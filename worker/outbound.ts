@@ -1,0 +1,217 @@
+import { DateTime } from "luxon";
+import { withSystem } from "./db";
+import { sessions } from "./wa/session";
+import { readFileBuffer } from "../src/lib/storage";
+import type { AnyMessageContent } from "@whiskeysockets/baileys";
+
+/**
+ * Outbound sender with number-protection rails:
+ * - randomized 3–10s delay between sends per clinic
+ * - daily cap per clinic (overflow deferred to next window)
+ * - identical-message blast guard (pauses automation sends)
+ * - repeated errors pause the clinic's queue and notify the owner
+ */
+
+const nextSendAt = new Map<string, number>(); // clinicId → epoch ms
+
+export function startOutboundLoop() {
+  const tick = async () => {
+    try {
+      await processOnce();
+    } catch (e) {
+      console.error("[outbound]", (e as Error).message);
+    }
+    setTimeout(tick, 1500);
+  };
+  void tick();
+}
+
+async function processOnce() {
+  const connected = [...sessions.entries()].filter(([, s]) => s.connected);
+  await Promise.all(
+    connected.map(async ([clinicId, session]) => {
+      if ((nextSendAt.get(clinicId) ?? 0) > Date.now()) return;
+
+      const claimed = await withSystem(async (c) => {
+        const ses = (
+          await c.query(
+            `select ws.paused_until, ws.consecutive_errors, ws.outbound_today, ws.outbound_date,
+                    cl.daily_outbound_cap, cl.timezone, cl.message_window_start
+             from whatsapp_sessions ws join clinics cl on cl.id = ws.clinic_id
+             where ws.clinic_id = $1`,
+            [clinicId]
+          )
+        ).rows[0];
+        if (!ses) return null;
+        if (ses.paused_until && new Date(ses.paused_until) > new Date()) return null;
+
+        const today = DateTime.now().setZone(ses.timezone).toISODate();
+        if (ses.outbound_date !== today) {
+          await c.query(
+            `update whatsapp_sessions set outbound_today = 0, outbound_date = $2 where clinic_id = $1`,
+            [clinicId, today]
+          );
+          ses.outbound_today = 0;
+        }
+
+        const row = (
+          await c.query(
+            `update messages set status = 'sending'
+             where id = (
+               select id from messages
+               where clinic_id = $1 and status = 'queued' and scheduled_at <= now()
+               order by created_at limit 1
+               for update skip locked
+             )
+             returning *`,
+            [clinicId]
+          )
+        ).rows[0];
+        if (!row) return null;
+
+        // Daily cap: push overflow to the next day's window
+        if (ses.outbound_today >= ses.daily_outbound_cap) {
+          const nextWindow = DateTime.now()
+            .setZone(ses.timezone)
+            .plus({ days: 1 })
+            .startOf("day")
+            .plus({ minutes: hmToMinutes(String(ses.message_window_start)) });
+          await c.query(
+            `update messages set status = 'queued', scheduled_at = $2 where id = $1`,
+            [row.id, nextWindow.toUTC().toISO()]
+          );
+          console.log(`[outbound ${clinicId}] daily cap reached — deferred message`);
+          return null;
+        }
+
+        // Blast guard: identical automation text to many numbers in a short window
+        if (row.sender_kind === "automation" && row.body) {
+          const blast = (
+            await c.query(
+              `select count(distinct conversation_id)::int as n from messages
+               where clinic_id = $1 and body = $2 and created_at > now() - interval '10 minutes'`,
+              [clinicId, row.body]
+            )
+          ).rows[0];
+          if (blast.n > 8) {
+            await c.query(
+              `update whatsapp_sessions set paused_until = now() + interval '30 minutes' where clinic_id = $1`,
+              [clinicId]
+            );
+            await c.query(
+              `update messages set status = 'queued', scheduled_at = now() + interval '35 minutes' where id = $1`,
+              [row.id]
+            );
+            console.log(`[outbound ${clinicId}] blast guard tripped — pausing automations 30m`);
+            return null;
+          }
+        }
+
+        const conv = (
+          await c.query(`select phone_e164 from conversations where id = $1`, [row.conversation_id])
+        ).rows[0];
+        return { row, phone: conv?.phone_e164 as string };
+      });
+
+      if (!claimed) return;
+      const { row, phone } = claimed;
+      const jid = `${phone.replace("+", "")}@s.whatsapp.net`;
+
+      try {
+        let content: AnyMessageContent;
+        if (row.msg_type === "image" && row.media_path) {
+          const buf = await readFileBuffer(row.media_path);
+          if (!buf) throw new Error("media file missing");
+          content = { image: buf, caption: row.body || undefined };
+        } else if (row.msg_type === "document" && row.media_path) {
+          const buf = await readFileBuffer(row.media_path);
+          if (!buf) throw new Error("media file missing");
+          content = {
+            document: buf,
+            mimetype: row.media_mime ?? "application/octet-stream",
+            fileName: row.media_name ?? "document.pdf",
+            caption: row.body || undefined,
+          };
+        } else {
+          content = { text: row.body };
+        }
+
+        const sent = await session.sock!.sendMessage(jid, content);
+        await withSystem(async (c) => {
+          await c.query(
+            `update messages set status = 'sent', sent_at = now(), wa_message_id = coalesce($2, wa_message_id), error = null
+             where id = $1`,
+            [row.id, sent?.key?.id ?? null]
+          );
+          await c.query(
+            `update whatsapp_sessions set outbound_today = outbound_today + 1, consecutive_errors = 0, last_seen_at = now()
+             where clinic_id = $1`,
+            [clinicId]
+          );
+        });
+      } catch (e) {
+        const errMsg = (e as Error).message.slice(0, 300);
+        console.error(`[outbound ${clinicId}] send failed:`, errMsg);
+        await withSystem(async (c) => {
+          const attempts = (row.attempts ?? 0) + 1;
+          if (attempts < 3) {
+            await c.query(
+              `update messages set status = 'queued', attempts = $2, error = $3,
+                 scheduled_at = now() + ($2 * interval '90 seconds')
+               where id = $1`,
+              [row.id, attempts, errMsg]
+            );
+          } else {
+            await c.query(`update messages set status = 'failed', attempts = $2, error = $3 where id = $1`, [
+              row.id,
+              attempts,
+              errMsg,
+            ]);
+          }
+          const ses = (
+            await c.query(
+              `update whatsapp_sessions set consecutive_errors = consecutive_errors + 1
+               where clinic_id = $1 returning consecutive_errors`,
+              [clinicId]
+            )
+          ).rows[0];
+          // Repeated failures: pause automations and alert
+          if (ses.consecutive_errors === 5) {
+            await c.query(
+              `update whatsapp_sessions set paused_until = now() + interval '15 minutes' where clinic_id = $1`,
+              [clinicId]
+            );
+            const clinic = (
+              await c.query(`select slug, name, name_ar from clinics where id = $1`, [clinicId])
+            ).rows[0];
+            const owners = await c.query(
+              `select user_id from clinic_members where clinic_id = $1 and role = 'owner' and active`,
+              [clinicId]
+            );
+            for (const o of owners.rows) {
+              await c.query(
+                `insert into notifications (clinic_id, user_id, kind, title, body, url)
+                 values ($1, $2, 'whatsapp_errors', $3, $4, $5)`,
+                [
+                  clinicId,
+                  o.user_id,
+                  "رسائل واتساب تفشل بشكل متكرر",
+                  "تم إيقاف الإرسال مؤقتاً لمدة 15 دقيقة لحماية الرقم.",
+                  `/c/${clinic.slug}/settings/whatsapp`,
+                ]
+              );
+            }
+          }
+        });
+      }
+
+      // Randomized human-like delay before this clinic's next send
+      nextSendAt.set(clinicId, Date.now() + 3000 + Math.random() * 7000);
+    })
+  );
+}
+
+function hmToMinutes(hm: string): number {
+  const [h, m] = hm.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}

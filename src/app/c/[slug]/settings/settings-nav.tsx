@@ -16,6 +16,7 @@ export function SettingsNav({ slug, isOwner }: { slug: string; isOwner: boolean 
     { href: `${base}/hours`, label: t.settings.workingHours },
     { href: `${base}/fields`, label: t.fields.title },
     { href: `${base}/booking`, label: t.settings.bookingLinks },
+    { href: `${base}/whatsapp`, label: t.settings.whatsapp },
   ];
 
   return (

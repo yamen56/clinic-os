@@ -18,6 +18,7 @@
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@whiskeysockets/baileys": "^6.7.21",
     "bcryptjs": "^3.0.3",
     "lucide-react": "^1.26.0",
     "luxon": "^3.7.2",
