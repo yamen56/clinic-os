@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { useAutosave } from "@/lib/use-autosave";
 import { Card } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
 import { SaveIndicator } from "@/components/ui/save-indicator";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { Upload } from "lucide-react";
 
 export function ClinicProfileForm({
   slug,
@@ -27,12 +31,35 @@ export function ClinicProfileForm({
   };
 }) {
   const { t } = useI18n();
+  const router = useRouter();
+  const { toast } = useToast();
   const { patch, state } = useAutosave({
     url: `/api/c/${slug}/clinic`,
     entityKey: `clinic:${slug}`,
   });
   const [color, setColor] = useState(clinic.brand_color);
+  const [uploading, setUploading] = useState(false);
+  const logoInput = useRef<HTMLInputElement>(null);
   const ro = !isOwner;
+
+  const uploadLogo = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      const res = await fetch(`/api/c/${slug}/clinic/logo`, { method: "POST", body: fd });
+      if (!res.ok) {
+        toast(t.common.genericError, "error");
+        return;
+      }
+      toast(t.common.saved);
+      router.refresh();
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <Card className="p-6">
@@ -78,6 +105,24 @@ export function ClinicProfileForm({
               className="h-9 w-14 cursor-pointer rounded-md border border-line-strong bg-surface"
             />
             <span dir="ltr" className="text-sm text-ink-500 tnum">{color}</span>
+            {!ro && (
+              <>
+                <input
+                  ref={logoInput}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    void uploadLogo(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <Button variant="outline" size="sm" loading={uploading} onClick={() => logoInput.current?.click()}>
+                  <Upload className="h-3.5 w-3.5" />
+                  Logo
+                </Button>
+              </>
+            )}
           </div>
         </Field>
       </div>
