@@ -82,8 +82,8 @@ export function isE164(s: string | null | undefined): s is string {
 /** Display format: +962 79 074 4070 style grouping. */
 export function formatPhone(e164: string | null | undefined): string {
   if (!e164) return "";
-  const m = e164.match(/^\+(962|966|971)(\d)(\d{2})(\d{3})(\d{3,4})$/);
-  if (m) return `+${m[1]} ${m[2]}${m[3]} ${m[4]} ${m[5]}`;
+  const m = e164.match(/^\+(962|966|971)(\d{2})(\d{3})(\d{4})$/);
+  if (m) return `+${m[1]} ${m[2]} ${m[3]} ${m[4]}`;
   return e164;
 }
 
