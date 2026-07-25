@@ -11,6 +11,9 @@ export function SettingsNav({ slug, isOwner }: { slug: string; isOwner: boolean 
 
   const items: { href: string; label: string; ownerOnly?: boolean }[] = [
     { href: base, label: t.settings.profile },
+    { href: `${base}/staff`, label: t.settings.staff, ownerOnly: true },
+    { href: `${base}/services`, label: t.settings.services },
+    { href: `${base}/hours`, label: t.settings.workingHours },
     { href: `${base}/fields`, label: t.fields.title },
   ];
 
