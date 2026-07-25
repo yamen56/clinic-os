@@ -13,7 +13,8 @@
     "seed": "tsx scripts/seed.ts",
     "test:phone": "tsx scripts/test-phone.ts",
     "test:rls": "tsx scripts/test-rls.ts",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json",
+    "seed:recipes": "tsx scripts/seed-recipes.ts"
   },
   "type": "commonjs",
   "dependencies": {

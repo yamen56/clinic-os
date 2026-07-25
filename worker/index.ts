@@ -11,6 +11,8 @@ import { withSystem, pool } from "./db";
 import { ensureSession, sessions } from "./wa/session";
 import { startOutboundLoop } from "./outbound";
 import { startHttpServer } from "./http";
+import { startJobLoop } from "./jobs";
+import { startScheduler } from "./scheduler";
 
 async function resumeDesiredSessions() {
   const rows = await withSystem(async (c) => {
@@ -32,6 +34,8 @@ async function main() {
   // Catch sessions marked desired while the worker was down (or by another instance)
   setInterval(() => void resumeDesiredSessions().catch(() => {}), 15000);
   startOutboundLoop();
+  startJobLoop();
+  startScheduler();
   console.log("[worker] ready");
 }
 

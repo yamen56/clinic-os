@@ -26,6 +26,38 @@ const createClinicSchema = z.object({
 
 export type CreateClinicResult = { error?: string; fieldErrors?: Record<string, string> } | null;
 
+type RecipeStep = {
+  step_type: string;
+  config?: Record<string, unknown>;
+  children?: { yes?: RecipeStep[]; no?: RecipeStep[] };
+};
+
+/** Copies a recipe's step tree (including condition branches) into a clinic. */
+async function copySteps(
+  c: import("pg").PoolClient,
+  clinicId: string,
+  automationId: string,
+  steps: unknown[],
+  parentId: string | null,
+  branch: "yes" | "no" | null
+) {
+  let sort = 0;
+  for (const raw of steps as RecipeStep[]) {
+    const r = await c.query(
+      `insert into automation_steps (clinic_id, automation_id, parent_step_id, branch, sort, step_type, config)
+       values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+      [clinicId, automationId, parentId, branch, sort++, raw.step_type, JSON.stringify(raw.config ?? {})]
+    );
+    const stepId = r.rows[0].id as string;
+    if (raw.children?.yes?.length) {
+      await copySteps(c, clinicId, automationId, raw.children.yes, stepId, "yes");
+    }
+    if (raw.children?.no?.length) {
+      await copySteps(c, clinicId, automationId, raw.children.no, stepId, "no");
+    }
+  }
+}
+
 export async function createClinicAction(
   _prev: CreateClinicResult,
   formData: FormData
@@ -91,17 +123,9 @@ export async function createClinicAction(
         const a = await c.query(
           `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key)
            values ($1, $2, $3, $4, $5, false, $6) returning id`,
-          [clinicId, r.name, r.description, r.trigger_type, r.trigger_config, r.key]
+          [clinicId, r.name_ar || r.name, r.description, r.trigger_type, r.trigger_config, r.key]
         );
-        const steps: unknown[] = Array.isArray(r.steps) ? r.steps : [];
-        let sort = 0;
-        for (const st of steps as { step_type: string; config?: Record<string, unknown> }[]) {
-          await c.query(
-            `insert into automation_steps (clinic_id, automation_id, sort, step_type, config)
-             values ($1, $2, $3, $4, $5)`,
-            [clinicId, a.rows[0].id, sort++, st.step_type, JSON.stringify(st.config ?? {})]
-          );
-        }
+        await copySteps(c, clinicId, a.rows[0].id, Array.isArray(r.steps) ? r.steps : [], null, null);
       }
       const kts = await c.query("select * from knowledge_templates order by sort");
       for (const k of kts.rows) {
