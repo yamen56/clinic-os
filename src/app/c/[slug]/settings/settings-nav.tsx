@@ -18,6 +18,7 @@ export function SettingsNav({ slug, isOwner }: { slug: string; isOwner: boolean 
     { href: `${base}/booking`, label: t.settings.bookingLinks },
     { href: `${base}/whatsapp`, label: t.settings.whatsapp },
     { href: `${base}/invoicing`, label: t.settings.invoiceSettings },
+    { href: `/c/${slug}/notifications`, label: t.settings.notificationPrefs },
   ];
 
   return (

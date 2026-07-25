@@ -76,7 +76,7 @@ async function recallReminders() {
         `select id from patients
          where clinic_id = $1 and merged_into is null and status = 'active'
            and last_visit_at is not null
-           and last_visit_at::date = (current_date - ($2 || ' days')::interval)::date
+           and last_visit_at::date = (current_date - ($2::text || ' days')::interval)::date
          limit 200`,
         [auto.clinic_id, days]
       );
@@ -146,7 +146,7 @@ async function unpaidInvoices() {
         `select id, patient_id from invoices
          where clinic_id = $1 and status in ('sent', 'partially_paid')
            and sent_at is not null
-           and sent_at::date = (current_date - ($2 || ' days')::interval)::date
+           and sent_at::date = (current_date - ($2::text || ' days')::interval)::date
          limit 200`,
         [auto.clinic_id, days]
       );

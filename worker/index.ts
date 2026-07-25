@@ -13,6 +13,7 @@ import { startOutboundLoop } from "./outbound";
 import { startHttpServer } from "./http";
 import { startJobLoop } from "./jobs";
 import { startScheduler } from "./scheduler";
+import { startNotificationLoop } from "./notifications";
 
 async function resumeDesiredSessions() {
   const rows = await withSystem(async (c) => {
@@ -36,6 +37,7 @@ async function main() {
   startOutboundLoop();
   startJobLoop();
   startScheduler();
+  startNotificationLoop();
   console.log("[worker] ready");
 }
 

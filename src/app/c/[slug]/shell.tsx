@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useI18n } from "@/lib/i18n/client";
 import { LanguageToggle } from "@/components/language-toggle";
 import { logoutAction } from "@/app/login/actions";
+import { exitImpersonationAction } from "@/app/admin/actions";
 import { Avatar } from "@/components/ui/misc";
 import {
   LayoutDashboard,
@@ -170,9 +171,11 @@ export function Shell({
           <div className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-amber-acc px-4 py-2 text-center text-[13px] font-medium text-white">
             <ShieldAlert className="h-4 w-4 shrink-0" />
             {t.admin.impersonating}
-            <Link href="/admin" className="underline underline-offset-2">
-              {t.admin.exitImpersonation}
-            </Link>
+            <form action={exitImpersonationAction}>
+              <button className="underline underline-offset-2 hover:opacity-80">
+                {t.admin.exitImpersonation}
+              </button>
+            </form>
           </div>
         )}
         {announcements

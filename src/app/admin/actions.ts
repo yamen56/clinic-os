@@ -183,6 +183,24 @@ export async function updateSubscriptionAction(
   revalidatePath("/admin");
 }
 
+/** Ends support mode: drops the impersonation session and issues a clean admin one. */
+export async function exitImpersonationAction() {
+  const s = await requireSuperAdmin();
+  await withSystem(async (c) => {
+    if (s.impersonatedBy) {
+      await audit(c, {
+        userId: s.user.id,
+        impersonatedBy: s.impersonatedBy,
+        action: "admin.impersonate.end",
+      });
+    }
+    await c.query(`delete from sessions where id = $1`, [s.sessionId]);
+  });
+  const token = await createSession(s.user.id);
+  await setSessionCookie(token);
+  redirect("/admin");
+}
+
 /** Support-mode entry: a new audited session that keeps the admin identity attached. */
 export async function impersonateAction(clinicSlug: string) {
   const s = await requireSuperAdmin();

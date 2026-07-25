@@ -9,6 +9,15 @@ export const metadata: Metadata = {
   description: "The operating system for your clinic",
   applicationName: "Clinic OS",
   manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Clinic OS",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {

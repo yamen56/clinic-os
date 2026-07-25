@@ -9,3 +9,4 @@ storage/
 tsconfig.tsbuildinfo
 .wa-auth/
 scripts/qa-shots/
+scripts/qa-certs/
