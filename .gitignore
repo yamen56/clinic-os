@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.pgdata/
+.pgdata-test/
+storage/
+*.log
+.env
+.DS_Store
+tsconfig.tsbuildinfo
+.wa-auth/
+scripts/qa-shots/

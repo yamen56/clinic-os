@@ -1,0 +1,279 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { useI18n } from "@/lib/i18n/client";
+import { LanguageToggle } from "@/components/language-toggle";
+import { logoutAction } from "@/app/login/actions";
+import { Avatar } from "@/components/ui/misc";
+import {
+  LayoutDashboard,
+  MessageCircle,
+  CalendarDays,
+  Users,
+  Receipt,
+  Workflow,
+  Sparkles,
+  Settings,
+  MoreHorizontal,
+  Bell,
+  LogOut,
+  ShieldAlert,
+  X,
+} from "lucide-react";
+
+type NavKey =
+  | "dashboard"
+  | "conversations"
+  | "calendar"
+  | "patients"
+  | "invoices"
+  | "automations"
+  | "aiAgent"
+  | "settings";
+
+const icons: Record<NavKey, React.ComponentType<{ className?: string }>> = {
+  dashboard: LayoutDashboard,
+  conversations: MessageCircle,
+  calendar: CalendarDays,
+  patients: Users,
+  invoices: Receipt,
+  automations: Workflow,
+  aiAgent: Sparkles,
+  settings: Settings,
+};
+
+export function Shell({
+  clinic,
+  role,
+  permissions,
+  userName,
+  userId,
+  isImpersonating,
+  unreadCount,
+  announcements,
+  children,
+}: {
+  clinic: {
+    id: string;
+    name: string;
+    nameAr: string | null;
+    slug: string;
+    brandColor: string;
+    logoPath: string | null;
+  };
+  role: "owner" | "doctor" | "receptionist";
+  permissions: Record<string, boolean>;
+  userName: string;
+  userId: string;
+  isImpersonating: boolean;
+  unreadCount: number;
+  announcements: { id: string; title: string; body: string }[];
+  children: React.ReactNode;
+}) {
+  const { t, locale } = useI18n();
+  const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [hiddenAnnouncements, setHiddenAnnouncements] = useState<string[]>([]);
+
+  const base = `/c/${clinic.slug}`;
+  const canAutomations = role === "owner" || permissions.automations === true;
+
+  const items: { key: NavKey; href: string; show: boolean; badge?: number }[] = [
+    { key: "dashboard", href: base, show: true },
+    { key: "conversations", href: `${base}/conversations`, show: role !== "doctor", badge: unreadCount },
+    { key: "calendar", href: `${base}/calendar`, show: true },
+    { key: "patients", href: `${base}/patients`, show: true },
+    { key: "invoices", href: `${base}/invoices`, show: role !== "doctor" },
+    { key: "automations", href: `${base}/automations`, show: canAutomations },
+    { key: "aiAgent", href: `${base}/ai`, show: canAutomations },
+    { key: "settings", href: `${base}/settings`, show: role !== "doctor" },
+  ];
+  const visible = items.filter((i) => i.show);
+  const mobileMain = visible.slice(0, 4);
+  const mobileMore = visible.slice(4);
+
+  const isActive = (href: string) =>
+    href === base ? pathname === base : pathname.startsWith(href);
+
+  const clinicDisplay = locale === "ar" ? clinic.nameAr || clinic.name : clinic.name;
+
+  return (
+    <div className="min-h-dvh bg-paper">
+      {/* Desktop sidebar */}
+      <aside className="fixed inset-y-0 inset-inline-start-0 z-40 hidden w-60 flex-col border-e border-line bg-surface md:flex">
+        <div className="flex items-center gap-2.5 px-4 py-4">
+          <Avatar name={clinic.name} size={34} color={clinic.brandColor} />
+          <div className="min-w-0">
+            <div className="truncate text-[15px] font-semibold leading-tight">{clinicDisplay}</div>
+            <div className="text-[11px] text-ink-400">Clinic OS</div>
+          </div>
+        </div>
+        <nav className="flex-1 overflow-y-auto px-2.5 py-2">
+          {visible.map(({ key, href, badge }) => {
+            const Icon = icons[key];
+            const active = isActive(href);
+            return (
+              <Link
+                key={key}
+                href={href}
+                className={`mb-0.5 flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-brand-50 text-brand-800"
+                    : "text-ink-700 hover:bg-ink-900/4"
+                }`}
+              >
+                <Icon className={`h-[18px] w-[18px] ${active ? "text-brand-700" : "text-ink-400"}`} />
+                <span className="flex-1">{t.nav[key]}</span>
+                {!!badge && (
+                  <span className="rounded-full bg-brand-600 px-1.5 py-0.5 text-[11px] font-semibold text-white tnum">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="border-t border-line p-3">
+          <div className="flex items-center gap-2.5 px-1">
+            <Avatar name={userName} size={30} color="var(--color-ink-500)" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-medium">{userName}</div>
+              <div className="text-[11px] text-ink-400">{role}</div>
+            </div>
+            <Link
+              href={`${base}/notifications`}
+              className="rounded-md p-1.5 text-ink-400 hover:bg-ink-900/5 hover:text-ink-700"
+              aria-label={t.nav.notifications}
+            >
+              <Bell className="h-4.5 w-4.5" />
+            </Link>
+            <form action={logoutAction}>
+              <button
+                className="rounded-md p-1.5 text-ink-400 hover:bg-ink-900/5 hover:text-ink-700"
+                aria-label={t.auth.signOut}
+              >
+                <LogOut className="h-4.5 w-4.5" />
+              </button>
+            </form>
+          </div>
+          <div className="mt-2 px-1">
+            <LanguageToggle />
+          </div>
+        </div>
+      </aside>
+
+      {/* Content */}
+      <div className="md:ms-60">
+        {isImpersonating && (
+          <div className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-amber-acc px-4 py-2 text-center text-[13px] font-medium text-white">
+            <ShieldAlert className="h-4 w-4 shrink-0" />
+            {t.admin.impersonating}
+            <Link href="/admin" className="underline underline-offset-2">
+              {t.admin.exitImpersonation}
+            </Link>
+          </div>
+        )}
+        {announcements
+          .filter((a) => !hiddenAnnouncements.includes(a.id))
+          .map((a) => (
+            <div
+              key={a.id}
+              className="flex items-start justify-between gap-3 border-b border-line bg-brand-50 px-4 py-2.5 text-[13px] text-brand-800"
+            >
+              <div>
+                <span className="font-semibold">{a.title}</span>
+                {a.body && <span className="ms-2">{a.body}</span>}
+              </div>
+              <button
+                onClick={() => {
+                  setHiddenAnnouncements((xs) => [...xs, a.id]);
+                  fetch("/api/me/dismiss-announcement", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: a.id }),
+                  }).catch(() => {});
+                }}
+                aria-label={t.common.close}
+                className="mt-0.5 shrink-0 text-brand-700 hover:text-brand-900"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        <main className="mx-auto max-w-6xl px-4 py-6 pb-24 md:px-8 md:pb-10">{children}</main>
+      </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <div className="grid auto-cols-fr grid-flow-col">
+          {mobileMain.map(({ key, href, badge }) => {
+            const Icon = icons[key];
+            const active = isActive(href);
+            return (
+              <Link
+                key={key}
+                href={href}
+                className={`relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium ${
+                  active ? "text-brand-700" : "text-ink-400"
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+                {t.nav[key]}
+                {!!badge && (
+                  <span className="absolute top-1 inset-inline-end-[calc(50%-1.4rem)] h-2 w-2 rounded-full bg-brand-600" />
+                )}
+              </Link>
+            );
+          })}
+          {mobileMore.length > 0 && (
+            <button
+              onClick={() => setMoreOpen((v) => !v)}
+              className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium ${
+                moreOpen ? "text-brand-700" : "text-ink-400"
+              }`}
+            >
+              <MoreHorizontal className="h-5 w-5" />
+              {t.nav.more}
+            </button>
+          )}
+        </div>
+        {moreOpen && (
+          <div className="border-t border-line bg-surface px-2 py-2 animate-fade-up">
+            {mobileMore.map(({ key, href }) => {
+              const Icon = icons[key];
+              return (
+                <Link
+                  key={key}
+                  href={href}
+                  onClick={() => setMoreOpen(false)}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-ink-900/4"
+                >
+                  <Icon className="h-[18px] w-[18px] text-ink-400" />
+                  {t.nav[key]}
+                </Link>
+              );
+            })}
+            <Link
+              href={`${base}/notifications`}
+              onClick={() => setMoreOpen(false)}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-ink-900/4"
+            >
+              <Bell className="h-[18px] w-[18px] text-ink-400" />
+              {t.nav.notifications}
+            </Link>
+            <div className="flex items-center justify-between px-3 py-2.5">
+              <LanguageToggle />
+              <form action={logoutAction}>
+                <button className="flex items-center gap-2 text-sm text-ink-500">
+                  <LogOut className="h-4 w-4" /> {t.auth.signOut}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </nav>
+    </div>
+  );
+}

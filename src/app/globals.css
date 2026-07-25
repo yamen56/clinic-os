@@ -1,0 +1,123 @@
+@import "tailwindcss";
+@import "../../public/fonts/fonts.local.css";
+
+/*
+  CLINIC OS design tokens.
+  Direction: "clinical calm" — warm paper neutrals, deep viridian accent,
+  status expressed as logical-start spine bars. Light interface only.
+*/
+@theme {
+  --font-sans: "Inter", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+
+  /* Warm stone neutrals */
+  --color-paper: #faf9f7;
+  --color-surface: #ffffff;
+  --color-ink-900: #1c1917;
+  --color-ink-700: #44403c;
+  --color-ink-500: #78716c;
+  --color-ink-400: #a8a29e;
+  --color-ink-300: #d6d3d1;
+  --color-line: #e9e6e2;
+  --color-line-strong: #d8d4cf;
+
+  /* Brand: deep viridian */
+  --color-brand-50: #eef7f4;
+  --color-brand-100: #d8ede6;
+  --color-brand-200: #b2dbcd;
+  --color-brand-300: #7fc2ad;
+  --color-brand-400: #4aa389;
+  --color-brand-500: #26866d;
+  --color-brand-600: #0f6e5c;
+  --color-brand-700: #0b584a;
+  --color-brand-800: #0a463c;
+  --color-brand-900: #093a32;
+
+  /* Secondary accent: date amber (used sparingly) */
+  --color-amber-acc: #b45309;
+  --color-amber-soft: #fdf3e7;
+
+  /* Status system (appointments, invoices, connections) */
+  --color-st-scheduled: #6d28d9;
+  --color-st-scheduled-soft: #f1ecfd;
+  --color-st-confirmed: #0f6e5c;
+  --color-st-confirmed-soft: #e6f2ee;
+  --color-st-completed: #365314;
+  --color-st-completed-soft: #eef3e4;
+  --color-st-noshow: #b91c1c;
+  --color-st-noshow-soft: #fdeeee;
+  --color-st-cancelled: #78716c;
+  --color-st-cancelled-soft: #f1efed;
+  --color-st-pending: #b45309;
+  --color-st-pending-soft: #fdf3e7;
+
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fdeeee;
+  --color-ok: #0f6e5c;
+
+  --radius-card: 0.875rem;
+  --radius-ctl: 0.5rem;
+
+  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.04), 0 4px 16px -8px rgb(28 25 23 / 0.06);
+  --shadow-pop: 0 2px 6px rgb(28 25 23 / 0.06), 0 12px 32px -12px rgb(28 25 23 / 0.18);
+
+  --animate-fade-up: fade-up 0.25s ease both;
+  --animate-fade-in: fade-in 0.2s ease both;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+html {
+  font-family: var(--font-sans);
+  color: var(--color-ink-900);
+  background: var(--color-paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+html[dir="rtl"] {
+  font-family: "IBM Plex Sans Arabic", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+/* Numbers always tabular in data contexts */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Status spine: colored bar on the logical-start edge */
+.spine { position: relative; }
+.spine::before {
+  content: "";
+  position: absolute;
+  inset-block: 6px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--spine-color, var(--color-brand-600));
+}
+
+::selection { background: var(--color-brand-100); }
+
+/* Scrollbars: quiet */
+* { scrollbar-width: thin; scrollbar-color: var(--color-ink-300) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Focus visibility */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+input, textarea, select, button { font: inherit; }
