@@ -55,10 +55,11 @@ export default async function MonitoringPage() {
     const [jobs] = (
       await c.query(
         `select
-           count(*) filter (where status = 'pending')::int as pending,
-           count(*) filter (where status = 'failed')::int as failed,
-           count(*) filter (where status = 'running')::int as running,
-           count(*) filter (where status = 'pending' and run_at < now() - interval '5 minutes')::int as stale`
+           count(*) filter (where j.status = 'pending')::int as pending,
+           count(*) filter (where j.status = 'failed')::int as failed,
+           count(*) filter (where j.status = 'running')::int as running,
+           count(*) filter (where j.status = 'pending' and j.run_at < now() - interval '5 minutes')::int as stale
+         from jobs j`
       )
     ).rows;
 

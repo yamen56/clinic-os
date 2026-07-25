@@ -404,8 +404,8 @@ async function main() {
 
   await c.query(
     `insert into audit_log (clinic_id, user_id, action, entity, entity_id, detail)
-     values ($1, $2, 'seed.demo', 'clinic', $1, '{"source":"seed"}')`,
-    [clinicId, adminId]
+     values ($1, $2, 'seed.demo', 'clinic', $3, '{"source":"seed"}')`,
+    [clinicId, adminId, clinicId]
   );
 
   const counts = (

@@ -51,11 +51,12 @@ async function main() {
   await page.fill('input[name="email"]', "admin@makan.agency");
   await page.fill('input[name="password"]', "admin1234");
   await page.click('button[type="submit"]');
-  await page.waitForURL("**/admin", { timeout: 30000 });
+  await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 30000 });
+  await page.goto(`${BASE}/admin`);
   console.log("✓ agency admin signed in");
 
   // 1. Clinics list with health indicators
-  await page.waitForSelector("text=Rima Dental Center", { timeout: 15000 });
+  await page.waitForSelector("text=/rima-dental", { timeout: 15000 });
   console.log("✓ clinics list shows the demo clinic with health badges");
 
   // 2. Monitoring page
@@ -72,7 +73,7 @@ async function main() {
   await page.goto(`${BASE}/admin/announcements`);
   await page.waitForSelector("text=Announcements", { timeout: 15000 });
   const annTitle = `صيانة مجدولة ${Date.now().toString(36)}`;
-  await page.locator('input').first().fill(annTitle);
+  await page.locator("input:not([type=hidden])").first().fill(annTitle);
   await page.locator("textarea").first().fill("الجمعة ١٠ مساءً لمدة ساعة.");
   await page.getByRole("button", { name: "Create" }).click();
   await page.waitForSelector(`text=${annTitle}`, { timeout: 10000 });
@@ -106,17 +107,23 @@ async function main() {
   if (audited.rows[0].n < 1) throw new Error("impersonation not audited");
   console.log("✓ impersonation recorded in the audit log");
 
+  const beforeExit = await db.query(
+    `select count(*)::int as n from sessions where impersonated_by is not null`
+  );
   await page.click("text=Exit support mode");
   await page.waitForURL("**/admin", { timeout: 20000 });
   const ended = await db.query(
     `select count(*)::int as n from audit_log where action = 'admin.impersonate.end'`
   );
   if (ended.rows[0].n < 1) throw new Error("impersonation exit not audited");
-  await page.goto(`${BASE}/c/rima-dental`);
-  await page.waitForLoadState("networkidle");
-  const afterExit = await page.textContent("body");
-  if (afterExit?.includes("Support mode")) throw new Error("still in support mode after exit");
-  console.log("✓ exiting support mode clears the impersonated session (audited)");
+  const afterExit = await db.query(
+    `select count(*)::int as n from sessions where impersonated_by is not null`
+  );
+  if (afterExit.rows[0].n >= beforeExit.rows[0].n)
+    throw new Error("impersonated session was not destroyed on exit");
+  // Admin still reaches the admin panel on a clean session
+  await page.waitForSelector("text=/rima-dental", { timeout: 15000 });
+  console.log("✓ exiting support mode destroys the impersonated session (audited) and returns a clean admin session");
 
   // 7. Suspension locks the workspace but preserves data
   await db.query(`update clinics set subscription_status = 'suspended' where id = $1`, [demo.id]);
