@@ -1,5 +1,6 @@
 import { withSystem } from "./db";
 import { advanceRun, handleTrigger } from "./automations";
+import { respondToConversation } from "./ai/agent";
 
 /**
  * Job runner: claims due jobs with FOR UPDATE SKIP LOCKED so multiple worker
@@ -11,6 +12,9 @@ type JobHandler = (payload: Record<string, unknown>, clinicId: string | null) =>
 const handlers: Record<string, JobHandler> = {
   "automation:advance": async (payload) => {
     await advanceRun(String(payload.runId));
+  },
+  "ai:respond": async (payload) => {
+    await respondToConversation(String(payload.conversationId));
   },
 };
 
@@ -41,6 +45,15 @@ async function runOne(): Promise<boolean> {
       const kind = job.kind.slice("trigger:".length);
       if (!job.clinic_id) throw new Error("trigger job without clinic");
       await handleTrigger(kind, job.clinic_id, job.payload ?? {});
+      // An inbound patient message also wakes the AI receptionist.
+      if (kind === "inbound_message" && job.payload?.conversationId) {
+        await withSystem((c) =>
+          c.query(
+            `insert into jobs (clinic_id, kind, payload, run_at) values ($1, 'ai:respond', $2, now() + interval '4 seconds')`,
+            [job.clinic_id, JSON.stringify({ conversationId: job.payload.conversationId })]
+          )
+        );
+      }
     } else {
       const handler = handlers[job.kind];
       if (!handler) throw new Error(`no handler for ${job.kind}`);
