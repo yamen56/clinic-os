@@ -171,12 +171,16 @@ export function CalendarClient({
       return cols;
     }, [data, view, doctorFilter]);
 
+  const fmtLocale = locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB";
   const title =
     view === "month"
-      ? anchorDt.setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB").toFormat("LLLL yyyy")
+      ? anchorDt.setLocale(fmtLocale).toFormat("LLLL yyyy")
       : view === "week"
-        ? `${range.start.setLocale("en-GB").toFormat("d LLL")} – ${range.start.plus({ days: 6 }).setLocale("en-GB").toFormat("d LLL")}`
-        : anchorDt.setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB").toFormat("cccc d LLLL");
+        ? `${range.start.setLocale(fmtLocale).toFormat("d LLL")} – ${range.start
+            .plus({ days: 6 })
+            .setLocale(fmtLocale)
+            .toFormat("d LLL")}`
+        : anchorDt.setLocale(fmtLocale).toFormat("cccc d LLLL");
 
   const openCreate = (start: DateTime, doctorId: string | null) =>
     setPanel({ mode: "create", start: start.toISO()!, doctorId: doctorId ?? undefined });

@@ -169,7 +169,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
                       {ap.doctor_name ? ` · ${ap.doctor_name}` : ""}
                     </div>
                   </div>
-                  <Badge status={apptStatus[ap.status] ?? "neutral"}>{ap.status}</Badge>
+                  <Badge status={apptStatus[ap.status] ?? "neutral"}>
+                    {(t.calendar.statuses as Record<string, string>)[ap.status] ?? ap.status}
+                  </Badge>
                 </li>
               ))}
             </ul>

@@ -404,7 +404,9 @@ export function PatientProfile(props: {
                         {a.doctor_name ? ` · ${a.doctor_name}` : ""}
                       </div>
                     </div>
-                    <Badge status={apptStatus[a.status] ?? "neutral"}>{a.status}</Badge>
+                    <Badge status={apptStatus[a.status] ?? "neutral"}>
+                      {(t.calendar.statuses as Record<string, string>)[a.status] ?? a.status}
+                    </Badge>
                   </li>
                 ))}
               </ul>
@@ -449,7 +451,7 @@ export function PatientProfile(props: {
                                 : "pending"
                         }
                       >
-                        {inv.status}
+                        {(t.invoices.statuses as Record<string, string>)[inv.status] ?? inv.status}
                       </Badge>
                     </Link>
                   </li>
