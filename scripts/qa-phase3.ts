@@ -1,7 +1,11 @@
 /** Browser QA for Phase 3: staff, services, hours, calendar, conflicts, drag, realtime. */
 import { chromium, type Page } from "playwright";
+import { DateTime } from "luxon";
 
 const BASE = "http://localhost:3000";
+// Clinic-local date (Asia/Amman): after midnight there the UTC date is still
+// "yesterday", which can fall outside the displayed week.
+const CLINIC_TODAY = DateTime.now().setZone("Asia/Amman").toISODate()!;
 
 async function login(page: Page, email: string, password: string) {
   await page.goto(`${BASE}/login`);
@@ -77,7 +81,7 @@ async function main() {
   await aside.locator('input[placeholder="0790744070"]').fill("0795556677");
   await aside.locator("select").nth(0).selectOption({ index: 1 }); // Dental Cleaning
   await aside.locator("select").nth(1).selectOption({ index: 1 }); // doctor
-  await aside.locator('input[type="date"]').fill(new Date().toISOString().slice(0, 10));
+  await aside.locator('input[type="date"]').fill(CLINIC_TODAY);
   await aside.locator('input[type="time"]').fill("10:00");
   await aside.locator("button:has-text('Save')").click();
   await page.waitForSelector("text=Appointment booked", { timeout: 10000 });
@@ -92,7 +96,7 @@ async function main() {
   await aside2.locator('input[placeholder="Full name"]').fill("عمر يوسف");
   await aside2.locator('input[placeholder="0790744070"]').fill("0791119988");
   await aside2.locator("select").nth(1).selectOption({ index: 1 });
-  await aside2.locator('input[type="date"]').fill(new Date().toISOString().slice(0, 10));
+  await aside2.locator('input[type="date"]').fill(CLINIC_TODAY);
   await aside2.locator('input[type="time"]').fill("10:15");
   await aside2.locator("button:has-text('Save')").click();
   await page.waitForSelector("text=This time overlaps another appointment", { timeout: 10000 });
@@ -134,7 +138,7 @@ async function main() {
   await aside3.locator("text=Create new patient").click();
   await aside3.locator('input[placeholder="Full name"]').fill("زيد الرواشدة");
   await aside3.locator('input[placeholder="0790744070"]').fill("0777771234");
-  await aside3.locator('input[type="date"]').fill(new Date().toISOString().slice(0, 10));
+  await aside3.locator('input[type="date"]').fill(CLINIC_TODAY);
   await aside3.locator('input[type="time"]').fill("15:00");
   await aside3.locator("button:has-text('Save')").click();
   await page.waitForSelector("text=Appointment booked", { timeout: 10000 });

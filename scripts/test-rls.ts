@@ -78,6 +78,11 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     )
   ).id;
   await q(`insert into booking_links (clinic_id, slug) values ($1, $2) returning id`, [clinic, `rls-bl-${tag}`]);
+  await q(
+    `insert into booking_verifications (clinic_id, phone_e164, code, expires_at)
+     values ($1, $2, '123456', now() + interval '10 minutes') returning id`,
+    [clinic, `+96279000000${seq}`]
+  );
   const conversation = (
     await q(
       `insert into conversations (clinic_id, patient_id, phone_e164) values ($1, $2, $3) returning id`,
