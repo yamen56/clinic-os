@@ -18,8 +18,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), 3500);
   }, []);
 
+  // The only place a colored edge is allowed by the brand.
+  const barColor: Record<ToastKind, string> = {
+    success: "border-s-ok",
+    error: "border-s-danger",
+    info: "border-s-brand-600",
+  };
+
   const icons: Record<ToastKind, React.ReactNode> = {
-    success: <CheckCircle2 className="h-4.5 w-4.5 text-brand-500" />,
+    success: <CheckCircle2 className="h-4.5 w-4.5 text-ok" />,
     error: <AlertCircle className="h-4.5 w-4.5 text-danger" />,
     info: <Info className="h-4.5 w-4.5 text-ink-500" />,
   };
@@ -31,7 +38,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {items.map((t) => (
           <div
             key={t.id}
-            className="pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-full border border-line bg-surface px-4 py-2.5 text-sm text-ink-900 shadow-pop animate-fade-up"
+            className={`pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-card border border-line border-s-4 bg-surface px-4 py-2.5 text-sm font-medium text-ink-900 shadow-pop animate-fade-up ${barColor[t.kind]}`}
           >
             {icons[t.kind]}
             <span>{t.text}</span>

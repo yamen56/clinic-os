@@ -2,74 +2,101 @@
 @import "../../public/fonts/fonts.local.css";
 
 /*
-  CLINIC OS design tokens.
-  Direction: "clinical calm" — warm paper neutrals, deep viridian accent,
-  status expressed as logical-start spine bars. Light interface only.
+  CLINIC OS — Makan Scaling brand layer.
+  Single source of truth: no hardcoded hex in components.
+
+  Daylight-white product surface, near-black text, one slate-blue accent.
+  The dark "night aurora" surface is reserved for brand moments (auth/splash)
+  and the app sidebar — never for working screens.
 */
 @theme {
-  --font-sans: "Inter", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", "Tajawal", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Montserrat", "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-ar-display: "Cairo", "Noto Sans Arabic", sans-serif;
+  --font-ar-body: "Tajawal", "Noto Sans Arabic", sans-serif;
 
-  /* Warm stone neutrals */
-  --color-paper: #faf9f7;
+  /* Neutrals — near-black ink on daylight white */
+  --color-paper: #ffffff;
   --color-surface: #ffffff;
-  --color-ink-900: #1c1917;
-  --color-ink-700: #44403c;
-  --color-ink-500: #78716c;
-  --color-ink-400: #a8a29e;
-  --color-ink-300: #d6d3d1;
-  --color-line: #e9e6e2;
-  --color-line-strong: #d8d4cf;
+  --color-subtle: #f7f8fa;
+  --color-sunken: #f2f5f9;
+  --color-ink-900: #16181c;
+  --color-ink-700: #4b5159;
+  --color-ink-500: #7a828c;
+  --color-ink-400: #9aa2ac;
+  --color-ink-300: #c5cbd3;
+  --color-line: #e3e6eb;
+  --color-line-strong: #c5cbd3;
+  --color-graphite: #2a2d33;
 
-  /* Brand: deep viridian */
-  --color-brand-50: #eef7f4;
-  --color-brand-100: #d8ede6;
-  --color-brand-200: #b2dbcd;
-  --color-brand-300: #7fc2ad;
-  --color-brand-400: #4aa389;
-  --color-brand-500: #26866d;
-  --color-brand-600: #0f6e5c;
-  --color-brand-700: #0b584a;
-  --color-brand-800: #0a463c;
-  --color-brand-900: #093a32;
+  /* Brand: slate blue, sampled from the mark */
+  --color-brand-50: #f2f5f9;
+  --color-brand-100: #dce5ee;
+  --color-brand-200: #c6d4e2;
+  --color-brand-300: #a9bed2;
+  --color-brand-400: #8fa9c0;
+  --color-brand-500: #7b97b1;
+  --color-brand-600: #6989a6;
+  --color-brand-700: #4a6b8a;
+  --color-brand-800: #3a5670;
+  --color-brand-900: #1e3a6b;
 
-  /* Secondary accent: date amber (used sparingly) */
-  --color-amber-acc: #b45309;
-  --color-amber-soft: #fdf3e7;
+  /* Night surface — auth, splash, sidebar */
+  --color-night: #0b1220;
+  --color-night-deep: #050810;
 
-  /* Status system (appointments, invoices, connections) */
-  --color-st-scheduled: #6d28d9;
-  --color-st-scheduled-soft: #f1ecfd;
-  --color-st-confirmed: #0f6e5c;
-  --color-st-confirmed-soft: #e6f2ee;
-  --color-st-completed: #365314;
-  --color-st-completed-soft: #eef3e4;
-  --color-st-noshow: #b91c1c;
-  --color-st-noshow-soft: #fdeeee;
-  --color-st-cancelled: #78716c;
-  --color-st-cancelled-soft: #f1efed;
-  --color-st-pending: #b45309;
-  --color-st-pending-soft: #fdf3e7;
+  /* Chart / accent series (§5) */
+  --color-cyan: #5bc6e3;
+  --color-cyan-ink: #1f6e85;
+  --color-warm: #e4946b;
+  --color-deep-blue: #1e3a6b;
 
-  --color-danger: #b91c1c;
-  --color-danger-soft: #fdeeee;
-  --color-ok: #0f6e5c;
+  /* Semantic */
+  --color-ok: #2f9e6a;
+  --color-warning: #c98a2b;
+  --color-danger: #c24a4a;
+  --color-danger-hover: #a93f3f;
+  --color-danger-soft: #f7ecec;
 
-  --radius-card: 0.875rem;
-  --radius-ctl: 0.5rem;
+  /* Status chips — tinted fill, solid ink */
+  --color-st-scheduled: #4a6b8a;
+  --color-st-scheduled-soft: #dce5ee;
+  --color-st-confirmed: #2f9e6a;
+  --color-st-confirmed-soft: #e7f4ee;
+  --color-st-completed: #2a2d33;
+  --color-st-completed-soft: #eceded;
+  --color-st-noshow: #c98a2b;
+  --color-st-noshow-soft: #f9f0e2;
+  --color-st-cancelled: #c24a4a;
+  --color-st-cancelled-soft: #f7ecec;
+  --color-st-pending: #c98a2b;
+  --color-st-pending-soft: #f9f0e2;
 
-  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.04), 0 4px 16px -8px rgb(28 25 23 / 0.06);
-  --shadow-pop: 0 2px 6px rgb(28 25 23 / 0.06), 0 12px 32px -12px rgb(28 25 23 / 0.18);
+  --radius-card: 12px;
+  --radius-ctl: 8px;
+  --radius-modal: 20px;
 
-  --animate-fade-up: fade-up 0.25s ease both;
-  --animate-fade-in: fade-in 0.2s ease both;
+  /* Never pure black — tinted with the night hue */
+  --shadow-card: 0 1px 2px rgb(11 18 32 / 0.06), 0 1px 1px rgb(11 18 32 / 0.04);
+  --shadow-pop: 0 12px 32px rgb(11 18 32 / 0.08), 0 4px 12px rgb(11 18 32 / 0.05);
+  --shadow-modal: 0 24px 64px rgb(11 18 32 / 0.12), 0 8px 20px rgb(11 18 32 / 0.06);
+
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --animate-fade-up: fade-up 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.14s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 
   @keyframes fade-up {
-    from { opacity: 0; transform: translateY(4px); }
+    from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
   }
   @keyframes fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+  @keyframes slim-progress {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(250%); }
   }
 }
 
@@ -82,15 +109,101 @@ html {
 }
 
 html[dir="rtl"] {
-  font-family: "IBM Plex Sans Arabic", "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ar-body);
 }
 
 body {
   min-height: 100dvh;
 }
 
-/* Numbers always tabular in data contexts */
+/*
+  Display type: Montserrat in Latin, Cairo in Arabic.
+  Arabic script is never letter-spaced, italicized or uppercased, and needs a
+  looser line-height for its taller ascenders.
+*/
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+html[dir="rtl"] .font-display {
+  font-family: var(--font-ar-display);
+  font-weight: 800;
+  letter-spacing: normal;
+  line-height: 1.35;
+}
+
+/* Eyebrow: uppercase + tracked in Latin, weight-led in Arabic */
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-brand-600);
+}
+html[dir="rtl"] .eyebrow {
+  font-family: var(--font-ar-body);
+  font-weight: 700;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/*
+  Arabic script is never uppercased, letter-spaced or italicized. Enforced at the
+  root so utility classes elsewhere can't reintroduce it; Latin keeps both.
+*/
+html[dir="rtl"] .uppercase:not(.latin) { text-transform: none; }
+html[dir="rtl"] [class*="tracking-"]:not(.latin) { letter-spacing: normal; }
+html[dir="rtl"] .italic:not(.latin) { font-style: normal; }
+
+/* Numbers, IDs, money and timestamps */
 .tnum { font-variant-numeric: tabular-nums; }
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9375em;
+}
+
+/* Latin numerals stay LTR inside Arabic text */
+.num { unicode-bidi: isolate; direction: ltr; }
+
+/*
+  Night aurora — brand moments only (auth, splash).
+  The supplied asset already carries the grain and light leaks, so it sits on
+  top of the gradient rather than repeating it. The gradient stays underneath as
+  the fallback if the image is ever missing.
+*/
+.surface-night {
+  background-color: var(--color-night-deep);
+  background-image:
+    url("/assets/bg-aurora-grain.png"),
+    radial-gradient(1200px 600px at 12% 30%, rgb(91 198 227 / 0.18), transparent 60%),
+    radial-gradient(900px 500px at 85% 70%, rgb(228 148 107 / 0.10), transparent 65%),
+    radial-gradient(1400px 800px at 50% 110%, rgb(30 58 107 / 0.55), transparent 70%),
+    linear-gradient(180deg, #050810 0%, #0b1220 100%);
+  background-size: cover, auto, auto, auto, auto;
+  background-position: center;
+  color: #fff;
+  position: relative;
+  isolation: isolate;
+}
+.surface-night > * { position: relative; z-index: 2; }
+
+/* Loading is a slim bar, never a spinner */
+.slim-progress {
+  height: 1.5px;
+  width: 100%;
+  background: var(--color-line);
+  overflow: hidden;
+}
+.slim-progress::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 40%;
+  background: var(--color-brand-600);
+  animation: slim-progress 1.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
 
 /* Status spine: colored bar on the logical-start edge */
 .spine { position: relative; }
@@ -104,7 +217,7 @@ body {
   background: var(--spine-color, var(--color-brand-600));
 }
 
-::selection { background: var(--color-brand-100); }
+::selection { background: var(--color-brand-100); color: var(--color-ink-900); }
 
 /* Scrollbars: quiet */
 * { scrollbar-width: thin; scrollbar-color: var(--color-ink-300) transparent; }
@@ -113,10 +226,10 @@ body {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
-/* Focus visibility */
+/* Focus: always a 3px brand ring — never a hard outline, never suppressed */
 :focus-visible {
-  outline: 2px solid var(--color-brand-500);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(105 137 166 / 0.30);
   border-radius: 4px;
 }
 

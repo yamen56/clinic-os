@@ -5,24 +5,21 @@ import { loginAction } from "./actions";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
-import { HeartPulse } from "lucide-react";
 
 export function LoginForm() {
   const { t } = useI18n();
   const [state, formAction, pending] = useActionState(loginAction, null);
 
   return (
-    <div className="w-full max-w-sm">
-      <div className="mb-8 flex flex-col items-center gap-3 text-center">
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-card">
-          <HeartPulse className="h-6 w-6" />
-        </span>
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{t.auth.signInTitle}</h1>
+    <div className="w-full max-w-[420px]">
+      <form
+        action={formAction}
+        className="grid gap-4 rounded-modal border border-line bg-surface p-6 shadow-modal"
+      >
+        <div className="mb-1 text-center">
+          <h1 className="font-display text-xl font-semibold text-ink-900">{t.auth.signInTitle}</h1>
           <p className="mt-1 text-sm text-ink-500">{t.auth.signInSub}</p>
         </div>
-      </div>
-      <form action={formAction} className="grid gap-4 rounded-card border border-line bg-surface p-6 shadow-card">
         <Field label={t.common.email} required>
           <Input name="email" type="email" dir="ltr" placeholder={t.auth.emailPlaceholder} autoComplete="email" required />
         </Field>

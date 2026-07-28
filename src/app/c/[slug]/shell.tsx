@@ -8,6 +8,7 @@ import { LanguageToggle } from "@/components/language-toggle";
 import { logoutAction } from "@/app/login/actions";
 import { exitImpersonationAction } from "@/app/admin/actions";
 import { Avatar } from "@/components/ui/misc";
+import { BrandMark } from "@/components/brand-mark";
 import {
   LayoutDashboard,
   MessageCircle,
@@ -34,7 +35,7 @@ type NavKey =
   | "aiAgent"
   | "settings";
 
-const icons: Record<NavKey, React.ComponentType<{ className?: string }>> = {
+const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
   dashboard: LayoutDashboard,
   conversations: MessageCircle,
   calendar: CalendarDays,
@@ -102,16 +103,21 @@ export function Shell({
 
   return (
     <div className="min-h-dvh bg-paper">
-      {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 inset-inline-start-0 z-40 hidden w-60 flex-col border-e border-line bg-surface md:flex">
-        <div className="flex items-center gap-2.5 px-4 py-4">
-          <Avatar name={clinic.name} size={34} color={clinic.brandColor} />
+      {/* Desktop sidebar — night surface, the one dark region of the app chrome */}
+      <aside className="fixed inset-y-0 inset-inline-start-0 z-40 hidden w-[248px] flex-col border-e border-white/6 bg-night md:flex">
+        <div className="flex h-[88px] items-center justify-center border-b border-white/6">
+          <BrandMark size={64} />
+        </div>
+        <div className="flex items-center gap-2.5 px-4 py-3.5">
+          <Avatar name={clinic.name} size={30} color={clinic.brandColor} />
           <div className="min-w-0">
-            <div className="truncate text-[15px] font-semibold leading-tight">{clinicDisplay}</div>
-            <div className="text-[11px] text-ink-400">Clinic OS</div>
+            <div className="truncate text-[13px] font-semibold leading-tight text-white">
+              {clinicDisplay}
+            </div>
+            <div className="text-[11px] text-white/40">Clinic OS</div>
           </div>
         </div>
-        <nav className="flex-1 overflow-y-auto px-2.5 py-2">
+        <nav className="flex-1 overflow-y-auto px-3 py-2">
           {visible.map(({ key, href, badge }) => {
             const Icon = icons[key];
             const active = isActive(href);
@@ -119,16 +125,17 @@ export function Shell({
               <Link
                 key={key}
                 href={href}
-                className={`mb-0.5 flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-sm font-medium transition-colors ${
+                aria-current={active ? "page" : undefined}
+                className={`relative mb-0.5 flex h-10 items-center gap-2.5 rounded-ctl px-3 text-sm font-medium transition-colors duration-140 ease-out ${
                   active
-                    ? "bg-brand-50 text-brand-800"
-                    : "text-ink-700 hover:bg-ink-900/4"
+                    ? "bg-[rgb(105_137_166/0.22)] text-white before:absolute before:inset-y-2 before:inset-inline-start-0 before:w-0.5 before:rounded-full before:bg-brand-600 before:content-['']"
+                    : "text-white/62 hover:bg-white/5 hover:text-white"
                 }`}
               >
-                <Icon className={`h-[18px] w-[18px] ${active ? "text-brand-700" : "text-ink-400"}`} />
+                <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
                 <span className="flex-1">{t.nav[key]}</span>
                 {!!badge && (
-                  <span className="rounded-full bg-brand-600 px-1.5 py-0.5 text-[11px] font-semibold text-white tnum">
+                  <span className="rounded-full bg-white/12 px-1.5 py-0.5 text-[11px] font-semibold text-white tnum">
                     {badge > 99 ? "99+" : badge}
                   </span>
                 )}
@@ -136,39 +143,39 @@ export function Shell({
             );
           })}
         </nav>
-        <div className="border-t border-line p-3">
+        <div className="border-t border-white/6 p-3">
           <div className="flex items-center gap-2.5 px-1">
-            <Avatar name={userName} size={30} color="var(--color-ink-500)" />
+            <Avatar name={userName} size={30} color="rgb(255 255 255 / 0.14)" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-medium">{userName}</div>
-              <div className="text-[11px] text-ink-400">{role}</div>
+              <div className="truncate text-[13px] font-medium text-white">{userName}</div>
+              <div className="text-[11px] text-white/40">{role}</div>
             </div>
             <Link
               href={`${base}/notifications`}
-              className="rounded-md p-1.5 text-ink-400 hover:bg-ink-900/5 hover:text-ink-700"
+              className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
               aria-label={t.nav.notifications}
             >
-              <Bell className="h-4.5 w-4.5" />
+              <Bell className="h-4.5 w-4.5" strokeWidth={1.75} />
             </Link>
             <form action={logoutAction}>
               <button
-                className="rounded-md p-1.5 text-ink-400 hover:bg-ink-900/5 hover:text-ink-700"
+                className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
                 aria-label={t.auth.signOut}
               >
-                <LogOut className="h-4.5 w-4.5" />
+                <LogOut className="h-4.5 w-4.5" strokeWidth={1.75} />
               </button>
             </form>
           </div>
           <div className="mt-2 px-1">
-            <LanguageToggle />
+            <LanguageToggle onDark />
           </div>
         </div>
       </aside>
 
       {/* Content */}
-      <div className="md:ms-60">
+      <div className="md:ms-[248px]">
         {isImpersonating && (
-          <div className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-amber-acc px-4 py-2 text-center text-[13px] font-medium text-white">
+          <div className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-danger px-4 py-2 text-center text-[13px] font-medium text-white">
             <ShieldAlert className="h-4 w-4 shrink-0" />
             {t.admin.impersonating}
             <form action={exitImpersonationAction}>
@@ -183,7 +190,7 @@ export function Shell({
           .map((a) => (
             <div
               key={a.id}
-              className="flex items-start justify-between gap-3 border-b border-line bg-brand-50 px-4 py-2.5 text-[13px] text-brand-800"
+              className="flex items-start justify-between gap-3 border-b border-line bg-brand-100 px-4 py-2.5 text-[13px] text-brand-800"
             >
               <div>
                 <span className="font-semibold">{a.title}</span>
@@ -199,7 +206,7 @@ export function Shell({
                   }).catch(() => {});
                 }}
                 aria-label={t.common.close}
-                className="mt-0.5 shrink-0 text-brand-700 hover:text-brand-900"
+                className="mt-0.5 shrink-0 text-brand-700 hover:text-brand-800"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -219,7 +226,7 @@ export function Shell({
                 key={key}
                 href={href}
                 className={`relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium ${
-                  active ? "text-brand-700" : "text-ink-400"
+                  active ? "text-brand-700" : "text-ink-500"
                 }`}
               >
                 <Icon className="h-5 w-5" />
@@ -234,7 +241,7 @@ export function Shell({
             <button
               onClick={() => setMoreOpen((v) => !v)}
               className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium ${
-                moreOpen ? "text-brand-700" : "text-ink-400"
+                moreOpen ? "text-brand-700" : "text-ink-500"
               }`}
             >
               <MoreHorizontal className="h-5 w-5" />
@@ -251,7 +258,7 @@ export function Shell({
                   key={key}
                   href={href}
                   onClick={() => setMoreOpen(false)}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-ink-900/4"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-sunken"
                 >
                   <Icon className="h-[18px] w-[18px] text-ink-400" />
                   {t.nav[key]}
@@ -261,7 +268,7 @@ export function Shell({
             <Link
               href={`${base}/notifications`}
               onClick={() => setMoreOpen(false)}
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-ink-900/4"
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-sunken"
             >
               <Bell className="h-[18px] w-[18px] text-ink-400" />
               {t.nav.notifications}

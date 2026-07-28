@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { AppointmentPanel, type PanelState } from "./appointment-panel";
 import { updateAppointmentAction } from "./actions";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { inkOn } from "@/lib/contrast";
 
 export type Appt = {
   id: string;
@@ -258,7 +259,7 @@ export function CalendarClient({
           )}
           <button
             onClick={() => setColorBy(colorBy === "service" ? "doctor" : "service")}
-            className="rounded-full border border-line-strong px-3 py-1 text-[12px] font-medium text-ink-500 hover:bg-paper"
+            className="rounded-full border border-line-strong px-3 py-1 text-[12px] font-medium text-ink-500 hover:bg-sunken"
           >
             {t.calendar.colorBy}: {colorBy === "service" ? t.calendar.byService : t.calendar.byDoctor}
           </button>
@@ -366,7 +367,7 @@ function MonthGrid({
               key={k}
               onClick={() => onDayClick(d)}
               className={`min-h-24 border-b border-e border-line p-1.5 text-start align-top transition-colors hover:bg-brand-50/40 ${
-                inMonth ? "" : "bg-paper/60 text-ink-300"
+                inMonth ? "" : "bg-subtle text-ink-300"
               }`}
             >
               <span
@@ -380,8 +381,8 @@ function MonthGrid({
                 {list.slice(0, 3).map((a) => (
                   <span
                     key={a.id}
-                    className="truncate rounded px-1 py-0.5 text-[11px] font-medium text-white"
-                    style={{ background: colorOf(a) }}
+                    className="truncate rounded px-1 py-0.5 text-[11px] font-medium"
+                    style={{ background: colorOf(a), color: inkOn(colorOf(a)) }}
                   >
                     {a.patient_name}
                   </span>
@@ -646,8 +647,8 @@ function TimeGrid({
                             moved: false,
                           };
                         }}
-                        className={`absolute inset-x-0.5 z-[5] cursor-grab touch-none select-none overflow-hidden rounded-md border border-white/40 px-1.5 py-0.5 text-white shadow-sm transition-shadow hover:shadow-md ${statusStyle[a.status] ?? ""} ${isPreview ? "z-20 opacity-80 ring-2 ring-brand-400" : ""}`}
-                        style={{ top, height: h, background: colorOf(a) }}
+                        className={`absolute inset-x-0.5 z-[5] cursor-grab touch-none select-none overflow-hidden rounded-md border border-black/5 px-1.5 py-0.5 shadow-sm transition-shadow hover:shadow-md ${statusStyle[a.status] ?? ""} ${isPreview ? "z-20 opacity-80 ring-2 ring-brand-400" : ""}`}
+                        style={{ top, height: h, background: colorOf(a), color: inkOn(colorOf(a)) }}
                         title={`${a.patient_name} · ${statusLabel(a.status)}`}
                       >
                         <div className="truncate text-[11px] font-semibold leading-tight">

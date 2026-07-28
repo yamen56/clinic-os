@@ -434,7 +434,7 @@ export function PatientProfile(props: {
                   <li key={inv.id}>
                     <Link
                       href={`/c/${slug}/invoices/${inv.id}`}
-                      className="flex items-center gap-4 px-5 py-3 hover:bg-paper"
+                      className="flex items-center gap-4 px-5 py-3 hover:bg-sunken"
                     >
                       <span className="flex-1 text-sm font-medium" dir="ltr">
                         {inv.number}
@@ -473,7 +473,7 @@ export function PatientProfile(props: {
                       className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
                         m.direction === "out"
                           ? "self-end bg-brand-50 text-brand-900"
-                          : "self-start border border-line bg-paper"
+                          : "self-start border border-line bg-sunken"
                       }`}
                     >
                       {m.body || `[${m.msg_type}]`}
@@ -620,7 +620,7 @@ function NotesTab({
       <Card className="p-4">
         <div className="mb-2 flex items-center gap-2">
           <StickyNote className="h-4 w-4 text-ink-400" />
-          <div className="flex gap-1 rounded-full bg-paper p-0.5">
+          <div className="flex gap-1 rounded-full bg-sunken p-0.5">
             {(["clinical", "admin"] as const).map((k) => (
               <button
                 key={k}
@@ -702,10 +702,7 @@ function NoteItem({
     entityKey: `note:${note.id}`,
   });
   return (
-    <Card
-      className="spine p-4"
-      spine={note.kind === "clinical" ? "var(--color-brand-500)" : "var(--color-st-pending)"}
-    >
+    <Card className="p-4">
       <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px] text-ink-400">
         <span>
           {note.kind === "clinical" ? t.patients.notes.clinical : t.patients.notes.admin}
@@ -903,7 +900,7 @@ function MergeModal({
             key={r.id}
             onClick={() => setSelected(r)}
             className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-start text-sm transition-colors ${
-              selected?.id === r.id ? "border-brand-500 bg-brand-50" : "border-line hover:bg-paper"
+              selected?.id === r.id ? "border-brand-500 bg-brand-50" : "border-line hover:bg-sunken"
             }`}
           >
             <Avatar name={r.full_name} size={28} />

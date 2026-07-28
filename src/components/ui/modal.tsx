@@ -35,21 +35,21 @@ export function Modal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <div className="absolute inset-0 bg-ink-900/30 animate-fade-in" onClick={onClose} />
+      <div className="absolute inset-0 bg-[rgb(11_18_32/0.55)] animate-fade-in" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
-        className={`relative m-0 max-h-[92dvh] w-full overflow-auto rounded-t-card bg-surface shadow-pop animate-fade-up sm:m-4 sm:rounded-card ${
+        className={`relative m-0 max-h-[92dvh] w-full overflow-auto rounded-t-modal bg-surface shadow-modal animate-fade-up sm:m-4 sm:rounded-modal ${
           wide ? "sm:max-w-3xl" : "sm:max-w-lg"
         }`}
       >
         {title && (
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 py-3.5">
-            <h2 className="text-[15px] font-semibold">{title}</h2>
+            <h2 className="font-display text-xl font-semibold">{title}</h2>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="rounded-md p-1.5 text-ink-500 hover:bg-ink-900/5"
+              className="rounded-md p-1.5 text-ink-500 hover:bg-sunken"
             >
               <X className="h-4.5 w-4.5" />
             </button>

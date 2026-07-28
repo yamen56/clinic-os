@@ -179,8 +179,8 @@ export function BuilderClient({
       {tab === "flow" ? (
         <div className="mx-auto max-w-2xl">
           {/* Trigger */}
-          <Card className="spine p-5" spine="var(--color-amber-acc)">
-            <div className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-amber-acc">
+          <Card className="p-5">
+            <div className="eyebrow mb-3">
               {t.automations.trigger}
             </div>
             <Select value={triggerType} onChange={(e) => { setTriggerType(e.target.value); setTriggerConfig({}); }}>
@@ -371,7 +371,7 @@ function StepList({
               <button
                 key={type}
                 onClick={() => addStep(type)}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-start text-sm hover:bg-paper"
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-start text-sm hover:bg-sunken"
               >
                 <Icon className="h-4 w-4 text-ink-400" />
                 {(t.automations.steps as Record<string, string>)[type]}
@@ -420,7 +420,7 @@ function StepCard({
   const setCfg = (patch: Record<string, unknown>) => onChange({ ...step, config: { ...cfg, ...patch } });
 
   return (
-    <Card className="spine overflow-hidden" spine="var(--color-brand-500)">
+    <Card className="overflow-hidden">
       <div className="flex items-center gap-2.5 border-b border-line px-4 py-2.5">
         <Icon className="h-4 w-4 text-brand-600" />
         <span className="flex-1 text-[13px] font-semibold">
@@ -525,7 +525,7 @@ function StepCard({
             {depth < 2 && (
               <div className="grid gap-3 sm:grid-cols-2">
                 {(["yes", "no"] as const).map((branch) => (
-                  <div key={branch} className="rounded-xl border border-line bg-paper/50 p-3">
+                  <div key={branch} className="rounded-xl border border-line bg-subtle p-3">
                     <div className={`mb-2 text-[12px] font-semibold ${branch === "yes" ? "text-brand-700" : "text-ink-500"}`}>
                       {branch === "yes" ? t.automations.yes : t.automations.no}
                     </div>
@@ -570,7 +570,7 @@ function RunHistory({ runs, tz, locale }: { runs: Run[]; tz: string; locale: str
           <li key={r.id}>
             <button
               onClick={() => setOpen(open === r.id ? null : r.id)}
-              className="flex w-full items-center gap-3 px-5 py-3 text-start hover:bg-paper"
+              className="flex w-full items-center gap-3 px-5 py-3 text-start hover:bg-sunken"
             >
               <Badge status={runBadge[r.status] ?? "neutral"}>
                 {(t.automations.runStatus as Record<string, string>)[r.status] ?? r.status}
@@ -582,7 +582,7 @@ function RunHistory({ runs, tz, locale }: { runs: Run[]; tz: string; locale: str
               <ChevronDown className={`h-4 w-4 text-ink-300 transition-transform ${open === r.id ? "rotate-180" : ""}`} />
             </button>
             {open === r.id && (
-              <div className="border-t border-line bg-paper/50 px-5 py-3">
+              <div className="border-t border-line bg-subtle px-5 py-3">
                 {r.error && (
                   <p className="mb-2 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger">{r.error}</p>
                 )}
@@ -655,7 +655,7 @@ function TestRunModal({
                 onClose();
               })
             }
-            className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2 text-start text-sm hover:bg-paper"
+            className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2 text-start text-sm hover:bg-sunken"
           >
             <Avatar name={r.full_name} size={26} />
             {r.full_name}

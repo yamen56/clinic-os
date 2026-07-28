@@ -25,7 +25,7 @@ export function WeeklyHoursEditor({
       {DAY_KEYS.map((day) => {
         const ranges = value[day] ?? [];
         return (
-          <div key={day} className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-paper/60 px-3 py-2">
+          <div key={day} className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-subtle px-3 py-2">
             <span className="w-20 text-[13px] font-medium">{(t.hours.days as Record<string, string>)[day]}</span>
             {ranges.length === 0 && <span className="text-[13px] text-ink-400">{t.hours.closed}</span>}
             {ranges.map(([from, to], i) => (

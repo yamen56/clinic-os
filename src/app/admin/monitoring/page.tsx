@@ -104,7 +104,7 @@ export default async function MonitoringPage() {
           { icon: <MessageCircle className="h-4 w-4" />, label: "Outbox queued", value: data.outbox.queued, warn: data.outbox.failed > 0 },
           { icon: <HardDrive className="h-4 w-4" />, label: "Storage (MB)", value: storageMb, warn: false },
         ].map((s, i) => (
-          <Card key={i} className={s.warn ? "spine p-4" : "p-4"} spine={s.warn ? "var(--color-st-noshow)" : undefined}>
+          <Card key={i} className="p-4">
             <div className="flex items-center gap-1.5 text-[13px] text-ink-500">
               {s.icon}
               {s.label}

@@ -12,7 +12,7 @@ import {
   MessageCircle,
   Stethoscope,
   User,
-  Loader2,
+  
   Check,
 } from "lucide-react";
 
@@ -335,7 +335,7 @@ export function BookingWizard({
               {/* slots */}
               {slots === null ? (
                 <div className="flex justify-center py-10 text-ink-400">
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="slim-progress w-32 rounded-full" />
                 </div>
               ) : slots.length === 0 ? (
                 <p className="rounded-card border border-dashed border-line-strong bg-surface/60 px-4 py-8 text-center text-sm text-ink-500">
@@ -538,7 +538,7 @@ function PrimaryBtn({
       className="inline-flex h-11 items-center gap-2 rounded-full px-6 text-[15px] font-semibold text-white shadow-card transition-opacity disabled:opacity-40"
       style={{ background: "var(--bk)" }}
     >
-      {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+      
       {label}
     </button>
   );

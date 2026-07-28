@@ -68,7 +68,7 @@ async function main() {
        values ('Rima Dental Center', 'مركز ريما لطب الأسنان', $1, '+96264616161',
                'Amman, 7th Circle, Zahran St. 42', 'عمان، الدوار السابع، شارع زهران ٤٢',
                'https://maps.google.com/?q=31.9539,35.8656',
-               '#0f6e5c', 'RIMA', 16, 'ضريبة المبيعات',
+               '#6989a6', 'RIMA', 16, 'ضريبة المبيعات',
                'الدفع نقداً في العيادة، أو عبر كليك: RIMADENTAL',
                'شكراً لثقتكم بمركز ريما لطب الأسنان', 'active', 'standard', 149)
        returning id, timezone`,
@@ -102,7 +102,7 @@ async function main() {
         clinicId, userId, role,
         (extra.title as string) ?? null,
         (extra.specialty as string) ?? null,
-        (extra.color as string) ?? "#0f6e5c",
+        (extra.color as string) ?? "#6989a6",
         (extra.reminder as number) ?? 30,
       ]
     );
@@ -110,20 +110,20 @@ async function main() {
   };
 
   await mkMember(ownerId, "owner");
-  const m1 = await mkMember(doc1Id, "doctor", { title: "د.", specialty: "تقويم الأسنان", color: "#6d28d9" });
-  const m2 = await mkMember(doc2Id, "doctor", { title: "د.", specialty: "طب أسنان الأطفال", color: "#b45309" });
-  await mkMember(recId, "receptionist", { color: "#26866d" });
+  const m1 = await mkMember(doc1Id, "doctor", { title: "د.", specialty: "تقويم الأسنان", color: "#1e3a6b" });
+  const m2 = await mkMember(doc2Id, "doctor", { title: "د.", specialty: "طب أسنان الأطفال", color: "#e4946b" });
+  await mkMember(recId, "receptionist", { color: "#5bc6e3" });
 
   // ---- Services
   const services: { id: string; name: string; dur: number; price: number }[] = [];
   const svcDefs = [
-    ["Consultation", "كشفية", 20, 15, "#0f6e5c"],
-    ["Cleaning & Polish", "تنظيف وتلميع", 45, 35, "#26866d"],
-    ["Filling", "حشوة", 45, 40, "#6d28d9"],
-    ["Root Canal", "علاج عصب", 90, 180, "#b45309"],
-    ["Extraction", "خلع", 30, 45, "#b91c1c"],
-    ["Teeth Whitening", "تبييض الأسنان", 60, 220, "#4aa389"],
-    ["Orthodontic Follow-up", "مراجعة تقويم", 20, 25, "#365314"],
+    ["Consultation", "كشفية", 20, 15, "#6989a6"],
+    ["Cleaning & Polish", "تنظيف وتلميع", 45, 35, "#5bc6e3"],
+    ["Filling", "حشوة", 45, 40, "#1e3a6b"],
+    ["Root Canal", "علاج عصب", 90, 180, "#e4946b"],
+    ["Extraction", "خلع", 30, 45, "#c24a4a"],
+    ["Teeth Whitening", "تبييض الأسنان", 60, 220, "#8fa9c0"],
+    ["Orthodontic Follow-up", "مراجعة تقويم", 20, 25, "#2a2d33"],
   ] as const;
   for (const [name, nameAr, dur, price, color] of svcDefs) {
     const r = await c.query(

@@ -232,7 +232,7 @@ export function InboxClient({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={t.common.search}
-              className="h-9 w-full rounded-full border border-line bg-paper ps-9 pe-3 text-sm outline-none focus:border-brand-400"
+              className="h-9 w-full rounded-full border border-line bg-sunken ps-9 pe-3 text-sm outline-none focus:border-brand-400"
             />
           </div>
           <div className="flex gap-1 overflow-x-auto">
@@ -261,7 +261,7 @@ export function InboxClient({
               <button
                 key={row.id}
                 onClick={() => setOpenId(row.id)}
-                className={`flex w-full items-center gap-3 border-b border-line/60 px-3.5 py-3 text-start transition-colors hover:bg-paper ${
+                className={`flex w-full items-center gap-3 border-b border-line/60 px-3.5 py-3 text-start transition-colors hover:bg-sunken ${
                   openId === row.id ? "bg-brand-50/50" : ""
                 }`}
               >
@@ -342,7 +342,7 @@ export function InboxClient({
             </div>
 
             {/* Messages */}
-            <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto bg-paper/50 px-4 py-4">
+            <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto bg-subtle px-4 py-4">
               {cv.flagged && cv.flag_reason && (
                 <div className="mx-auto mb-2 rounded-full bg-st-pending-soft px-4 py-1.5 text-[12px] font-medium text-st-pending">
                   {cv.flag_reason}
@@ -390,7 +390,7 @@ export function InboxClient({
                           href={`/api/c/${slug}/wa-media/${m.id}`}
                           target="_blank"
                           rel="noreferrer"
-                          className={`mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] underline ${out ? "bg-white/10" : "bg-paper"}`}
+                          className={`mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] underline ${out ? "bg-white/10" : "bg-sunken"}`}
                         >
                           <Paperclip className="h-3.5 w-3.5" />
                           {m.media_name ?? m.msg_type}
@@ -477,13 +477,13 @@ export function InboxClient({
                 </div>
               </div>
               <div className="grid gap-2 text-[13px]">
-                <div className="flex justify-between rounded-lg bg-paper px-3 py-2">
+                <div className="flex justify-between rounded-lg bg-sunken px-3 py-2">
                   <span className="text-ink-500">{t.patients.overview.balanceDue}</span>
                   <span className="font-semibold tnum">
                     {fmtMoney(Number(thread.patient.balance_due), "JOD", locale)}
                   </span>
                 </div>
-                <div className="rounded-lg bg-paper px-3 py-2">
+                <div className="rounded-lg bg-sunken px-3 py-2">
                   <span className="text-ink-500">{t.patients.overview.upcoming}: </span>
                   <span className="font-medium">
                     {thread.patient.next_appointment
@@ -492,7 +492,7 @@ export function InboxClient({
                   </span>
                 </div>
                 {thread.patient.notes_summary && (
-                  <p className="rounded-lg bg-paper px-3 py-2 text-ink-700">{thread.patient.notes_summary}</p>
+                  <p className="rounded-lg bg-sunken px-3 py-2 text-ink-700">{thread.patient.notes_summary}</p>
                 )}
               </div>
               <div className="grid gap-2">
@@ -532,7 +532,7 @@ export function InboxClient({
                   setDraft((d) => (d ? `${d}\n${qr.body}` : qr.body));
                   setQrOpen(false);
                 }}
-                className="flex-1 rounded-lg border border-line px-3 py-2 text-start hover:bg-paper"
+                className="flex-1 rounded-lg border border-line px-3 py-2 text-start hover:bg-sunken"
               >
                 <div className="text-[13px] font-semibold">{qr.title}</div>
                 <div className="line-clamp-2 text-[12px] text-ink-500">{qr.body}</div>

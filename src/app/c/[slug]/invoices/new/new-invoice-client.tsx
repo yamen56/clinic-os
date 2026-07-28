@@ -257,7 +257,7 @@ function PatientSearch({
         <button
           key={r.id}
           onClick={() => onPick({ id: r.id, name: r.full_name })}
-          className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2 text-start text-sm hover:bg-paper"
+          className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2 text-start text-sm hover:bg-sunken"
         >
           <Avatar name={r.full_name} size={26} />
           <span className="flex-1 font-medium">{r.full_name}</span>

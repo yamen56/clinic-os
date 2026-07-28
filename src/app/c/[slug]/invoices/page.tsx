@@ -119,7 +119,7 @@ export default async function InvoicesPage({
             [t.invoices.outstanding, data.stats.outstanding],
           ] as [string, string][]
         ).map(([label, val], i) => (
-          <Card key={i} className={`p-4 ${i === 3 && Number(val) > 0 ? "spine" : ""}`} spine={i === 3 && Number(val) > 0 ? "var(--color-st-pending)" : undefined}>
+          <Card key={i} className="p-4">
             <div className="text-[13px] text-ink-500">{label}</div>
             <div className="mt-1 text-xl font-semibold tnum">{fmtMoney(Number(val), data.currency, locale)}</div>
           </Card>
@@ -171,7 +171,7 @@ export default async function InvoicesPage({
             <ul className="divide-y divide-line">
               {data.invoices.map((inv) => (
                 <li key={String(inv.id)}>
-                  <Link href={`${base}/${inv.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-paper">
+                  <Link href={`${base}/${inv.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-sunken">
                     <span className="w-36 shrink-0 text-sm font-semibold tnum" dir="ltr">
                       {String(inv.number)}
                     </span>

@@ -44,7 +44,7 @@ const empty: Draft = {
   nameAr: "",
   durationMin: 30,
   price: 0,
-  color: "#0f6e5c",
+  color: "#6989a6",
   bufferAfterMin: 0,
   bookableOnline: true,
   doctorIds: [],
@@ -241,7 +241,7 @@ export function ServicesClient({
                         className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
                           on
                             ? "border-brand-500 bg-brand-50 text-brand-800"
-                            : "border-line-strong text-ink-500 hover:bg-paper"
+                            : "border-line-strong text-ink-500 hover:bg-sunken"
                         }`}
                       >
                         {d.name}

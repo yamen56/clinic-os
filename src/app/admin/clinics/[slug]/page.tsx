@@ -61,7 +61,7 @@ export default async function AdminClinicDetail({
   const { clinic, members, stats } = data;
 
   const checklistState: Record<string, boolean> = {
-    branding: !!clinic.logo_path || clinic.brand_color !== "#0f6e5c",
+    branding: !!clinic.logo_path || clinic.brand_color !== "#6989a6",
     services: Number(stats.services) > 0,
     whatsapp: clinic.wa_status === "connected",
     automations: Number(stats.active_automations) > 0,

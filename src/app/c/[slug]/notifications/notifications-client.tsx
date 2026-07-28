@@ -135,7 +135,7 @@ export function NotificationsClient({
                   <div
                     className={`flex items-start gap-3 px-5 py-3.5 transition-colors ${
                       n.read_at ? "" : "bg-brand-50/40"
-                    } ${n.url ? "hover:bg-paper" : ""}`}
+                    } ${n.url ? "hover:bg-sunken" : ""}`}
                   >
                     {!n.read_at && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-600" />}
                     <div className={`min-w-0 flex-1 ${n.read_at ? "ps-5" : ""}`}>

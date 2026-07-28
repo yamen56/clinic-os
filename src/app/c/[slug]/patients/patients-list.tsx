@@ -156,7 +156,7 @@ export function PatientsList({
               <li key={p.id}>
                 <Link
                   href={`/c/${slug}/patients/${p.id}`}
-                  className="flex items-center gap-3.5 px-4 py-3 transition-colors hover:bg-paper"
+                  className="flex items-center gap-3.5 px-4 py-3 transition-colors hover:bg-sunken"
                 >
                   <Avatar name={p.fullName} size={38} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
                   <div className="min-w-0 flex-1">

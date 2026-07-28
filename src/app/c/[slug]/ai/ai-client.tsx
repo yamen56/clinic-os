@@ -250,7 +250,7 @@ export function AiClient({
               </div>
             </Card>
 
-            <Card className="spine p-5" spine="var(--color-brand-500)">
+            <Card className="p-5">
               <h3 className="mb-1.5 flex items-center gap-2 text-[15px] font-semibold">
                 <ShieldCheck className="h-4.5 w-4.5 text-brand-600" />
                 {t.ai.guardrails}

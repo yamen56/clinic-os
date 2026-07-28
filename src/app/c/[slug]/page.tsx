@@ -107,28 +107,28 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card className="p-4">
-          <div className="text-[13px] text-ink-500">{t.dashboard.todayAppointments}</div>
-          <div className="mt-1 text-2xl font-semibold tnum">{data.appts.length}</div>
+          <div className="eyebrow">{t.dashboard.todayAppointments}</div>
+          <div className="font-display mt-2 text-[32px] font-bold leading-none tnum">{data.appts.length}</div>
         </Card>
         <Link href={`${base}/conversations`}>
           <Card className="h-full p-4 transition-shadow hover:shadow-pop">
-            <div className="text-[13px] text-ink-500">{t.dashboard.unreadConversations}</div>
-            <div className="mt-1 text-2xl font-semibold tnum">{data.stats.unread}</div>
+            <div className="eyebrow">{t.dashboard.unreadConversations}</div>
+            <div className="font-display mt-2 text-[32px] font-bold leading-none tnum">{data.stats.unread}</div>
           </Card>
         </Link>
         <Card className="p-4">
-          <div className="text-[13px] text-ink-500">{t.dashboard.revenueWeek}</div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tnum">{fmtMoney(revThis, data.currency, locale)}</span>
+          <div className="eyebrow">{t.dashboard.revenueWeek}</div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="font-display text-[32px] font-bold leading-none tnum">{fmtMoney(revThis, data.currency, locale)}</span>
           </div>
-          <div className={`mt-0.5 flex items-center gap-1 text-xs ${revUp ? "text-brand-600" : "text-danger"}`}>
+          <div className={`mt-2 flex items-center gap-1 text-xs font-semibold ${revUp ? "text-ok" : "text-danger"}`}>
             {revUp ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
             {fmtMoney(revLast, data.currency, locale)} {t.dashboard.vsLastWeek}
           </div>
         </Card>
         <Card className="p-4">
-          <div className="text-[13px] text-ink-500">{t.dashboard.noShowRate}</div>
-          <div className="mt-1 text-2xl font-semibold tnum">{noShowRate}%</div>
+          <div className="eyebrow">{t.dashboard.noShowRate}</div>
+          <div className="font-display mt-2 text-[32px] font-bold leading-none tnum">{noShowRate}%</div>
         </Card>
       </div>
 

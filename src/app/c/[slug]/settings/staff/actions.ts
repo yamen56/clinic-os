@@ -13,7 +13,7 @@ const addStaffSchema = z.object({
   role: z.enum(["owner", "doctor", "receptionist"]),
   title: z.string().max(60).optional().default(""),
   specialty: z.string().max(60).optional().default(""),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#0f6e5c"),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#6989a6"),
 });
 
 export async function addStaffAction(

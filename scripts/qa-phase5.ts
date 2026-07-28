@@ -5,7 +5,11 @@ import bcrypt from "bcryptjs";
 
 const BASE = "http://localhost:3000";
 const WORKER = "http://localhost:4020";
-const SECRET = "dev-internal-secret-change-in-production";
+try {
+  process.loadEnvFile?.();
+} catch {}
+// Must match the running worker; falls back to the dev default.
+const SECRET = process.env.INTERNAL_API_SECRET || "dev-internal-secret-change-in-production";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
 
 async function simulateInbound(clinicId: string, phone: string, name: string, body: string) {

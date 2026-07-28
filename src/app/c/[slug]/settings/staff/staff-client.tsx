@@ -49,7 +49,7 @@ export function StaffClient({
     role: "receptionist",
     title: "",
     specialty: "",
-    color: "#0f6e5c",
+    color: "#6989a6",
   });
   const [pending, start] = useTransition();
 
@@ -151,7 +151,7 @@ export function StaffClient({
                   }
                   toast(r.existing ? t.staff.emailTaken : t.staff.added, r.existing ? "info" : "success");
                   setAddOpen(false);
-                  setForm({ fullName: "", email: "", password: "", role: "receptionist", title: "", specialty: "", color: "#0f6e5c" });
+                  setForm({ fullName: "", email: "", password: "", role: "receptionist", title: "", specialty: "", color: "#6989a6" });
                   router.refresh();
                 })
               }

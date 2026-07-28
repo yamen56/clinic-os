@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json",
     "seed:recipes": "tsx scripts/seed-recipes.ts",
     "postinstall": "playwright install chromium",
-    "doctor": "tsx scripts/doctor.ts"
+    "doctor": "tsx scripts/doctor.ts",
+    "fonts": "tsx scripts/fetch-fonts.ts"
   },
   "type": "commonjs",
   "dependencies": {

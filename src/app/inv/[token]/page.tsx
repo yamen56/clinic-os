@@ -103,7 +103,7 @@ export default async function PublicInvoicePage({
                 </span>
               )}
               <div>
-                <h1 className="text-xl font-bold">{clinicName}</h1>
+                <h1 className="font-display text-xl font-bold">{clinicName}</h1>
                 {address && <p className="text-[13px] text-ink-500">{address}</p>}
                 {inv.clinic_phone && (
                   <p className="text-[13px] text-ink-500 tnum" dir="ltr">
@@ -113,10 +113,10 @@ export default async function PublicInvoicePage({
               </div>
             </div>
             <div className="text-end">
-              <div className="text-[13px] font-semibold uppercase tracking-widest text-ink-400">
+              <div className="text-[13px] font-semibold uppercase tracking-widest text-ink-500">
                 {L.invoice}
               </div>
-              <div className="text-lg font-bold tnum" dir="ltr">
+              <div className="font-display text-lg font-bold tnum" dir="ltr">
                 {inv.number}
               </div>
               <div className="mt-1 text-[13px] text-ink-500">
@@ -136,7 +136,7 @@ export default async function PublicInvoicePage({
           </header>
 
           <section className="mt-8">
-            <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-400">
+            <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
               {L.billTo}
             </div>
             <div className="mt-1 text-[15px] font-semibold">{inv.patient_name}</div>
@@ -188,7 +188,7 @@ export default async function PublicInvoicePage({
                   <span className="tnum">{fmtMoney(Number(inv.tax_amount), inv.currency, locale)}</span>
                 </div>
               )}
-              <div className="flex justify-between border-t-2 pt-2 text-base font-bold" style={{ borderColor: "var(--bk)" }}>
+              <div className="flex justify-between border-t-2 pt-2 font-display text-base font-bold" style={{ borderColor: "var(--bk)" }}>
                 <span>{L.total}</span>
                 <span className="tnum">{fmtMoney(Number(inv.total), inv.currency, locale)}</span>
               </div>
@@ -208,8 +208,8 @@ export default async function PublicInvoicePage({
           </div>
 
           {inv.payment_instructions && inv.status !== "paid" && inv.status !== "void" && (
-            <section className="mt-8 rounded-xl border border-line bg-paper/60 p-4">
-              <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-400">
+            <section className="mt-8 rounded-xl border border-line bg-subtle p-4">
+              <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
                 {L.payTitle}
               </div>
               <p className="mt-1 whitespace-pre-wrap text-[13px] leading-6">{inv.payment_instructions}</p>
