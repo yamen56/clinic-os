@@ -3,9 +3,7 @@
  * rails, job/automation runner, scheduler, and push delivery.
  * Long-running process — never deploy to serverless.
  */
-try {
-  process.loadEnvFile?.();
-} catch {}
+import "./env"; // must precede every other import — see worker/env.ts
 
 import { withSystem, pool } from "./db";
 import { ensureSession, sessions } from "./wa/session";

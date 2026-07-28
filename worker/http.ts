@@ -4,8 +4,9 @@ import { ensureSession, stopSession, sessions } from "./wa/session";
 import { recordMessage } from "./wa/inbound";
 import { normalizePhone } from "../src/lib/phone";
 
-const SECRET = process.env.INTERNAL_API_SECRET || "dev-internal-secret-change-in-production";
-const PORT = Number(new URL(process.env.WORKER_URL || "http://localhost:4020").port || 4020);
+// Read lazily: never capture config at module-load time.
+const secret = () => process.env.INTERNAL_API_SECRET || "dev-internal-secret-change-in-production";
+const port = () => Number(new URL(process.env.WORKER_URL || "http://localhost:4020").port || 4020);
 
 /** Internal control API for the web app (shared-secret protected). */
 export function startHttpServer() {
@@ -16,7 +17,7 @@ export function startHttpServer() {
         res.end(JSON.stringify(body));
       };
       try {
-        if (req.headers["x-internal-secret"] !== SECRET) return send(401, { error: "unauthorized" });
+        if (req.headers["x-internal-secret"] !== secret()) return send(401, { error: "unauthorized" });
         const url = new URL(req.url ?? "/", "http://localhost");
         const parts = url.pathname.split("/").filter(Boolean);
 
@@ -85,5 +86,6 @@ export function startHttpServer() {
       }
     })();
   });
-  server.listen(PORT, () => console.log(`[worker] internal API on :${PORT}`));
+  const p = port();
+  server.listen(p, () => console.log(`[worker] internal API on :${p}`));
 }
