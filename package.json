@@ -17,22 +17,25 @@
     "qa:clean": "tsx scripts/qa-cleanup.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json",
     "seed:recipes": "tsx scripts/seed-recipes.ts",
-    "postinstall": "playwright install chromium",
+    "postinstall": "node scripts/postinstall.js",
     "doctor": "tsx scripts/doctor.ts",
     "fonts": "tsx scripts/fetch-fonts.ts"
   },
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@aws-sdk/client-s3": "^3.1096.0",
     "@whiskeysockets/baileys": "^6.7.21",
     "bcryptjs": "^3.0.3",
     "lucide-react": "^1.26.0",
     "luxon": "^3.7.2",
     "next": "^15.5.21",
     "pg": "^8.22.0",
+    "playwright": "^1.62.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "tsx": "^4.23.1",
     "web-push": "^3.6.7",
     "zod": "^4.4.3"
   },
@@ -47,10 +50,8 @@
     "@types/react-dom": "^19.2.3",
     "@types/web-push": "^3.6.4",
     "embedded-postgres": "^18.4.0-beta.17",
-    "playwright": "^1.62.0",
     "postcss": "^8.5.23",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.23.1",
     "typescript": "^5.9.3"
   },
   "private": true

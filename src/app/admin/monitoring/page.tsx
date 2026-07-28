@@ -82,7 +82,7 @@ export default async function MonitoringPage() {
     return { clinics, jobs, failedJobs, outbox };
   });
 
-  const storageMb = (storageUsageBytes() / 1024 / 1024).toFixed(1);
+  const storageMb = ((await storageUsageBytes()) / 1024 / 1024).toFixed(1);
 
   return (
     <>

@@ -43,7 +43,8 @@ async function main() {
   let done = 0;
   await Promise.all(
     urls.map(async (u) => {
-      const buf = Buffer.from(await fetch(u).then((r) => r.arrayBuffer()));
+      const ab = (await fetch(u).then((r) => r.arrayBuffer())) as ArrayBuffer;
+      const buf = Buffer.from(new Uint8Array(ab));
       const name = `f-${createHash("sha1").update(u).digest("hex").slice(0, 8)}.woff2`;
       writeFileSync(join(OUT_DIR, name), buf);
       map.set(u, `/fonts/${name}`);

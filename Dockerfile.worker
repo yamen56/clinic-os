@@ -1,0 +1,33 @@
+# WhatsApp / automations / AI / notifications worker.
+#
+# Long-running by design: it holds one Baileys socket per clinic and runs the
+# job scheduler. Never deploy this to a serverless platform.
+#
+# The Playwright base image ships the Chromium that renders invoice PDFs, so the
+# web app can stay a slim serverless bundle.
+FROM mcr.microsoft.com/playwright:v1.62.0-noble
+
+WORKDIR /app
+ENV NODE_ENV=production
+# Chromium is already in the base image — must be set before install so the
+# postinstall hook skips its own download.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+# Install deps first so image layers cache across code changes.
+# postinstall.js is copied with them because npm runs it during install.
+COPY package*.json ./
+COPY scripts/postinstall.js ./scripts/
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY tsconfig*.json ./
+COPY worker ./worker
+COPY src/lib ./src/lib
+COPY migrations ./migrations
+COPY scripts/migrate.ts scripts/lib-migrate.ts ./scripts/
+
+EXPOSE 4020
+
+# Apply pending migrations, then start. Safe on every deploy: the migration
+# runner is idempotent and skips anything already applied.
+# tsx runs the TypeScript directly, so there is no build artifact to drift.
+CMD ["sh", "-c", "npx tsx scripts/migrate.ts && npx tsx worker/index.ts"]

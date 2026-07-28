@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { openFile } from "@/lib/storage";
-import { Readable } from "node:stream";
 
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string; fileId: string }> }) {
   const { slug, fileId } = await ctx.params;
@@ -17,11 +16,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string; f
   });
   if (!meta) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const f = openFile(meta.storage_path);
+  const f = await openFile(meta.storage_path);
   if (!f) return NextResponse.json({ error: "gone" }, { status: 410 });
 
   const download = new URL(req.url).searchParams.has("download");
-  return new NextResponse(Readable.toWeb(f.stream) as ReadableStream, {
+  return new NextResponse(new Uint8Array(f.data), {
     headers: {
       "Content-Type": meta.mime_type,
       "Content-Length": String(f.size),

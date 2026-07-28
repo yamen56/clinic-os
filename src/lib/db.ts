@@ -5,13 +5,26 @@ declare global {
   var __cosPool: Pool | undefined;
 }
 
+/**
+ * Hosted Postgres (Supabase, Neon, Railway) requires TLS; the local embedded
+ * server does not offer it. Managed providers commonly present certificates
+ * that Node will not chain-verify, so verification is relaxed for remote hosts
+ * only — the connection is still encrypted.
+ */
+function sslFor(url: string) {
+  const local = /@(localhost|127.0.0.1|[::1])[:/]/.test(url);
+  return local ? undefined : { rejectUnauthorized: false };
+}
+
 export function getPool(): Pool {
   if (!globalThis.__cosPool) {
+    const url =
+      process.env.DATABASE_URL ||
+      "postgres://clinicos_app:clinicos_app@127.0.0.1:5544/clinicos";
     globalThis.__cosPool = new Pool({
-      connectionString:
-        process.env.DATABASE_URL ||
-        "postgres://clinicos_app:clinicos_app@127.0.0.1:5544/clinicos",
-      max: 12,
+      connectionString: url,
+      ssl: sslFor(url),
+      max: Number(process.env.PG_POOL_MAX || 12),
     });
     globalThis.__cosPool.on("error", (e) => console.error("[pg pool]", e.message));
   }

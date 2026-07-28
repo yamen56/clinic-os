@@ -5,10 +5,16 @@ import { Pool, type PoolClient } from "pg";
  * context (app.is_admin) — the worker is a trusted internal service that
  * spans all clinics.
  */
+const url =
+  process.env.DATABASE_URL || "postgres://clinicos_app:clinicos_app@127.0.0.1:5544/clinicos";
+
+/** TLS for hosted Postgres; the local embedded server does not offer it. */
+const isLocal = /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(url);
+
 export const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL || "postgres://clinicos_app:clinicos_app@127.0.0.1:5544/clinicos",
-  max: 8,
+  connectionString: url,
+  ssl: isLocal ? undefined : { rejectUnauthorized: false },
+  max: Number(process.env.PG_POOL_MAX || 8),
 });
 pool.on("error", (e) => console.error("[worker pg]", e.message));
 

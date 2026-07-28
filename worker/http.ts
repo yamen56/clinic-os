@@ -2,6 +2,7 @@ import http from "node:http";
 import { withSystem } from "./db";
 import { ensureSession, stopSession, sessions } from "./wa/session";
 import { recordMessage } from "./wa/inbound";
+import { renderUrlToPdf } from "./pdf";
 import { normalizePhone } from "../src/lib/phone";
 
 // Read lazily: never capture config at module-load time.
@@ -53,6 +54,22 @@ export function startHttpServer() {
             })),
             uptime: process.uptime(),
           });
+        }
+
+        // POST /render-pdf — the web app has no Chromium; this process does
+        if (req.method === "POST" && parts[0] === "render-pdf") {
+          const chunks: Buffer[] = [];
+          for await (const ch of req) chunks.push(ch as Buffer);
+          const { url } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+          if (typeof url !== "string" || !/^https?:\/\//.test(url)) {
+            return send(400, { error: "bad_url" });
+          }
+          const pdf = await renderUrlToPdf(url);
+          res.writeHead(200, {
+            "Content-Type": "application/pdf",
+            "Content-Length": String(pdf.length),
+          });
+          return res.end(pdf);
         }
 
         // POST /simulate-inbound — dev/testing only: exercises the threading pipeline

@@ -3,6 +3,14 @@ import { subscribeClinic, type AppEvent } from "@/lib/realtime-server";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Serverless platforms cap streaming responses, so this cannot be a truly
+ * long-lived connection in production. Capping it ourselves means the stream
+ * ends cleanly and the client's EventSource reconnects (and resyncs) on a
+ * predictable cadence instead of being killed mid-flight by the platform.
+ */
+export const maxDuration = 60;
+
 /** SSE stream of this clinic's change events (from Postgres NOTIFY triggers). */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
