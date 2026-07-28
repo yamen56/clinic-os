@@ -116,10 +116,14 @@ Two things are exercised against local doubles rather than live third parties, b
 
 ## Deploying
 
-- **Web app** — any Node host that runs Next.js. Needs `DATABASE_URL`, `APP_URL`, `INTERNAL_API_SECRET`, `WORKER_URL`, and the VAPID keys.
-- **Worker** — a persistent host (Railway, Fly.io, a VPS). Never serverless. Needs the same `DATABASE_URL` and `INTERNAL_API_SECRET`, plus `ANTHROPIC_API_KEY` if the AI agent is used.
-- **Database** — the schema is plain PostgreSQL. To move to a hosted Postgres or Supabase, point `DATABASE_URL` at it and run `npm run migrate`; the RLS policies come along with the migrations.
-- **Storage** — `src/lib/storage.ts` is the only module that touches disk. Swap it for S3 or Supabase Storage without changing callers.
+**See [DEPLOY.md](DEPLOY.md) for the full walkthrough.** In short:
+
+- **Web app** → Vercel. Needs `DATABASE_URL`, `APP_URL`, `WORKER_URL`, `INTERNAL_API_SECRET`, the `S3_*` values and the VAPID keys.
+- **Worker** → Railway (`Dockerfile.worker`, pinned in `railway.json`). **Never serverless** — it holds a live WhatsApp socket per clinic and owns the scheduler. It also renders invoice PDFs, because headless Chromium does not fit in a serverless function.
+- **Database + storage** → Supabase. Run `npm run migrate` with `DATABASE_SUPER_URL` pointed at it; the RLS policies come along with the migrations. Use the **session** pooler, not the transaction pooler — realtime needs `LISTEN/NOTIFY`.
+- **Storage** — `src/lib/storage.ts` picks its driver from `S3_BUCKET`: local disk in development, S3-compatible object storage in production. Serverless filesystems are ephemeral, so production must set it.
 - **Booking subdomain** — `book.domain.com/{slug}` maps to `/book/{slug}` with a rewrite.
+
+`.env.production.example` documents every production variable and which service needs it.
 
 See `DECISIONS.md` for the reasoning behind each substitution made during the build.
