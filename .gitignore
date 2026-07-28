@@ -14,3 +14,7 @@ tsconfig.tsbuildinfo
 .wa-auth/
 scripts/qa-shots/
 scripts/qa-certs/
+
+# Generated env paste-blocks (contain real secrets)
+RAILWAY-ENV.txt
+VERCEL-ENV.txt
