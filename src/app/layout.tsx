@@ -21,9 +21,13 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#6989a6",
+  // Matches the sidebar/night surface so the status bar blends into the app
+  // shell when installed to a home screen.
+  themeColor: "#0b1220",
   width: "device-width",
   initialScale: 1,
+  // Prevents iOS zooming the page when a form field is focused.
+  maximumScale: 1,
   viewportFit: "cover",
 };
 

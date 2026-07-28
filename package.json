@@ -20,7 +20,8 @@
     "postinstall": "node scripts/postinstall.js",
     "doctor": "tsx scripts/doctor.ts",
     "fonts": "tsx scripts/fetch-fonts.ts",
-    "bench": "tsx scripts/bench.ts"
+    "bench": "tsx scripts/bench.ts",
+    "icons": "tsx scripts/make-icons.ts"
   },
   "type": "commonjs",
   "dependencies": {
