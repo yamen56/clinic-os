@@ -16,7 +16,9 @@
     "qa": "tsx scripts/qa-all.ts",
     "qa:clean": "tsx scripts/qa-cleanup.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json",
-    "seed:recipes": "tsx scripts/seed-recipes.ts"
+    "seed:recipes": "tsx scripts/seed-recipes.ts",
+    "postinstall": "playwright install chromium",
+    "doctor": "tsx scripts/doctor.ts"
   },
   "type": "commonjs",
   "dependencies": {

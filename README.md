@@ -9,10 +9,17 @@ Arabic-first (RTL) with an English toggle, built for Jordan and the Gulf.
 ## Quick start
 
 ```bash
-npm install
-npx playwright install chromium   # used for invoice PDF rendering
-npm run dev:all                   # database + web app + worker in one terminal
-npm run seed                      # demo clinic with realistic Arabic data
+cp .env.example .env   # only if .env is missing
+npm install            # also fetches the Chromium used for invoice PDFs
+npm run dev:all        # database + web app + worker in one terminal
+```
+
+`dev:all` applies pending migrations on boot and seeds the demo clinic when the database is empty, so this is the only command needed from a fresh clone.
+
+Check readiness at any time:
+
+```bash
+npm run doctor         # every line is either fine, or the exact command that fixes it
 ```
 
 Then open **http://localhost:3000** and sign in:
@@ -32,6 +39,7 @@ Demo clinic workspace: `/c/rima-dental` · public booking page: `/book/rima-dent
 npm run db       # embedded PostgreSQL + migrations (keep running)
 npm run dev      # Next.js app on :3000
 npm run worker   # WhatsApp, automations, AI, notifications on :4020
+npm run seed     # reset the demo clinic with fresh Arabic data
 ```
 
 The worker is a **long-running process** and cannot run on serverless — it holds one WhatsApp session per clinic.

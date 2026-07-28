@@ -10,13 +10,24 @@ declare global {
   var __cosBrowser: Promise<Browser> | undefined;
 }
 
+function launch(): Promise<Browser> {
+  return chromium.launch({ args: ["--font-render-hinting=none"] }).catch((e: Error) => {
+    if (/executable doesn't exist|Looks like Playwright/i.test(e.message)) {
+      throw new Error(
+        "Invoice PDFs need headless Chromium. Run: npx playwright install chromium"
+      );
+    }
+    throw e;
+  });
+}
+
 async function getBrowser(): Promise<Browser> {
   if (!globalThis.__cosBrowser) {
-    globalThis.__cosBrowser = chromium.launch({ args: ["--font-render-hinting=none"] });
+    globalThis.__cosBrowser = launch();
   }
   const browser = await globalThis.__cosBrowser;
   if (!browser.isConnected()) {
-    globalThis.__cosBrowser = chromium.launch({ args: ["--font-render-hinting=none"] });
+    globalThis.__cosBrowser = launch();
     return globalThis.__cosBrowser;
   }
   return browser;
