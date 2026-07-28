@@ -200,8 +200,13 @@ export async function seedAgencyDefaults(c: Client) {
 }
 
 if (process.argv[1]?.includes("seed-recipes")) {
+  // Targets DATABASE_SUPER_URL when set, so the same script seeds production.
+  const url =
+    process.env.DATABASE_SUPER_URL ??
+    `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
   const c = new Client({
-    connectionString: `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`,
+    connectionString: url,
+    ssl: /@(localhost|127\.0\.0\.1)/.test(url) ? undefined : { rejectUnauthorized: false },
   });
   c.connect()
     .then(() => seedAgencyDefaults(c))
