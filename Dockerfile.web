@@ -1,0 +1,39 @@
+# Next.js web app, containerised.
+#
+# Runs as a long-lived server rather than serverless functions. That removes the
+# per-deployment function cap, and lets the realtime endpoint hold a Postgres
+# LISTEN connection for as long as the browser stays open instead of being cut
+# off at the platform's streaming limit.
+#
+# Invoice PDFs are still rendered by the worker, so no Chromium is needed here.
+FROM node:22-slim AS deps
+WORKDIR /app
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+COPY package*.json ./
+COPY scripts/postinstall.js ./scripts/
+RUN npm ci
+
+FROM node:22-slim AS build
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# NEXT_PUBLIC_* values are inlined at build time, so this one must be present now.
+ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
+RUN npm run build
+
+FROM node:22-slim AS run
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+
+# Standalone output already contains the pruned node_modules it needs.
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+
+EXPOSE 3000
+CMD ["node", "server.js"]
