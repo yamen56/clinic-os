@@ -6,34 +6,26 @@
 # off at the platform's streaming limit.
 #
 # Invoice PDFs are still rendered by the worker, so no Chromium is needed here.
-FROM node:22-slim AS deps
-WORKDIR /app
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-COPY package*.json ./
-COPY scripts/postinstall.js ./scripts/
-RUN npm ci
+FROM node:22-slim
 
-FROM node:22-slim AS build
-WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-# NEXT_PUBLIC_* values are inlined at build time, so this one must be present now.
-ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
-ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
-RUN npm run build
-
-FROM node:22-slim AS run
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
+# The worker owns PDF rendering; this image never launches a browser.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
-# Standalone output already contains the pruned node_modules it needs.
-COPY --from=build /app/.next/standalone ./
-COPY --from=build /app/.next/static ./.next/static
-COPY --from=build /app/public ./public
+# Dev dependencies are needed to build (TypeScript, Tailwind), so install the
+# full tree, build, then prune. Layer-cached separately from source changes.
+COPY package*.json ./
+COPY scripts/postinstall.js ./scripts/
+RUN npm ci --include=dev
+
+COPY . .
+
+# NEXT_PUBLIC_* is inlined at build time, so it must be present now — not at run.
+ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
+RUN npm run build && npm prune --omit=dev && npm cache clean --force
 
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["npx", "next", "start", "-p", "3000"]
