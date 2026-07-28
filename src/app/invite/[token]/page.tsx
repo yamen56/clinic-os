@@ -24,7 +24,7 @@ export default async function InvitePage({
         <SetPasswordForm
           token={token}
           action={acceptInviteAction}
-          heading={t.invite.heading.replace("{clinic}", info.clinicName ?? "Clinic OS")}
+          heading={t.invite.heading.replace("{clinic}", info.clinicName ?? "Makan Clinic Platform")}
           sub={t.invite.sub.replace("{email}", info.email)}
           submitLabel={t.invite.submit}
         />

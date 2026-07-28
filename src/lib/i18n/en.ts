@@ -1,6 +1,6 @@
 export const en = {
   common: {
-    appName: "Clinic OS",
+    appName: "Makan Clinic Platform",
     save: "Save",
     saving: "Saving…",
     saved: "Saved",
@@ -57,7 +57,7 @@ export const en = {
     signIn: "Sign in",
     signOut: "Sign out",
     emailPlaceholder: "you@clinic.com",
-    signInTitle: "Sign in to Clinic OS",
+    signInTitle: "Sign in to Makan Clinic Platform",
     signInSub: "The operating system for your clinic",
     wrongCredentials: "Email or password is incorrect.",
     suspendedTitle: "This workspace is suspended",
@@ -372,7 +372,7 @@ export const en = {
     pushUnsupported: "This browser doesn't support notifications. Install the app to your home screen first.",
     pushEnabled: "Notifications are on for this device",
     pushDisabled: "Notifications off for this device",
-    installPrompt: "Install Clinic OS",
+    installPrompt: "Install Makan Clinic Platform",
     installHint: "Add it to your home screen to get notifications on your phone.",
     kinds: {
       booking: "New booking",
@@ -396,7 +396,7 @@ export const en = {
     prefDayEnd: "End-of-day summary",
     reminderMinutes: "Remind me this many minutes before",
     offlineTitle: "You're offline",
-    offlineBody: "Clinic OS needs a connection to show live clinic data. Anything you typed is saved and will sync when you're back.",
+    offlineBody: "Makan Clinic Platform needs a connection to show live clinic data. Anything you typed is saved and will sync when you're back.",
     retry: "Try again",
   },
   ai: {
@@ -670,7 +670,7 @@ export const en = {
     slotTaken: "That time was just taken — pick another one.",
     minutes: "minutes",
     with: "with",
-    poweredBy: "Powered by Clinic OS",
+    poweredBy: "Powered by Makan Clinic Platform",
     notFound: "This booking page doesn't exist or is no longer active.",
     invalidPhone: "This phone number doesn't look right. Use a format like 0790744070.",
     bookAgain: "Book another appointment",

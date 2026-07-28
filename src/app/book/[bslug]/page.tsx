@@ -10,7 +10,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { bslug } = await params;
   const data = await loadPublicLink(bslug);
-  if (!data) return { title: "Clinic OS" };
+  if (!data) return { title: "Makan Clinic Platform" };
   const name = data.clinic.name_ar || data.clinic.name;
   return {
     title: `${name} — حجز موعد`,

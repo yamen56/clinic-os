@@ -2,7 +2,7 @@ import type { Dict } from "./en";
 
 export const ar: Dict = {
   common: {
-    appName: "كلينك أو إس",
+    appName: "منصة مكان للعيادات",
     save: "حفظ",
     saving: "جارٍ الحفظ…",
     saved: "تم الحفظ",
@@ -59,7 +59,7 @@ export const ar: Dict = {
     signIn: "تسجيل الدخول",
     signOut: "تسجيل الخروج",
     emailPlaceholder: "you@clinic.com",
-    signInTitle: "تسجيل الدخول إلى كلينك أو إس",
+    signInTitle: "تسجيل الدخول إلى منصة مكان للعيادات",
     signInSub: "نظام التشغيل الكامل لعيادتك",
     wrongCredentials: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
     suspendedTitle: "مساحة العمل هذه موقوفة",
@@ -374,7 +374,7 @@ export const ar: Dict = {
     pushUnsupported: "هذا المتصفح لا يدعم الإشعارات. ثبّت التطبيق على الشاشة الرئيسية أولاً.",
     pushEnabled: "الإشعارات مفعّلة على هذا الجهاز",
     pushDisabled: "الإشعارات متوقفة على هذا الجهاز",
-    installPrompt: "تثبيت كلينك أو إس",
+    installPrompt: "تثبيت منصة مكان للعيادات",
     installHint: "أضفه إلى شاشتك الرئيسية لتصلك الإشعارات على هاتفك.",
     kinds: {
       booking: "حجز جديد",
@@ -398,7 +398,7 @@ export const ar: Dict = {
     prefDayEnd: "ملخص نهاية اليوم",
     reminderMinutes: "ذكّرني قبل الموعد بهذه الدقائق",
     offlineTitle: "أنت غير متصل",
-    offlineBody: "يحتاج كلينك أو إس إلى اتصال لعرض بيانات العيادة المباشرة. كل ما كتبته محفوظ وسيُزامَن عند عودة الاتصال.",
+    offlineBody: "يحتاج منصة مكان للعيادات إلى اتصال لعرض بيانات العيادة المباشرة. كل ما كتبته محفوظ وسيُزامَن عند عودة الاتصال.",
     retry: "إعادة المحاولة",
   },
   ai: {
@@ -672,7 +672,7 @@ export const ar: Dict = {
     slotTaken: "تم حجز هذا الوقت للتو — اختر وقتاً آخر.",
     minutes: "دقيقة",
     with: "مع",
-    poweredBy: "مدعوم من كلينك أو إس",
+    poweredBy: "مدعوم من منصة مكان للعيادات",
     notFound: "صفحة الحجز هذه غير موجودة أو لم تعد نشطة.",
     invalidPhone: "رقم الهاتف غير صحيح. استخدم صيغة مثل 0790744070.",
     bookAgain: "حجز موعد آخر",

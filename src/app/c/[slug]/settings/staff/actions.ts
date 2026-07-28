@@ -166,7 +166,7 @@ export async function resendInviteAction(
 
 async function clinicDisplayName(c: PoolClient, clinicId: string): Promise<string> {
   const r = await c.query(`select coalesce(name_ar, name) as n from clinics where id = $1`, [clinicId]);
-  return (r.rows[0]?.n as string) ?? "Clinic OS";
+  return (r.rows[0]?.n as string) ?? "Makan Clinic Platform";
 }
 
 export async function updateMemberAction(

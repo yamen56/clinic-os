@@ -1,4 +1,4 @@
-# Deploying Clinic OS
+# Deploying Makan Clinic Platform
 
 Three services. They are separate because they have genuinely different needs —
 this is not an arrangement you can collapse into one Vercel project.

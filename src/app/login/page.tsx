@@ -29,7 +29,7 @@ export default async function LoginPage() {
         </div>
         <LoginForm />
       </div>
-      <footer className="pb-6 text-center text-xs text-white/40">Makan Scaling · Clinic OS</footer>
+      <footer className="pb-6 text-center text-xs text-white/40">Makan Scaling · Makan Clinic Platform</footer>
     </main>
   );
 }

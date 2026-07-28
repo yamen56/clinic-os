@@ -1,4 +1,4 @@
-# Clinic OS
+# Makan Clinic Platform
 
 A multi-tenant clinic management platform, operated by an agency (Makan Scaling) that onboards clinics as tenants. Each clinic gets an isolated workspace: patients, WhatsApp conversations, calendar, invoices, automations, and an AI receptionist. The agency gets a separate admin panel over all of them.
 

@@ -114,7 +114,7 @@ export function Shell({
             <div className="truncate text-[13px] font-semibold leading-tight text-white">
               {clinicDisplay}
             </div>
-            <div className="text-[11px] text-white/40">Clinic OS</div>
+            <div className="text-[11px] text-white/40">Makan Clinic Platform</div>
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2">

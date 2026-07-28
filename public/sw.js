@@ -1,4 +1,4 @@
-/* Clinic OS service worker: installable PWA shell + web push. */
+/* Makan Clinic Platform service worker: installable PWA shell + web push. */
 
 const SHELL_CACHE = "clinic-os-shell-v1";
 
@@ -38,9 +38,9 @@ self.addEventListener("push", (event) => {
   try {
     payload = event.data ? event.data.json() : {};
   } catch {
-    payload = { title: "Clinic OS", body: event.data ? event.data.text() : "" };
+    payload = { title: "Makan Clinic Platform", body: event.data ? event.data.text() : "" };
   }
-  const title = payload.title || "Clinic OS";
+  const title = payload.title || "Makan Clinic Platform";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: payload.body || "",
