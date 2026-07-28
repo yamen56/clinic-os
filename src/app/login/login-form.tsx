@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { loginAction } from "./actions";
 import { useI18n } from "@/lib/i18n/client";
@@ -34,6 +35,12 @@ export function LoginForm() {
         <Button type="submit" size="lg" loading={pending}>
           {t.auth.signIn}
         </Button>
+        <Link
+          href="/forgot"
+          className="text-center text-[13px] text-ink-500 underline underline-offset-4 hover:text-ink-900"
+        >
+          {t.auth.forgotPassword}
+        </Link>
       </form>
     </div>
   );

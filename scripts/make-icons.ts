@@ -20,15 +20,24 @@ const PLATE = "#0b1220";
 
 type Spec = { file: string; size: number; scale: number; plate: string; radius: string };
 
+/*
+  Every plate is a full square with no corner radius. Rounding here would leave
+  transparent corners, which render as white notches against light backgrounds —
+  and both iOS and Android already apply their own mask, so the radius was doing
+  nothing but damage. The mark is sized to fill the frame confidently; at 48px on
+  a home screen a timid logo is unreadable.
+*/
 const SPECS: Spec[] = [
-  { file: "icon-192.png", size: 192, scale: 0.62, plate: PLATE, radius: "22%" },
-  { file: "icon-512.png", size: 512, scale: 0.62, plate: PLATE, radius: "22%" },
-  // Maskable: platform applies its own mask, so fill the square and inset more.
-  { file: "icon-maskable-512.png", size: 512, scale: 0.48, plate: PLATE, radius: "0" },
+  { file: "icon-192.png", size: 192, scale: 0.82, plate: PLATE, radius: "0" },
+  { file: "icon-512.png", size: 512, scale: 0.82, plate: PLATE, radius: "0" },
+  // Maskable: the platform crops to a circle, so keep the mark in the 80% safe zone.
+  { file: "icon-maskable-512.png", size: 512, scale: 0.62, plate: PLATE, radius: "0" },
   // iOS applies its own rounding and does not support transparency.
-  { file: "apple-touch-icon.png", size: 180, scale: 0.62, plate: PLATE, radius: "0" },
-  // Monochrome-ish badge for Android notifications (small, must stay legible).
-  { file: "badge.png", size: 96, scale: 0.72, plate: "transparent", radius: "0" },
+  { file: "apple-touch-icon.png", size: 180, scale: 0.82, plate: PLATE, radius: "0" },
+  // Browser tab favicon — tiny, so the mark fills nearly the whole square.
+  { file: "favicon.png", size: 256, scale: 0.88, plate: PLATE, radius: "0" },
+  // Android notification badge: silhouetted by the OS, so no plate.
+  { file: "badge.png", size: 96, scale: 0.9, plate: "transparent", radius: "0" },
 ];
 
 async function main() {

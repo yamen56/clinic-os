@@ -37,7 +37,13 @@ export function hashPassword(pw: string): string {
   return bcrypt.hashSync(pw, 10);
 }
 
-export function verifyPassword(pw: string, hash: string): boolean {
+/**
+ * A null hash means the account was invited but has not set a password yet.
+ * Refuse it explicitly — bcrypt would otherwise throw on a null input, and an
+ * unaccepted invitation must never be a way in.
+ */
+export function verifyPassword(pw: string, hash: string | null): boolean {
+  if (!hash) return false;
   return bcrypt.compareSync(pw, hash);
 }
 

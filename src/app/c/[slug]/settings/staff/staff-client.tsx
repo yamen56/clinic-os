@@ -11,7 +11,7 @@ import { Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { WeeklyHoursEditor } from "@/components/weekly-hours-editor";
-import { addStaffAction, updateMemberAction } from "./actions";
+import { addStaffAction, updateMemberAction, resendInviteAction } from "./actions";
 import { UserPlus, Pencil } from "lucide-react";
 
 type Member = {
@@ -41,11 +41,11 @@ export function StaffClient({
   const router = useRouter();
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [editing, setEditing] = useState<Member | null>(null);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
-    password: "",
     role: "receptionist",
     title: "",
     specialty: "",
@@ -106,9 +106,9 @@ export function StaffClient({
             </Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t.common.password} required hint="8+">
-              <Input dir="ltr" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-            </Field>
+            <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700">
+              {t.staff.inviteExplainer}
+            </p>
             <Field label={t.common.status}>
               <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
                 <option value="receptionist">{t.staff.roleReceptionist}</option>
@@ -141,7 +141,7 @@ export function StaffClient({
             </Button>
             <Button
               loading={pending}
-              disabled={!form.fullName || !form.email || form.password.length < 8}
+              disabled={!form.fullName || !form.email}
               onClick={() =>
                 start(async () => {
                   const r = await addStaffAction(slug, form);
@@ -149,9 +149,17 @@ export function StaffClient({
                     toast(t.common.genericError, "error");
                     return;
                   }
-                  toast(r.existing ? t.staff.emailTaken : t.staff.added, r.existing ? "info" : "success");
+                  if (r.inviteUrl) {
+                    // Email could not be delivered — hand the owner the link.
+                    setInviteLink(r.inviteUrl);
+                  } else {
+                    toast(
+                      r.existing ? t.staff.emailTaken : t.staff.invited,
+                      r.existing ? "info" : "success"
+                    );
+                  }
                   setAddOpen(false);
-                  setForm({ fullName: "", email: "", password: "", role: "receptionist", title: "", specialty: "", color: "#6989a6" });
+                  setForm({ fullName: "", email: "", role: "receptionist", title: "", specialty: "", color: "#6989a6" });
                   router.refresh();
                 })
               }
@@ -159,6 +167,30 @@ export function StaffClient({
               {t.common.add}
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Shown only when the invitation email could not be delivered. */}
+      <Modal
+        open={!!inviteLink}
+        onClose={() => setInviteLink(null)}
+        title={t.staff.inviteLinkTitle}
+      >
+        <p className="text-sm text-ink-700">{t.staff.inviteLinkBody}</p>
+        <p className="mt-3 break-all rounded-ctl bg-sunken px-3 py-2 font-mono text-[12px] text-ink-900">
+          {inviteLink}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              void navigator.clipboard.writeText(inviteLink ?? "");
+              toast(t.common.copied);
+            }}
+          >
+            {t.common.copy}
+          </Button>
+          <Button onClick={() => setInviteLink(null)}>{t.common.done}</Button>
         </div>
       </Modal>
 
