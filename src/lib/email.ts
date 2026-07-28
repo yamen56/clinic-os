@@ -7,7 +7,7 @@
  * email provider exists, instead of blocking staff onboarding on it.
  */
 
-const FROM = () => process.env.EMAIL_FROM || "Clinic OS <onboarding@resend.dev>";
+const FROM = () => process.env.EMAIL_FROM || "Makan Scaling <onboarding@resend.dev>";
 const REPLY_TO = () => process.env.EMAIL_REPLY_TO?.trim() || undefined;
 
 /**
@@ -78,7 +78,7 @@ function layout(opts: { heading: string; body: string; cta?: { url: string; labe
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border:1px solid #e3e6eb;border-radius:12px;overflow:hidden">
         <tr><td style="background:#0b1220;padding:24px;text-align:center">
-          <div style="color:#ffffff;font:700 18px/1.3 -apple-system,Segoe UI,Roboto,sans-serif">Clinic OS</div>
+          <div style="color:#ffffff;font:700 18px/1.3 -apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:-0.01em">Makan Scaling</div>
         </td></tr>
         <tr><td style="padding:28px 28px 8px;text-align:${align}">
           <h1 style="margin:0 0 12px;font:600 20px/1.35 -apple-system,Segoe UI,Roboto,sans-serif;color:#16181c">${opts.heading}</h1>
@@ -110,8 +110,8 @@ export function inviteEmail(opts: {
   const subject = ar ? `دعوة للانضمام إلى ${opts.clinicName}` : `You've been invited to ${opts.clinicName}`;
   const heading = ar ? `مرحباً ${opts.name}` : `Hi ${opts.name}`;
   const body = ar
-    ? `تمت دعوتك للانضمام إلى <strong>${opts.clinicName}</strong> على كلينك أو إس. اضغط الزر أدناه لتعيين كلمة المرور وتفعيل حسابك.`
-    : `You've been invited to join <strong>${opts.clinicName}</strong> on Clinic OS. Set your password below to activate your account.`;
+    ? `تمت دعوتك للانضمام إلى <strong>${opts.clinicName}</strong> على منصة مكان سكيلنج. اضغط الزر أدناه لتعيين كلمة المرور وتفعيل حسابك.`
+    : `You've been invited to join <strong>${opts.clinicName}</strong> on Makan Scaling. Set your password below to activate your account.`;
   const label = ar ? "تعيين كلمة المرور" : "Set your password";
   const footer = ar
     ? "هذا الرابط صالح لمدة 7 أيام. إذا لم تكن تتوقع هذه الدعوة، تجاهل هذه الرسالة."
