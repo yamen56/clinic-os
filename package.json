@@ -19,7 +19,8 @@
     "seed:recipes": "tsx scripts/seed-recipes.ts",
     "postinstall": "node scripts/postinstall.js",
     "doctor": "tsx scripts/doctor.ts",
-    "fonts": "tsx scripts/fetch-fonts.ts"
+    "fonts": "tsx scripts/fetch-fonts.ts",
+    "bench": "tsx scripts/bench.ts"
   },
   "type": "commonjs",
   "dependencies": {

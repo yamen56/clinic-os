@@ -152,6 +152,7 @@ export const en = {
     lastVisit: "Last visit",
     noPatients: "No patients yet",
     noPatientsBody: "Add your first patient, or they'll appear here automatically when they message you on WhatsApp.",
+    showingOf: "Showing {shown} of {total} — use search to find a specific patient.",
     existingPatient: "A patient with this number already exists — opened their file.",
     phoneTaken: "Another patient already has this number",
     phoneTakenAction: "Open their file or merge the two records.",

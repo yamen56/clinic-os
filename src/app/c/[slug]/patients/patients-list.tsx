@@ -30,12 +30,14 @@ type Row = {
 export function PatientsList({
   slug,
   patients,
+  total,
   allTags,
   tz,
   initialFilters,
 }: {
   slug: string;
   patients: Row[];
+  total: number;
   allTags: string[];
   tz: string;
   initialFilters: { q: string; tag: string; source: string; visit: string };
@@ -137,6 +139,15 @@ export function PatientsList({
           <option value="180">{t.patients.filters.noVisit180}</option>
         </Select>
       </div>
+
+      {/* The query is capped, so say so rather than silently hiding records. */}
+      {total > patients.length && (
+        <p className="mb-2 text-[13px] text-ink-500">
+          {t.patients.showingOf
+            .replace("{shown}", String(patients.length))
+            .replace("{total}", String(total))}
+        </p>
+      )}
 
       {patients.length === 0 ? (
         <EmptyState

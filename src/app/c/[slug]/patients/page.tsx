@@ -53,14 +53,19 @@ export default async function PatientsPage({
         [access.clinicId]
       )
     ).rows.map((r) => r.tag as string);
+    const total = Number(
+      (await c.query(`select count(*)::int as n from patients p where ${conds.join(" and ")}`, vals))
+        .rows[0].n
+    );
     const tz = (await c.query(`select timezone from clinics where id = $1`, [access.clinicId]))
       .rows[0].timezone as string;
-    return { rows, tags, tz };
+    return { rows, tags, tz, total };
   });
 
   return (
     <PatientsList
       slug={slug}
+      total={data.total}
       patients={data.rows.map((r) => ({
         id: r.id,
         fullName: r.full_name,
