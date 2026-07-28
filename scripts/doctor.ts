@@ -33,6 +33,48 @@ async function reachable(url: string, ms = 20_000) {
   }
 }
 
+/**
+ * Deployment readiness (`npm run doctor -- --deploy`).
+ * Each CLI login is an interactive browser flow that only a human can complete;
+ * this reports which ones are still outstanding.
+ */
+async function deployChecks() {
+  const { execSync } = await import("node:child_process");
+  const run = (cmd: string): string | null => {
+    try {
+      return execSync(cmd, { stdio: ["ignore", "pipe", "pipe"], timeout: 25_000 })
+        .toString()
+        .trim();
+    } catch {
+      return null;
+    }
+  };
+
+  const gh = run("gh auth status");
+  gh
+    ? add("ok", "GitHub CLI", (gh.match(/account (\S+)/)?.[1] ?? "authenticated"))
+    : add("warn", "GitHub CLI", "not logged in — run: gh auth login");
+
+  const vercel = run("npx --yes vercel whoami");
+  vercel
+    ? add("ok", "Vercel CLI", vercel.split("\n").pop() ?? "authenticated")
+    : add("warn", "Vercel CLI", "not logged in — run: npx vercel login");
+
+  const railway = run("npx --yes @railway/cli whoami");
+  railway
+    ? add("ok", "Railway CLI", railway.split("\n").pop() ?? "authenticated")
+    : add("warn", "Railway CLI", "not logged in — run: npx @railway/cli login");
+
+  existsSync(".env.production.local")
+    ? add("ok", "Production secrets", ".env.production.local present")
+    : add("fail", "Production secrets", "missing — regenerate before deploying");
+
+  const remote = run("git remote get-url origin");
+  remote
+    ? add("ok", "Git remote", remote)
+    : add("warn", "Git remote", "none yet — created during deploy");
+}
+
 async function main() {
   // Node
   const major = Number(process.versions.node.split(".")[0]);
@@ -125,6 +167,8 @@ async function main() {
   process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY
     ? add("ok", "Push notifications", "VAPID keys set")
     : add("warn", "Push notifications", "VAPID keys missing — push disabled");
+
+  if (process.argv.includes("--deploy")) await deployChecks();
 
   // Report
   const icon = { ok: "\x1b[32m✓\x1b[0m", warn: "\x1b[33m!\x1b[0m", fail: "\x1b[31m✗\x1b[0m" };
