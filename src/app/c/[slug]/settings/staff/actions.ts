@@ -98,12 +98,12 @@ export async function addStaffAction(
         })
       );
       inviteUrl = `${appUrl()}/invite/${raw}`;
-      const clinicName = await clinicDisplayName(c, access.clinicId);
+      const clinic = await clinicEmailContext(c, access.clinicId);
       const mail = renderEmail({
         type: "invitation",
-        locale: "ar",
+        locale: clinic.locale,
         name: d.fullName,
-        clinic: clinicName,
+        clinic: clinic.name,
         url: inviteUrl,
       });
       const sent = await sendEmail({ to: d.email, ...mail });
@@ -146,10 +146,10 @@ export async function resendInviteAction(
       })
     );
     const inviteUrl = `${appUrl()}/invite/${raw}`;
-    const clinicName = await clinicDisplayName(c, access.clinicId);
+    const clinic = await clinicEmailContext(c, access.clinicId);
     const sent = await sendEmail({
       to: u.email,
-      ...renderEmail({ type: "invitation", locale: "ar", name: u.full_name, clinic: clinicName, url: inviteUrl }),
+      ...renderEmail({ type: "invitation", locale: clinic.locale, name: u.full_name, clinic: clinic.name, url: inviteUrl }),
     });
     await audit(c, {
       clinicId: access.clinicId,
@@ -165,9 +165,23 @@ export async function resendInviteAction(
   });
 }
 
-async function clinicDisplayName(c: PoolClient, clinicId: string): Promise<string> {
-  const r = await c.query(`select coalesce(name_ar, name) as n from clinics where id = $1`, [clinicId]);
-  return (r.rows[0]?.n as string) ?? "Makan Clinic Platform";
+/**
+ * Display name and language for an invitation. A newly invited person has no
+ * stored language preference yet, so the clinic's default decides which of the
+ * four templates they receive.
+ */
+async function clinicEmailContext(
+  c: PoolClient,
+  clinicId: string
+): Promise<{ name: string; locale: "en" | "ar" }> {
+  const r = await c.query(
+    `select coalesce(name_ar, name) as n, default_locale from clinics where id = $1`,
+    [clinicId]
+  );
+  return {
+    name: (r.rows[0]?.n as string) ?? "Makan Clinic Platform",
+    locale: r.rows[0]?.default_locale === "en" ? "en" : "ar",
+  };
 }
 
 export async function updateMemberAction(
