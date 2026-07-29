@@ -2,8 +2,8 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setLocaleAction } from "@/app/login/actions";
 import { useI18n } from "@/lib/i18n/client";
+import { LOCALE_COOKIE } from "@/lib/i18n/shared";
 import { Languages } from "lucide-react";
 
 export function LanguageToggle({ compact, onDark }: { compact?: boolean; onDark?: boolean }) {
@@ -13,29 +13,27 @@ export function LanguageToggle({ compact, onDark }: { compact?: boolean; onDark?
   const next = locale === "ar" ? "en" : "ar";
 
   /*
-    Mirror the layout immediately, then let the server catch up.
+    The click does no network work at all.
 
-    The dictionary is rendered server-side, so the text itself cannot swap until
-    the refresh lands — but direction is the change the eye actually tracks.
-    Flipping it on the spot makes the toggle feel instant instead of hanging for
-    the length of two round trips.
+    Writing the cookie in the browser removes a whole server round trip that
+    existed only to set it, and flipping dir/lang mirrors the layout on the spot.
+    The refresh that follows swaps the server-rendered text, but by then the
+    change the eye tracks has already happened, so the button responds instantly
+    instead of appearing stuck.
   */
   const toggle = () => {
+    document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=${365 * 86400}; samesite=lax`;
     const el = document.documentElement;
     el.dir = next === "ar" ? "rtl" : "ltr";
     el.lang = next;
-    start(async () => {
-      await setLocaleAction(next);
-      router.refresh();
-    });
+    start(() => router.refresh());
   };
 
   return (
     <button
       onClick={toggle}
-      disabled={pending}
       aria-busy={pending || undefined}
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors duration-140 ease-out disabled:opacity-60 ${
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors duration-140 ease-out ${
         onDark
           ? "border-white/12 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
           : "border-line bg-surface text-ink-700 hover:bg-sunken"

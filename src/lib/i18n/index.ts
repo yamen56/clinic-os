@@ -6,7 +6,8 @@ import { ar } from "./ar";
 export type Locale = "ar" | "en";
 export type { Dict };
 
-export const LOCALE_COOKIE = "cos_locale";
+import { LOCALE_COOKIE } from "./shared";
+export { LOCALE_COOKIE };
 
 export function dictFor(locale: Locale): Dict {
   return locale === "en" ? en : ar;
