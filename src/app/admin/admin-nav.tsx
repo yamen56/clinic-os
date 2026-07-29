@@ -21,6 +21,7 @@ export function AdminNav() {
           <Link
             key={it.href}
             href={it.href}
+            prefetch
             className={`rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
               active ? "bg-brand-100 text-brand-700" : "text-ink-500 hover:text-ink-900"
             }`}

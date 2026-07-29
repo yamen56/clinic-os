@@ -125,6 +125,7 @@ export function Shell({
               <Link
                 key={key}
                 href={href}
+                prefetch
                 aria-current={active ? "page" : undefined}
                 className={`relative mb-0.5 flex h-10 items-center gap-2.5 rounded-ctl px-3 text-sm font-medium transition-colors duration-140 ease-out ${
                   active
