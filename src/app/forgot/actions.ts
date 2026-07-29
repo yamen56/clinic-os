@@ -2,7 +2,7 @@
 
 import { withSystem } from "@/lib/db";
 import { createAuthToken, pruneAuthTokens } from "@/lib/invites";
-import { sendEmail, resetEmail, emailConfigured } from "@/lib/email";
+import { sendEmail, renderEmail, emailConfigured } from "@/lib/email";
 import { appUrl } from "@/lib/urls";
 
 export type ForgotState = { sent?: boolean; devUrl?: string } | null;
@@ -29,13 +29,26 @@ export async function requestResetAction(
     );
     if (!u.rowCount) return null;
     const user = u.rows[0];
+    // The template names the workspace being recovered; agency staff have no
+    // clinic membership, so fall back to the agency name.
+    const cn = await c.query(
+      `select coalesce(cl.name_ar, cl.name) as n
+       from clinic_members m
+       join clinics cl on cl.id = m.clinic_id
+       where m.user_id = $1 and m.active
+       order by m.created_at limit 1`,
+      [user.id]
+    );
+    const clinicName = (cn.rows[0]?.n as string) ?? "Makan Scaling";
 
     const raw = await createAuthToken(c, { userId: user.id, purpose: "reset" });
     const link = `${appUrl()}/reset/${raw}`;
-    const mail = resetEmail({
-      name: user.full_name,
-      url: link,
+    const mail = renderEmail({
+      type: "password-reset",
       locale: user.locale === "en" ? "en" : "ar",
+      name: user.full_name,
+      clinic: clinicName,
+      url: link,
     });
     const sent = await sendEmail({ to: email, ...mail });
     if (!sent.ok && !sent.skipped) console.error("[reset email]", sent.error);

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { PoolClient } from "pg";
 import { requireClinic } from "@/lib/auth";
 import { createAuthToken } from "@/lib/invites";
-import { sendEmail, inviteEmail } from "@/lib/email";
+import { sendEmail, renderEmail } from "@/lib/email";
 import { appUrl } from "@/lib/urls";
 import { inClinic } from "@/lib/clinic-api";
 import { withSystem } from "@/lib/db";
@@ -99,11 +99,12 @@ export async function addStaffAction(
       );
       inviteUrl = `${appUrl()}/invite/${raw}`;
       const clinicName = await clinicDisplayName(c, access.clinicId);
-      const mail = inviteEmail({
-        name: d.fullName,
-        clinicName,
-        url: inviteUrl,
+      const mail = renderEmail({
+        type: "invitation",
         locale: "ar",
+        name: d.fullName,
+        clinic: clinicName,
+        url: inviteUrl,
       });
       const sent = await sendEmail({ to: d.email, ...mail });
       emailed = sent.ok;
@@ -148,7 +149,7 @@ export async function resendInviteAction(
     const clinicName = await clinicDisplayName(c, access.clinicId);
     const sent = await sendEmail({
       to: u.email,
-      ...inviteEmail({ name: u.full_name, clinicName, url: inviteUrl, locale: "ar" }),
+      ...renderEmail({ type: "invitation", locale: "ar", name: u.full_name, clinic: clinicName, url: inviteUrl }),
     });
     await audit(c, {
       clinicId: access.clinicId,
