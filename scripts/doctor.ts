@@ -173,7 +173,7 @@ async function main() {
   // Report
   const icon = { ok: "\x1b[32m✓\x1b[0m", warn: "\x1b[33m!\x1b[0m", fail: "\x1b[31m✗\x1b[0m" };
   const pad = Math.max(...results.map((r) => r.label.length));
-  console.log("\n  Clinic OS — readiness\n" + "  " + "─".repeat(pad + 46));
+  console.log("\n  Makan Clinic Platform — readiness\n" + "  " + "─".repeat(pad + 46));
   for (const r of results) {
     console.log(`  ${icon[r.level]} ${r.label.padEnd(pad)}  ${r.detail}`);
   }
