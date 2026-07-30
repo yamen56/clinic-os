@@ -529,7 +529,7 @@ function TimeGrid({
     <div className="flex-1 overflow-auto rounded-card border border-line bg-surface shadow-card">
       <div className="flex min-w-fit">
         {/* time gutter */}
-        <div className="sticky inset-inline-start-0 z-10 w-14 shrink-0 border-e border-line bg-surface">
+        <div className="sticky start-0 z-10 w-14 shrink-0 border-e border-line bg-surface">
           <div className="h-9 border-b border-line" />
           <div className="relative" style={{ height: totalH }}>
             {Array.from({ length: (END_MIN - START_MIN) / 60 }, (_, i) => (
@@ -619,7 +619,7 @@ function TimeGrid({
                       className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-danger"
                       style={{ top: (now.hour * 60 + now.minute - START_MIN) * PX }}
                     >
-                      <span className="absolute -top-1 inset-inline-start-0 h-2 w-2 rounded-full bg-danger" />
+                      <span className="absolute -top-1 start-0 h-2 w-2 rounded-full bg-danger" />
                     </div>
                   )}
                   {/* appointments */}

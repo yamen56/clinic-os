@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { PushManager } from "@/components/push-manager";
 import { saveNotificationPrefsAction } from "./actions";
+import { InstallApp } from "@/components/pwa";
 import { BellRing, CheckCheck, Smartphone } from "lucide-react";
 
 type Notif = {
@@ -173,7 +174,14 @@ export function NotificationsClient({
               }
               sub={t.notifications.installHint}
             />
-            <div className="px-5 py-4">
+            {/*
+              The card has always been headed "install this on your phone" and
+              then offered only the notifications switch. The install control
+              now sits where the copy already promised it — and removes itself
+              once there is nothing left to install.
+            */}
+            <div className="grid justify-items-start gap-3 px-5 py-4">
+              <InstallApp presentation="button" />
               <PushManager />
             </div>
           </Card>

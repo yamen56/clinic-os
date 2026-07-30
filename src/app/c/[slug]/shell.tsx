@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/client";
 import { LanguageToggle } from "@/components/language-toggle";
+import { InstallApp } from "@/components/pwa";
 import { logoutAction } from "@/app/login/actions";
 import { exitImpersonationAction } from "@/app/admin/actions";
 import { Avatar } from "@/components/ui/misc";
@@ -111,12 +112,17 @@ export function Shell({
   const isActive = (href: string) =>
     href === base ? pathname === base : pathname.startsWith(href);
 
+  // Navigating away closes the sheet. The links close it themselves, but the
+  // back button and in-page redirects don't go through them, and a sheet left
+  // sitting over the screen it just opened reads as a stuck app.
+  useEffect(() => setMoreOpen(false), [pathname]);
+
   const clinicDisplay = locale === "ar" ? clinic.nameAr || clinic.name : clinic.name;
 
   return (
     <div className="min-h-dvh bg-paper">
       {/* Desktop sidebar — night surface, the one dark region of the app chrome */}
-      <aside className="fixed inset-y-0 inset-inline-start-0 z-40 hidden w-[248px] flex-col border-e border-white/6 bg-night md:flex">
+      <aside className="fixed inset-y-0 start-0 z-40 hidden w-[248px] flex-col border-e border-white/6 bg-night md:flex">
         <div className="flex h-[88px] items-center justify-center border-b border-white/6">
           <BrandMark size={64} />
         </div>
@@ -141,7 +147,7 @@ export function Shell({
                 aria-current={active ? "page" : undefined}
                 className={`relative mb-0.5 flex h-10 items-center gap-2.5 rounded-ctl px-3 text-sm font-medium transition-colors duration-140 ease-out ${
                   active
-                    ? "bg-[rgb(105_137_166/0.22)] text-white before:absolute before:inset-y-2 before:inset-inline-start-0 before:w-0.5 before:rounded-full before:bg-brand-600 before:content-['']"
+                    ? "bg-[rgb(105_137_166/0.22)] text-white before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-brand-600 before:content-['']"
                     : "text-white/62 hover:bg-white/5 hover:text-white"
                 }`}
               >
@@ -188,14 +194,20 @@ export function Shell({
               </button>
             </form>
           </div>
-          <div className="mt-2 px-1">
+          <div className="mt-2 space-y-1 px-1">
+            <InstallApp onDark />
             <LanguageToggle onDark />
           </div>
         </div>
       </aside>
 
-      {/* Content */}
-      <div className="md:ms-[248px]">
+      {/*
+        Content. The top inset is zero in a browser tab and only becomes real
+        once the app is installed to a home screen, where the page runs behind
+        the status bar and the first line of every screen would otherwise sit
+        under the clock.
+      */}
+      <div className="pt-[env(safe-area-inset-top)] md:ms-[248px] md:pt-0">
         {isImpersonating && (
           <div className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-danger px-4 py-2 text-center text-[13px] font-medium text-white">
             <ShieldAlert className="h-4 w-4 shrink-0" />
@@ -238,7 +250,81 @@ export function Shell({
       </div>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      {moreOpen && (
+        <button
+          type="button"
+          aria-label={t.common.close}
+          onClick={() => setMoreOpen(false)}
+          className="fixed inset-0 z-30 bg-night/25 animate-fade-in md:hidden"
+        />
+      )}
+      {/*
+        The horizontal insets matter in landscape on a notched phone, where the
+        cutout eats into the row and would otherwise sit on top of the first
+        tab. They are physical (`pl`/`pr`), not logical: the notch is on the
+        same side of the handset whichever way the text runs.
+      */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur md:hidden">
+        {/*
+          The sheet is rendered before the tab row deliberately. The bar is
+          anchored to the bottom edge, so markup placed after the tabs grows
+          downward off-screen and shunts the tabs up as it opens; placed before
+          them it rises above the bar, which is where a menu opened from the
+          bottom of the screen is expected to come from.
+
+          72dvh clears the full owner menu — nine entries plus the footer come
+          to ~440px, which overflowed a 62dvh cap on an ordinary handset and
+          left the language and sign-out row sliced in half against the tab bar.
+          The scroll stays for the short phones where it genuinely cannot fit.
+        */}
+        {moreOpen && (
+          <div className="max-h-[72dvh] overflow-y-auto border-b border-line bg-surface px-2 py-2 animate-fade-up">
+            {mobileMore.map(({ key, href, badge }) => {
+              const Icon = icons[key];
+              return (
+                <Link
+                  key={key}
+                  href={href}
+                  onClick={() => setMoreOpen(false)}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
+                >
+                  <Icon className="h-[18px] w-[18px] shrink-0 text-ink-400" />
+                  <span className="flex-1">{t.nav[key]}</span>
+                  {!!badge && (
+                    <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 tnum">
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+            <Link
+              href={`${base}/notifications`}
+              onClick={() => setMoreOpen(false)}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
+            >
+              <Bell className="h-[18px] w-[18px] shrink-0 text-ink-400" />
+              {t.nav.notifications}
+            </Link>
+            <Link
+              href={`${base}/signature`}
+              onClick={() => setMoreOpen(false)}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
+            >
+              <PenTool className="h-[18px] w-[18px] shrink-0 text-ink-400" />
+              {t.mySignature.title}
+            </Link>
+            <InstallApp />
+            <div className="mt-1 flex items-center justify-between border-t border-line px-3 pt-3 pb-1">
+              <LanguageToggle />
+              <form action={logoutAction}>
+                <button className="flex touch-manipulation items-center gap-2 py-1.5 text-sm text-ink-500">
+                  <LogOut className="h-4 w-4" /> {t.auth.signOut}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
         <div className="grid auto-cols-fr grid-flow-col">
           {mobileMain.map(({ key, href, badge }) => {
             const Icon = icons[key];
@@ -247,14 +333,15 @@ export function Shell({
               <Link
                 key={key}
                 href={href}
-                className={`relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium ${
+                aria-current={active ? "page" : undefined}
+                className={`relative flex touch-manipulation flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors duration-140 ease-out ${
                   active ? "text-brand-700" : "text-ink-500"
                 }`}
               >
                 <Icon className="h-5 w-5" />
                 {t.nav[key]}
                 {!!badge && (
-                  <span className="absolute top-1 inset-inline-end-[calc(50%-1.4rem)] h-2 w-2 rounded-full bg-brand-600" />
+                  <span className="absolute top-1 end-[calc(50%-1.4rem)] h-2 w-2 rounded-full bg-brand-600" />
                 )}
               </Link>
             );
@@ -262,7 +349,8 @@ export function Shell({
           {mobileMore.length > 0 && (
             <button
               onClick={() => setMoreOpen((v) => !v)}
-              className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium ${
+              aria-expanded={moreOpen}
+              className={`flex touch-manipulation flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors duration-140 ease-out ${
                 moreOpen ? "text-brand-700" : "text-ink-500"
               }`}
             >
@@ -271,48 +359,6 @@ export function Shell({
             </button>
           )}
         </div>
-        {moreOpen && (
-          <div className="border-t border-line bg-surface px-2 py-2 animate-fade-up">
-            {mobileMore.map(({ key, href }) => {
-              const Icon = icons[key];
-              return (
-                <Link
-                  key={key}
-                  href={href}
-                  onClick={() => setMoreOpen(false)}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-sunken"
-                >
-                  <Icon className="h-[18px] w-[18px] text-ink-400" />
-                  {t.nav[key]}
-                </Link>
-              );
-            })}
-            <Link
-              href={`${base}/notifications`}
-              onClick={() => setMoreOpen(false)}
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-sunken"
-            >
-              <Bell className="h-[18px] w-[18px] text-ink-400" />
-              {t.nav.notifications}
-            </Link>
-            <Link
-              href={`${base}/signature`}
-              onClick={() => setMoreOpen(false)}
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-sunken"
-            >
-              <PenTool className="h-[18px] w-[18px] text-ink-400" />
-              {t.mySignature.title}
-            </Link>
-            <div className="flex items-center justify-between px-3 py-2.5">
-              <LanguageToggle />
-              <form action={logoutAction}>
-                <button className="flex items-center gap-2 text-sm text-ink-500">
-                  <LogOut className="h-4 w-4" /> {t.auth.signOut}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
       </nav>
     </div>
   );

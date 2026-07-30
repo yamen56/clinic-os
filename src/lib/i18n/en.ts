@@ -108,6 +108,13 @@ export const en = {
     notifications: "Notifications",
     more: "More",
   },
+  install: {
+    cta: "Install app",
+    why: "Opens full screen and keeps working when the signal drops.",
+    iosHow: "To install, tap Share in Safari, then “Add to Home Screen”.",
+    iosShare: "Tap the Share button at the bottom of Safari",
+    iosAdd: "Choose “Add to Home Screen”, then Add",
+  },
   dashboard: {
     title: "Dashboard",
     todayAppointments: "Today's appointments",

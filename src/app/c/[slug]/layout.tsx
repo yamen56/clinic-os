@@ -1,5 +1,6 @@
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
+import { ServiceWorkerRegistrar } from "@/components/pwa";
 import { Shell } from "./shell";
 
 export default async function ClinicLayout({
@@ -57,6 +58,15 @@ export default async function ClinicLayout({
       pendingDocuments={chrome.pending_documents}
       announcements={chrome.announcements.filter((a) => !dismissed.includes(a.id))}
     >
+      {/*
+        The worker is registered here rather than in the root layout, so it is
+        scoped to the staff workspace. The public pages under this app are
+        one-time patient links — a signing link, an invoice, a booking form.
+        Leaving a service worker and a cache behind in a patient's browser
+        after they have signed once is not something they asked for, and the
+        registration competes with the page they actually came for.
+      */}
+      <ServiceWorkerRegistrar />
       {children}
     </Shell>
   );

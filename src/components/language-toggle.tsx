@@ -33,7 +33,7 @@ export function LanguageToggle({ compact, onDark }: { compact?: boolean; onDark?
     <button
       onClick={toggle}
       aria-busy={pending || undefined}
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors duration-140 ease-out ${
+      className={`inline-flex touch-manipulation items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors duration-140 ease-out select-none active:translate-y-px ${
         onDark
           ? "border-white/12 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
           : "border-line bg-surface text-ink-700 hover:bg-sunken"

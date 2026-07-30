@@ -238,7 +238,7 @@ export function PatientProfile(props: {
               <MoreVertical className="h-4.5 w-4.5" />
             </Button>
             {menuOpen && (
-              <div className="absolute inset-inline-end-0 top-10 z-30 w-52 rounded-card border border-line bg-surface p-1.5 shadow-pop animate-fade-up">
+              <div className="absolute end-0 top-10 z-30 w-52 rounded-card border border-line bg-surface p-1.5 shadow-pop animate-fade-up">
                 <button
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink-900/4"
                   onClick={() => {

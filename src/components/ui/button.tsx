@@ -52,7 +52,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         flex sibling can squeeze the box, so buttons in the same row end up
         different heights. The icon gets shrink-0 for the same reason.
       */
-      className={`relative isolate inline-flex shrink-0 items-center justify-center overflow-hidden whitespace-nowrap font-semibold transition-colors duration-140 ease-out select-none active:translate-y-px disabled:opacity-45 disabled:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 ${variants[variant]} ${sizes[size]} ${className}`}
+      /*
+        `touch-manipulation` removes the ~300ms the browser otherwise waits to
+        see whether a tap is the start of a double-tap zoom. Without it every
+        button on a phone feels a beat behind the finger.
+      */
+      className={`relative isolate inline-flex shrink-0 touch-manipulation items-center justify-center overflow-hidden whitespace-nowrap font-semibold transition-colors duration-140 ease-out select-none active:translate-y-px disabled:opacity-45 disabled:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 ${variants[variant]} ${sizes[size]} ${className}`}
       {...rest}
     >
       {children}

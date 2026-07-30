@@ -26,8 +26,14 @@ export const viewport: Viewport = {
   themeColor: "#0b1220",
   width: "device-width",
   initialScale: 1,
-  // Prevents iOS zooming the page when a form field is focused.
-  maximumScale: 1,
+  /*
+    Deliberately no `maximumScale`. It was here to stop iOS zooming in when a
+    form field is focused, but it buys that by disabling pinch-zoom for
+    everyone, permanently — and staff read small print on phones. The zoom on
+    focus is really a symptom: iOS only does it when the field's text is under
+    16px, so the inputs set 16px on small screens and the browser leaves the
+    page alone. Same result, without taking zoom away.
+  */
   viewportFit: "cover",
 };
 
@@ -37,6 +43,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} dir={dirFor(locale)}>
       <body>
+        {/*
+          `beforeinstallprompt` fires once, during load, and is usually gone
+          before React mounts. Catching it here parks it on `window` so the
+          install button can still find it whenever it renders.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "window.addEventListener('beforeinstallprompt',function(e){" +
+              "e.preventDefault();window.__installPrompt=e;" +
+              "window.dispatchEvent(new Event('installpromptready'))});",
+          }}
+        />
         <I18nProvider dict={dict} locale={locale}>
           <ToastProvider>{children}</ToastProvider>
         </I18nProvider>
