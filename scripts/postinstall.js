@@ -8,32 +8,10 @@
  * Chromium in its base layer, so it skips too.
  */
 const { execSync } = require("node:child_process");
-const fs = require("node:fs");
-const path = require("node:path");
 
-/*
-  pdf.js runs its parser in a Web Worker, which has to be a real file the browser
-  can fetch — it cannot be bundled into the page. Copy it next to the other
-  static assets so the field-placement editor works with no CDN, on the same
-  terms as the self-hosted fonts.
-*/
-try {
-  const src = path.join(
-    __dirname,
-    "..",
-    "node_modules",
-    "pdfjs-dist",
-    "build",
-    "pdf.worker.min.mjs"
-  );
-  const dest = path.join(__dirname, "..", "public", "pdf.worker.min.mjs");
-  if (fs.existsSync(src)) {
-    fs.copyFileSync(src, dest);
-    console.log("[postinstall] copied pdf.js worker to public/");
-  }
-} catch (e) {
-  console.warn("[postinstall] could not copy pdf.js worker:", e.message);
-}
+// pdf.js's worker file. Also run as `prebuild` — inside the Docker image this
+// runs before the source tree is copied, so `public/` does not exist yet.
+require("./copy-pdf-worker.js");
 
 const skip =
   process.env.VERCEL ||

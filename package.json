@@ -7,6 +7,7 @@
     "dev:all": "tsx scripts/dev-all.ts",
     "db": "tsx scripts/db.ts",
     "worker": "tsx worker/index.ts",
+    "prebuild": "node scripts/copy-pdf-worker.js",
     "build": "next build",
     "start": "next start",
     "migrate": "tsx scripts/migrate.ts",
