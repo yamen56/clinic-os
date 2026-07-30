@@ -16,7 +16,9 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 # Install deps first so image layers cache across code changes.
 # postinstall.js is copied with them because npm runs it during install.
 COPY package*.json ./
-COPY scripts/postinstall.js ./scripts/
+# Both scripts, not just the entry point: postinstall requires copy-pdf-worker,
+# and a missing require here fails `npm ci` and takes the whole build with it.
+COPY scripts/postinstall.js scripts/copy-pdf-worker.js ./scripts/
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY tsconfig*.json ./

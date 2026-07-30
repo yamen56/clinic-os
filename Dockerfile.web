@@ -17,7 +17,9 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 # Dev dependencies are needed to build (TypeScript, Tailwind), so install the
 # full tree, build, then prune. Layer-cached separately from source changes.
 COPY package*.json ./
-COPY scripts/postinstall.js ./scripts/
+# Both scripts, not just the entry point: postinstall requires copy-pdf-worker,
+# and a missing require here fails `npm ci` and takes the whole build with it.
+COPY scripts/postinstall.js scripts/copy-pdf-worker.js ./scripts/
 RUN npm ci --include=dev
 
 COPY . .

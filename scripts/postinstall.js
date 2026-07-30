@@ -9,9 +9,18 @@
  */
 const { execSync } = require("node:child_process");
 
-// pdf.js's worker file. Also run as `prebuild` — inside the Docker image this
-// runs before the source tree is copied, so `public/` does not exist yet.
-require("./copy-pdf-worker.js");
+// pdf.js's worker file. Also run as `prebuild`, which is the run that actually
+// lands it — inside the Docker images this postinstall runs before the source
+// tree is copied, so `public/` does not exist yet.
+//
+// Guarded because postinstall runs inside `npm ci`: anything thrown here fails
+// the install and takes the entire deploy with it. A missing pdf worker costs
+// one editor screen; a failed install costs the whole release.
+try {
+  require("./copy-pdf-worker.js");
+} catch (e) {
+  console.warn("[postinstall] pdf worker copy skipped:", e.message);
+}
 
 const skip =
   process.env.VERCEL ||
