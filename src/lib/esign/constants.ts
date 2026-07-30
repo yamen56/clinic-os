@@ -31,7 +31,11 @@ export type DocumentEventType =
   | "hash_mismatch"
   | "locked"
   | "unlocked"
-  | "superseded";
+  | "superseded"
+  /** A signed copy from outside this platform was attached. */
+  | "final_uploaded"
+  /** A template was built from a file the clinic already had. */
+  | "imported";
 
 export type FieldType =
   | "text"

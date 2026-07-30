@@ -158,7 +158,7 @@ async function dailyDigests() {
       // 20:00 — owner end-of-day summary
       if (now.hour === 20 && now.minute <= 2) {
         const owners = await c.query(
-          `select user_id from clinic_members where clinic_id = $1 and role = 'owner' and active`,
+          `select user_id from clinic_members where clinic_id = $1 and is_owner and active`,
           [cl.id]
         );
         const [stats] = (
@@ -196,7 +196,7 @@ async function dailyDigests() {
         ).rows[0].n;
         if (unread >= 3) {
           const staff = await c.query(
-            `select user_id from clinic_members where clinic_id = $1 and active and role in ('owner', 'receptionist')`,
+            `select user_id from clinic_members where clinic_id = $1 and active and (is_owner or role = 'receptionist')`,
             [cl.id]
           );
           for (const s of staff.rows) {

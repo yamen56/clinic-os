@@ -6,6 +6,7 @@ import { Client } from "pg";
 import bcrypt from "bcryptjs";
 import { DateTime } from "luxon";
 import { seedAgencyDefaults } from "./seed-recipes";
+import { ROLE_DEFAULTS, type MemberRole } from "../src/lib/permissions";
 
 const PG_PORT = Number(process.env.PG_PORT || 5544);
 const url = `postgres://postgres:postgres@127.0.0.1:${PG_PORT}/clinicos`;
@@ -95,11 +96,25 @@ async function main() {
   const recId = await upsertUser(SEED.receptionEmail, SEED.password, "هبة النجار", { phone: "+962790000004" });
 
   const mkMember = async (userId: string, role: string, extra: Record<string, unknown> = {}) => {
+    const isOwner = !!extra.owner;
     const r = await c.query(
-      `insert into clinic_members (clinic_id, user_id, role, title, specialty, color, reminder_minutes)
-       values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+      `insert into clinic_members
+         (clinic_id, user_id, role, is_owner, permissions, title, specialty, color, reminder_minutes)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
       [
-        clinicId, userId, role,
+        clinicId, userId, role, isOwner,
+        // Ownership carries full access; everyone else gets the set their job
+        // implies, which is what the settings screen would have offered.
+        JSON.stringify(
+          isOwner
+            ? { level: "full" }
+            : {
+                level: "custom",
+                caps: Object.fromEntries(
+                  (ROLE_DEFAULTS[role as MemberRole] ?? []).map((cap) => [cap, true])
+                ),
+              }
+        ),
         (extra.title as string) ?? null,
         (extra.specialty as string) ?? null,
         (extra.color as string) ?? "#6989a6",
@@ -109,7 +124,9 @@ async function main() {
     return r.rows[0].id as string;
   };
 
-  await mkMember(ownerId, "owner");
+  // The owner is a receptionist who also owns the place — which is the point of
+  // splitting the two: ownership is not a job.
+  await mkMember(ownerId, "receptionist", { owner: true });
   const m1 = await mkMember(doc1Id, "doctor", { title: "د.", specialty: "تقويم الأسنان", color: "#1e3a6b" });
   const m2 = await mkMember(doc2Id, "doctor", { title: "د.", specialty: "طب أسنان الأطفال", color: "#e4946b" });
   await mkMember(recId, "receptionist", { color: "#5bc6e3" });

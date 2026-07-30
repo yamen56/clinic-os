@@ -3,6 +3,7 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { loadDocumentList } from "@/lib/esign/queries";
 import { PatientProfile } from "./profile-client";
+import { can } from "@/lib/auth";
 
 export default async function PatientProfilePage({
   params,
@@ -123,7 +124,7 @@ export default async function PatientProfilePage({
       activity={JSON.parse(JSON.stringify(d.activity))}
       documents={JSON.parse(JSON.stringify(d.documents))}
       docTemplates={JSON.parse(JSON.stringify(d.templates))}
-      canSendDocuments={access.role !== "doctor"}
+      canSendDocuments={can(access, "documents.manage")}
     />
   );
 }

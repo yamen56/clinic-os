@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
+import { can } from "@/lib/auth";
 
 const TEXT_COLS: Record<string, number> = {
   name: 80,
@@ -21,7 +22,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   const g = await apiClinic(slug);
   if (!g.ok) return g.res;
   const access = g.access;
-  if (access.role !== "owner") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!can(access, "settings.clinic")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   let body: { patch?: Record<string, unknown> };
   try {

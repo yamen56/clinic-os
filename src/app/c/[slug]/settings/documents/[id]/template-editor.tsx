@@ -13,6 +13,7 @@ import { Tabs } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { RichText, insertTokenAtCaret } from "@/components/esign/rich-text";
+import { ImportFileButton } from "@/components/esign/import-file";
 import { PdfFieldPlacer, type PlacedField } from "@/components/esign/pdf-field-placer";
 import { saveTemplateAction } from "../actions";
 import { ArrowLeft, Plus, Trash2, Eye, Braces, ChevronUp, ChevronDown } from "lucide-react";
@@ -40,6 +41,7 @@ export function TemplateEditor({
   slug,
   isOwner,
   defaultSource,
+  autoImport,
   defs,
   roles,
   services,
@@ -50,6 +52,8 @@ export function TemplateEditor({
   slug: string;
   isOwner: boolean;
   defaultSource: "template" | "upload";
+  /** Arrived from "import a file" — open the picker rather than a blank page. */
+  autoImport?: boolean;
   defs: Def[];
   roles: Role[];
   services: Service[];
@@ -97,6 +101,7 @@ export function TemplateEditor({
     }))
   );
   const [tab, setTab] = useState<"ar" | "en">(language === "en" ? "en" : "ar");
+  const [imported, setImported] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [fields, setFields] = useState<PlacedField[]>(placedFields);
@@ -284,11 +289,28 @@ export function TemplateEditor({
                 />
               </div>
             )}
-            <span className="mb-1.5 block text-[13px] font-semibold">
-              {tab === "ar" ? t.docTemplates.bodyAr : t.docTemplates.bodyEn}
-            </span>
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[13px] font-semibold">
+                {tab === "ar" ? t.docTemplates.bodyAr : t.docTemplates.bodyEn}
+              </span>
+              {/*
+                Bumping `imported` remounts RichText, which is uncontrolled and
+                reads its content from `defaultValue` once. Without it the state
+                would hold the imported body while the editor still showed the
+                old one.
+              */}
+              <ImportFileButton
+                slug={slug}
+                dir={tab === "ar" ? "rtl" : "ltr"}
+                autoOpen={autoImport && !template}
+                onInsert={(html) => {
+                  setCurrentBody(html);
+                  setImported((n) => n + 1);
+                }}
+              />
+            </div>
             <RichText
-              key={tab}
+              key={`${tab}-${imported}`}
               defaultValue={currentBody}
               dir={tab === "ar" ? "rtl" : "ltr"}
               placeholder={tab === "ar" ? t.docTemplates.bodyAr : t.docTemplates.bodyEn}

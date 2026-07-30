@@ -50,7 +50,8 @@ export default async function ClinicLayout({
         logoPath: clinic.logoPath,
       }}
       role={access.role}
-      permissions={access.permissions}
+      isOwner={access.isOwner}
+      caps={access.caps}
       userName={access.session.user.fullName}
       userId={access.session.user.id}
       isImpersonating={access.isImpersonating}

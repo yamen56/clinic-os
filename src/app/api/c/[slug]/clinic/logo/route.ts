@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { saveFile, deleteFile } from "@/lib/storage";
 import { audit } from "@/lib/audit";
+import { can } from "@/lib/auth";
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
   const g = await apiClinic(slug);
   if (!g.ok) return g.res;
-  if (g.access.role !== "owner") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!can(g.access, "settings.clinic")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const form = await req.formData();
   const file = form.get("file");

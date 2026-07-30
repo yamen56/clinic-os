@@ -1,6 +1,7 @@
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { BookingLinksClient } from "./booking-client";
+import { can } from "@/lib/auth";
 
 export default async function BookingSettingsPage({
   params,
@@ -37,7 +38,7 @@ export default async function BookingSettingsPage({
   return (
     <BookingLinksClient
       slug={slug}
-      canEdit={access.role !== "doctor"}
+      canEdit={can(access, "settings")}
       links={JSON.parse(JSON.stringify(data.links))}
       doctors={JSON.parse(JSON.stringify(data.doctors))}
       services={JSON.parse(JSON.stringify(data.services))}

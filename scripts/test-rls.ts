@@ -50,7 +50,7 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   ).id;
   const member = (
     await q(
-      `insert into clinic_members (clinic_id, user_id, role) values ($1, $2, 'owner') returning id`,
+      `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions) values ($1, $2, 'other', true, '{"level":"full"}') returning id`,
       [clinic, user]
     )
   ).id;

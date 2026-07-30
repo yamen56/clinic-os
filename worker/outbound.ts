@@ -196,7 +196,7 @@ async function processOnce() {
               await c.query(`select slug, name, name_ar from clinics where id = $1`, [clinicId])
             ).rows[0];
             const owners = await c.query(
-              `select user_id from clinic_members where clinic_id = $1 and role = 'owner' and active`,
+              `select user_id from clinic_members where clinic_id = $1 and is_owner and active`,
               [clinicId]
             );
             for (const o of owners.rows) {

@@ -3,16 +3,17 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { loadFieldDefinitions } from "@/lib/esign/fields";
 import { TemplateEditor } from "./template-editor";
+import { can } from "@/lib/auth";
 
 export default async function TemplateEditorPage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug: string; id: string }>;
-  searchParams: Promise<{ source?: string }>;
+  searchParams: Promise<{ source?: string; import?: string }>;
 }) {
   const { slug, id } = await params;
-  const { source } = await searchParams;
+  const { source, import: openImport } = await searchParams;
   const access = await guardClinic(slug);
   const isNew = id === "new";
 
@@ -80,8 +81,9 @@ export default async function TemplateEditorPage({
   return (
     <TemplateEditor
       slug={slug}
-      isOwner={access.role === "owner"}
+      isOwner={can(access, "settings.clinic")}
       defaultSource={source === "upload" ? "upload" : "template"}
+      autoImport={openImport === "1"}
       defs={JSON.parse(JSON.stringify(data.defs))}
       roles={JSON.parse(JSON.stringify(data.roles))}
       services={JSON.parse(JSON.stringify(data.services))}

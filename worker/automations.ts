@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { withSystem } from "./db";
 import { loadContext, renderTemplate } from "./templates";
 import { createAndSendFromTemplate } from "../src/lib/esign/flow";
+import { staffInRoles } from "../src/lib/notify";
 
 /**
  * Automation engine.
@@ -289,17 +290,15 @@ export async function advanceRun(runId: string): Promise<void> {
       } else if (step.step_type === "notify_staff") {
         const title = renderTemplate(String(cfg.title ?? "Automation"), tmplCtx);
         const roles = Array.isArray(cfg.roles) && cfg.roles.length ? cfg.roles : ["owner", "receptionist"];
-        const staff = await c.query(
-          `select user_id from clinic_members where clinic_id = $1 and active and role = any($2)`,
-          [run.clinic_id, roles]
-        );
-        for (const s of staff.rows) {
+        // "owner" is a flag now, not a role value — see staffInRoles.
+        const staff = await staffInRoles(c, run.clinic_id, roles as string[]);
+        for (const userId of staff) {
           await c.query(
             `insert into notifications (clinic_id, user_id, kind, title, body) values ($1, $2, 'automation', $3, $4)`,
-            [run.clinic_id, s.user_id, title, renderTemplate(String(cfg.body ?? ""), tmplCtx)]
+            [run.clinic_id, userId, title, renderTemplate(String(cfg.body ?? ""), tmplCtx)]
           );
         }
-        await log(c, run.clinic_id, runId, step.id, "ok", { notified: staff.rowCount });
+        await log(c, run.clinic_id, runId, step.id, "ok", { notified: staff.length });
       } else if (step.step_type === "send_document") {
         const templateId = String(cfg.template_id ?? "");
         if (!templateId || !run.patient_id) {
@@ -313,7 +312,7 @@ export async function advanceRun(runId: string): Promise<void> {
           const owner = (
             await c.query(
               `select user_id from clinic_members
-               where clinic_id = $1 and role = 'owner' and active order by created_at limit 1`,
+               where clinic_id = $1 and is_owner and active order by created_at limit 1`,
               [run.clinic_id]
             )
           ).rows[0];

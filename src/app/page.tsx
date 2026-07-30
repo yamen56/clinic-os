@@ -40,7 +40,9 @@ export default async function Home() {
               <Avatar name={m.clinicName} />
               <div>
                 <div className="font-medium">{m.clinicNameAr || m.clinicName}</div>
-                <div className="text-sm text-ink-500">{m.role}</div>
+                <div className="text-sm text-ink-500">
+                  {m.isOwner ? t.staff.owner : t.staff.roles[m.role]}
+                </div>
               </div>
             </Card>
           </Link>

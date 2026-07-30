@@ -9,6 +9,7 @@ import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { redirect } from "next/navigation";
 import { Plus, ReceiptText, Download } from "lucide-react";
+import { can } from "@/lib/auth";
 
 const invStatus: Record<string, StatusKey> = {
   draft: "neutral",
@@ -28,7 +29,7 @@ export default async function InvoicesPage({
   const { slug } = await params;
   const sp = await searchParams;
   const access = await guardClinic(slug);
-  if (access.role === "doctor") redirect(`/c/${slug}`);
+  if (!can(access, "invoices")) redirect(`/c/${slug}`);
   const t = await getDict();
   const locale = await getLocale();
   const tab = sp.tab === "payments" ? "payments" : "invoices";

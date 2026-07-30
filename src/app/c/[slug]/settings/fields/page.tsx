@@ -1,7 +1,8 @@
-import { guardClinic } from "@/lib/guard";
+import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { loadFieldDefinitions } from "@/lib/esign/fields";
 import { FieldsClient } from "./fields-client";
+import { can } from "@/lib/auth";
 
 export default async function FieldsSettingsPage({
   params,
@@ -9,7 +10,15 @@ export default async function FieldsSettingsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const access = await guardClinic(slug);
+  /*
+    Guarded rather than rendered read-only, unlike the other settings screens.
+    The nav hides this one without `settings.clinic`, and a screen that is hidden
+    from the menu but still opens by URL is a boundary that does not mean
+    anything. Hours and services stay visible-but-locked deliberately — knowing
+    the clinic's opening times is not the same as editing the field definitions
+    every document is built from.
+  */
+  const access = await guardCap(slug, "settings.clinic");
 
   const { defs, usage } = await inClinic(access, async (c) => {
     const defs = await loadFieldDefinitions(c, access.clinicId, { includeHidden: true });
@@ -32,7 +41,7 @@ export default async function FieldsSettingsPage({
   return (
     <FieldsClient
       slug={slug}
-      isOwner={access.role === "owner"}
+      isOwner={can(access, "settings.clinic")}
       defs={JSON.parse(JSON.stringify(defs))}
       usage={usage}
     />

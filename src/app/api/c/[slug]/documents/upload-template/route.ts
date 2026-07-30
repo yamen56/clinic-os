@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { saveFile } from "@/lib/storage";
 import { pdfPageCount } from "@/lib/esign/pdf";
+import { can } from "@/lib/auth";
 
 const MAX_BYTES = 15 * 1024 * 1024;
 
@@ -17,7 +18,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   const auth = await apiClinic(slug);
   if (!auth.ok) return auth.res;
   const { access } = auth;
-  if (access.role === "doctor") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!can(access, "documents.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");

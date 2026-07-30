@@ -1,6 +1,7 @@
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { ClinicProfileForm } from "./profile-form";
+import { can } from "@/lib/auth";
 
 export default async function ClinicProfileSettings({
   params,
@@ -22,7 +23,7 @@ export default async function ClinicProfileSettings({
   return (
     <ClinicProfileForm
       slug={slug}
-      isOwner={access.role === "owner"}
+      isOwner={can(access, "settings.clinic")}
       clinic={JSON.parse(JSON.stringify(clinic))}
     />
   );

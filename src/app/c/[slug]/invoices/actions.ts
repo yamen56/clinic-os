@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireClinic } from "@/lib/auth";
+import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { nextInvoiceNumber, computeTotals, refreshInvoiceStatus, round2, type InvoiceItemInput } from "@/lib/invoices";
@@ -34,7 +34,7 @@ export async function createInvoiceAction(
   data: unknown
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return { error: "forbidden" };
+  if (!can(access, "invoices")) return { error: "forbidden" };
   const parsed = createSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -91,7 +91,7 @@ export async function createInvoiceAction(
 
 export async function sendInvoiceAction(slug: string, invoiceId: string): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return { error: "forbidden" };
+  if (!can(access, "invoices")) return { error: "forbidden" };
 
   // Generate the PDF outside the DB transaction (Chromium visits the public page)
   const pre = await inClinic(access, async (c) => {
@@ -169,7 +169,7 @@ export async function recordPaymentAction(
   data: { invoiceId: string; amount: number; method: string; reference: string; paidAt?: string }
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return { error: "forbidden" };
+  if (!can(access, "invoices")) return { error: "forbidden" };
   if (!["cash", "cliq", "card", "transfer"].includes(data.method)) return { error: "invalid" };
   const amount = round2(Number(data.amount));
   if (!(amount > 0)) return { error: "invalid" };
@@ -210,7 +210,7 @@ export async function recordPaymentAction(
 
 export async function voidInvoiceAction(slug: string, invoiceId: string): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return { error: "forbidden" };
+  if (!can(access, "invoices")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
     const r = await c.query(
       `update invoices set status = 'void' where id = $1 and clinic_id = $2`,

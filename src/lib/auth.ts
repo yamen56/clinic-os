@@ -3,6 +3,13 @@ import { cache } from "react";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { withSystem, readOneShot, safeLiteral } from "./db";
+import {
+  allCapabilities,
+  resolveCapabilities,
+  type Capability,
+  type CapabilityMap,
+  type MemberRole,
+} from "./permissions";
 
 const COOKIE = "cos_session";
 const SESSION_DAYS = 30;
@@ -31,8 +38,10 @@ export type Membership = ClinicProfile & {
   clinicName: string;
   clinicNameAr: string | null;
   clinicSlug: string;
-  role: "owner" | "doctor" | "receptionist";
-  permissions: Record<string, boolean>;
+  /** The job, not the access set. See lib/permissions. */
+  role: MemberRole;
+  isOwner: boolean;
+  caps: CapabilityMap;
 };
 
 export type SessionInfo = {
@@ -125,8 +134,9 @@ type SessionRow = {
   settings: Record<string, unknown> | null;
   memberships: {
     memberId: string;
-    role: Membership["role"];
-    permissions: Record<string, boolean> | null;
+    role: MemberRole;
+    isOwner: boolean;
+    permissions: Record<string, unknown> | null;
     clinic: ClinicProfile;
   }[];
 };
@@ -150,7 +160,8 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
             u.id, u.email, u.full_name, u.phone_e164, u.is_super_admin, u.locale, u.settings,
             coalesce((
               select json_agg(json_build_object(
-                'memberId', cm.id, 'role', cm.role, 'permissions', cm.permissions,
+                'memberId', cm.id, 'role', cm.role, 'isOwner', cm.is_owner,
+                'permissions', cm.permissions,
                 'clinic', ${CLINIC_JSON}
               ) order by cl.name)
               from clinic_members cm join clinics cl on cl.id = cm.clinic_id
@@ -182,7 +193,8 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
       clinicNameAr: m.clinic.nameAr,
       clinicSlug: m.clinic.slug,
       role: m.role,
-      permissions: m.permissions ?? {},
+      isOwner: !!m.isOwner,
+      caps: resolveCapabilities(m.permissions, { isOwner: !!m.isOwner, role: m.role }),
     })),
   };
 });
@@ -235,11 +247,24 @@ export type ClinicAccess = {
   clinicSlug: string;
   /** The clinic's own row — already loaded, so pages need not re-select it. */
   clinic: ClinicProfile;
-  role: "owner" | "doctor" | "receptionist";
+  /** The job title. Gates read `caps`, never this. */
+  role: MemberRole;
+  isOwner: boolean;
   memberId: string | null;
-  permissions: Record<string, boolean>;
+  caps: CapabilityMap;
   isImpersonating: boolean;
 };
+
+/**
+ * Whether this access may do something.
+ *
+ * A function rather than a bare lookup because it is the one spelling every
+ * server gate uses — `if (!can(access, "invoices"))` greps as a permission check
+ * in a way that `access.caps.invoices` does not.
+ */
+export function can(access: ClinicAccess, cap: Capability): boolean {
+  return access.caps[cap] === true;
+}
 
 /** Access check for a clinic workspace. Super admins get owner-level access (impersonation is audited separately). */
 export async function requireClinic(slug: string): Promise<ClinicAccess> {
@@ -253,8 +278,9 @@ export async function requireClinic(slug: string): Promise<ClinicAccess> {
       clinicSlug: slug,
       clinic: m,
       role: m.role,
+      isOwner: m.isOwner,
       memberId: m.memberId,
-      permissions: m.permissions,
+      caps: m.caps,
       isImpersonating: !!s.impersonatedBy,
     };
   }
@@ -273,9 +299,10 @@ export async function requireClinic(slug: string): Promise<ClinicAccess> {
       clinicId: clinic.id,
       clinicSlug: slug,
       clinic,
-      role: "owner",
+      role: "other",
+      isOwner: true,
       memberId: null,
-      permissions: {},
+      caps: allCapabilities(),
       isImpersonating: true,
     };
   }

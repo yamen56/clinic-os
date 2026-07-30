@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
+import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { loadDocumentDetail } from "@/lib/esign/queries";
 import { verifyHash } from "@/lib/esign/documents";
@@ -15,6 +16,7 @@ export default async function DocumentPage({
   const { slug, id } = await params;
   const { sign } = await searchParams;
   const access = await guardClinic(slug);
+  if (!can(access, "documents")) redirect(`/c/${slug}`);
 
   const data = await inClinic(access, async (c) => {
     const detail = await loadDocumentDetail(c, access.clinicId, id);
@@ -37,7 +39,8 @@ export default async function DocumentPage({
     <DocumentDetailClient
       slug={slug}
       tz={access.clinic.timezone}
-      role={access.role}
+      canManage={can(access, "documents.manage")}
+      canVoid={can(access, "documents.void")}
       userId={access.session.user.id}
       hasSavedSignature={data.hasSavedSignature}
       autoOpenSignerId={sign ?? null}

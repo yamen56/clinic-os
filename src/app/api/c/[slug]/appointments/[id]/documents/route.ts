@@ -3,6 +3,7 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { loadAppointmentDocuments } from "@/lib/esign/queries";
 import { buildDefaultSigners, createDocument } from "@/lib/esign/documents";
 import { sendDocument } from "@/lib/esign/flow";
+import { can } from "@/lib/auth";
 
 /**
  * The consent forms a booked service requires, and where each one stands.
@@ -29,7 +30,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
   const auth = await apiClinic(slug);
   if (!auth.ok) return auth.res;
   const { access } = auth;
-  if (access.role === "doctor") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!can(access, "documents.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const body = await req.json().catch(() => ({}) as { templateId?: string; send?: boolean });
   if (!body.templateId) return NextResponse.json({ error: "invalid" }, { status: 400 });

@@ -36,7 +36,7 @@ async function main() {
       [`owner-qa7-${slug}@test.local`, bcrypt.hashSync("password123", 10)]
     )
   ).rows[0];
-  await db.query(`insert into clinic_members (clinic_id, user_id, role) values ($1, $2, 'owner')`, [clinic.id, owner.id]);
+  await db.query(`insert into clinic_members (clinic_id, user_id, role, is_owner, permissions) values ($1, $2, 'other', true, '{"level":"full"}')`, [clinic.id, owner.id]);
   const patient = (
     await db.query(
       `insert into patients (clinic_id, full_name, phone_e164, source) values ($1, 'سامي الحوراني', '+962791234567', 'staff') returning id`,

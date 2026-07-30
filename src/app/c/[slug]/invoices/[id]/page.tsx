@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { InvoiceDetailClient } from "./invoice-detail-client";
+import { can } from "@/lib/auth";
 
 export default async function InvoiceDetailPage({
   params,
@@ -10,7 +11,7 @@ export default async function InvoiceDetailPage({
 }) {
   const { slug, id } = await params;
   const access = await guardClinic(slug);
-  if (access.role === "doctor") redirect(`/c/${slug}`);
+  if (!can(access, "invoices")) redirect(`/c/${slug}`);
 
   const data = await inClinic(access, async (c) => {
     const inv = (

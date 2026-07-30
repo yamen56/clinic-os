@@ -112,7 +112,7 @@ async function flagForStaff(clinicId: string, conversationId: string, reason: st
     );
     const clinic = (await c.query(`select slug from clinics where id = $1`, [clinicId])).rows[0];
     const staff = await c.query(
-      `select user_id from clinic_members where clinic_id = $1 and active and role in ('owner', 'receptionist')`,
+      `select user_id from clinic_members where clinic_id = $1 and active and (is_owner or role = 'receptionist')`,
       [clinicId]
     );
     for (const s of staff.rows) {
@@ -391,7 +391,7 @@ export async function respondToConversation(conversationId: string): Promise<voi
         );
         const staff = await c.query(
           `select cm.user_id, cl.slug from clinic_members cm join clinics cl on cl.id = cm.clinic_id
-           where cm.clinic_id = $1 and cm.active and cm.role in ('owner', 'receptionist')`,
+           where cm.clinic_id = $1 and cm.active and (cm.is_owner or cm.role = 'receptionist')`,
           [cfg.clinicId]
         );
         const local = start.setZone(clinic.timezone).setLocale("ar-JO-u-nu-latn");

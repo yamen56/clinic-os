@@ -1,53 +1,44 @@
+import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
+import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { loadDocumentList } from "@/lib/esign/queries";
 import { DocumentsListClient } from "./documents-list";
 
-export default async function DocumentsPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ slug: string }>;
-  searchParams: Promise<{ scope?: string }>;
-}) {
+export default async function DocumentsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const { scope } = await searchParams;
   const access = await guardClinic(slug);
-  const view = scope === "completed" ? "completed" : scope === "all" ? "all" : "pending";
+  if (!can(access, "documents")) redirect(`/c/${slug}`);
 
+  /*
+    Both scopes are loaded up front rather than one per visit. The tabs are the
+    thing staff click most on this screen, and a `?scope=` round trip put a
+    server render between the press and any visible change — on a phone that
+    reads as a dead button. Two capped selects cost one extra query and buy an
+    instant filter.
+
+    Not one `all` select: it is capped too, and its ordering puts everything
+    outstanding first, so a clinic with a full page of pending work would see an
+    empty Completed tab.
+  */
   const data = await inClinic(access, async (c) => {
-    const [rows, templates, counts] = await Promise.all([
-      loadDocumentList(c, access.clinicId, { scope: view }),
-      c.query(
-        `select id, name, name_ar, category, language from document_templates
-         where clinic_id = $1 and is_active order by category, name`,
-        [access.clinicId]
-      ),
-      c.query(
-        `select
-           count(*) filter (where status in ('draft', 'sent', 'partially_signed'))::int as pending,
-           count(*) filter (where status = 'completed')::int as completed,
-           count(*)::int as all
-         from documents where clinic_id = $1`,
-        [access.clinicId]
-      ),
-    ]);
-    return { rows, templates: templates.rows, counts: counts.rows[0] };
+    const pending = await loadDocumentList(c, access.clinicId, { scope: "pending" });
+    const completed = await loadDocumentList(c, access.clinicId, { scope: "completed" });
+    const templates = await c.query(
+      `select id, name, name_ar, category, language from document_templates
+       where clinic_id = $1 and is_active order by category, name`,
+      [access.clinicId]
+    );
+    return { rows: [...pending, ...completed], templates: templates.rows };
   });
 
   return (
     <DocumentsListClient
       slug={slug}
       tz={access.clinic.timezone}
-      role={access.role}
-      scope={view}
+      canManage={can(access, "documents.manage")}
       rows={JSON.parse(JSON.stringify(data.rows))}
       templates={JSON.parse(JSON.stringify(data.templates))}
-      counts={{
-        pending: Number(data.counts.pending),
-        completed: Number(data.counts.completed),
-        all: Number(data.counts.all),
-      }}
     />
   );
 }

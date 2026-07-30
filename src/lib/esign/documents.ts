@@ -154,7 +154,7 @@ export async function buildDefaultSigners(
     await c.query(
       `select cm.user_id, u.full_name, u.phone_e164 from clinic_members cm
        join users u on u.id = cm.user_id
-       where cm.clinic_id = $1 and cm.role = 'owner' and cm.active
+       where cm.clinic_id = $1 and cm.is_owner and cm.active
        order by cm.created_at limit 1`,
       [args.clinicId]
     )

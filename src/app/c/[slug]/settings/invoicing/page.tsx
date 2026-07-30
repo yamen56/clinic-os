@@ -1,6 +1,7 @@
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { InvoicingForm } from "./invoicing-form";
+import { can } from "@/lib/auth";
 
 export default async function InvoicingSettingsPage({
   params,
@@ -21,7 +22,7 @@ export default async function InvoicingSettingsPage({
   return (
     <InvoicingForm
       slug={slug}
-      isOwner={access.role === "owner"}
+      isOwner={can(access, "settings.clinic")}
       clinic={JSON.parse(JSON.stringify(clinic))}
     />
   );

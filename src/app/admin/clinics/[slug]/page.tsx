@@ -38,7 +38,7 @@ export default async function AdminClinicDetail({
     if (!clinic) return null;
     const members = (
       await c.query(
-        `select cm.role, u.full_name, u.email from clinic_members cm
+        `select cm.role, cm.is_owner, u.full_name, u.email from clinic_members cm
          join users u on u.id = cm.user_id where cm.clinic_id = $1 order by cm.created_at`,
         [clinic.id]
       )
@@ -147,7 +147,9 @@ export default async function AdminClinicDetail({
             {members.map((m, i) => (
               <li key={i} className="flex items-center justify-between gap-2">
                 <span>{m.full_name}</span>
-                <Badge status="brand">{m.role}</Badge>
+                <Badge status={m.is_owner ? "brand" : "neutral"}>
+                  {m.is_owner ? `${m.role} · owner` : m.role}
+                </Badge>
               </li>
             ))}
           </ul>

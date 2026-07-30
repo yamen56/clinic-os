@@ -101,8 +101,11 @@ export async function createClinicAction(
         );
         ownerId = u.rows[0].id;
       }
+      // The first member owns the clinic and always has full access. Their job
+      // title is a guess the clinic corrects in staff settings; ownership is not.
       await c.query(
-        `insert into clinic_members (clinic_id, user_id, role) values ($1, $2, 'owner')`,
+        `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions)
+         values ($1, $2, 'other', true, '{"level":"full"}')`,
         [clinicId, ownerId]
       );
 

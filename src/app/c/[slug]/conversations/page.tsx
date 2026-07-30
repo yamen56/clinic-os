@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { InboxClient } from "./inbox-client";
+import { can } from "@/lib/auth";
 
 export default async function ConversationsPage({
   params,
@@ -13,7 +14,7 @@ export default async function ConversationsPage({
   const { slug } = await params;
   const sp = await searchParams;
   const access = await guardClinic(slug);
-  if (access.role === "doctor") redirect(`/c/${slug}`);
+  if (!can(access, "conversations")) redirect(`/c/${slug}`);
 
   const data = await inClinic(access, async (c) => {
     const quickReplies = (

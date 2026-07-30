@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
 import {
   AuthError,
+  can,
   requireClinic,
   requireSuperAdmin,
   requireUser,
   type ClinicAccess,
   type SessionInfo,
 } from "./auth";
+import type { Capability } from "./permissions";
 
 /** Page-level guards: translate auth failures into redirects. */
 
@@ -37,4 +39,14 @@ export async function guardClinic(slug: string): Promise<ClinicAccess> {
     }
     redirect("/login");
   }
+}
+
+/**
+ * A page that needs a capability. Sends anyone without it to the dashboard,
+ * which every member can see — bouncing to a screen they also lack would loop.
+ */
+export async function guardCap(slug: string, cap: Capability): Promise<ClinicAccess> {
+  const access = await guardClinic(slug);
+  if (!can(access, cap)) redirect(`/c/${slug}`);
+  return access;
 }

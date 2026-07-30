@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireClinic, type ClinicAccess } from "@/lib/auth";
+import { requireClinic, type ClinicAccess, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { patientFilterSql, type PatientFilters } from "@/lib/patients";
@@ -17,7 +17,7 @@ import {
  * to anyone who can open a conversation.
  */
 function assertCanSend(access: ClinicAccess) {
-  const allowed = access.role === "owner" || access.permissions.automations === true;
+  const allowed = can(access, "campaigns");
   if (!allowed) throw new Error("forbidden");
 }
 

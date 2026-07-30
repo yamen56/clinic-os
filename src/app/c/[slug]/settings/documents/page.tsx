@@ -1,6 +1,7 @@
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { DocumentSettingsClient } from "./documents-client";
+import { can } from "@/lib/auth";
 
 export default async function DocumentSettingsPage({
   params,
@@ -56,7 +57,7 @@ export default async function DocumentSettingsPage({
   return (
     <DocumentSettingsClient
       slug={slug}
-      isOwner={access.role === "owner"}
+      isOwner={can(access, "settings.clinic")}
       templates={JSON.parse(JSON.stringify(data.templates))}
       roles={JSON.parse(JSON.stringify(data.roles))}
       library={JSON.parse(JSON.stringify(data.library))}

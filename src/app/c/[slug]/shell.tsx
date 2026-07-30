@@ -10,6 +10,7 @@ import { logoutAction } from "@/app/login/actions";
 import { exitImpersonationAction } from "@/app/admin/actions";
 import { Avatar } from "@/components/ui/misc";
 import { BrandMark } from "@/components/brand-mark";
+import type { CapabilityMap, MemberRole } from "@/lib/permissions";
 import {
   LayoutDashboard,
   MessageCircle,
@@ -57,7 +58,8 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
 export function Shell({
   clinic,
   role,
-  permissions,
+  isOwner,
+  caps,
   userName,
   userId,
   isImpersonating,
@@ -74,8 +76,9 @@ export function Shell({
     brandColor: string;
     logoPath: string | null;
   };
-  role: "owner" | "doctor" | "receptionist";
-  permissions: Record<string, boolean>;
+  role: MemberRole;
+  isOwner: boolean;
+  caps: CapabilityMap;
   userName: string;
   userId: string;
   isImpersonating: boolean;
@@ -90,20 +93,25 @@ export function Shell({
   const [hiddenAnnouncements, setHiddenAnnouncements] = useState<string[]>([]);
 
   const base = `/c/${clinic.slug}`;
-  const canAutomations = role === "owner" || permissions.automations === true;
 
+  /*
+    The nav is the capability set, rendered. Nothing here reads a job title —
+    a doctor who has been granted the inbox sees the inbox, and a receptionist
+    whose owner took invoices away does not see invoices. The dashboard is the
+    one entry everybody keeps: it is where the guards send anyone who reaches a
+    screen they are not allowed, so it can never be hidden.
+  */
   const items: { key: NavKey; href: string; show: boolean; badge?: number }[] = [
     { key: "dashboard", href: base, show: true },
-    { key: "conversations", href: `${base}/conversations`, show: role !== "doctor", badge: unreadCount },
-    { key: "calendar", href: `${base}/calendar`, show: true },
-    { key: "patients", href: `${base}/patients`, show: true },
-    { key: "campaigns", href: `${base}/campaigns`, show: canAutomations },
-    // Doctors see Documents: countersigning is a doctor's job, unlike invoicing.
-    { key: "documents", href: `${base}/documents`, show: true, badge: pendingDocuments },
-    { key: "invoices", href: `${base}/invoices`, show: role !== "doctor" },
-    { key: "automations", href: `${base}/automations`, show: canAutomations },
-    { key: "aiAgent", href: `${base}/ai`, show: canAutomations },
-    { key: "settings", href: `${base}/settings`, show: role !== "doctor" },
+    { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
+    { key: "calendar", href: `${base}/calendar`, show: caps.calendar },
+    { key: "patients", href: `${base}/patients`, show: caps.patients },
+    { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
+    { key: "documents", href: `${base}/documents`, show: caps.documents, badge: pendingDocuments },
+    { key: "invoices", href: `${base}/invoices`, show: caps.invoices },
+    { key: "automations", href: `${base}/automations`, show: caps.automations },
+    { key: "aiAgent", href: `${base}/ai`, show: caps.automations },
+    { key: "settings", href: `${base}/settings`, show: caps.settings },
   ];
   const visible = items.filter((i) => i.show);
   const mobileMain = visible.slice(0, 4);
@@ -167,7 +175,9 @@ export function Shell({
             <Avatar name={userName} size={30} color="rgb(255 255 255 / 0.14)" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] font-medium text-white">{userName}</div>
-              <div className="text-[11px] text-white/40">{role}</div>
+              <div className="text-[11px] text-white/40">
+                {isOwner ? t.staff.owner : t.staff.roles[role]}
+              </div>
             </div>
             {/* Reachable for doctors too, who never see /settings. */}
             <Link

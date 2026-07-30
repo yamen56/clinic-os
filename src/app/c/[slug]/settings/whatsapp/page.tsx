@@ -1,5 +1,6 @@
 import { guardClinic } from "@/lib/guard";
 import { WhatsappClient } from "./whatsapp-client";
+import { can } from "@/lib/auth";
 
 export default async function WhatsappSettingsPage({
   params,
@@ -8,5 +9,5 @@ export default async function WhatsappSettingsPage({
 }) {
   const { slug } = await params;
   const access = await guardClinic(slug);
-  return <WhatsappClient slug={slug} canEdit={access.role !== "doctor"} />;
+  return <WhatsappClient slug={slug} canEdit={can(access, "settings")} />;
 }

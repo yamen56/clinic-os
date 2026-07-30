@@ -164,7 +164,7 @@ async function notifyDisconnected(clinicId: string) {
     if (!clinic) return;
     // clinic owner + agency admins — automations depend on this connection
     const staff = await c.query(
-      `select user_id from clinic_members where clinic_id = $1 and role = 'owner' and active
+      `select user_id from clinic_members where clinic_id = $1 and is_owner and active
        union select id from users where is_super_admin`,
       [clinicId]
     );

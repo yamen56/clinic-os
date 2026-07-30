@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireClinic } from "@/lib/auth";
+import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { z } from "zod";
@@ -28,7 +28,7 @@ export async function saveBookingLinkAction(
   data: unknown
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return { error: "forbidden" };
+  if (!can(access, "settings")) return { error: "forbidden" };
   const parsed = linkSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -70,7 +70,7 @@ export async function saveBookingLinkAction(
 
 export async function deleteBookingLinkAction(slug: string, id: string) {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return;
+  if (!can(access, "settings")) return;
   await inClinic(access, (c) =>
     c.query(`delete from booking_links where id = $1 and clinic_id = $2`, [id, access.clinicId])
   );

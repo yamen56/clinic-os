@@ -8,7 +8,7 @@ import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { Card, PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -48,6 +48,7 @@ import {
   Check,
   Clock,
   FileWarning,
+  FileUp,
   Users,
 } from "lucide-react";
 
@@ -86,6 +87,7 @@ type Detail = {
     signing_mode: "sequential" | "parallel";
     content_snapshot: string | null;
     final_pdf_path: string | null;
+    final_pdf_source: "generated" | "uploaded";
     content_hash: string | null;
     hash_ok: boolean;
     appointment_id: string | null;
@@ -138,7 +140,8 @@ type Detail = {
 export function DocumentDetailClient({
   slug,
   tz,
-  role,
+  canManage,
+  canVoid,
   userId,
   hasSavedSignature,
   autoOpenSignerId,
@@ -146,7 +149,8 @@ export function DocumentDetailClient({
 }: {
   slug: string;
   tz: string;
-  role: "owner" | "doctor" | "receptionist";
+  canManage: boolean;
+  canVoid: boolean;
   userId: string;
   hasSavedSignature: boolean;
   autoOpenSignerId: string | null;
@@ -164,6 +168,7 @@ export function DocumentDetailClient({
   const [oneOff, setOneOff] = useState<{ label: string; value: string } | null>(null);
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
@@ -176,7 +181,7 @@ export function DocumentDetailClient({
 
   const isDraft = doc.status === "draft";
   const isTerminal = ["completed", "declined", "expired", "voided"].includes(doc.status);
-  const canSend = role !== "doctor" && !isTerminal;
+  const canSend = canManage && !isTerminal;
   const roleName = (s: { role_key: string; role_label: string | null; role_label_ar: string | null }) => {
     const fallback = (t.docs.roles as Record<string, string>)[s.role_key];
     if (locale === "ar") return s.role_label_ar || fallback || s.role_label || s.role_key;
@@ -345,6 +350,12 @@ export function DocumentDetailClient({
                 </Button>
               </>
             )}
+            {canManage && doc.status !== "voided" && (
+              <Button variant="outline" onClick={() => setUploadOpen(true)}>
+                <FileUp className="h-4 w-4" />
+                {t.docs.uploadSigned}
+              </Button>
+            )}
             {doc.final_pdf_path && (
               <a href={`/api/c/${slug}/documents/${doc.id}/pdf`} target="_blank" rel="noreferrer">
                 <Button variant="outline">
@@ -353,7 +364,7 @@ export function DocumentDetailClient({
                 </Button>
               </a>
             )}
-            {role === "owner" && doc.status !== "voided" && (
+            {canVoid && doc.status !== "voided" && (
               <Button variant="ghost" className="!text-danger" onClick={() => setVoidOpen(true)}>
                 <Ban className="h-4 w-4" />
                 {t.docs.voidDocument}
@@ -364,6 +375,20 @@ export function DocumentDetailClient({
       />
 
       {/* ------------------------------------------------------ banner strip */}
+      {/*
+        Said plainly and near the top, because everything else on this screen —
+        the completed badge, the signed timestamps, the download button — looks
+        identical whether the signature was captured here or scanned in. Only
+        one of those carries an IP, a one-time code and a content hash.
+      */}
+      {doc.final_pdf_source === "uploaded" && (
+        <Banner
+          tone="brand"
+          icon={<FileUp className="h-4 w-4" />}
+          title={t.docs.uploadedCopyTitle}
+          body={t.docs.uploadedCopyBody}
+        />
+      )}
       {!doc.hash_ok && (
         <Banner tone="danger" icon={<ShieldAlert className="h-4 w-4" />} title={t.docs.hashBad} />
       )}
@@ -431,7 +456,7 @@ export function DocumentDetailClient({
           title={(t.docs.statuses as Record<string, string>).voided}
           body={doc.void_reason ?? ""}
           action={
-            role !== "doctor" ? (
+            canManage ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -568,7 +593,7 @@ export function DocumentDetailClient({
                     </div>
                   </div>
 
-                  {!isTerminal && s.status !== "signed" && role !== "doctor" && (
+                  {!isTerminal && s.status !== "signed" && canManage && (
                     <div className="flex shrink-0 flex-wrap gap-1.5">
                       {!s.user_id && s.phone_e164 && (
                         <>
@@ -622,7 +647,7 @@ export function DocumentDetailClient({
             );
           })}
 
-          {isDraft && role !== "doctor" && (
+          {isDraft && canManage && (
             <Button
               variant="outline"
               className="justify-self-start"
@@ -680,7 +705,7 @@ export function DocumentDetailClient({
                         {f.used && <Badge status="neutral">{t.docs.preview}</Badge>}
                         {f.isOverride && <Badge status="pending">{t.docs.overridden}</Badge>}
                         {f.isOneOff && <Badge status="brand">{t.docs.oneOff}</Badge>}
-                        {isDraft && role !== "doctor" && (
+                        {isDraft && canManage && (
                           <span className="flex gap-1">
                             <Button
                               variant="ghost"
@@ -746,7 +771,7 @@ export function DocumentDetailClient({
               );
             })}
           </ul>
-          {isDraft && role !== "doctor" && (
+          {isDraft && canManage && (
             <div className="border-t border-line px-5 py-3">
               <Button variant="outline" size="sm" onClick={() => setOneOff({ label: "", value: "" })}>
                 <Plus className="h-4 w-4" />
@@ -961,6 +986,20 @@ export function DocumentDetailClient({
         )}
       </Modal>
 
+      <UploadSignedCopy
+        slug={slug}
+        documentId={doc.id}
+        open={uploadOpen}
+        signers={detail.signers.map((s) => ({
+          id: s.id,
+          name: s.display_name || roleName(s),
+          role: roleName(s),
+          alreadySigned: s.status === "signed",
+          declined: s.status === "declined",
+        }))}
+        onClose={() => setUploadOpen(false)}
+      />
+
       <SignerEditor
         slug={slug}
         documentId={doc.id}
@@ -1034,6 +1073,135 @@ function Banner({
         {action}
       </div>
     </div>
+  );
+}
+
+/**
+ * Attaches a copy that was signed on paper.
+ *
+ * The signer list is a checklist rather than an assumption, because a scan of
+ * page three proves nothing about who is on it — only the person holding the
+ * paper knows. Anyone who declined here is shown but cannot be ticked: a refusal
+ * recorded in the system is not something a later upload gets to overwrite.
+ */
+function UploadSignedCopy({
+  slug,
+  documentId,
+  open,
+  signers,
+  onClose,
+}: {
+  slug: string;
+  documentId: string;
+  open: boolean;
+  signers: { id: string; name: string; role: string; alreadySigned: boolean; declined: boolean }[];
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const router = useRouter();
+  const { toast } = useToast();
+  const [file, setFile] = useState<File | null>(null);
+  const [note, setNote] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setFile(null);
+    setNote("");
+    // Everyone the upload can actually settle is ticked to start with; the
+    // common case is a form that came back fully signed.
+    setPicked(signers.filter((s) => !s.declined && !s.alreadySigned).map((s) => s.id));
+  }, [open, signers]);
+
+  const submit = async () => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("signerIds", picked.join(","));
+      if (note.trim()) fd.append("note", note.trim());
+      const res = await fetch(`/api/c/${slug}/documents/${documentId}/final-pdf`, {
+        method: "POST",
+        body: fd,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast(
+          (t.docs.errors as Record<string, string>)[json.error] ?? t.common.genericError,
+          "error"
+        );
+        return;
+      }
+      toast(t.docs.uploadedOk);
+      onClose();
+      router.refresh();
+    } catch {
+      toast(t.common.genericError, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={t.docs.uploadSigned}>
+      <div className="grid gap-4">
+        <p className="text-[13px] text-ink-500">{t.docs.uploadSignedBody}</p>
+
+        <Field label={t.docs.uploadSignedFile} required>
+          <input
+            type="file"
+            accept=".pdf,application/pdf"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="w-full rounded-ctl border border-line bg-surface px-3 py-2 text-base file:me-3 file:rounded-ctl file:border-0 file:bg-sunken file:px-3 file:py-1.5 file:text-[13px] file:font-medium md:text-sm"
+          />
+        </Field>
+
+        <div>
+          <span className="mb-1.5 block text-[13px] font-medium text-ink-700">
+            {t.docs.uploadSignedWho}
+          </span>
+          <ul className="grid gap-1 rounded-lg border border-line p-2">
+            {signers.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-3 px-1.5 py-1">
+                <span className="min-w-0 flex-1 text-[13px]">
+                  {s.name}
+                  <span className="ms-2 text-[12px] text-ink-400">{s.role}</span>
+                  {s.declined && (
+                    <span className="ms-2 text-[12px] text-danger">
+                      {t.docs.signerStatuses.declined}
+                    </span>
+                  )}
+                </span>
+                <Toggle
+                  checked={picked.includes(s.id) || s.alreadySigned}
+                  disabled={s.declined || s.alreadySigned}
+                  label={s.name}
+                  onChange={(v) =>
+                    setPicked((xs) => (v ? [...xs, s.id] : xs.filter((x) => x !== s.id)))
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <Field label={t.docs.uploadSignedNote}>
+          <Input value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            {t.common.cancel}
+          </Button>
+          <Button loading={busy} disabled={!file} onClick={submit}>
+            <FileUp className="h-4 w-4" />
+            {t.docs.uploadSigned}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

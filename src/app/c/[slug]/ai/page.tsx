@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { AiClient } from "./ai-client";
+import { can } from "@/lib/auth";
 
 export default async function AiAgentPage({
   params,
@@ -13,7 +14,7 @@ export default async function AiAgentPage({
   const { slug } = await params;
   const sp = await searchParams;
   const access = await guardClinic(slug);
-  const canEdit = access.role === "owner" || access.permissions.automations === true;
+  const canEdit = can(access, "automations");
   if (!canEdit) redirect(`/c/${slug}`);
 
   const data = await inClinic(access, async (c) => {

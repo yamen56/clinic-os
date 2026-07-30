@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { guardClinic } from "@/lib/guard";
+import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { getDict, getLocale } from "@/lib/i18n";
 import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtTime, fmtMoney } from "@/lib/dates";
@@ -73,6 +74,15 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
   const revThis = Number(data.stats.rev_this);
   const revLast = Number(data.stats.rev_last);
   const revUp = revThis >= revLast;
+  /*
+    The dashboard is the one screen everybody can open, which makes it the one
+    screen where a hidden section can leak anyway. A member whose owner removed
+    Invoices should not read the week's revenue off the front page, so the tiles
+    follow the same capabilities as the nav.
+  */
+  const showMoney = can(a, "invoices");
+  const showInbox = can(a, "conversations");
+  const showCalendar = can(a, "calendar");
   const noShowRate = data.stats.finished > 0 ? Math.round((data.stats.noshow / data.stats.finished) * 100) : 0;
   const base = `/c/${slug}`;
 
@@ -98,12 +108,15 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           <div className="eyebrow">{t.dashboard.todayAppointments}</div>
           <div className="font-display mt-2 text-[32px] font-bold leading-none tnum">{data.appts.length}</div>
         </Card>
-        <Link href={`${base}/conversations`}>
-          <Card className="h-full p-4 transition-shadow hover:shadow-pop">
-            <div className="eyebrow">{t.dashboard.unreadConversations}</div>
-            <div className="font-display mt-2 text-[32px] font-bold leading-none tnum">{data.stats.unread}</div>
-          </Card>
-        </Link>
+        {showInbox && (
+          <Link href={`${base}/conversations`}>
+            <Card className="h-full p-4 transition-shadow hover:shadow-pop">
+              <div className="eyebrow">{t.dashboard.unreadConversations}</div>
+              <div className="font-display mt-2 text-[32px] font-bold leading-none tnum">{data.stats.unread}</div>
+            </Card>
+          </Link>
+        )}
+        {showMoney && (
         <Card className="p-4">
           <div className="eyebrow">{t.dashboard.revenueWeek}</div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -114,6 +127,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             {fmtMoney(revLast, a.clinic.currency, locale)} {t.dashboard.vsLastWeek}
           </div>
         </Card>
+        )}
         <Card className="p-4">
           <div className="eyebrow">{t.dashboard.noShowRate}</div>
           <div className="font-display mt-2 text-[32px] font-bold leading-none tnum">{noShowRate}%</div>
@@ -169,24 +183,28 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         <Card>
           <CardHeader title={t.dashboard.pending} />
           <ul className="grid gap-1 p-3">
-            <li>
-              <Link
-                href={`${base}/invoices?status=unpaid`}
-                className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm hover:bg-ink-900/4"
-              >
-                <span>{t.dashboard.unpaidInvoices}</span>
-                <span className="font-semibold tnum">{data.stats.unpaid}</span>
-              </Link>
-            </li>
-            <li>
-              <Link
-                href={`${base}/calendar`}
-                className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm hover:bg-ink-900/4"
-              >
-                <span>{t.dashboard.unconfirmed}</span>
-                <span className="font-semibold tnum">{data.stats.unconfirmed}</span>
-              </Link>
-            </li>
+            {showMoney && (
+              <li>
+                <Link
+                  href={`${base}/invoices?status=unpaid`}
+                  className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm hover:bg-ink-900/4"
+                >
+                  <span>{t.dashboard.unpaidInvoices}</span>
+                  <span className="font-semibold tnum">{data.stats.unpaid}</span>
+                </Link>
+              </li>
+            )}
+            {showCalendar && (
+              <li>
+                <Link
+                  href={`${base}/calendar`}
+                  className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm hover:bg-ink-900/4"
+                >
+                  <span>{t.dashboard.unconfirmed}</span>
+                  <span className="font-semibold tnum">{data.stats.unconfirmed}</span>
+                </Link>
+              </li>
+            )}
           </ul>
         </Card>
       </div>

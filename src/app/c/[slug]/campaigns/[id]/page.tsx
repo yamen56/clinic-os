@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { CampaignDetail } from "./campaign-detail";
+import { can } from "@/lib/auth";
 
 export default async function CampaignPage({
   params,
@@ -10,7 +11,7 @@ export default async function CampaignPage({
 }) {
   const { slug, id } = await params;
   const access = await guardClinic(slug);
-  const canSend = access.role === "owner" || access.permissions.automations === true;
+  const canSend = can(access, "campaigns");
   if (!canSend) redirect(`/c/${slug}`);
 
   const data = await inClinic(access, async (c) => {

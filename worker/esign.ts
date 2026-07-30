@@ -208,7 +208,7 @@ export async function sendPendingDigest(): Promise<void> {
       if (!claim.rowCount) continue;
 
       const owners = await c.query(
-        `select user_id from clinic_members where clinic_id = $1 and role = 'owner' and active`,
+        `select user_id from clinic_members where clinic_id = $1 and is_owner and active`,
         [r.clinic_id]
       );
       for (const o of owners.rows) {
@@ -301,7 +301,7 @@ export async function autoSendServiceDocuments(
     const owner = (
       await c.query(
         `select user_id from clinic_members
-         where clinic_id = $1 and role = 'owner' and active order by created_at limit 1`,
+         where clinic_id = $1 and is_owner and active order by created_at limit 1`,
         [clinicId]
       )
     ).rows[0];

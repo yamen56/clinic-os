@@ -5,7 +5,16 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/client";
 
-export function SettingsNav({ slug, isOwner }: { slug: string; isOwner: boolean }) {
+export function SettingsNav({
+  slug,
+  canClinic,
+  canStaff,
+}: {
+  slug: string;
+  /** Clinic-wide configuration: profile, custom fields, templates, invoicing. */
+  canClinic: boolean;
+  canStaff: boolean;
+}) {
   const { t } = useI18n();
   const pathname = usePathname();
   const base = `/c/${slug}/settings`;
@@ -20,18 +29,18 @@ export function SettingsNav({ slug, isOwner }: { slug: string; isOwner: boolean 
   useEffect(() => setPressed(null), [pathname]);
   const current = pressed ?? pathname;
 
-  const items: { href: string; label: string; ownerOnly?: boolean }[] = [
+  const items: { href: string; label: string; show?: boolean }[] = [
     { href: base, label: t.settings.profile },
-    { href: `${base}/staff`, label: t.settings.staff, ownerOnly: true },
+    { href: `${base}/staff`, label: t.settings.staff, show: canStaff },
     { href: `${base}/services`, label: t.settings.services },
     { href: `${base}/hours`, label: t.settings.workingHours },
-    { href: `${base}/fields`, label: t.fields.title },
+    { href: `${base}/fields`, label: t.fields.title, show: canClinic },
     { href: `${base}/documents`, label: t.settings.documentTemplates },
     { href: `${base}/booking`, label: t.settings.bookingLinks },
     { href: `${base}/whatsapp`, label: t.settings.whatsapp },
     { href: `${base}/invoicing`, label: t.settings.invoiceSettings },
     // Personal, not clinic configuration — and it lives outside /settings so that
-    // doctors, who this layout redirects away, can still reach it.
+    // members without the settings capability can still reach it.
     { href: `/c/${slug}/signature`, label: t.settings.mySignature },
     { href: `/c/${slug}/notifications`, label: t.settings.notificationPrefs },
   ];
@@ -39,7 +48,7 @@ export function SettingsNav({ slug, isOwner }: { slug: string; isOwner: boolean 
   return (
     <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
       {items
-        .filter((i) => !i.ownerOnly || isOwner)
+        .filter((i) => i.show !== false)
         .map((i) => {
           const active = i.href === base ? current === base : current.startsWith(i.href);
           return (

@@ -121,7 +121,7 @@ async function setup(): Promise<Fixture> {
       [ownerEmail, hash]
     );
     const ownerId = owner.rows[0].id as string;
-    await c.query(`insert into clinic_members (clinic_id, user_id, role) values ($1, $2, 'owner')`, [
+    await c.query(`insert into clinic_members (clinic_id, user_id, role, is_owner, permissions) values ($1, $2, 'other', true, '{"level":"full"}')`, [
       clinicId,
       ownerId,
     ]);
@@ -556,8 +556,20 @@ async function journeyRemote(browser: Browser, f: Fixture, locale: "ar" | "en") 
 
   // Resume: abandon the link mid-signature, reopen it, and land back on step 3.
   if (locale === "ar") {
+    /*
+      Wait for the ping the resume actually depends on, not for a guessed
+      number of milliseconds. The stroke save is deliberately fire-and-forget
+      (blocking the pen on a network round trip would be worse than losing a
+      resume), so 600ms was a bet on how fast the dev server happened to be —
+      and it stopped paying on a loaded machine. Watching for the response
+      makes this test measure the feature instead of the hardware.
+    */
+    const pinged = pp.waitForResponse(
+      (r) => r.url().includes("/progress") && r.request().method() === "POST",
+      { timeout: 20000 }
+    );
     await drawSignature(pp);
-    await pp.waitForTimeout(600); // let the progress ping land
+    await pinged;
     await pp.goto(`${BASE}/sign/${linkMatch[1]}`);
     await pp.waitForSelector("text=الخطوة 3 من 3", { timeout: 25000 });
     ok("abandoning the link and reopening it resumes on step 3");

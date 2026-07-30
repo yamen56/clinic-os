@@ -1,6 +1,6 @@
 "use server";
 
-import { requireClinic } from "@/lib/auth";
+import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 
@@ -12,7 +12,7 @@ export async function whatsappControlAction(
   op: "connect" | "disconnect"
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return { error: "forbidden" };
+  if (!can(access, "settings")) return { error: "forbidden" };
   try {
     const res = await fetch(`${WORKER_URL}/sessions/${access.clinicId}/${op}`, {
       method: "POST",

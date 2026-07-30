@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
-import { requireClinic } from "@/lib/auth";
+import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
@@ -85,7 +85,7 @@ export async function createDocumentAction(
   input: unknown
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) return bad("invalid");
   const d = parsed.data;
@@ -202,7 +202,7 @@ export async function setFieldValueAction(
   input: unknown
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
   const parsed = overrideSchema.safeParse(input);
   if (!parsed.success) return bad("invalid");
   const d = parsed.data;
@@ -246,7 +246,7 @@ export async function clearFieldValueAction(
   fieldKey: string
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
   return inClinic(access, async (c) => {
     const doc = (
       await c.query(`select status from documents where id = $1 and clinic_id = $2`, [
@@ -272,7 +272,7 @@ export async function setDocumentBodyAction(
   html: string
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
   return inClinic(access, async (c) => {
     const doc = (
       await c.query(`select status, language from documents where id = $1 and clinic_id = $2`, [
@@ -309,7 +309,7 @@ const signersSchema = z.object({
 
 export async function setSignersAction(slug: string, input: unknown): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
   const parsed = signersSchema.safeParse(input);
   if (!parsed.success) return bad("invalid");
   const d = parsed.data;
@@ -366,7 +366,7 @@ export async function sendDocumentAction(
   opts: { isResend?: boolean } = {}
 ): Promise<SendActionResult> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
 
   const result = await inClinic(access, async (c) => {
     const doc = (
@@ -418,7 +418,7 @@ export async function sendAllPendingAction(
   patientId: string
 ): Promise<{ error?: string; sent?: number }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
 
   const result = await inClinic(access, (c) =>
     sendAllPendingForPatient(c, {
@@ -439,7 +439,7 @@ export async function revokeLinkAction(
   signerId: string
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
   return inClinic(access, async (c) => {
     const n = await revokeSignerTokens(c, signerId);
     if (!n) return bad("not_found");
@@ -463,7 +463,7 @@ export async function copyLinkAction(
   signerId: string
 ): Promise<{ url?: string; error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
   return inClinic(access, async (c) => {
     const clinic = await loadClinicDelivery(c, access.clinicId);
     const signer = (
@@ -502,9 +502,10 @@ export async function voidDocumentAction(
   reason: string
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  // Voiding keeps the record but marks it dead on every page; that is an owner's
-  // call, not reception's.
-  if (access.role !== "owner") return bad("forbidden");
+  // Voiding keeps the record but marks it dead on every page — a separate
+  // capability from managing documents, and off by default, because "created
+  // the wrong form" and "cancelled a signed agreement" are not the same job.
+  if (!can(access, "documents.void")) return bad("forbidden");
 
   const result = await inClinic(access, async (c) => {
     const r = await voidDocument(c, {
@@ -547,7 +548,7 @@ export async function supersedeDocumentAction(
   documentId: string
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
 
   return inClinic(access, async (c) => {
     const old = (
@@ -756,7 +757,7 @@ export async function startInPersonAction(
   documentId: string
 ): Promise<{ error?: string; heldBy?: string; signerId?: string; missing?: string[] }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return bad("forbidden");
+  if (!can(access, "documents.manage")) return bad("forbidden");
 
   return inClinic(access, async (c) => {
     const doc = (

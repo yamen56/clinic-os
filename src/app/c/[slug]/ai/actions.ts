@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireClinic, type ClinicAccess } from "@/lib/auth";
+import { requireClinic, type ClinicAccess, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { z } from "zod";
 
 function canEdit(access: ClinicAccess): boolean {
-  return access.role === "owner" || access.permissions.automations === true;
+  return can(access, "automations");
 }
 
 const settingsSchema = z.object({

@@ -36,7 +36,7 @@ async function main() {
       [`owner-qa5-${slug}@test.local`, bcrypt.hashSync("password123", 10)]
     )
   ).rows[0];
-  await db.query(`insert into clinic_members (clinic_id, user_id, role) values ($1, $2, 'owner')`, [
+  await db.query(`insert into clinic_members (clinic_id, user_id, role, is_owner, permissions) values ($1, $2, 'other', true, '{"level":"full"}')`, [
     clinic.id, owner.id,
   ]);
   // Pre-existing patient for the identity-rule check

@@ -86,7 +86,7 @@ export function Tabs({
           role="tab"
           aria-selected={active === t.key}
           onClick={() => onChange(t.key)}
-          className={`relative flex h-10 items-center whitespace-nowrap px-3.5 text-sm font-semibold transition-colors ${
+          className={`relative flex h-10 touch-manipulation items-center whitespace-nowrap px-3.5 text-sm font-semibold transition-colors duration-140 ease-out ${
             active === t.key ? "text-ink-900" : "text-ink-500 hover:text-ink-700"
           }`}
         >

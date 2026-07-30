@@ -133,7 +133,7 @@ async function setup(): Promise<Fixture> {
       [`owner-${tag}@qa.local`]
     );
     const ownerId = owner.rows[0].id as string;
-    await c.query(`insert into clinic_members (clinic_id, user_id, role) values ($1, $2, 'owner')`, [
+    await c.query(`insert into clinic_members (clinic_id, user_id, role, is_owner, permissions) values ($1, $2, 'other', true, '{"level":"full"}')`, [
       clinicId,
       ownerId,
     ]);

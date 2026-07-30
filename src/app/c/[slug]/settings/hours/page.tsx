@@ -1,6 +1,7 @@
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { HoursClient } from "./hours-client";
+import { can } from "@/lib/auth";
 
 export default async function HoursSettingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -14,7 +15,7 @@ export default async function HoursSettingsPage({ params }: { params: Promise<{ 
   return (
     <HoursClient
       slug={slug}
-      isOwner={access.role === "owner"}
+      isOwner={can(access, "settings.clinic")}
       initialHours={clinic.working_hours}
       initialBlocked={clinic.blocked_dates}
     />

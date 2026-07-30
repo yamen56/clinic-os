@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireClinic } from "@/lib/auth";
+import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { sanitizeHtml } from "@/lib/esign/render";
@@ -80,7 +80,7 @@ export async function saveTemplateAction(
   input: unknown
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return { error: "forbidden" };
+  if (!can(access, "settings")) return { error: "forbidden" };
   const parsed = templateSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -261,7 +261,7 @@ export async function saveTemplateAction(
 
 export async function deleteTemplateAction(slug: string, id: string): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role !== "owner") return { error: "forbidden" };
+  if (!can(access, "settings.clinic")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
     const r = await c.query(
       `delete from document_templates where id = $1 and clinic_id = $2 returning source_pdf_path`,
@@ -288,7 +288,7 @@ export async function copyLibraryTemplateAction(
   libraryKey: string
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role === "doctor") return { error: "forbidden" };
+  if (!can(access, "settings")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
     const lt = (
@@ -354,7 +354,7 @@ export async function saveSignerRoleAction(
   input: unknown
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role !== "owner") return { error: "forbidden" };
+  if (!can(access, "settings.clinic")) return { error: "forbidden" };
   const parsed = roleSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -386,7 +386,7 @@ export async function saveSignerRoleAction(
 
 export async function deleteSignerRoleAction(slug: string, id: string): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role !== "owner") return { error: "forbidden" };
+  if (!can(access, "settings.clinic")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
     const r = await c.query(
       `delete from signer_roles where id = $1 and clinic_id = $2 and not is_system`,
@@ -411,7 +411,7 @@ export async function saveEsignSettingsAction(
   input: unknown
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role !== "owner") return { error: "forbidden" };
+  if (!can(access, "settings.clinic")) return { error: "forbidden" };
   const parsed = settingsSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;

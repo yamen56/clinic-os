@@ -1,6 +1,7 @@
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { ServicesClient } from "./services-client";
+import { can } from "@/lib/auth";
 
 export default async function ServicesSettingsPage({
   params,
@@ -38,7 +39,7 @@ export default async function ServicesSettingsPage({
   return (
     <ServicesClient
       slug={slug}
-      canEdit={access.role !== "doctor"}
+      canEdit={can(access, "settings")}
       services={JSON.parse(JSON.stringify(data.services))}
       doctors={JSON.parse(JSON.stringify(data.doctors))}
       currency={access.clinic.currency}

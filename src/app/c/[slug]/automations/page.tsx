@@ -2,11 +2,12 @@ import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { AutomationsClient } from "./automations-client";
+import { can } from "@/lib/auth";
 
 export default async function AutomationsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const access = await guardClinic(slug);
-  const canEdit = access.role === "owner" || access.permissions.automations === true;
+  const canEdit = can(access, "automations");
   if (!canEdit) redirect(`/c/${slug}`);
 
   const data = await inClinic(access, async (c) => {
@@ -32,7 +33,7 @@ export default async function AutomationsPage({ params }: { params: Promise<{ sl
   return (
     <AutomationsClient
       slug={slug}
-      isOwner={access.role === "owner"}
+      isOwner={can(access, "settings.clinic")}
       automations={JSON.parse(JSON.stringify(data.automations))}
       windowStart={String(data.clinic.message_window_start).slice(0, 5)}
       windowEnd={String(data.clinic.message_window_end).slice(0, 5)}

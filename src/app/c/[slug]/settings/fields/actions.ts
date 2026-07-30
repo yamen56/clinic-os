@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireClinic } from "@/lib/auth";
+import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 
@@ -44,7 +44,7 @@ export async function saveFieldDefAction(
   input: unknown
 ): Promise<{ error?: string; id?: string }> {
   const access = await requireClinic(slug);
-  if (access.role !== "owner") return { error: "forbidden" };
+  if (!can(access, "settings.clinic")) return { error: "forbidden" };
   const parsed = defSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -124,7 +124,7 @@ export async function saveFieldDefAction(
 
 export async function deleteFieldDefAction(slug: string, id: string): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role !== "owner") return { error: "forbidden" };
+  if (!can(access, "settings.clinic")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
     const r = await c.query(
@@ -154,7 +154,7 @@ export async function moveFieldDefAction(
   direction: "up" | "down"
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role !== "owner") return { error: "forbidden" };
+  if (!can(access, "settings.clinic")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
     const me = (
@@ -195,7 +195,7 @@ export async function toggleFieldHiddenAction(
   hidden: boolean
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (access.role !== "owner") return { error: "forbidden" };
+  if (!can(access, "settings.clinic")) return { error: "forbidden" };
   await inClinic(access, (c) =>
     c.query(`update patient_field_definitions set hidden = $3 where id = $1 and clinic_id = $2`, [
       id,

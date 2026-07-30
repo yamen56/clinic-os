@@ -22,6 +22,8 @@ const SUITES = [
   ["concurrency: one slot, one appointment", "scripts/qa-booking-race.ts"],
   ["signing: integrity, tokens, orchestration", "scripts/qa-esign.ts"],
   ["signing: both journeys in the browser", "scripts/qa-esign-browser.ts"],
+  ["documents: tabs, signed copies, imports", "scripts/qa-documents.ts"],
+  ["access: what each member can reach", "scripts/qa-access.ts"],
 ] as const;
 
 function run(script: string): Promise<{ ok: boolean; out: string }> {
