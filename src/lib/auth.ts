@@ -2,12 +2,30 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { withSystem } from "./db";
+import { withSystem, readOneShot, safeLiteral } from "./db";
 
 const COOKIE = "cos_session";
 const SESSION_DAYS = 30;
 
-export type Membership = {
+/**
+ * The clinic fields every workspace screen needs. Carried on the session so
+ * that resolving access does not cost a second query — the timezone and
+ * currency alone were being re-fetched on most pages.
+ */
+export type ClinicProfile = {
+  id: string;
+  name: string;
+  nameAr: string | null;
+  slug: string;
+  timezone: string;
+  currency: string;
+  brandColor: string;
+  logoPath: string | null;
+  defaultLocale: "ar" | "en";
+  subscriptionStatus: string;
+};
+
+export type Membership = ClinicProfile & {
   memberId: string;
   clinicId: string;
   clinicName: string;
@@ -15,7 +33,6 @@ export type Membership = {
   clinicSlug: string;
   role: "owner" | "doctor" | "receptionist";
   permissions: Record<string, boolean>;
-  subscriptionStatus: string;
 };
 
 export type SessionInfo = {
@@ -88,54 +105,111 @@ export async function destroySession() {
   await clearSessionCookie();
 }
 
-/** Validates the session cookie. Cached per request. */
+/** The clinic columns a membership carries, as a json object. Shared with `requireClinic`. */
+const CLINIC_JSON = `json_build_object(
+  'id', cl.id, 'name', cl.name, 'nameAr', cl.name_ar, 'slug', cl.slug,
+  'timezone', cl.timezone, 'currency', cl.currency, 'brandColor', cl.brand_color,
+  'logoPath', cl.logo_path, 'defaultLocale', cl.default_locale,
+  'subscriptionStatus', cl.subscription_status
+)`;
+
+type SessionRow = {
+  session_id: string;
+  impersonated_by: string | null;
+  id: string;
+  email: string;
+  full_name: string;
+  phone_e164: string | null;
+  is_super_admin: boolean;
+  locale: "ar" | "en";
+  settings: Record<string, unknown> | null;
+  memberships: {
+    memberId: string;
+    role: Membership["role"];
+    permissions: Record<string, boolean> | null;
+    clinic: ClinicProfile;
+  }[];
+};
+
+/**
+ * Validates the session cookie. Cached per request.
+ *
+ * This runs before every page render, so it is deliberately one query in one
+ * round trip: memberships come back nested rather than as a follow-up select,
+ * and `readOneShot` sends the transaction with it. The token hash is a SHA-256
+ * digest, which is why it can be inlined.
+ */
 export const getSession = cache(async (): Promise<SessionInfo | null> => {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
-  const th = hashToken(token);
-  return withSystem(async (c) => {
-    const r = await c.query(
-      `select s.id as session_id, s.impersonated_by,
-              u.id, u.email, u.full_name, u.phone_e164, u.is_super_admin, u.locale, u.settings
-       from sessions s join users u on u.id = s.user_id
-       where s.token_hash = $1 and s.expires_at > now()`,
-      [th]
-    );
-    if (r.rowCount === 0) return null;
-    const row = r.rows[0];
-    const m = await c.query(
-      `select cm.id as member_id, cm.clinic_id, cm.role, cm.permissions,
-              cl.name, cl.name_ar, cl.slug, cl.subscription_status
-       from clinic_members cm join clinics cl on cl.id = cm.clinic_id
-       where cm.user_id = $1 and cm.active
-       order by cl.name`,
-      [row.id]
-    );
-    return {
-      sessionId: row.session_id,
-      impersonatedBy: row.impersonated_by,
-      user: {
-        id: row.id,
-        email: row.email,
-        fullName: row.full_name,
-        phone: row.phone_e164,
-        isSuperAdmin: row.is_super_admin,
-        locale: row.locale,
-        settings: row.settings ?? {},
-      },
-      memberships: m.rows.map((x) => ({
-        memberId: x.member_id,
-        clinicId: x.clinic_id,
-        clinicName: x.name,
-        clinicNameAr: x.name_ar,
-        clinicSlug: x.slug,
-        role: x.role,
-        permissions: x.permissions ?? {},
-        subscriptionStatus: x.subscription_status,
-      })),
-    };
-  });
+  const th = safeLiteral(hashToken(token));
+
+  const rows = await readOneShot<SessionRow>(
+    { isAdmin: true },
+    `select s.id as session_id, s.impersonated_by,
+            u.id, u.email, u.full_name, u.phone_e164, u.is_super_admin, u.locale, u.settings,
+            coalesce((
+              select json_agg(json_build_object(
+                'memberId', cm.id, 'role', cm.role, 'permissions', cm.permissions,
+                'clinic', ${CLINIC_JSON}
+              ) order by cl.name)
+              from clinic_members cm join clinics cl on cl.id = cm.clinic_id
+              where cm.user_id = u.id and cm.active
+            ), '[]'::json) as memberships
+     from sessions s join users u on u.id = s.user_id
+     where s.token_hash = ${th} and s.expires_at > now()`
+  );
+  if (rows.length === 0) return null;
+  const row = rows[0];
+
+  return {
+    sessionId: row.session_id,
+    impersonatedBy: row.impersonated_by,
+    user: {
+      id: row.id,
+      email: row.email,
+      fullName: row.full_name,
+      phone: row.phone_e164,
+      isSuperAdmin: row.is_super_admin,
+      locale: row.locale,
+      settings: row.settings ?? {},
+    },
+    memberships: (row.memberships ?? []).map((m) => ({
+      ...m.clinic,
+      memberId: m.memberId,
+      clinicId: m.clinic.id,
+      clinicName: m.clinic.name,
+      clinicNameAr: m.clinic.nameAr,
+      clinicSlug: m.clinic.slug,
+      role: m.role,
+      permissions: m.permissions ?? {},
+    })),
+  };
 });
+
+/**
+ * Where a signed-in user belongs. One rule, used by both the login action and
+ * `/`, so signing in never bounces through a page that redirects again — a
+ * redirect chain out of a Server Action is what made the post-login landing
+ * unreliable.
+ */
+export function landingPathFor(u: { isSuperAdmin: boolean; clinicSlugs: string[] }): string {
+  if (u.clinicSlugs.length === 1 && !u.isSuperAdmin) return `/c/${u.clinicSlugs[0]}`;
+  if (u.clinicSlugs.length === 0 && u.isSuperAdmin) return "/admin";
+  return "/";
+}
+
+/**
+ * A post-login destination is attacker-controllable (it arrives as `?next=`),
+ * so only same-origin absolute paths are honoured. `//host` and `/\host` are
+ * protocol-relative URLs, not paths.
+ */
+export function safeNextPath(next: string | undefined | null): string | null {
+  if (!next || !next.startsWith("/")) return null;
+  if (next.startsWith("//") || next.startsWith("/\\")) return null;
+  if (next === "/login" || next.startsWith("/login/")) return null;
+  return next;
+}
 
 export class AuthError extends Error {
   constructor(public code: "unauthenticated" | "forbidden" | "suspended") {
@@ -159,6 +233,8 @@ export type ClinicAccess = {
   session: SessionInfo;
   clinicId: string;
   clinicSlug: string;
+  /** The clinic's own row — already loaded, so pages need not re-select it. */
+  clinic: ClinicProfile;
   role: "owner" | "doctor" | "receptionist";
   memberId: string | null;
   permissions: Record<string, boolean>;
@@ -175,6 +251,7 @@ export async function requireClinic(slug: string): Promise<ClinicAccess> {
       session: s,
       clinicId: m.clinicId,
       clinicSlug: slug,
+      clinic: m,
       role: m.role,
       memberId: m.memberId,
       permissions: m.permissions,
@@ -182,15 +259,20 @@ export async function requireClinic(slug: string): Promise<ClinicAccess> {
     };
   }
   if (s.user.isSuperAdmin) {
+    // No membership row to read the clinic from, so fetch the same shape here.
     const clinic = await withSystem(async (c) => {
-      const r = await c.query("select id from clinics where slug = $1", [slug]);
-      return r.rows[0] ?? null;
+      const r = await c.query(
+        `select ${CLINIC_JSON} as clinic from clinics cl where cl.slug = $1`,
+        [slug]
+      );
+      return (r.rows[0]?.clinic ?? null) as ClinicProfile | null;
     });
     if (!clinic) throw new AuthError("forbidden");
     return {
       session: s,
       clinicId: clinic.id,
       clinicSlug: slug,
+      clinic,
       role: "owner",
       memberId: null,
       permissions: {},

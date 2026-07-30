@@ -21,16 +21,13 @@ export default async function ConversationsPage({
         access.clinicId,
       ])
     ).rows;
-    const clinic = (
-      await c.query(`select timezone from clinics where id = $1`, [access.clinicId])
-    ).rows[0];
-    return { quickReplies, tz: clinic.timezone as string };
+    return { quickReplies };
   });
 
   return (
     <InboxClient
       slug={slug}
-      tz={data.tz}
+      tz={access.clinic.timezone}
       selfId={access.session.user.id}
       initialOpenId={sp.open ?? null}
       initialQuickReplies={JSON.parse(JSON.stringify(data.quickReplies))}

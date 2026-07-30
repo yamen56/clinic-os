@@ -23,7 +23,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       vals.push(`%${q}%`);
       const idx = vals.length;
       vals.push(`%${q.replace(/\D/g, "")}%`);
-      conds.push(`(p.full_name ilike $${idx} or cv.phone_e164 like $${idx + 1})`);
+      // Same Arabic-insensitive matching as the patient list, so searching the
+      // inbox for a name behaves the way searching Patients does.
+      conds.push(
+        `(ar_normalize(p.full_name) like ar_normalize($${idx}) or cv.phone_e164 like $${idx + 1})`
+      );
     }
     const r = await c.query(
       `select cv.id, cv.phone_e164, cv.status, cv.assigned_to, cv.ai_enabled, cv.ai_paused_until,

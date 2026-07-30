@@ -2,7 +2,7 @@ import http from "node:http";
 import { withSystem } from "./db";
 import { ensureSession, stopSession, sessions } from "./wa/session";
 import { recordMessage } from "./wa/inbound";
-import { renderUrlToPdf } from "./pdf";
+import { renderUrlToPdf, renderPageOverlays } from "./pdf";
 import { normalizePhone } from "../src/lib/phone";
 
 // Read lazily: never capture config at module-load time.
@@ -70,6 +70,17 @@ export function startHttpServer() {
             "Content-Length": String(pdf.length),
           });
           return res.end(pdf);
+        }
+
+        // POST /render-overlays — transparent per-page layers for uploaded PDFs
+        if (req.method === "POST" && parts[0] === "render-overlays") {
+          const chunks: Buffer[] = [];
+          for await (const ch of req) chunks.push(ch as Buffer);
+          const { url } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+          if (typeof url !== "string" || !/^https?:\/\//.test(url)) {
+            return send(400, { error: "bad_url" });
+          }
+          return send(200, { pages: await renderPageOverlays(url) });
         }
 
         // POST /simulate-inbound — dev/testing only: exercises the threading pipeline

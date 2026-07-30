@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomInt } from "node:crypto";
 import { withSystem } from "@/lib/db";
-import { loadPublicLink, rateLimit } from "@/lib/booking-public";
+import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
 import { normalizePhone } from "@/lib/phone";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { finalizeBooking } from "../finalize";
@@ -12,7 +12,7 @@ import { finalizeBooking } from "../finalize";
  */
 export async function POST(req: Request, ctx: { params: Promise<{ bslug: string }> }) {
   const { bslug } = await ctx.params;
-  const ip = req.headers.get("x-forwarded-for") ?? "local";
+  const ip = clientIp(req);
   if (!rateLimit(`start:${bslug}:${ip}`, 8, 10 * 60_000)) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
@@ -41,6 +41,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   }
   const phone = normalizePhone(body.phone);
   if (!phone) return NextResponse.json({ error: "invalid_phone" }, { status: 422 });
+
+  /*
+    Also limit per number, not just per caller. Every call here sends a WhatsApp
+    message to whatever number was typed, so an IP limit alone still allows one
+    visitor to send a stranger a burst of codes — from the clinic's own number,
+    against the clinic's daily cap. Three codes in ten minutes is more than a
+    real booking needs.
+  */
+  if (!rateLimit(`start-phone:${phone}`, 3, 10 * 60_000)) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
 
   const payload = {
     serviceId,

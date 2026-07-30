@@ -10,6 +10,7 @@ export function AdminNav() {
   const items = [
     { href: "/admin", label: t.admin.clinics, exact: true },
     { href: "/admin/monitoring", label: t.admin.monitoring },
+    { href: "/admin/documents", label: t.nav.documents },
     { href: "/admin/announcements", label: t.admin.announcements },
     { href: "/admin/defaults", label: t.admin.defaults },
   ];

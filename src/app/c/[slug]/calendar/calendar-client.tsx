@@ -313,6 +313,7 @@ export function CalendarClient({
         }}
         doctors={data?.doctors ?? []}
         services={data?.services ?? []}
+        canSendDocuments={!isDoctor}
       />
     </div>
   );

@@ -2,7 +2,9 @@
 
 import { createContext, useContext } from "react";
 import type { Dict } from "./en";
-import type { Locale } from "./index";
+import { ar } from "./ar";
+
+type Locale = "ar" | "en";
 
 type I18nValue = { t: Dict; locale: Locale; dir: "rtl" | "ltr" };
 
@@ -28,4 +30,17 @@ export function useI18n(): I18nValue {
   const v = useContext(I18nContext);
   if (!v) throw new Error("useI18n outside I18nProvider");
   return v;
+}
+
+/**
+ * The provider's value, or Arabic defaults when there is none.
+ *
+ * For components shared between the workspace and the public signing screens.
+ * The signing screens pass their locale in explicitly — it belongs to the
+ * document, not to the visitor — so they must not be forced to mount a provider
+ * just to satisfy a hook they are overriding anyway.
+ */
+export function useI18nSafe(): I18nValue {
+  const v = useContext(I18nContext);
+  return v ?? { t: ar as Dict, locale: "ar", dir: "rtl" };
 }

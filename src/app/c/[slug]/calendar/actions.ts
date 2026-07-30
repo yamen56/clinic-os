@@ -5,6 +5,7 @@ import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { emitTrigger } from "@/lib/triggers";
 import { findOrCreatePatient } from "@/lib/patients";
+import { lockClinicSchedule } from "@/lib/appointments";
 import type { PoolClient } from "pg";
 
 const ACTIVE = `('pending_approval', 'scheduled', 'confirmed')`;
@@ -17,6 +18,9 @@ async function conflictFor(
   endsAt: string,
   excludeId?: string
 ): Promise<{ id: string; patient: string } | null> {
+  // Held until this transaction commits, so the answer is still true when the
+  // caller acts on it. See lockClinicSchedule.
+  await lockClinicSchedule(c, clinicId);
   if (!doctorMemberId) return null;
   const r = await c.query(
     `select a.id, p.full_name as patient from appointments a

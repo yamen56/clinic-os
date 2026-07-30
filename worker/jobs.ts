@@ -1,6 +1,7 @@
 import { withSystem } from "./db";
 import { advanceRun, handleTrigger } from "./automations";
 import { respondToConversation } from "./ai/agent";
+import { autoSendServiceDocuments } from "./esign";
 
 /**
  * Job runner: claims due jobs with FOR UPDATE SKIP LOCKED so multiple worker
@@ -45,6 +46,20 @@ async function runOne(): Promise<boolean> {
       const kind = job.kind.slice("trigger:".length);
       if (!job.clinic_id) throw new Error("trigger job without clinic");
       await handleTrigger(kind, job.clinic_id, job.payload ?? {});
+
+      /*
+        A confirmed appointment also raises the consent forms its service
+        requires. This sits outside the automation engine on purpose: the form is
+        chosen by the booked service, which no single recipe could express.
+      */
+      if (
+        kind === "appointment_status_changed" &&
+        job.payload?.status === "confirmed" &&
+        job.payload?.appointmentId
+      ) {
+        await autoSendServiceDocuments(job.clinic_id, String(job.payload.appointmentId));
+      }
+
       // An inbound patient message also wakes the AI receptionist.
       if (kind === "inbound_message" && job.payload?.conversationId) {
         await withSystem((c) =>

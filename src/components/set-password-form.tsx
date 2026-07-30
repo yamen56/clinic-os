@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 
-export type SetPasswordState = { error?: string } | null;
+export type SetPasswordState = { error?: string; to?: string } | null;
 
 /**
  * Shared by invitation acceptance and password reset — both set a password
@@ -26,6 +26,13 @@ export function SetPasswordForm({
 }) {
   const { t } = useI18n();
   const [state, formAction, pending] = useActionState(action, null);
+
+  // Accepting an invitation signs the user in, so the same rule as /login
+  // applies: leave for the destination with a full document load, carrying the
+  // fresh cookie and no cached signed-out view of it. See app/login/actions.ts.
+  useEffect(() => {
+    if (state?.to) window.location.replace(state.to);
+  }, [state?.to]);
 
   return (
     <form
@@ -68,7 +75,7 @@ export function SetPasswordForm({
         </p>
       )}
 
-      <Button type="submit" size="lg" loading={pending}>
+      <Button type="submit" size="lg" loading={pending || !!state?.to}>
         {submitLabel}
       </Button>
     </form>

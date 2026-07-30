@@ -19,6 +19,15 @@ const FAMILIES = [
   "JetBrains+Mono:wght@400;500",
   "Cairo:wght@600;700;800;900",
   "Tajawal:wght@400;500;700",
+  /*
+    Signature faces, for the "type my name instead" option. A typed signature has
+    to read as a signature, and the Latin script fonts everyone reaches for have
+    no Arabic coverage at all — so there are two, one per script, and the pad
+    picks by what was actually typed. Aref Ruqaa is a Ruqʿah-style calligraphic
+    Arabic face; Dancing Script covers Latin.
+  */
+  "Dancing+Script:wght@600;700",
+  "Aref+Ruqaa:wght@400;700",
 ];
 
 const OUT_DIR = join(process.cwd(), "public", "fonts");

@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { withSystem } from "./db";
 import { startRun } from "./automations";
+import { sweepExpiredDocuments, sweepUnsignedDocuments, sendPendingDigest } from "./esign";
 
 /**
  * Time-based triggers. Runs every minute; every enqueue is keyed by a
@@ -169,7 +170,16 @@ async function unpaidInvoices() {
 
 export function startScheduler() {
   const tick = async () => {
-    for (const fn of [wakeSleepingRuns, appointmentReminders, recallReminders, birthdays, unpaidInvoices]) {
+    for (const fn of [
+      wakeSleepingRuns,
+      appointmentReminders,
+      recallReminders,
+      birthdays,
+      unpaidInvoices,
+      sweepExpiredDocuments,
+      sweepUnsignedDocuments,
+      sendPendingDigest,
+    ]) {
       try {
         await fn();
       } catch (e) {

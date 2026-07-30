@@ -54,10 +54,17 @@ export default async function AutomationBuilderPage({
         isNew ? "00000000-0000-0000-0000-000000000000" : id,
       ])
     ).rows;
-    const tz = (await c.query(`select timezone from clinics where id = $1`, [access.clinicId])).rows[0]
-      .timezone as string;
+    // Templates the "send a document" step can choose from.
+    const docTemplates = (
+      await c.query(
+        `select id, name, name_ar from document_templates
+         where clinic_id = $1 and is_active order by category, name`,
+        [access.clinicId]
+      )
+    ).rows;
+    const tz = access.clinic.timezone;
 
-    if (isNew) return { automation: null, steps: [], runs: [], services, others, tz };
+    if (isNew) return { automation: null, steps: [], runs: [], services, others, docTemplates, tz };
 
     const automation = (
       await c.query(`select * from automations where id = $1 and clinic_id = $2`, [id, access.clinicId])
@@ -82,7 +89,15 @@ export default async function AutomationBuilderPage({
         [id]
       )
     ).rows;
-    return { automation, steps: buildTree(stepRows, null, null), runs, services, others, tz };
+    return {
+      automation,
+      steps: buildTree(stepRows, null, null),
+      runs,
+      services,
+      others,
+      docTemplates,
+      tz,
+    };
   });
 
   if (!data) notFound();
@@ -96,6 +111,7 @@ export default async function AutomationBuilderPage({
       runs={JSON.parse(JSON.stringify(data.runs))}
       services={JSON.parse(JSON.stringify(data.services))}
       otherAutomations={JSON.parse(JSON.stringify(data.others))}
+      docTemplates={JSON.parse(JSON.stringify(data.docTemplates))}
       initialTab={sp.tab === "history" ? "history" : "flow"}
     />
   );

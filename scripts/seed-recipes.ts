@@ -163,7 +163,91 @@ export const RECIPES = [
       },
     ],
   },
+
+  /*
+    Document signing.
+
+    The two patient reminders the brief asks for (24 hours, then 72) are not
+    recipes: they are built into the send path and timed by the clinic's own
+    "first reminder after" setting, so they are hour-accurate and cannot be
+    accidentally switched off along with an automation. Duplicating them here
+    would send every patient the same nudge twice. What these recipes add is
+    everything a flow can do that a fixed reminder cannot — escalate to a task,
+    chase staff, branch on whether the patient replied.
+  */
+  {
+    key: "document_expired_alert",
+    name: "Document expired unsigned",
+    name_ar: "مستند انتهت صلاحيته بدون توقيع",
+    description: "Raises a task when a signing link expires with no signature.",
+    trigger_type: "document_expired",
+    trigger_config: {},
+    sort: 9,
+    steps: [
+      {
+        step_type: "notify_staff",
+        config: {
+          title: "مستند انتهت صلاحيته بدون توقيع",
+          body: "المستند «{{document.title}}» الخاص بـ{{patient.name}} انتهت صلاحيته. أرسل رابطاً جديداً إن كان ما زال مطلوباً.",
+          roles: ["owner", "receptionist"],
+        },
+      },
+      {
+        step_type: "create_task",
+        config: {
+          title: "إعادة إرسال «{{document.title}}» لـ{{patient.name}}",
+          body: "انتهت صلاحية رابط التوقيع بدون توقيع.",
+          due_in_minutes: 240,
+        },
+      },
+    ],
+  },
+  {
+    key: "document_unsigned_escalate",
+    name: "Chase an unsigned document",
+    name_ar: "متابعة مستند غير موقّع",
+    description: "After five days with no signature, hands it to reception to chase by phone.",
+    trigger_type: "document_unsigned",
+    // Deliberately later than the built-in 24h and 72h reminders: by day five,
+    // two WhatsApp messages have already gone unanswered and the next step is a
+    // person picking up the phone.
+    trigger_config: { days: 5 },
+    sort: 10,
+    steps: [
+      {
+        step_type: "create_task",
+        config: {
+          title: "اتصل بـ{{patient.name}} بخصوص «{{document.title}}»",
+          body: "أُرسل المستند قبل خمسة أيام ولم يُوقّع بعد. الرسائل التلقائية لم تُجدِ.",
+          due_in_minutes: 120,
+        },
+      },
+    ],
+  },
+  {
+    key: "document_declined_alert",
+    name: "Patient declined a document",
+    name_ar: "المريض رفض توقيع مستند",
+    description: "Notifies staff and opens a task when a patient declines.",
+    trigger_type: "document_declined",
+    trigger_config: {},
+    sort: 11,
+    steps: [
+      {
+        step_type: "create_task",
+        config: {
+          title: "{{patient.name}} رفض توقيع «{{document.title}}»",
+          body: "تواصل مع المريض لفهم السبب قبل المتابعة في العلاج.",
+          due_in_minutes: 60,
+        },
+      },
+    ],
+  },
 ];
+
+// Which of these arrive switched on lives in src/lib/esign/constants.ts, so the
+// seed script and clinic creation cannot disagree.
+export { RECIPES_ON_BY_DEFAULT } from "../src/lib/esign/constants";
 
 export const KNOWLEDGE = [
   { category: "services_prices", title: "الخدمات والأسعار", content: "", sort: 1 },

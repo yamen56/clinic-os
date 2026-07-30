@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { withSystem } from "@/lib/db";
 import { findOrCreatePatient } from "@/lib/patients";
+import { lockClinicSchedule } from "@/lib/appointments";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { notifyClinicStaff } from "@/lib/notify";
 import { emitTrigger } from "@/lib/triggers";
@@ -25,6 +26,10 @@ export async function finalizeBooking(
   verified: boolean
 ): Promise<{ error?: string } | { appointmentId: string; startISO: string; status: string }> {
   return withSystem(async (c) => {
+    // Before the free/busy scan, so the slot this booking picks cannot be taken
+    // by a simultaneous one between the check and the insert.
+    await lockClinicSchedule(c, data.clinic.id);
+
     const service = (
       await c.query(
         `select id, name, name_ar, duration_min from services where id = $1 and clinic_id = $2 and active`,

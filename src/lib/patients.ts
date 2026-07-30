@@ -64,7 +64,60 @@ export async function findOrCreatePatient(
   return { id: r.rows[0].id, created: true, phoneE164 };
 }
 
-/** Search by name or any phone format the user might type. */
+export type PatientFilters = {
+  q?: string;
+  tag?: string;
+  source?: string;
+  /** Days since last visit: "30" | "90" | "180". */
+  visit?: string;
+};
+
+/**
+ * The patient list's filters, as SQL over an aliased `patients p`.
+ *
+ * Shared with campaign audiences on purpose: a campaign is built from a filter
+ * the user just previewed in the list, and "who did this actually go to?" must
+ * have exactly one answer.
+ */
+export function patientFilterSql(
+  clinicId: string,
+  f: PatientFilters,
+  /** First placeholder number to use, when the caller already has parameters. */
+  paramOffset = 1
+): { where: string; values: unknown[] } {
+  const values: unknown[] = [clinicId];
+  const n = () => paramOffset + values.length - 1;
+  const conds = [`p.clinic_id = $${n()}`, "p.merged_into is null", "p.status <> 'archived'"];
+
+  if (f.q?.trim()) {
+    const { clause, params } = patientSearchClause(f.q, paramOffset + values.length);
+    conds.push(clause);
+    values.push(...params);
+  }
+  if (f.tag) {
+    values.push(f.tag);
+    conds.push(`$${n()} = any(p.tags)`);
+  }
+  if (f.source) {
+    values.push(f.source);
+    conds.push(`p.source = $${n()}`);
+  }
+  if (f.visit === "30" || f.visit === "90" || f.visit === "180") {
+    conds.push(
+      `(p.last_visit_at is null or p.last_visit_at < now() - interval '${Number(f.visit)} days')`
+    );
+  }
+  return { where: conds.join(" and "), values };
+}
+
+/**
+ * Search by name or any phone format the user might type.
+ *
+ * Names are matched through `ar_normalize` on both sides, so the spellings that
+ * differ only by hamza, taa marbuta, alif maqsura or diacritics all find each
+ * other — staff type أحمد as احمد and expect the file to come up. See
+ * migrations/0009_arabic_search.sql.
+ */
 export function patientSearchClause(
   q: string,
   paramOffset: number
@@ -72,7 +125,7 @@ export function patientSearchClause(
   const trimmed = q.trim();
   const phone = normalizePhone(trimmed);
   const digits = trimmed.replace(/\D/g, "");
-  const parts: string[] = [`p.full_name ilike $${paramOffset}`];
+  const parts: string[] = [`ar_normalize(p.full_name) like ar_normalize($${paramOffset})`];
   const params: string[] = [`%${trimmed}%`];
   if (phone) {
     parts.push(

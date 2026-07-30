@@ -37,7 +37,9 @@ export function Badge({
   const c = statusColors[status];
   return (
     <span
-      className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold whitespace-nowrap ${className}`}
+      // shrink-0 so a truncating sibling (a patient name, a campaign title)
+      // squeezes itself rather than crushing the status chip next to it.
+      className={`inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold whitespace-nowrap [&_svg]:shrink-0 ${className}`}
       style={{ color: c.fg, background: c.bg }}
     >
       {dot && <span className="h-1.5 w-1.5 rounded-full" style={{ background: c.fg }} />}

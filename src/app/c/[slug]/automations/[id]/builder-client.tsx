@@ -19,7 +19,7 @@ import {
 } from "../actions";
 import {
   Zap, Clock, GitBranch, Tag, TagsIcon, ListTodo, BellRing, ArrowRightLeft, Square,
-  Plus, Trash2, ChevronDown, ChevronUp, Play, History,
+  Plus, Trash2, ChevronDown, ChevronUp, Play, History, FileSignature,
 } from "lucide-react";
 
 const STEP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -31,6 +31,7 @@ const STEP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
   create_task: ListTodo,
   notify_staff: BellRing,
   goto_automation: ArrowRightLeft,
+  send_document: FileSignature,
   stop: Square,
 };
 
@@ -38,11 +39,13 @@ const TRIGGERS = [
   "appointment_created", "appointment_status_changed", "before_appointment", "after_last_visit",
   "patient_created", "tag_added", "tag_removed", "birthday", "invoice_sent", "invoice_unpaid",
   "inbound_message", "booking_submitted",
+  "document_sent", "document_viewed", "document_signed", "document_completed",
+  "document_declined", "document_unsigned", "document_expired",
 ] as const;
 
 const STEP_TYPES = [
   "send_whatsapp", "wait", "condition", "add_tag", "remove_tag",
-  "create_task", "notify_staff", "goto_automation", "stop",
+  "create_task", "notify_staff", "goto_automation", "send_document", "stop",
 ] as const;
 
 type Automation = {
@@ -80,6 +83,7 @@ export function BuilderClient({
   runs,
   services,
   otherAutomations,
+  docTemplates,
   initialTab,
 }: {
   slug: string;
@@ -89,6 +93,7 @@ export function BuilderClient({
   runs: Run[];
   services: { id: string; name: string; name_ar: string | null }[];
   otherAutomations: { id: string; name: string }[];
+  docTemplates: { id: string; name: string; name_ar: string | null }[];
   initialTab: "flow" | "history";
 }) {
   const { t, locale } = useI18n();
@@ -204,6 +209,7 @@ export function BuilderClient({
             onChange={setSteps}
             services={services}
             otherAutomations={otherAutomations}
+            docTemplates={docTemplates}
             depth={0}
           />
         </div>
@@ -263,12 +269,13 @@ function TriggerConfig({
       </div>
     );
   }
-  if (type === "after_last_visit" || type === "invoice_unpaid") {
+  if (type === "after_last_visit" || type === "invoice_unpaid" || type === "document_unsigned") {
+    const fallback = type === "after_last_visit" ? 180 : 3;
     return (
       <div className="mt-3">
         <Field label={t.automations.days}>
           <Input type="number" dir="ltr" min={1} max={3650}
-            value={String(config.days ?? (type === "invoice_unpaid" ? 3 : 180))}
+            value={String(config.days ?? fallback)}
             onChange={(e) => onChange({ ...config, days: Number(e.target.value) || 1 })} />
         </Field>
       </div>
@@ -316,12 +323,14 @@ function StepList({
   onChange,
   services,
   otherAutomations,
+  docTemplates,
   depth,
 }: {
   steps: StepInput[];
   onChange: (s: StepInput[]) => void;
   services: { id: string; name: string; name_ar: string | null }[];
   otherAutomations: { id: string; name: string }[];
+  docTemplates: { id: string; name: string; name_ar: string | null }[];
   depth: number;
 }) {
   const { t } = useI18n();
@@ -346,6 +355,7 @@ function StepList({
             step={s}
             services={services}
             otherAutomations={otherAutomations}
+            docTemplates={docTemplates}
             depth={depth}
             onChange={(next) => onChange(steps.map((x, j) => (j === i ? next : x)))}
             onDelete={() => onChange(steps.filter((_, j) => j !== i))}
@@ -403,6 +413,7 @@ function StepCard({
   onMoveDown,
   services,
   otherAutomations,
+  docTemplates,
   depth,
 }: {
   step: StepInput;
@@ -412,9 +423,10 @@ function StepCard({
   onMoveDown?: () => void;
   services: { id: string; name: string; name_ar: string | null }[];
   otherAutomations: { id: string; name: string }[];
+  docTemplates: { id: string; name: string; name_ar: string | null }[];
   depth: number;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const Icon = STEP_ICONS[step.step_type] ?? Zap;
   const cfg = step.config ?? {};
   const setCfg = (patch: Record<string, unknown>) => onChange({ ...step, config: { ...cfg, ...patch } });
@@ -488,6 +500,21 @@ function StepCard({
             </Field>
           </>
         )}
+        {step.step_type === "send_document" && (
+          <Field label={t.automations.documentTemplate}>
+            <Select
+              value={String(cfg.template_id ?? "")}
+              onChange={(e) => setCfg({ template_id: e.target.value })}
+            >
+              <option value="">—</option>
+              {docTemplates.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {locale === "ar" ? d.name_ar || d.name : d.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         {step.step_type === "goto_automation" && (
           <Field label={t.automations.steps.goto_automation}>
             <Select value={String(cfg.automation_id ?? "")} onChange={(e) => setCfg({ automation_id: e.target.value })}>
@@ -542,6 +569,7 @@ function StepCard({
                       }
                       services={services}
                       otherAutomations={otherAutomations}
+                      docTemplates={docTemplates}
                       depth={depth + 1}
                     />
                   </div>

@@ -14,6 +14,7 @@ export async function loadContext(
     patientId?: string | null;
     appointmentId?: string | null;
     invoiceId?: string | null;
+    documentId?: string | null;
   }
 ): Promise<TemplateContext> {
   const ctx: TemplateContext = {};
@@ -67,6 +68,21 @@ export async function loadContext(
         status: a.status,
       };
       ctx.doctor = { name: a.doctor_name ?? "" };
+    }
+  }
+
+  if (ids.documentId) {
+    const d = (
+      await c.query(`select title, status, expires_at from documents where id = $1`, [ids.documentId])
+    ).rows[0];
+    if (d) {
+      ctx.document = {
+        title: d.title,
+        status: d.status,
+        expires: d.expires_at
+          ? DateTime.fromJSDate(new Date(d.expires_at)).setZone(tz).setLocale(fmtLocale).toFormat("d LLLL")
+          : "",
+      };
     }
   }
 

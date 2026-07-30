@@ -40,9 +40,17 @@ async function main() {
   const slug = `qa8-test${Date.now().toString(36)}`;
   const clinic = (
     await db.query(
+      /*
+        Open every day, Friday included.
+
+        The booking assertion below asks the agent for "بكرا" (tomorrow). With
+        Friday closed, tomorrow has no slots one day in seven, the agent correctly
+        declines to book, and the suite fails on the day of the week rather than on
+        a defect. What is under test here is the agent's tool loop, not the hours.
+      */
       `insert into clinics (name, name_ar, slug, address_ar, working_hours)
        values ('QA8 Clinic', 'عيادة النور', $1, 'عمان - الشميساني',
-               '{"sun":[["09:00","17:00"]],"mon":[["09:00","17:00"]],"tue":[["09:00","17:00"]],"wed":[["09:00","17:00"]],"thu":[["09:00","17:00"]],"fri":[],"sat":[["09:00","17:00"]]}')
+               '{"sun":[["09:00","17:00"]],"mon":[["09:00","17:00"]],"tue":[["09:00","17:00"]],"wed":[["09:00","17:00"]],"thu":[["09:00","17:00"]],"fri":[["09:00","17:00"]],"sat":[["09:00","17:00"]]}')
        returning id, timezone`,
       [slug]
     )

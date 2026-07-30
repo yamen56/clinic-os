@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
-import { getSession } from "@/lib/auth";
+import { getSession, landingPathFor } from "@/lib/auth";
 import { getDict } from "@/lib/i18n";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
@@ -9,10 +9,11 @@ import { Avatar } from "@/components/ui/misc";
 export default async function Home() {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (s.memberships.length === 1 && !s.user.isSuperAdmin) {
-    redirect(`/c/${s.memberships[0].clinicSlug}`);
-  }
-  if (s.memberships.length === 0 && s.user.isSuperAdmin) redirect("/admin");
+  const landing = landingPathFor({
+    isSuperAdmin: s.user.isSuperAdmin,
+    clinicSlugs: s.memberships.map((m) => m.clinicSlug),
+  });
+  if (landing !== "/") redirect(landing);
   const t = await getDict();
 
   // Multi-clinic user (or admin with memberships): pick a workspace

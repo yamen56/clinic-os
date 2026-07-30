@@ -132,6 +132,22 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   await q(`insert into ai_conversation_state (conversation_id, clinic_id) values ($1, $2) returning conversation_id`, [conversation, clinic]);
   await q(`insert into ai_usage (clinic_id, day) values ($1, current_date) returning id`, [clinic]);
   await q(`insert into jobs (clinic_id, kind) values ($1, 'noop') returning id`, [clinic]);
+  const campaign = (
+    await q(
+      `insert into campaigns (clinic_id, name, body) values ($1, 'c', 'hi') returning id`,
+      [clinic]
+    )
+  ).id;
+  await q(
+    `insert into campaign_recipients (clinic_id, campaign_id, patient_id, phone_e164)
+     values ($1, $2, $3, $4) returning id`,
+    [clinic, campaign, patient, `+96279100000${seq}`]
+  );
+  await q(
+    `insert into auth_tokens (user_id, clinic_id, purpose, token_hash, expires_at)
+     values ($1, $2, 'invite', $3, now() + interval '1 day') returning id`,
+    [user, clinic, `rls-token-${tag}`]
+  );
   await q(`insert into audit_log (clinic_id, user_id, action) values ($1, $2, 'rls.test') returning id`, [clinic, user]);
   await q(`insert into notifications (clinic_id, user_id, kind, title) values ($1, $2, 'test', 'T') returning id`, [clinic, user]);
   await q(
@@ -142,6 +158,73 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     `insert into push_subscriptions (user_id, endpoint, keys) values ($1, $2, '{}') returning id`,
     [user, `https://push.test/${tag}`]
   );
+
+  /*
+    Document signing.
+
+    A row in every one of these matters: the isolation half of this proof passes
+    trivially on an empty table, so without fixtures the eleven signing tables
+    would look isolated while actually being untested.
+  */
+  await q(`select seed_esign_defaults($1)`, [clinic]);
+  const template = (
+    await q(
+      `insert into document_templates (clinic_id, name, body, body_ar, created_by)
+       values ($1, 'RLS consent', '<p>{{patient.full_name}}</p>', '<p>{{patient.full_name}}</p>', $2)
+       returning id`,
+      [clinic, user]
+    )
+  ).id;
+  await q(
+    `insert into document_template_versions (clinic_id, template_id, version, name, body)
+     values ($1, $2, 1, 'RLS consent', '<p>x</p>') returning id`,
+    [clinic, template]
+  );
+  await q(
+    `insert into service_documents (clinic_id, service_id, template_id) values ($1, $2, $3)
+     returning service_id`,
+    [clinic, service, template]
+  );
+  const document = (
+    await q(
+      `insert into documents (clinic_id, patient_id, template_id, title, language, content_snapshot, content_hash)
+       values ($1, $2, $3, 'RLS consent', 'ar', '<article>x</article>', 'deadbeef') returning id`,
+      [clinic, patient, template]
+    )
+  ).id;
+  const signer = (
+    await q(
+      `insert into document_signers (clinic_id, document_id, role_key, display_name, phone_e164)
+       values ($1, $2, 'patient', $3, $4) returning id`,
+      [clinic, document, `Patient ${tag}`, `+96279000000${seq}`]
+    )
+  ).id;
+  await q(
+    `insert into document_fields (clinic_id, document_id, page_number, x, y, width, height, field_type)
+     values ($1, $2, 1, 0.1, 0.1, 0.2, 0.05, 'signature') returning id`,
+    [clinic, document]
+  );
+  await q(
+    `insert into document_field_values (clinic_id, document_id, field_key, label, value)
+     values ($1, $2, 'patient.full_name', 'Full name', $3) returning id`,
+    [clinic, document, `Patient ${tag}`]
+  );
+  await q(
+    `insert into document_events (clinic_id, document_id, signer_id, event_type, actor_kind)
+     values ($1, $2, $3, 'created', 'staff') returning id`,
+    [clinic, document, signer]
+  );
+  await q(
+    `insert into signing_tokens (clinic_id, document_id, signer_id, token_hash, expires_at)
+     values ($1, $2, $3, $4, now() + interval '7 days') returning id`,
+    [clinic, document, signer, `rls-sign-${tag}`]
+  );
+  await q(
+    `insert into signing_sessions (signer_id, clinic_id, document_id, last_step)
+     values ($1, $2, $3, 1) returning signer_id`,
+    [signer, clinic, document]
+  );
+
   return { clinic, user, member, patient, service, appointment, conversation, invoice, automation, step, run };
 }
 
@@ -186,6 +269,14 @@ async function main() {
   ).rows.map((r) => r.table_name as string);
   console.log(`[rls] testing ${clinicTables.length} clinic-scoped tables`);
 
+  /*
+    Tables a clinic context is not supposed to read at all. auth_tokens is
+    looked up for a signed-out visitor holding an invite link, so there is no
+    clinic context to scope by and its policy is system-only. The isolation
+    assertion below still applies — only "sees its own rows" is waived.
+  */
+  const systemOnly = new Set(["auth_tokens"]);
+
   const app = new Pool({ connectionString: APP_URL, max: 2 });
 
   for (const t of clinicTables) {
@@ -200,7 +291,8 @@ async function main() {
       const r = await c.query(`select count(*)::int as n from ${t} where clinic_id = $1`, [A.clinic]);
       return r.rows[0].n as number;
     });
-    ok(seesOwn >= 1, `${t}: clinic A must see its own rows`);
+    if (systemOnly.has(t)) ok(seesOwn === 0, `${t}: clinic context must not read it at all`);
+    else ok(seesOwn >= 1, `${t}: clinic A must see its own rows`);
 
     // No-context connection sees nothing at all
     const anon = await withCtx(app, {}, async (c) => {

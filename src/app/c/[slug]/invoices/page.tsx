@@ -33,11 +33,9 @@ export default async function InvoicesPage({
   const locale = await getLocale();
   const tab = sp.tab === "payments" ? "payments" : "invoices";
 
+  const tz = access.clinic.timezone;
+
   const data = await inClinic(access, async (c) => {
-    const clinic = (
-      await c.query(`select timezone, currency from clinics where id = $1`, [access.clinicId])
-    ).rows[0];
-    const tz = clinic.timezone as string;
     const today = dayRangeUtc(tz);
     const week = weekRangeUtc(tz);
     const month = monthRangeUtc(tz);
@@ -83,7 +81,7 @@ export default async function InvoicesPage({
         )
       ).rows;
     }
-    return { tz, currency: clinic.currency as string, stats, invoices, payments };
+    return { stats, invoices, payments };
   });
 
   const base = `/c/${slug}/invoices`;
@@ -121,7 +119,7 @@ export default async function InvoicesPage({
         ).map(([label, val], i) => (
           <Card key={i} className="p-4">
             <div className="text-[13px] text-ink-500">{label}</div>
-            <div className="mt-1 text-xl font-semibold tnum">{fmtMoney(Number(val), data.currency, locale)}</div>
+            <div className="mt-1 text-xl font-semibold tnum">{fmtMoney(Number(val), access.clinic.currency, locale)}</div>
           </Card>
         ))}
       </div>
@@ -177,10 +175,10 @@ export default async function InvoicesPage({
                     </span>
                     <span className="min-w-0 flex-1 truncate text-sm">{String(inv.patient_name)}</span>
                     <span className="hidden text-[13px] text-ink-400 sm:block">
-                      {fmtDate(String(inv.created_at), data.tz, locale)}
+                      {fmtDate(String(inv.created_at), tz, locale)}
                     </span>
                     <span className="w-28 text-end text-sm font-semibold tnum">
-                      {fmtMoney(Number(inv.total), data.currency, locale)}
+                      {fmtMoney(Number(inv.total), access.clinic.currency, locale)}
                     </span>
                     <Badge status={invStatus[String(inv.status)] ?? "neutral"}>
                       {(t.invoices.statuses as Record<string, string>)[String(inv.status)]}
@@ -197,7 +195,7 @@ export default async function InvoicesPage({
             {data.payments.map((p) => (
               <li key={String(p.id)} className="flex items-center gap-4 px-5 py-3">
                 <span className="w-24 shrink-0 text-sm font-semibold tnum">
-                  {fmtMoney(Number(p.amount), data.currency, locale)}
+                  {fmtMoney(Number(p.amount), access.clinic.currency, locale)}
                 </span>
                 <Badge status="brand">
                   {(t.invoices.methods as Record<string, string>)[String(p.method)] ?? String(p.method)}
@@ -207,7 +205,7 @@ export default async function InvoicesPage({
                   {String(p.number)}
                 </Link>
                 <span className="hidden text-[13px] text-ink-400 sm:block">
-                  {fmtDate(String(p.paid_at), data.tz, locale)}
+                  {fmtDate(String(p.paid_at), tz, locale)}
                 </span>
               </li>
             ))}

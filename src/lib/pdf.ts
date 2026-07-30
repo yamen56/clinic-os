@@ -28,3 +28,22 @@ export async function renderUrlToPdf(url: string): Promise<Buffer> {
   }
   return Buffer.from(await res.arrayBuffer());
 }
+
+/**
+ * Transparent per-page layers for an uploaded PDF, rendered by the same
+ * Chromium. Returns one PNG buffer per `.ov-page` element on the URL.
+ */
+export async function renderOverlays(url: string): Promise<Buffer[]> {
+  const res = await fetch(`${WORKER_URL()}/render-overlays`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-internal-secret": SECRET() },
+    body: JSON.stringify({ url }),
+    signal: AbortSignal.timeout(90_000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Overlay render failed (${res.status}): ${detail.slice(0, 200)}`);
+  }
+  const { pages } = (await res.json()) as { pages: string[] };
+  return (pages ?? []).map((b64) => Buffer.from(b64, "base64"));
+}

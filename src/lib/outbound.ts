@@ -11,7 +11,7 @@ export async function queueWhatsAppMessage(
     clinicId: string;
     phoneE164: string;
     body: string;
-    senderKind: "staff" | "automation" | "ai" | "system";
+    senderKind: "staff" | "automation" | "ai" | "system" | "campaign";
     senderUserId?: string | null;
     automationRunId?: string | null;
     msgType?: "text" | "image" | "document";

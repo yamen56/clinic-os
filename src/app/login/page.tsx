@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSession, landingPathFor, safeNextPath } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 import { LanguageToggle } from "@/components/language-toggle";
 import { BrandMark } from "@/components/brand-mark";
@@ -8,9 +8,22 @@ import { BrandMark } from "@/components/brand-mark";
  * Auth is the one working-adjacent screen on the night surface — the brand
  * moment before the daylight-white product takes over.
  */
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const next = safeNextPath((await searchParams).next);
   const s = await getSession();
-  if (s) redirect("/");
+  if (s) {
+    redirect(
+      next ??
+        landingPathFor({
+          isSuperAdmin: s.user.isSuperAdmin,
+          clinicSlugs: s.memberships.map((m) => m.clinicSlug),
+        })
+    );
+  }
   return (
     <main className="surface-night flex min-h-dvh flex-col">
       <div className="flex justify-end p-4">
@@ -27,7 +40,7 @@ export default async function LoginPage() {
             Solutions Engineered for Success.
           </p>
         </div>
-        <LoginForm />
+        <LoginForm next={next ?? undefined} />
       </div>
       <footer className="pb-6 text-center text-xs text-white/40">Makan Scaling · Makan Clinic Platform</footer>
     </main>

@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { hashPassword, createSession, setSessionCookie } from "@/lib/auth";
 import { consumeAuthToken } from "@/lib/invites";
 import type { SetPasswordState } from "@/components/set-password-form";
@@ -27,5 +26,5 @@ export async function acceptInviteAction(
 
   const session = await createSession(r.userId);
   await setSessionCookie(session);
-  redirect(r.clinicSlug ? `/c/${r.clinicSlug}` : "/");
+  return { to: r.clinicSlug ? `/c/${r.clinicSlug}` : "/" };
 }

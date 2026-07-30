@@ -12,6 +12,8 @@ import { startHttpServer } from "./http";
 import { startJobLoop } from "./jobs";
 import { startScheduler } from "./scheduler";
 import { startNotificationLoop } from "./notifications";
+import { startCampaignLoop } from "./campaigns";
+import { registerEsignJobs } from "./esign";
 
 async function resumeDesiredSessions() {
   const rows = await withSystem(async (c) => {
@@ -32,7 +34,9 @@ async function main() {
   await resumeDesiredSessions();
   // Catch sessions marked desired while the worker was down (or by another instance)
   setInterval(() => void resumeDesiredSessions().catch(() => {}), 15000);
+  registerEsignJobs();
   startOutboundLoop();
+  startCampaignLoop();
   startJobLoop();
   startScheduler();
   startNotificationLoop();

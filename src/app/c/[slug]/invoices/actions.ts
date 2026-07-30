@@ -50,9 +50,7 @@ export async function createInvoiceAction(
 
     const { seq, number } = await nextInvoiceNumber(c, access.clinicId);
     const totals = computeTotals(d.items as InvoiceItemInput[], d.discountAmount, d.taxRate);
-    const currency = (
-      await c.query(`select currency from clinics where id = $1`, [access.clinicId])
-    ).rows[0].currency;
+    const currency = access.clinic.currency;
 
     const inv = await c.query(
       `insert into invoices (clinic_id, patient_id, appointment_id, seq, number, currency,

@@ -15,6 +15,9 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --font-ar-display: "Cairo", "Noto Sans Arabic", sans-serif;
   --font-ar-body: "Tajawal", "Noto Sans Arabic", sans-serif;
+  /* Typed signatures. Two faces because no single one covers both scripts. */
+  --font-sig-latin: "Dancing Script", cursive;
+  --font-sig-ar: "Aref Ruqaa", serif;
 
   /* Neutrals — near-black ink on daylight white */
   --color-paper: #ffffff;
@@ -215,6 +218,99 @@ html[dir="rtl"] .italic:not(.latin) { font-style: normal; }
   width: 3px;
   border-radius: 999px;
   background: var(--spine-color, var(--color-brand-600));
+}
+
+/*
+  Document body: the same type treatment in the editor, the on-screen preview and
+  the printed page, so what staff compose is what the patient signs. The rules
+  live here rather than in three components for exactly that reason.
+*/
+.doc-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-ink-400);
+}
+.doc-editor p, .doc-body-wrap p { margin: 0 0 0.6rem; }
+.doc-editor ul, .doc-editor ol, .doc-body-wrap ul, .doc-body-wrap ol {
+  margin: 0 0 0.6rem; padding-inline-start: 1.4rem;
+}
+.doc-editor ul, .doc-body-wrap ul { list-style: disc; }
+.doc-editor ol, .doc-body-wrap ol { list-style: decimal; }
+.doc-editor li, .doc-body-wrap li { margin-bottom: 0.25rem; }
+.doc-editor h1, .doc-editor h2, .doc-editor h3,
+.doc-body-wrap h1, .doc-body-wrap h2, .doc-body-wrap h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin: 1rem 0 0.4rem;
+}
+html[dir="rtl"] .doc-editor h1, html[dir="rtl"] .doc-editor h2, html[dir="rtl"] .doc-editor h3,
+html[dir="rtl"] .doc-body-wrap h1, html[dir="rtl"] .doc-body-wrap h2, html[dir="rtl"] .doc-body-wrap h3 {
+  font-family: var(--font-ar-display);
+}
+.doc-editor table, .doc-body-wrap table {
+  width: 100%; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.8125rem;
+}
+.doc-editor th, .doc-editor td, .doc-body-wrap th, .doc-body-wrap td {
+  border: 1px solid var(--color-line); padding: 0.35rem 0.5rem; text-align: start;
+}
+.doc-editor hr, .doc-body-wrap hr {
+  border: none; border-top: 1px solid var(--color-line); margin: 0.9rem 0;
+}
+.doc-body-wrap .doc-head { margin-bottom: 0.75rem; }
+.doc-body-wrap .doc-clinic { font-weight: 700; }
+.doc-body-wrap .doc-clinic-meta { font-size: 0.75rem; color: var(--color-ink-500); }
+.doc-body-wrap .doc-title {
+  font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; margin: 0 0 0.75rem;
+}
+html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display); }
+.doc-body-wrap .doc-extras table th { width: 38%; color: var(--color-ink-500); }
+
+/* An unresolved variable is never allowed to look like ordinary prose. */
+.doc-missing {
+  display: inline-block; min-width: 3.5rem; text-align: center;
+  border-bottom: 1px dotted var(--color-danger); color: var(--color-danger);
+}
+/* A value staff changed for this document only, marked so nobody sends it blind. */
+.doc-override {
+  background: var(--color-st-noshow-soft);
+  box-shadow: 0 0 0 2px var(--color-st-noshow-soft);
+  border-radius: 3px;
+}
+
+/*
+  A typed signature has to read as a signature rather than as a label, so it
+  keeps its script face at a size no other text uses. Arabic is never skewed or
+  letter-spaced here either — Ruqʿah already carries the slant.
+*/
+.sig-typed {
+  font-family: var(--font-sig-latin);
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1.4;
+  color: var(--color-ink-900);
+}
+.sig-typed[data-script="ar"] {
+  font-family: var(--font-sig-ar);
+  font-weight: 700;
+  line-height: 1.9;
+}
+
+/*
+  The signing surface is deliberately not a Card. It is the only thing on screen
+  and it has to invite a finger, so it gets a dashed rule that reads as "write
+  on this line" and no shadow competing with the stroke.
+*/
+.sig-canvas {
+  touch-action: none;
+  cursor: crosshair;
+  background: var(--color-surface);
+}
+.sig-baseline {
+  position: absolute;
+  inset-inline: 8%;
+  bottom: 26%;
+  border-bottom: 1px dashed var(--color-line-strong);
+  pointer-events: none;
 }
 
 ::selection { background: var(--color-brand-100); color: var(--color-ink-900); }

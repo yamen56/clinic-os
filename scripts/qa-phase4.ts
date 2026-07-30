@@ -1,9 +1,32 @@
 /** Browser QA for Phase 4: public booking wizard, slot engine, OTP flow, identity rule. */
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import { Client } from "pg";
 
 const BASE = "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
+
+/**
+ * Clicks the first day in the date strip that actually offers slots, and returns
+ * its index.
+ *
+ * The clinic's working hours close some weekdays, so a fixed "tomorrow" makes the
+ * whole suite fail on those days of the week rather than when something is
+ * broken. Skips index 0 (today), which the minimum-notice window can empty out.
+ */
+async function pickOpenDay(page: Page): Promise<number> {
+  const chips = page.locator("button:has(span.tnum)");
+  const total = await chips.count();
+  for (let i = 1; i < Math.min(total, 10); i++) {
+    await chips.nth(i).click();
+    try {
+      await page.waitForSelector("button.tnum", { timeout: 4000 });
+      return i;
+    } catch {
+      // Closed day or fully booked — try the next one.
+    }
+  }
+  throw new Error("no day in the booking strip offered any slots");
+}
 
 async function main() {
   const db = new Client({ connectionString: PG });
@@ -61,11 +84,17 @@ async function main() {
   await page.waitForSelector("text=عيادة الاختبار", { timeout: 15000 });
   console.log("✓ public page renders with Arabic clinic branding");
   await page.click("text=كشفية");
-  // date strip → pick tomorrow (second chip)
   await page.waitForSelector("text=اختر الوقت");
-  const chips = page.locator("button:has(span.tnum)");
-  await chips.nth(1).click();
-  await page.waitForSelector("button.tnum", { timeout: 15000 });
+  /*
+    Pick the first day in the strip that actually has slots, and remember which.
+
+    This used to take the second chip unconditionally — "tomorrow" — which fails
+    every time tomorrow is a Friday, because the seeded clinic uses the default
+    working hours and Friday is closed. Booking 2 below reuses the same index on
+    purpose: the "taken slot disappeared" assertion only means anything if both
+    bookings are on the same day.
+  */
+  const openDay = await pickOpenDay(page);
   const firstSlotText = await page.locator("button.tnum").first().textContent();
   await page.locator("button.tnum").first().click();
   await page.click("text=متابعة");
@@ -95,7 +124,8 @@ async function main() {
   await page.click("text=حجز موعد آخر");
   await page.click("text=كشفية");
   await page.waitForSelector("text=اختر الوقت");
-  await page.locator("button:has(span.tnum)").nth(1).click();
+  // The same day as booking 1, so "the taken slot is gone" is a real comparison.
+  await page.locator("button:has(span.tnum)").nth(openDay).click();
   await page.waitForSelector("button.tnum", { timeout: 15000 });
   // the first slot should now be a DIFFERENT time (previous one taken)
   const newFirst = await page.locator("button.tnum").first().textContent();

@@ -8,7 +8,14 @@ export type TriggerKind =
   | "tag_removed"
   | "invoice_sent"
   | "inbound_message"
-  | "booking_submitted";
+  | "booking_submitted"
+  | "document_sent"
+  | "document_viewed"
+  | "document_signed"
+  | "document_completed"
+  | "document_declined"
+  | "document_unsigned"
+  | "document_expired";
 
 /**
  * Domain events land in the jobs table; the worker's automation engine

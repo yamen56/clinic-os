@@ -14,12 +14,15 @@ import {
   MessageCircle,
   CalendarDays,
   Users,
+  Megaphone,
   Receipt,
+  FileSignature,
   Workflow,
   Sparkles,
   Settings,
   MoreHorizontal,
   Bell,
+  PenTool,
   LogOut,
   ShieldAlert,
   X,
@@ -30,6 +33,8 @@ type NavKey =
   | "conversations"
   | "calendar"
   | "patients"
+  | "campaigns"
+  | "documents"
   | "invoices"
   | "automations"
   | "aiAgent"
@@ -40,6 +45,8 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   conversations: MessageCircle,
   calendar: CalendarDays,
   patients: Users,
+  campaigns: Megaphone,
+  documents: FileSignature,
   invoices: Receipt,
   automations: Workflow,
   aiAgent: Sparkles,
@@ -54,6 +61,7 @@ export function Shell({
   userId,
   isImpersonating,
   unreadCount,
+  pendingDocuments,
   announcements,
   children,
 }: {
@@ -71,6 +79,7 @@ export function Shell({
   userId: string;
   isImpersonating: boolean;
   unreadCount: number;
+  pendingDocuments: number;
   announcements: { id: string; title: string; body: string }[];
   children: React.ReactNode;
 }) {
@@ -87,6 +96,9 @@ export function Shell({
     { key: "conversations", href: `${base}/conversations`, show: role !== "doctor", badge: unreadCount },
     { key: "calendar", href: `${base}/calendar`, show: true },
     { key: "patients", href: `${base}/patients`, show: true },
+    { key: "campaigns", href: `${base}/campaigns`, show: canAutomations },
+    // Doctors see Documents: countersigning is a doctor's job, unlike invoicing.
+    { key: "documents", href: `${base}/documents`, show: true, badge: pendingDocuments },
     { key: "invoices", href: `${base}/invoices`, show: role !== "doctor" },
     { key: "automations", href: `${base}/automations`, show: canAutomations },
     { key: "aiAgent", href: `${base}/ai`, show: canAutomations },
@@ -151,6 +163,15 @@ export function Shell({
               <div className="truncate text-[13px] font-medium text-white">{userName}</div>
               <div className="text-[11px] text-white/40">{role}</div>
             </div>
+            {/* Reachable for doctors too, who never see /settings. */}
+            <Link
+              href={`${base}/signature`}
+              className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
+              aria-label={t.mySignature.title}
+              title={t.mySignature.title}
+            >
+              <PenTool className="h-4.5 w-4.5" strokeWidth={1.75} />
+            </Link>
             <Link
               href={`${base}/notifications`}
               className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
@@ -273,6 +294,14 @@ export function Shell({
             >
               <Bell className="h-[18px] w-[18px] text-ink-400" />
               {t.nav.notifications}
+            </Link>
+            <Link
+              href={`${base}/signature`}
+              onClick={() => setMoreOpen(false)}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-sunken"
+            >
+              <PenTool className="h-[18px] w-[18px] text-ink-400" />
+              {t.mySignature.title}
             </Link>
             <div className="flex items-center justify-between px-3 py-2.5">
               <LanguageToggle />

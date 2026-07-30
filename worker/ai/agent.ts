@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import { DateTime } from "luxon";
 import { withSystem } from "../db";
+import { lockClinicSchedule } from "../../src/lib/appointments";
 import { buildSystemPrompt, type AgentConfig } from "./prompt";
 import { computeSlots } from "../../src/lib/slots";
 import { isWithinHours, type WeeklyHours } from "../../src/lib/hours";
@@ -311,6 +312,10 @@ export async function respondToConversation(conversationId: string): Promise<voi
     },
     run: async ({ service_name, start_iso, patient_name }) => {
       return withSystem(async (c) => {
+        // The availability re-check below is only meaningful while nothing else
+        // can book in parallel. See lockClinicSchedule.
+        await lockClinicSchedule(c, cfg.clinicId);
+
         const svc = (
           await c.query(
             `select id, name, duration_min from services

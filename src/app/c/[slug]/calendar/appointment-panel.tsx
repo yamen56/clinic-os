@@ -15,6 +15,7 @@ import {
   updateAppointmentAction,
   setAppointmentStatusAction,
 } from "./actions";
+import { RequiredDocuments } from "@/components/esign/required-documents";
 import type { Appt, Doctor, Service } from "./calendar-client";
 import { X, UserPlus } from "lucide-react";
 
@@ -40,6 +41,7 @@ export function AppointmentPanel({
   onChanged,
   doctors,
   services,
+  canSendDocuments,
 }: {
   slug: string;
   tz: string;
@@ -48,6 +50,7 @@ export function AppointmentPanel({
   onChanged: () => void;
   doctors: Doctor[];
   services: Service[];
+  canSendDocuments: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -268,6 +271,14 @@ export function AppointmentPanel({
             <Field label={t.common.notes}>
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-20" />
             </Field>
+
+            {state.mode === "edit" && (
+              <RequiredDocuments
+                slug={slug}
+                appointmentId={state.appt.id}
+                canSend={canSendDocuments}
+              />
+            )}
 
             {state.mode === "edit" && (
               <div>

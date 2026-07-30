@@ -24,11 +24,18 @@ import {
   setPatientStatusAction,
   mergePatientsAction,
 } from "../actions";
+import { sendAllPendingAction } from "../../documents/actions";
+import { DOC_STATUS_BADGE } from "@/components/esign/status";
+import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-document-modal";
+import type { DocumentListRow } from "@/lib/esign/queries";
 import {
   MessageCircle,
   Phone as PhoneIcon,
   CalendarPlus,
   ReceiptText,
+  FileSignature,
+  Send,
+  Download,
   X,
   Plus,
   Upload,
@@ -57,6 +64,25 @@ type Patient = {
   created_at: string;
 };
 
+/**
+ * One of the clinic's own field definitions. `source_column` names a real column
+ * on `patients` — those already have their own input above, so this form only
+ * renders the ones that live in `custom_fields`.
+ */
+type FieldDef = {
+  id: string;
+  key: string;
+  label: string;
+  label_ar: string | null;
+  field_type: string;
+  options: string[];
+  is_required: boolean;
+  storage_key: string | null;
+  source_column: string | null;
+};
+
+const storageKeyOf = (d: FieldDef) => d.storage_key ?? d.key.replace(/^patient\./, "");
+
 const apptStatus: Record<string, StatusKey> = {
   pending_approval: "pending",
   scheduled: "scheduled",
@@ -77,8 +103,11 @@ export function PatientProfile(props: {
   appointments: { id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null }[];
   invoices: { id: string; number: string; status: string; total: string; amount_paid: string; created_at: string }[];
   conversation: { id: string; msgs: { id: string; direction: string; sender_kind: string; body: string; msg_type: string; created_at: string }[] | null } | null;
-  defs: { id: string; key: string; label: string; label_ar: string | null; field_type: string; options: string[] }[];
+  defs: FieldDef[];
   activity: { action: string; created_at: string; detail: Record<string, unknown>; actor: string | null }[];
+  documents: DocumentListRow[];
+  docTemplates: PickableTemplate[];
+  canSendDocuments: boolean;
 }) {
   const { slug, tz, currency } = props;
   const { t, locale } = useI18n();
@@ -108,6 +137,19 @@ export function PatientProfile(props: {
     patch({ custom_fields: { [key]: value } });
   };
 
+  /*
+    The clinic can rename any field, including the built-in ones, so the labels
+    on this form come from the definitions rather than from the dictionary. The
+    dictionary is the fallback for a clinic that has not touched them.
+  */
+  const defLabel = (key: string, fallback: string) => {
+    const d = props.defs.find((x) => x.key === key);
+    if (!d) return fallback;
+    return locale === "ar" ? d.label_ar || d.label : d.label;
+  };
+  // Fields backed by a real column already have their own input above.
+  const extraDefs = props.defs.filter((d) => !d.source_column);
+
   const waLink = p.phone_e164 ? `https://wa.me/${p.phone_e164.replace("+", "")}` : null;
   const upcoming = props.appointments.find(
     (a) => new Date(a.starts_at) > new Date() && !["cancelled", "no_show"].includes(a.status)
@@ -118,6 +160,9 @@ export function PatientProfile(props: {
     { key: "notes", label: t.patients.tabs.notes, count: props.notes.length },
     { key: "appointments", label: t.patients.tabs.appointments, count: props.appointments.length },
     { key: "files", label: t.patients.tabs.files, count: props.files.length },
+    // Between Files and Invoices, as specified: a signed form belongs with the
+    // patient's other paperwork, not filed away under billing.
+    { key: "documents", label: t.patients.tabs.documents, count: props.documents.length },
     { key: "invoices", label: t.patients.tabs.invoices, count: props.invoices.length },
     { key: "conversation", label: t.patients.tabs.conversation },
   ];
@@ -229,7 +274,7 @@ export function PatientProfile(props: {
               <Card className="p-5">
                 <h3 className="mb-4 text-[15px] font-semibold">{t.patients.overview.details}</h3>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t.patients.phone}>
+                  <Field label={defLabel("patient.phone", t.patients.phone)}>
                     <Input
                       dir="ltr"
                       defaultValue={p.phone_e164 ?? ""}
@@ -244,14 +289,14 @@ export function PatientProfile(props: {
                       onChange={(e) => patch({ secondary_phone_e164: e.target.value })}
                     />
                   </Field>
-                  <Field label={t.patients.birthDate}>
+                  <Field label={defLabel("patient.birth_date", t.patients.birthDate)}>
                     <Input
                       type="date"
                       defaultValue={p.birth_date?.slice(0, 10) ?? ""}
                       onChange={(e) => patch({ birth_date: e.target.value })}
                     />
                   </Field>
-                  <Field label={t.patients.gender}>
+                  <Field label={defLabel("patient.gender", t.patients.gender)}>
                     <Select
                       value={p.gender ?? ""}
                       onChange={(e) => set({ gender: e.target.value || null })}
@@ -262,21 +307,22 @@ export function PatientProfile(props: {
                     </Select>
                   </Field>
                 </div>
-                {props.defs.length > 0 && (
+                {extraDefs.length > 0 && (
                   <>
                     <h4 className="mb-3 mt-6 text-[13px] font-semibold text-ink-500">
                       {t.patients.overview.customFields}
                     </h4>
                     <div className="grid gap-4 sm:grid-cols-2">
-                      {props.defs.map((d) => {
+                      {extraDefs.map((d) => {
                         const label = locale === "ar" ? d.label_ar || d.label : d.label;
-                        const val = p.custom_fields?.[d.key];
+                        const sk = storageKeyOf(d);
+                        const val = p.custom_fields?.[sk];
                         if (d.field_type === "select") {
                           return (
-                            <Field key={d.id} label={label}>
+                            <Field key={d.id} label={label} required={d.is_required}>
                               <Select
                                 value={String(val ?? "")}
-                                onChange={(e) => setCustom(d.key, e.target.value)}
+                                onChange={(e) => setCustom(sk, e.target.value)}
                               >
                                 <option value="">—</option>
                                 {(d.options ?? []).map((o) => (
@@ -288,13 +334,13 @@ export function PatientProfile(props: {
                             </Field>
                           );
                         }
-                        if (d.field_type === "boolean") {
+                        if (d.field_type === "checkbox") {
                           return (
-                            <Field key={d.id} label={label}>
+                            <Field key={d.id} label={label} required={d.is_required}>
                               <Select
                                 value={val === true ? "yes" : val === false ? "no" : ""}
                                 onChange={(e) =>
-                                  setCustom(d.key, e.target.value === "" ? null : e.target.value === "yes")
+                                  setCustom(sk, e.target.value === "" ? null : e.target.value === "yes")
                                 }
                               >
                                 <option value="">—</option>
@@ -304,12 +350,32 @@ export function PatientProfile(props: {
                             </Field>
                           );
                         }
+                        if (d.field_type === "longtext") {
+                          return (
+                            <Field key={d.id} label={label} required={d.is_required}>
+                              <Textarea
+                                defaultValue={String(val ?? "")}
+                                className="min-h-20"
+                                onChange={(e) => setCustom(sk, e.target.value)}
+                              />
+                            </Field>
+                          );
+                        }
                         return (
-                          <Field key={d.id} label={label}>
+                          <Field key={d.id} label={label} required={d.is_required}>
                             <Input
-                              type={d.field_type === "number" ? "number" : d.field_type === "date" ? "date" : "text"}
+                              type={
+                                d.field_type === "number"
+                                  ? "number"
+                                  : d.field_type === "date"
+                                    ? "date"
+                                    : d.field_type === "email"
+                                      ? "email"
+                                      : "text"
+                              }
+                              dir={d.field_type === "phone" || d.field_type === "email" ? "ltr" : undefined}
                               defaultValue={String(val ?? "")}
-                              onChange={(e) => setCustom(d.key, e.target.value)}
+                              onChange={(e) => setCustom(sk, e.target.value)}
                             />
                           </Field>
                         );
@@ -414,6 +480,16 @@ export function PatientProfile(props: {
           </Card>
         )}
         {tab === "files" && <FilesTab slug={slug} patientId={p.id} files={props.files} tz={tz} />}
+        {tab === "documents" && (
+          <DocumentsTab
+            slug={slug}
+            patientId={p.id}
+            tz={tz}
+            documents={props.documents}
+            templates={props.docTemplates}
+            canSend={props.canSendDocuments}
+          />
+        )}
         {tab === "invoices" && (
           <Card>
             {props.invoices.length === 0 ? (
@@ -844,6 +920,133 @@ function FilesTab({
             router.refresh();
           }
         }}
+      />
+    </div>
+  );
+}
+
+/**
+ * Every document on this patient's file, with what it is still waiting for.
+ *
+ * "New" is one tap to a template picker and one tap to a merged, signable
+ * document — the four-tap budget in the brief is measured from here.
+ */
+function DocumentsTab({
+  slug,
+  patientId,
+  tz,
+  documents,
+  templates,
+  canSend,
+}: {
+  slug: string;
+  patientId: string;
+  tz: string;
+  documents: DocumentListRow[];
+  templates: PickableTemplate[];
+  canSend: boolean;
+}) {
+  const { t, locale } = useI18n();
+  const router = useRouter();
+  const { toast } = useToast();
+  const [newOpen, setNewOpen] = useState(false);
+  const [pending, start] = useTransition();
+
+  const pendingCount = documents.filter((d) =>
+    ["draft", "sent", "partially_signed"].includes(d.status)
+  ).length;
+
+  return (
+    <div className="grid gap-4">
+      {canSend && (
+        <Card className="flex flex-wrap items-center gap-3 p-4">
+          <Button onClick={() => setNewOpen(true)}>
+            <FileSignature className="h-4 w-4" />
+            {t.docs.newDocument}
+          </Button>
+          {pendingCount > 1 && (
+            <Button
+              variant="outline"
+              loading={pending}
+              onClick={() =>
+                start(async () => {
+                  const r = await sendAllPendingAction(slug, patientId);
+                  if (r.error) {
+                    toast(
+                      (t.docs.errors as Record<string, string>)[r.error] ?? t.common.genericError,
+                      "error"
+                    );
+                    return;
+                  }
+                  toast(t.docs.sendAllDone.replace("{n}", String(r.sent ?? 0)));
+                  router.refresh();
+                })
+              }
+            >
+              <Send className="h-4 w-4" />
+              {t.docs.sendAllPending.replace("{n}", String(pendingCount))}
+            </Button>
+          )}
+        </Card>
+      )}
+
+      {documents.length === 0 ? (
+        <EmptyState
+          icon={<FileSignature />}
+          title={t.docs.empty}
+          body={t.docs.emptyBody}
+          action={canSend ? <Button onClick={() => setNewOpen(true)}>{t.docs.newDocument}</Button> : undefined}
+        />
+      ) : (
+        <Card>
+          <ul className="divide-y divide-line">
+            {documents.map((d) => (
+              <li key={d.id} className="flex items-center gap-3 px-5 py-3">
+                <Link href={`/c/${slug}/documents/${d.id}`} className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate text-sm font-medium hover:text-brand-700">{d.title}</span>
+                    <Badge status={(DOC_STATUS_BADGE[d.status] ?? "neutral") as StatusKey}>
+                      {(t.docs.statuses as Record<string, string>)[d.status] ?? d.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[12px] text-ink-500">
+                    {d.waiting_on && !["completed", "voided"].includes(d.status) && (
+                      <span className="text-st-pending">
+                        {t.docs.waitingOnN.replace("{name}", d.waiting_on)}
+                      </span>
+                    )}
+                    {d.signer_count > 1 && (
+                      <span className="tnum">
+                        {d.signed_count}/{d.signer_count}
+                      </span>
+                    )}
+                    <span>{fmtDate(d.created_at, tz, locale)}</span>
+                  </div>
+                </Link>
+                {d.final_pdf_path && (
+                  <a
+                    href={`/api/c/${slug}/documents/${d.id}/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={t.docs.downloadPdf}
+                  >
+                    <Button variant="ghost" size="icon">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <NewDocumentModal
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        slug={slug}
+        templates={templates}
+        patientId={patientId}
       />
     </div>
   );

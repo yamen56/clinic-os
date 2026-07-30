@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
+import { loadDocumentList } from "@/lib/esign/queries";
 import { PatientProfile } from "./profile-client";
 
 export default async function PatientProfilePage({
@@ -18,7 +19,7 @@ export default async function PatientProfilePage({
     if (!p) return null;
     if (p.merged_into) return { mergedInto: p.merged_into as string };
 
-    const [notes, files, appointments, invoices, conversation, defs, activity, clinic, balance] =
+    const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates] =
       await Promise.all([
         c.query(
           `select n.id, n.kind, n.body, n.created_at, u.full_name as author
@@ -56,9 +57,15 @@ export default async function PatientProfilePage({
            order by cv.last_message_at desc nulls last limit 1`,
           [id, access.clinicId]
         ),
+        // The clinic's own field definitions drive this form, the template
+        // variable picker and the document preview from one place, so a field
+        // renamed in settings is renamed here without a second thought.
         c.query(
-          `select id, key, label, label_ar, field_type, options from custom_field_defs
-           where clinic_id = $1 order by sort`,
+          `select id, key, label, label_ar, field_type, options, is_required,
+                  storage_key, source_column
+           from patient_field_definitions
+           where clinic_id = $1 and scope = 'patient' and not hidden and show_in_profile
+           order by display_order, label`,
           [access.clinicId]
         ),
         c.query(
@@ -68,11 +75,16 @@ export default async function PatientProfilePage({
            order by al.created_at desc limit 15`,
           [access.clinicId, id]
         ),
-        c.query(`select timezone, currency from clinics where id = $1`, [access.clinicId]),
         c.query(
           `select coalesce(sum(total - amount_paid), 0) as due from invoices
            where patient_id = $1 and clinic_id = $2 and status in ('sent', 'partially_paid')`,
           [id, access.clinicId]
+        ),
+        loadDocumentList(c, access.clinicId, { patientId: id }),
+        c.query(
+          `select id, name, name_ar, category, language from document_templates
+           where clinic_id = $1 and is_active order by category, name`,
+          [access.clinicId]
         ),
       ]);
 
@@ -85,9 +97,9 @@ export default async function PatientProfilePage({
       conversation: conversation.rows[0] ?? null,
       defs: defs.rows,
       activity: activity.rows,
-      tz: clinic.rows[0].timezone as string,
-      currency: clinic.rows[0].currency as string,
       balanceDue: Number(balance.rows[0].due),
+      documents,
+      templates: templates.rows,
     };
   });
 
@@ -98,8 +110,8 @@ export default async function PatientProfilePage({
   return (
     <PatientProfile
       slug={slug}
-      tz={d.tz}
-      currency={d.currency}
+      tz={access.clinic.timezone}
+      currency={access.clinic.currency}
       balanceDue={d.balanceDue}
       patient={JSON.parse(JSON.stringify(d.patient))}
       notes={JSON.parse(JSON.stringify(d.notes))}
@@ -109,6 +121,9 @@ export default async function PatientProfilePage({
       conversation={d.conversation ? JSON.parse(JSON.stringify(d.conversation)) : null}
       defs={JSON.parse(JSON.stringify(d.defs))}
       activity={JSON.parse(JSON.stringify(d.activity))}
+      documents={JSON.parse(JSON.stringify(d.documents))}
+      docTemplates={JSON.parse(JSON.stringify(d.templates))}
+      canSendDocuments={access.role !== "doctor"}
     />
   );
 }

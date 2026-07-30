@@ -44,7 +44,8 @@ async function main() {
   const dlg = page.locator('div[role="dialog"]');
   await dlg.locator("input").nth(0).fill("د. سارة العمري");
   await dlg.locator('input[type="email"]').fill(`dr-${slug}@test.local`);
-  await dlg.locator('input[dir="ltr"]').nth(1).fill("password123");
+  // No password here: staff are invited by email and choose their own, so the
+  // dialog has none to fill. This suite only needs the member to exist.
   await dlg.locator("select").selectOption("doctor");
   await dlg.locator("button:has-text('Add')").last().click();
   await page.waitForSelector("text=د. سارة العمري", { timeout: 10000 });

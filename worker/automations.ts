@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import type { PoolClient } from "pg";
 import { withSystem } from "./db";
 import { loadContext, renderTemplate } from "./templates";
+import { createAndSendFromTemplate } from "../src/lib/esign/flow";
 
 /**
  * Automation engine.
@@ -23,7 +24,7 @@ type Step = {
 };
 
 /** Next send time inside the clinic's allowed window (queues overnight traffic). */
-function withinWindow(
+export function withinWindow(
   from: DateTime,
   tz: string,
   windowStart: string,
@@ -90,11 +91,12 @@ export async function startRun(
     appointmentId?: string | null;
     invoiceId?: string | null;
     conversationId?: string | null;
+    documentId?: string | null;
   }
 ): Promise<string | null> {
   const r = await c.query(
-    `insert into automation_runs (clinic_id, automation_id, patient_id, appointment_id, invoice_id, conversation_id, status)
-     values ($1, $2, $3, $4, $5, $6, 'running')
+    `insert into automation_runs (clinic_id, automation_id, patient_id, appointment_id, invoice_id, conversation_id, document_id, status)
+     values ($1, $2, $3, $4, $5, $6, $7, 'running')
      on conflict do nothing
      returning id`,
     [
@@ -104,6 +106,7 @@ export async function startRun(
       ctx.appointmentId ?? null,
       ctx.invoiceId ?? null,
       ctx.conversationId ?? null,
+      ctx.documentId ?? null,
     ]
   );
   return r.rows[0]?.id ?? null;
@@ -151,6 +154,7 @@ export async function advanceRun(runId: string): Promise<void> {
       patientId: run.patient_id,
       appointmentId: run.appointment_id,
       invoiceId: run.invoice_id,
+      documentId: run.document_id,
     });
 
     // Resume after the last completed step, or start at the root
@@ -296,6 +300,41 @@ export async function advanceRun(runId: string): Promise<void> {
           );
         }
         await log(c, run.clinic_id, runId, step.id, "ok", { notified: staff.rowCount });
+      } else if (step.step_type === "send_document") {
+        const templateId = String(cfg.template_id ?? "");
+        if (!templateId || !run.patient_id) {
+          await log(c, run.clinic_id, runId, step.id, "skipped", {
+            reason: !templateId ? "no_template" : "no_patient",
+          });
+        } else {
+          // The automation is the sender, so the document is created by whoever
+          // owns the clinic — a document must always name a real person as its
+          // creator, and an automation is not one.
+          const owner = (
+            await c.query(
+              `select user_id from clinic_members
+               where clinic_id = $1 and role = 'owner' and active order by created_at limit 1`,
+              [run.clinic_id]
+            )
+          ).rows[0];
+          const sent = await createAndSendFromTemplate(c, {
+            clinicId: run.clinic_id,
+            userId: owner?.user_id ?? null,
+            templateId,
+            patientId: run.patient_id,
+            appointmentId: run.appointment_id,
+          });
+          await log(
+            c,
+            run.clinic_id,
+            runId,
+            step.id,
+            sent.ok ? "ok" : "failed",
+            sent.ok
+              ? { documentId: sent.documentId, delivered: sent.delivered }
+              : { error: sent.error, missing: sent.missing ?? [] }
+          );
+        }
       } else if (step.step_type === "goto_automation") {
         const targetId = String(cfg.automation_id ?? "");
         if (targetId) {
@@ -406,6 +445,7 @@ export async function handleTrigger(
         appointmentId: (payload.appointmentId as string) ?? null,
         invoiceId: (payload.invoiceId as string) ?? null,
         conversationId: (payload.conversationId as string) ?? null,
+        documentId: (payload.documentId as string) ?? null,
       });
       if (runId) {
         await c.query(`insert into jobs (clinic_id, kind, payload) values ($1, 'automation:advance', $2)`, [

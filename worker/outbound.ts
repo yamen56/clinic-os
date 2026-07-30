@@ -35,7 +35,12 @@ async function processOnce() {
       const claimed = await withSystem(async (c) => {
         const ses = (
           await c.query(
-            `select ws.paused_until, ws.consecutive_errors, ws.outbound_today, ws.outbound_date,
+            // outbound_date is cast to text deliberately. A `date` comes back
+            // from node-pg as a JS Date in the *server's* zone, so comparing it
+            // to a clinic-local ISO day was never equal — which silently reset
+            // the counter on every send and left the daily cap doing nothing.
+            `select ws.paused_until, ws.consecutive_errors, ws.outbound_today,
+                    ws.outbound_date::text as outbound_date,
                     cl.daily_outbound_cap, cl.timezone, cl.message_window_start
              from whatsapp_sessions ws join clinics cl on cl.id = ws.clinic_id
              where ws.clinic_id = $1`,
@@ -84,7 +89,13 @@ async function processOnce() {
           return null;
         }
 
-        // Blast guard: identical automation text to many numbers in a short window
+        // Blast guard: identical automation text to many numbers in a short
+        // window. Campaigns are exempt on purpose — sending one message to many
+        // numbers is the whole feature, and their protection is upstream: the
+        // drip releases one recipient per configured interval and stops
+        // entirely when this clinic is paused, capped, or out of hours. Tripping
+        // the guard on them would pause every automation in the clinic for a
+        // send that was deliberate.
         if (row.sender_kind === "automation" && row.body) {
           const blast = (
             await c.query(

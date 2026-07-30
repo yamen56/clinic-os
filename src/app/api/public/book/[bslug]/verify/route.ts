@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { randomInt } from "node:crypto";
 import { withSystem } from "@/lib/db";
-import { loadPublicLink, rateLimit } from "@/lib/booking-public";
+import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { finalizeBooking, type BookingPayload } from "../finalize";
 
 /** Step 2: check the WhatsApp OTP, then finalize the booking. */
 export async function POST(req: Request, ctx: { params: Promise<{ bslug: string }> }) {
   const { bslug } = await ctx.params;
-  const ip = req.headers.get("x-forwarded-for") ?? "local";
+  const ip = clientIp(req);
   if (!rateLimit(`verify:${bslug}:${ip}`, 20, 10 * 60_000)) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }

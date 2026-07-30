@@ -140,12 +140,16 @@ async function main() {
     );
   }
 
-  // ---- Custom patient fields
+  // ---- Patient field definitions: the built-in set, then this clinic's own.
+  // These same rows are the merge variables every document template can use.
+  await c.query(`select seed_esign_defaults($1)`, [clinicId]);
   await c.query(
-    `insert into custom_field_defs (clinic_id, key, label, label_ar, field_type, options, sort) values
-      ($1, 'insurance', 'Insurance', 'شركة التأمين', 'select', $2, 1),
-      ($1, 'allergies', 'Allergies', 'الحساسية', 'text', '[]', 2),
-      ($1, 'referred_by', 'Referred by', 'من حوّله', 'text', '[]', 3)`,
+    `insert into patient_field_definitions
+       (clinic_id, scope, key, label, label_ar, field_type, options, storage_key, display_order) values
+      ($1, 'patient', 'patient.insurance', 'Insurance', 'شركة التأمين', 'select', $2, 'insurance', 210),
+      ($1, 'patient', 'patient.allergies', 'Allergies', 'الحساسية', 'longtext', '[]', 'allergies', 220),
+      ($1, 'patient', 'patient.referred_by', 'Referred by', 'من حوّله', 'text', '[]', 'referred_by', 230)
+     on conflict (clinic_id, key) do nothing`,
     [clinicId, JSON.stringify(["بدون", "الأردنية للتأمين", "ميدغلف", "الشرق العربي"])]
   );
 
@@ -275,13 +279,28 @@ async function main() {
         : k % 3 === 0
           ? "confirmed"
           : "scheduled";
+      // Slot times are generated arithmetically while durations vary per
+      // service, so two of them can land on the same doctor. The product never
+      // allows that, and demo data showing an impossible calendar is a bug in
+      // the demo — skip rather than seed a double booking.
+      const doctor = k % 2 ? m1 : m2;
+      const clash = await c.query(
+        `select 1 from appointments
+         where clinic_id = $1 and doctor_member_id = $2
+           and status in ('pending_approval', 'scheduled', 'confirmed', 'completed', 'no_show')
+           and starts_at < $4 and ends_at > $3
+         limit 1`,
+        [clinicId, doctor, start.toUTC().toISO(), end.toUTC().toISO()]
+      );
+      if (clash.rowCount) continue;
+
       await c.query(
         `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source)
          values ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           clinicId,
           patientIds[(k * 5 + Math.abs(d) * 3) % patientIds.length],
-          k % 2 ? m1 : m2,
+          doctor,
           svc.id,
           start.toUTC().toISO(),
           end.toUTC().toISO(),

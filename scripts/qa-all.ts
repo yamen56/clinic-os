@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 const SUITES = [
   ["unit: phone normalization", "scripts/test-phone.ts"],
   ["unit: RLS tenant isolation", "scripts/test-rls.ts"],
+  ["unit: Arabic-insensitive search", "scripts/test-search.ts"],
   ["phase 1: foundation, auth, tenancy", "scripts/qa-phase1.ts"],
   ["phase 2: patients", "scripts/qa-phase2.ts"],
   ["phase 3: calendar", "scripts/qa-phase3.ts"],
@@ -17,6 +18,10 @@ const SUITES = [
   ["phase 8: AI receptionist", "scripts/qa-phase8.ts"],
   ["phase 9: PWA & notifications", "scripts/qa-phase9.ts"],
   ["phase 10: admin & demo data", "scripts/qa-phase10.ts"],
+  ["campaigns: bulk send & drip rails", "scripts/qa-campaigns.ts"],
+  ["concurrency: one slot, one appointment", "scripts/qa-booking-race.ts"],
+  ["signing: integrity, tokens, orchestration", "scripts/qa-esign.ts"],
+  ["signing: both journeys in the browser", "scripts/qa-esign-browser.ts"],
 ] as const;
 
 function run(script: string): Promise<{ ok: boolean; out: string }> {

@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { hashPassword } from "@/lib/auth";
 import { withSystem } from "@/lib/db";
 import { consumeAuthToken } from "@/lib/invites";
@@ -24,5 +23,7 @@ export async function resetPasswordAction(
   // prompted by a compromise, the attacker's session must not survive it.
   await withSystem((c) => c.query(`delete from sessions where user_id = $1`, [r.userId]));
 
-  redirect("/login?reset=1");
+  // A hard load, like the other auth transitions: the router cache still holds
+  // pages rendered for the session that was just destroyed.
+  return { to: "/login?reset=1" };
 }

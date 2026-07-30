@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
@@ -47,8 +47,21 @@ export function AutomationsClient({
   const [, start] = useTransition();
   const { patch, state } = useAutosave({ url: `/api/c/${slug}/clinic`, entityKey: `msgwindow:${slug}` });
 
-  const active = automations.filter((a) => a.active);
-  const inactive = automations.filter((a) => !a.active);
+  /*
+    Enabling an automation moves its row between the two sections, so the knob
+    alone moving instantly is not enough — the row has to travel with it.
+    React drops the optimistic value once the transition ends, at which point
+    the refreshed server data is already in place, and a failed write simply
+    leaves the row where it was.
+  */
+  const [shown, setShown] = useOptimistic(
+    automations,
+    (rows: Automation[], change: { id: string; active: boolean }) =>
+      rows.map((a) => (a.id === change.id ? { ...a, active: change.active } : a))
+  );
+
+  const active = shown.filter((a) => a.active);
+  const inactive = shown.filter((a) => !a.active);
 
   const triggerLabel = (a: Automation) => {
     const base = (t.automations.triggers as Record<string, string>)[a.trigger_type] ?? a.trigger_type;
@@ -62,13 +75,14 @@ export function AutomationsClient({
   };
 
   const row = (a: Automation) => (
-    <li key={a.id} className={a.active ? "" : "opacity-70"}>
+    <li key={a.id} className={`transition-opacity duration-140 ${a.active ? "" : "opacity-70"}`}>
       <div className="flex items-center gap-3 px-5 py-3.5">
         <Toggle
           checked={a.active}
           label={t.automations.enable}
           onChange={(v) =>
             start(async () => {
+              setShown({ id: a.id, active: v });
               await toggleAutomationAction(slug, a.id, v);
               toast(v ? t.automations.enabled : t.automations.disabled);
               router.refresh();

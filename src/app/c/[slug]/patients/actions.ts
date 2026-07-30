@@ -271,49 +271,10 @@ export async function mergePatientsAction(
   });
 }
 
-export async function saveCustomFieldDefAction(
-  slug: string,
-  def: {
-    id?: string;
-    label: string;
-    labelAr: string;
-    fieldType: string;
-    options: string[];
-  }
-): Promise<{ error?: string }> {
-  const access = await requireClinic(slug);
-  if (access.role !== "owner") return { error: "forbidden" };
-  const key =
-    def.label
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 40) || `field_${Date.now().toString(36)}`;
-  await inClinic(access, async (c) => {
-    if (def.id) {
-      await c.query(
-        `update custom_field_defs set label = $2, label_ar = $3, field_type = $4, options = $5
-         where id = $1 and clinic_id = $6`,
-        [def.id, def.label, def.labelAr, def.fieldType, JSON.stringify(def.options), access.clinicId]
-      );
-    } else {
-      await c.query(
-        `insert into custom_field_defs (clinic_id, key, label, label_ar, field_type, options, sort)
-         values ($1, $2, $3, $4, $5, $6, (select coalesce(max(sort), 0) + 1 from custom_field_defs where clinic_id = $1))
-         on conflict (clinic_id, key) do update set label = excluded.label, label_ar = excluded.label_ar`,
-        [access.clinicId, key, def.label, def.labelAr, def.fieldType, JSON.stringify(def.options)]
-      );
-    }
-  });
-  revalidatePath(`/c/${slug}/settings/fields`);
-  return {};
-}
-
-export async function deleteCustomFieldDefAction(slug: string, id: string) {
-  const access = await requireClinic(slug);
-  if (access.role !== "owner") return;
-  await inClinic(access, (c) =>
-    c.query(`delete from custom_field_defs where id = $1 and clinic_id = $2`, [id, access.clinicId])
-  );
-  revalidatePath(`/c/${slug}/settings/fields`);
-}
+/*
+  Custom field definitions moved to `patient_field_definitions` and now live in
+  `settings/fields/actions.ts`. They had to move: the same rows have to drive the
+  patient form, the merge-variable picker and the document preview, and two
+  tables would have meant two truths. The old `custom_field_defs` rows were
+  copied across by migration 0010 and are no longer read.
+*/

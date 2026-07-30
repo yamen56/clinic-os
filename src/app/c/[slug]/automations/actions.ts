@@ -15,7 +15,7 @@ const stepSchema: z.ZodType<StepInput> = z.lazy(() =>
   z.object({
     step_type: z.enum([
       "send_whatsapp", "wait", "condition", "add_tag", "remove_tag",
-      "create_task", "notify_staff", "goto_automation", "stop",
+      "create_task", "notify_staff", "goto_automation", "send_document", "stop",
     ]),
     config: z.record(z.string(), z.unknown()).default({}),
     children: z

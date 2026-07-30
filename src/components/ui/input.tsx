@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useId } from "react";
+import { forwardRef, useEffect, useId, useState } from "react";
 import { Search } from "lucide-react";
 
 const base =
@@ -79,21 +79,38 @@ export function Toggle({
   disabled?: boolean;
   label?: string;
 }) {
+  /*
+    The switch answers the finger, not the database.
+
+    `checked` arrives from a server round trip, so driving the knob straight
+    from it means the control sits still for the length of that trip and the
+    click reads as ignored. Holding the position locally moves it on the press
+    instead; the prop takes over again the moment it catches up — which also
+    snaps the knob back on its own if the write was rejected.
+  */
+  const [shown, setShown] = useState(checked);
+  useEffect(() => setShown(checked), [checked]);
+
   return (
     <button
       type="button"
       role="switch"
-      aria-checked={checked}
+      aria-checked={shown}
       aria-label={label}
       disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative h-5.5 w-10 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-        checked ? "bg-brand-600" : "bg-ink-300"
+      onClick={() => {
+        setShown(!shown);
+        onChange(!shown);
+      }}
+      className={`relative h-5.5 w-10 shrink-0 rounded-full transition-colors duration-140 ease-out disabled:opacity-50 ${
+        shown ? "bg-brand-600" : "bg-ink-300"
       }`}
     >
+      {/* Travels on transform rather than inset-inline-start: the knob gets its
+          own layer, so the movement never waits on layout. */}
       <span
-        className={`absolute top-0.5 h-4.5 w-4.5 rounded-full bg-white shadow transition-all ${
-          checked ? "inset-inline-start-[calc(100%-1.25rem)]" : "inset-inline-start-0.5"
+        className={`absolute top-0.5 inset-inline-start-0.5 h-4.5 w-4.5 rounded-full bg-white shadow transition-transform duration-140 ease-out ${
+          shown ? "translate-x-[1.125rem] rtl:-translate-x-[1.125rem]" : "translate-x-0"
         }`}
       />
     </button>

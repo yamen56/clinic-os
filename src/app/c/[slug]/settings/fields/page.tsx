@@ -1,5 +1,6 @@
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
+import { loadFieldDefinitions } from "@/lib/esign/fields";
 import { FieldsClient } from "./fields-client";
 
 export default async function FieldsSettingsPage({
@@ -9,13 +10,31 @@ export default async function FieldsSettingsPage({
 }) {
   const { slug } = await params;
   const access = await guardClinic(slug);
-  const defs = await inClinic(access, async (c) => {
-    const r = await c.query(
-      `select id, key, label, label_ar, field_type, options from custom_field_defs
-       where clinic_id = $1 order by sort`,
+
+  const { defs, usage } = await inClinic(access, async (c) => {
+    const defs = await loadFieldDefinitions(c, access.clinicId, { includeHidden: true });
+    // How many templates reference each variable, so hiding or deleting one is
+    // an informed decision rather than a surprise.
+    const bodies = await c.query(
+      `select body, body_ar from document_templates where clinic_id = $1 and is_active`,
       [access.clinicId]
     );
-    return r.rows;
+    const usage: Record<string, number> = {};
+    for (const d of defs) {
+      const token = new RegExp(`\\{\\{\\s*${d.key.replace(/\./g, "\\.")}\\s*\\}\\}`);
+      usage[d.key] = bodies.rows.filter(
+        (r) => token.test(r.body ?? "") || token.test(r.body_ar ?? "")
+      ).length;
+    }
+    return { defs, usage };
   });
-  return <FieldsClient slug={slug} isOwner={access.role === "owner"} defs={JSON.parse(JSON.stringify(defs))} />;
+
+  return (
+    <FieldsClient
+      slug={slug}
+      isOwner={access.role === "owner"}
+      defs={JSON.parse(JSON.stringify(defs))}
+      usage={usage}
+    />
+  );
 }

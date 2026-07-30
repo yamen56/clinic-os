@@ -1,5 +1,6 @@
 node_modules/
 .next/
+.next-*/
 .pgdata/
 .pgdata-test/
 storage/
@@ -14,6 +15,9 @@ tsconfig.tsbuildinfo
 .wa-auth/
 scripts/qa-shots/
 scripts/qa-certs/
+
+# Copied from node_modules by scripts/postinstall.js
+public/pdf.worker.min.mjs
 
 # Generated env paste-blocks (contain real secrets)
 RAILWAY-ENV.txt

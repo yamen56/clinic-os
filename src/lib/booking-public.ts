@@ -107,10 +107,31 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
   });
 }
 
+/**
+ * The caller's address, as observed by our own proxy.
+ *
+ * `X-Forwarded-For` is a chain, and only the entry the *closest* proxy appended
+ * is trustworthy — everything to its left is whatever the client chose to send.
+ * Reading the raw header made the rate-limit key attacker-controlled: sending a
+ * different fake value each time produced a fresh bucket every request and the
+ * limit never applied. Take the rightmost entry instead.
+ */
+export function clientIp(req: Request): string {
+  const chain = req.headers.get("x-forwarded-for");
+  if (!chain) return req.headers.get("x-real-ip")?.trim() || "local";
+  const parts = chain.split(",").map((p) => p.trim()).filter(Boolean);
+  return parts[parts.length - 1] || "local";
+}
+
 /** Naive fixed-window rate limiter for public endpoints. */
 const buckets = new Map<string, { count: number; reset: number }>();
 export function rateLimit(key: string, max: number, windowMs: number): boolean {
   const now = Date.now();
+  // Fixed windows accumulate one bucket per key forever; public endpoints are
+  // keyed by caller, so sweep expired entries rather than grow without bound.
+  if (buckets.size > 5000) {
+    for (const [k, v] of buckets) if (v.reset < now) buckets.delete(k);
+  }
   const b = buckets.get(key);
   if (!b || b.reset < now) {
     buckets.set(key, { count: 1, reset: now + windowMs });

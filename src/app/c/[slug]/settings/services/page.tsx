@@ -32,10 +32,7 @@ export default async function ServicesSettingsPage({
         [access.clinicId]
       )
     ).rows;
-    const currency = (
-      await c.query(`select currency from clinics where id = $1`, [access.clinicId])
-    ).rows[0].currency;
-    return { services, doctors, currency };
+    return { services, doctors };
   });
 
   return (
@@ -44,7 +41,7 @@ export default async function ServicesSettingsPage({
       canEdit={access.role !== "doctor"}
       services={JSON.parse(JSON.stringify(data.services))}
       doctors={JSON.parse(JSON.stringify(data.doctors))}
-      currency={data.currency}
+      currency={access.clinic.currency}
     />
   );
 }

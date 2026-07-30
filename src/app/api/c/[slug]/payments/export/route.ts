@@ -36,10 +36,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
     return r.rows;
   });
 
-  const tz = await inClinic(g.access, async (c) =>
-    (await c.query(`select timezone from clinics where id = $1`, [g.access.clinicId])).rows[0]
-      .timezone as string
-  );
+  const tz = g.access.clinic.timezone;
 
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [
