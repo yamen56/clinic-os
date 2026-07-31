@@ -121,9 +121,16 @@ export function AiClient({
         sub={t.ai.sub}
         action={
           <label className="flex items-center gap-2.5">
+            {/*
+              Turning the agent OFF is never blocked. It used to be disabled
+              outright whenever the key check failed, which meant an agent that
+              was already on could not be switched off — the one control someone
+              reaches for when it is misbehaving, unavailable exactly when they
+              need it. Only turning it on requires a working key.
+            */}
             <Toggle
               checked={a.enabled}
-              disabled={!hasApiKey}
+              disabled={!hasApiKey && !a.enabled}
               onChange={(v) => save({ enabled: v })}
               label={t.ai.enable}
             />

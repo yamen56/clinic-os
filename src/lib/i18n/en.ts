@@ -621,7 +621,8 @@ export const en = {
     tokens: "Tokens",
     last30: "Last 30 days",
     noUsage: "No activity yet",
-    noKey: "Add an ANTHROPIC_API_KEY to the server environment to turn the agent on.",
+    noKey:
+      "Add an ANTHROPIC_API_KEY to the server environment to turn the agent on. It has to be set on the worker service as well as this one — the agent runs there, and without it every message is handed to staff instead of answered.",
     testTitle: "Try it",
     testHint: "Send a message as if you were a patient. Nothing goes to WhatsApp.",
     testPlaceholder: "بدي أحجز موعد…",
