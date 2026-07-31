@@ -84,9 +84,14 @@ async function main() {
       elapsed >= 700,
       `${elapsed}ms`
     );
+    /*
+      Bounded. Measured in production: a pooler in trouble takes ~3s to refuse,
+      and three of those made a page spin for fifteen seconds before showing the
+      same error. A fast-refusing socket like this one still gets every attempt.
+    */
     check(
-      "and gives up rather than hanging the request",
-      elapsed < 8000,
+      "and stays inside the connect budget",
+      elapsed < 4000,
       `${elapsed}ms`
     );
   });

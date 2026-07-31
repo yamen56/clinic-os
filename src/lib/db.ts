@@ -54,6 +54,13 @@ function makePool(url: string, name: string): Pool {
     connectionString: url,
     ssl: sslFor(url),
     max: Number(process.env.PG_POOL_MAX || 12),
+    /*
+      A healthy connection to Supabase takes well under a second. Supavisor in
+      trouble, however, sits on the attempt for about three seconds before
+      refusing — measured in production — so without this bound the retry loop
+      alone took ten. Cap it: anything this slow is not going to succeed.
+    */
+    connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 4000),
     // A remote database makes a new connection expensive — TCP, TLS, then
     // auth before the first query. Hold idle ones long enough to span the
     // gaps between page views instead of paying that on every navigation.
@@ -147,6 +154,17 @@ function isTransientConnectionError(e: unknown): boolean {
 const CONNECT_ATTEMPTS = 3;
 
 /**
+ * Total time acquiring a connection may take before giving up.
+ *
+ * A budget rather than a count, because the two failures behave nothing alike.
+ * A closed socket refuses instantly, so a genuine blip still gets all three
+ * attempts inside this. A pooler in trouble takes ~3s to refuse, so it gets one
+ * — which is the right number, since three would mean fifteen seconds of a
+ * spinner before the same error.
+ */
+const CONNECT_BUDGET_MS = 3000;
+
+/**
  * Takes a client, riding out a brief outage rather than turning it into a 500.
  *
  * Only connecting is retried, never a query. Once a caller's work has begun,
@@ -169,7 +187,8 @@ const CONNECT_ATTEMPTS = 3;
  */
 const FALLBACK_STICKY_MS = 120_000;
 
-async function tryConnect(pool: Pool, attempts: number): Promise<PoolClient> {
+async function tryConnect(pool: Pool, attempts: number, budgetMs = CONNECT_BUDGET_MS): Promise<PoolClient> {
+  const deadline = Date.now() + budgetMs;
   let last: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
@@ -179,7 +198,9 @@ async function tryConnect(pool: Pool, attempts: number): Promise<PoolClient> {
       if (!isTransientConnectionError(e) || attempt === attempts) break;
       // 150ms, then 600ms — long enough for a pooler to come back, short enough
       // that a page still renders inside a normal request budget.
-      await new Promise((r) => setTimeout(r, 150 * 4 ** (attempt - 1)));
+      const backoff = 150 * 4 ** (attempt - 1);
+      if (Date.now() + backoff >= deadline) break;
+      await new Promise((r) => setTimeout(r, backoff));
       console.warn(`[pg] connect retry ${attempt + 1}/${attempts}: ${(e as Error).message}`);
     }
   }
