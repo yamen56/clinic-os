@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
+import { activeRoute, connectAsRequest } from "@/lib/db";
 
 /**
  * Whether the platform is actually working, for an uptime monitor to poll.
@@ -22,9 +22,11 @@ import { getPool } from "@/lib/db";
  * credential — and deliberately free of anything worth reading: no counts, no
  * names, no hostnames, no versions. Just whether it works, and how slowly.
  *
- * It does not go through `withCtx`: this is a liveness probe, so it wants the
- * unretried truth about right now rather than the resilience the app applies to
- * real traffic.
+ * It connects the same way a real request does — retries, and the direct-route
+ * fallback included — because the question this answers is "can the platform
+ * serve?", not "is one particular host up". A probe that only tried the pooler
+ * would page someone at 3am while the fallback was quietly serving every page.
+ * `route` says which way it got in.
  */
 
 export const dynamic = "force-dynamic";
@@ -51,7 +53,7 @@ export async function GET() {
   let workerOk: boolean | null = null;
   let workerIdleMs: number | null = null;
 
-  const client = await withTimeout(getPool().connect(), TIMEOUT_MS).catch((e: Error) => {
+  const client = await withTimeout(connectAsRequest(), TIMEOUT_MS).catch((e: Error) => {
     dbError = e.message.slice(0, 120);
     return null;
   });
@@ -98,6 +100,9 @@ export async function GET() {
     {
       ok,
       db: { ok: dbOk, ms: dbMs, ...(dbError ? { error: dbError } : {}) },
+      // "fallback" means the pooler is down and the direct route is carrying
+      // the app — working, but worth knowing about rather than discovering later.
+      route: activeRoute(),
       worker: { ok: workerOk, idleMs: workerIdleMs },
       ms: Date.now() - started,
     },

@@ -11,7 +11,7 @@
  * work is *never* retried, because repeating it could double an insert.
  */
 import type { Pool } from "pg";
-import { withCtx, withSystem, getPool } from "../src/lib/db";
+import { withCtx, withSystem, getPool, activeRoute } from "../src/lib/db";
 
 let passed = 0;
 const failures: string[] = [];
@@ -132,6 +132,56 @@ async function main() {
 
     await withSystem((c) => c.query(`drop table if exists _qa_retry_probe`));
   });
+
+  /* ------------------- 3b. the direct route carries the app when the pooler dies */
+  /*
+    The case this was built for: Supabase's pooler unreachable for hours while
+    Postgres itself is fine. A dead primary plus a live fallback must serve, not
+    fail — and must then stop paying the primary's retry on every request.
+  */
+  {
+    const prevPool = globalThis.__cosPool;
+    const prevFallback = globalThis.__cosFallbackPool;
+    const prevUrl = process.env.DATABASE_URL;
+    const prevFbUrl = process.env.DATABASE_FALLBACK_URL;
+    globalThis.__cosPool = undefined;
+    globalThis.__cosFallbackPool = undefined;
+    globalThis.__cosFallbackUntil = undefined;
+    process.env.DATABASE_URL = DEAD;
+    process.env.DATABASE_FALLBACK_URL = LIVE;
+
+    try {
+      const t0 = Date.now();
+      const n = await withSystem(async (c) => (await c.query("select 7 as n")).rows[0].n);
+      const firstMs = Date.now() - t0;
+      check("a dead pooler falls back to the direct route", Number(n) === 7, `${firstMs}ms`);
+      check("and the health route reports it", activeRoute() === "fallback", activeRoute());
+
+      // Second call must skip the dead primary entirely.
+      const t1 = Date.now();
+      await withSystem(async (c) => c.query("select 1"));
+      const secondMs = Date.now() - t1;
+      check(
+        "later requests skip the dead primary rather than re-paying its retry",
+        secondMs < firstMs && secondMs < 400,
+        `${secondMs}ms vs ${firstMs}ms`
+      );
+    } finally {
+      try {
+        await (globalThis.__cosPool as Pool | undefined)?.end();
+      } catch {}
+      try {
+        await (globalThis.__cosFallbackPool as Pool | undefined)?.end();
+      } catch {}
+      globalThis.__cosPool = prevPool;
+      globalThis.__cosFallbackPool = prevFallback;
+      globalThis.__cosFallbackUntil = undefined;
+      if (prevUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = prevUrl;
+      if (prevFbUrl === undefined) delete process.env.DATABASE_FALLBACK_URL;
+      else process.env.DATABASE_FALLBACK_URL = prevFbUrl;
+    }
+  }
 
   /* ------------------------------------ 4. the health probe tells the truth */
   const { GET } = await import("../src/app/api/health/route");
