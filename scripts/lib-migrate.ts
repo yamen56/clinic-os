@@ -14,7 +14,7 @@ const REMOTE = process.env.DATABASE_SUPER_URL;
 
 /** Kept in step with `sslFor` in src/lib/db.ts — see the reasoning there. */
 const sslFor = (url: string) =>
-  /@(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.railway\.internal|[a-z0-9-]+\.internal)[:/]/i.test(url)
+  process.env.PGSSL === "disable" || /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(url)
     ? undefined
     : { rejectUnauthorized: false };
 

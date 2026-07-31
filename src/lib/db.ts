@@ -46,19 +46,23 @@ function isUnroutable(e: unknown): boolean {
  */
 export function sslFor(url: string) {
   /*
-    Two kinds of connection need no TLS, and asking for it breaks both: node-pg
-    negotiates SSL whenever this returns an object, and a server that does not
-    offer it refuses outright rather than falling back.
+    node-pg negotiates SSL whenever this returns an object, and a server that
+    does not offer it refuses the connection rather than falling back — so this
+    decision has to be right in both directions.
 
-    The local embedded server is one. The other is a database on a provider's
-    private network — Railway's `*.railway.internal`, Render's `*.internal` —
-    where the traffic never leaves the provider's own network and no TLS is
-    presented. Everything reachable over the public internet still gets it.
+    Everything remote gets TLS, including a database on the provider's private
+    network. I briefly excluded `*.railway.internal` on the assumption that a
+    private-network Postgres presents none; measuring it disproved that —
+    Railway's image is `postgres-ssl` and accepts TLS on both its private domain
+    and its public proxy. Encrypting a link that costs nothing to encrypt is
+    plainly better than reasoning about who else is on the network.
+
+    PGSSL=disable is the escape hatch for a host that genuinely cannot, so that
+    situation is a variable change rather than a deploy.
   */
-  const noTls = /@(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.railway\.internal|[a-z0-9-]+\.internal)[:/]/i.test(
-    url
-  );
-  return noTls ? undefined : { rejectUnauthorized: false };
+  if (process.env.PGSSL === "disable") return undefined;
+  const local = /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(url);
+  return local ? undefined : { rejectUnauthorized: false };
 }
 
 function primaryUrl(): string {

@@ -68,8 +68,9 @@ async function main() {
   for (const [url, wantTls, why] of [
     ["postgres://u:p@localhost:5432/db", false, "local"],
     ["postgres://u:p@127.0.0.1:5544/clinicos", false, "local ip"],
-    ["postgres://u:p@postgres.railway.internal:5432/railway", false, "railway private network"],
-    ["postgres://u:p@db.internal:5432/x", false, "provider private network"],
+    // Measured: Railway's postgres-ssl image accepts TLS on its private domain
+    // as well as its public proxy, so the private network gets it too.
+    ["postgres://u:p@postgres.railway.internal:5432/railway", true, "railway private network"],
     ["postgres://u:p@aws-0-eu-central-1.pooler.supabase.com:5432/postgres", true, "supabase"],
     ["postgres://u:p@db.abc.supabase.co:5432/postgres", true, "supabase direct"],
     ["postgres://u:p@some-host.example.com:5432/db", true, "public host"],

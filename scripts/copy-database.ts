@@ -59,9 +59,8 @@ function parseArgs(): Args {
 
 function connect(url: string): Client {
   /** Kept in step with `sslFor` in src/lib/db.ts — see the reasoning there. */
-  const noTls = /@(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.railway\.internal|[a-z0-9-]+\.internal)[:/]/i.test(
-    url
-  );
+  const noTls =
+    process.env.PGSSL === "disable" || /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(url);
   return new Client({
     connectionString: url,
     ssl: noTls ? undefined : { rejectUnauthorized: false },
