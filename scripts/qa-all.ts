@@ -26,6 +26,7 @@ const SUITES = [
   ["documents: tabs, signed copies, imports", "scripts/qa-documents.ts"],
   ["payments: part-paid invoices", "scripts/qa-payments.ts"],
   ["photos: staff pictures & who may set them", "scripts/qa-photos.ts"],
+  ["pdf: browser released when idle", "scripts/qa-pdf-idle.ts"],
   ["access: what each member can reach", "scripts/qa-access.ts"],
 ] as const;
 

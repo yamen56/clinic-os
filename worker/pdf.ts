@@ -8,7 +8,27 @@ import { chromium, type Browser } from "playwright";
 declare global {
   // eslint-disable-next-line no-var
   var __cosBrowser: Promise<Browser> | undefined;
+  // eslint-disable-next-line no-var
+  var __cosBrowserIdleTimer: NodeJS.Timeout | undefined;
 }
+
+/**
+ * How long an unused Chromium is kept warm before being shut down.
+ *
+ * It used to be kept forever. Launching is slow — a second or two — so holding
+ * one open made every render after the first feel instant, and on a machine you
+ * already own that is simply free.
+ *
+ * On metered hosting it is not free: the browser is several hundred megabytes
+ * resident, billed by the second, and a clinic renders a handful of PDFs a day.
+ * That is paying around the clock for something used for a few minutes.
+ *
+ * Five minutes keeps a burst fast — sending a document, then its invoice,
+ * reuses the same browser — while a quiet afternoon costs nothing. The price is
+ * a one-off second on the first render after a lull, which nobody waiting on a
+ * PDF will notice.
+ */
+const IDLE_SHUTDOWN_MS = Number(process.env.PDF_BROWSER_IDLE_MS || 5 * 60_000);
 
 function launch(): Promise<Browser> {
   return chromium.launch({ args: ["--font-render-hinting=none"] }).catch((e: Error) => {
@@ -21,7 +41,30 @@ function launch(): Promise<Browser> {
   });
 }
 
+/** Restarts the idle countdown. Called after every render finishes. */
+function touchBrowser(): void {
+  if (globalThis.__cosBrowserIdleTimer) clearTimeout(globalThis.__cosBrowserIdleTimer);
+  if (IDLE_SHUTDOWN_MS <= 0) return;
+  const timer = setTimeout(() => {
+    const pending = globalThis.__cosBrowser;
+    globalThis.__cosBrowser = undefined;
+    globalThis.__cosBrowserIdleTimer = undefined;
+    void pending
+      ?.then((b) => (b.isConnected() ? b.close() : undefined))
+      .then(() => console.log("[pdf] chromium closed after idle"))
+      .catch(() => {});
+  }, IDLE_SHUTDOWN_MS);
+  // Must not keep the worker alive on its own account.
+  timer.unref?.();
+  globalThis.__cosBrowserIdleTimer = timer;
+}
+
 async function getBrowser(): Promise<Browser> {
+  // Any in-flight render cancels the shutdown; re-armed when it completes.
+  if (globalThis.__cosBrowserIdleTimer) {
+    clearTimeout(globalThis.__cosBrowserIdleTimer);
+    globalThis.__cosBrowserIdleTimer = undefined;
+  }
   if (!globalThis.__cosBrowser) {
     globalThis.__cosBrowser = launch();
   }
@@ -46,6 +89,7 @@ export async function renderUrlToPdf(url: string): Promise<Buffer> {
     return Buffer.from(pdf);
   } finally {
     await page.close();
+    touchBrowser();
   }
 }
 
@@ -75,5 +119,6 @@ export async function renderPageOverlays(url: string): Promise<string[]> {
     return shots;
   } finally {
     await page.close();
+    touchBrowser();
   }
 }
