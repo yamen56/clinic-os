@@ -47,13 +47,36 @@ export default async function AiAgentPage({
         [access.clinicId]
       )
     ).rows[0]?.ok ?? false;
-    return { agent, knowledge, usage, waConnected };
+    /*
+      Whether the agent can run is a fact about the *worker*, which is where it
+      runs — not about this process, which has no reason to hold an Anthropic
+      key. Asking our own environment is what told clinics the agent was
+      unconfigured while it was answering their patients.
+
+      A worker silent for over five minutes is treated as not ready: its row
+      says what it could do when it last spoke, which is not the same as what it
+      can do now.
+    */
+    const worker = (
+      await c.query(
+        `select ai_ready, updated_at > now() - interval '5 minutes' as alive
+           from worker_status where id = true`
+      )
+    ).rows[0] as { ai_ready: boolean; alive: boolean } | undefined;
+    return { agent, knowledge, usage, waConnected, worker };
   });
 
   return (
     <AiClient
       slug={slug}
-      hasApiKey={!!process.env.ANTHROPIC_API_KEY}
+      hasApiKey={
+        data.worker
+          ? data.worker.ai_ready && data.worker.alive
+          : // No worker has ever reported in — a fresh database, or local dev
+            // where the worker may not be running. Fall back to this process's
+            // own key so development is not blocked by a missing heartbeat.
+            !!process.env.ANTHROPIC_API_KEY
+      }
       waConnected={data.waConnected}
       initialTab={
         sp.tab === "knowledge" || sp.tab === "usage" ? sp.tab : "setup"

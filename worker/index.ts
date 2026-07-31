@@ -14,6 +14,7 @@ import { startScheduler } from "./scheduler";
 import { startNotificationLoop } from "./notifications";
 import { startCampaignLoop } from "./campaigns";
 import { registerEsignJobs } from "./esign";
+import { startStatusHeartbeat } from "./status";
 
 async function resumeDesiredSessions() {
   const rows = await withSystem(async (c) => {
@@ -40,6 +41,8 @@ async function main() {
   startJobLoop();
   startScheduler();
   startNotificationLoop();
+  // Last, so it advertises a worker that has finished starting up.
+  startStatusHeartbeat();
   console.log("[worker] ready");
 }
 
