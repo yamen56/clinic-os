@@ -35,6 +35,9 @@ async function withPool(url: string, fn: () => Promise<void>) {
   const previous = globalThis.__cosPool;
   const prevUrl = process.env.DATABASE_URL;
   globalThis.__cosPool = undefined;
+  // Each block gets a clean breaker, or one block's failures suppress the next
+  // block's connect attempts and the timings stop meaning anything.
+  globalThis.__cosPrimaryDownUntil = undefined;
   process.env.DATABASE_URL = url;
   try {
     await fn();
@@ -45,6 +48,7 @@ async function withPool(url: string, fn: () => Promise<void>) {
       await (globalThis.__cosPool as Pool | undefined)?.end();
     } catch {}
     globalThis.__cosPool = previous;
+    globalThis.__cosPrimaryDownUntil = undefined;
     if (prevUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = prevUrl;
   }
@@ -187,6 +191,75 @@ async function main() {
       else process.env.DATABASE_FALLBACK_URL = prevFbUrl;
     }
   }
+
+  /* ------------- 1b. a page of several queries pays the outage cost once */
+  await withPool(DEAD, async () => {
+    const t0 = Date.now();
+    await withSystem(async (c) => c.query("select 1")).catch(() => null);
+    const first = Date.now() - t0;
+
+    // What a real page does: several separate acquisitions in a row.
+    const t1 = Date.now();
+    for (let i = 0; i < 3; i++) {
+      await withSystem(async (c) => c.query("select 1")).catch(() => null);
+    }
+    const nextThree = Date.now() - t1;
+
+    check(
+      "the next three queries do not each re-test a database known to be down",
+      nextThree < first,
+      `${nextThree}ms for three, vs ${first}ms for the first`
+    );
+    check("they fail almost immediately", nextThree < 300, `${nextThree}ms`);
+  });
+
+  /* ---------- 1c. a busy pool is not an outage, and must not become one */
+  /*
+    The trap this guards: pg rejects with "timeout exceeded when trying to
+    connect" when every pooled connection is in use. That says nothing about the
+    database. If it opened the breaker, a burst of traffic would fail every
+    query for two seconds — manufacturing an outage at exactly the busiest
+    moment.
+  */
+  await withPool(LIVE, async () => {
+    const prevMax = process.env.PG_POOL_MAX;
+    const prevTimeout = process.env.PG_CONNECT_TIMEOUT_MS;
+    process.env.PG_POOL_MAX = "1";
+    process.env.PG_CONNECT_TIMEOUT_MS = "300";
+    globalThis.__cosPool = undefined;
+    globalThis.__cosPrimaryDownUntil = undefined;
+
+    try {
+      // Hold the single connection, then ask for another: guaranteed timeout.
+      const held = await getPool().connect();
+      let exhausted: Error | null = null;
+      await getPool()
+        .connect()
+        .catch((e) => {
+          exhausted = e as Error;
+        });
+      held.release();
+
+      check(
+        "a saturated pool times out",
+        !!exhausted && /timeout exceeded/i.test((exhausted as unknown as Error).message),
+        (exhausted as unknown as Error | null)?.message?.slice(0, 45)
+      );
+      check(
+        "but is never mistaken for the database being down",
+        globalThis.__cosPrimaryDownUntil === undefined
+      );
+
+      // And the pool still works immediately afterwards.
+      const n = await withSystem(async (c) => (await c.query("select 5 as n")).rows[0].n);
+      check("so the next query succeeds normally", Number(n) === 5);
+    } finally {
+      if (prevMax === undefined) delete process.env.PG_POOL_MAX;
+      else process.env.PG_POOL_MAX = prevMax;
+      if (prevTimeout === undefined) delete process.env.PG_CONNECT_TIMEOUT_MS;
+      else process.env.PG_CONNECT_TIMEOUT_MS = prevTimeout;
+    }
+  });
 
   /* --------------- 3c. an unroutable fallback is abandoned, not paid for */
   /*

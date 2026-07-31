@@ -11,6 +11,12 @@ declare global {
   /** Set once the fallback proves unroutable from this host; see below. */
   // eslint-disable-next-line no-var
   var __cosFallbackUnusable: boolean | undefined;
+  /** Short-lived circuit breaker on the primary; see connectWithRetry. */
+  // eslint-disable-next-line no-var
+  var __cosPrimaryDownUntil: number | undefined;
+  /** Replayed while the breaker is open, so callers see the real reason. */
+  // eslint-disable-next-line no-var
+  var __cosPrimaryLastError: Error | undefined;
 }
 
 /**
@@ -139,15 +145,35 @@ export type DbCtx = {
  * produces: EAUTHQUERY when its credential lookup times out, ECIRCUITBREAKER
  * once it has given up and is refusing new connections for a few seconds.
  */
-function isTransientConnectionError(e: unknown): boolean {
+function isHostUnreachable(e: unknown): boolean {
   const err = e as { code?: string; message?: string };
   const code = String(err?.code ?? "");
   const msg = String(err?.message ?? "");
   return (
     /^(ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPIPE|EAI_AGAIN|ENOTFOUND|EHOSTUNREACH|ENETUNREACH)$/.test(code) ||
-    /EAUTHQUERY|ECIRCUITBREAKER|econnrefused|Connection terminated|timeout exceeded when trying to connect|server closed the connection|Client has encountered a connection error|terminating connection due to administrator command|the database system is (starting up|shutting down|in recovery)/i.test(
+    /EAUTHQUERY|ECIRCUITBREAKER|econnrefused|Connection terminated|server closed the connection|Client has encountered a connection error|terminating connection due to administrator command|the database system is (starting up|shutting down|in recovery)/i.test(
       msg
     )
+  );
+}
+
+/**
+ * Every failure worth trying again — the unreachable ones above, plus a
+ * saturated pool.
+ *
+ * The two must stay separate, and the reason is not academic. A busy pool
+ * rejects with "timeout exceeded when trying to connect", which says nothing
+ * about the database: it is here, it is fine, and every one of our own
+ * connections is simply in use. Treating that as an outage would open the
+ * breaker below and fail *every* query for two seconds — turning a moment of
+ * load into exactly the outage it was meant to protect against, and doing it
+ * precisely when the app is busiest. Retry it, yes. Conclude the database is
+ * gone, never.
+ */
+function isTransientConnectionError(e: unknown): boolean {
+  return (
+    isHostUnreachable(e) ||
+    /timeout exceeded when trying to connect/i.test(String((e as { message?: string })?.message ?? ""))
   );
 }
 
@@ -163,6 +189,20 @@ const CONNECT_ATTEMPTS = 3;
  * spinner before the same error.
  */
 const CONNECT_BUDGET_MS = 3000;
+
+/**
+ * How long a failed primary is assumed still failed.
+ *
+ * One page is many queries, and each acquires its own connection. Without this,
+ * a page making three of them paid the full connect budget three times — ten
+ * seconds of spinner before an error that was already certain after the first
+ * three. One failure now answers for all of them.
+ *
+ * Two seconds, because the cost of being wrong is small in both directions: a
+ * request that could have succeeded is delayed by at most this, and recovery is
+ * noticed within it.
+ */
+const PRIMARY_DOWN_MS = 2000;
 
 /**
  * Takes a client, riding out a brief outage rather than turning it into a 500.
@@ -234,13 +274,30 @@ async function connectWithRetry(): Promise<PoolClient> {
     }
   }
 
+  /*
+    Skip the primary entirely if it failed moments ago. Re-testing it once per
+    query on a page that issues several is how a certain failure turned into ten
+    seconds of waiting for it.
+  */
+  const breakerOpen =
+    !!globalThis.__cosPrimaryDownUntil && Date.now() < globalThis.__cosPrimaryDownUntil;
+
   try {
+    if (breakerOpen) throw globalThis.__cosPrimaryLastError ?? new Error("ECONNREFUSED");
     const c = await tryConnect(getPool(), CONNECT_ATTEMPTS);
-    // Primary is healthy again — stop preferring the fallback.
+    // Primary is healthy again — stop preferring the fallback, close the breaker.
     globalThis.__cosFallbackUntil = undefined;
+    globalThis.__cosPrimaryDownUntil = undefined;
     return c;
   } catch (e) {
-    if (!fallback || !isTransientConnectionError(e)) throw e;
+    // Only an unreachable host opens the breaker or reaches for the fallback.
+    // A saturated pool is neither — see isTransientConnectionError.
+    if (!isHostUnreachable(e)) throw e;
+    if (!breakerOpen) {
+      globalThis.__cosPrimaryDownUntil = Date.now() + PRIMARY_DOWN_MS;
+      globalThis.__cosPrimaryLastError = e as Error;
+    }
+    if (!fallback) throw e;
     // One attempt, no retry: a route that exists answers immediately, and one
     // that does not will not start existing 150ms later.
     let client: PoolClient | null = null;
