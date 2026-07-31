@@ -45,6 +45,63 @@ export type DbCtx = {
 };
 
 /**
+ * Failures that mean "the database was not reachable just now", as opposed to
+ * "the database answered and said no".
+ *
+ * The distinction is the whole point: a constraint violation, a permission
+ * error, a syntax error are all answers, and retrying them just wastes time and
+ * repeats side effects. These are the ones where nothing ran at all — the
+ * pooler was mid-restart, DNS blinked, TLS was reset — and where trying again a
+ * second later genuinely works.
+ *
+ * The Supavisor codes are here because they are what a Supabase blip actually
+ * produces: EAUTHQUERY when its credential lookup times out, ECIRCUITBREAKER
+ * once it has given up and is refusing new connections for a few seconds.
+ */
+function isTransientConnectionError(e: unknown): boolean {
+  const err = e as { code?: string; message?: string };
+  const code = String(err?.code ?? "");
+  const msg = String(err?.message ?? "");
+  return (
+    /^(ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPIPE|EAI_AGAIN|ENOTFOUND|EHOSTUNREACH|ENETUNREACH)$/.test(code) ||
+    /EAUTHQUERY|ECIRCUITBREAKER|econnrefused|Connection terminated|timeout exceeded when trying to connect|server closed the connection|Client has encountered a connection error|terminating connection due to administrator command|the database system is (starting up|shutting down|in recovery)/i.test(
+      msg
+    )
+  );
+}
+
+const CONNECT_ATTEMPTS = 3;
+
+/**
+ * Takes a client, riding out a brief outage rather than turning it into a 500.
+ *
+ * Only connecting is retried, never a query. Once a caller's work has begun,
+ * repeating it could double an insert or re-send a message, so a failure from
+ * that point on is passed straight up. Acquiring a connection has no such
+ * hazard: if it throws, by definition nothing ran.
+ *
+ * Three attempts over roughly a second and a half. That is sized for a pooler
+ * restart or a dropped socket — not for a real outage, which should still fail
+ * quickly and visibly instead of leaving pages hanging for a minute.
+ */
+async function connectWithRetry(): Promise<PoolClient> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= CONNECT_ATTEMPTS; attempt++) {
+    try {
+      return await getPool().connect();
+    } catch (e) {
+      last = e;
+      if (!isTransientConnectionError(e) || attempt === CONNECT_ATTEMPTS) break;
+      // 150ms, then 600ms — long enough for a pooler to come back, short enough
+      // that a page still renders inside a normal request budget.
+      await new Promise((r) => setTimeout(r, 150 * 4 ** (attempt - 1)));
+      console.warn(`[pg] connect retry ${attempt + 1}/${CONNECT_ATTEMPTS}: ${(e as Error).message}`);
+    }
+  }
+  throw last;
+}
+
+/**
  * Inlines a value into SQL text. Only safe because every caller passes an
  * identifier the app itself produced — a uuid, a role name, a hex digest. The
  * character whitelist is the guarantee: anything else throws rather than
@@ -76,7 +133,7 @@ function beginWithCtx(ctx: DbCtx): string {
  * All tenant-scoped access must go through this.
  */
 export async function withCtx<T>(ctx: DbCtx, fn: (c: PoolClient) => Promise<T>): Promise<T> {
-  const client = await getPool().connect();
+  const client = await connectWithRetry();
   try {
     await client.query(beginWithCtx(ctx));
     const result = await fn(client);
@@ -105,7 +162,7 @@ export async function readOneShot<T = Record<string, unknown>>(
   ctx: DbCtx,
   sql: string
 ): Promise<T[]> {
-  const client = await getPool().connect();
+  const client = await connectWithRetry();
   try {
     const results = await client.query(`${beginWithCtx(ctx)}; ${sql}; commit`);
     // Statement order is begin, set_config, the caller's query, commit.

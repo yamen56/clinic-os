@@ -38,6 +38,11 @@ export const en = {
     required: "This field is required",
     invalidPhone: "This phone number doesn't look right. Use a format like 0790744070.",
     genericError: "Something went wrong. Try again, and contact support if it keeps happening.",
+    appErrorTitle: "We can't reach the system",
+    appErrorBody:
+      "This is usually brief and clears on its own. Try again, and if it keeps happening let support know.",
+    appErrorRetry: "Try again",
+    appErrorRef: "Reference",
     confirmDeleteTitle: "Delete permanently?",
     confirmDeleteBody: "This can't be undone.",
     noResults: "Nothing matches your search",

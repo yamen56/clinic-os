@@ -8,6 +8,7 @@ const SUITES = [
   ["unit: phone normalization", "scripts/test-phone.ts"],
   ["unit: RLS tenant isolation", "scripts/test-rls.ts"],
   ["unit: Arabic-insensitive search", "scripts/test-search.ts"],
+  ["unit: surviving a database blip", "scripts/qa-db-resilience.ts"],
   ["phase 1: foundation, auth, tenancy", "scripts/qa-phase1.ts"],
   ["phase 2: patients", "scripts/qa-phase2.ts"],
   ["phase 3: calendar", "scripts/qa-phase3.ts"],
