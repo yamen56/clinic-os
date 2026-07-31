@@ -26,6 +26,7 @@ import {
 } from "../actions";
 import { sendAllPendingAction } from "../../documents/actions";
 import { DOC_STATUS_BADGE } from "@/components/esign/status";
+import { DownloadSignedPdf } from "@/components/esign/download-signed";
 import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-document-modal";
 import type { DocumentListRow } from "@/lib/esign/queries";
 import {
@@ -35,7 +36,6 @@ import {
   ReceiptText,
   FileSignature,
   Send,
-  Download,
   X,
   Plus,
   Upload,
@@ -506,32 +506,65 @@ export function PatientProfile(props: {
               </div>
             ) : (
               <ul className="divide-y divide-line">
-                {props.invoices.map((inv) => (
-                  <li key={inv.id}>
-                    <Link
-                      href={`/c/${slug}/invoices/${inv.id}`}
-                      className="flex items-center gap-4 px-5 py-3 hover:bg-sunken"
-                    >
-                      <span className="flex-1 text-sm font-medium" dir="ltr">
-                        {inv.number}
-                      </span>
-                      <span className="text-sm tnum">{fmtMoney(Number(inv.total), currency, locale)}</span>
-                      <Badge
-                        status={
-                          inv.status === "paid"
-                            ? "confirmed"
-                            : inv.status === "void"
-                              ? "cancelled"
-                              : inv.status === "draft"
-                                ? "neutral"
-                                : "pending"
-                        }
+                {props.invoices.map((inv) => {
+                  const partial = inv.status === "partially_paid";
+                  const left = Number(inv.total) - Number(inv.amount_paid);
+                  return (
+                    <li key={inv.id}>
+                      <Link
+                        href={`/c/${slug}/invoices/${inv.id}`}
+                        className="flex items-center gap-4 px-5 py-3 hover:bg-sunken"
                       >
-                        {(t.invoices.statuses as Record<string, string>)[inv.status] ?? inv.status}
-                      </Badge>
-                    </Link>
-                  </li>
-                ))}
+                        <span className="flex-1 text-sm font-medium" dir="ltr">
+                          {inv.number}
+                        </span>
+                        {/* On a partly paid invoice the total alone is the least
+                            useful number — what was paid and what is left are
+                            what anyone opening this file wants. */}
+                        <span className="text-end">
+                          <span className="block text-sm tnum">
+                            {fmtMoney(
+                              partial ? Number(inv.amount_paid) : Number(inv.total),
+                              currency,
+                              locale
+                            )}
+                          </span>
+                          {partial && (
+                            <span className="block text-[12px] text-ink-400 tnum">
+                              {t.invoices.ofTotal.replace(
+                                "{total}",
+                                fmtMoney(Number(inv.total), currency, locale)
+                              )}
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-end">
+                          <Badge
+                            status={
+                              inv.status === "paid"
+                                ? "confirmed"
+                                : inv.status === "void"
+                                  ? "cancelled"
+                                  : inv.status === "draft"
+                                    ? "neutral"
+                                    : "pending"
+                            }
+                          >
+                            {(t.invoices.statuses as Record<string, string>)[inv.status] ?? inv.status}
+                          </Badge>
+                          {partial && (
+                            <span className="mt-0.5 block text-[12px] font-medium text-st-pending tnum">
+                              {t.invoices.leftToPay.replace(
+                                "{amount}",
+                                fmtMoney(left, currency, locale)
+                              )}
+                            </span>
+                          )}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Card>
@@ -1023,17 +1056,15 @@ function DocumentsTab({
                     <span>{fmtDate(d.created_at, tz, locale)}</span>
                   </div>
                 </Link>
-                {d.final_pdf_path && (
-                  <a
-                    href={`/api/c/${slug}/documents/${d.id}/pdf`}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={t.docs.downloadPdf}
-                  >
-                    <Button variant="ghost" size="icon">
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </a>
+                {(d.status === "completed" || d.final_pdf_path) && (
+                  <DownloadSignedPdf
+                    slug={slug}
+                    documentId={d.id}
+                    title={d.title}
+                    variant="ghost"
+                    size="icon"
+                    iconOnly
+                  />
                 )}
               </li>
             ))}

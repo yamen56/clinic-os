@@ -12,9 +12,10 @@ import { SearchInput } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState, Tabs, Avatar } from "@/components/ui/misc";
 import { DOC_STATUS_BADGE } from "@/components/esign/status";
+import { DownloadSignedPdf } from "@/components/esign/download-signed";
 import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-document-modal";
 import type { DocumentListRow } from "@/lib/esign/queries";
-import { FileSignature, Plus, Download, Clock, Users } from "lucide-react";
+import { FileSignature, Plus, Clock, Users } from "lucide-react";
 
 /** The statuses that still need somebody to do something. */
 const PENDING = ["draft", "sent", "partially_signed"];
@@ -170,17 +171,15 @@ export function DocumentsListClient({
                     </div>
                   </div>
                 </Link>
-                {r.final_pdf_path && (
-                  <a
-                    href={`/api/c/${slug}/documents/${r.id}/pdf`}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={t.docs.downloadPdf}
-                  >
-                    <Button variant="ghost" size="icon">
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </a>
+                {(r.status === "completed" || r.final_pdf_path) && (
+                  <DownloadSignedPdf
+                    slug={slug}
+                    documentId={r.id}
+                    title={r.title}
+                    variant="ghost"
+                    size="icon"
+                    iconOnly
+                  />
                 )}
               </li>
             ))}

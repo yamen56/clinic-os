@@ -23,6 +23,7 @@ const SUITES = [
   ["signing: integrity, tokens, orchestration", "scripts/qa-esign.ts"],
   ["signing: both journeys in the browser", "scripts/qa-esign-browser.ts"],
   ["documents: tabs, signed copies, imports", "scripts/qa-documents.ts"],
+  ["payments: part-paid invoices", "scripts/qa-payments.ts"],
   ["access: what each member can reach", "scripts/qa-access.ts"],
 ] as const;
 

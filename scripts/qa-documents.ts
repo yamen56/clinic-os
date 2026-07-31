@@ -288,6 +288,54 @@ async function main() {
     `${pdfRes.status()}, ${pdfBody.length} bytes`
   );
 
+  /* ------------------------ 2b. a completed document with nothing stored yet */
+  /*
+    The case staff actually hit: the last signature landed a moment ago, or the
+    worker was down, so `final_pdf_path` is still null. The button used to be
+    hidden on exactly those documents — which reads as the feature missing
+    rather than the render being a few seconds behind.
+  */
+  const freshDoc = await mkDoc("Consent — just completed", "completed");
+  await page.goto(`${BASE}/c/${slug}/documents/${freshDoc}`);
+  await page.waitForLoadState("networkidle");
+  check(
+    "a completed document offers the download before its file exists",
+    (await page.getByRole("button", { name: /Download signed PDF/i }).count()) > 0
+  );
+
+  const beforePath = (
+    await db.query(`select final_pdf_path from documents where id = $1`, [freshDoc])
+  ).rows[0];
+  check("and nothing is stored for it yet", beforePath.final_pdf_path === null);
+
+  const built = await page.request.get(`${BASE}/api/c/${slug}/documents/${freshDoc}/pdf`);
+  const builtBody = await built.body();
+  check(
+    "pressing it builds the signed PDF on demand",
+    built.ok() && builtBody.subarray(0, 5).toString("latin1") === "%PDF-",
+    `${built.status()}, ${builtBody.length} bytes`
+  );
+
+  const afterPath = (
+    await db.query(`select final_pdf_path, final_pdf_source from documents where id = $1`, [freshDoc])
+  ).rows[0];
+  check("and keeps it, so the next download is instant", !!afterPath.final_pdf_path);
+  check(
+    "the generated one is not labelled as an upload",
+    afterPath.final_pdf_source === "generated",
+    afterPath.final_pdf_source
+  );
+
+  // A document nobody has finished has nothing to hand over, and says so
+  // rather than producing a half-signed file.
+  const draftDoc = await mkDoc("Consent — draft", "draft");
+  const notReady = await page.request.get(`${BASE}/api/c/${slug}/documents/${draftDoc}/pdf`);
+  check(
+    "an unfinished document refuses instead of inventing one",
+    notReady.status() === 409,
+    String(notReady.status())
+  );
+
   /* --------------------------------------------------- 3. importing a file */
   const docxRes = await page.request.post(`${BASE}/api/c/${slug}/documents/import`, {
     multipart: {

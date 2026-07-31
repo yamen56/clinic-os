@@ -47,7 +47,8 @@ export default async function InvoicesPage({
            (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $2 and paid_at < $3) as today,
            (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $4 and paid_at < $5) as week,
            (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $6 and paid_at < $7) as month,
-           (select coalesce(sum(total - amount_paid), 0) from invoices where clinic_id = $1 and status in ('sent', 'partially_paid')) as outstanding`,
+           (select coalesce(sum(total - amount_paid), 0) from invoices where clinic_id = $1 and status in ('sent', 'partially_paid')) as outstanding,
+           (select count(*) from invoices where clinic_id = $1 and status = 'partially_paid')::int as partial_count`,
         [access.clinicId, today.start, today.end, week.start, week.end, month.start, month.end]
       )
     ).rows;
@@ -56,7 +57,14 @@ export default async function InvoicesPage({
     let payments: Record<string, unknown>[] = [];
     if (tab === "invoices") {
       const conds = ["i.clinic_id = $1"];
+      /*
+        Partly paid is its own filter, not a shade of unpaid. "Owes something"
+        and "has started paying" are different conversations to have with a
+        patient, and lumping them together was why the second one was invisible.
+      */
       if (sp.status === "unpaid") conds.push(`i.status in ('sent', 'partially_paid')`);
+      else if (sp.status === "partial") conds.push(`i.status = 'partially_paid'`);
+      else if (sp.status === "paid") conds.push(`i.status = 'paid'`);
       invoices = (
         await c.query(
           `select i.id, i.number, i.status, i.total, i.amount_paid, i.created_at, i.sent_at,
@@ -71,7 +79,8 @@ export default async function InvoicesPage({
       payments = (
         await c.query(
           `select pay.id, pay.amount, pay.method, pay.reference, pay.paid_at,
-                  i.number, i.id as invoice_id, p.full_name as patient_name, u.full_name as recorded_by
+                  i.number, i.id as invoice_id, i.total, i.amount_paid, i.status as invoice_status,
+                  p.full_name as patient_name, u.full_name as recorded_by
            from payments pay
            join invoices i on i.id = pay.invoice_id
            join patients p on p.id = pay.patient_id
@@ -142,14 +151,30 @@ export default async function InvoicesPage({
           </Link>
         ))}
         {tab === "invoices" && (
-          <Link
-            href={sp.status === "unpaid" ? base : `${base}?status=unpaid`}
-            className={`ms-auto self-center rounded-full px-3 py-1 text-[12px] font-medium ${
-              sp.status === "unpaid" ? "bg-st-pending-soft text-st-pending" : "bg-ink-900/4 text-ink-500"
-            }`}
-          >
-            {t.invoices.unpaidFilter}
-          </Link>
+          <div className="ms-auto flex flex-wrap items-center gap-1 self-center">
+            {(
+              [
+                ["", t.invoices.allFilter, 0],
+                ["unpaid", t.invoices.unpaidFilter, 0],
+                ["partial", t.invoices.partlyPaidFilter, Number(data.stats.partial_count)],
+                ["paid", t.invoices.paidFilter, 0],
+              ] as [string, string, number][]
+            ).map(([key, label, count]) => {
+              const on = (sp.status ?? "") === key;
+              return (
+                <Link
+                  key={key || "all"}
+                  href={key ? `${base}?status=${key}` : base}
+                  className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-140 ease-out ${
+                    on ? "bg-st-pending-soft text-st-pending" : "bg-ink-900/4 text-ink-500 hover:text-ink-700"
+                  }`}
+                >
+                  {label}
+                  {count > 0 && <span className="ms-1.5 tnum">{count}</span>}
+                </Link>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -168,32 +193,70 @@ export default async function InvoicesPage({
         ) : (
           <Card>
             <ul className="divide-y divide-line">
-              {data.invoices.map((inv) => (
-                <li key={String(inv.id)}>
-                  <Link href={`${base}/${inv.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-sunken">
-                    <span className="w-36 shrink-0 text-sm font-semibold tnum" dir="ltr">
-                      {String(inv.number)}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm">{String(inv.patient_name)}</span>
-                    <span className="hidden text-[13px] text-ink-400 sm:block">
-                      {fmtDate(String(inv.created_at), tz, locale)}
-                    </span>
-                    <span className="w-28 text-end text-sm font-semibold tnum">
-                      {fmtMoney(Number(inv.total), access.clinic.currency, locale)}
-                    </span>
-                    <Badge status={invStatus[String(inv.status)] ?? "neutral"}>
-                      {(t.invoices.statuses as Record<string, string>)[String(inv.status)]}
-                    </Badge>
-                  </Link>
-                </li>
-              ))}
+              {data.invoices.map((inv) => {
+                const total = Number(inv.total);
+                const paid = Number(inv.amount_paid);
+                const left = total - paid;
+                const partial = String(inv.status) === "partially_paid";
+                return (
+                  <li key={String(inv.id)}>
+                    <Link href={`${base}/${inv.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-sunken">
+                      <span className="w-36 shrink-0 text-sm font-semibold tnum" dir="ltr">
+                        {String(inv.number)}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm">{String(inv.patient_name)}</span>
+                      <span className="hidden text-[13px] text-ink-400 sm:block">
+                        {fmtDate(String(inv.created_at), tz, locale)}
+                      </span>
+                      {/*
+                        A partly paid row shows the money, not just the word.
+                        "Partly paid" next to the full total is the one thing
+                        reception cannot act on — what they need to say on the
+                        phone is how much is still owed.
+                      */}
+                      <span className="w-32 shrink-0 text-end">
+                        <span className="block text-sm font-semibold tnum">
+                          {fmtMoney(partial ? paid : total, access.clinic.currency, locale)}
+                        </span>
+                        {partial && (
+                          <span className="block text-[12px] text-ink-400 tnum">
+                            {t.invoices.ofTotal.replace(
+                              "{total}",
+                              fmtMoney(total, access.clinic.currency, locale)
+                            )}
+                          </span>
+                        )}
+                      </span>
+                      <span className="w-28 shrink-0 text-end">
+                        <Badge status={invStatus[String(inv.status)] ?? "neutral"}>
+                          {(t.invoices.statuses as Record<string, string>)[String(inv.status)]}
+                        </Badge>
+                        {partial && (
+                          <span className="mt-0.5 block text-[12px] font-medium text-st-pending tnum">
+                            {t.invoices.leftToPay.replace(
+                              "{amount}",
+                              fmtMoney(left, access.clinic.currency, locale)
+                            )}
+                          </span>
+                        )}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         )
       ) : (
         <Card>
           <ul className="divide-y divide-line">
-            {data.payments.map((p) => (
+            {data.payments.map((p) => {
+              // Whether this payment closed the invoice or left a balance. The
+              // ledger otherwise shows an amount with no way to tell a deposit
+              // from a settlement.
+              const stillDue = Number(p.total) - Number(p.amount_paid);
+              const open = String(p.invoice_status) !== "paid" && stillDue > 0;
+              return (
               <li key={String(p.id)} className="flex items-center gap-4 px-5 py-3">
                 <span className="w-24 shrink-0 text-sm font-semibold tnum">
                   {fmtMoney(Number(p.amount), access.clinic.currency, locale)}
@@ -201,7 +264,19 @@ export default async function InvoicesPage({
                 <Badge status="brand">
                   {(t.invoices.methods as Record<string, string>)[String(p.method)] ?? String(p.method)}
                 </Badge>
-                <span className="min-w-0 flex-1 truncate text-sm">{String(p.patient_name)}</span>
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {String(p.patient_name)}
+                  <span
+                    className={`ms-2 text-[12px] ${open ? "text-st-pending" : "text-ink-400"}`}
+                  >
+                    {open
+                      ? t.invoices.leftBalance.replace(
+                          "{amount}",
+                          fmtMoney(stillDue, access.clinic.currency, locale)
+                        )
+                      : t.invoices.settled}
+                  </span>
+                </span>
                 <Link href={`${base}/${p.invoice_id}`} className="text-[13px] text-brand-700 tnum" dir="ltr">
                   {String(p.number)}
                 </Link>
@@ -209,7 +284,8 @@ export default async function InvoicesPage({
                   {fmtDate(String(p.paid_at), tz, locale)}
                 </span>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </Card>
       )}

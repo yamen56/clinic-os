@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/toast";
 import { DocumentBody } from "@/components/esign/document-body";
 import { SignaturePad, type SignaturePadHandle } from "@/components/esign/signature-pad";
 import { DOC_STATUS_BADGE, SIGNER_STATUS_BADGE } from "@/components/esign/status";
+import { DownloadSignedPdf } from "@/components/esign/download-signed";
 import {
   clearFieldValueAction,
   copyLinkAction,
@@ -34,7 +35,6 @@ import {
   ArrowLeft,
   Send,
   Tablet,
-  Download,
   Link2,
   Ban,
   ShieldAlert,
@@ -181,6 +181,8 @@ export function DocumentDetailClient({
 
   const isDraft = doc.status === "draft";
   const isTerminal = ["completed", "declined", "expired", "voided"].includes(doc.status);
+  /** Everyone required has signed — there is a final version to hand over. */
+  const isCompleted = doc.status === "completed";
   const canSend = canManage && !isTerminal;
   const roleName = (s: { role_key: string; role_label: string | null; role_label_ar: string | null }) => {
     const fallback = (t.docs.roles as Record<string, string>)[s.role_key];
@@ -356,13 +358,16 @@ export function DocumentDetailClient({
                 {t.docs.uploadSigned}
               </Button>
             )}
-            {doc.final_pdf_path && (
-              <a href={`/api/c/${slug}/documents/${doc.id}/pdf`} target="_blank" rel="noreferrer">
-                <Button variant="outline">
-                  <Download className="h-4 w-4" />
-                  {t.docs.downloadPdf}
-                </Button>
-              </a>
+            {/*
+              Offered whenever there is something finished to hand over, which
+              is not the same as "a file is already stored". The render happens
+              when the last signature lands, so a document that completed a
+              moment ago — or while the worker was down — has no path yet and
+              used to show no button at all, which read as the feature being
+              missing rather than a few seconds late.
+            */}
+            {(isCompleted || doc.final_pdf_path) && (
+              <DownloadSignedPdf slug={slug} documentId={doc.id} title={doc.title} />
             )}
             {canVoid && doc.status !== "voided" && (
               <Button variant="ghost" className="!text-danger" onClick={() => setVoidOpen(true)}>
