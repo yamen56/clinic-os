@@ -133,6 +133,28 @@ async function main() {
     await withSystem((c) => c.query(`drop table if exists _qa_retry_probe`));
   });
 
+  /* ------------------------------------ 4. the health probe tells the truth */
+  const { GET } = await import("../src/app/api/health/route");
+
+  await withPool(LIVE, async () => {
+    const res = await GET();
+    const body = (await res.json()) as { ok: boolean; db: { ok: boolean; ms: number | null } };
+    check("a healthy platform reports 200", res.status === 200, String(res.status));
+    check("and says the database is reachable", body.ok && body.db.ok, JSON.stringify(body.db));
+  });
+
+  await withPool(DEAD, async () => {
+    const t0 = Date.now();
+    const res = await GET();
+    const body = (await res.json()) as { ok: boolean; db: { ok: boolean; error?: string } };
+    const elapsed = Date.now() - t0;
+    check("an unreachable database reports 503", res.status === 503, String(res.status));
+    check("and says so rather than throwing", body.ok === false && !body.db.ok);
+    check("carrying the reason", !!body.db.error, body.db.error?.slice(0, 40));
+    // A probe that hangs is worse than one that fails: the monitor learns nothing.
+    check("without hanging the monitor", elapsed < 12000, `${elapsed}ms`);
+  });
+
   try {
     await getPool().end();
   } catch {}
