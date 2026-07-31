@@ -378,6 +378,18 @@ export const en = {
     title: "Staff & access",
     sub: "Who works in this clinic and exactly what each of them can reach.",
     addStaff: "Add staff member",
+    photoTitle: "Photo",
+    photoAdd: "Add a photo",
+    photoReplace: "Change photo",
+    photoSaved: "Photo updated",
+    photoHint: "A head-and-shoulders picture, JPG, PNG or WebP, up to 5 MB. It appears next to your name across the clinic.",
+    photoErrors: {
+      no_file: "No file was chosen.",
+      too_large: "That image is too large (5 MB maximum).",
+      bad_type: "That file isn't a JPG, PNG or WebP image.",
+      forbidden: "You can't change this person's photo.",
+      not_found: "That staff member no longer exists.",
+    },
     role: "Job",
     roleHint: "Only a doctor can be booked and given working hours.",
     roles: {

@@ -11,6 +11,7 @@ import { Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { WeeklyHoursEditor } from "@/components/weekly-hours-editor";
+import { PhotoPicker } from "@/components/photo-picker";
 import { addStaffAction, updateMemberAction } from "./actions";
 import {
   CAPABILITIES,
@@ -39,6 +40,7 @@ type Member = {
   working_hours: Record<string, [string, string][]> | null;
   full_name: string;
   email: string;
+  has_photo: boolean;
 };
 
 const ROLES: MemberRole[] = ["doctor", "receptionist", "other"];
@@ -119,7 +121,12 @@ export function StaffClient({
         <ul className="divide-y divide-line">
           {members.map((m) => (
             <li key={m.id} className={`flex items-center gap-3 px-5 py-3 ${m.active ? "" : "opacity-50"}`}>
-              <Avatar name={m.full_name} size={36} color={m.color} />
+              <Avatar
+                name={m.full_name}
+                size={36}
+                color={m.color}
+                src={m.has_photo ? `/api/c/${slug}/staff/${m.id}/photo` : null}
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate text-sm font-medium">{m.full_name}</span>
@@ -434,6 +441,13 @@ function EditMember({
 
   return (
     <div className="grid gap-4">
+      <PhotoPicker
+        slug={slug}
+        memberId={member.id}
+        name={member.full_name}
+        hasPhoto={member.has_photo}
+        color={m.color}
+      />
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label={t.staff.role}>
           <Select

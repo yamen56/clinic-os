@@ -62,6 +62,8 @@ export function Shell({
   caps,
   userName,
   userId,
+  memberId,
+  hasPhoto,
   isImpersonating,
   unreadCount,
   pendingDocuments,
@@ -81,6 +83,9 @@ export function Shell({
   caps: CapabilityMap;
   userName: string;
   userId: string;
+  /** Null when a super admin is impersonating: no membership, so no photo. */
+  memberId: string | null;
+  hasPhoto: boolean;
   isImpersonating: boolean;
   unreadCount: number;
   pendingDocuments: number;
@@ -172,7 +177,12 @@ export function Shell({
         </nav>
         <div className="border-t border-white/6 p-3">
           <div className="flex items-center gap-2.5 px-1">
-            <Avatar name={userName} size={30} color="rgb(255 255 255 / 0.14)" />
+            <Avatar
+              name={userName}
+              size={30}
+              color="rgb(255 255 255 / 0.14)"
+              src={hasPhoto && memberId ? `/api/c/${clinic.slug}/staff/${memberId}/photo` : null}
+            />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] font-medium text-white">{userName}</div>
               <div className="text-[11px] text-white/40">

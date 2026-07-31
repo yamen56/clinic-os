@@ -2,6 +2,8 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { readFileBuffer } from "@/lib/storage";
 import { PageHeader } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
+import { PhotoPicker } from "@/components/photo-picker";
 import { getDict } from "@/lib/i18n";
 import { SignatureSettings } from "./signature-client";
 
@@ -23,10 +25,14 @@ export default async function SignatureSettingsPage({
 
   const me = await inClinic(access, async (c) => {
     const r = await c.query(
-      `select signature_png_path, kiosk_pin_hash from users where id = $1`,
+      `select signature_png_path, kiosk_pin_hash, avatar_path from users where id = $1`,
       [access.session.user.id]
     );
-    return r.rows[0] as { signature_png_path: string | null; kiosk_pin_hash: string | null };
+    return r.rows[0] as {
+      signature_png_path: string | null;
+      kiosk_pin_hash: string | null;
+      avatar_path: string | null;
+    };
   });
 
   // Inlined rather than served from a route: it is one small image belonging to
@@ -42,6 +48,26 @@ export default async function SignatureSettingsPage({
   return (
     <>
       <PageHeader title={t.mySignature.title} sub={t.mySignature.sub} />
+
+      {/*
+        Your own photo lives here rather than in staff settings, for the same
+        reason the signature does: this page is reachable by every role, and
+        staff settings is not. A doctor can set their own picture without
+        needing an owner to do it for them.
+      */}
+      {access.memberId && (
+        <Card className="mb-4">
+          <CardHeader title={t.staff.photoTitle} sub={t.staff.photoHint} />
+          <div className="px-5 py-4">
+            <PhotoPicker
+              slug={slug}
+              memberId={access.memberId}
+              name={access.session.user.fullName}
+              hasPhoto={!!me?.avatar_path}
+            />
+          </div>
+        </Card>
+      )}
       <SignatureSettings
         slug={slug}
         currentSignature={current}

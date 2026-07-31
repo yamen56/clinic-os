@@ -43,10 +43,13 @@ export function Avatar({
   name,
   size = 36,
   color,
+  src,
 }: {
   name: string;
   size?: number;
   color?: string;
+  /** A photo. Initials are drawn underneath and show through if it fails. */
+  src?: string | null;
 }) {
   const initials = name
     .split(/\s+/)
@@ -55,7 +58,7 @@ export function Avatar({
     .join("");
   return (
     <span
-      className="font-display inline-flex shrink-0 items-center justify-center rounded-full font-semibold"
+      className="font-display relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold"
       style={{
         width: size,
         height: size,
@@ -65,6 +68,28 @@ export function Avatar({
       }}
     >
       {initials}
+      {src && (
+        /*
+          Layered over the initials rather than swapped for them, so there is
+          never an empty circle: a photo that 404s (deleted, or the storage
+          backend having a moment) simply reveals what was already behind it.
+          eslint-disable — next/image cannot help here; these are authorised
+          API routes, not optimisable static assets.
+        */
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          width={size}
+          height={size}
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+        />
+      )}
     </span>
   );
 }

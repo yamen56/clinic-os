@@ -21,17 +21,19 @@ export default async function ClinicLayout({
          (select coalesce(sum(unread_count), 0)::int from conversations where clinic_id = $1) as unread,
          (select count(*)::int from documents
            where clinic_id = $1 and status in ('sent', 'partially_signed')) as pending_documents,
+         (select avatar_path is not null from users where id = $2) as has_photo,
          coalesce((
            select json_agg(json_build_object('id', a.id, 'title', a.title, 'body', a.body))
            from (
              select id, title, body from announcements where active order by created_at desc limit 3
            ) a
          ), '[]'::json) as announcements`,
-      [access.clinicId]
+      [access.clinicId, access.session.user.id]
     );
     return r.rows[0] as {
       unread: number;
       pending_documents: number;
+      has_photo: boolean;
       announcements: { id: string; title: string; body: string }[];
     };
   });
@@ -54,6 +56,8 @@ export default async function ClinicLayout({
       caps={access.caps}
       userName={access.session.user.fullName}
       userId={access.session.user.id}
+      memberId={access.memberId}
+      hasPhoto={!!chrome.has_photo}
       isImpersonating={access.isImpersonating}
       unreadCount={chrome.unread}
       pendingDocuments={chrome.pending_documents}
