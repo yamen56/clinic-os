@@ -183,6 +183,64 @@ async function main() {
     }
   }
 
+  /* --------------- 3c. an unroutable fallback is abandoned, not paid for */
+  /*
+    Measured in production: Railway has no IPv6 egress, so Supabase's AAAA-only
+    direct host answers ENETUNREACH every time. Retrying it turned a 1-second
+    failure into a 15-second one on every request. It must be tried once and
+    then dropped.
+  */
+  {
+    const prevPool = globalThis.__cosPool;
+    const prevFallback = globalThis.__cosFallbackPool;
+    const prevUrl = process.env.DATABASE_URL;
+    const prevFbUrl = process.env.DATABASE_FALLBACK_URL;
+    globalThis.__cosPool = undefined;
+    globalThis.__cosFallbackPool = undefined;
+    globalThis.__cosFallbackUntil = undefined;
+    globalThis.__cosFallbackUnusable = undefined;
+    process.env.DATABASE_URL = DEAD;
+    // A host that cannot resolve stands in for one that cannot be routed to;
+    // both surface as `isUnroutable` and must be treated the same.
+    process.env.DATABASE_FALLBACK_URL =
+      "postgres://u:p@no-such-host.invalid:5432/clinicos";
+
+    try {
+      const t0 = Date.now();
+      await withSystem(async (c) => c.query("select 1")).catch(() => null);
+      const first = Date.now() - t0;
+
+      const t1 = Date.now();
+      await withSystem(async (c) => c.query("select 1")).catch(() => null);
+      const second = Date.now() - t1;
+
+      check(
+        "an unroutable fallback is tried once and abandoned",
+        globalThis.__cosFallbackUnusable === true
+      );
+      check(
+        "so later failures cost no more than the primary alone",
+        second <= first,
+        `${second}ms then, ${first}ms first`
+      );
+    } finally {
+      try {
+        await (globalThis.__cosPool as Pool | undefined)?.end();
+      } catch {}
+      try {
+        await (globalThis.__cosFallbackPool as Pool | undefined)?.end();
+      } catch {}
+      globalThis.__cosPool = prevPool;
+      globalThis.__cosFallbackPool = prevFallback;
+      globalThis.__cosFallbackUntil = undefined;
+      globalThis.__cosFallbackUnusable = undefined;
+      if (prevUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = prevUrl;
+      if (prevFbUrl === undefined) delete process.env.DATABASE_FALLBACK_URL;
+      else process.env.DATABASE_FALLBACK_URL = prevFbUrl;
+    }
+  }
+
   /* ------------------------------------ 4. the health probe tells the truth */
   const { GET } = await import("../src/app/api/health/route");
 

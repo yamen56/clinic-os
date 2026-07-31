@@ -8,6 +8,28 @@ declare global {
   /** While set, the fallback route is preferred; see connectWithRetry. */
   // eslint-disable-next-line no-var
   var __cosFallbackUntil: number | undefined;
+  /** Set once the fallback proves unroutable from this host; see below. */
+  // eslint-disable-next-line no-var
+  var __cosFallbackUnusable: boolean | undefined;
+}
+
+/**
+ * Failures that mean the fallback can never work from here, as opposed to
+ * "not right now".
+ *
+ * Measured, not guessed: Railway has no IPv6 egress, so the direct Supabase
+ * host — which publishes only a AAAA record — answers every attempt with
+ * ENETUNREACH. Retrying that is pure cost, and paying it on every request
+ * turned a 1-second failure into a 15-second one during the very outage the
+ * fallback exists to survive.
+ *
+ * (The fix on the infrastructure side is Supabase's IPv4 add-on, which gives
+ * the direct host an A record. Nothing here needs to change when it appears —
+ * the route simply starts working.)
+ */
+function isUnroutable(e: unknown): boolean {
+  const code = String((e as { code?: string })?.code ?? "");
+  return /^(ENETUNREACH|EHOSTUNREACH|ENOTFOUND|EAFNOSUPPORT)$/.test(code);
 }
 
 /**
@@ -67,6 +89,7 @@ export function getPool(): Pool {
  * as it did before.
  */
 function getFallbackPool(): Pool | null {
+  if (globalThis.__cosFallbackUnusable) return null;
   if (globalThis.__cosFallbackPool) return globalThis.__cosFallbackPool;
 
   let url = process.env.DATABASE_FALLBACK_URL;
@@ -197,7 +220,22 @@ async function connectWithRetry(): Promise<PoolClient> {
     return c;
   } catch (e) {
     if (!fallback || !isTransientConnectionError(e)) throw e;
-    const client = await tryConnect(fallback, 2).catch(() => null);
+    // One attempt, no retry: a route that exists answers immediately, and one
+    // that does not will not start existing 150ms later.
+    let client: PoolClient | null = null;
+    try {
+      client = await tryConnect(fallback, 1);
+    } catch (fe) {
+      if (isUnroutable(fe)) {
+        // Give up on it for the lifetime of this process, so an outage fails
+        // fast instead of adding a dead route's latency to every request.
+        globalThis.__cosFallbackUnusable = true;
+        console.warn(
+          `[pg] direct connection is unroutable from this host (${(fe as { code?: string }).code}) — ` +
+            "not trying it again. Supabase's IPv4 add-on would make it usable."
+        );
+      }
+    }
     if (!client) throw e; // Report the primary's failure; it is the real one.
     if (!preferFallback) {
       console.warn("[pg] primary unreachable — serving via the direct connection");
