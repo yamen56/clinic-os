@@ -8,12 +8,19 @@ import { Pool, type PoolClient } from "pg";
 const url =
   process.env.DATABASE_URL || "postgres://clinicos_app:clinicos_app@127.0.0.1:5544/clinicos";
 
-/** TLS for hosted Postgres; the local embedded server does not offer it. */
-const isLocal = /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(url);
+/**
+ * TLS for hosted Postgres, but not for the local embedded server — nor for a
+ * database on the provider's private network, which presents none. Asking for
+ * SSL where it is not offered fails the connection rather than falling back.
+ * Kept in step with `sslFor` in src/lib/db.ts.
+ */
+const noTls = /@(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.railway\.internal|[a-z0-9-]+\.internal)[:/]/i.test(
+  url
+);
 
 export const pool = new Pool({
   connectionString: url,
-  ssl: isLocal ? undefined : { rejectUnauthorized: false },
+  ssl: noTls ? undefined : { rejectUnauthorized: false },
   max: Number(process.env.PG_POOL_MAX || 8),
 });
 pool.on("error", (e) => console.error("[worker pg]", e.message));

@@ -11,7 +11,7 @@
  * work is *never* retried, because repeating it could double an insert.
  */
 import type { Pool } from "pg";
-import { withCtx, withSystem, getPool, activeRoute } from "../src/lib/db";
+import { withCtx, withSystem, getPool, activeRoute, sslFor } from "../src/lib/db";
 
 let passed = 0;
 const failures: string[] = [];
@@ -56,6 +56,31 @@ async function withPool(url: string, fn: () => Promise<void>) {
 
 async function main() {
   console.log("▶ database resilience");
+
+  /* --------------------------------- 0. TLS is asked for where it exists */
+  /*
+    node-pg negotiates SSL whenever an ssl object is given, and a server that
+    does not offer it refuses the connection outright rather than falling back.
+    So this decision is load-bearing in both directions: demand TLS from a
+    provider's private network and nothing connects at all; skip it for a public
+    host and credentials cross the internet in the clear.
+  */
+  for (const [url, wantTls, why] of [
+    ["postgres://u:p@localhost:5432/db", false, "local"],
+    ["postgres://u:p@127.0.0.1:5544/clinicos", false, "local ip"],
+    ["postgres://u:p@postgres.railway.internal:5432/railway", false, "railway private network"],
+    ["postgres://u:p@db.internal:5432/x", false, "provider private network"],
+    ["postgres://u:p@aws-0-eu-central-1.pooler.supabase.com:5432/postgres", true, "supabase"],
+    ["postgres://u:p@db.abc.supabase.co:5432/postgres", true, "supabase direct"],
+    ["postgres://u:p@some-host.example.com:5432/db", true, "public host"],
+  ] as [string, boolean, string][]) {
+    const got = sslFor(url) !== undefined;
+    check(
+      `TLS ${wantTls ? "required" : "skipped"} for ${why}`,
+      got === wantTls,
+      got ? "ssl on" : "ssl off"
+    );
+  }
 
   /* ------------------------------------- 1. an unreachable database retries */
   await withPool(DEAD, async () => {

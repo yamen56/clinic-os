@@ -12,8 +12,11 @@ const PG_PORT = Number(process.env.PG_PORT || 5544);
  */
 const REMOTE = process.env.DATABASE_SUPER_URL;
 
+/** Kept in step with `sslFor` in src/lib/db.ts — see the reasoning there. */
 const sslFor = (url: string) =>
-  /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(url) ? undefined : { rejectUnauthorized: false };
+  /@(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.railway\.internal|[a-z0-9-]+\.internal)[:/]/i.test(url)
+    ? undefined
+    : { rejectUnauthorized: false };
 
 function connect(db: string): Client {
   const url = REMOTE ?? `postgres://postgres:postgres@127.0.0.1:${PG_PORT}/${db}`;

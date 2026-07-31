@@ -58,10 +58,13 @@ function parseArgs(): Args {
 }
 
 function connect(url: string): Client {
-  const local = /@(localhost|127\.0\.0\.1)/.test(url);
+  /** Kept in step with `sslFor` in src/lib/db.ts — see the reasoning there. */
+  const noTls = /@(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.railway\.internal|[a-z0-9-]+\.internal)[:/]/i.test(
+    url
+  );
   return new Client({
     connectionString: url,
-    ssl: local ? undefined : { rejectUnauthorized: false },
+    ssl: noTls ? undefined : { rejectUnauthorized: false },
     connectionTimeoutMillis: 20000,
     // A big table should not die halfway to a statement timeout.
     statement_timeout: 0,

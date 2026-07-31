@@ -44,9 +44,21 @@ function isUnroutable(e: unknown): boolean {
  * that Node will not chain-verify, so verification is relaxed for remote hosts
  * only — the connection is still encrypted.
  */
-function sslFor(url: string) {
-  const local = /@(localhost|127.0.0.1|[::1])[:/]/.test(url);
-  return local ? undefined : { rejectUnauthorized: false };
+export function sslFor(url: string) {
+  /*
+    Two kinds of connection need no TLS, and asking for it breaks both: node-pg
+    negotiates SSL whenever this returns an object, and a server that does not
+    offer it refuses outright rather than falling back.
+
+    The local embedded server is one. The other is a database on a provider's
+    private network — Railway's `*.railway.internal`, Render's `*.internal` —
+    where the traffic never leaves the provider's own network and no TLS is
+    presented. Everything reachable over the public internet still gets it.
+  */
+  const noTls = /@(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.railway\.internal|[a-z0-9-]+\.internal)[:/]/i.test(
+    url
+  );
+  return noTls ? undefined : { rejectUnauthorized: false };
 }
 
 function primaryUrl(): string {
