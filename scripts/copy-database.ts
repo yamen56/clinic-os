@@ -132,11 +132,16 @@ async function main() {
   await src.connect();
   await dst.connect();
 
-  // Host *and* database: two databases on one server are legitimately
-  // different targets, which is how this gets tested before it is trusted.
+  /*
+    User, host and database together. All three are needed: two databases on one
+    server are legitimately different targets (which is how this gets tested),
+    and two *Supabase projects* share both the pooler host and the database name
+    `postgres`, differing only in the username — `postgres.<project-ref>`. On
+    host alone this refused to migrate one project to another.
+  */
   const ident = (u: string) => {
     const p = new URL(u);
-    return `${p.host}${p.pathname}`;
+    return `${decodeURIComponent(p.username)}@${p.host}${p.pathname}`;
   };
   console.log(`source → ${ident(from)}`);
   console.log(`target → ${ident(to)}`);
