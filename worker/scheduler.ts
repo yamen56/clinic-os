@@ -2,6 +2,8 @@ import { DateTime } from "luxon";
 import { withSystem } from "./db";
 import { startRun } from "./automations";
 import { sweepExpiredDocuments, sweepUnsignedDocuments, sendPendingDigest } from "./esign";
+import { backupDatabase } from "../src/lib/backup";
+import { usingObjectStore } from "../src/lib/storage";
 
 /**
  * Time-based triggers. Runs every minute; every enqueue is keyed by a
@@ -168,6 +170,29 @@ async function unpaidInvoices() {
   });
 }
 
+/**
+ * A logical backup, once a day.
+ *
+ * The database lives on a volume we own now, so recovery is ours to arrange.
+ * This runs at a quiet hour rather than on the minute-by-minute tick, and skips
+ * entirely unless object storage is configured — a backup written to a
+ * container's own disk would vanish with the container that failed.
+ *
+ * Deliberately not wrapped in a job row: if the job system itself is what broke,
+ * the backup is exactly the thing that still needs to happen.
+ */
+async function dailyBackup() {
+  if (!usingObjectStore()) return;
+  const now = new Date();
+  // 03:00 UTC, and only once — the tick runs every minute.
+  if (now.getUTCHours() !== 3 || now.getUTCMinutes() !== 0) return;
+  const started = Date.now();
+  const r = await backupDatabase({ keep: Number(process.env.BACKUP_KEEP || 14) });
+  console.log(
+    `[backup] ${r.tables} tables, ${r.rows} rows, ${(r.bytes / 1048576).toFixed(1)} MB in ${Date.now() - started}ms -> ${r.path}`
+  );
+}
+
 export function startScheduler() {
   const tick = async () => {
     for (const fn of [
@@ -179,6 +204,7 @@ export function startScheduler() {
       sweepExpiredDocuments,
       sweepUnsignedDocuments,
       sendPendingDigest,
+      dailyBackup,
     ]) {
       try {
         await fn();

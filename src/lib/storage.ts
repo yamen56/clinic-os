@@ -56,6 +56,54 @@ async function s3(): Promise<{ mod: S3Module; client: InstanceType<S3Module["S3C
 
 // -------------------------------------------------------------- public API
 
+/**
+ * Writes a file that belongs to the deployment rather than to a clinic — a
+ * database backup, not a patient's scan.
+ *
+ * Separate from `saveFile` because that one namespaces everything under a
+ * clinic id, which is right for tenant data and wrong for this: a backup spans
+ * every clinic, and filing it under one of them would make it look like theirs.
+ * The name is used verbatim so a backup can be found by its date instead of
+ * behind a random prefix.
+ */
+export async function saveSystemFile(
+  folder: string,
+  fileName: string,
+  data: Buffer
+): Promise<{ storagePath: string; sizeBytes: number }> {
+  const key = path.posix.join("_system", folder, safeName(fileName));
+  if (usingObjectStore()) {
+    const { mod, client, bucket } = await s3();
+    await client.send(new mod.PutObjectCommand({ Bucket: bucket, Key: key, Body: data }));
+    return { storagePath: key, sizeBytes: data.length };
+  }
+  const abs = path.join(ROOT, key);
+  await fs.promises.mkdir(path.dirname(abs), { recursive: true });
+  await fs.promises.writeFile(abs, data);
+  return { storagePath: key, sizeBytes: data.length };
+}
+
+/** Lists system files under a folder, newest name last. */
+export async function listSystemFiles(folder: string): Promise<string[]> {
+  const prefix = path.posix.join("_system", folder) + "/";
+  if (usingObjectStore()) {
+    const { mod, client, bucket } = await s3();
+    const out: string[] = [];
+    let token: string | undefined;
+    do {
+      const r = await client.send(
+        new mod.ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token })
+      );
+      for (const o of r.Contents ?? []) if (o.Key) out.push(o.Key);
+      token = r.IsTruncated ? r.NextContinuationToken : undefined;
+    } while (token);
+    return out.sort();
+  }
+  const abs = path.join(ROOT, prefix);
+  const names = await fs.promises.readdir(abs).catch(() => [] as string[]);
+  return names.sort().map((n) => prefix + n);
+}
+
 export async function saveFile(
   clinicId: string,
   folder: string,
