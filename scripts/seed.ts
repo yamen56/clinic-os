@@ -9,7 +9,25 @@ import { seedAgencyDefaults } from "./seed-recipes";
 import { ROLE_DEFAULTS, type MemberRole } from "../src/lib/permissions";
 
 const PG_PORT = Number(process.env.PG_PORT || 5544);
-const url = `postgres://postgres:postgres@127.0.0.1:${PG_PORT}/clinicos`;
+/*
+  Local by default. DATABASE_SUPER_URL points it at a hosted database, which is
+  how the demo clinic gets built in production — the one prospective clinics are
+  shown before they sign up.
+*/
+const url =
+  process.env.DATABASE_SUPER_URL || `postgres://postgres:postgres@127.0.0.1:${PG_PORT}/clinicos`;
+const isRemote = !!process.env.DATABASE_SUPER_URL;
+
+/*
+  Against a real deployment only the demo clinic is built. The agency defaults
+  and the super admin already exist there, and re-seeding them would overwrite
+  the agency's own edits — seedAgencyDefaults clears knowledge_templates
+  outright.
+*/
+const demoOnly = isRemote || process.argv.includes("--demo-only");
+
+/** Overridable, so a demo can be rebuilt without colliding with a live clinic. */
+const SLUG = process.env.DEMO_SLUG || "rima-dental";
 
 export const SEED = {
   adminEmail: "admin@makan.agency",
@@ -31,7 +49,11 @@ function pick<T>(a: T[], i: number): T {
 }
 
 async function main() {
-  const c = new Client({ connectionString: url });
+  const c = new Client({
+    connectionString: url,
+    ssl: /@(localhost|127\.0\.0\.1)/.test(url) ? undefined : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 20000,
+  });
   await c.connect();
 
   const hash = (pw: string) => bcrypt.hashSync(pw, 10);
@@ -53,14 +75,23 @@ async function main() {
   }
 
   // ---- Agency defaults + super admin
-  await seedAgencyDefaults(c);
-  const adminId = await upsertUser(SEED.adminEmail, SEED.adminPassword, "Makan Admin", {
-    superAdmin: true,
-    locale: "en",
-  });
+  if (!demoOnly) await seedAgencyDefaults(c);
+  /*
+    The agency super admin is created for local development only. Against a
+    real deployment this would mint an account with a published password and
+    full access to every clinic — the demo is not worth that. There, the seed
+    attributes its audit entry to whichever super admin already exists.
+  */
+  const adminId = demoOnly
+    ? ((await c.query(`select id from users where is_super_admin order by created_at limit 1`))
+        .rows[0]?.id as string | undefined) ?? null
+    : await upsertUser(SEED.adminEmail, SEED.adminPassword, "Makan Admin", {
+        superAdmin: true,
+        locale: "en",
+      });
 
   // ---- Demo clinic (recreated fresh each run so demos are predictable)
-  await c.query(`delete from clinics where slug = $1`, [SEED.clinicSlug]);
+  await c.query(`delete from clinics where slug = $1`, [SLUG]);
   const clinic = (
     await c.query(
       `insert into clinics (name, name_ar, slug, phone_e164, address, address_ar, google_maps_url,
@@ -73,7 +104,7 @@ async function main() {
                'الدفع نقداً في العيادة، أو عبر كليك: RIMADENTAL',
                'شكراً لثقتكم بمركز ريما لطب الأسنان', 'active', 'standard', 149)
        returning id, timezone`,
-      [SEED.clinicSlug]
+      [SLUG]
     )
   ).rows[0];
   const clinicId = clinic.id as string;
@@ -171,7 +202,7 @@ async function main() {
   );
 
   await c.query(`insert into booking_links (clinic_id, slug, name) values ($1, $2, 'الرابط العام')`, [
-    clinicId, SEED.clinicSlug,
+    clinicId, SLUG,
   ]);
 
   await c.query(
@@ -435,14 +466,16 @@ async function main() {
     `insert into notifications (clinic_id, user_id, kind, title, body, url, push_sent) values
       ($1, $2, 'booking', 'حجز جديد من الرابط العام', 'تنظيف وتلميع · غداً ١١:٠٠ ص', $3, true),
       ($1, $2, 'ai_escalation', 'المساعد الذكي يحتاج تدخلك', 'المريض يشكو من ألم شديد', $4, true)`,
-    [clinicId, ownerId, `/c/${SEED.clinicSlug}/calendar`, `/c/${SEED.clinicSlug}/conversations`]
+    [clinicId, ownerId, `/c/${SLUG}/calendar`, `/c/${SLUG}/conversations`]
   );
 
-  await c.query(
-    `insert into audit_log (clinic_id, user_id, action, entity, entity_id, detail)
-     values ($1, $2, 'seed.demo', 'clinic', $3, '{"source":"seed"}')`,
-    [clinicId, adminId, clinicId]
-  );
+  if (adminId) {
+    await c.query(
+      `insert into audit_log (clinic_id, user_id, action, entity, entity_id, detail)
+       values ($1, $2, 'seed.demo', 'clinic', $3, '{"source":"seed"}')`,
+      [clinicId, adminId, clinicId]
+    );
+  }
 
   const counts = (
     await c.query(
@@ -465,8 +498,8 @@ async function main() {
   console.log(`  Clinic owner   ${SEED.ownerEmail} / ${SEED.password}`);
   console.log(`  Doctor         ${SEED.doctorEmail} / ${SEED.password}`);
   console.log(`  Receptionist   ${SEED.receptionEmail} / ${SEED.password}`);
-  console.log(`\n  Workspace      /c/${SEED.clinicSlug}`);
-  console.log(`  Booking page   /book/${SEED.clinicSlug}`);
+  console.log(`\n  Workspace      /c/${SLUG}`);
+  console.log(`  Booking page   /book/${SLUG}`);
   console.log(
     `\n  ${counts.patients} patients · ${counts.appointments} appointments · ${counts.invoices} invoices · ` +
       `${counts.payments} payments · ${counts.conversations} threads (${counts.messages} messages) · ${counts.automations} automations\n`
