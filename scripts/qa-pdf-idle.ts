@@ -8,7 +8,16 @@
  * released when idle, and a burst still has to reuse one browser rather than
  * launching per page.
  */
-import { renderUrlToPdf } from "../worker/pdf";
+/*
+  Set before the module is imported: the renderer reads its idle window once, at
+  load. Production waits five minutes, which no test should sit through — and
+  relying on the caller to export this made the suite pass by hand and fail
+  inside qa-all, which is the wrong way round for a test to behave.
+*/
+process.env.PDF_BROWSER_IDLE_MS ||= "1500";
+
+type Renderer = typeof import("../worker/pdf");
+let pdf: Renderer;
 
 let passed = 0;
 const failures: string[] = [];
@@ -30,19 +39,20 @@ const PAGE = "data:text/html,<h1>clinic</h1>";
 
 async function main() {
   console.log("▶ pdf browser lifecycle");
+  pdf = await import("../worker/pdf");
 
-  const pdf = await renderUrlToPdf(PAGE);
+  const first = await pdf.renderUrlToPdf(PAGE);
   check(
     "a render produces a PDF",
-    pdf.subarray(0, 5).toString("latin1") === "%PDF-",
-    `${pdf.length} bytes`
+    first.subarray(0, 5).toString("latin1") === "%PDF-",
+    `${first.length} bytes`
   );
   check("and the browser is held afterwards, ready for the next one", held());
 
   // A second render inside the idle window must reuse it, not relaunch.
   const before = globalThis.__cosBrowser;
   const t0 = Date.now();
-  await renderUrlToPdf(PAGE);
+  await pdf.renderUrlToPdf(PAGE);
   const reuseMs = Date.now() - t0;
   check("a follow-up render reuses the same browser", globalThis.__cosBrowser === before);
   check("so it is fast", reuseMs < 8000, `${reuseMs}ms`);
@@ -54,7 +64,7 @@ async function main() {
   check("an idle browser is released rather than held for ever", !held());
 
   // And it comes back on demand.
-  const again = await renderUrlToPdf(PAGE);
+  const again = await pdf.renderUrlToPdf(PAGE);
   check(
     "the next render relaunches and still works",
     again.subarray(0, 5).toString("latin1") === "%PDF-",
