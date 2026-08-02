@@ -25,6 +25,8 @@ import {
   MoreHorizontal,
   Bell,
   PenTool,
+  UserRound,
+  ChevronLeft,
   LogOut,
   ShieldAlert,
   X,
@@ -191,12 +193,12 @@ export function Shell({
             </div>
             {/* Reachable for doctors too, who never see /settings. */}
             <Link
-              href={`${base}/signature`}
+              href={`${base}/profile`}
               className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
-              aria-label={t.mySignature.title}
-              title={t.mySignature.title}
+              aria-label={t.profile.title}
+              title={t.profile.title}
             >
-              <PenTool className="h-4.5 w-4.5" strokeWidth={1.75} />
+              <UserRound className="h-4.5 w-4.5" strokeWidth={1.75} />
             </Link>
             <Link
               href={`${base}/notifications`}
@@ -318,6 +320,26 @@ export function Shell({
                 </Link>
               );
             })}
+            {/* The account, first and unmistakable: on a phone this sheet is
+                the only route to it. */}
+            <Link
+              href={`${base}/profile`}
+              onClick={() => setMoreOpen(false)}
+              className="mb-1 flex touch-manipulation items-center gap-3 rounded-lg border border-line px-3 py-2.5 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
+            >
+              <Avatar
+                name={userName}
+                size={34}
+                src={hasPhoto && memberId ? `/api/c/${clinic.slug}/staff/${memberId}/photo` : null}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{userName}</span>
+                <span className="block text-[12px] text-ink-500">
+                  {isOwner ? t.staff.owner : t.staff.roles[role]}
+                </span>
+              </span>
+              <ChevronLeft className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
+            </Link>
             <Link
               href={`${base}/notifications`}
               onClick={() => setMoreOpen(false)}

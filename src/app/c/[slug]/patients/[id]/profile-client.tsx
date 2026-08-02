@@ -112,6 +112,8 @@ export function PatientProfile(props: {
   canSendDocuments: boolean;
   /** The clinic's country, so a new number defaults to the right dialling code. */
   country: CountryCode;
+  /** The clinic's tag vocabulary — suggestions, and the colour each tag wears. */
+  clinicTags: { name: string; color: string }[];
 }) {
   const { slug, tz, currency } = props;
   const { t, locale } = useI18n();
@@ -205,6 +207,7 @@ export function PatientProfile(props: {
             slug={slug}
             patientId={p.id}
             tags={p.tags}
+            known={props.clinicTags}
             onChange={(tags) => setP((prev) => ({ ...prev, tags }))}
           />
         </div>
@@ -640,19 +643,23 @@ function TagsRow({
   slug,
   patientId,
   tags,
+  known,
   onChange,
 }: {
   slug: string;
   patientId: string;
   tags: string[];
+  /** The clinic's catalogue: what to suggest, and what colour each tag wears. */
+  known: { name: string; color: string }[];
   onChange: (tags: string[]) => void;
 }) {
   const { t } = useI18n();
   const [adding, setAdding] = useState(false);
   const [val, setVal] = useState("");
+  const colorOf = (tag: string) => known.find((k) => k.name === tag)?.color;
 
   const commit = async () => {
-    const tag = val.trim();
+    const tag = val.trim().replace(/\s+/g, " ");
     setAdding(false);
     setVal("");
     if (!tag || tags.includes(tag)) return;
@@ -662,39 +669,62 @@ function TagsRow({
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      {tags.map((tag) => (
-        <span
-          key={tag}
-          className="group inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700"
-        >
-          {tag}
-          <button
-            aria-label={`${t.common.delete} ${tag}`}
-            onClick={async () => {
-              onChange(tags.filter((x) => x !== tag));
-              await removeTagAction(slug, patientId, tag);
-            }}
-            className="opacity-40 transition-opacity hover:opacity-100"
+      {tags.map((tag) => {
+        const color = colorOf(tag);
+        return (
+          <span
+            key={tag}
+            /*
+              A tag from the catalogue wears its own colour; one typed here a
+              moment ago has not been read back yet, so it keeps the brand pill
+              until the next load rather than flashing an arbitrary colour.
+            */
+            className={`group inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              color ? "text-white" : "bg-brand-50 text-brand-700"
+            }`}
+            style={color ? { background: color } : undefined}
           >
-            <X className="h-3 w-3" />
-          </button>
-        </span>
-      ))}
+            {tag}
+            <button
+              aria-label={`${t.common.delete} ${tag}`}
+              onClick={async () => {
+                onChange(tags.filter((x) => x !== tag));
+                await removeTagAction(slug, patientId, tag);
+              }}
+              className="opacity-40 transition-opacity hover:opacity-100"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        );
+      })}
       {adding ? (
-        <input
-          autoFocus
-          className="h-6 w-28 rounded-full border border-brand-300 px-2.5 text-xs outline-none"
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
-            if (e.key === "Escape") {
-              setAdding(false);
-              setVal("");
-            }
-          }}
-        />
+        <>
+          <input
+            autoFocus
+            list={`tags-${patientId}`}
+            className="h-6 w-28 rounded-full border border-brand-300 px-2.5 text-xs outline-none"
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") {
+                setAdding(false);
+                setVal("");
+              }
+            }}
+          />
+          {/* Suggest what the clinic already uses — the cheapest way to stop a
+              third spelling of the same label entering the vocabulary. */}
+          <datalist id={`tags-${patientId}`}>
+            {known
+              .filter((k) => !tags.includes(k.name))
+              .map((k) => (
+                <option key={k.name} value={k.name} />
+              ))}
+          </datalist>
+        </>
       ) : (
         <button
           onClick={() => setAdding(true)}

@@ -35,6 +35,7 @@ export function SettingsNav({
     { href: `${base}/services`, label: t.settings.services },
     { href: `${base}/hours`, label: t.settings.workingHours },
     { href: `${base}/fields`, label: t.fields.title, show: canClinic },
+    { href: `${base}/tags`, label: t.tags.title },
     { href: `${base}/documents`, label: t.settings.documentTemplates },
     { href: `${base}/booking`, label: t.settings.bookingLinks },
     { href: `${base}/whatsapp`, label: t.settings.whatsapp },

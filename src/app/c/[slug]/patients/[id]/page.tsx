@@ -21,7 +21,7 @@ export default async function PatientProfilePage({
     if (!p) return null;
     if (p.merged_into) return { mergedInto: p.merged_into as string };
 
-    const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates] =
+    const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags] =
       await Promise.all([
         c.query(
           `select n.id, n.kind, n.body, n.created_at, u.full_name as author
@@ -88,6 +88,12 @@ export default async function PatientProfilePage({
            where clinic_id = $1 and is_active order by category, name`,
           [access.clinicId]
         ),
+        // The clinic's tag vocabulary, so this file suggests the labels the
+        // clinic already uses instead of inviting a third spelling of "سكري",
+        // and so a tag wears the colour it was given in settings.
+        c.query(`select name, color from clinic_tags where clinic_id = $1 order by sort, name`, [
+          access.clinicId,
+        ]),
       ]);
 
     return {
@@ -102,6 +108,7 @@ export default async function PatientProfilePage({
       balanceDue: Number(balance.rows[0].due),
       documents,
       templates: templates.rows,
+      clinicTags: clinicTags.rows,
     };
   });
 
@@ -125,6 +132,7 @@ export default async function PatientProfilePage({
       activity={JSON.parse(JSON.stringify(d.activity))}
       documents={JSON.parse(JSON.stringify(d.documents))}
       docTemplates={JSON.parse(JSON.stringify(d.templates))}
+      clinicTags={JSON.parse(JSON.stringify(d.clinicTags))}
       canSendDocuments={can(access, "documents.manage")}
       country={countryFromClinic(access.clinic)}
     />

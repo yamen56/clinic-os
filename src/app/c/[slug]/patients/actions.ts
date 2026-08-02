@@ -54,16 +54,28 @@ export async function createPatientAction(
 
 export async function addTagAction(slug: string, patientId: string, tag: string) {
   const access = await requireClinic(slug);
-  const clean = tag.trim().slice(0, 40);
+  const clean = tag.trim().replace(/\s+/g, " ").slice(0, 40);
   if (!clean) return;
-  await inClinic(access, (c) =>
-    c.query(
+  await inClinic(access, async (c) => {
+    await c.query(
       `update patients set tags = array_append(tags, $2)
        where id = $1 and clinic_id = $3 and not ($2 = any(tags))`,
       [patientId, clean, access.clinicId]
-    )
-  );
+    );
+    /*
+      Typing a tag on a patient file is how most of them get created, so the
+      catalogue has to adopt it here. Skip this and Settings → Tags shows a
+      different vocabulary from the one the patient list is filtering by, and
+      the tag nobody can rename is the one everybody actually uses.
+    */
+    await c.query(
+      `insert into clinic_tags (clinic_id, name) values ($1, $2)
+       on conflict (clinic_id, name) do nothing`,
+      [access.clinicId, clean]
+    );
+  });
   revalidatePath(`/c/${slug}/patients`);
+  revalidatePath(`/c/${slug}/settings/tags`);
 }
 
 export async function removeTagAction(slug: string, patientId: string, tag: string) {
