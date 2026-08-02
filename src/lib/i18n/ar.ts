@@ -842,6 +842,8 @@ export const ar: Dict = {
     delivered: "وصلت",
     read: "تمت القراءة",
     noPatient: "لا يوجد ملف مريض مرتبط",
+    createPatient: "إنشاء ملف مريض",
+    patientCreated: "تم إنشاء ملف المريض",
     markDone: "إغلاق المحادثة",
     reopen: "إعادة فتح",
   },

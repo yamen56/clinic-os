@@ -843,6 +843,8 @@ export const en = {
     delivered: "Delivered",
     read: "Read",
     noPatient: "No patient file linked",
+    createPatient: "Create patient file",
+    patientCreated: "Patient file created",
     markDone: "Close conversation",
     reopen: "Reopen",
   },

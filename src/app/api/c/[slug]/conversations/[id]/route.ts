@@ -10,8 +10,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
   const data = await inClinic(g.access, async (c) => {
     const conv = (
       await c.query(
+        // The coalesce is listed after cv.* deliberately: it shadows the
+        // conversation's own column so callers get the best name available.
         `select cv.*, p.full_name as patient_name, p.status as patient_status, p.tags as patient_tags,
-                p.whatsapp_name, au.full_name as assigned_name
+                coalesce(cv.whatsapp_name, p.whatsapp_name) as whatsapp_name,
+                au.full_name as assigned_name
          from conversations cv
          left join patients p on p.id = cv.patient_id
          left join users au on au.id = cv.assigned_to

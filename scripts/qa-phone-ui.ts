@@ -124,10 +124,18 @@ async function main() {
   /* ------------------------------------------- changing the country rewrites it */
   await cc.selectOption("SA");
   await national.fill("501234567");
-  // Two edits, each debounced by the autosave: the second lands past 3s.
-  await page.waitForTimeout(5000);
-  const saved = (await db.query(`select phone_e164 from patients where id = $1`, [patient.id]))
-    .rows[0].phone_e164;
+  /*
+    Two edits, each behind the autosave's debounce. Waiting a fixed span is
+    what makes this flaky on a loaded machine — the timers are wall-clock but
+    the work behind them is not. Wait for the value instead.
+  */
+  let saved = "";
+  for (let i = 0; i < 40; i++) {
+    saved = (await db.query(`select phone_e164 from patients where id = $1`, [patient.id])).rows[0]
+      .phone_e164;
+    if (saved === "+966501234567") break;
+    await page.waitForTimeout(500);
+  }
   check("choosing another country saves the right code", saved === "+966501234567", saved);
 
   await page.screenshot({ path: "scripts/qa-shots/phone-rtl.png" });

@@ -46,15 +46,27 @@ async function main() {
   );
   console.log(`✓ fixture clinic ${slug}`);
 
-  // 1. Inbound from unknown number → lead auto-created
+  /*
+    1. Inbound from an unknown number → a conversation, and no patient file.
+    Anyone can message a clinic; the patient list is for the people staff
+    added, the AI booked, or who came through the booking link.
+  */
   await simulateInbound(clinic.id, "0788881122", "Abu Salem", "السلام عليكم، بدي أحجز موعد");
   const p1 = await db.query(
-    `select full_name, status, source, whatsapp_name from patients where clinic_id = $1 and phone_e164 = '+962788881122'`,
+    `select 1 from patients where clinic_id = $1 and phone_e164 = '+962788881122'`,
     [clinic.id]
   );
-  if (p1.rowCount !== 1 || p1.rows[0].status !== "lead" || p1.rows[0].source !== "whatsapp")
-    throw new Error(`lead not created correctly: ${JSON.stringify(p1.rows)}`);
-  console.log("✓ unknown number → lead patient with WhatsApp name");
+  if (p1.rowCount !== 0)
+    throw new Error("a WhatsApp message must not create a patient file");
+  const c1 = await db.query(
+    `select patient_id, whatsapp_name from conversations where clinic_id = $1 and phone_e164 = '+962788881122'`,
+    [clinic.id]
+  );
+  if (c1.rowCount !== 1 || c1.rows[0].patient_id !== null)
+    throw new Error(`conversation not created unlinked: ${JSON.stringify(c1.rows)}`);
+  if (c1.rows[0].whatsapp_name !== "Abu Salem")
+    throw new Error("the thread must remember the sender's WhatsApp name itself");
+  console.log("✓ unknown number → conversation only, no patient file");
 
   // 2. Inbound from the existing patient's number (different format) → attaches, stays active
   await simulateInbound(clinic.id, "0779998877", "Umm K", "مرحبا");
@@ -70,6 +82,7 @@ async function main() {
   );
   if (conv2.rows[0].status !== "active") throw new Error("existing patient demoted to lead");
   console.log("✓ inbound attaches to existing patient by phone");
+
 
   // 3. Inbox UI
   const browser = await chromium.launch();
@@ -127,6 +140,26 @@ async function main() {
   await page.click("text=Assign to me");
   await page.waitForSelector("text=Mine", { timeout: 8000 });
   console.log("✓ thread assigned to me");
+
+  /*
+    7. Promoting a thread. An unknown number gets a conversation and nothing
+    more, so this is the step that decides somebody is a patient — and the
+    only way one enters the list from WhatsApp.
+  */
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.getByRole("button", { name: /create patient file/i }).click();
+  await page.waitForSelector("text=Open file", { timeout: 20000 });
+  const promoted = await db.query(
+    `select p.source, p.status, p.full_name from patients p
+      join conversations cv on cv.patient_id = p.id
+     where cv.clinic_id = $1 and cv.phone_e164 = '+962788881122'`,
+    [clinic.id]
+  );
+  if (promoted.rowCount !== 1 || promoted.rows[0].source !== "staff")
+    throw new Error(`promotion did not create a staff patient: ${JSON.stringify(promoted.rows)}`);
+  if (promoted.rows[0].full_name !== "Abu Salem")
+    throw new Error(`the WhatsApp name should become the file name: ${promoted.rows[0].full_name}`);
+  console.log("✓ staff can turn a thread into a patient file");
 
   // 7. WhatsApp settings: connect → QR appears (live Baileys against WA servers)
   await page.goto(`${BASE}/c/${slug}/settings/whatsapp`);

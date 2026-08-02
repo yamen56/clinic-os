@@ -1,7 +1,11 @@
 "use server";
 
-import { requireClinic } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
+import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
+import { findOrCreatePatient } from "@/lib/patients";
+import { countryFromClinic } from "@/lib/phone";
+import { audit } from "@/lib/audit";
 
 export async function addQuickReplyAction(
   slug: string,
@@ -25,4 +29,63 @@ export async function deleteQuickReplyAction(slug: string, id: string) {
   await inClinic(access, (c) =>
     c.query(`delete from quick_replies where id = $1 and clinic_id = $2`, [id, access.clinicId])
   );
+}
+
+/**
+ * Turn a conversation into a patient file.
+ *
+ * Someone texting the clinic is not a patient, so inbound messages no longer
+ * create one. This is the deliberate step in the other direction: a member
+ * decides this person is a patient and says so.
+ */
+export async function createPatientFromConversationAction(
+  slug: string,
+  conversationId: string
+): Promise<{ patientId?: string; error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "patients")) return { error: "forbidden" };
+
+  return inClinic(access, async (c) => {
+    const conv = (
+      await c.query(
+        `select id, phone_e164, patient_id, whatsapp_name from conversations
+          where id = $1 and clinic_id = $2`,
+        [conversationId, access.clinicId]
+      )
+    ).rows[0] as
+      | { id: string; phone_e164: string; patient_id: string | null; whatsapp_name: string | null }
+      | undefined;
+    if (!conv) return { error: "not_found" };
+    if (conv.patient_id) return { patientId: conv.patient_id };
+
+    // Still goes through the identity rule — the number may already belong to
+    // a file created some other way since this thread started.
+    const patient = await findOrCreatePatient(c, access.clinicId, {
+      phone: conv.phone_e164,
+      whatsappName: conv.whatsapp_name ?? undefined,
+      source: "staff",
+      status: "active",
+      defaultCountry: countryFromClinic(access.clinic),
+    });
+    await c.query(`update conversations set patient_id = $2 where id = $1`, [conv.id, patient.id]);
+
+    if (patient.created) {
+      await c.query(
+        `insert into jobs (clinic_id, kind, payload) values ($1, 'trigger:patient_created', $2)`,
+        [access.clinicId, JSON.stringify({ patientId: patient.id, source: "staff" })]
+      );
+      await audit(c, {
+        clinicId: access.clinicId,
+        userId: access.session.user.id,
+        impersonatedBy: access.session.impersonatedBy,
+        action: "patient.create",
+        entity: "patient",
+        entityId: patient.id,
+        detail: { from: "conversation" },
+      });
+    }
+
+    revalidatePath(`/c/${slug}/patients`);
+    return { patientId: patient.id };
+  });
 }

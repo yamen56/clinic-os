@@ -6,7 +6,7 @@ import {
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import { withSystem } from "../db";
-import { findOrCreatePatient } from "../../src/lib/patients";
+import { findPatientByPhone } from "../../src/lib/patients";
 import { jidToE164 } from "../../src/lib/phone";
 import { saveFile } from "../../src/lib/storage";
 
@@ -150,26 +150,37 @@ export async function recordMessage(
       if (dup.rowCount) return;
     }
 
-    const patient = await findOrCreatePatient(c, clinicId, {
-      phone: m.phone,
-      whatsappName: m.pushName ?? undefined,
-      source: "whatsapp",
-    });
-    if (patient.created) {
+    /*
+      Look the sender up, but never create them. A message is not a patient —
+      the patient list is for people staff added, the AI booked, or who came
+      through the booking link. Anyone else gets a conversation and nothing
+      more, and becomes a patient the moment somebody decides they are one.
+    */
+    const existing = await findPatientByPhone(c, clinicId, m.phone);
+    const patientId = existing?.id ?? null;
+    if (patientId && m.pushName) {
       await c.query(
-        `insert into jobs (clinic_id, kind, payload) values ($1, 'trigger:patient_created', $2)`,
-        [clinicId, JSON.stringify({ patientId: patient.id, source: "whatsapp" })]
+        `update patients set whatsapp_name = coalesce(whatsapp_name, $2) where id = $1`,
+        [patientId, m.pushName]
       );
     }
 
     const conv = await c.query(
-      `insert into conversations (clinic_id, phone_e164, patient_id, wa_jid)
-       values ($1, $2, $3, $4)
+      `insert into conversations (clinic_id, phone_e164, patient_id, wa_jid, whatsapp_name)
+       values ($1, $2, $3, $4, $5)
        on conflict (clinic_id, phone_e164) do update
          set patient_id = coalesce(conversations.patient_id, excluded.patient_id),
-             wa_jid = coalesce(excluded.wa_jid, conversations.wa_jid)
+             wa_jid = coalesce(excluded.wa_jid, conversations.wa_jid),
+             -- The thread's own name, so an unknown number is still a person.
+             whatsapp_name = coalesce(conversations.whatsapp_name, excluded.whatsapp_name)
        returning id, ai_enabled, ai_paused_until`,
-      [clinicId, m.phone, patient.id, `${m.phone.replace("+", "")}@s.whatsapp.net`]
+      [
+        clinicId,
+        m.phone,
+        patientId,
+        `${m.phone.replace("+", "")}@s.whatsapp.net`,
+        m.pushName ?? null,
+      ]
     );
     const convId = conv.rows[0].id as string;
     const preview = m.body ? m.body.slice(0, 120) : `[${m.msgType}]`;
@@ -209,7 +220,9 @@ export async function recordMessage(
           clinicId,
           JSON.stringify({
             conversationId: convId,
-            patientId: patient.id,
+            // Null when the sender has no file yet; every consumer already
+            // treats the patient as optional.
+            patientId,
             body: m.body,
             msgType: m.msgType,
           }),

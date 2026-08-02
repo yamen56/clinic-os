@@ -12,7 +12,11 @@ import { Toggle, Input, Field, Textarea } from "@/components/ui/input";
 import { Avatar, EmptyState, Spinner } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
-import { addQuickReplyAction, deleteQuickReplyAction } from "./actions";
+import {
+  addQuickReplyAction,
+  deleteQuickReplyAction,
+  createPatientFromConversationAction,
+} from "./actions";
 import {
   MessageCircle,
   Send,
@@ -108,6 +112,7 @@ export function InboxClient({
   const [qrOpen, setQrOpen] = useState(false);
   const [quickReplies, setQuickReplies] = useState(initialQuickReplies);
   const [saveQrOpen, setSaveQrOpen] = useState(false);
+  const [creatingPatient, setCreatingPatient] = useState(false);
   const [qrTitle, setQrTitle] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -551,7 +556,34 @@ export function InboxClient({
               </div>
             </div>
           ) : (
-            <div className="p-4 text-center text-sm text-ink-400">{t.conversations.noPatient}</div>
+            /*
+              A thread without a file is the normal case now — anyone can text
+              the clinic. This is the deliberate step that makes one a patient.
+            */
+            <div className="grid gap-3 p-4 text-center">
+              <p className="text-sm text-ink-400">{t.conversations.noPatient}</p>
+              <Button
+                variant="outline"
+                loading={creatingPatient}
+                onClick={() => {
+                  if (!cv) return;
+                  setCreatingPatient(true);
+                  void createPatientFromConversationAction(slug, cv.id)
+                    .then((r) => {
+                      if (r.error) toast(t.common.genericError, "error");
+                      else {
+                        toast(t.conversations.patientCreated);
+                        void refreshThread(cv.id);
+                        void refreshList();
+                      }
+                    })
+                    .finally(() => setCreatingPatient(false));
+                }}
+              >
+                <UserRound className="h-4 w-4" />
+                {t.conversations.createPatient}
+              </Button>
+            </div>
           )}
         </div>
       )}
