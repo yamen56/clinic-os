@@ -103,7 +103,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Card className="p-4">
           <div className="eyebrow">{t.dashboard.todayAppointments}</div>
           <div className="font-display mt-2 text-[32px] font-bold leading-none tnum">{data.appts.length}</div>

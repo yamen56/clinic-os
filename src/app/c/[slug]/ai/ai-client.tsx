@@ -328,7 +328,7 @@ export function AiClient({
 
         {tab === "usage" && (
           <>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               {[
                 [t.ai.messagesOut, totals.messages],
                 [t.ai.bookings, totals.bookings],

@@ -240,7 +240,7 @@ export function InboxClient({
   return (
     <div className="flex h-[calc(100dvh-8.5rem)] overflow-hidden rounded-card border border-line bg-surface shadow-card md:h-[calc(100dvh-5rem)]">
       {/* ------ List pane ------ */}
-      <div className={`flex w-full flex-col border-e border-line md:w-80 lg:w-96 ${openId ? "hidden md:flex" : ""}`}>
+      <div className={`flex w-full flex-col border-e border-line lg:w-[17rem] xl:w-80 ${openId ? "hidden lg:flex" : ""}`}>
         <div className="border-b border-line p-3">
           <div className="relative mb-2">
             <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
@@ -251,7 +251,13 @@ export function InboxClient({
               className="h-9 w-full rounded-full border border-line bg-sunken ps-9 pe-3 text-sm outline-none focus:border-brand-400"
             />
           </div>
-          <div className="flex gap-1 overflow-x-auto">
+          {/*
+            Wraps rather than scrolls sideways. In the narrower list pane a
+            tablet gets, the last filter was clipped at the edge — and a control
+            half off-screen reads as a broken layout rather than as something
+            you can scroll to. Five short chips cost one extra row at worst.
+          */}
+          <div className="flex flex-wrap gap-1">
             {filters.map((f) => (
               <button
                 key={f.key}
@@ -316,7 +322,7 @@ export function InboxClient({
       </div>
 
       {/* ------ Thread pane ------ */}
-      <div className={`flex min-w-0 flex-1 flex-col ${openId ? "" : "hidden md:flex"}`}>
+      <div className={`flex min-w-0 flex-1 flex-col ${openId ? "" : "hidden lg:flex"}`}>
         {!thread || !cv ? (
           <div className="flex flex-1 items-center justify-center text-sm text-ink-400">
             {t.conversations.selectThread}
@@ -325,7 +331,7 @@ export function InboxClient({
           <>
             {/* Thread header */}
             <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
-              <button className="md:hidden" onClick={() => setOpenId(null)} aria-label={t.common.back}>
+              <button className="lg:hidden" onClick={() => setOpenId(null)} aria-label={t.common.back}>
                 <X className="h-5 w-5 text-ink-400" />
               </button>
               <Avatar name={displayName(cv)} size={36} />
@@ -472,7 +478,7 @@ export function InboxClient({
 
       {/* ------ Patient panel ------ */}
       {thread && (
-        <div className="hidden w-72 shrink-0 flex-col border-s border-line lg:flex">
+        <div className="hidden w-72 shrink-0 flex-col border-s border-line xl:flex">
           {thread.patient ? (
             <div className="flex flex-col gap-4 overflow-y-auto p-4">
               <div className="flex flex-col items-center gap-2 text-center">
