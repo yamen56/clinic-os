@@ -10,6 +10,8 @@ import { formatPhone } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Field, Select, Textarea } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
+import type { CountryCode } from "@/lib/phone";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { Avatar, EmptyState, Tabs } from "@/components/ui/misc";
 import { SaveIndicator } from "@/components/ui/save-indicator";
@@ -108,6 +110,8 @@ export function PatientProfile(props: {
   documents: DocumentListRow[];
   docTemplates: PickableTemplate[];
   canSendDocuments: boolean;
+  /** The clinic's country, so a new number defaults to the right dialling code. */
+  country: CountryCode;
 }) {
   const { slug, tz, currency } = props;
   const { t, locale } = useI18n();
@@ -185,12 +189,12 @@ export function PatientProfile(props: {
             <SaveIndicator state={state} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-500">
-            {p.phone_e164 && <span dir="ltr" className="tnum">{formatPhone(p.phone_e164)}</span>}
+            {p.phone_e164 && <span className="num tnum">{formatPhone(p.phone_e164)}</span>}
             {p.secondary_phone_e164 && (
-              <span dir="ltr" className="tnum text-ink-400">{formatPhone(p.secondary_phone_e164)}</span>
+              <span className="num tnum text-ink-400">{formatPhone(p.secondary_phone_e164)}</span>
             )}
             {p.extra_phones?.map((ph) => (
-              <span key={ph} dir="ltr" className="tnum text-ink-400">{formatPhone(ph)}</span>
+              <span key={ph} className="num tnum text-ink-400">{formatPhone(ph)}</span>
             ))}
             <span>
               {(t.patients.sources as Record<string, string>)[p.source] ?? p.source} ·{" "}
@@ -275,18 +279,17 @@ export function PatientProfile(props: {
                 <h3 className="mb-4 text-[15px] font-semibold">{t.patients.overview.details}</h3>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={defLabel("patient.phone", t.patients.phone)}>
-                    <Input
-                      dir="ltr"
-                      defaultValue={p.phone_e164 ?? ""}
-                      onChange={(e) => patch({ phone_e164: e.target.value })}
-                      placeholder="0790744070"
+                    <PhoneInput
+                      value={p.phone_e164}
+                      defaultCountry={props.country}
+                      onChange={(v) => patch({ phone_e164: v })}
                     />
                   </Field>
                   <Field label={t.patients.secondaryPhone}>
-                    <Input
-                      dir="ltr"
-                      defaultValue={p.secondary_phone_e164 ?? ""}
-                      onChange={(e) => patch({ secondary_phone_e164: e.target.value })}
+                    <PhoneInput
+                      value={p.secondary_phone_e164}
+                      defaultCountry={props.country}
+                      onChange={(v) => patch({ secondary_phone_e164: v })}
                     />
                   </Field>
                   <Field label={defLabel("patient.birth_date", t.patients.birthDate)}>

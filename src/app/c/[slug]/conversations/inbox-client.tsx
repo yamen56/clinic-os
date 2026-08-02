@@ -206,8 +206,24 @@ export function InboxClient({
   const aiActive = (cv: ConvRow) =>
     cv.ai_enabled && (!cv.ai_paused_until || new Date(cv.ai_paused_until) < new Date());
 
-  const displayName = (cv: ConvRow) =>
-    cv.patient_name || cv.whatsapp_name || formatPhone(cv.phone_e164);
+  /**
+   * The title of a thread, which is a *name* when we have one and a phone
+   * number when we do not.
+   *
+   * That distinction has to survive to the markup, because the two need
+   * different treatment in Arabic. A name is Arabic text and belongs in the
+   * page's own direction. A phone number begins with `+`, which is a neutral
+   * character: in a right-to-left paragraph the surrounding text claims it and
+   * drags it to the far end, so `+962 79 074 4070` is drawn ending in the plus
+   * and reads backwards. Isolating the run is what stops that.
+   */
+  const displayName = (cv: ConvRow) => cv.patient_name || cv.whatsapp_name || formatPhone(cv.phone_e164);
+  const isPhoneTitle = (cv: ConvRow) => !cv.patient_name && !cv.whatsapp_name;
+
+  /** The thread title, isolated when it is really a number. */
+  const Title = ({ cv, className = "" }: { cv: ConvRow; className?: string }) => (
+    <span className={`${isPhoneTitle(cv) ? "num " : ""}${className}`}>{displayName(cv)}</span>
+  );
 
   const statusIcon = (m: Msg) => {
     if (m.direction === "in") return null;
@@ -272,7 +288,7 @@ export function InboxClient({
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-sm font-semibold">{displayName(row)}</span>
+                    <Title cv={row} className="truncate text-sm font-semibold" />
                     {row.last_message_at && (
                       <span className="shrink-0 text-[11px] text-ink-400" suppressHydrationWarning>
                         {fmtRelative(row.last_message_at, locale)}
@@ -314,7 +330,7 @@ export function InboxClient({
               </button>
               <Avatar name={displayName(cv)} size={36} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{displayName(cv)}</div>
+                <div className="truncate text-sm font-semibold"><Title cv={cv} /></div>
                 <div className="text-[12px] text-ink-400 tnum" dir="ltr">
                   {formatPhone(cv.phone_e164)}
                 </div>

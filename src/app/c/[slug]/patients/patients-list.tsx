@@ -176,7 +176,7 @@ export function PatientsList({
                       {p.status === "lead" && <Badge status="pending">{t.patients.statusLead}</Badge>}
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-ink-500">
-                      {p.phone && <span dir="ltr" className="tnum">{formatPhone(p.phone)}</span>}
+                      {p.phone && <span className="num tnum">{formatPhone(p.phone)}</span>}
                       <span>{sourceLabel(p.source)}</span>
                       {p.lastVisitAt && (
                         <span>

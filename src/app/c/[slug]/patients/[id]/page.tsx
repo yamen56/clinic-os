@@ -4,6 +4,7 @@ import { inClinic } from "@/lib/clinic-api";
 import { loadDocumentList } from "@/lib/esign/queries";
 import { PatientProfile } from "./profile-client";
 import { can } from "@/lib/auth";
+import { countryFromClinic } from "@/lib/phone";
 
 export default async function PatientProfilePage({
   params,
@@ -125,6 +126,7 @@ export default async function PatientProfilePage({
       documents={JSON.parse(JSON.stringify(d.documents))}
       docTemplates={JSON.parse(JSON.stringify(d.templates))}
       canSendDocuments={can(access, "documents.manage")}
+      country={countryFromClinic(access.clinic)}
     />
   );
 }

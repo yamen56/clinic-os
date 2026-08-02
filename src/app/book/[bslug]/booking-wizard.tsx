@@ -424,7 +424,7 @@ export function BookingWizard({
             <section className="animate-fade-up text-center">
               <MessageCircle className="mx-auto mb-3 h-10 w-10" style={{ color: "var(--bk)" }} />
               <h2 className="mb-1 text-[15px] font-semibold">{t.enterCode}</h2>
-              <p className="mb-4 text-[13px] text-ink-500 tnum" dir="ltr">{phone}</p>
+              <p className="num mb-4 text-[13px] text-ink-500 tnum">{phone}</p>
               <input
                 dir="ltr"
                 inputMode="numeric"
