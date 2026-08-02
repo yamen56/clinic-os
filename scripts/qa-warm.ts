@@ -40,6 +40,13 @@ const ROUTES = [
   "/settings/invoicing",
 ];
 
+/*
+  The public routes, which need tokens the warm-up has no way to mint. A bad
+  token still compiles the route, which is the whole point — the signing suite
+  budgets its first journey at 15s and was spending 20 of them on the compiler.
+*/
+const PUBLIC_ROUTES = ["/sign/warmup", "/inv/warmup", "/doc-print/warmup", "/invite/warmup"];
+
 async function main() {
   const db = new Client({ connectionString: PG });
   await db.connect();
@@ -75,22 +82,25 @@ async function main() {
   await page.click('button[type="submit"]');
   await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 180000 });
 
-  for (const r of ROUTES) {
+  const visit = async (url: string, label: string) => {
     try {
-      await page.goto(`${BASE}/c/${slug}${r}`, { timeout: 120000 });
+      await page.goto(url, { timeout: 120000 });
       await page.waitForLoadState("networkidle", { timeout: 60000 });
     } catch {
       // A route that will not compile is the suites' problem to report, not
       // ours — warming is best effort.
-      console.log(`  · ${r || "/"} did not settle`);
+      console.log(`  · ${label} did not settle`);
     }
-  }
+  };
+
+  for (const r of ROUTES) await visit(`${BASE}/c/${slug}${r}`, r || "/");
+  for (const r of PUBLIC_ROUTES) await visit(`${BASE}${r}`, r);
 
   await browser.close();
   await db.query(`delete from clinics where id = $1`, [clinic.id]);
   await db.query(`delete from users where id = $1`, [user.id]);
   await db.end();
-  console.log(`✓ warmed ${ROUTES.length} routes in ${Math.round((Date.now() - t0) / 1000)}s`);
+  console.log(`✓ warmed ${ROUTES.length + PUBLIC_ROUTES.length} routes in ${Math.round((Date.now() - t0) / 1000)}s`);
 }
 
 main().catch((e) => {
