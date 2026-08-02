@@ -26,7 +26,7 @@ export function startOutboundLoop() {
   void tick();
 }
 
-async function processOnce() {
+export async function processOnce() {
   const connected = [...sessions.entries()].filter(([, s]) => s.connected);
   await Promise.all(
     connected.map(async ([clinicId, session]) => {
@@ -119,14 +119,67 @@ async function processOnce() {
         }
 
         const conv = (
-          await c.query(`select phone_e164 from conversations where id = $1`, [row.conversation_id])
+          await c.query(
+            `select phone_e164, wa_jid, on_whatsapp, wa_checked_at from conversations where id = $1`,
+            [row.conversation_id]
+          )
         ).rows[0];
-        return { row, phone: conv?.phone_e164 as string };
+        return {
+          row,
+          phone: conv?.phone_e164 as string,
+          waJid: conv?.wa_jid as string | null,
+          onWhatsApp: conv?.on_whatsapp as boolean | null,
+          checkedAt: conv?.wa_checked_at as Date | null,
+        };
       });
 
       if (!claimed) return;
       const { row, phone } = claimed;
-      const jid = `${phone.replace("+", "")}@s.whatsapp.net`;
+
+      /*
+        Does this number have WhatsApp at all? Sending to one that does not is
+        not an error the socket reports — it accepts the message and it simply
+        never arrives, which then reads as "sent" forever. Ask once and
+        remember: a number that has WhatsApp today still will next month, and
+        asking on every send is exactly the repeated lookup that gets a number
+        rate-limited.
+      */
+      const stale =
+        !claimed.checkedAt || Date.now() - new Date(claimed.checkedAt).getTime() > 30 * 864e5;
+      let jid = claimed.waJid || `${phone.replace("+", "")}@s.whatsapp.net`;
+
+      if (claimed.onWhatsApp === null || stale) {
+        try {
+          const [hit] = (await session.sock!.onWhatsApp(phone)) ?? [];
+          const exists = !!hit?.exists;
+          if (exists && hit.jid) jid = hit.jid;
+          await withSystem((c) =>
+            c.query(
+              `update conversations set on_whatsapp = $2, wa_checked_at = now(),
+                      wa_jid = coalesce($3, wa_jid)
+                where id = $1`,
+              [row.conversation_id, exists, exists && hit?.jid ? hit.jid : null]
+            )
+          );
+          claimed.onWhatsApp = exists;
+        } catch (e) {
+          // A lookup failure is a connection problem, not a verdict on the
+          // number. Fall through and let the send itself decide.
+          console.error(`[outbound ${clinicId}] onWhatsApp check failed:`, (e as Error).message);
+        }
+      }
+
+      if (claimed.onWhatsApp === false) {
+        await withSystem((c) =>
+          c.query(
+            `update messages set status = 'failed', error = 'no_whatsapp_account', attempts = attempts + 1
+              where id = $1`,
+            [row.id]
+          )
+        );
+        console.log(`[outbound ${clinicId}] ${phone} has no WhatsApp account — not sending`);
+        return;
+      }
 
       try {
         let content: AnyMessageContent;

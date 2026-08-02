@@ -7,6 +7,7 @@ import pino from "pino";
 import { withSystem } from "../db";
 import { useDbAuthState } from "./auth-state";
 import { handleUpsert } from "./inbound";
+import { handleReceipts } from "./receipts";
 
 const logger = pino({ level: "silent" });
 
@@ -122,6 +123,13 @@ export class WASession {
       sock.ev.on("messages.upsert", (m) => {
         handleUpsert(this.clinicId, sock, m).catch((e) =>
           console.error(`[wa ${this.clinicId}] inbound`, (e as Error).message)
+        );
+      });
+
+      // Delivered and read arrive here, long after the send returned.
+      sock.ev.on("messages.update", (u) => {
+        handleReceipts(this.clinicId, u).catch((e) =>
+          console.error(`[wa ${this.clinicId}] receipts`, (e as Error).message)
         );
       });
     } catch (e) {

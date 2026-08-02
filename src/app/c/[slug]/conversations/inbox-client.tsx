@@ -225,14 +225,22 @@ export function InboxClient({
     <span className={`${isPhoneTitle(cv) ? "num " : ""}${className}`}>{displayName(cv)}</span>
   );
 
+  /*
+    One tick means the socket took it, two that the handset has it, and the
+    lit pair that it was opened. They are only worth drawing apart — the whole
+    point of a receipt is telling "arrived" from "went nowhere".
+  */
   const statusIcon = (m: Msg) => {
     if (m.direction === "in") return null;
-    if (m.status === "failed") return <AlertCircle className="h-3.5 w-3.5 text-danger" />;
+    if (m.status === "failed")
+      return <AlertCircle className="h-3.5 w-3.5 text-danger" aria-label={t.conversations.failed} />;
     if (m.status === "queued" || m.status === "sending")
-      return <Clock className="h-3.5 w-3.5 opacity-60" />;
-    if (m.status === "delivered" || m.status === "read")
-      return <CheckCheck className="h-3.5 w-3.5 opacity-60" />;
-    return <Check className="h-3.5 w-3.5 opacity-60" />;
+      return <Clock className="h-3.5 w-3.5 opacity-60" aria-label={t.conversations.pending} />;
+    if (m.status === "read")
+      return <CheckCheck className="h-3.5 w-3.5 text-sky-300" aria-label={t.conversations.read} />;
+    if (m.status === "delivered")
+      return <CheckCheck className="h-3.5 w-3.5 opacity-60" aria-label={t.conversations.delivered} />;
+    return <Check className="h-3.5 w-3.5 opacity-60" aria-label={t.conversations.sent} />;
   };
 
   const cv = thread?.conversation;
@@ -421,7 +429,11 @@ export function InboxClient({
                       {m.body && <div className="whitespace-pre-wrap break-words text-sm">{m.body}</div>}
                       <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${out && m.sender_kind !== "ai" ? "text-white/60" : "text-ink-400"}`}>
                         {m.status === "failed" && (
-                          <span className="font-medium text-danger">{t.conversations.failed}</span>
+                          <span className="font-medium text-danger">
+                            {m.error === "no_whatsapp_account"
+                              ? t.conversations.noWhatsappAccount
+                              : t.conversations.failed}
+                          </span>
                         )}
                         <span className="tnum" suppressHydrationWarning>{fmtTime(m.created_at, tz, locale)}</span>
                         {statusIcon(m)}
