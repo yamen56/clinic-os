@@ -94,6 +94,7 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     [clinic, conversation]
   );
   await q(`insert into quick_replies (clinic_id, title, body) values ($1, 't', 'b') returning id`, [clinic]);
+  await q(`insert into clinic_tags (clinic_id, name) values ($1, $2) returning id`, [clinic, `rls-tag-${tag}`]);
   await q(`insert into whatsapp_sessions (clinic_id) values ($1) returning clinic_id`, [clinic]);
   await q(`insert into whatsapp_auth_state (clinic_id, key, value) values ($1, 'creds', '{}') returning clinic_id`, [clinic]);
   const invoice = (

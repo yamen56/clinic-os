@@ -5,6 +5,8 @@
 import { spawn } from "node:child_process";
 
 const SUITES = [
+  // First, so the browser suites time the app and not the dev compiler.
+  ["warm-up: compile the routes", "scripts/qa-warm.ts"],
   ["unit: phone normalization", "scripts/test-phone.ts"],
   ["unit: RLS tenant isolation", "scripts/test-rls.ts"],
   ["unit: Arabic-insensitive search", "scripts/test-search.ts"],
