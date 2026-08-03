@@ -870,6 +870,8 @@ export const en = {
     dailyCap: "Daily message cap",
     sentToday: "Sent today",
     workerDown: "The messaging service is unreachable. Start the worker and try again.",
+    capWarning:
+      "This is a personal WhatsApp number, not a business account. High volume — especially to people who never messaged you first — is what gets numbers banned, and a ban cannot be appealed. Raise this only as far as the clinic actually needs, and keep bulk sends in Campaigns so they go out slowly.",
     deliverability: "Delivery, last 7 days",
     deliverabilitySub: "Whether messages arrived — not just whether we sent them.",
     noSendsYet: "No messages sent in the last 7 days.",

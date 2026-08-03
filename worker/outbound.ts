@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import type { PoolClient } from "pg";
 import { withSystem } from "./db";
 import { sessions } from "./wa/session";
 import { readFileBuffer } from "../src/lib/storage";
@@ -89,14 +90,25 @@ export async function processOnce() {
           return null;
         }
 
-        // Blast guard: identical automation text to many numbers in a short
-        // window. Campaigns are exempt on purpose — sending one message to many
-        // numbers is the whole feature, and their protection is upstream: the
-        // drip releases one recipient per configured interval and stops
-        // entirely when this clinic is paused, capped, or out of hours. Tripping
-        // the guard on them would pause every automation in the clinic for a
-        // send that was deliberate.
+        /*
+          Blast guard: an automation fanning the same text out to the whole
+          patient list, which is the shape of a misconfigured trigger and the
+          fastest way to get a number banned.
+
+          The threshold follows the clinic's own daily cap rather than sitting
+          at a fixed handful. A busy clinic sending an unpersonalised reminder
+          to fifty patients is doing something ordinary — at one message every
+          six seconds it used to cross a fixed limit of eight within a minute,
+          pause every automation for half an hour, and do it again on the next
+          message. That made high volume impossible by accident.
+
+          Campaigns are exempt on purpose — sending one message to many numbers
+          is the whole feature, and their protection is upstream: the drip
+          releases one recipient per configured interval and stops entirely
+          when this clinic is paused, capped, or out of hours.
+        */
         if (row.sender_kind === "automation" && row.body) {
+          const limit = Math.max(30, Math.floor(Number(ses.daily_outbound_cap) / 5));
           const blast = (
             await c.query(
               `select count(distinct conversation_id)::int as n from messages
@@ -104,7 +116,7 @@ export async function processOnce() {
               [clinicId, row.body]
             )
           ).rows[0];
-          if (blast.n > 8) {
+          if (blast.n > limit) {
             await c.query(
               `update whatsapp_sessions set paused_until = now() + interval '30 minutes' where clinic_id = $1`,
               [clinicId]
@@ -113,7 +125,12 @@ export async function processOnce() {
               `update messages set status = 'queued', scheduled_at = now() + interval '35 minutes' where id = $1`,
               [row.id]
             );
-            console.log(`[outbound ${clinicId}] blast guard tripped — pausing automations 30m`);
+            // Silently pausing a clinic's automations is how this stayed
+            // invisible: nothing sends, nothing errors, nobody is told.
+            await notifyBlastGuard(c, clinicId, blast.n);
+            console.log(
+              `[outbound ${clinicId}] blast guard tripped at ${blast.n} (limit ${limit}) — pausing automations 30m`
+            );
             return null;
           }
         }
@@ -299,6 +316,41 @@ export async function processOnce() {
       nextSendAt.set(clinicId, Date.now() + 3000 + Math.random() * 7000);
     })
   );
+}
+
+/**
+ * Tell someone the guard fired. Once an hour: it stays tripped for thirty
+ * minutes and the same automation will keep arriving at it, and an alarm that
+ * repeats every message is one people learn to click past.
+ */
+async function notifyBlastGuard(c: PoolClient, clinicId: string, n: number) {
+  const told = await c.query(
+    `select 1 from notifications
+      where clinic_id = $1 and kind = 'whatsapp_blast_guard'
+        and created_at > now() - interval '1 hour'`,
+    [clinicId]
+  );
+  if (told.rowCount) return;
+  const clinic = (await c.query(`select slug from clinics where id = $1`, [clinicId])).rows[0];
+  if (!clinic) return;
+  const staff = await c.query(
+    `select user_id from clinic_members where clinic_id = $1 and is_owner and active
+     union select id from users where is_super_admin`,
+    [clinicId]
+  );
+  for (const s of staff.rows) {
+    await c.query(
+      `insert into notifications (clinic_id, user_id, kind, title, body, url)
+       values ($1, $2, 'whatsapp_blast_guard', $3, $4, $5)`,
+      [
+        clinicId,
+        s.user_id ?? s.id,
+        "تم إيقاف الأتمتة مؤقتاً لحماية الرقم",
+        `أُرسل النص نفسه إلى ${n} رقماً خلال عشر دقائق. إن كان مقصوداً فاستخدم الحملات، وإلا فراجع الأتمتة.`,
+        `/c/${clinic.slug}/settings/whatsapp`,
+      ]
+    );
+  }
 }
 
 function hmToMinutes(hm: string): number {

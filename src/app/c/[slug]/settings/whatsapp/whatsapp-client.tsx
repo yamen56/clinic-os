@@ -34,13 +34,23 @@ const badge: Record<Status["status"], StatusKey> = {
   logged_out: "no_show",
 };
 
-export function WhatsappClient({ slug, canEdit }: { slug: string; canEdit: boolean }) {
+export function WhatsappClient({
+  slug,
+  canEdit,
+  canSetCap,
+}: {
+  slug: string;
+  canEdit: boolean;
+  /** The cap is clinic configuration, which is a separate capability. */
+  canSetCap: boolean;
+}) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
   const [st, setSt] = useState<Status | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, start] = useTransition();
+  const [savingCap, setSavingCap] = useState(false);
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/c/${slug}/whatsapp/status`);
@@ -67,6 +77,29 @@ export function WhatsappClient({ slug, canEdit }: { slug: string; canEdit: boole
       setQrUrl(null);
     }
   }, [st?.qr]);
+
+  /*
+    Saved on blur rather than behind a Save button: it is one number in a card
+    of read-only rails, and a lone button there reads as saving the whole card.
+  */
+  const saveCap = async (n: number) => {
+    if (!Number.isInteger(n) || n < 10 || n > 5000 || n === st?.daily_outbound_cap) return;
+    setSavingCap(true);
+    try {
+      const res = await fetch(`/api/c/${slug}/clinic`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patch: { daily_outbound_cap: n } }),
+      });
+      if (!res.ok) throw new Error();
+      toast(t.common.saved);
+      await refresh();
+    } catch {
+      toast(t.common.genericError, "error");
+    } finally {
+      setSavingCap(false);
+    }
+  };
 
   const control = (op: "connect" | "disconnect") =>
     start(async () => {
@@ -158,19 +191,50 @@ export function WhatsappClient({ slug, canEdit }: { slug: string; canEdit: boole
       <Card>
         <CardHeader title={t.wa.railsTitle} sub={t.wa.railsBody} />
         {st && (
-          <div className="flex flex-wrap gap-8 px-5 py-4 text-sm">
-            <div>
-              <div className="text-[12px] text-ink-500">{t.wa.dailyCap}</div>
-              <div className="font-semibold tnum">{st.daily_outbound_cap}</div>
+          <div className="px-5 py-4">
+            <div className="flex flex-wrap items-end gap-8 text-sm">
+              <div>
+                <label
+                  htmlFor="daily-cap"
+                  className="mb-1 block text-[12px] text-ink-500"
+                >
+                  {t.wa.dailyCap}
+                </label>
+                {canSetCap ? (
+                  <input
+                    id="daily-cap"
+                    type="number"
+                    min={10}
+                    max={5000}
+                    step={50}
+                    defaultValue={st.daily_outbound_cap}
+                    disabled={savingCap}
+                    onBlur={(e) => saveCap(Number(e.target.value))}
+                    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                    className="h-9 w-28 rounded-ctl border border-line bg-transparent px-3 text-sm font-semibold tabular-nums outline-none focus:border-brand-400"
+                  />
+                ) : (
+                  <div className="font-semibold tnum">{st.daily_outbound_cap}</div>
+                )}
+              </div>
+              <div>
+                <div className="text-[12px] text-ink-500">{t.wa.sentToday}</div>
+                <div className="font-semibold tnum">{st.outbound_today}</div>
+              </div>
+              <div className="flex items-center gap-2 pb-1.5 text-brand-700">
+                <ShieldCheck className="h-4.5 w-4.5" />
+                3–10s
+              </div>
             </div>
-            <div>
-              <div className="text-[12px] text-ink-500">{t.wa.sentToday}</div>
-              <div className="font-semibold tnum">{st.outbound_today}</div>
-            </div>
-            <div className="flex items-center gap-2 text-brand-700">
-              <ShieldCheck className="h-4.5 w-4.5" />
-              3–10s
-            </div>
+            {/*
+              The cap is the one rail a clinic can raise, so it is the one that
+              needs the warning next to it. This is a personal WhatsApp number,
+              not a business API: volume to people who never wrote first is what
+              gets numbers banned, and a banned number cannot be appealed.
+            */}
+            <p className="mt-3 max-w-prose rounded-lg bg-sunken p-3 text-[13px] text-ink-600">
+              {t.wa.capWarning}
+            </p>
           </div>
         )}
       </Card>

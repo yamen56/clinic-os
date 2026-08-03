@@ -41,7 +41,11 @@ export default async function WhatsappSettingsPage({
 
   return (
     <div className="grid gap-4">
-      <WhatsappClient slug={slug} canEdit={can(access, "settings")} />
+      <WhatsappClient
+        slug={slug}
+        canEdit={can(access, "settings")}
+        canSetCap={can(access, "settings.clinic")}
+      />
       <Deliverability stats={JSON.parse(JSON.stringify(stats))} />
     </div>
   );
