@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import type { PoolClient } from "pg";
 import { withSystem } from "./db";
 import { sessions } from "./wa/session";
+import { resolveSendAddress } from "./wa/resolve-address";
 import { readFileBuffer } from "../src/lib/storage";
 import type { AnyMessageContent } from "@whiskeysockets/baileys";
 
@@ -216,49 +217,21 @@ export async function processOnce() {
       */
       if (!claimed.isLid && (claimed.onWhatsApp === null || stale)) {
         try {
-          const [hit] = (await session.sock!.onWhatsApp(phone)) ?? [];
-          /*
-            Only an actual answer counts. An empty result is WhatsApp declining
-            to say — it happens on a flaky connection — and reading that as "no
-            such account" would write the number off permanently, losing every
-            future message to it in exactly the silent way this check exists to
-            prevent. No answer means try the send and let it speak for itself.
-          */
-          if (hit && typeof hit.exists === "boolean") {
-            const exists = hit.exists;
-            /*
-              Take the LID, not the phone address.
-
-              `onWhatsApp` asks with the LID protocol and answers with both: the
-              legacy `<phone>@s.whatsapp.net` and the account's LID. WhatsApp has
-              moved these accounts onto LID addressing — every inbound message
-              arrives that way — and for a migrated account the legacy address no
-              longer routes. The socket accepts it, returns an id, and the
-              message is never delivered, which is why messages to numbers that
-              had never written to the clinic vanished while replies to numbers
-              that had worked perfectly.
-            */
-            const rawLid = typeof hit.lid === "string" ? hit.lid : null;
-            const lidJid = rawLid ? (rawLid.includes("@") ? rawLid : `${rawLid}@lid`) : null;
-            const resolved = exists ? (lidJid ?? hit.jid ?? null) : null;
-            if (resolved) jid = resolved;
+          const addr = await resolveSendAddress(session.sock, phone);
+          if (addr.exists === null) {
+            console.log(`[outbound ${clinicId}] no verdict for ${phone} — sending anyway`);
+          } else {
+            if (addr.jid) jid = addr.jid;
             await withSystem((c) =>
               c.query(
                 `update conversations set on_whatsapp = $2, wa_checked_at = now(),
                         wa_jid = coalesce($3, wa_jid),
                         wa_lid = coalesce($4, wa_lid)
                   where id = $1`,
-                [
-                  row.conversation_id,
-                  exists,
-                  resolved,
-                  lidJid ? lidJid.split("@")[0] : null,
-                ]
+                [row.conversation_id, addr.exists, addr.jid, addr.lid]
               )
             );
-            claimed.onWhatsApp = exists;
-          } else {
-            console.log(`[outbound ${clinicId}] no verdict for ${phone} — sending anyway`);
+            claimed.onWhatsApp = addr.exists;
           }
         } catch (e) {
           // A lookup failure is a connection problem, not a verdict on the

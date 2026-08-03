@@ -59,6 +59,50 @@ function fakeSock(sentTo: string[], lidFor: Record<string, string> = {}) {
 }
 
 async function main() {
+  /* ------------------------------------- resolving where a message should go */
+  const { resolveSendAddress } = await import("../worker/wa/resolve-address");
+  const PN = "+962790111222";
+
+  // Baileys 7: the mapping store answers, and its answer wins.
+  const withMapper = {
+    signalRepository: { lidMapping: { getLIDForPN: async () => "99887766554433@lid" } },
+    onWhatsApp: async () => [{ jid: `962790111222@s.whatsapp.net`, exists: true }],
+  };
+  let a = await resolveSendAddress(withMapper, PN);
+  check("the mapping store's LID is preferred over the phone address", a.jid === "99887766554433@lid", a.jid ?? "");
+  check("and the bare LID comes back with it", a.lid === "99887766554433", a.lid ?? "");
+
+  // Baileys 6.7: no mapping store, but onWhatsApp may still offer a LID.
+  a = await resolveSendAddress(
+    { onWhatsApp: async () => [{ jid: `962790111222@s.whatsapp.net`, exists: true, lid: "1122334455@lid" }] },
+    PN
+  );
+  check("a LID from onWhatsApp is used when there is no mapper", a.jid === "1122334455@lid", a.jid ?? "");
+
+  // A number still on legacy addressing has to keep working.
+  a = await resolveSendAddress(
+    { onWhatsApp: async () => [{ jid: `962790111222@s.whatsapp.net`, exists: true }] },
+    PN
+  );
+  check("no LID anywhere falls back to the phone address", a.jid === "962790111222@s.whatsapp.net", a.jid ?? "");
+  check("and is still marked reachable", a.exists === true);
+
+  // WhatsApp saying no, versus WhatsApp saying nothing.
+  a = await resolveSendAddress({ onWhatsApp: async () => [{ jid: "x", exists: false }] }, PN);
+  check("a real 'no account' is reported as such", a.exists === false && a.jid === null);
+  a = await resolveSendAddress({ onWhatsApp: async () => [] }, PN);
+  check("silence is not a verdict", a.exists === null, String(a.exists));
+
+  // A mapper that throws must not become a verdict either.
+  a = await resolveSendAddress(
+    {
+      signalRepository: { lidMapping: { getLIDForPN: async () => { throw new Error("boom"); } } },
+      onWhatsApp: async () => [{ jid: `962790111222@s.whatsapp.net`, exists: true }],
+    },
+    PN
+  );
+  check("a failing resolver falls through rather than giving up", a.jid === "962790111222@s.whatsapp.net", a.jid ?? "");
+
   /* ------------------------------------------ the window, before anything else */
   const tz = "Asia/Amman";
   const at = (h: number, m = 0) =>
