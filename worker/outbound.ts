@@ -60,13 +60,25 @@ export async function processOnce() {
           ses.outbound_today = 0;
         }
 
+        /*
+          Somebody is waiting on a staff reply; nobody is waiting on a
+          reminder. Strict arrival order put a receptionist's message behind
+          every queued automation — fifty of them at one every six seconds is
+          five minutes before their reply leaves, which reads as the product
+          being broken while it is working exactly as written.
+
+          The AI counts as interactive for the same reason: it is answering a
+          patient who is sitting in the chat right now.
+        */
         const row = (
           await c.query(
             `update messages set status = 'sending'
              where id = (
                select id from messages
                where clinic_id = $1 and status = 'queued' and scheduled_at <= now()
-               order by created_at limit 1
+               order by case when sender_kind in ('staff', 'ai') then 0 else 1 end,
+                        created_at
+               limit 1
                for update skip locked
              )
              returning *`,

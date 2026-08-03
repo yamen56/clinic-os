@@ -194,6 +194,34 @@ async function main() {
   );
   check("and somebody is told it happened", told.rows[0].n > 0, `${told.rows[0].n} notified`);
 
+  /*
+    A receptionist typing a reply is waiting on it. A reminder is not. Strict
+    arrival order made the person wait behind the batch, which is what makes a
+    working system feel broken.
+  */
+  await db.query(`update whatsapp_sessions set outbound_today = 0, paused_until = null where clinic_id = $1`, [
+    clinic.id,
+  ]);
+  await db.query(`delete from messages where clinic_id = $1`, [clinic.id]);
+
+  for (let i = 0; i < 12; i++) {
+    await queue(`تذكير رقم ${i}`, "automation", `+96279${String(1000000 + i).slice(-7)}`);
+  }
+  const reply = await queue("أهلاً، نعم يوجد موعد غداً", "staff", "+962791000000");
+  await new Promise((r) => setTimeout(r, 10500));
+  await processOnce();
+  m = (await db.query(`select status from messages where id = $1`, [reply])).rows[0];
+  check("a staff reply goes before the reminder batch", m.status === "sent", m.status);
+  const stillQueued = await db.query(
+    `select count(*)::int n from messages where clinic_id = $1 and status = 'queued'`,
+    [clinic.id]
+  );
+  check(
+    "and the reminders wait their turn behind it",
+    stillQueued.rows[0].n === 12,
+    `${stillQueued.rows[0].n} still queued`
+  );
+
   /* ------------------- and the clinic can raise the rail without asking us */
   await db.query(`update users set password_hash = $2 where id = $1`, [
     owner.id,
