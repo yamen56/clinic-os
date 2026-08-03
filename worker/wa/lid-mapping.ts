@@ -74,7 +74,9 @@ export function pairsFromContacts(
   const out: { lid: string; jid: string }[] = [];
   for (const ct of contacts) {
     const lid = ct.lid ?? (ct.id?.endsWith("@lid") ? ct.id : undefined);
-    const jid = ct.jid ?? (ct.id?.endsWith("@s.whatsapp.net") ? ct.id : undefined);
+    // `phoneNumber` is what the contact's PN form is called now; `id` still
+    // holds it on contacts that were never LID-addressed.
+    const jid = ct.phoneNumber ?? (ct.id?.endsWith("@s.whatsapp.net") ? ct.id : undefined);
     if (lid && jid) out.push({ lid, jid });
   }
   return out;

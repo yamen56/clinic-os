@@ -139,9 +139,11 @@ export class WASession {
         A LID-addressed thread works without this — it is how the message
         reached us — but the number is what ties it to a patient file.
       */
-      sock.ev.on("chats.phoneNumberShare", (p) => {
-        learnLidMapping(this.clinicId, [p]).catch((e) =>
-          console.error(`[wa ${this.clinicId}] lid share`, (e as Error).message)
+      // The library resolves phone↔LID itself now and announces each pairing it
+      // learns, which is both earlier and more reliable than the contact sync.
+      sock.ev.on("lid-mapping.update", (m) => {
+        learnLidMapping(this.clinicId, [{ lid: m.lid, jid: m.pn }]).catch((e) =>
+          console.error(`[wa ${this.clinicId}] lid mapping`, (e as Error).message)
         );
       });
       const onContacts = (cts: Parameters<typeof pairsFromContacts>[0]) => {

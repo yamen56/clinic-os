@@ -52,7 +52,12 @@ export async function useDbAuthState(clinicId: string): Promise<{
         for (const id of ids) {
           let value = (await read(`${type}:${id}`)) as SignalDataTypeMap[T] | null;
           if (type === "app-state-sync-key" && value) {
-            value = proto.Message.AppStateSyncKeyData.fromObject(value) as unknown as SignalDataTypeMap[T];
+            // The stored shape is a plain object either way; the union this key
+            // now widens to no longer satisfies `fromObject`'s parameter, so
+            // the cast says what was already true rather than changing it.
+            value = proto.Message.AppStateSyncKeyData.fromObject(
+              value as unknown as { [k: string]: unknown }
+            ) as unknown as SignalDataTypeMap[T];
           }
           if (value) out[id] = value;
         }

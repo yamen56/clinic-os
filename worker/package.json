@@ -1,0 +1,4 @@
+{
+  "//": "Baileys 7 is pure ESM, so the worker has to be. Scoped here rather than set on the root package so the Next app, its config files and the QA scripts stay CommonJS — this directory is the only thing that imports Baileys.",
+  "type": "module"
+}

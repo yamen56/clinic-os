@@ -7,7 +7,7 @@
  * and the receipts that arrive minutes after the send already returned.
  */
 import { Client } from "pg";
-import { handleReceipts } from "../worker/wa/receipts";
+
 
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
 process.env.DATABASE_URL ||= PG;
@@ -45,6 +45,7 @@ function fakeSock(opts: { registered: Set<string>; silent?: Set<string>; onSend?
 }
 
 async function main() {
+  const { handleReceipts } = await import("../worker/wa/receipts");
   const db = new Client({ connectionString: PG });
   await db.connect();
 

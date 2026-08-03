@@ -10,7 +10,6 @@
 import { chromium } from "playwright";
 import { Client } from "pg";
 import bcrypt from "bcryptjs";
-import { pumpClinic, reconcileDelivery } from "../worker/campaigns";
 
 try {
   process.loadEnvFile?.();
@@ -40,6 +39,7 @@ async function waitForStatus(db: Client, id: string, want: string, ms = 20000) {
 }
 
 async function main() {
+  const { pumpClinic, reconcileDelivery } = await import("../worker/campaigns");
   const db = new Client({ connectionString: PG });
   await db.connect();
 

@@ -11,9 +11,6 @@
  * to". The fake socket records the address.
  */
 import { Client } from "pg";
-import { recordMessage } from "../worker/wa/inbound";
-import { learnLidMapping } from "../worker/wa/lid-mapping";
-import { withinWindow } from "../worker/automations";
 import { DateTime } from "luxon";
 
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -59,6 +56,9 @@ function fakeSock(sentTo: string[], lidFor: Record<string, string> = {}) {
 }
 
 async function main() {
+  const { recordMessage } = await import("../worker/wa/inbound");
+  const { learnLidMapping } = await import("../worker/wa/lid-mapping");
+  const { withinWindow } = await import("../worker/automations");
   /* ------------------------------------- resolving where a message should go */
   const { resolveSendAddress } = await import("../worker/wa/resolve-address");
   const PN = "+962790111222";
