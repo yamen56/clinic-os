@@ -48,20 +48,40 @@ export async function createPatientFromConversationAction(
   return inClinic(access, async (c) => {
     const conv = (
       await c.query(
-        `select id, phone_e164, patient_id, whatsapp_name from conversations
-          where id = $1 and clinic_id = $2`,
+        `select id, phone_e164, patient_id, whatsapp_name, identifier_kind
+           from conversations where id = $1 and clinic_id = $2`,
         [conversationId, access.clinicId]
       )
     ).rows[0] as
-      | { id: string; phone_e164: string; patient_id: string | null; whatsapp_name: string | null }
+      | {
+          id: string;
+          phone_e164: string;
+          patient_id: string | null;
+          whatsapp_name: string | null;
+          identifier_kind: string;
+        }
       | undefined;
     if (!conv) return { error: "not_found" };
     if (conv.patient_id) return { patientId: conv.patient_id };
 
+    /*
+      A LID-addressed thread has no phone number — `phone_e164` is holding the
+      WhatsApp identity that stands in for one. Copying it onto a patient file
+      writes a fifteen-digit thing that looks like a number, is not one, and
+      cannot be dialled or matched. Leave the field empty for staff to fill in
+      from the person they are actually talking to.
+    */
+    const dialable = conv.identifier_kind !== "lid";
+    // A file has to be findable by something. The WhatsApp name is the only
+    // thing a LID thread carries, and when even that is missing a placeholder
+    // is kinder than a blank row — staff rename it from the conversation.
+    const placeholder = access.clinic.defaultLocale === "ar" ? "مستخدم واتساب" : "WhatsApp user";
+
     // Still goes through the identity rule — the number may already belong to
     // a file created some other way since this thread started.
     const patient = await findOrCreatePatient(c, access.clinicId, {
-      phone: conv.phone_e164,
+      phone: dialable ? conv.phone_e164 : "",
+      fullName: conv.whatsapp_name ?? (dialable ? undefined : placeholder),
       whatsappName: conv.whatsapp_name ?? undefined,
       source: "staff",
       status: "active",

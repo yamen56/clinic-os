@@ -150,7 +150,7 @@ async function main() {
   await page.getByRole("button", { name: /create patient file/i }).click();
   await page.waitForSelector("text=Open file", { timeout: 20000 });
   const promoted = await db.query(
-    `select p.source, p.status, p.full_name from patients p
+    `select p.source, p.status, p.full_name, p.phone_e164 from patients p
       join conversations cv on cv.patient_id = p.id
      where cv.clinic_id = $1 and cv.phone_e164 = '+962788881122'`,
     [clinic.id]
@@ -160,6 +160,41 @@ async function main() {
   if (promoted.rows[0].full_name !== "Abu Salem")
     throw new Error(`the WhatsApp name should become the file name: ${promoted.rows[0].full_name}`);
   console.log("✓ staff can turn a thread into a patient file");
+  if (promoted.rows[0].phone_e164 !== "+962788881122")
+    throw new Error(`the real number should land on the file: ${promoted.rows[0].phone_e164}`);
+
+  /*
+    8. The same, for a chat WhatsApp addresses by identity rather than number.
+    `phone_e164` is holding a LID standing in for a number, and copying it onto
+    a patient file writes a fifteen-digit thing that looks like a phone number,
+    cannot be dialled, and turns up in the patient list as "a strange number".
+  */
+  const lid = "947716245331902";
+  await db.query(
+    `insert into conversations (clinic_id, phone_e164, wa_jid, wa_lid, identifier_kind,
+                                whatsapp_name, last_message_at, last_message_preview)
+     values ($1, $2, $3, $4, 'lid', 'Nadia', now(), 'مرحبا')`,
+    [clinic.id, `+${lid}`, `${lid}@lid`, lid]
+  );
+  await page.goto(`${BASE}/c/${slug}/conversations`);
+  await page.waitForLoadState("networkidle");
+  await page.click("text=Nadia");
+  await page.getByRole("button", { name: /create patient file/i }).click();
+  await page.waitForSelector("text=Open file", { timeout: 20000 });
+
+  const fromLid = await db.query(
+    `select p.full_name, p.phone_e164 from patients p
+      join conversations cv on cv.patient_id = p.id
+     where cv.clinic_id = $1 and cv.wa_lid = $2`,
+    [clinic.id, lid]
+  );
+  if (fromLid.rowCount !== 1)
+    throw new Error("promoting a LID thread did not create a file");
+  if (fromLid.rows[0].phone_e164 !== null)
+    throw new Error(`a LID must not become a phone number: ${fromLid.rows[0].phone_e164}`);
+  if (fromLid.rows[0].full_name !== "Nadia")
+    throw new Error(`the WhatsApp name should name the file: ${fromLid.rows[0].full_name}`);
+  console.log("✓ promoting a LID thread leaves the phone blank, not a fake number");
 
   // 7. WhatsApp settings: connect → QR appears (live Baileys against WA servers)
   await page.goto(`${BASE}/c/${slug}/settings/whatsapp`);
