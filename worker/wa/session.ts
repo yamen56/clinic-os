@@ -8,6 +8,7 @@ import { withSystem } from "../db";
 import { useDbAuthState } from "./auth-state";
 import { handleUpsert } from "./inbound";
 import { handleReceipts } from "./receipts";
+import { learnLidMapping, pairsFromContacts } from "./lid-mapping";
 
 const logger = pino({ level: "silent" });
 
@@ -132,6 +133,26 @@ export class WASession {
           console.error(`[wa ${this.clinicId}] receipts`, (e as Error).message)
         );
       });
+
+      /*
+        The two places WhatsApp tells us which phone number is behind a LID.
+        A LID-addressed thread works without this — it is how the message
+        reached us — but the number is what ties it to a patient file.
+      */
+      sock.ev.on("chats.phoneNumberShare", (p) => {
+        learnLidMapping(this.clinicId, [p]).catch((e) =>
+          console.error(`[wa ${this.clinicId}] lid share`, (e as Error).message)
+        );
+      });
+      const onContacts = (cts: Parameters<typeof pairsFromContacts>[0]) => {
+        const pairs = pairsFromContacts(cts);
+        if (pairs.length)
+          learnLidMapping(this.clinicId, pairs).catch((e) =>
+            console.error(`[wa ${this.clinicId}] lid contacts`, (e as Error).message)
+          );
+      };
+      sock.ev.on("contacts.upsert", onContacts);
+      sock.ev.on("contacts.update", onContacts);
     } catch (e) {
       console.error(`[wa ${this.clinicId}] start failed`, (e as Error).message);
       await this.setSession({ status: "disconnected", error: (e as Error).message }).catch(() => {});

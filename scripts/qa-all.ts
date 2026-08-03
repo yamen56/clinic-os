@@ -32,6 +32,7 @@ const SUITES = [
   ["tablet: iPad layouts", "scripts/qa-tablet.ts"],
   ["account & tags: the profile page and the tag catalogue", "scripts/qa-profile-tags.ts"],
   ["whatsapp: sending, unreachable numbers, receipts", "scripts/qa-whatsapp-delivery.ts"],
+  ["whatsapp: LID chats and the sending window", "scripts/qa-whatsapp-lid.ts"],
   ["pdf: browser released when idle", "scripts/qa-pdf-idle.ts"],
   ["backup: dump and restore", "scripts/qa-backup.ts"],
   ["access: what each member can reach", "scripts/qa-access.ts"],

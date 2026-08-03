@@ -35,8 +35,26 @@ export function withinWindow(
   const [sh, sm] = windowStart.split(":").map(Number);
   const [eh, em] = windowEnd.split(":").map(Number);
   const start = local.set({ hour: sh, minute: sm, second: 0, millisecond: 0 });
-  const end = local.set({ hour: eh, minute: em, second: 0, millisecond: 0 });
-  if (local < start) return start;
+  let end = local.set({ hour: eh, minute: em, second: 0, millisecond: 0 });
+  /*
+    A window that closes at midnight closes at the *end* of the day. Read
+    literally, 00:00 is the start of it — earlier than every opening time — so
+    a clinic open "12:00 to 00:00" had its window collapse to nothing and every
+    message pushed to noon the next day, one day late, forever. The same
+    correction covers any window that runs past midnight, e.g. 20:00 to 02:00.
+  */
+  if (end <= start) end = end.plus({ days: 1 });
+
+  /*
+    Before today's opening is not the same as outside the window. When the
+    window spans midnight, 01:00 belongs to the opening that began last
+    night — sending then is exactly what the clinic asked for, and holding it
+    until tonight would be nineteen hours late.
+  */
+  if (local < start) {
+    const openedYesterday = local >= start.minus({ days: 1 }) && local < end.minus({ days: 1 });
+    return openedYesterday ? local : start;
+  }
   if (local >= end) return start.plus({ days: 1 });
   return local;
 }

@@ -120,7 +120,8 @@ export async function processOnce() {
 
         const conv = (
           await c.query(
-            `select phone_e164, wa_jid, on_whatsapp, wa_checked_at from conversations where id = $1`,
+            `select phone_e164, wa_jid, on_whatsapp, wa_checked_at, identifier_kind
+               from conversations where id = $1`,
             [row.conversation_id]
           )
         ).rows[0];
@@ -130,6 +131,7 @@ export async function processOnce() {
           waJid: conv?.wa_jid as string | null,
           onWhatsApp: conv?.on_whatsapp as boolean | null,
           checkedAt: conv?.wa_checked_at as Date | null,
+          isLid: conv?.identifier_kind === "lid",
         };
       });
 
@@ -146,9 +148,17 @@ export async function processOnce() {
       */
       const stale =
         !claimed.checkedAt || Date.now() - new Date(claimed.checkedAt).getTime() > 30 * 864e5;
+      /*
+        The stored address wins. It is the one WhatsApp used when the patient
+        wrote to us, so it is known to reach them — where a rebuilt one is a
+        guess, and a wrong guess is a message that vanishes without an error.
+        Only a conversation we started ourselves has no stored address.
+      */
       let jid = claimed.waJid || `${phone.replace("+", "")}@s.whatsapp.net`;
 
-      if (claimed.onWhatsApp === null || stale) {
+      // A LID cannot be looked up as a number and does not need to be: the
+      // patient reached us at it. Checking would only produce a false verdict.
+      if (!claimed.isLid && (claimed.onWhatsApp === null || stale)) {
         try {
           const [hit] = (await session.sock!.onWhatsApp(phone)) ?? [];
           const exists = !!hit?.exists;

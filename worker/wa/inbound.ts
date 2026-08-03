@@ -83,8 +83,22 @@ export async function handleUpsert(
 async function handleOne(clinicId: string, sock: WASocket, msg: WAMessage) {
   const jid = msg.key.remoteJid ?? "";
   if (!jid || jid.endsWith("@g.us") || jid === "status@broadcast" || jid.endsWith("@newsletter")) return;
-  const phone = jidToE164(jid);
-  if (!phone) return;
+
+  /*
+    WhatsApp addresses many chats by an opaque LID rather than a phone number.
+    The digits in one look like a number and are not: matching them out and
+    rebuilding <digits>@s.whatsapp.net produces an address nobody is at, and
+    the send silently goes nowhere. Keep the LID as a LID, and keep the real
+    JID so replies go back to where the message came from.
+  */
+  const isLid = jid.endsWith("@lid");
+  const lid = isLid ? jid.split("@")[0] : null;
+  const phone = isLid ? null : jidToE164(jid);
+  // The identifier the conversation is keyed by. For a LID chat we do not know
+  // the number yet — `chats.phoneNumberShare` and the contact list fill it in
+  // later, and until then the LID stands in for it.
+  const identifier = phone ?? (lid ? `+${lid}` : null);
+  if (!identifier) return;
 
   const fromMe = !!msg.key.fromMe;
   const waId = msg.key.id ?? null;
@@ -110,7 +124,10 @@ async function handleOne(clinicId: string, sock: WASocket, msg: WAMessage) {
   }
 
   await recordMessage(clinicId, {
-    phone,
+    phone: identifier,
+    jid,
+    lid,
+    dialable: phone !== null,
     fromMe,
     waId,
     msgType: ex.msgType,
@@ -129,7 +146,13 @@ async function handleOne(clinicId: string, sock: WASocket, msg: WAMessage) {
 export async function recordMessage(
   clinicId: string,
   m: {
+    /** What the conversation is keyed by — a real number, or a LID standing in. */
     phone: string;
+    /** The address WhatsApp used, kept verbatim so replies go back to it. */
+    jid?: string | null;
+    lid?: string | null;
+    /** False when `phone` is really a LID: nothing may dial or match on it. */
+    dialable?: boolean;
     fromMe: boolean;
     waId: string | null;
     msgType: string;
@@ -140,6 +163,7 @@ export async function recordMessage(
     pushName: string | null;
   }
 ) {
+  const dialable = m.dialable ?? true;
   await withSystem(async (c) => {
     // Dedup (our own sends echo back through messages.upsert)
     if (m.waId) {
@@ -156,7 +180,9 @@ export async function recordMessage(
       through the booking link. Anyone else gets a conversation and nothing
       more, and becomes a patient the moment somebody decides they are one.
     */
-    const existing = await findPatientByPhone(c, clinicId, m.phone);
+    // A LID is not a number, so it cannot identify a patient. Only look one up
+    // when we actually have something dialable.
+    const existing = dialable ? await findPatientByPhone(c, clinicId, m.phone) : null;
     const patientId = existing?.id ?? null;
     if (patientId && m.pushName) {
       await c.query(
@@ -166,11 +192,16 @@ export async function recordMessage(
     }
 
     const conv = await c.query(
-      `insert into conversations (clinic_id, phone_e164, patient_id, wa_jid, whatsapp_name)
-       values ($1, $2, $3, $4, $5)
+      `insert into conversations (clinic_id, phone_e164, patient_id, wa_jid, wa_lid,
+                                  identifier_kind, whatsapp_name)
+       values ($1, $2, $3, $4, $5, $6, $7)
        on conflict (clinic_id, phone_e164) do update
          set patient_id = coalesce(conversations.patient_id, excluded.patient_id),
+             -- Always take the newest address: this is the one that works, and
+             -- an older fabricated one is exactly what we are correcting.
              wa_jid = coalesce(excluded.wa_jid, conversations.wa_jid),
+             wa_lid = coalesce(excluded.wa_lid, conversations.wa_lid),
+             identifier_kind = excluded.identifier_kind,
              -- The thread's own name, so an unknown number is still a person.
              whatsapp_name = coalesce(conversations.whatsapp_name, excluded.whatsapp_name)
        returning id, ai_enabled, ai_paused_until`,
@@ -178,7 +209,9 @@ export async function recordMessage(
         clinicId,
         m.phone,
         patientId,
-        `${m.phone.replace("+", "")}@s.whatsapp.net`,
+        m.jid ?? `${m.phone.replace("+", "")}@s.whatsapp.net`,
+        m.lid ?? null,
+        dialable ? "phone" : "lid",
         m.pushName ?? null,
       ]
     );
