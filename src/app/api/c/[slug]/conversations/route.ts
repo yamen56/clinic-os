@@ -32,7 +32,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
     const r = await c.query(
       `select cv.id, cv.phone_e164, cv.status, cv.assigned_to, cv.ai_enabled, cv.ai_paused_until,
               cv.unread_count, cv.flagged, cv.flag_reason, cv.last_message_at, cv.last_message_preview,
-              cv.last_message_direction, cv.patient_id,
+              cv.last_message_direction, cv.patient_id, cv.identifier_kind,
               p.full_name as patient_name, p.status as patient_status,
               -- The thread's own name first: most senders have no patient file.
               coalesce(cv.whatsapp_name, p.whatsapp_name) as whatsapp_name,

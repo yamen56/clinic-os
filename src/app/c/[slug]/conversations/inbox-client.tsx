@@ -50,6 +50,7 @@ type ConvRow = {
   last_message_preview: string | null;
   last_message_direction: string | null;
   patient_id: string | null;
+  identifier_kind: string;
   patient_name: string | null;
   patient_status: string | null;
   whatsapp_name: string | null;
@@ -222,8 +223,17 @@ export function InboxClient({
    * drags it to the far end, so `+962 79 074 4070` is drawn ending in the plus
    * and reads backwards. Isolating the run is what stops that.
    */
-  const displayName = (cv: ConvRow) => cv.patient_name || cv.whatsapp_name || formatPhone(cv.phone_e164);
-  const isPhoneTitle = (cv: ConvRow) => !cv.patient_name && !cv.whatsapp_name;
+  /*
+    Some chats are addressed by a WhatsApp identity rather than a number. The
+    digits look like a phone number and are not one, so formatting them as
+    "+19 109 180 2390675" invites somebody to dial it. Say what it is instead.
+  */
+  const displayName = (cv: ConvRow) =>
+    cv.patient_name ||
+    cv.whatsapp_name ||
+    (cv.identifier_kind === "lid" ? t.conversations.whatsappUser : formatPhone(cv.phone_e164));
+  const isPhoneTitle = (cv: ConvRow) =>
+    !cv.patient_name && !cv.whatsapp_name && cv.identifier_kind !== "lid";
 
   /** The thread title, isolated when it is really a number. */
   const Title = ({ cv, className = "" }: { cv: ConvRow; className?: string }) => (

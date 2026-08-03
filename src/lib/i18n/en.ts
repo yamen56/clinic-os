@@ -844,6 +844,7 @@ export const en = {
     read: "Read",
     noPatient: "No patient file linked",
     createPatient: "Create patient file",
+    whatsappUser: "WhatsApp user",
     patientCreated: "Patient file created",
     markDone: "Close conversation",
     reopen: "Reopen",

@@ -843,6 +843,7 @@ export const ar: Dict = {
     read: "تمت القراءة",
     noPatient: "لا يوجد ملف مريض مرتبط",
     createPatient: "إنشاء ملف مريض",
+    whatsappUser: "مستخدم واتساب",
     patientCreated: "تم إنشاء ملف المريض",
     markDone: "إغلاق المحادثة",
     reopen: "إعادة فتح",
