@@ -327,6 +327,53 @@ async function main() {
     sent3[0] ?? "nothing sent"
   );
 
+  /*
+    The thread the patient started arrives holding an identity, not a number.
+    Asking the library for the number behind it is what puts a real, dialable
+    phone on the patient file instead of a fifteen-digit thing or a blank.
+  */
+  const { resolvePendingLids } = await import("../worker/wa/lid-mapping");
+  const PENDING_LID = "600100200300400";
+  const PENDING_PN = "+962791234567";
+  await db.query(
+    `insert into conversations (clinic_id, phone_e164, wa_jid, wa_lid, identifier_kind, whatsapp_name)
+     values ($1, $2, $3, $4, 'lid', 'Nadia')`,
+    [clinic.id, `+${PENDING_LID}`, `${PENDING_LID}@lid`, PENDING_LID]
+  );
+  const batchSock = {
+    signalRepository: {
+      lidMapping: {
+        getPNsForLIDs: async (lids: string[]) =>
+          lids
+            .filter((l) => l.startsWith(PENDING_LID))
+            .map((l) => ({ lid: l, pn: `${PENDING_PN.replace("+", "")}@s.whatsapp.net` })),
+      },
+    },
+  };
+  await resolvePendingLids(clinic.id, batchSock);
+  const resolved = (
+    await db.query(`select phone_e164, identifier_kind, wa_jid from conversations where wa_lid = $1`, [
+      PENDING_LID,
+    ])
+  ).rows[0];
+  check(
+    "an identity thread is given its real number",
+    resolved.phone_e164 === PENDING_PN,
+    resolved.phone_e164
+  );
+  check("and stops standing in for one", resolved.identifier_kind === "phone");
+  check(
+    "while still addressed the way that reaches them",
+    resolved.wa_jid === `${PENDING_LID}@lid`,
+    resolved.wa_jid
+  );
+
+  // An old library has no resolver, and the sweep must simply do nothing.
+  check(
+    "a library without the resolver is not an error",
+    (await resolvePendingLids(clinic.id, {})) === 0
+  );
+
   // A number that already has its own thread must not be merged behind our back.
   const other = (
     await db.query(

@@ -67,6 +67,63 @@ export async function learnLidMapping(
   });
 }
 
+/**
+ * Give the LID-addressed threads their real numbers.
+ *
+ * A thread WhatsApp addresses by identity reaches the patient perfectly well,
+ * but the number is what ties it to a patient file — and what a receptionist
+ * reads, dials, and expects to see when they open the file. Without it a new
+ * patient profile shows either a fifteen-digit thing that is not a number or
+ * nothing at all.
+ *
+ * The library can answer this directly, in one batched round trip, so the
+ * threads that have been sitting on an identity get resolved rather than
+ * waiting for WhatsApp to volunteer the pairing.
+ */
+export async function resolvePendingLids(clinicId: string, sock: unknown): Promise<number> {
+  const resolver = (
+    sock as {
+      signalRepository?: {
+        lidMapping?: { getPNsForLIDs?: (lids: string[]) => Promise<{ pn: string; lid: string }[] | null> };
+      };
+    }
+  ).signalRepository?.lidMapping?.getPNsForLIDs;
+  if (typeof resolver !== "function") return 0;
+
+  const pending = await withSystem((c) =>
+    c.query(
+      `select wa_lid from conversations
+        where clinic_id = $1 and identifier_kind = 'lid' and wa_lid is not null
+        order by last_message_at desc nulls last
+        limit 100`,
+      [clinicId]
+    )
+  );
+  if (!pending.rowCount) return 0;
+
+  const lids = pending.rows.map((r) => `${String(r.wa_lid).split("@")[0]}@lid`);
+  let pairs: { pn: string; lid: string }[] | null = null;
+  try {
+    pairs = await resolver.call(
+      (sock as { signalRepository: { lidMapping: unknown } }).signalRepository.lidMapping,
+      lids
+    );
+  } catch (e) {
+    console.error(`[wa ${clinicId}] lid batch lookup failed`, (e as Error).message);
+    return 0;
+  }
+  if (!pairs?.length) return 0;
+
+  // `learnLidMapping` owns the actual upgrade, including refusing to merge a
+  // number that already has a thread of its own.
+  const before = pairs.length;
+  await learnLidMapping(
+    clinicId,
+    pairs.filter((p) => p.pn && p.lid).map((p) => ({ lid: p.lid, jid: p.pn }))
+  );
+  return before;
+}
+
 /** Contact syncs carry both forms of the same person often enough to be worth reading. */
 export function pairsFromContacts(
   contacts: BaileysEventMap["contacts.upsert"] | BaileysEventMap["contacts.update"]

@@ -5,6 +5,24 @@ import { sweepExpiredDocuments, sweepUnsignedDocuments, sendPendingDigest } from
 import { backupDatabase } from "../src/lib/backup";
 import { usingObjectStore } from "../src/lib/storage";
 import { deliveryWatch } from "./delivery-watch";
+import { sessions } from "./wa/session";
+import { resolvePendingLids } from "./wa/lid-mapping";
+
+/**
+ * Threads that arrived addressed by identity rather than number, every ten
+ * minutes. A patient who messages at noon should have a real number on their
+ * file long before anybody opens it — waiting for the next reconnect could be
+ * days.
+ */
+async function sweepLidNumbers() {
+  const now = new Date();
+  if (now.getUTCMinutes() % 10 !== 0) return;
+  for (const [clinicId, s] of sessions) {
+    if (!s.connected) continue;
+    const n = await resolvePendingLids(clinicId, s.sock).catch(() => 0);
+    if (n) console.log(`[lid-sweep ${clinicId}] looked up ${n} thread(s)`);
+  }
+}
 
 /**
  * Time-based triggers. Runs every minute; every enqueue is keyed by a
@@ -206,6 +224,7 @@ export function startScheduler() {
       sweepUnsignedDocuments,
       sendPendingDigest,
       dailyBackup,
+      sweepLidNumbers,
       deliveryWatch,
     ]) {
       try {

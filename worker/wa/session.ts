@@ -8,7 +8,7 @@ import { withSystem } from "../db";
 import { useDbAuthState } from "./auth-state";
 import { handleUpsert } from "./inbound";
 import { handleReceipts } from "./receipts";
-import { learnLidMapping, pairsFromContacts } from "./lid-mapping";
+import { learnLidMapping, pairsFromContacts, resolvePendingLids } from "./lid-mapping";
 
 const logger = pino({ level: "silent" });
 
@@ -80,6 +80,17 @@ export class WASession {
                 consecutive_errors: 0,
               });
               console.log(`[wa ${this.clinicId}] connected as +${phone}`);
+              /*
+                Now that there is a socket, ask what the identity-addressed
+                threads are actually numbered. A short delay lets the library
+                finish its own sync first, so the batch is answered from a warm
+                mapping store rather than a cold one.
+              */
+              setTimeout(() => {
+                resolvePendingLids(this.clinicId, sock)
+                  .then((n) => n && console.log(`[wa ${this.clinicId}] resolved ${n} identity thread(s)`))
+                  .catch((e) => console.error(`[wa ${this.clinicId}] lid sweep`, (e as Error).message));
+              }, 20_000);
             }
             if (u.connection === "close") {
               const code =
