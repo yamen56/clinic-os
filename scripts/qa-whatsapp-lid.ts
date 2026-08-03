@@ -157,6 +157,36 @@ async function main() {
   check("the reply is sent, not written off as unreachable", sent.status === "sent", `${sent.status}/${sent.error}`);
   check("and it goes to the LID address", sentTo[0] === `${LID}@lid`, sentTo[0] ?? "nothing sent");
 
+  /*
+    A LID chat carrying a stale verdict from when we treated it as a number.
+    Every clinic that ran the old code has these, and the flag must not be
+    allowed to keep throwing away messages that would arrive.
+  */
+  await db.query(
+    `update conversations set on_whatsapp = false, wa_checked_at = now() where id = $1`,
+    [conv.id]
+  );
+  let msg2 = "";
+  await withSystem(async (c) => {
+    msg2 = (
+      await queueWhatsAppMessage(c, {
+        clinicId: clinic.id,
+        phoneE164: conv.phone_e164,
+        body: "فاتورتك جاهزة",
+        senderKind: "staff",
+      })
+    ).messageId;
+  });
+  await new Promise((r) => setTimeout(r, 10500)); // the per-clinic send pacing
+  await processOnce();
+  const second = (await db.query(`select status, error from messages where id = $1`, [msg2])).rows[0];
+  check(
+    "a stale 'no account' verdict cannot silence a LID chat",
+    second.status === "sent",
+    `${second.status}/${second.error}`
+  );
+  check("and that message reached the LID too", sentTo[1] === `${LID}@lid`, sentTo[1] ?? "nothing sent");
+
   /* --------------------------------- and the number is adopted once offered */
   await learnLidMapping(clinic.id, [{ lid: `${LID}@lid`, jid: `${REAL.replace("+", "")}@s.whatsapp.net` }]);
   const after = (

@@ -156,8 +156,13 @@ export async function processOnce() {
       */
       let jid = claimed.waJid || `${phone.replace("+", "")}@s.whatsapp.net`;
 
-      // A LID cannot be looked up as a number and does not need to be: the
-      // patient reached us at it. Checking would only produce a false verdict.
+      /*
+        A LID cannot be looked up as a number and does not need to be: the
+        patient reached us at it, so it is the one address we know works. Both
+        the lookup and the verdict below are skipped — asking produced "no such
+        account", which is true of the digits and false of the chat, and threw
+        away messages that would have been delivered.
+      */
       if (!claimed.isLid && (claimed.onWhatsApp === null || stale)) {
         try {
           const [hit] = (await session.sock!.onWhatsApp(phone)) ?? [];
@@ -179,7 +184,7 @@ export async function processOnce() {
         }
       }
 
-      if (claimed.onWhatsApp === false) {
+      if (!claimed.isLid && claimed.onWhatsApp === false) {
         await withSystem((c) =>
           c.query(
             `update messages set status = 'failed', error = 'no_whatsapp_account', attempts = attempts + 1
