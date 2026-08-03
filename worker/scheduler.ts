@@ -4,6 +4,7 @@ import { startRun } from "./automations";
 import { sweepExpiredDocuments, sweepUnsignedDocuments, sendPendingDigest } from "./esign";
 import { backupDatabase } from "../src/lib/backup";
 import { usingObjectStore } from "../src/lib/storage";
+import { deliveryWatch } from "./delivery-watch";
 
 /**
  * Time-based triggers. Runs every minute; every enqueue is keyed by a
@@ -205,6 +206,7 @@ export function startScheduler() {
       sweepUnsignedDocuments,
       sendPendingDigest,
       dailyBackup,
+      deliveryWatch,
     ]) {
       try {
         await fn();

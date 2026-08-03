@@ -166,17 +166,28 @@ export async function processOnce() {
       if (!claimed.isLid && (claimed.onWhatsApp === null || stale)) {
         try {
           const [hit] = (await session.sock!.onWhatsApp(phone)) ?? [];
-          const exists = !!hit?.exists;
-          if (exists && hit.jid) jid = hit.jid;
-          await withSystem((c) =>
-            c.query(
-              `update conversations set on_whatsapp = $2, wa_checked_at = now(),
-                      wa_jid = coalesce($3, wa_jid)
-                where id = $1`,
-              [row.conversation_id, exists, exists && hit?.jid ? hit.jid : null]
-            )
-          );
-          claimed.onWhatsApp = exists;
+          /*
+            Only an actual answer counts. An empty result is WhatsApp declining
+            to say — it happens on a flaky connection — and reading that as "no
+            such account" would write the number off permanently, losing every
+            future message to it in exactly the silent way this check exists to
+            prevent. No answer means try the send and let it speak for itself.
+          */
+          if (hit && typeof hit.exists === "boolean") {
+            const exists = hit.exists;
+            if (exists && hit.jid) jid = hit.jid;
+            await withSystem((c) =>
+              c.query(
+                `update conversations set on_whatsapp = $2, wa_checked_at = now(),
+                        wa_jid = coalesce($3, wa_jid)
+                  where id = $1`,
+                [row.conversation_id, exists, exists && hit.jid ? hit.jid : null]
+              )
+            );
+            claimed.onWhatsApp = exists;
+          } else {
+            console.log(`[outbound ${clinicId}] no verdict for ${phone} — sending anyway`);
+          }
         } catch (e) {
           // A lookup failure is a connection problem, not a verdict on the
           // number. Fall through and let the send itself decide.

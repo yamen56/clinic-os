@@ -92,7 +92,7 @@ async function main() {
     )
   ).rows[0];
   await db.query(
-    `insert into whatsapp_sessions (clinic_id, status, desired) values ($1,'connected',true)`,
+    `insert into whatsapp_sessions (clinic_id, status, desired) values ($1,'connected',false)`,
     [clinic.id]
   );
   console.log(`✓ fixture clinic ${slug}`);
