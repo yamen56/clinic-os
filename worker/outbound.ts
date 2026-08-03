@@ -27,7 +27,29 @@ export function startOutboundLoop() {
   void tick();
 }
 
+/**
+ * Put back anything left mid-flight.
+ *
+ * A message is marked 'sending' before the socket is touched, so a worker that
+ * restarts — or a failure inside the failure handler — strands it in a state
+ * nothing looks at again. Reclaiming after a few minutes costs at worst one
+ * duplicate; not reclaiming costs the message.
+ */
+async function reclaimStranded() {
+  const r = await withSystem((c) =>
+    c.query(
+      `update messages set status = 'queued'
+        where status = 'sending' and updated_at < now() - interval '5 minutes'
+        returning id`
+    )
+  );
+  if (r.rowCount) console.log(`[outbound] reclaimed ${r.rowCount} stranded message(s)`);
+}
+
 export async function processOnce() {
+  await reclaimStranded().catch((e) =>
+    console.error("[outbound] reclaim failed:", (e as Error).message)
+  );
   const connected = [...sessions.entries()].filter(([, s]) => s.connected);
   await Promise.all(
     connected.map(async ([clinicId, session]) => {
@@ -204,13 +226,34 @@ export async function processOnce() {
           */
           if (hit && typeof hit.exists === "boolean") {
             const exists = hit.exists;
-            if (exists && hit.jid) jid = hit.jid;
+            /*
+              Take the LID, not the phone address.
+
+              `onWhatsApp` asks with the LID protocol and answers with both: the
+              legacy `<phone>@s.whatsapp.net` and the account's LID. WhatsApp has
+              moved these accounts onto LID addressing — every inbound message
+              arrives that way — and for a migrated account the legacy address no
+              longer routes. The socket accepts it, returns an id, and the
+              message is never delivered, which is why messages to numbers that
+              had never written to the clinic vanished while replies to numbers
+              that had worked perfectly.
+            */
+            const rawLid = typeof hit.lid === "string" ? hit.lid : null;
+            const lidJid = rawLid ? (rawLid.includes("@") ? rawLid : `${rawLid}@lid`) : null;
+            const resolved = exists ? (lidJid ?? hit.jid ?? null) : null;
+            if (resolved) jid = resolved;
             await withSystem((c) =>
               c.query(
                 `update conversations set on_whatsapp = $2, wa_checked_at = now(),
-                        wa_jid = coalesce($3, wa_jid)
+                        wa_jid = coalesce($3, wa_jid),
+                        wa_lid = coalesce($4, wa_lid)
                   where id = $1`,
-                [row.conversation_id, exists, exists && hit.jid ? hit.jid : null]
+                [
+                  row.conversation_id,
+                  exists,
+                  resolved,
+                  lidJid ? lidJid.split("@")[0] : null,
+                ]
               )
             );
             claimed.onWhatsApp = exists;
@@ -274,9 +317,18 @@ export async function processOnce() {
         await withSystem(async (c) => {
           const attempts = (row.attempts ?? 0) + 1;
           if (attempts < 3) {
+            /*
+              The casts are load-bearing. Postgres cannot deduce one type for a
+              parameter used both as an integer column and as the left side of
+              an interval multiply, so this statement threw — which meant the
+              retry path itself failed and left the message stuck in 'sending'
+              for good: never sent, never failed, and invisible to the failure
+              count. Only a send error reaches this code, so nothing exercised
+              it until one did.
+            */
             await c.query(
-              `update messages set status = 'queued', attempts = $2, error = $3,
-                 scheduled_at = now() + ($2 * interval '90 seconds')
+              `update messages set status = 'queued', attempts = $2::int, error = $3,
+                 scheduled_at = now() + ($2::int * interval '90 seconds')
                where id = $1`,
               [row.id, attempts, errMsg]
             );

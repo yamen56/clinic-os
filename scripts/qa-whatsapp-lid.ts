@@ -34,16 +34,26 @@ function check(name: string, ok: boolean, detail = "") {
 const LID = "191091802390675";
 const REAL = "+962790555111";
 
-function fakeSock(sentTo: string[]) {
-  let n = 0;
+/**
+ * `withLIDProtocol()` means WhatsApp answers with both addresses. The legacy
+ * one is the trap: it looks right, the socket takes it, and nothing arrives.
+ */
+// Ids are unique across sockets: `messages.wa_message_id` is unique per clinic,
+// and a repeat would fail the insert rather than the behaviour under test.
+let waId = 0;
+function fakeSock(sentTo: string[], lidFor: Record<string, string> = {}) {
   return {
     user: { id: "962790000000:1@s.whatsapp.net" },
     onWhatsApp: async (phone: string) => [
-      { jid: `${phone.replace("+", "")}@s.whatsapp.net`, exists: phone.startsWith("+962") },
+      {
+        jid: `${phone.replace("+", "")}@s.whatsapp.net`,
+        exists: phone.startsWith("+962"),
+        lid: lidFor[phone] ?? undefined,
+      },
     ],
     sendMessage: async (jid: string) => {
       sentTo.push(jid);
-      return { key: { id: `LIDQA${++n}`, fromMe: true } };
+      return { key: { id: `LIDQA${++waId}`, fromMe: true } };
     },
   };
 }
@@ -197,6 +207,81 @@ async function main() {
   check("the thread takes the real number when WhatsApp shares it", after.phone_e164 === REAL, after.phone_e164);
   check("and stops calling itself a LID", after.identifier_kind === "phone");
   check("while keeping the address that works", after.wa_jid === `${LID}@lid`, after.wa_jid);
+
+  /*
+    A number the clinic writes to first, which has never written to them: there
+    is no LID to copy from an inbound message, so the address has to come from
+    the lookup. WhatsApp answers with both, and taking the legacy one is what
+    made every message to a new number disappear.
+  */
+  const COLD = "+962790123456";
+  const COLD_LID = "55512345678901";
+  const sent2: string[] = [];
+  sessions.set(clinic.id, {
+    clinicId: clinic.id,
+    sock: fakeSock(sent2, { [COLD]: COLD_LID }),
+    connected: true,
+  } as never);
+
+  let coldId = "";
+  await withSystem(async (c) => {
+    coldId = (
+      await queueWhatsAppMessage(c, {
+        clinicId: clinic.id,
+        phoneE164: COLD,
+        body: "أهلاً، هذا موعدك",
+        senderKind: "staff",
+      })
+    ).messageId;
+  });
+  await new Promise((r) => setTimeout(r, 10500));
+  await processOnce();
+
+  const coldMsg = (await db.query(`select status from messages where id = $1`, [coldId])).rows[0];
+  check("a message to a number that never wrote is sent", coldMsg.status === "sent", coldMsg.status);
+  check(
+    "and it goes to the LID WhatsApp gave us, not the phone address",
+    sent2[0] === `${COLD_LID}@lid`,
+    sent2[0] ?? "nothing sent"
+  );
+  const coldConv = (
+    await db.query(
+      `select wa_jid, wa_lid, identifier_kind from conversations where clinic_id = $1 and phone_e164 = $2`,
+      [clinic.id, COLD]
+    )
+  ).rows[0];
+  check("the resolved address is remembered", coldConv.wa_jid === `${COLD_LID}@lid`, coldConv.wa_jid);
+  check("along with the LID itself", coldConv.wa_lid === COLD_LID, coldConv.wa_lid);
+  check(
+    "and the thread still knows it holds a real phone number",
+    coldConv.identifier_kind === "phone",
+    coldConv.identifier_kind
+  );
+
+  // A number still on legacy addressing has no LID, and must still be reachable.
+  const LEGACY = "+962790654321";
+  const sent3: string[] = [];
+  sessions.set(clinic.id, { clinicId: clinic.id, sock: fakeSock(sent3), connected: true } as never);
+  let legacyId = "";
+  await withSystem(async (c) => {
+    legacyId = (
+      await queueWhatsAppMessage(c, {
+        clinicId: clinic.id,
+        phoneE164: LEGACY,
+        body: "مرحبا",
+        senderKind: "staff",
+      })
+    ).messageId;
+  });
+  await new Promise((r) => setTimeout(r, 10500));
+  await processOnce();
+  const legacyMsg = (await db.query(`select status from messages where id = $1`, [legacyId])).rows[0];
+  check("a number with no LID still gets the phone address", legacyMsg.status === "sent", legacyMsg.status);
+  check(
+    "which is the legacy one",
+    sent3[0] === `${LEGACY.replace("+", "")}@s.whatsapp.net`,
+    sent3[0] ?? "nothing sent"
+  );
 
   // A number that already has its own thread must not be merged behind our back.
   const other = (
