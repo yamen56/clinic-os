@@ -71,6 +71,29 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         push(key, raw === "male" || raw === "female" ? raw : null);
       } else if (key === "status") {
         if (raw === "lead" || raw === "active" || raw === "archived") push(key, raw);
+      } else if (key === "insurer_id") {
+        /*
+          Verified against this clinic's own list rather than trusted. The value
+          comes from a select the client rendered, but an id from another
+          clinic's insurers would otherwise be accepted and would leak that
+          company's name back onto this patient's file.
+        */
+        const v = String(raw ?? "").trim();
+        if (!v) {
+          push(key, null);
+        } else {
+          const ok = await c.query(`select 1 from insurers where id = $1 and clinic_id = $2`, [
+            v,
+            access.clinicId,
+          ]);
+          if (!ok.rowCount) return NextResponse.json({ error: "unknown_insurer" }, { status: 422 });
+          push(key, v);
+        }
+      } else if (key === "insurance_no") {
+        push(key, String(raw ?? "").slice(0, 60));
+      } else if (key === "insurance_valid_until") {
+        const v = String(raw ?? "");
+        push(key, /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
       } else if (key === "custom_fields" && raw && typeof raw === "object") {
         const merged = { ...before.custom_fields, ...(raw as Record<string, unknown>) };
         push("custom_fields", JSON.stringify(merged));

@@ -21,6 +21,7 @@ import {
   FileSignature,
   Workflow,
   Sparkles,
+  Hourglass,
   Settings,
   MoreHorizontal,
   Bell,
@@ -36,6 +37,7 @@ type NavKey =
   | "dashboard"
   | "conversations"
   | "calendar"
+  | "waitlist"
   | "patients"
   | "campaigns"
   | "documents"
@@ -48,6 +50,7 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   dashboard: LayoutDashboard,
   conversations: MessageCircle,
   calendar: CalendarDays,
+  waitlist: Hourglass,
   patients: Users,
   campaigns: Megaphone,
   documents: FileSignature,
@@ -112,6 +115,8 @@ export function Shell({
     { key: "dashboard", href: base, show: true },
     { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
     { key: "calendar", href: `${base}/calendar`, show: caps.calendar },
+    // Beside the calendar, because it is read when the calendar has a hole in it.
+    { key: "waitlist", href: `${base}/waitlist`, show: caps.calendar },
     { key: "patients", href: `${base}/patients`, show: caps.patients },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
     { key: "documents", href: `${base}/documents`, show: caps.documents, badge: pendingDocuments },

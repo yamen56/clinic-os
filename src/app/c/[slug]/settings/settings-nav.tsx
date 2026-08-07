@@ -38,6 +38,7 @@ export function SettingsNav({
     { href: `${base}/tags`, label: t.tags.title },
     { href: `${base}/documents`, label: t.settings.documentTemplates },
     { href: `${base}/booking`, label: t.settings.bookingLinks },
+    { href: `${base}/insurers`, label: t.insurers.title, show: canClinic },
     { href: `${base}/whatsapp`, label: t.settings.whatsapp },
     { href: `${base}/invoicing`, label: t.settings.invoiceSettings },
     // Personal, not clinic configuration — and it lives outside /settings so that

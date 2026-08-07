@@ -64,6 +64,9 @@ type Patient = {
   status: string;
   notes_summary: string;
   custom_fields: Record<string, unknown>;
+  insurer_id: string | null;
+  insurance_no: string;
+  insurance_valid_until: string | null;
   created_at: string;
 };
 
@@ -115,6 +118,8 @@ export function PatientProfile(props: {
   country: CountryCode;
   /** The clinic's tag vocabulary — suggestions, and the colour each tag wears. */
   clinicTags: { name: string; color: string }[];
+  /** Active insurance companies. Empty for a clinic that only takes cash. */
+  insurers: { id: string; name: string }[];
 }) {
   const { slug, tz, currency } = props;
   const { t, locale } = useI18n();
@@ -346,6 +351,42 @@ export function PatientProfile(props: {
                       <option value="female">{t.patients.female}</option>
                     </Select>
                   </Field>
+                  {/*
+                    Who covers this person, so an invoice can split itself and
+                    reception can answer "how much do I pay today" without
+                    looking it up somewhere else. Hidden entirely until the
+                    clinic has added a company — a self-paying practice should
+                    not be asked about insurance on every file.
+                  */}
+                  {props.insurers.length > 0 && (
+                    <>
+                      <Field label={t.insurers.insurer}>
+                        <Select
+                          value={p.insurer_id ?? ""}
+                          onChange={(e) => set({ insurer_id: e.target.value || null })}
+                        >
+                          <option value="">{t.insurers.none}</option>
+                          {props.insurers.map((i) => (
+                            <option key={i.id} value={i.id}>{i.name}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={t.insurers.policyNo}>
+                        <Input
+                          dir="ltr"
+                          defaultValue={p.insurance_no ?? ""}
+                          onChange={(e) => patch({ insurance_no: e.target.value })}
+                        />
+                      </Field>
+                      <Field label={t.insurers.validUntil}>
+                        <Input
+                          type="date"
+                          defaultValue={p.insurance_valid_until?.slice(0, 10) ?? ""}
+                          onChange={(e) => patch({ insurance_valid_until: e.target.value })}
+                        />
+                      </Field>
+                    </>
+                  )}
                 </div>
                 {extraDefs.length > 0 && (
                   <>

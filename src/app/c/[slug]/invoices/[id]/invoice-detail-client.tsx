@@ -11,7 +11,12 @@ import { Badge, type StatusKey } from "@/components/ui/badge";
 import { Field, Input, Select } from "@/components/ui/input";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
-import { sendInvoiceAction, recordPaymentAction, voidInvoiceAction } from "../actions";
+import {
+  sendInvoiceAction,
+  recordPaymentAction,
+  voidInvoiceAction,
+  setInvoiceInsuranceAction,
+} from "../actions";
 import { MessageCircle, FileDown, ExternalLink, BadgeDollarSign, Ban, UserRound } from "lucide-react";
 
 const invStatus: Record<string, StatusKey> = {
@@ -33,6 +38,10 @@ type Invoice = {
   tax_amount: string;
   total: string;
   amount_paid: string;
+  insurer_amount: string;
+  insurer_id: string | null;
+  insurer_name: string | null;
+  claim_status: string;
   notes: string;
   public_token: string;
   sent_at: string | null;
@@ -49,11 +58,14 @@ export function InvoiceDetailClient({
   invoice,
   items,
   payments,
+  insurers,
 }: {
   slug: string;
   invoice: Invoice;
   items: { description: string; qty: string; unit_price: string; amount: string }[];
   payments: { id: string; amount: string; method: string; reference: string; paid_at: string; recorded_by: string | null }[];
+  /** Active companies. Empty for a clinic that only takes cash. */
+  insurers: { id: string; name: string }[];
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -65,6 +77,12 @@ export function InvoiceDetailClient({
   const [amount, setAmount] = useState(due > 0 ? String(due) : "");
   const [method, setMethod] = useState("cash");
   const [reference, setReference] = useState("");
+  const [insurerId, setInsurerId] = useState(inv.insurer_id ?? "");
+  const [covered, setCovered] = useState(
+    Number(inv.insurer_amount) > 0 ? String(Number(inv.insurer_amount)) : ""
+  );
+  const [claimStatus, setClaimStatus] = useState(inv.claim_status || "none");
+  const [savingClaim, startClaim] = useTransition();
   const [pending, start] = useTransition();
   const [sendPending, startSend] = useTransition();
 
@@ -198,6 +216,28 @@ export function InvoiceDetailClient({
                 <span>{t.invoices.total}</span>
                 <span className="tnum">{fmtMoney(Number(inv.total), inv.currency, locale)}</span>
               </div>
+              {/*
+                The split, shown only when there is one. This is the number
+                reception is asked for at the desk — "how much do I pay now" —
+                and answering it from the total alone is how the wrong amount
+                gets taken from an insured patient.
+              */}
+              {Number(inv.insurer_amount) > 0 && (
+                <>
+                  <div className="flex justify-between text-ink-500">
+                    <span>{t.insurers.covered}</span>
+                    <span className="tnum">
+                      −{fmtMoney(Number(inv.insurer_amount), inv.currency, locale)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-semibold">
+                    <span>{t.insurers.patientPays}</span>
+                    <span className="tnum">
+                      {fmtMoney(Number(inv.total) - Number(inv.insurer_amount), inv.currency, locale)}
+                    </span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between text-ink-500">
                 <span>{t.invoices.paid}</span>
                 <span className="tnum">{fmtMoney(Number(inv.amount_paid), inv.currency, locale)}</span>
@@ -209,6 +249,73 @@ export function InvoiceDetailClient({
             </div>
           </div>
         </Card>
+
+        {/*
+          The claim, kept beside the invoice rather than inside it. What a
+          company agrees to cover arrives days after the work was priced, and
+          editing the invoice to record it would change what the patient was
+          shown and signed for.
+        */}
+        {insurers.length > 0 && (
+          <Card className="h-fit">
+            <CardHeader title={t.insurers.claim} />
+            <div className="grid gap-3 p-5">
+              <Field label={t.insurers.insurer}>
+                <Select
+                  value={insurerId}
+                  onChange={(e) => setInsurerId(e.target.value)}
+                  disabled={inv.status === "void"}
+                >
+                  <option value="">{t.insurers.none}</option>
+                  {insurers.map((i) => (
+                    <option key={i.id} value={i.id}>{i.name}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={`${t.insurers.covered} (${inv.currency})`}>
+                <Input
+                  dir="ltr"
+                  inputMode="decimal"
+                  value={covered}
+                  onChange={(e) => setCovered(e.target.value)}
+                  disabled={inv.status === "void" || !insurerId}
+                />
+              </Field>
+              <Field label={t.insurers.claim}>
+                <Select
+                  value={claimStatus}
+                  onChange={(e) => setClaimStatus(e.target.value)}
+                  disabled={inv.status === "void" || !insurerId}
+                >
+                  {["none", "to_submit", "submitted", "approved", "rejected", "paid"].map((s) => (
+                    <option key={s} value={s}>
+                      {(t.insurers.claimStatus as Record<string, string>)[s]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Button
+                variant="outline"
+                loading={savingClaim}
+                disabled={inv.status === "void"}
+                onClick={() =>
+                  startClaim(async () => {
+                    const r = await setInvoiceInsuranceAction(slug, inv.id, {
+                      insurerId: insurerId || null,
+                      insurerAmount: Number(covered) || 0,
+                      claimStatus,
+                    });
+                    if (r.error) return toast(r.error, "error");
+                    router.refresh();
+                    toast(t.common.saved, "success");
+                  })
+                }
+              >
+                {t.common.save}
+              </Button>
+            </div>
+          </Card>
+        )}
 
         <Card className="h-fit">
           <CardHeader title={t.invoices.payments} />

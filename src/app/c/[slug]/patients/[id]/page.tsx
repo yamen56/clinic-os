@@ -21,7 +21,7 @@ export default async function PatientProfilePage({
     if (!p) return null;
     if (p.merged_into) return { mergedInto: p.merged_into as string };
 
-    const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags] =
+    const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags, insurers] =
       await Promise.all([
         c.query(
           `select n.id, n.kind, n.body, n.created_at, u.full_name as author
@@ -94,6 +94,11 @@ export default async function PatientProfilePage({
         c.query(`select name, color from clinic_tags where clinic_id = $1 order by sort, name`, [
           access.clinicId,
         ]),
+        // Only companies still in use, so a list that has been tidied does not
+        // offer a defunct insurer to the next patient.
+        c.query(`select id, name from insurers where clinic_id = $1 and active order by name`, [
+          access.clinicId,
+        ]),
       ]);
 
     return {
@@ -109,6 +114,7 @@ export default async function PatientProfilePage({
       documents,
       templates: templates.rows,
       clinicTags: clinicTags.rows,
+      insurers: insurers.rows,
     };
   });
 
@@ -133,6 +139,7 @@ export default async function PatientProfilePage({
       documents={JSON.parse(JSON.stringify(d.documents))}
       docTemplates={JSON.parse(JSON.stringify(d.templates))}
       clinicTags={JSON.parse(JSON.stringify(d.clinicTags))}
+      insurers={JSON.parse(JSON.stringify(d.insurers))}
       canSendDocuments={can(access, "documents.manage")}
       country={countryFromClinic(access.clinic)}
     />

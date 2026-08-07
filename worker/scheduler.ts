@@ -5,6 +5,7 @@ import { sweepExpiredDocuments, sweepUnsignedDocuments, sendPendingDigest } from
 import { backupDatabase } from "../src/lib/backup";
 import { usingObjectStore } from "../src/lib/storage";
 import { deliveryWatch } from "./delivery-watch";
+import { expirePastWaitlist, requeueStaleOffers } from "./waitlist";
 import { sessions } from "./wa/session";
 import { resolvePendingLids } from "./wa/lid-mapping";
 
@@ -226,6 +227,8 @@ export function startScheduler() {
       dailyBackup,
       sweepLidNumbers,
       deliveryWatch,
+      requeueStaleOffers,
+      expirePastWaitlist,
     ]) {
       try {
         await fn();

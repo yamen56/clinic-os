@@ -2,6 +2,7 @@ import { withSystem } from "./db";
 import { advanceRun, handleTrigger } from "./automations";
 import { respondToConversation } from "./ai/agent";
 import { autoSendServiceDocuments } from "./esign";
+import { offerFreedSlot } from "./waitlist";
 
 /**
  * Job runner: claims due jobs with FOR UPDATE SKIP LOCKED so multiple worker
@@ -58,6 +59,40 @@ async function runOne(): Promise<boolean> {
         job.payload?.appointmentId
       ) {
         await autoSendServiceDocuments(job.clinic_id, String(job.payload.appointmentId));
+      }
+
+      /*
+        A slot that just came free is offered to whoever is waiting for it.
+
+        Outside the automation engine for the same reason as the consent forms
+        above: the recipients are chosen by matching a waitlist against the
+        freed slot's doctor, service and date, which no recipe can express.
+      */
+      if (
+        kind === "appointment_status_changed" &&
+        (job.payload?.status === "cancelled" || job.payload?.status === "no_show") &&
+        job.payload?.appointmentId
+      ) {
+        const appt = await withSystem(async (c) =>
+          (
+            await c.query(
+              `select id, doctor_member_id, service_id, starts_at from appointments
+                where id = $1 and clinic_id = $2 and starts_at > now()`,
+              [String(job.payload!.appointmentId), job.clinic_id]
+            )
+          ).rows[0]
+        );
+        // Only a future slot is worth offering; a no-show this morning frees
+        // nothing anybody can still take.
+        if (appt) {
+          await offerFreedSlot({
+            clinicId: job.clinic_id,
+            appointmentId: appt.id as string,
+            doctorMemberId: (appt.doctor_member_id as string) ?? null,
+            serviceId: (appt.service_id as string) ?? null,
+            startsAt: new Date(appt.starts_at as string).toISOString(),
+          });
+        }
       }
 
       // An inbound patient message also wakes the AI receptionist.

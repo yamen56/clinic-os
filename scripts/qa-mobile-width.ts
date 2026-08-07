@@ -171,6 +171,8 @@ async function main() {
     ["settings · booking", `${s}/settings/booking`],
     ["settings · fields", `${s}/settings/fields`],
     ["settings · templates", `${s}/settings/templates`],
+    ["settings · insurers", `${s}/settings/insurers`],
+    ["waitlist", `${s}/waitlist`],
     ["profile", `${s}/profile`],
   ];
   if (patient) pages.push(["patient profile", `${s}/patients/${patient.id}`]);
