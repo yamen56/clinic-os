@@ -152,7 +152,12 @@ export const en = {
     slug: "URL slug",
     ownerName: "Owner name",
     ownerEmail: "Owner email",
-    ownerPassword: "Owner password",
+    ownerInviteHint:
+      "The owner gets an email invitation and chooses their own password. You never see or set it.",
+    ownerInvitePending: "invitation pending",
+    resendInvite: "Resend invitation",
+    inviteSent: "Invitation sent.",
+    inviteLinkCopy: "Invitation link — send it to the owner directly if the email does not arrive:",
     plan: "Plan",
     planPrice: "Monthly price",
     createClinic: "Create clinic",

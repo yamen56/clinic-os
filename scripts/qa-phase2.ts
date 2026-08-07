@@ -23,7 +23,6 @@ async function main() {
   await page.fill('input[name="slug"]', slug);
   await page.fill('input[name="ownerName"]', "QA Owner");
   await page.fill('input[name="ownerEmail"]', `owner-${slug}@test.local`);
-  await page.fill('input[name="ownerPassword"]', "password123");
   await page.click('button[type="submit"]');
   await page.waitForURL(`**/admin/clinics/${slug}`, { timeout: 20000 });
   await page.click("text=Open workspace");

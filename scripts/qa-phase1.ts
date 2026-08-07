@@ -1,5 +1,6 @@
 /** Browser QA for Phase 1: login, admin panel, clinic creation, workspace shell, RTL toggle. */
 import { chromium } from "playwright";
+import { acceptOwnerInvite } from "./lib-owner-invite";
 
 const BASE = "http://localhost:3000";
 
@@ -32,10 +33,14 @@ async function main() {
   await page.fill('input[name="slug"]', slug);
   await page.fill('input[name="ownerName"]', "Test Owner");
   await page.fill('input[name="ownerEmail"]', `owner-${slug}@test.local`);
-  await page.fill('input[name="ownerPassword"]', "password123");
   await page.click('button[type="submit"]');
   await page.waitForURL(`**/admin/clinics/${slug}`, { timeout: 20000 });
   console.log("✓ clinic created → detail page");
+
+  // The agency never sets the owner's password; they are invited and choose one.
+  // Walking that path here is what proves the invitation actually works.
+  await acceptOwnerInvite(page, browser, BASE, slug, "password123");
+  console.log("✓ owner accepted the invitation and chose a password");
 
   // 4. Impersonate → workspace shell (admin session is English)
   await page.click("text=Open workspace");

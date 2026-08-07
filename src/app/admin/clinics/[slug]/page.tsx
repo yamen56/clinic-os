@@ -6,6 +6,7 @@ import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/misc";
 import { ClinicAdminPanel } from "./clinic-admin-panel";
+import { OwnerInvite } from "./owner-invite";
 import { CheckCircle2, Circle } from "lucide-react";
 
 const CHECKLIST: { key: string; en: string; ar: string }[] = [
@@ -38,8 +39,12 @@ export default async function AdminClinicDetail({
     if (!clinic) return null;
     const members = (
       await c.query(
-        `select cm.role, cm.is_owner, u.full_name, u.email from clinic_members cm
-         join users u on u.id = cm.user_id where cm.clinic_id = $1 order by cm.created_at`,
+        // password_hash is null exactly while an invitation is outstanding —
+        // the account exists but cannot be signed into yet.
+        `select cm.role, cm.is_owner, u.full_name, u.email,
+                (u.password_hash is null) as invite_pending
+           from clinic_members cm
+           join users u on u.id = cm.user_id where cm.clinic_id = $1 order by cm.created_at`,
         [clinic.id]
       )
     ).rows;
@@ -145,13 +150,25 @@ export default async function AdminClinicDetail({
           <CardHeader title={t.settings.staff} />
           <ul className="grid gap-2.5 px-5 py-4 text-sm">
             {members.map((m, i) => (
-              <li key={i} className="flex items-center justify-between gap-2">
-                <span>{m.full_name}</span>
-                <Badge status={m.is_owner ? "brand" : "neutral"}>
-                  {m.is_owner ? `${m.role} · owner` : m.role}
-                </Badge>
+              <li key={i} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 truncate">{m.full_name}</span>
+                <span className="flex items-center gap-1.5">
+                  {m.invite_pending && (
+                    <Badge status="pending">{t.admin.ownerInvitePending}</Badge>
+                  )}
+                  <Badge status={m.is_owner ? "brand" : "neutral"}>
+                    {m.is_owner ? `${m.role} · owner` : m.role}
+                  </Badge>
+                </span>
               </li>
             ))}
+            {/* Only while it can still be accepted; once a password exists an
+                invitation would be a reset link nobody asked for. */}
+            {members.some((m) => m.is_owner && m.invite_pending) && (
+              <li className="pt-1">
+                <OwnerInvite clinicId={clinic.id as string} />
+              </li>
+            )}
           </ul>
         </Card>
       </div>

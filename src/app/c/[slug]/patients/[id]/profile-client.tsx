@@ -232,7 +232,13 @@ export function PatientProfile(props: {
             onChange={(tags) => setP((prev) => ({ ...prev, tags }))}
           />
         </div>
-        <div className="flex items-center gap-2">
+        {/*
+          Five actions in a row that would not wrap: on a phone they ran to 722
+          pixels and took the whole page sideways with them. The header above
+          already wraps; this did not, and adding the Message button made a
+          long-standing overflow impossible to miss.
+        */}
+        <div className="flex flex-wrap items-center gap-2">
           {p.phone_e164 && (
             <Button variant="soft" size="sm" onClick={openThread} disabled={opening}>
               <MessageCircle className="h-4 w-4" />

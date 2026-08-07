@@ -2,7 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin, hashPassword, createSession, setSessionCookie } from "@/lib/auth";
+import { requireSuperAdmin, createSession, setSessionCookie } from "@/lib/auth";
+import { createAuthToken } from "@/lib/invites";
+import { sendEmail, renderEmail } from "@/lib/email";
+import { appUrl } from "@/lib/urls";
 import { withSystem } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
@@ -23,7 +26,6 @@ const createClinicSchema = z.object({
   planPrice: z.coerce.number().min(0).default(0),
   ownerName: z.string().min(2).max(80),
   ownerEmail: z.string().email(),
-  ownerPassword: z.string().min(8),
 });
 
 export type CreateClinicResult = { error?: string; fieldErrors?: Record<string, string> } | null;
@@ -75,6 +77,11 @@ export async function createClinicAction(
   const phone = d.phone ? normalizePhone(d.phone) : null;
 
   let slug = "";
+  // Set inside the transaction, read after it: only a brand-new account needs an
+  // invitation. Somebody who already runs another clinic has a password already.
+  let ownerIsNew = false;
+  let ownerId = "";
+  let clinicId = "";
   try {
     slug = await withSystem(async (c) => {
       const dup = await c.query("select 1 from clinics where slug = $1", [d.slug]);
@@ -85,21 +92,34 @@ export async function createClinicAction(
          values ($1, $2, $3, $4, $5, $6) returning id, slug`,
         [d.name, d.nameAr || null, d.slug, phone, d.plan, d.planPrice]
       );
-      const clinicId: string = clinic.rows[0].id;
+      clinicId = clinic.rows[0].id as string;
 
-      // Owner account: reuse an existing user with this email, otherwise create one
+      /*
+        Owner account: reuse an existing user with this email, otherwise create
+        one with no password at all.
+
+        The agency used to type a password here and pass it to the owner, which
+        meant we chose it, we knew it, and it travelled to them over whatever
+        channel was handy. Staff invitations already worked the right way — an
+        emailed link, a password only the invitee ever sees — and there was no
+        reason the owner of the clinic should be the one person onboarded worse
+        than their own receptionist.
+
+        password_hash stays null until they accept, so the account cannot be
+        signed into before then.
+      */
       const existing = await c.query("select id from users where lower(email) = $1", [
         d.ownerEmail.toLowerCase(),
       ]);
-      let ownerId: string;
       if (existing.rowCount) {
         ownerId = existing.rows[0].id;
       } else {
         const u = await c.query(
-          `insert into users (email, password_hash, full_name) values ($1, $2, $3) returning id`,
-          [d.ownerEmail, hashPassword(d.ownerPassword), d.ownerName]
+          `insert into users (email, full_name) values ($1, $2) returning id`,
+          [d.ownerEmail, d.ownerName]
         );
         ownerId = u.rows[0].id;
+        ownerIsNew = true;
       }
       // The first member owns the clinic and always has full access. Their job
       // title is a guess the clinic corrects in staff settings; ownership is not.
@@ -199,8 +219,107 @@ export async function createClinicAction(
     console.error("createClinic failed", e);
     return { error: "generic" };
   }
+
+  /*
+    Outside the transaction on purpose. Sending mail is a network call to a third
+    party that can hang for its full fifteen-second timeout, and holding a
+    Postgres transaction open across it would pin a connection for that whole
+    time. The clinic exists either way; a failed send is recoverable from the
+    clinic page, an aborted creation is not.
+  */
+  if (ownerIsNew) {
+    await sendOwnerInvite(clinicId, ownerId, d.ownerEmail, d.ownerName, s.user.id).catch((e) =>
+      console.error("[owner invite]", (e as Error).message)
+    );
+  }
+
   revalidatePath("/admin");
   redirect(`/admin/clinics/${slug}`);
+}
+
+/**
+ * Issues the owner's invitation and mails it.
+ *
+ * Shared by clinic creation and the resend button, so the two cannot drift into
+ * sending different links or different wording.
+ *
+ * Returns the URL whatever happens. When Resend is not configured `sendEmail`
+ * reports `skipped` rather than throwing, and the caller shows the link so the
+ * agency can pass it on — onboarding is never blocked on a mail provider.
+ */
+async function sendOwnerInvite(
+  clinicId: string,
+  ownerId: string,
+  email: string,
+  name: string,
+  createdBy: string
+): Promise<{ url: string; emailed: boolean }> {
+  const raw = await withSystem((c) =>
+    createAuthToken(c, { userId: ownerId, clinicId, purpose: "invite", createdBy })
+  );
+  const url = `${appUrl()}/invite/${raw}`;
+  const clinic = await withSystem(async (c) => {
+    const r = await c.query(
+      `select coalesce(nullif(name_ar, ''), name) as name, default_locale from clinics where id = $1`,
+      [clinicId]
+    );
+    return {
+      name: (r.rows[0]?.name as string) ?? "",
+      locale: r.rows[0]?.default_locale === "en" ? ("en" as const) : ("ar" as const),
+    };
+  });
+  const sent = await sendEmail({
+    to: email,
+    ...renderEmail({ type: "invitation", locale: clinic.locale, name, clinic: clinic.name, url }),
+  });
+  if (!sent.ok && !sent.skipped) console.error("[owner invite email]", sent.error);
+  return { url, emailed: sent.ok };
+}
+
+/**
+ * Re-issues the owner's invitation, invalidating any previous link.
+ *
+ * The counterpart to a send that silently failed — a bounced address, a mail
+ * provider that was not configured yet, an owner who let the seven days lapse.
+ * Without this the only remedy was recreating the clinic.
+ */
+export async function resendOwnerInviteAction(
+  clinicId: string
+): Promise<{ error?: string; url?: string; emailed?: boolean }> {
+  const s = await requireSuperAdmin();
+  const owner = await withSystem(async (c) => {
+    const r = await c.query(
+      `select u.id, u.email, u.full_name, u.password_hash
+         from clinic_members cm join users u on u.id = cm.user_id
+        where cm.clinic_id = $1 and cm.is_owner
+        order by cm.created_at limit 1`,
+      [clinicId]
+    );
+    return r.rows[0] as
+      | { id: string; email: string; full_name: string; password_hash: string | null }
+      | undefined;
+  });
+  if (!owner) return { error: "no_owner" };
+  // An owner who has already chosen a password does not need an invitation, and
+  // issuing one would be a password-reset link nobody asked for.
+  if (owner.password_hash) return { error: "already_active" };
+
+  const { url, emailed } = await sendOwnerInvite(
+    clinicId,
+    owner.id,
+    owner.email,
+    owner.full_name,
+    s.user.id
+  );
+  revalidatePath("/admin");
+  /*
+    The link comes back whether or not the mail was accepted, which differs from
+    the staff invitation on purpose. Only a super admin can reach this, and they
+    can impersonate the owner regardless, so it discloses nothing they did not
+    already have — while an owner who never received the email is a support call
+    that otherwise has no answer. In practice the agency sends it on WhatsApp.
+  */
+  return { emailed, url };
 }
 
 export async function updateSubscriptionAction(

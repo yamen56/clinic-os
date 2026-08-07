@@ -1,6 +1,7 @@
 /** Browser QA for Phase 3: staff, services, hours, calendar, conflicts, drag, realtime. */
 import { chromium, type Page } from "playwright";
 import { DateTime } from "luxon";
+import { acceptOwnerInvite } from "./lib-owner-invite";
 
 const BASE = "http://localhost:3000";
 // Clinic-local date (Asia/Amman): after midnight there the UTC date is still
@@ -29,9 +30,10 @@ async function main() {
   await page.fill('input[name="slug"]', slug);
   await page.fill('input[name="ownerName"]', "QA Owner");
   await page.fill('input[name="ownerEmail"]', `owner-${slug}@test.local`);
-  await page.fill('input[name="ownerPassword"]', "password123");
   await page.click('button[type="submit"]');
   await page.waitForURL(`**/admin/clinics/${slug}`, { timeout: 20000 });
+  // The owner signs in further down, so the invitation has to be accepted first.
+  await acceptOwnerInvite(page, browser, BASE, slug, "password123");
   await page.click("text=Open workspace");
   await page.waitForURL(`**/c/${slug}`);
   console.log(`✓ in workspace ${slug}`);

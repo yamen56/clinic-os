@@ -200,8 +200,19 @@ export default async function InvoicesPage({
                 const partial = String(inv.status) === "partially_paid";
                 return (
                   <li key={String(inv.id)}>
-                    <Link href={`${base}/${inv.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-sunken">
-                      <span className="w-36 shrink-0 text-sm font-semibold tnum" dir="ltr">
+                    {/*
+                      Three fixed columns — 144 + 128 + 112 — plus gaps and
+                      padding come to more than a phone is wide, so the row used
+                      to push the entire page sideways. The widths earn their
+                      keep on a desktop, where they line the numbers up into
+                      columns; on a phone they are dropped and the row is allowed
+                      to wrap instead.
+                    */}
+                    <Link
+                      href={`${base}/${inv.id}`}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-sunken sm:flex-nowrap sm:gap-4 sm:px-5"
+                    >
+                      <span className="w-24 shrink-0 truncate text-sm font-semibold tnum sm:w-36" dir="ltr">
                         {String(inv.number)}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-sm">{String(inv.patient_name)}</span>
@@ -214,7 +225,7 @@ export default async function InvoicesPage({
                         reception cannot act on — what they need to say on the
                         phone is how much is still owed.
                       */}
-                      <span className="w-32 shrink-0 text-end">
+                      <span className="shrink-0 text-end sm:w-32">
                         <span className="block text-sm font-semibold tnum">
                           {fmtMoney(partial ? paid : total, access.clinic.currency, locale)}
                         </span>
@@ -227,7 +238,7 @@ export default async function InvoicesPage({
                           </span>
                         )}
                       </span>
-                      <span className="w-28 shrink-0 text-end">
+                      <span className="shrink-0 text-end sm:w-28">
                         <Badge status={invStatus[String(inv.status)] ?? "neutral"}>
                           {(t.invoices.statuses as Record<string, string>)[String(inv.status)]}
                         </Badge>

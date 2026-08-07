@@ -135,6 +135,48 @@ export async function consumeAuthToken(
   });
 }
 
+/**
+ * Recognises this process's own repeat of a submission it already completed.
+ *
+ * A form that reaches the server twice — React re-invoking an action, an
+ * impatient double-click, a client retry after a dropped response — consumes the
+ * token on the first pass and fails on the second. Reporting that failure tells
+ * somebody their invitation is no longer valid seconds after it worked
+ * perfectly, and leaves them staring at a dead end with a working password they
+ * do not know they have.
+ *
+ * This is deliberately narrow. It proves the token was spent moments ago *and*
+ * that the caller already knows the resulting password — so it tells an attacker
+ * holding a stolen link nothing, because passing it requires the very secret the
+ * link would have been used to set.
+ */
+const REPLAY_WINDOW_SECONDS = 120;
+
+export async function wasJustConsumed(
+  raw: string,
+  purpose: Purpose,
+  password: string,
+  verify: (pw: string, hash: string | null) => boolean
+): Promise<{ userId: string; clinicSlug: string | null } | null> {
+  if (!raw || raw.length < 20) return null;
+  return withSystem(async (c) => {
+    const r = await c.query(
+      `select t.user_id, u.password_hash, cl.slug
+         from auth_tokens t
+         join users u on u.id = t.user_id
+         left join clinics cl on cl.id = t.clinic_id
+        where t.token_hash = $1 and t.purpose = $2
+          and t.used_at is not null
+          and t.used_at > now() - ($3::text || ' seconds')::interval`,
+      [hashToken(raw), purpose, String(REPLAY_WINDOW_SECONDS)]
+    );
+    if (!r.rowCount) return null;
+    const row = r.rows[0];
+    if (!verify(password, row.password_hash)) return null;
+    return { userId: row.user_id as string, clinicSlug: (row.slug as string) ?? null };
+  });
+}
+
 /** Removes spent and expired rows. Called opportunistically, cheap. */
 export async function pruneAuthTokens(c: PoolClient): Promise<void> {
   await c.query(

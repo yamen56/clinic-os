@@ -154,7 +154,12 @@ export const ar: Dict = {
     slug: "معرّف الرابط",
     ownerName: "اسم المالك",
     ownerEmail: "بريد المالك",
-    ownerPassword: "كلمة مرور المالك",
+    ownerInviteHint:
+      "يصل المالك دعوة على بريده ويختار كلمة المرور بنفسه. لا تراها ولا تحددها أنت.",
+    ownerInvitePending: "بانتظار قبول الدعوة",
+    resendInvite: "إعادة إرسال الدعوة",
+    inviteSent: "تم إرسال الدعوة.",
+    inviteLinkCopy: "رابط الدعوة — أرسله للمالك مباشرة إذا لم يصله البريد:",
     plan: "الخطة",
     planPrice: "السعر الشهري",
     createClinic: "إنشاء العيادة",

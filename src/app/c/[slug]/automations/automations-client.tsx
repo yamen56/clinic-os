@@ -90,8 +90,14 @@ export function AutomationsClient({
           }
         />
         <Link href={`/c/${slug}/automations/${a.id}`} className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold">{a.name}</span>
+          {/*
+            min-w-0 here as well as on the Link. A flex item's floor is its
+            content width unless it is told otherwise, so without this the
+            truncate below never truncates: the name simply pushes the row wider
+            than the phone, and the whole page starts scrolling sideways.
+          */}
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-semibold">{a.name}</span>
             {a.failed_count > 0 && (
               <Badge status="danger">
                 <AlertTriangle className="h-3 w-3" />
@@ -145,7 +151,17 @@ export function AutomationsClient({
           }
         />
       ) : (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
+          {/*
+            grid-cols-1, not a bare grid. A grid's implicit column is sized
+            `auto`, whose floor is the min-content width of what it holds — and a
+            row whose trigger line is `truncate` (so, nowrap) has a min-content
+            of whatever that text measures. The card therefore refused to be
+            narrower than its longest automation, pushed past the edge of the
+            phone, and took the page's whole layout width with it. `grid-cols-1`
+            is `minmax(0, 1fr)`: the floor becomes zero and the truncation that
+            was asked for all along finally happens.
+          */}
           {active.length > 0 && (
             <Card>
               <CardHeader title={t.automations.enabled} />

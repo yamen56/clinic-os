@@ -73,9 +73,11 @@ export function NewClinicForm() {
           <Input name="ownerEmail" type="email" dir="ltr" required />
         </Field>
       </div>
-      <Field label={t.admin.ownerPassword} required hint="8+ characters">
-        <Input name="ownerPassword" type="text" dir="ltr" minLength={8} required />
-      </Field>
+      {/* Says what will happen, because the missing password field is otherwise
+          the most obvious thing about this form. */}
+      <p className="rounded-md bg-sunken px-3 py-2 text-[13px] text-ink-500">
+        {t.admin.ownerInviteHint}
+      </p>
       {state?.error && (
         <p className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">
           {t.common.genericError}
