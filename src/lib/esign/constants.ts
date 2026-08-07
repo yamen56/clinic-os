@@ -88,10 +88,23 @@ export const SIGNING_STEPS = 3;
  * Recipes a new clinic gets switched on.
  *
  * Everything else in the library arrives disabled, so a clinic never sends a
- * patient something it did not choose to send. These three send nothing to a
- * patient at all — they raise a task or notify staff — which is why they are
- * safe to have live on day one, and why leaving them off would mean unsigned
- * paperwork quietly going nowhere.
+ * patient something it did not choose to send. The three document alerts send
+ * nothing to a patient at all — they raise a task or notify staff — which is why
+ * they are safe to have live on day one, and why leaving them off would mean
+ * unsigned paperwork quietly going nowhere.
+ *
+ * `welcome_new_patient` is the deliberate exception, and the only entry here
+ * that messages a patient. It is on because the platform now promises that
+ * behaviour: adding a patient greets them. Migration 0023 switched it on for the
+ * clinics that already existed, so leaving it off here would mean a clinic
+ * onboarded next month silently behaved differently from the one it was
+ * demonstrated on — the worst kind of difference, because nothing reports it.
+ *
+ * Worth knowing when onboarding: a brand-new WhatsApp number whose first
+ * outbound activity is unsolicited first contact is the likeliest ban profile
+ * there is. The rails in worker/outbound.ts (daily cap, blast guard, sending
+ * window) bound it, but a new number should still be warmed up on replies before
+ * it leans on this.
  *
  * Lives here rather than in the seed script because both the seed script and
  * clinic creation need the same answer.
@@ -100,4 +113,5 @@ export const RECIPES_ON_BY_DEFAULT = new Set([
   "document_expired_alert",
   "document_unsigned_escalate",
   "document_declined_alert",
+  "welcome_new_patient",
 ]);

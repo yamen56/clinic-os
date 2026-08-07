@@ -25,6 +25,31 @@ export const RECIPES = [
     ],
   },
   {
+    key: "welcome_new_patient",
+    name: "Welcome a new patient",
+    name_ar: "ترحيب بمريض جديد",
+    description: "Greets a patient on WhatsApp as soon as their file is created.",
+    trigger_type: "patient_created",
+    trigger_config: {},
+    sort: 0,
+    steps: [
+      {
+        step_type: "send_whatsapp",
+        config: {
+          /*
+            Deliberately an opening, not an announcement. This is very often the
+            clinic's first message to this number, and a first message that
+            invites a reply is both more useful to the patient and far safer for
+            the number than a broadcast — WhatsApp reads a one-way blast to
+            strangers very differently from a conversation someone answers.
+          */
+          message:
+            "مرحباً {{patient.first_name}} 👋\nأهلاً بك في {{clinic.name}}.\nسجّلنا ملفك عندنا، وهذا رقمنا على واتساب لأي استفسار أو حجز موعد.\n\nكيف يمكننا مساعدتك؟",
+        },
+      },
+    ],
+  },
+  {
     key: "reminder_24h",
     name: "Reminder — 24 hours before",
     name_ar: "تذكير قبل 24 ساعة",

@@ -1,12 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireClinic } from "@/lib/auth";
+import { can, requireClinic } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { findOrCreatePatient } from "@/lib/patients";
 import { normalizePhone } from "@/lib/phone";
 import { deleteFile } from "@/lib/storage";
+import { emitTrigger } from "@/lib/triggers";
 
 export async function createPatientAction(
   slug: string,
@@ -31,6 +32,15 @@ export async function createPatientAction(
         entity: "patient",
         entityId: r.rows[0].id,
       });
+      /*
+        Fires even with no phone. A welcome message will skip itself for want of
+        a number, but an automation on this trigger may equally tag the file or
+        raise a task, and those are still owed.
+      */
+      await emitTrigger(c, access.clinicId, "patient_created", {
+        patientId: r.rows[0].id,
+        source: "staff",
+      });
       return { id: r.rows[0].id as string };
     }
     const result = await findOrCreatePatient(c, access.clinicId, {
@@ -47,8 +57,60 @@ export async function createPatientAction(
         entity: "patient",
         entityId: result.id,
       });
+      /*
+        Only on creation, and only from here — which is the point. This action is
+        one patient typed by one person, so a welcome message is a greeting. A
+        bulk import reaches `findOrCreatePatient` directly and emits nothing,
+        because greeting four hundred numbers at once is how a WhatsApp number
+        gets banned.
+      */
+      await emitTrigger(c, access.clinicId, "patient_created", {
+        patientId: result.id,
+        source: "staff",
+      });
     }
     return { id: result.id, existing: !result.created };
+  });
+}
+
+/**
+ * Opens the WhatsApp thread for a patient, creating it if there is none.
+ *
+ * Staff could previously only reply. The send route takes a conversation id, and
+ * a conversation only came into existence when the patient wrote in — so the one
+ * patient who most needs a message, the one just added, was the one nobody could
+ * message. The clinic's workaround was wa.me, which sends from the phone and
+ * leaves the platform knowing nothing about it.
+ *
+ * Nothing new is being invented here: `queueWhatsAppMessage` already opens a
+ * conversation on demand for every automated sender. This gives staff the same
+ * door.
+ */
+export async function openConversationAction(
+  slug: string,
+  patientId: string
+): Promise<{ id?: string; error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "conversations")) return { error: "forbidden" };
+
+  return inClinic(access, async (c) => {
+    const p = await c.query(
+      `select phone_e164 from patients where id = $1 and clinic_id = $2 and merged_into is null`,
+      [patientId, access.clinicId]
+    );
+    if (!p.rowCount) return { error: "not_found" };
+    const phone = p.rows[0].phone_e164 as string | null;
+    if (!phone) return { error: "no_phone" };
+
+    const conv = await c.query(
+      `insert into conversations (clinic_id, phone_e164, patient_id)
+       values ($1, $2, $3)
+       on conflict (clinic_id, phone_e164)
+       do update set patient_id = coalesce(conversations.patient_id, excluded.patient_id)
+       returning id`,
+      [access.clinicId, phone, patientId]
+    );
+    return { id: conv.rows[0].id as string };
   });
 }
 

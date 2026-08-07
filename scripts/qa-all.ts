@@ -31,6 +31,7 @@ const SUITES = [
   ["photos: staff pictures & who may set them", "scripts/qa-photos.ts"],
   ["tablet: iPad layouts", "scripts/qa-tablet.ts"],
   ["account & tags: the profile page and the tag catalogue", "scripts/qa-profile-tags.ts"],
+  ["whatsapp: messaging a patient first", "scripts/qa-first-message.ts"],
   ["whatsapp: sending, unreachable numbers, receipts", "scripts/qa-whatsapp-delivery.ts"],
   ["whatsapp: LID chats and the sending window", "scripts/qa-whatsapp-lid.ts"],
   ["whatsapp: 500 messages a day", "scripts/qa-whatsapp-volume.ts"],

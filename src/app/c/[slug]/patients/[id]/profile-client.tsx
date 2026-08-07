@@ -25,6 +25,7 @@ import {
   deletePatientFileAction,
   setPatientStatusAction,
   mergePatientsAction,
+  openConversationAction,
 } from "../actions";
 import { sendAllPendingAction } from "../../documents/actions";
 import { DOC_STATUS_BADGE } from "@/components/esign/status";
@@ -157,6 +158,26 @@ export function PatientProfile(props: {
   const extraDefs = props.defs.filter((d) => !d.source_column);
 
   const waLink = p.phone_e164 ? `https://wa.me/${p.phone_e164.replace("+", "")}` : null;
+
+  /*
+    Messaging from inside the platform, as opposed to the wa.me link beside it.
+    The difference is not cosmetic: a message sent here is queued through the
+    sending rails — the daily cap, the quiet-hours window, the delivery receipt —
+    and every colleague can see it on the thread afterwards. One sent from the
+    phone is invisible to all of that.
+
+    The thread need not exist yet; the action creates it. That is the whole point
+    of the button.
+  */
+  const [opening, startOpening] = useTransition();
+  const openThread = () => {
+    if (!p.phone_e164) return toast(t.patients.messageNoPhone, "error");
+    startOpening(async () => {
+      const r = await openConversationAction(slug, p.id);
+      if (r.id) router.push(`/c/${slug}/conversations?open=${r.id}`);
+      else toast(r.error === "no_phone" ? t.patients.messageNoPhone : t.patients.messageFailed, "error");
+    });
+  };
   const upcoming = props.appointments.find(
     (a) => new Date(a.starts_at) > new Date() && !["cancelled", "no_show"].includes(a.status)
   );
@@ -212,10 +233,17 @@ export function PatientProfile(props: {
           />
         </div>
         <div className="flex items-center gap-2">
+          {p.phone_e164 && (
+            <Button variant="soft" size="sm" onClick={openThread} disabled={opening}>
+              <MessageCircle className="h-4 w-4" />
+              {t.patients.message}
+            </Button>
+          )}
+          {/* The patient's own WhatsApp, for a call or a look — not the way to
+              send, which is the button beside it. */}
           {waLink && (
             <a href={waLink} target="_blank" rel="noreferrer">
-              <Button variant="soft" size="sm">
-                <MessageCircle className="h-4 w-4" />
+              <Button variant="outline" size="sm">
                 {t.patients.whatsappOpen}
               </Button>
             </a>
@@ -578,7 +606,20 @@ export function PatientProfile(props: {
         {tab === "conversation" && (
           <Card className="p-5">
             {!props.conversation?.msgs?.length ? (
-              <EmptyState icon={<MessageCircle />} title={t.common.none} />
+              /* The empty state is exactly where someone wants to start a
+                 conversation, so it offers to rather than just reporting none. */
+              <EmptyState
+                icon={<MessageCircle />}
+                title={t.common.none}
+                action={
+                  p.phone_e164 ? (
+                    <Button variant="soft" size="sm" onClick={openThread} disabled={opening}>
+                      <MessageCircle className="h-4 w-4" />
+                      {t.patients.message}
+                    </Button>
+                  ) : undefined
+                }
+              />
             ) : (
               <>
                 <div className="grid gap-2">
