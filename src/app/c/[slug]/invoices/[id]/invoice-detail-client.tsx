@@ -153,17 +153,24 @@ export function InvoiceDetailClient({
                 {t.invoices.downloadPdf}
               </Button>
             </a>
+            {/*
+              Sending stays available once the invoice is paid. A settled invoice
+              is the patient's proof of payment — the thing they are asked for by
+              an employer or an insurer — and hiding the button at exactly the
+              moment it became worth sending meant there was no way to give it to
+              them. Only a voided invoice has nothing worth sending.
+            */}
+            {inv.status !== "void" && (
+              <Button size="sm" onClick={send} loading={sendPending}>
+                <MessageCircle className="h-4 w-4" />
+                {t.invoices.sendWhatsapp}
+              </Button>
+            )}
             {inv.status !== "void" && inv.status !== "paid" && (
-              <>
-                <Button size="sm" onClick={send} loading={sendPending}>
-                  <MessageCircle className="h-4 w-4" />
-                  {t.invoices.sendWhatsapp}
-                </Button>
-                <Button variant="soft" size="sm" onClick={() => setPayOpen(true)}>
-                  <BadgeDollarSign className="h-4 w-4" />
-                  {t.invoices.recordPayment}
-                </Button>
-              </>
+              <Button variant="soft" size="sm" onClick={() => setPayOpen(true)}>
+                <BadgeDollarSign className="h-4 w-4" />
+                {t.invoices.recordPayment}
+              </Button>
             )}
             {inv.status !== "void" && (
               <Button variant="ghost" size="sm" className="!text-danger" onClick={() => setVoidOpen(true)}>

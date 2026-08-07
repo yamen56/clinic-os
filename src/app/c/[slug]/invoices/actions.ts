@@ -108,6 +108,7 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
     const inv = (
       await c.query(
         `select i.id, i.number, i.total, i.currency, i.public_token, i.pdf_path,
+                i.status, i.amount_paid,
                 p.phone_e164, p.full_name, cl.name, cl.name_ar, cl.default_locale,
                 coalesce(ws.status = 'connected', false) as wa_connected
          from invoices i
@@ -139,9 +140,19 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
     const base = process.env.APP_URL || "http://localhost:3000";
     const isAr = pre.default_locale !== "en";
     const clinicName = isAr ? pre.name_ar || pre.name : pre.name;
-    const body = isAr
-      ? `فاتورتك من ${clinicName}\nرقم ${pre.number} — الإجمالي ${Number(pre.total).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`
-      : `Your invoice from ${clinicName}\n${pre.number} — total ${Number(pre.total).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`;
+    /*
+      A settled invoice is sent as proof of payment, not as a bill. Telling
+      somebody who has already paid that their "total" is 100 reads as a demand
+      and produces exactly the phone call this was meant to save.
+    */
+    const settled = pre.status === "paid";
+    const body = settled
+      ? isAr
+        ? `إيصال الدفع من ${clinicName}\nرقم ${pre.number} — مدفوع ${Number(pre.amount_paid).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`
+        : `Payment receipt from ${clinicName}\n${pre.number} — paid ${Number(pre.amount_paid).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`
+      : isAr
+        ? `فاتورتك من ${clinicName}\nرقم ${pre.number} — الإجمالي ${Number(pre.total).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`
+        : `Your invoice from ${clinicName}\n${pre.number} — total ${Number(pre.total).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`;
 
     await queueWhatsAppMessage(c, {
       clinicId: access.clinicId,
@@ -168,7 +179,13 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
       entity: "invoice",
       entityId: invoiceId,
     });
-    await emitTrigger(c, access.clinicId, "invoice_sent", { invoiceId });
+    /*
+      `invoice_sent` means a bill went out, and automations hang chasing steps
+      off it. Re-sending a paid invoice as a receipt must not start a chase for
+      money already received — which is newly possible now that the button stays
+      after payment.
+    */
+    if (!settled) await emitTrigger(c, access.clinicId, "invoice_sent", { invoiceId });
     revalidatePath(`/c/${slug}/invoices`);
     return {};
   });
