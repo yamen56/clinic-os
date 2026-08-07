@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { withSystem } from "./db";
 import { pushToUser, pushConfigured } from "../src/lib/push";
+import { notifyUser } from "../src/lib/notify";
 
 /**
  * Notification delivery + the scheduled digests.
@@ -97,17 +98,24 @@ async function doctorReminders() {
       const local = DateTime.fromJSDate(new Date(r.starts_at))
         .setZone(r.timezone)
         .setLocale("ar-JO-u-nu-latn");
-      await c.query(
-        `insert into notifications (clinic_id, user_id, kind, title, body, url)
-         values ($1, $2, 'doctor_reminder', $3, $4, $5)`,
-        [
-          r.clinic_id,
-          r.user_id,
-          `موعدك القادم ${local.toFormat("h:mm a")}`,
-          `${r.patient_name}${r.service_name ? ` — ${r.service_name_ar || r.service_name}` : ""}`,
-          `/c/${r.slug}/calendar`,
-        ]
-      );
+      /*
+        Keyed by the appointment, because the window this selects on is ninety
+        seconds wide and the scheduler ticks every sixty. Consecutive ticks
+        therefore overlap by thirty seconds, and any reminder whose moment fell
+        in that overlap was sent twice — about half of them.
+
+        The window is deliberately wider than the tick so a late or restarted
+        worker still sends the reminder at all. Narrowing it would trade
+        duplicates for silence; the key keeps both.
+      */
+      await notifyUser(c, r.user_id as string, {
+        clinicId: r.clinic_id as string,
+        kind: "doctor_reminder",
+        title: `موعدك القادم ${local.toFormat("h:mm a")}`,
+        body: `${r.patient_name}${r.service_name ? ` — ${r.service_name_ar || r.service_name}` : ""}`,
+        url: `/c/${r.slug}/calendar`,
+        dedupeKey: `doctor_reminder:${r.id}`,
+      });
     }
   });
 }

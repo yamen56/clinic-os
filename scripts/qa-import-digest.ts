@@ -131,11 +131,65 @@ async function testDigest(db: Client) {
   await db.query(`delete from clinics where id = any($1)`, [[clinic.id, otherClinic.id]]);
 }
 
+/**
+ * The other way a notification repeated: no claim at all.
+ *
+ * Doctor reminders select on a ninety-second window while the scheduler ticks
+ * every sixty, so consecutive ticks overlapped by thirty seconds and about half
+ * of all reminders were sent twice. The window has to stay wider than the tick
+ * or a late worker sends nothing, so the fix is a key rather than a narrower
+ * window — and this proves the key holds while the overlap still exists.
+ */
+async function testNotificationDedupe(db: Client) {
+  console.log("\n── a reminder, once ──");
+  const slug = `qandp${Date.now().toString(36)}`;
+  const clinic = (
+    await db.query(`insert into clinics (name, slug) values ('QA Notif',$1) returning id`, [slug])
+  ).rows[0];
+  const user = (
+    await db.query(`insert into users (email, full_name) values ($1,'QA Doc') returning id`, [
+      `doc-${slug}@test.local`,
+    ])
+  ).rows[0];
+
+  const send = async (key: string | null) => {
+    const r = await db.query(
+      `insert into notifications (clinic_id, user_id, kind, title, body, dedupe_key)
+       values ($1,$2,'doctor_reminder','next appointment','',$3)
+       on conflict (dedupe_key) where dedupe_key is not null do nothing returning id`,
+      [clinic.id, user.id, key]
+    );
+    return (r.rowCount ?? 0) > 0;
+  };
+
+  const appt = "11111111-1111-1111-1111-111111111111";
+  check("the first tick sends the reminder", await send(`doctor_reminder:${appt}:${user.id}`));
+  check("the overlapping tick does not", !(await send(`doctor_reminder:${appt}:${user.id}`)));
+  check(
+    "a different appointment is still reminded",
+    await send(`doctor_reminder:22222222-2222-2222-2222-222222222222:${user.id}`)
+  );
+
+  // The escape hatch has to keep working, or every repeatable notification
+  // silently becomes once-only.
+  check("a notification with no key repeats, as before", (await send(null)) && (await send(null)));
+
+  const per = await db.query(
+    `select count(*)::int n from notifications where clinic_id = $1 and kind = 'doctor_reminder'`,
+    [clinic.id]
+  );
+  check("so four rows exist, not six", per.rows[0].n === 4, String(per.rows[0].n));
+
+  await db.query(`delete from clinics where id = $1`, [clinic.id]);
+  await db.query(`delete from users where id = $1`, [user.id]);
+}
+
 async function main() {
   testParser();
   const db = new Client({ connectionString: PG });
   await db.connect();
   await testDigest(db);
+  await testNotificationDedupe(db);
   await db.end();
 
   console.log(`\n  import & digest: ${passed} passed, ${failures.length} failed`);

@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { withSystem } from "./db";
 import { appUrl } from "../src/lib/urls";
+import { notifyClinicStaff } from "../src/lib/notify";
 
 /**
  * Turning a cancelled appointment back into a booked one.
@@ -167,6 +168,78 @@ export async function offerFreedSlot(slot: FreedSlot): Promise<number> {
       `[waitlist ${clinic.slug}] offered ${local.toISO()} to ${candidates.rowCount} patient(s)`
     );
     return candidates.rowCount;
+  });
+}
+
+/**
+ * Closes a waitlist entry when the patient actually books.
+ *
+ * Without this the offer worked and nothing knew. The entry stayed 'offered',
+ * the cooldown expired, it returned to 'waiting', and the next cancellation
+ * offered another slot to somebody who had already taken one — which reads to
+ * the patient as a clinic that is not paying attention.
+ *
+ * Any live entry for that patient is closed, not only one matching the doctor:
+ * somebody waiting for an earlier appointment has got one, and what they asked
+ * for has happened.
+ */
+export async function closeWaitlistOnBooking(
+  clinicId: string,
+  appointmentId: string
+): Promise<void> {
+  await withSystem(async (c) => {
+    const appt = (
+      await c.query(
+        `select patient_id, starts_at from appointments where id = $1 and clinic_id = $2`,
+        [appointmentId, clinicId]
+      )
+    ).rows[0];
+    if (!appt) return;
+
+    const closed = await c.query(
+      `update waitlist_entries
+          set status = 'booked', booked_appointment_id = $3
+        where clinic_id = $1 and patient_id = $2 and status in ('waiting', 'offered')
+        returning id, (status = 'offered') as was_offered`,
+      [clinicId, appt.patient_id, appointmentId]
+    );
+    if (!closed.rowCount) return;
+
+    const info = (
+      await c.query(
+        `select cl.slug, cl.timezone, p.full_name
+           from clinics cl, patients p where cl.id = $1 and p.id = $2`,
+        [clinicId, appt.patient_id]
+      )
+    ).rows[0];
+    if (!info) return;
+
+    const when = DateTime.fromJSDate(new Date(appt.starts_at as string))
+      .setZone(info.timezone)
+      .setLocale("ar")
+      .toFormat("cccc d LLLL, h:mm a");
+    /*
+      Worth telling reception: a slot they thought was empty is now filled, and
+      the person who filled it came off the waitlist rather than by phone.
+    */
+    await notifyClinicStaff(c, clinicId, {
+      kind: "waitlist_booked",
+      title: `حجز من قائمة الانتظار — ${info.full_name}`,
+      body: when,
+      url: `/c/${info.slug}/calendar`,
+      dedupeKey: `waitlist_booked:${appointmentId}`,
+    });
+    await c.query(
+      `insert into jobs (clinic_id, kind, payload, dedupe_key)
+       values ($1, 'trigger:waitlist_booked', $2, $3)
+       on conflict (dedupe_key) do nothing`,
+      [
+        clinicId,
+        JSON.stringify({ patientId: appt.patient_id, appointmentId }),
+        `waitlist_booked:${appointmentId}`,
+      ]
+    );
+    console.log(`[waitlist ${info.slug}] ${closed.rowCount} entr(ies) closed by a booking`);
   });
 }
 

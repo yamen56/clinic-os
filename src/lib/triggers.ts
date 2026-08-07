@@ -4,6 +4,7 @@ export type TriggerKind =
   | "appointment_created"
   | "appointment_status_changed"
   | "patient_created"
+  | "waitlist_booked"
   | "tag_added"
   | "tag_removed"
   | "invoice_sent"

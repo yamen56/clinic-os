@@ -36,7 +36,7 @@ const saveSchema = z.object({
   description: z.string().max(300).default(""),
   triggerType: z.enum([
     "appointment_created", "appointment_status_changed", "before_appointment",
-    "after_last_visit", "patient_created", "tag_added", "tag_removed", "birthday",
+    "after_last_visit", "patient_created", "waitlist_booked", "tag_added", "tag_removed", "birthday",
     "invoice_sent", "invoice_unpaid", "inbound_message", "booking_submitted",
   ]),
   triggerConfig: z.record(z.string(), z.unknown()).default({}),

@@ -9,6 +9,7 @@ import { useDbAuthState } from "./auth-state";
 import { handleUpsert } from "./inbound";
 import { handleReceipts } from "./receipts";
 import { learnLidMapping, pairsFromContacts, resolvePendingLids } from "./lid-mapping";
+import { notifyUser } from "../../src/lib/notify";
 
 const logger = pino({ level: "silent" });
 
@@ -210,18 +211,23 @@ async function notifyDisconnected(clinicId: string) {
        union select id from users where is_super_admin`,
       [clinicId]
     );
+    /*
+      Once an hour, not once per drop. This is raised both when the phone logs
+      us out and again after five failed reconnects, so a connection that flaps
+      — a clinic's wifi in the evening — produced an alert every few minutes
+      about a thing the owner had already been told and could not act on any
+      faster.
+    */
+    const hour = new Date().toISOString().slice(0, 13);
     for (const row of staff.rows) {
-      await c.query(
-        `insert into notifications (clinic_id, user_id, kind, title, body, url)
-         values ($1, $2, 'whatsapp_disconnected', $3, $4, $5)`,
-        [
-          clinicId,
-          row.user_id ?? row.id,
-          `انقطع اتصال واتساب — ${clinic.name_ar || clinic.name}`,
-          "الأتمتة والرسائل متوقفة حتى إعادة الربط.",
-          `/c/${clinic.slug}/settings/whatsapp`,
-        ]
-      );
+      await notifyUser(c, (row.user_id ?? row.id) as string, {
+        clinicId,
+        kind: "whatsapp_disconnected",
+        title: `انقطع اتصال واتساب — ${clinic.name_ar || clinic.name}`,
+        body: "الأتمتة والرسائل متوقفة حتى إعادة الربط.",
+        url: `/c/${clinic.slug}/settings/whatsapp`,
+        dedupeKey: `wa_disconnected:${clinicId}:${hour}`,
+      });
     }
   }).catch((e) => console.error("[wa] notifyDisconnected", e.message));
 }

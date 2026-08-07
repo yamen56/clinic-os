@@ -2,7 +2,7 @@ import { withSystem } from "./db";
 import { advanceRun, handleTrigger } from "./automations";
 import { respondToConversation } from "./ai/agent";
 import { autoSendServiceDocuments } from "./esign";
-import { offerFreedSlot } from "./waitlist";
+import { offerFreedSlot, closeWaitlistOnBooking } from "./waitlist";
 
 /**
  * Job runner: claims due jobs with FOR UPDATE SKIP LOCKED so multiple worker
@@ -93,6 +93,12 @@ async function runOne(): Promise<boolean> {
             startsAt: new Date(appt.starts_at as string).toISOString(),
           });
         }
+      }
+
+      // Booking is how a waitlist entry ends. Whether it came from an offer we
+      // sent or a phone call, what they were waiting for has happened.
+      if (kind === "appointment_created" && job.payload?.appointmentId) {
+        await closeWaitlistOnBooking(job.clinic_id, String(job.payload.appointmentId));
       }
 
       // An inbound patient message also wakes the AI receptionist.

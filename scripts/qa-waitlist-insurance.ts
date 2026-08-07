@@ -28,9 +28,8 @@ function check(name: string, ok: boolean, detail = "") {
 
 async function main() {
   // The worker is ESM; a CommonJS script has to reach it this way.
-  const { offerFreedSlot, expirePastWaitlist, requeueStaleOffers } = await import(
-    "../worker/waitlist"
-  );
+  const { offerFreedSlot, expirePastWaitlist, requeueStaleOffers, closeWaitlistOnBooking } =
+    await import("../worker/waitlist");
 
   const db = new Client({ connectionString: PG });
   await db.connect();
@@ -60,6 +59,24 @@ async function main() {
       [clinic.id, user.id]
     )
   ).rows[0];
+
+  /*
+    An owner from the start. Staff notifications go to owners and receptionists,
+    so a fixture whose only member is a doctor silently has nobody to tell — and
+    a check for "reception was told" would fail for the wrong reason.
+  */
+  const owner = (
+    await db.query(
+      `insert into users (email, password_hash, full_name, locale)
+       values ($1,$2,'WL Owner','en') returning id`,
+      [`owner-${slug}@test.local`, bcrypt.hashSync("password123", 10)]
+    )
+  ).rows[0];
+  await db.query(
+    `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions)
+     values ($1,$2,'receptionist',true,'{"level":"full"}')`,
+    [clinic.id, owner.id]
+  );
 
   const mk = async (name: string, phone: string) =>
     (
@@ -171,6 +188,44 @@ async function main() {
   const back = await db.query(`select status from waitlist_entries where patient_id = $1`, [wants]);
   check("a cold offer puts them back on the list", back.rows[0].status === "waiting", back.rows[0].status);
 
+  /* ------------------------------------- booking is how an entry should end */
+  /*
+    The offer working used to leave no trace: the entry stayed 'offered', went
+    cold, returned to 'waiting', and the next cancellation offered another slot
+    to somebody who had already taken one.
+  */
+  const svc = (
+    await db.query(
+      `insert into services (clinic_id, name, duration_min, price) values ($1,'QA',30,10) returning id`,
+      [clinic.id]
+    )
+  ).rows[0];
+  const booked = (
+    await db.query(
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status)
+       values ($1,$2,$3,$4,$5,$5::timestamptz + interval '30 minutes','scheduled') returning id`,
+      [clinic.id, wants, doctor.id, svc.id, soonISO]
+    )
+  ).rows[0];
+  await closeWaitlistOnBooking(clinic.id, booked.id);
+  const after2 = await db.query(
+    `select status, booked_appointment_id from waitlist_entries where patient_id = $1`,
+    [wants]
+  );
+  check("booking closes their waitlist entry", after2.rows[0].status === "booked", after2.rows[0].status);
+  check("and records which appointment did it", after2.rows[0].booked_appointment_id === booked.id);
+  const told = await db.query(
+    `select count(*)::int n from notifications where clinic_id = $1 and kind = 'waitlist_booked'`,
+    [clinic.id]
+  );
+  check("reception is told the slot was filled", told.rows[0].n > 0, `${told.rows[0].n}`);
+  await closeWaitlistOnBooking(clinic.id, booked.id);
+  const told2 = await db.query(
+    `select count(*)::int n from notifications where clinic_id = $1 and kind = 'waitlist_booked'`,
+    [clinic.id]
+  );
+  check("and not told twice if it runs again", told2.rows[0].n === told.rows[0].n, `${told2.rows[0].n}`);
+
   /* ---------------------------------------------- windows that have passed */
   await db.query(
     `update waitlist_entries set latest_date = current_date - 1 where patient_id = $1`,
@@ -245,19 +300,6 @@ async function main() {
     type, no failing query. Only driving the screen catches a client that
     misreads its own API.
   */
-  const owner = (
-    await db.query(
-      `insert into users (email, password_hash, full_name, locale)
-       values ($1,$2,'WL Owner','en') returning id`,
-      [`owner-${slug}@test.local`, bcrypt.hashSync("password123", 10)]
-    )
-  ).rows[0];
-  await db.query(
-    `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions)
-     values ($1,$2,'receptionist',true,'{"level":"full"}')`,
-    [clinic.id, owner.id]
-  );
-
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors: string[] = [];

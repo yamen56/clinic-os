@@ -37,7 +37,7 @@ const STEP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
 
 const TRIGGERS = [
   "appointment_created", "appointment_status_changed", "before_appointment", "after_last_visit",
-  "patient_created", "tag_added", "tag_removed", "birthday", "invoice_sent", "invoice_unpaid",
+  "patient_created", "waitlist_booked", "tag_added", "tag_removed", "birthday", "invoice_sent", "invoice_unpaid",
   "inbound_message", "booking_submitted",
   "document_sent", "document_viewed", "document_signed", "document_completed",
   "document_declined", "document_unsigned", "document_expired",

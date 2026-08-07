@@ -4,6 +4,7 @@ import { withSystem } from "./db";
 import { sessions } from "./wa/session";
 import { resolveSendAddress } from "./wa/resolve-address";
 import { readFileBuffer } from "../src/lib/storage";
+import { notifyUser } from "../src/lib/notify";
 import type { AnyMessageContent } from "@whiskeysockets/baileys";
 
 /**
@@ -332,18 +333,18 @@ export async function processOnce() {
               `select user_id from clinic_members where clinic_id = $1 and is_owner and active`,
               [clinicId]
             );
+            // Once an hour: the pause is fifteen minutes, so a number that keeps
+            // failing would otherwise raise this four times an hour, for hours.
+            const errHour = new Date().toISOString().slice(0, 13);
             for (const o of owners.rows) {
-              await c.query(
-                `insert into notifications (clinic_id, user_id, kind, title, body, url)
-                 values ($1, $2, 'whatsapp_errors', $3, $4, $5)`,
-                [
-                  clinicId,
-                  o.user_id,
-                  "رسائل واتساب تفشل بشكل متكرر",
-                  "تم إيقاف الإرسال مؤقتاً لمدة 15 دقيقة لحماية الرقم.",
-                  `/c/${clinic.slug}/settings/whatsapp`,
-                ]
-              );
+              await notifyUser(c, o.user_id as string, {
+                clinicId,
+                kind: "whatsapp_errors",
+                title: "رسائل واتساب تفشل بشكل متكرر",
+                body: "تم إيقاف الإرسال مؤقتاً لمدة 15 دقيقة لحماية الرقم.",
+                url: `/c/${clinic.slug}/settings/whatsapp`,
+                dedupeKey: `wa_errors:${clinicId}:${errHour}`,
+              });
             }
           }
         });
