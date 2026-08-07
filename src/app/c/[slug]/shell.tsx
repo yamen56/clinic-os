@@ -111,16 +111,21 @@ export function Shell({
     one entry everybody keeps: it is where the guards send anyone who reaches a
     screen they are not allowed, so it can never be hidden.
   */
+  /*
+    Order is the clinic's, not ours. The first four also become the phone's
+    bottom bar (see mobileMain below), so this sequence decides what a
+    receptionist can reach with one thumb — which is why it is worth being
+    literal about rather than tidy.
+  */
   const items: { key: NavKey; href: string; show: boolean; badge?: number }[] = [
     { key: "dashboard", href: base, show: true },
-    { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
-    { key: "calendar", href: `${base}/calendar`, show: caps.calendar },
-    // Beside the calendar, because it is read when the calendar has a hole in it.
-    { key: "waitlist", href: `${base}/waitlist`, show: caps.calendar },
     { key: "patients", href: `${base}/patients`, show: caps.patients },
-    { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
-    { key: "documents", href: `${base}/documents`, show: caps.documents, badge: pendingDocuments },
+    { key: "calendar", href: `${base}/calendar`, show: caps.calendar },
     { key: "invoices", href: `${base}/invoices`, show: caps.invoices },
+    { key: "documents", href: `${base}/documents`, show: caps.documents, badge: pendingDocuments },
+    { key: "waitlist", href: `${base}/waitlist`, show: caps.calendar },
+    { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
+    { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
     { key: "automations", href: `${base}/automations`, show: caps.automations },
     { key: "aiAgent", href: `${base}/ai`, show: caps.automations },
     { key: "settings", href: `${base}/settings`, show: caps.settings },
