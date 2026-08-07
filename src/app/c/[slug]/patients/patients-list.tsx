@@ -14,7 +14,7 @@ import { EmptyState, Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { createPatientAction } from "./actions";
-import { Users, Plus } from "lucide-react";
+import { Users, Plus, Upload } from "lucide-react";
 
 type Row = {
   id: string;
@@ -91,10 +91,20 @@ export function PatientsList({
       <PageHeader
         title={t.patients.title}
         action={
-          <Button onClick={() => setNewOpen(true)}>
-            <Plus className="h-4 w-4" />
-            {t.patients.newPatient}
-          </Button>
+          <>
+            {/* Beside "new patient", because a clinic arriving with a list is
+                looking for it on this screen and nowhere else. */}
+            <Link href={`/c/${slug}/patients/import`}>
+              <Button variant="outline">
+                <Upload className="h-4 w-4" />
+                {t.import.title}
+              </Button>
+            </Link>
+            <Button onClick={() => setNewOpen(true)}>
+              <Plus className="h-4 w-4" />
+              {t.patients.newPatient}
+            </Button>
+          </>
         }
       />
       <div className="mb-4 flex flex-wrap gap-2">

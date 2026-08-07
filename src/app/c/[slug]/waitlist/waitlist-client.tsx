@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { addToWaitlistAction, setWaitlistStatusAction } from "./actions";
+import { createPatientAction } from "../patients/actions";
 import { Hourglass, Plus, X, Search } from "lucide-react";
 
 type Entry = {
@@ -178,14 +179,28 @@ function AddModal(props: {
   const [latest, setLatest] = useState("");
   const [note, setNote] = useState("");
 
+  const [searched, setSearched] = useState(false);
+
+  /*
+    `results`, not `patients` — the endpoint has always returned that key, and
+    reading the wrong one meant the list was silently empty however correct the
+    search term was. Nothing errored; there was simply never anybody to pick.
+  */
   const search = async (value: string) => {
     setQ(value);
+    setSearched(false);
     if (value.trim().length < 2) return setResults([]);
     const r = await fetch(
       `/api/c/${props.slug}/patients/search?q=${encodeURIComponent(value)}`
-    ).then((x) => (x.ok ? x.json() : { patients: [] }));
-    setResults(r.patients ?? []);
+    ).then((x) => (x.ok ? x.json() : { results: [] }));
+    setResults(r.results ?? []);
+    setSearched(true);
   };
+
+  // Somebody ringing to ask for an earlier slot is often not on file yet, so
+  // the dead end of "no matches" has to lead somewhere.
+  const digits = q.replace(/\D/g, "");
+  const looksLikePhone = digits.length >= 7;
 
   return (
     <Modal open={props.open} onClose={props.onClose} title={t.waitlist.add}>
@@ -231,6 +246,34 @@ function AddModal(props: {
                   </li>
                 ))}
               </ul>
+            )}
+            {searched && results.length === 0 && (
+              <div className="mt-2 grid gap-2 rounded-lg border border-dashed border-line p-3">
+                <span className="text-[13px] text-ink-500">{t.waitlist.noMatch}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={props.pending}
+                  onClick={() =>
+                    props.start(async () => {
+                      // What was typed is used as whichever field it looks like,
+                      // so a phone number does not become somebody's name.
+                      const r = await createPatientAction(props.slug, {
+                        fullName: looksLikePhone ? q.trim() : q.trim(),
+                        phone: looksLikePhone ? q.trim() : "",
+                      });
+                      if (!r.id) return toast(t.waitlist.createFailed, "error");
+                      setPicked({ id: r.id, full_name: q.trim() });
+                      setResults([]);
+                      setQ("");
+                      setSearched(false);
+                    })
+                  }
+                >
+                  <Plus className="h-4 w-4" />
+                  {t.waitlist.createPatient}
+                </Button>
+              </div>
             )}
           </Field>
         )}

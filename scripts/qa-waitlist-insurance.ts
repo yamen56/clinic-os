@@ -8,7 +8,10 @@
  * just been offered a different slot, somebody waiting for another doctor.
  */
 import { Client } from "pg";
+import { chromium } from "playwright";
+import bcrypt from "bcryptjs";
 
+const BASE = process.env.APP_URL || "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
 
 let passed = 0;
@@ -234,8 +237,86 @@ async function main() {
     Number(split.total) - Number(split.insurer_amount) >= 0
   );
 
+  /* --------------------------------------- adding somebody, in the browser */
+  /*
+    This section exists because of a real bug that everything else missed. The
+    add-to-waitlist search read `patients` from a response that has always been
+    keyed `results`, so the list was silently always empty — no error, no failing
+    type, no failing query. Only driving the screen catches a client that
+    misreads its own API.
+  */
+  const owner = (
+    await db.query(
+      `insert into users (email, password_hash, full_name, locale)
+       values ($1,$2,'WL Owner','en') returning id`,
+      [`owner-${slug}@test.local`, bcrypt.hashSync("password123", 10)]
+    )
+  ).rows[0];
+  await db.query(
+    `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions)
+     values ($1,$2,'receptionist',true,'{"level":"full"}')`,
+    [clinic.id, owner.id]
+  );
+
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+
+  await page.goto(`${BASE}/login`);
+  await page.waitForLoadState("networkidle");
+  await page.fill('input[name="email"]', `owner-${slug}@test.local`);
+  await page.fill('input[name="password"]', "password123");
+  await page.click('button[type="submit"]');
+  await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 120000 });
+
+  await page.goto(`${BASE}/c/${slug}/waitlist`);
+  await page.waitForLoadState("networkidle");
+  await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
+  await page.getByRole("button", { name: /add to waitlist/i }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor({ state: "visible", timeout: 15000 });
+
+  await dialog.locator("input").first().fill("Wants");
+  const hit = dialog.getByText("Wants Sooner", { exact: false }).first();
+  const found = await hit
+    .waitFor({ state: "visible", timeout: 10000 })
+    .then(() => true)
+    .catch(() => false);
+  check("searching by name finds a patient", found);
+
+  if (found) {
+    await hit.click();
+    await dialog.getByRole("button", { name: /^add$/i }).click();
+    await page.waitForTimeout(1500);
+    const added = (
+      await db.query(
+        `select count(*)::int n from waitlist_entries
+          where clinic_id = $1 and patient_id = $2 and status in ('waiting','offered')`,
+        [clinic.id, wants]
+      )
+    ).rows[0].n;
+    check("and adding them puts them on the list", added > 0, `${added}`);
+  }
+
+  // Nobody matching must lead somewhere, or reception is stuck at a dead end.
+  await page.goto(`${BASE}/c/${slug}/waitlist`);
+  await page.waitForLoadState("networkidle");
+  await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
+  await page.getByRole("button", { name: /add to waitlist/i }).first().click();
+  await page.getByRole("dialog").waitFor({ state: "visible", timeout: 15000 });
+  await page.getByRole("dialog").locator("input").first().fill("Nobody Named This");
+  await page.waitForTimeout(1200);
+  check(
+    "and a name nobody matches offers to create them",
+    (await page.getByRole("button", { name: /add them as a new patient/i }).count()) > 0
+  );
+
+  check("no page errors", errors.length === 0, errors.slice(0, 2).join(" | "));
+  await browser.close();
+
   await db.query(`delete from clinics where id = $1`, [clinic.id]);
-  await db.query(`delete from users where id = any($1)`, [[user.id, ghostUser.id]]);
+  await db.query(`delete from users where id = any($1)`, [[user.id, ghostUser.id, owner.id]]);
   await db.end();
 
   console.log(`\n  waitlist & insurance: ${passed} passed, ${failures.length} failed`);

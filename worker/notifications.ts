@@ -112,6 +112,35 @@ async function doctorReminders() {
   });
 }
 
+/**
+ * Claims a digest for one clinic, for one local day.
+ *
+ * The scheduler ticks every minute and each digest fires inside a three-minute
+ * window — `hour === 20 && minute <= 2` — so that a tick arriving a little late,
+ * or a worker restarting across the hour, still sends. Without a claim that
+ * window means the notification is inserted three times, which is what an owner
+ * saw: the same end-of-day summary at 20:00, 20:01 and 20:02.
+ *
+ * The claim is a `jobs` row with a dedupe key, exactly as the e-sign digest and
+ * every automation trigger already do. The unique index decides the winner, so
+ * a second worker cannot send it either.
+ */
+async function claimDailyDigest(
+  c: import("pg").PoolClient,
+  clinicId: string,
+  kind: string,
+  localDate: string
+): Promise<boolean> {
+  const r = await c.query(
+    `insert into jobs (clinic_id, kind, payload, status, dedupe_key)
+     values ($1, $2, '{}'::jsonb, 'done', $3)
+     on conflict (dedupe_key) do nothing
+     returning id`,
+    [clinicId, `digest:${kind}`, `digest:${kind}:${clinicId}:${localDate}`]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
 /** Daily digests: doctor morning schedule, owner end-of-day, staff unread messages. */
 async function dailyDigests() {
   await withSystem(async (c) => {
@@ -123,8 +152,10 @@ async function dailyDigests() {
       const todayStart = now.startOf("day");
       const todayEnd = todayStart.plus({ days: 1 });
 
+      const today = now.toISODate()!;
+
       // 08:00 — each doctor's schedule for today
-      if (now.hour === 8 && now.minute <= 2) {
+      if (now.hour === 8 && now.minute <= 2 && (await claimDailyDigest(c, cl.id, "morning", today))) {
         const doctors = await c.query(
           `select cm.id, cm.user_id from clinic_members cm
            where cm.clinic_id = $1 and cm.role = 'doctor' and cm.active`,
@@ -156,7 +187,7 @@ async function dailyDigests() {
       }
 
       // 20:00 — owner end-of-day summary
-      if (now.hour === 20 && now.minute <= 2) {
+      if (now.hour === 20 && now.minute <= 2 && (await claimDailyDigest(c, cl.id, "day_end", today))) {
         const owners = await c.query(
           `select user_id from clinic_members where clinic_id = $1 and is_owner and active`,
           [cl.id]
@@ -187,7 +218,7 @@ async function dailyDigests() {
       }
 
       // 12:00 — unread WhatsApp digest for staff
-      if (now.hour === 12 && now.minute <= 2) {
+      if (now.hour === 12 && now.minute <= 2 && (await claimDailyDigest(c, cl.id, "unread", today))) {
         const unread = (
           await c.query(
             `select coalesce(sum(unread_count), 0)::int as n from conversations where clinic_id = $1`,

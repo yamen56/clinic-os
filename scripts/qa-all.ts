@@ -32,6 +32,7 @@ const SUITES = [
   ["tablet: iPad layouts", "scripts/qa-tablet.ts"],
   ["phone: nothing scrolls sideways", "scripts/qa-mobile-width.ts"],
   ["account & tags: the profile page and the tag catalogue", "scripts/qa-profile-tags.ts"],
+  ["import & digest: reading their file, sending one summary", "scripts/qa-import-digest.ts"],
   ["waitlist & insurance: filling cancellations, splitting the bill", "scripts/qa-waitlist-insurance.ts"],
   ["whatsapp: messaging a patient first", "scripts/qa-first-message.ts"],
   ["whatsapp: sending, unreachable numbers, receipts", "scripts/qa-whatsapp-delivery.ts"],

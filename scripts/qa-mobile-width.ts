@@ -173,6 +173,7 @@ async function main() {
     ["settings · templates", `${s}/settings/templates`],
     ["settings · insurers", `${s}/settings/insurers`],
     ["waitlist", `${s}/waitlist`],
+    ["patient import", `${s}/patients/import`],
     ["profile", `${s}/profile`],
   ];
   if (patient) pages.push(["patient profile", `${s}/patients/${patient.id}`]);

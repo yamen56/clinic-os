@@ -61,9 +61,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           (select count(*) from appointments where clinic_id=$1 and starts_at >= $6 and starts_at < $7 and status='no_show')::int as noshow,
           (select count(*) from appointments where clinic_id=$1 and starts_at >= $6 and starts_at < $7 and status in ('completed','no_show'))::int as finished,
           (select count(*) from invoices where clinic_id=$1 and status in ('sent','partially_paid'))::int as unpaid,
-          (select count(*) from appointments where clinic_id=$1 and status in ('scheduled','pending_approval') and starts_at > now())::int as unconfirmed,
-          (select ws.status from whatsapp_sessions ws where ws.clinic_id=$1) as wa_status,
-          coalesce((select aa.enabled from ai_agents aa where aa.clinic_id=$1), false) as ai_enabled`,
+          (select count(*) from appointments where clinic_id=$1 and status in ('scheduled','pending_approval') and starts_at > now())::int as unconfirmed`,
         [a.clinicId, thisWeek.start, thisWeek.end, lastWeek.start, lastWeek.end, month.start, month.end]
       )
     ).rows;
@@ -88,20 +86,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
 
   return (
     <>
-      <PageHeader
-        title={t.dashboard.title}
-        action={
-          <div className="flex gap-2">
-            <Badge status={data.stats.wa_status === "connected" ? "ok" : "danger"} dot>
-              {t.dashboard.whatsapp}:{" "}
-              {data.stats.wa_status === "connected" ? t.dashboard.connected : t.dashboard.disconnected}
-            </Badge>
-            <Badge status={data.stats.ai_enabled ? "ok" : "neutral"} dot>
-              {t.dashboard.aiAgent}: {data.stats.ai_enabled ? t.dashboard.on : t.dashboard.off}
-            </Badge>
-          </div>
-        }
-      />
+      {/*
+        No WhatsApp or AI status badges here. They are settings, not news: they
+        change a handful of times a year and told a receptionist nothing she
+        needed while she was looking at today's list. A disconnection still
+        reaches the owner as a notification, which is the moment it matters.
+      */}
+      <PageHeader title={t.dashboard.title} />
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Card className="p-4">
