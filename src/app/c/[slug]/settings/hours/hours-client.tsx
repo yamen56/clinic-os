@@ -28,7 +28,7 @@ export function HoursClient({
   const { patch, state } = useAutosave({ url: `/api/c/${slug}/clinic`, entityKey: `hours:${slug}` });
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <Card>
         <CardHeader title={t.hours.title} sub={t.hours.sub} action={<SaveIndicator state={state} />} />
         <div className="p-5">
@@ -63,12 +63,14 @@ export function HoursClient({
             </span>
           ))}
           {isOwner && (
-            <span className="flex items-center gap-2">
+            // A native date input plus its button is wider than a 320px phone
+            // once the day chips are beside them, so let the pair wrap.
+            <span className="flex min-w-0 flex-wrap items-center gap-2">
               <Input
                 type="date"
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
-                className="!w-auto"
+                className="!w-auto min-w-0 max-w-full"
               />
               <Button
                 size="sm"

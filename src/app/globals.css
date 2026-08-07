@@ -247,6 +247,27 @@ html[dir="rtl"] .doc-editor h1, html[dir="rtl"] .doc-editor h2, html[dir="rtl"] 
 html[dir="rtl"] .doc-body-wrap h1, html[dir="rtl"] .doc-body-wrap h2, html[dir="rtl"] .doc-body-wrap h3 {
   font-family: var(--font-ar-display);
 }
+/*
+  Document HTML is written by the clinic and imported from Word, so its widths
+  are not ours to predict. An image arrives at whatever pixel size it was
+  authored at — a scan or a letterhead is routinely 1500px — and with nothing
+  bounding it, it did not merely overflow its card: the page's layout width grew
+  to match, which on a phone reads as the whole screen suddenly zooming out.
+
+  Two rules, because they answer different problems. Images are made to fit,
+  since a squeezed logo is still a logo. Anything else that cannot be made to fit
+  — a wide table, a long code span — scrolls within the document instead, which
+  keeps the failure local to the thing that is too wide rather than handing it to
+  the page.
+*/
+.doc-editor img, .doc-body-wrap img {
+  max-width: 100%;
+  height: auto;
+}
+.doc-body-wrap {
+  overflow-x: auto;
+  overflow-wrap: break-word;
+}
 .doc-editor table, .doc-body-wrap table {
   width: 100%; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.8125rem;
 }

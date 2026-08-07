@@ -139,11 +139,17 @@ export function BuilderClient({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t.automations.newAutomation}
-            className="min-w-56 rounded-md border border-transparent bg-transparent text-xl font-semibold tracking-tight outline-none hover:border-line focus:border-brand-500 focus:bg-surface"
+            // A 224px floor plus the page's own padding is wider than a 320px
+            // phone, and this sits in the page title, so it took the header —
+            // and the layout width — with it. Keep the roomy target where there
+            // is room for it.
+            className="w-full min-w-0 max-w-full rounded-md border border-transparent bg-transparent text-xl font-semibold tracking-tight outline-none hover:border-line focus:border-brand-500 focus:bg-surface sm:min-w-56"
           />
         }
         action={
-          <div className="flex items-center gap-2">
+          // The toggle, its label and the buttons beside it do not fit on one
+          // line on a narrow phone; wrapping is what the header already expects.
+          <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-2 pe-1">
               <Toggle checked={active} onChange={setActive} label={t.automations.enable} />
               <span className="text-[13px] font-medium">

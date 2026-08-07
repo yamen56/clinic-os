@@ -188,12 +188,15 @@ export function AutomationsClient({
           sub={t.automations.sendingWindowSub}
           action={<SaveIndicator state={state} />}
         />
-        <div className="flex items-center gap-3 px-5 py-4">
+        {/* Two native time inputs are ~138px each whatever we ask for, which
+            with the gaps and padding does not fit a 320px phone. Wrap rather
+            than hold the card open. */}
+        <div className="flex flex-wrap items-center gap-3 px-5 py-4">
           <Input
             type="time"
             defaultValue={windowStart}
             disabled={!isOwner}
-            className="!w-auto"
+            className="!w-auto min-w-0 max-w-full"
             onChange={(e) => patch({ message_window_start: e.target.value })}
           />
           <span className="text-ink-400">–</span>
@@ -201,7 +204,7 @@ export function AutomationsClient({
             type="time"
             defaultValue={windowEnd}
             disabled={!isOwner}
-            className="!w-auto"
+            className="!w-auto min-w-0 max-w-full"
             onChange={(e) => patch({ message_window_end: e.target.value })}
           />
         </div>

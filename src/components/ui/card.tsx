@@ -57,7 +57,15 @@ export function PageHeader({
         <h1 className="font-display text-2xl font-bold text-ink-900">{title}</h1>
         {sub && <p className="mt-1 text-sm text-ink-500">{sub}</p>}
       </div>
-      {action && <div className="flex items-center gap-2">{action}</div>}
+      {/*
+        flex-wrap, because this holds however many buttons a page decides to put
+        in its header — five on a patient file, four on a sent document — and on
+        a phone they do not fit on one line. Without it the row simply grew: the
+        document page reported itself 761px wide on a 390px screen, which is not
+        a header that looks slightly wrong but a whole page that scrolls
+        sideways. The header above has always wrapped; this never did.
+      */}
+      {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
     </div>
   );
 }

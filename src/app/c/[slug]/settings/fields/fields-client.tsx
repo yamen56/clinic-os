@@ -164,7 +164,9 @@ export function FieldsClient({
   );
 
   return (
-    <div className="grid gap-4">
+    // grid-cols-1 so the column floor is zero rather than the min-content width
+    // of the widest card; see the note in automations-client.
+    <div className="grid grid-cols-1 gap-4">
       <Card>
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>

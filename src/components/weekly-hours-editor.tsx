@@ -21,15 +21,25 @@ export function WeeklyHoursEditor({
     onChange({ ...value, [day]: ranges });
 
   return (
-    <div className="grid gap-2">
+    /*
+      grid-cols-1, not a bare grid: an implicit `auto` column is floored at the
+      min-content width of the widest day row, and a row holding two native time
+      inputs is wider than a phone. The floor became the page's width and the
+      whole of Settings scrolled sideways. See the note in automations-client.
+    */
+    <div className="grid grid-cols-1 gap-2">
       {DAY_KEYS.map((day) => {
         const ranges = value[day] ?? [];
         return (
           <div key={day} className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-subtle px-3 py-2">
-            <span className="w-20 text-[13px] font-medium">{(t.hours.days as Record<string, string>)[day]}</span>
+            <span className="w-20 shrink-0 text-[13px] font-medium">{(t.hours.days as Record<string, string>)[day]}</span>
             {ranges.length === 0 && <span className="text-[13px] text-ink-400">{t.hours.closed}</span>}
             {ranges.map(([from, to], i) => (
-              <span key={i} className="flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1">
+              // A native time input carries its own intrinsic width, and two of
+              // them plus the separator will not fit beside the day name on a
+              // narrow phone. Let the pair wrap onto its own line rather than
+              // hold the row open.
+              <span key={i} className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1">
                 <input
                   type="time"
                   value={from}

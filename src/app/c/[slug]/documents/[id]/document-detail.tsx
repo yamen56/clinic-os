@@ -296,7 +296,15 @@ export function DocumentDetailClient({
   const statusBadge = (DOC_STATUS_BADGE[doc.status] ?? "neutral") as StatusKey;
 
   return (
-    <div className="grid gap-4">
+    /*
+      grid-cols-1, so the column's floor is zero rather than the min-content
+      width of the document inside it. A consent form with a wide table measured
+      1316px here; the card grew to match, the header and tabs stretched with it,
+      and the page reported itself 1382px wide on a 390px phone. The
+      `overflow-x: auto` on .doc-body-wrap could not help — it only scrolls once
+      something has constrained the element, and nothing had.
+    */
+    <div className="grid grid-cols-1 gap-4">
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-2">
