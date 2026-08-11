@@ -39,7 +39,7 @@ export async function requestResetAction(
        order by m.created_at limit 1`,
       [user.id]
     );
-    const clinicName = (cn.rows[0]?.n as string) ?? "Makan Scaling";
+    const clinicName = (cn.rows[0]?.n as string) ?? "Clinicti";
 
     const raw = await createAuthToken(c, { userId: user.id, purpose: "reset" });
     const link = `${appUrl()}/reset/${raw}`;

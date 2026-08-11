@@ -66,7 +66,7 @@ export const en = {
     signInSub: "The operating system for your clinic",
     wrongCredentials: "Email or password is incorrect.",
     suspendedTitle: "This workspace is suspended",
-    suspendedBody: "Your clinic's subscription is paused. Contact Makan Scaling to reactivate it. Your data is safe.",
+    suspendedBody: "Your clinic's subscription is paused. Get in touch to reactivate it. Your data is safe.",
     noAccess: "You don't have access to this page.",
     forgotPassword: "Forgot your password?",
     forgotTitle: "Reset your password",

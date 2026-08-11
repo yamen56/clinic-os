@@ -42,7 +42,7 @@ export default async function LoginPage({
         </div>
         <LoginForm next={next ?? undefined} />
       </div>
-      <footer className="pb-6 text-center text-xs text-white/40">Makan Scaling · Clinicti</footer>
+      <footer className="pb-6 text-center text-xs text-white/40">Clinicti</footer>
     </main>
   );
 }

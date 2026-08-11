@@ -1,7 +1,7 @@
 # Brand assets
 
-Clinicti — كلينيكتي. The product is Clinicti; the company behind it is still
-Makan Scaling, and the two are not interchangeable in copy.
+Clinicti — كلينيكتي. The product stands on its own name: nothing in its copy,
+chrome or email names the company behind it.
 
 `logo-mark-primary.png` is the double-wave mark, **white on transparency**.
 That single fact decides most of what follows: it can only be placed on a dark

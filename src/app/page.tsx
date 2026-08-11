@@ -29,7 +29,7 @@ export default async function Home() {
               </span>
               <div>
                 <div className="font-medium">{t.admin.title}</div>
-                <div className="text-sm text-ink-500">Makan Scaling</div>
+                <div className="text-sm text-ink-500">Clinicti</div>
               </div>
             </Card>
           </Link>

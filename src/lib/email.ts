@@ -7,7 +7,7 @@
  * email provider exists, instead of blocking staff onboarding on it.
  */
 
-const FROM = () => process.env.EMAIL_FROM || "Makan Scaling <onboarding@resend.dev>";
+const FROM = () => process.env.EMAIL_FROM || "Clinicti <onboarding@resend.dev>";
 const REPLY_TO = () => process.env.EMAIL_REPLY_TO?.trim() || undefined;
 
 /**

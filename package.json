@@ -1,7 +1,7 @@
 {
   "name": "clinic-os",
   "version": "0.1.0",
-  "description": "Clinicti — multi-tenant clinic management platform (Makan Scaling)",
+  "description": "Clinicti — multi-tenant clinic management platform",
   "scripts": {
     "dev": "next dev",
     "dev:all": "tsx scripts/dev-all.ts",
