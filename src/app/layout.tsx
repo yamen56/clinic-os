@@ -5,13 +5,13 @@ import { I18nProvider } from "@/lib/i18n/client";
 import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
-  title: { default: "Makan Clinic Platform", template: "%s · Makan Clinic Platform" },
+  title: { default: "Clinicti", template: "%s · Clinicti" },
   description: "The operating system for your clinic",
-  applicationName: "Makan Clinic Platform",
+  applicationName: "Clinicti",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Makan Clinic Platform",
+    title: "Clinicti",
     statusBarStyle: "default",
   },
   icons: {

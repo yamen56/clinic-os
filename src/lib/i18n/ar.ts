@@ -2,7 +2,7 @@ import type { Dict } from "./en";
 
 export const ar: Dict = {
   common: {
-    appName: "منصة مكان للعيادات",
+    appName: "كلينيكتي",
     save: "حفظ",
     saving: "جارٍ الحفظ…",
     saved: "تم الحفظ",
@@ -64,7 +64,7 @@ export const ar: Dict = {
     signIn: "تسجيل الدخول",
     signOut: "تسجيل الخروج",
     emailPlaceholder: "you@clinic.com",
-    signInTitle: "تسجيل الدخول إلى منصة مكان للعيادات",
+    signInTitle: "تسجيل الدخول إلى كلينيكتي",
     signInSub: "نظام التشغيل الكامل لعيادتك",
     wrongCredentials: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
     suspendedTitle: "مساحة العمل هذه موقوفة",
@@ -671,7 +671,7 @@ export const ar: Dict = {
     pushUnsupported: "هذا المتصفح لا يدعم الإشعارات. ثبّت التطبيق على الشاشة الرئيسية أولاً.",
     pushEnabled: "الإشعارات مفعّلة على هذا الجهاز",
     pushDisabled: "الإشعارات متوقفة على هذا الجهاز",
-    installPrompt: "تثبيت منصة مكان للعيادات",
+    installPrompt: "تثبيت كلينيكتي",
     installHint: "أضفه إلى شاشتك الرئيسية لتصلك الإشعارات على هاتفك.",
     kinds: {
       booking: "حجز جديد",
@@ -704,7 +704,7 @@ export const ar: Dict = {
     prefDayEnd: "ملخص نهاية اليوم",
     reminderMinutes: "ذكّرني قبل الموعد بهذه الدقائق",
     offlineTitle: "أنت غير متصل",
-    offlineBody: "يحتاج منصة مكان للعيادات إلى اتصال لعرض بيانات العيادة المباشرة. كل ما كتبته محفوظ وسيُزامَن عند عودة الاتصال.",
+    offlineBody: "يحتاج كلينيكتي إلى اتصال لعرض بيانات العيادة المباشرة. كل ما كتبته محفوظ وسيُزامَن عند عودة الاتصال.",
     retry: "إعادة المحاولة",
   },
   ai: {
@@ -1019,7 +1019,7 @@ export const ar: Dict = {
     slotTaken: "تم حجز هذا الوقت للتو — اختر وقتاً آخر.",
     minutes: "دقيقة",
     with: "مع",
-    poweredBy: "مدعوم من منصة مكان للعيادات",
+    poweredBy: "مدعوم من كلينيكتي",
     notFound: "صفحة الحجز هذه غير موجودة أو لم تعد نشطة.",
     invalidPhone: "رقم الهاتف غير صحيح. استخدم صيغة مثل 0790744070.",
     bookAgain: "حجز موعد آخر",
@@ -1321,7 +1321,7 @@ export const ar: Dict = {
     retrying: "جارٍ إعادة الاتصال…",
     retryNow: "جرّب الآن",
     resumed: "نكمل من حيث توقّفت",
-    poweredBy: "موقّع عبر منصة مكان للعيادات",
+    poweredBy: "موقّع عبر كلينيكتي",
     codeTitle: "أدخل الرمز الذي أرسلناه",
     codeHint: "أرسلنا رمزاً من 6 أرقام إلى واتساب الخاص بك.",
     codePlaceholder: "رمز من 6 أرقام",

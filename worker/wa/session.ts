@@ -49,7 +49,7 @@ export class WASession {
         version,
         auth: state,
         logger,
-        browser: ["Makan Clinic Platform", "Chrome", "1.0.0"],
+        browser: ["Clinicti", "Chrome", "1.0.0"],
         markOnlineOnConnect: false,
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,

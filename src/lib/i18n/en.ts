@@ -1,6 +1,6 @@
 export const en = {
   common: {
-    appName: "Makan Clinic Platform",
+    appName: "Clinicti",
     save: "Save",
     saving: "Saving…",
     saved: "Saved",
@@ -62,7 +62,7 @@ export const en = {
     signIn: "Sign in",
     signOut: "Sign out",
     emailPlaceholder: "you@clinic.com",
-    signInTitle: "Sign in to Makan Clinic Platform",
+    signInTitle: "Sign in to Clinicti",
     signInSub: "The operating system for your clinic",
     wrongCredentials: "Email or password is incorrect.",
     suspendedTitle: "This workspace is suspended",
@@ -672,7 +672,7 @@ export const en = {
     pushUnsupported: "This browser doesn't support notifications. Install the app to your home screen first.",
     pushEnabled: "Notifications are on for this device",
     pushDisabled: "Notifications off for this device",
-    installPrompt: "Install Makan Clinic Platform",
+    installPrompt: "Install Clinicti",
     installHint: "Add it to your home screen to get notifications on your phone.",
     kinds: {
       booking: "New booking",
@@ -705,7 +705,7 @@ export const en = {
     prefDayEnd: "End-of-day summary",
     reminderMinutes: "Remind me this many minutes before",
     offlineTitle: "You're offline",
-    offlineBody: "Makan Clinic Platform needs a connection to show live clinic data. Anything you typed is saved and will sync when you're back.",
+    offlineBody: "Clinicti needs a connection to show live clinic data. Anything you typed is saved and will sync when you're back.",
     retry: "Try again",
   },
   ai: {
@@ -1020,7 +1020,7 @@ export const en = {
     slotTaken: "That time was just taken — pick another one.",
     minutes: "minutes",
     with: "with",
-    poweredBy: "Powered by Makan Clinic Platform",
+    poweredBy: "Powered by Clinicti",
     notFound: "This booking page doesn't exist or is no longer active.",
     invalidPhone: "This phone number doesn't look right. Use a format like 0790744070.",
     bookAgain: "Book another appointment",
@@ -1322,7 +1322,7 @@ export const en = {
     retrying: "Reconnecting…",
     retryNow: "Try now",
     resumed: "Picking up where you left off",
-    poweredBy: "Signed with Makan Clinic Platform",
+    poweredBy: "Signed with Clinicti",
     codeTitle: "Enter the code we sent",
     codeHint: "We sent a 6-digit code to your WhatsApp.",
     codePlaceholder: "6-digit code",

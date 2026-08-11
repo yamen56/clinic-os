@@ -103,8 +103,8 @@ async function tagMetadata(
   d.setTitle(doc.title);
   d.setSubject(`Signed document ${doc.id}`);
   d.setKeywords([doc.id, doc.content_hash ?? ""].filter(Boolean));
-  d.setProducer("Makan Clinic Platform");
-  d.setCreator("Makan Clinic Platform");
+  d.setProducer("Clinicti");
+  d.setCreator("Clinicti");
   return Buffer.from(await d.save());
 }
 

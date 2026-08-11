@@ -201,7 +201,7 @@ async function clinicEmailContext(
     [clinicId]
   );
   return {
-    name: (r.rows[0]?.n as string) ?? "Makan Clinic Platform",
+    name: (r.rows[0]?.n as string) ?? "Clinicti",
     locale: r.rows[0]?.default_locale === "en" ? "en" : "ar",
   };
 }

@@ -509,7 +509,7 @@ async function journeyRemote(browser: Browser, f: Fixture, locale: "ar" | "en") 
 
   /*
     `thanks` is the full heading, not a fragment. "Signed" alone also matches the
-    footer ("Signed with Makan Clinic Platform"), so the English run appeared to
+    footer ("Signed with Clinicti"), so the English run appeared to
     reach the thank-you screen the instant the page loaded — and then wrongly
     reported that a spent link still worked, because nothing had been submitted.
   */

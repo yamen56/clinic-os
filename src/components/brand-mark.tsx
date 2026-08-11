@@ -3,11 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * The Makan mark, used alone — never with the wordmark set beside it.
+ * The Clinicti mark, used alone — never with the wordmark set beside it.
  *
  * Rendered from `public/assets/logo-mark-primary.png` — never redrawn in SVG or
  * CSS, never recolored. The monogram plate shows only if that asset is missing,
  * so the chrome never flashes a broken image.
+ *
+ * The asset is white on transparency, which is why every surface that uses it is
+ * a dark one: the sidebar's night panel, the login page, and the navy plate the
+ * icon generator composites onto. Dropping it on a light background would render
+ * an invisible square.
  *
  * The status is settled in an effect rather than via `onLoad`: the browser
  * usually finishes decoding before React hydrates, so the load event fires with
@@ -55,7 +60,7 @@ export function BrandMark({
             className="font-display font-extrabold"
             style={{ fontSize: size * 0.34, letterSpacing: "-0.02em" }}
           >
-            MS
+            C
           </span>
         </span>
       )}
@@ -63,7 +68,7 @@ export function BrandMark({
       <img
         ref={ref}
         src="/assets/logo-mark-primary.png"
-        alt="Makan Scaling"
+        alt="Clinicti"
         width={size}
         height={size}
         className="relative object-contain"

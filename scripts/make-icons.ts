@@ -18,7 +18,15 @@ const MARK = join(process.cwd(), "public", "assets", "logo-mark-primary.png");
 // at 48px on a home screen. White would wash it out.
 const PLATE = "#0b1220";
 
-type Spec = { file: string; size: number; scale: number; plate: string; radius: string };
+type Spec = {
+  file: string;
+  size: number;
+  scale: number;
+  plate: string;
+  radius: string;
+  /** Written outside public/icons — currently only the email mark. */
+  dir?: string;
+};
 
 /*
   Every plate is a full square with no corner radius. Rounding here would leave
@@ -38,6 +46,13 @@ const SPECS: Spec[] = [
   { file: "favicon.png", size: 256, scale: 0.88, plate: PLATE, radius: "0" },
   // Android notification badge: silhouetted by the OS, so no plate.
   { file: "badge.png", size: 96, scale: 0.9, plate: "transparent", radius: "0" },
+  /*
+    The email mark. Generated rather than hand-made because the source mark is
+    white on transparency, and an email body is white — dropped in directly it
+    would be an invisible rectangle in every invitation we send. On its own navy
+    plate it reads on any background a mail client chooses, including dark mode.
+  */
+  { file: "mark-light.png", size: 256, scale: 0.72, plate: PLATE, radius: "0", dir: "assets" },
 ];
 
 async function main() {
@@ -58,7 +73,8 @@ async function main() {
       </div></body></html>`);
     await page.waitForTimeout(120);
     const buf = await page.screenshot({ omitBackground: s.plate === "transparent" });
-    writeFileSync(join(OUT, s.file), buf);
+    const dir = s.dir ? join(process.cwd(), "public", s.dir) : OUT;
+    writeFileSync(join(dir, s.file), buf);
     await page.close();
     console.log(`[icons] ${s.file} (${s.size}px)`);
   }

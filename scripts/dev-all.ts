@@ -74,7 +74,7 @@ async function isEmpty() {
 }
 
 async function main() {
-  console.log("Starting Makan Clinic Platform…\n");
+  console.log("Starting Clinicti…\n");
   run("db", ["tsx", "scripts/db.ts"], "36");
 
   if (!(await waitForDb())) {

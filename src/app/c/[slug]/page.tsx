@@ -125,7 +125,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      {/*
+        grid-cols-1 below lg, not a bare grid: an implicit column is floored at
+        the min-content width of its widest child, and one appointment row with
+        a long patient name held the dashboard open past the screen. The third
+        instance of this bug — see automations-client and weekly-hours-editor.
+      */}
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
             title={t.dashboard.todayAppointments}

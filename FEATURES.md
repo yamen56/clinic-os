@@ -1,4 +1,4 @@
-# Makan Clinic Platform (CLINIC OS) — Complete Feature Reference
+# Clinicti (CLINIC OS) — Complete Feature Reference
 
 > Knowledge file. Describes **what the product does**, feature by feature, with the exact
 > enum values, defaults, limits and file locations behind each one. Written to be handed to
