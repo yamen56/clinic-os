@@ -25,7 +25,7 @@ export async function createTagAction(
   if (!can(access, "settings")) return { error: "forbidden" };
   const n = clean(name);
   if (!n) return { error: "invalid" };
-  const c6 = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#6989a6";
+  const c6 = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#0b1220";
 
   return inClinic(access, async (c) => {
     const r = await c.query(

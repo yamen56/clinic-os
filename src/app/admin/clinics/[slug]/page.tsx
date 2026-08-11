@@ -66,7 +66,13 @@ export default async function AdminClinicDetail({
   const { clinic, members, stats } = data;
 
   const checklistState: Record<string, boolean> = {
-    branding: !!clinic.logo_path || clinic.brand_color !== "#6989a6",
+    /*
+      Compared against the schema's own default, which is what an untouched
+      clinic actually has. This read "#6989a6" — a colour no clinic is ever
+      created with — so the test was true for everybody and the checklist item
+      has been reporting branding as done since the day it was written.
+    */
+    branding: !!clinic.logo_path || clinic.brand_color !== "#0f6e5c",
     services: Number(stats.services) > 0,
     whatsapp: clinic.wa_status === "connected",
     automations: Number(stats.active_automations) > 0,

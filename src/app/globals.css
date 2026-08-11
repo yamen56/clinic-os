@@ -33,17 +33,32 @@
   --color-line-strong: #c5cbd3;
   --color-graphite: #2a2d33;
 
-  /* Brand: slate blue, sampled from the mark */
-  --color-brand-50: #f2f5f9;
-  --color-brand-100: #dce5ee;
-  --color-brand-200: #c6d4e2;
-  --color-brand-300: #a9bed2;
-  --color-brand-400: #8fa9c0;
-  --color-brand-500: #7b97b1;
-  --color-brand-600: #6989a6;
-  --color-brand-700: #4a6b8a;
-  --color-brand-800: #3a5670;
-  --color-brand-900: #1e3a6b;
+  /*
+    Brand: the navy of the Clinicti mark.
+
+    600 is the primary — buttons, active icons, the default event block — and it
+    is deliberately the same value as --color-night below. That is the point:
+    the accent and the dark chrome are one colour, which is what makes the mark
+    sit in the sidebar as if it were printed there.
+
+    It also has a consequence worth stating, because it caught the nav: anything
+    tinted brand-600 *on* the night surface is now invisible. Those places use
+    white at low alpha instead — see the active indicator in shell.tsx.
+
+    50–400 stay light and cool. They are backgrounds and borders, usually under
+    brand-700 text, and a ramp that went dark at the top would leave nothing to
+    put ink on.
+  */
+  --color-brand-50: #f3f5f8;
+  --color-brand-100: #e2e7ee;
+  --color-brand-200: #c7d0dc;
+  --color-brand-300: #a4b1c3;
+  --color-brand-400: #7d8da4;
+  --color-brand-500: #4a5a72;
+  --color-brand-600: #0b1220;
+  --color-brand-700: #050810;
+  --color-brand-800: #030509;
+  --color-brand-900: #010204;
 
   /* Night surface — auth, splash, sidebar */
   --color-night: #0b1220;
@@ -343,10 +358,16 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
-/* Focus: always a 3px brand ring — never a hard outline, never suppressed */
+/*
+  Focus: always a 3px ring — never a hard outline, never suppressed.
+
+  Deliberately a mid-tone rather than the brand navy. A focus ring has to be
+  seen on the login page and the sidebar as well as on white, and near-black at
+  30% is invisible on both of those. This one reads on either.
+*/
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgb(105 137 166 / 0.30);
+  box-shadow: 0 0 0 3px rgb(125 141 164 / 0.45);
   border-radius: 4px;
 }
 

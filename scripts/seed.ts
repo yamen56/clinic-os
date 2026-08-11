@@ -100,7 +100,7 @@ async function main() {
        values ('Rima Dental Center', 'مركز ريما لطب الأسنان', $1, '+96264616161',
                'Amman, 7th Circle, Zahran St. 42', 'عمان، الدوار السابع، شارع زهران ٤٢',
                'https://maps.google.com/?q=31.9539,35.8656',
-               '#6989a6', 'RIMA', 16, 'ضريبة المبيعات',
+               '#0b1220', 'RIMA', 16, 'ضريبة المبيعات',
                'الدفع نقداً في العيادة، أو عبر كليك: RIMADENTAL',
                'شكراً لثقتكم بمركز ريما لطب الأسنان', 'active', 'standard', 149)
        returning id, timezone`,
@@ -148,7 +148,7 @@ async function main() {
         ),
         (extra.title as string) ?? null,
         (extra.specialty as string) ?? null,
-        (extra.color as string) ?? "#6989a6",
+        (extra.color as string) ?? "#0b1220",
         (extra.reminder as number) ?? 30,
       ]
     );
@@ -165,7 +165,7 @@ async function main() {
   // ---- Services
   const services: { id: string; name: string; dur: number; price: number }[] = [];
   const svcDefs = [
-    ["Consultation", "كشفية", 20, 15, "#6989a6"],
+    ["Consultation", "كشفية", 20, 15, "#0b1220"],
     ["Cleaning & Polish", "تنظيف وتلميع", 45, 35, "#5bc6e3"],
     ["Filling", "حشوة", 45, 40, "#1e3a6b"],
     ["Root Canal", "علاج عصب", 90, 180, "#e4946b"],

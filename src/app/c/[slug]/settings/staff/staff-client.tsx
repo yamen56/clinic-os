@@ -79,7 +79,7 @@ export function StaffClient({
     caps: capabilitiesFor(ROLE_DEFAULTS.receptionist),
     title: "",
     specialty: "",
-    color: "#6989a6",
+    color: "#0b1220",
   });
   const [pending, start] = useTransition();
 
@@ -92,7 +92,7 @@ export function StaffClient({
       caps: capabilitiesFor(ROLE_DEFAULTS.receptionist),
       title: "",
       specialty: "",
-      color: "#6989a6",
+      color: "#0b1220",
     });
 
   /** Summary line for the list: "Full access" or how many of the sections. */

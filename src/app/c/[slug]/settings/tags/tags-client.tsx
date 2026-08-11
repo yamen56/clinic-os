@@ -16,7 +16,7 @@ type Tag = { id: string; name: string; color: string; used: number };
 
 /** Colours worth offering: distinguishable at a glance on a crowded patient row. */
 const SWATCHES = [
-  "#6989a6", "#1e3a6b", "#5bc6e3", "#3f9e79",
+  "#0b1220", "#1e3a6b", "#5bc6e3", "#3f9e79",
   "#e4946b", "#c24a4a", "#8b6bb1", "#2a2d33",
 ];
 

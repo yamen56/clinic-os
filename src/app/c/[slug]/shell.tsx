@@ -9,7 +9,7 @@ import { InstallApp } from "@/components/pwa";
 import { logoutAction } from "@/app/login/actions";
 import { exitImpersonationAction } from "@/app/admin/actions";
 import { Avatar } from "@/components/ui/misc";
-import { BrandMark } from "@/components/brand-mark";
+import { BrandLockup } from "@/components/brand-mark";
 import type { CapabilityMap, MemberRole } from "@/lib/permissions";
 import {
   LayoutDashboard,
@@ -149,7 +149,7 @@ export function Shell({
       {/* Desktop sidebar — night surface, the one dark region of the app chrome */}
       <aside className="fixed inset-y-0 start-0 z-40 hidden w-[248px] flex-col border-e border-white/6 bg-night md:flex">
         <div className="flex h-[88px] items-center justify-center border-b border-white/6">
-          <BrandMark size={64} />
+          <BrandLockup />
         </div>
         <div className="flex items-center gap-2.5 px-4 py-3.5">
           <Avatar name={clinic.name} size={30} color={clinic.brandColor} />
@@ -172,7 +172,13 @@ export function Shell({
                 aria-current={active ? "page" : undefined}
                 className={`relative mb-0.5 flex h-10 items-center gap-2.5 rounded-ctl px-3 text-sm font-medium transition-colors duration-140 ease-out ${
                   active
-                    ? "bg-[rgb(105_137_166/0.22)] text-white before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-brand-600 before:content-['']"
+                    /*
+                      White, not brand-600. The brand is the navy of the sidebar
+                      itself now, so an indicator tinted with it would be a bar
+                      the same colour as the panel behind it — the active item
+                      would simply stop being marked.
+                    */
+                    ? "bg-white/10 text-white before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-white before:content-['']"
                     : "text-white/62 hover:bg-white/5 hover:text-white"
                 }`}
               >

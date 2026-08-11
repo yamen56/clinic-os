@@ -53,7 +53,7 @@ async function build(c: Client): Promise<string> {
 
   const svc = await c.query(
     `insert into services (clinic_id, name, name_ar, duration_min, price, color, bookable_online)
-     values ($1, 'Checkup', 'كشفية', 30, 20, '#6989a6', true) returning id`,
+     values ($1, 'Checkup', 'كشفية', 30, 20, '#0b1220', true) returning id`,
     [id]
   );
 

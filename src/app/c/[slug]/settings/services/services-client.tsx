@@ -44,7 +44,7 @@ const empty: Draft = {
   nameAr: "",
   durationMin: 30,
   price: 0,
-  color: "#6989a6",
+  color: "#0b1220",
   bufferAfterMin: 0,
   bookableOnline: true,
   doctorIds: [],

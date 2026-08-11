@@ -33,7 +33,7 @@ const addStaffSchema = z.object({
   caps: z.array(z.enum(CAPABILITIES)).optional(),
   title: z.string().max(60).optional().default(""),
   specialty: z.string().max(60).optional().default(""),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#6989a6"),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#0b1220"),
 });
 
 /**

@@ -18,6 +18,35 @@ import { useEffect, useRef, useState } from "react";
  * usually finishes decoding before React hydrates, so the load event fires with
  * no listener attached and would leave the fallback showing forever.
  */
+/**
+ * The full lockup — mark, كلينيكتي and CLINICTI — for the sidebar header.
+ *
+ * Kept separate from BrandMark rather than made a variant of it, because the
+ * two have different jobs. The lockup names the product where there is width to
+ * read it; the mark stands alone where there is not. Both are white on
+ * transparency and both therefore need a dark surface under them.
+ *
+ * No load-state fallback here on purpose: this sits inside the sidebar's own
+ * header, so a missing file leaves a gap rather than a broken layout, and
+ * BrandMark is the one that has to survive being the only thing on a login page.
+ */
+export function BrandLockup({ className = "" }: { className?: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/assets/logo-mark-wide.png"
+      alt="Clinicti"
+      /*
+        Width-driven, not height-driven: the asset is 4:1, and the sidebar's
+        constraint is its 248px width rather than the 88px header. Sizing by
+        width fills the space the panel actually has and keeps the Arabic
+        readable, which at 44px tall it was not.
+      */
+      className={`h-auto w-[196px] object-contain ${className}`}
+    />
+  );
+}
+
 export function BrandMark({
   size = 64,
   className = "",
