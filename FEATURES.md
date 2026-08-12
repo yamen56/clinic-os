@@ -3,6 +3,14 @@
 > Knowledge file. Describes **what the product does**, feature by feature, with the exact
 > enum values, defaults, limits and file locations behind each one. Written to be handed to
 > an assistant as context. Everything here is drawn from the codebase, not from a spec.
+>
+> Verified against the tree on 2026-08-12.
+
+---
+
+## Contents
+
+1. What the product is · 2. Actors and access model · 3. Authentication & identity · 4. Patients · 5. Bringing an existing clinic's records in · 6. Calendar & appointments · 7. Waitlist · 8. Services · 9. Public online booking · 10. WhatsApp inbox & messaging · 11. Campaigns (bulk WhatsApp, drip-paced) · 12. Document signing (ESIGN module) · 13. Automations · 14. AI receptionist · 15. Invoices & payments · 16. Insurance & claims · 17. Dashboard · 18. Notifications & PWA · 19. Realtime · 20. Agency admin panel (/admin) · 21. Settings inventory (per clinic) · 22. Files, storage & backups · 23. Jobs, scheduler and the worker · 24. Internationalisation · 25. Phone handling (src/lib/phone.ts) · 26. Data model reference · 27. Route map · 28. Commands · 29. Environment variables · 30. Brand & attribution · 31. Design decisions worth knowing
 
 ---
 
@@ -204,12 +212,54 @@ All tags · all sources · last-visit windows (no visit in 30 / 90 / 180 days).
 
 ### Custom patient fields
 
-Superseded by `patient_field_definitions` (see §10) — one list drives the patient form,
+Superseded by `patient_field_definitions` (see §12) — one list drives the patient form,
 the merge-variable picker and the document preview.
 
 ---
 
-## 5. Calendar & appointments
+## 5. Bringing an existing clinic's records in
+
+*"The blocker on switching systems is never the software, it is the five years of patients
+already written down somewhere else."*
+
+A clinic arrives with a spreadsheet exported from whatever they used before. `/c/{slug}/patients/import`
+turns that into patients, and — critically — can turn it back.
+
+### The flow
+
+1. **Upload** a delimited file (CSV/TSV, any of `,` `;` `	` — the delimiter is detected
+   from the header line, not assumed).
+2. **Map columns.** Headers are guessed and pre-selected; every guess is overridable.
+   Target fields: `full_name` · `phone` · `secondary_phone` · `birth_date` · `gender` ·
+   `notes` · `tags` · `insurance_no` · `ignore`.
+3. **Preview.** Every row is shown with the action it will take — `create`, `match`
+   (an existing patient with that number) or `skip` — plus the reason. Nothing is written yet.
+4. **Commit.** Counts are recorded on an `import_batches` row: `row_count`,
+   `created_count`, `matched_count`, `skipped_count`, plus the mapping itself so a repeat
+   import of the same export does not start from guesses again.
+5. **Undo**, if it was wrong.
+
+### Encoding
+
+Excel on an Arabic Windows machine saves "CSV" in **windows-1256**, not UTF-8 — the single
+most likely file to arrive and the one that turns every name into mojibake if read as UTF-8.
+Detection is BOM first, then a strict UTF-8 attempt, then the fallback.
+
+### Date and gender parsing
+
+Dates accept `YYYY-MM-DD` and `D/M/YYYY` / `D.M.YY` forms; gender is read from Arabic and
+English spellings. A value that cannot be read is left empty rather than guessed.
+
+### Undo is bounded on purpose
+
+Undo removes **only** patients that batch created **and** that nothing has happened to since —
+no appointment, no invoice, no conversation, no document. Anyone who has since become part of
+the clinic's real records is kept and reported back as `kept`. Removing them to tidy up a bad
+import would destroy work. Patients carry `import_batch_id` and `source = 'import'`.
+
+---
+
+## 6. Calendar & appointments
 
 ### Appointment record
 
@@ -244,18 +294,54 @@ scan.
 
 ---
 
-## 6. Services
+## 7. Waitlist
+
+*"A cancellation is a slot the clinic already sold. The waitlist is how it gets sold twice."*
+
+`waitlist_entries`: patient, optional doctor, optional service, an optional date window
+(`earliest_date` / `latest_date`, null on either side meaning no bound), a note, and a status.
+
+- **Status**: `waiting` | `offered` | `booked` | `cancelled` | `expired`.
+- **One live entry per patient per doctor** (unique index over `waiting`/`offered`). Adding
+  somebody twice is a mistake, not a preference — it would double every offer they receive.
+
+### When a slot frees
+
+`offerFreedSlot()` in `worker/waitlist.ts` runs when an appointment is cancelled and matches
+waiting entries against the freed slot's doctor, service and date window, oldest first.
+
+| Rail | Default | Env |
+|---|---|---|
+| How many people are offered one slot | 5 | `WAITLIST_FANOUT` |
+| Cooldown before the same person is offered again | 180 min | `WAITLIST_COOLDOWN_MIN` |
+
+Fan-out is deliberate: the first person to reply takes it. The cooldown is what stops one
+patient being pestered about every slot that opens in the same hour — `last_offered_at` and
+`offers_sent` are tracked per entry.
+
+### The rest of the lifecycle
+
+- `requeueStaleOffers()` returns an `offered` entry to `waiting` once its cooldown lapses
+  with no booking, so the slot keeps circulating.
+- `expirePastWaitlist()` retires entries whose `latest_date` has passed.
+- `closeWaitlistOnBooking()` sets `booked`, records `booked_appointment_id`, notifies staff
+  (`kind: waitlist_booked`) and raises the `waitlist_booked` automation trigger — so reception
+  can see the waitlist actually working rather than trusting that it is.
+
+---
+
+## 8. Services
 
 `services`: name + `name_ar`, description, `duration_min` (>0), `price`, `color`,
 `bookable_online`, `buffer_after_min`, `active`, `sort`.
 
 - `service_doctors` maps which doctors perform which service. If a service has no mapping,
   every active doctor is a candidate.
-- Services can require consent forms (`service_documents`, see §10).
+- Services can require consent forms (`service_documents`, see §12).
 
 ---
 
-## 7. Public online booking
+## 9. Public online booking
 
 Public page at `/book/{slug}` (production: `book.domain.com/{slug}` via rewrite).
 Configured per **booking link** (`booking_links`), and a clinic can have several.
@@ -309,7 +395,7 @@ workspace keeps the platform accent so agency support isn't relearning a skin pe
 
 ---
 
-## 8. WhatsApp inbox & messaging
+## 10. WhatsApp inbox & messaging
 
 ### Connection
 
@@ -354,7 +440,7 @@ Claiming uses `FOR UPDATE SKIP LOCKED`, so multiple worker instances never doubl
 
 ---
 
-## 9. Campaigns (bulk WhatsApp, drip-paced)
+## 11. Campaigns (bulk WhatsApp, drip-paced)
 
 *"Send one WhatsApp message to a group of patients, paced so the number stays safe."*
 
@@ -383,7 +469,7 @@ on its own** when it reconnects.
 
 ---
 
-## 10. Document signing (ESIGN module)
+## 12. Document signing (ESIGN module)
 
 The largest module. Consent forms and agreements, sent for signature, signed remotely or on
 a clinic device, with a defensible audit trail.
@@ -595,7 +681,7 @@ details), staff are notified rather than it failing silently.
 
 ---
 
-## 11. Automations
+## 13. Automations
 
 *"Messages that go out on their own, so nobody has to remember."*
 
@@ -616,6 +702,7 @@ details), staff are notified rather than it failing silently.
 | `booking_submitted` | Someone books online |
 | `document_sent` / `document_viewed` / `document_signed` / `document_completed` / `document_declined` / `document_expired` | Document lifecycle |
 | `document_unsigned` | Document stays unsigned X days (config `days`, default 3) |
+| `waitlist_booked` | A waitlist offer turned into a booking |
 
 ### Steps
 
@@ -669,6 +756,11 @@ Copied into every new clinic, editable, each a normal automation afterwards:
 | `document_expired_alert` | Task when a signing link expires unsigned | **on** |
 | `document_unsigned_escalate` | After 5 days, hands it to reception to chase by phone | **on** |
 | `document_declined_alert` | Notifies staff and opens a task on a decline | **on** |
+| `welcome_new_patient` | Greets a new patient, which is also what opens the WhatsApp window so staff can message them first | **on** |
+
+`RECIPES_ON_BY_DEFAULT` (`src/lib/esign/constants.ts`) is the single answer to "which of
+these start switched on", read by both the seed script and clinic creation — so a clinic
+created today and a clinic created by the seeder get the same defaults.
 
 The two **patient-facing document reminders (24h / 72h) are built in, not recipes** — they
 run off the clinic's own "first reminder after" setting so they're hour-accurate and can't be
@@ -683,7 +775,7 @@ expiry, open a task on a decline.
 
 ---
 
-## 12. AI receptionist
+## 14. AI receptionist
 
 A per-clinic WhatsApp receptionist powered by the Anthropic Messages API
 (`worker/ai/agent.ts`). Default model **`claude-opus-5`**, per-clinic configurable.
@@ -752,7 +844,7 @@ A model refusal or an API failure escalates to staff rather than going silent. W
 
 ---
 
-## 13. Invoices & payments
+## 15. Invoices & payments
 
 ### Invoice
 
@@ -761,6 +853,8 @@ A model refusal or an API failure escalates to staff rather than going silent. W
 total, amount paid, notes, `public_token`, `pdf_path`.
 
 - **Status**: `draft` | `sent` | `partially_paid` | `paid` | `void`.
+- Optional **insurer split** — see the Insurance & claims section. `total` is always the full
+  price; the patient's share is `total - insurer_amount`.
 - Line items (`invoice_items`) added from a service or as a custom item, with qty, unit
   price, amount, sort.
 - Clinic-level invoice settings: prefix, counter, `invoice_tax_rate`, `invoice_tax_label`,
@@ -774,12 +868,17 @@ total, amount paid, notes, `public_token`, `pdf_path`.
   paid-at, recorded-by. Overpayment is rejected. Status recalculates to partially paid / paid.
 - **Void**: stays in records, no longer counts toward balances.
 - **PDF download** and **patient view**.
+- **Receipt**: there is no separate receipt entity. A paid invoice re-sent on WhatsApp goes
+  out worded as a payment receipt, and `/inv/{token}` stamps **PAID / مدفوعة** — the same
+  document, in the state it is now in. Re-sending a paid invoice must not start a chase for
+  money already collected, so the unpaid-invoice automation ignores it.
 - **Export CSV** of payments.
 
 ### Public invoice page
 
 `/inv/{token}` — an unguessable per-invoice token (16 random bytes hex). Carries the
-clinic's logo and brand colour, itemised lines, totals, payment instructions and the footer.
+clinic's logo and brand colour, itemised lines, totals, payment instructions and the footer,
+plus the Clinicti credit (see the Brand & attribution section).
 
 ### PDF generation
 
@@ -795,7 +894,41 @@ and Outstanding totals.
 
 ---
 
-## 14. Dashboard
+## 16. Insurance & claims
+
+*"Reception's question at the desk is 'how much does this person pay right now'."*
+
+### Insurers
+
+`insurers` per clinic: `name`, `code` (what reception types into the insurer's own portal —
+almost never the same string as the name), `notes`, `active`. Unique on `(clinic_id, name)`.
+
+### On the patient
+
+`insurer_id`, `insurance_no`, `insurance_valid_until` — so the desk can see cover has lapsed
+before the visit rather than after the claim.
+
+### On the invoice
+
+`insurer_id` and `insurer_amount` — what the company is expected to cover. `total` stays the
+**full** price, so the patient's share is `total - insurer_amount` and never needs storing twice.
+
+- **Claim status**: `none` | `to_submit` | `submitted` | `approved` | `rejected` | `paid`.
+  `none` is the common case — most visits are cash.
+- `claim_ref`, `claim_submitted_at`, `claim_note` carry the rest.
+- The claims worklist is "everything not settled", read straight off a partial index on
+  `claim_status <> 'none'`.
+
+---
+
+## 17. Dashboard
+
+**Nav order** (sidebar, and the first four become the phone's bottom bar):
+Dashboard · Patients · Calendar · Invoices · Documents · Waitlist · Conversations ·
+Campaigns · Automations · AI agent · Settings. The order is the clinic's working day, not
+the order the features were built — it decides what a receptionist reaches with one thumb.
+Each item is filtered by the member's capabilities.
+
 
 The one screen everybody can open. Tiles respect the same capabilities as the nav:
 
@@ -812,7 +945,25 @@ separate transactions.)
 
 ---
 
-## 15. Notifications & PWA
+## 18. Notifications & PWA
+
+### Sending each notification once
+
+Every insert goes through `src/lib/notify.ts`, which writes with
+`on conflict (dedupe_key) where dedupe_key is not null do nothing` against a **partial**
+unique index — the predicate has to be repeated in the `ON CONFLICT` clause or Postgres
+cannot match the index.
+
+The key is scoped per recipient (`${dedupeKey}:${userId}`). Callers that should fire once
+per event pass one (e.g. `waitlist_booked:${appointmentId}`); callers that legitimately
+repeat pass none. This replaced a set of per-caller guards that were mis-firing because the
+scheduler's 60s tick was narrower than a 90s look-back window.
+
+**Kinds in use**: `booking` · `clinical` · `doctor_reminder` · `document` ·
+`document_awaiting_signature` · `document_digest` · `document_expired` ·
+`document_integrity` · `document_new_link` · `waitlist_booked` · `whatsapp_disconnected` ·
+`whatsapp_errors`.
+
 
 ### In-app notifications
 
@@ -861,7 +1012,7 @@ is one nobody reads. Dedupe key is the ISO week, so a worker restart can't doubl
 
 ---
 
-## 16. Realtime
+## 19. Realtime
 
 PostgreSQL `LISTEN/NOTIFY` triggers (`emit_change`) fan out to browsers over **one SSE
 endpoint per clinic** (`/api/c/{slug}/events`, `src/lib/realtime-server.ts` +
@@ -880,7 +1031,7 @@ than a slow query.
 
 ---
 
-## 17. Agency admin panel (`/admin`)
+## 20. Agency admin panel (`/admin`)
 
 | Screen | What it does |
 |---|---|
@@ -894,7 +1045,7 @@ than a slow query.
 
 ---
 
-## 18. Settings inventory (per clinic)
+## 21. Settings inventory (per clinic)
 
 | Page | Contents |
 |---|---|
@@ -915,7 +1066,7 @@ than a slow query.
 
 ---
 
-## 19. Files, storage & backups
+## 22. Files, storage & backups
 
 ### Storage (`src/lib/storage.ts`)
 
@@ -943,7 +1094,7 @@ source PDFs, signature SVG/PNG, final signed PDFs.
 
 ---
 
-## 20. Jobs, scheduler and the worker
+## 23. Jobs, scheduler and the worker
 
 ### Job runner (`worker/jobs.ts`)
 
@@ -988,7 +1139,7 @@ Every enqueue carries a `dedupe_key`, so a restart or a second worker can never 
 
 ---
 
-## 21. Internationalisation
+## 24. Internationalisation
 
 - Two complete dictionaries: `src/lib/i18n/ar.ts` and `src/lib/i18n/en.ts` (~1,320 lines each),
   typed so a missing key is a compile error.
@@ -1003,7 +1154,7 @@ Every enqueue carries a `dedupe_key`, so a restart or a second worker can never 
 
 ---
 
-## 22. Phone handling (`src/lib/phone.ts`)
+## 25. Phone handling (`src/lib/phone.ts`)
 
 E.164 normalisation is **the single source of patient identity**.
 
@@ -1020,21 +1171,21 @@ E.164 normalisation is **the single source of patient identity**.
 
 ---
 
-## 23. Data model reference
+## 26. Data model reference
 
 **Identity & tenancy** — `users`, `sessions`, `auth_tokens`, `clinics`, `clinic_members`,
 `announcements`
 
 **Patients** — `patients`, `patient_notes`, `patient_files`, `custom_field_defs` (legacy),
-`patient_field_definitions`
+`patient_field_definitions`, `import_batches`
 
 **Scheduling** — `services`, `service_doctors`, `appointments`, `booking_links`,
-`booking_verifications`
+`booking_verifications`, `waitlist_entries`
 
 **Messaging** — `conversations`, `messages`, `quick_replies`, `whatsapp_sessions`,
 `whatsapp_auth_state`, `campaigns`, `campaign_recipients`
 
-**Money** — `invoices`, `invoice_items`, `payments`
+**Money** — `invoices`, `invoice_items`, `payments`, `insurers`
 
 **Automation** — `automations`, `automation_steps`, `automation_runs`,
 `automation_run_logs`, `tasks`, `recipe_templates`
@@ -1054,13 +1205,14 @@ Every table with `updated_at` gets a `touch_updated_at` trigger automatically.
 
 ---
 
-## 24. Route map
+## 27. Route map
 
 ### Clinic workspace — `/c/{slug}`
 
 `/` dashboard · `/conversations` · `/calendar` · `/patients` · `/patients/{id}` ·
 `/campaigns` · `/campaigns/{id}` · `/invoices` · `/invoices/new` · `/invoices/{id}` ·
-`/documents` · `/documents/{id}` · `/automations` · `/automations/{id}` · `/ai` ·
+`/documents` · `/documents/{id}` · `/waitlist` · `/patients/import` · `/automations` ·
+`/automations/{id}` · `/ai` ·
 `/notifications` · `/signature` ·
 `/settings` (+ `/booking`, `/documents`, `/documents/{id}`, `/fields`, `/hours`,
 `/invoicing`, `/services`, `/staff`, `/whatsapp`)
@@ -1085,7 +1237,7 @@ conversations, documents, invoices, files, staff photos, WhatsApp status, paymen
 
 ---
 
-## 25. Commands
+## 28. Commands
 
 ```bash
 npm run dev:all       # database + web + worker in one terminal (migrates & seeds on boot)
@@ -1115,9 +1267,13 @@ Real browser (Playwright) against the running app, asserting against the databas
 5. WhatsApp inbox · 6. invoicing · 7. automations · 8. AI receptionist ·
 9. PWA & notifications · 10. admin & demo data
 
-Plus focused suites: `qa-access`, `qa-backup`, `qa-booking-race`, `qa-campaigns`,
-`qa-db-resilience`, `qa-documents`, `qa-esign`, `qa-esign-browser`, `qa-mobile`,
-`qa-payments`, `qa-pdf-idle`, `qa-photos`.
+Plus focused suites: `qa-access`, `qa-backup`, `qa-booking-race`, `qa-brand-credit`,
+`qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`, `qa-esign-browser`,
+`qa-first-message`, `qa-import-digest`, `qa-mobile`, `qa-mobile-width`, `qa-payments`,
+`qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.
+
+Run `qa-warm` first. A cold `next dev` compiles routes on first hit, and the resulting
+timeouts look exactly like a dozen regressions.
 
 Two things run against local doubles because both need credentials the dev environment lacks:
 
@@ -1130,7 +1286,7 @@ Two things run against local doubles because both need credentials the dev envir
 
 ---
 
-## 26. Environment variables
+## 29. Environment variables
 
 | Variable | Purpose |
 |---|---|
@@ -1151,7 +1307,34 @@ Two things run against local doubles because both need credentials the dev envir
 
 ---
 
-## 27. Design decisions worth knowing
+## 30. Brand & attribution
+
+- **Product**: Clinicti / كلينيكتي. **App**: `https://app.clinicti.app`. **Marketing site**:
+  `clinicti.app` (the `landing/` directory, not yet deployed).
+- Operated by the agency Makan Scaling, which is **not** named on any clinic- or
+  patient-facing surface.
+- Accent `#0b1220`, which is the same value as `--color-night` — the accent and the dark
+  chrome are deliberately one colour. Brand steps 50–400 stay light and cool because they are
+  backgrounds carrying brand-700 text.
+- A clinic sets its **own** `brand_color` (schema default `#0f6e5c`) and logo; every
+  patient-facing surface wears the clinic's colour, not Clinicti's.
+
+### The credit
+
+`src/components/powered-by.tsx` — the mark, the product name and a link to
+`https://clinicti.app`, at 11px grey. It appears on every surface that leaves the clinic:
+public booking pages, the public invoice (and therefore the invoice PDF, which is that page
+printed), the document sheet, and the signing certificate. Printed surfaces also spell the
+domain out, because a link annotation survives into a PDF but paper has no cursor.
+
+**Exception**: the in-clinic signing kiosk renders the credit as plain text, not a link. The
+tablet is in a patient's hands mid-signature and a browser is one tap from the rest of the
+internet, so the signing chrome offers no link out. It is a link only when the signing session
+is `remote` — the patient's own phone.
+
+---
+
+## 31. Design decisions worth knowing
 
 Condensed from `DECISIONS.md`; each of these explains why something is the way it is.
 
