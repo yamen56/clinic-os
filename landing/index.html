@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>كلينيكتي — نظام إدارة العيادات</title>
+<meta name="description" content="كلينيكتي: مواعيد، واتساب، فواتير ومستندات موقّعة — في مكان واحد. مصمم للعيادات في الأردن، بالعربية أولاً.">
+<meta property="og:title" content="كلينيكتي — نظام إدارة العيادات">
+<meta property="og:description" content="مواعيد، واتساب، فواتير ومستندات موقّعة — في مكان واحد.">
+<meta property="og:image" content="/lockup.png">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#0b1220">
+<link rel="icon" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /*
+    Tokens lifted from the app's globals.css so the site and the product read as
+    one thing. If the brand navy changes there, change it here too.
+  */
+  :root{
+    --night:#0b1220; --night-deep:#050810;
+    --paper:#fff; --subtle:#f7f8fa;
+    --ink-900:#16181c; --ink-700:#4b5159; --ink-500:#7a828c;
+    --line:#e3e6eb;
+    --brand-100:#e2e7ee; --brand-600:#0b1220;
+    --ok:#2f9e6a;
+    --display:"Cairo",system-ui,sans-serif;
+    --body:"Tajawal",system-ui,sans-serif;
+    --wrap:1080px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:var(--body);color:var(--ink-900);background:var(--paper);
+       font-size:17px;line-height:1.75;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{font-family:var(--display);font-weight:700;line-height:1.25;margin:0}
+  p{margin:0}
+  a{color:inherit}
+  .wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+
+  header{position:sticky;top:0;z-index:40;background:rgb(11 18 32 / .92);
+         backdrop-filter:blur(8px);border-bottom:1px solid rgb(255 255 255 / .08)}
+  .bar{display:flex;align-items:center;justify-content:space-between;gap:16px;height:68px}
+  .bar img{height:30px;width:auto;display:block}
+  .nav{display:flex;align-items:center;gap:8px}
+  .btn{display:inline-flex;align-items:center;gap:8px;border-radius:10px;padding:10px 18px;
+       font-family:var(--display);font-weight:600;font-size:15px;text-decoration:none;
+       border:1px solid transparent;white-space:nowrap;transition:.15s ease}
+  .btn-ghost{color:rgb(255 255 255 / .82);border-color:rgb(255 255 255 / .18)}
+  .btn-ghost:hover{background:rgb(255 255 255 / .08);color:#fff}
+  .btn-wa{background:var(--ok);color:#fff}
+  .btn-wa:hover{filter:brightness(1.08)}
+
+  .hero{background:var(--night);color:#fff;padding:88px 0 96px;position:relative;overflow:hidden}
+  .hero::after{content:"";position:absolute;inset-inline-start:-18%;top:-38%;width:78%;height:150%;
+      background:radial-gradient(closest-side,rgb(255 255 255 / .07),transparent 70%);pointer-events:none}
+  .hero .wrap{position:relative}
+  .eyebrow{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.14em;
+           color:rgb(255 255 255 / .5);margin-bottom:20px}
+  .hero h1{font-size:clamp(34px,5.6vw,58px);letter-spacing:-.01em;max-width:19ch}
+  .hero p.lede{margin-top:22px;font-size:clamp(17px,2.1vw,21px);color:rgb(255 255 255 / .76);max-width:46ch}
+  .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:36px}
+  .trust{margin-top:34px;font-size:14px;color:rgb(255 255 255 / .45)}
+
+  section{padding:84px 0}
+  .kicker{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.14em;
+          color:var(--ink-500);margin-bottom:14px}
+  .h2{font-size:clamp(26px,3.6vw,38px);letter-spacing:-.01em;max-width:22ch}
+  .sub{margin-top:14px;color:var(--ink-700);max-width:56ch}
+
+  .grid{display:grid;grid-template-columns:1fr;gap:18px;margin-top:46px}
+  @media(min-width:720px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(min-width:980px){.grid{grid-template-columns:repeat(3,1fr)}}
+  .card{border:1px solid var(--line);border-radius:16px;padding:26px;background:var(--paper);
+        transition:.18s ease}
+  .card:hover{box-shadow:0 8px 28px rgb(11 18 32 / .07);transform:translateY(-2px)}
+  .card h3{font-size:19px;margin-bottom:10px}
+  .card p{color:var(--ink-700);font-size:15.5px}
+  .ic{width:42px;height:42px;border-radius:11px;background:var(--brand-100);color:var(--brand-600);
+      display:grid;place-items:center;margin-bottom:16px}
+  .ic svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.9;
+          stroke-linecap:round;stroke-linejoin:round}
+
+  .alt{background:var(--subtle);border-block:1px solid var(--line)}
+
+  .close-cta{background:var(--night);color:#fff;border-radius:22px;padding:56px 32px;text-align:center}
+  .close-cta h2{font-size:clamp(24px,3.4vw,34px)}
+  .close-cta p{margin-top:14px;color:rgb(255 255 255 / .72)}
+  .close-cta .cta{justify-content:center}
+
+  footer{padding:40px 0 56px;color:var(--ink-500);font-size:14px}
+  .foot{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
+  .foot a{text-decoration:none}
+  .foot a:hover{color:var(--ink-900)}
+
+  /*
+    Phones: the lockup plus both buttons is wider than a 390px screen, and in
+    RTL the excess spills to the LEFT rather than the right — which is why a
+    right-edge overflow check missed it entirely. Shrink the chrome rather than
+    let the page scroll sideways.
+  */
+  @media(max-width:430px){
+    .bar{height:60px}
+    .bar img{height:24px}
+    .btn{padding:9px 13px;font-size:14px}
+    .nav{gap:6px}
+    .hero{padding:64px 0 72px}
+    section{padding:60px 0}
+    .close-cta{padding:44px 20px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a href="/" aria-label="كلينيكتي"><img src="/lockup.png" alt="كلينيكتي"></a>
+    <nav class="nav">
+      <a class="btn btn-ghost" href="https://app.clinicti.app">تسجيل الدخول</a>
+      <a class="btn btn-wa" href="https://wa.me/962790744070">تواصل معنا</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="eyebrow">نظام إدارة العيادات</div>
+    <h1>عيادتك كلها في مكان واحد — وبالعربية.</h1>
+    <p class="lede">
+      المواعيد، محادثات واتساب، الفواتير، والمستندات الموقّعة.
+      نظام واحد يشتغل بالطريقة التي تعمل بها العيادة فعلاً.
+    </p>
+    <div class="cta">
+      <a class="btn btn-wa" href="https://wa.me/962790744070">احجز عرضاً على واتساب</a>
+      <a class="btn btn-ghost" href="#features">ما الذي يقدّمه؟</a>
+    </div>
+    <p class="trust">مصمم للعيادات في الأردن · واجهة عربية بالكامل · نسخة احتياطية يومية لبياناتك</p>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <div class="kicker">الميزات</div>
+    <h2 class="h2">كل ما تحتاجه العيادة، دون أوراق ودون برامج متفرقة</h2>
+    <p class="sub">من أول رسالة واتساب يرسلها المريض، حتى الفاتورة والمستند الموقّع.</p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 8.5-8.5 8.4 8.4 0 0 1 8.5 8.3Z"/></svg></div>
+        <h3>واتساب داخل النظام</h3>
+        <p>كل محادثات المرضى في صندوق واحد يشاركه الفريق، مع تأكيد وصول الرسائل — لا هاتف شخصي ولا رسائل ضائعة.</p>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg></div>
+        <h3>مواعيد وحجز أونلاين</h3>
+        <p>رابط حجز خاص بالعيادة، تذكيرات تلقائية قبل الموعد، ولا يمكن حجز نفس الوقت مرتين.</p>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg></div>
+        <h3>فواتير ومدفوعات</h3>
+        <p>فواتير عربية جاهزة للطباعة أو الإرسال على واتساب، مع الدفعات الجزئية وحصة التأمين.</p>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 17s2-6 9-6 9 6 9 6"/><path d="M12 3v8M9 6l3-3 3 3"/></svg></div>
+        <h3>مستندات وتواقيع</h3>
+        <p>نماذج الموافقة والإقرارات تُرسل وتُوقَّع من هاتف المريض، وتُحفظ موقّعة في ملفه.</p>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <h3>قائمة انتظار ذكية</h3>
+        <p>عند إلغاء أي موعد، يُعرض تلقائياً على المرضى المنتظرين — وأول من يحجز يأخذه.</p>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l2.2 4.9 5.3.6-4 3.6 1.1 5.2L12 14.8 7.4 17.3l1.1-5.2-4-3.6 5.3-.6Z"/></svg></div>
+        <h3>مساعد ذكي للرد</h3>
+        <p>يرد على أسئلة المرضى المتكررة ويحجز المواعيد، ويحوّل المحادثة إلى الموظف عند الحاجة.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="kicker">لماذا كلينيكتي</div>
+    <h2 class="h2">مبني للعيادة العربية، لا مترجَم إليها</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>عربي من الأساس</h3>
+        <p>الواجهة، الفواتير، والمستندات — كلها بالعربية واتجاهها صحيح. والبحث يجد الاسم بأي طريقة كُتب بها.</p>
+      </div>
+      <div class="card">
+        <h3>يعمل على الجوال</h3>
+        <p>الاستقبال يعمل من الجوال أو التابلت مثل أي تطبيق، ويستمر بالعمل عند ضعف الشبكة.</p>
+      </div>
+      <div class="card">
+        <h3>بياناتك بأمان</h3>
+        <p>كل عيادة معزولة تماماً عن غيرها، ونسخة احتياطية يومية — وسجل يوضّح من فعل ماذا ومتى.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="close-cta">
+      <h2>جرّب كلينيكتي في عيادتك</h2>
+      <p>حدّثنا عن عيادتك، ونجهّز لك عرضاً خلال دقائق.</p>
+      <div class="cta">
+        <a class="btn btn-wa" href="https://wa.me/962790744070">تواصل على واتساب</a>
+        <a class="btn btn-ghost" href="mailto:hello@clinicti.app">hello@clinicti.app</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div>© <span id="y">2026</span> كلينيكتي</div>
+    <div style="display:flex;gap:18px">
+      <a href="https://app.clinicti.app">تسجيل الدخول</a>
+      <a href="https://wa.me/962790744070">واتساب</a>
+      <a href="mailto:hello@clinicti.app">البريد</a>
+    </div>
+  </div>
+</footer>
+
+<script>document.getElementById("y").textContent = new Date().getFullYear();</script>
+</body>
+</html>
