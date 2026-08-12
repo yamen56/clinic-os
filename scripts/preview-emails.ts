@@ -2,7 +2,7 @@
 import { renderEmail, type EmailType, type EmailLocale } from "../src/emails/render";
 
 try { process.loadEnvFile?.(); } catch {}
-process.env.APP_URL = "https://clinic-web-production-bbff.up.railway.app";
+process.env.APP_URL = process.env.APP_URL || "https://app.clinicti.app";
 
 const to = process.argv[2] ?? "6000yamen.batarseh@gmail.com";
 const combos: [EmailType, EmailLocale][] = [["invitation", "ar"], ["password-reset", "en"]];
@@ -13,7 +13,7 @@ async function main() {
     type, locale,
     name: locale === "ar" ? "يامن" : "Yamen",
     clinic: "عيادات الحصن الطبي",
-    url: "https://clinic-web-production-bbff.up.railway.app/invite/PREVIEW-TOKEN",
+    url: "https://app.clinicti.app/invite/PREVIEW-TOKEN",
   });
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
