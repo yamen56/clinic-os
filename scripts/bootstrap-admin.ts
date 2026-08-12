@@ -25,7 +25,7 @@ async function main() {
   }
   // base64url avoids characters that get mangled when pasted into a shell.
   const password = process.argv[3] ?? randomBytes(12).toString("base64url");
-  const name = process.argv[4] ?? "Makan Admin";
+  const name = process.argv[4] ?? "Clinicti Admin";
 
   const url =
     process.env.DATABASE_SUPER_URL ??

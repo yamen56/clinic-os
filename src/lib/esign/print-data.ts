@@ -252,6 +252,7 @@ export const CERT_LABELS = {
     footer:
       "أُنشئت هذه الشهادة تلقائياً ولا يمكن تعطيلها. أي تعديل على محتوى المستند بعد تجميده يُبطل بصمته أعلاه.",
     tzNote: "الأوقات بتوقيت",
+    poweredBy: "مدعوم من كلينيكتي",
   },
   en: {
     title: "Certificate of Completion",
@@ -283,5 +284,6 @@ export const CERT_LABELS = {
     footer:
       "This certificate is generated automatically and cannot be disabled. Any change to the document content after it was frozen invalidates the fingerprint above.",
     tzNote: "Times shown in",
+    poweredBy: "Powered by Clinicti",
   },
 } as const;

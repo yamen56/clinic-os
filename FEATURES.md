@@ -18,7 +18,7 @@ tenants.
 - Arabic UI renders **Latin digits** (`ar-JO-u-nu-latn`) — standard in Jordanian/Gulf
   medical software, keeps phone numbers, prices and times unambiguous.
 - Default timezone `Asia/Amman`, default currency `JOD`, default locale `ar`.
-- Package name `clinic-os`, described as "Multi-tenant clinic management platform (Makan Scaling)".
+- Package name `clinic-os`, described as "Clinicti — multi-tenant clinic management platform".
 
 ### Deployment shape
 

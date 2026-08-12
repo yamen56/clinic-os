@@ -1,14 +1,19 @@
 "use client";
 
 import { dictFor, type Locale } from "@/lib/i18n/client-dict";
+import { PoweredBy } from "@/components/powered-by";
 
 /**
  * The shell every signing screen sits in, remote and in-clinic alike.
  *
  * It carries the clinic's logo and colour and nothing else — no navigation, no
- * language switch, no link anywhere. On the clinic tablet that is a security
- * property (the device is in a patient's hands); on a phone it is what makes a
- * bare link feel like it came from the clinic rather than from a vendor.
+ * language switch, and no link out except the Clinicti credit at the foot —
+ * and that one only when `credit` is set to "link". On the clinic tablet the
+ * absence of any link is a security property (the device is in a patient's
+ * hands, and a browser is one tap away from the rest of the internet), so the
+ * kiosk keeps the credit as plain text. On the patient's own phone there is
+ * nothing to protect and the mark is worth having. Either way the chrome is
+ * what makes a bare link feel like it came from the clinic, not from a vendor.
  */
 export function SigningChrome({
   clinic,
@@ -16,6 +21,7 @@ export function SigningChrome({
   children,
   footer,
   header,
+  credit = "text",
 }: {
   clinic: {
     name: string;
@@ -27,6 +33,8 @@ export function SigningChrome({
   children: React.ReactNode;
   footer?: React.ReactNode;
   header?: React.ReactNode;
+  /** "link" opens clinicti.app; "text" is the kiosk-safe default. */
+  credit?: "link" | "text";
 }) {
   const t = dictFor(locale);
   const dir = locale === "ar" ? "rtl" : "ltr";
@@ -65,8 +73,12 @@ export function SigningChrome({
 
       {footer}
 
-      <footer className="shrink-0 px-4 pb-4 pt-2 text-center text-[11px] text-ink-400">
-        {t.sign.poweredBy}
+      <footer className="shrink-0 px-4 pb-4 pt-2 text-center">
+        {credit === "link" ? (
+          <PoweredBy label={t.sign.poweredBy} />
+        ) : (
+          <span className="text-[11px] text-ink-400">{t.sign.poweredBy}</span>
+        )}
       </footer>
     </div>
   );

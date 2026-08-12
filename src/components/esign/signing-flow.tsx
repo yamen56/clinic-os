@@ -230,7 +230,7 @@ export function SigningFlow({
 
   if (declined) {
     return (
-      <SigningChrome clinic={view.clinic} locale={locale}>
+      <SigningChrome clinic={view.clinic} locale={locale} credit={mode === "remote" ? "link" : "text"}>
         <Outcome
           tone="danger"
           icon={<X className="h-8 w-8" />}
@@ -244,7 +244,7 @@ export function SigningFlow({
 
   if (done) {
     return (
-      <SigningChrome clinic={view.clinic} locale={locale} footer={kioskFooter}>
+      <SigningChrome clinic={view.clinic} locale={locale} footer={kioskFooter} credit={mode === "remote" ? "link" : "text"}>
         <Outcome
           tone="ok"
           icon={<CircleCheck className="h-8 w-8" />}
@@ -272,7 +272,7 @@ export function SigningFlow({
   */
   if (!codeVerified && token) {
     return (
-      <SigningChrome clinic={view.clinic} locale={locale} footer={kioskFooter}>
+      <SigningChrome clinic={view.clinic} locale={locale} footer={kioskFooter} credit={mode === "remote" ? "link" : "text"}>
         <CodeGate token={token} locale={locale} onVerified={() => setCodeVerified(true)} />
       </SigningChrome>
     );
@@ -287,7 +287,7 @@ export function SigningFlow({
     : t.sign.greetingNoName.replace("{clinic}", view.clinic?.name ?? "");
 
   return (
-    <SigningChrome clinic={view.clinic} locale={locale} footer={kioskFooter}>
+    <SigningChrome clinic={view.clinic} locale={locale} footer={kioskFooter} credit={mode === "remote" ? "link" : "text"}>
       <StepIndicator step={step} locale={locale} />
 
       {resume && resume.lastStep > 1 && step === resume.lastStep && (

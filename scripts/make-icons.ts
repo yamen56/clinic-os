@@ -1,5 +1,5 @@
 /**
- * Generates the PWA icon set from the Makan mark.
+ * Generates the PWA icon set from the Clinicti mark.
  *
  * The mark is never redrawn — each icon is the real asset composited onto a
  * brand plate at the right size. Maskable icons keep the mark inside the 80%

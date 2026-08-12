@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { withSystem } from "@/lib/db";
 import { fmtDate, fmtMoney } from "@/lib/dates";
+import { PoweredBy } from "@/components/powered-by";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -63,12 +64,14 @@ export default async function PublicInvoicePage({
         price: "السعر", amount: "المجموع", subtotal: "المجموع الفرعي", discount: "الخصم",
         total: "الإجمالي", paid: "المدفوع", due: "المستحق",
         payTitle: "تفاصيل الدفع", statusPaid: "مدفوعة", statusVoid: "ملغاة",
+        poweredBy: "مدعوم من كلينيكتي",
       }
     : {
         invoice: "Invoice", billTo: "Billed to", date: "Date", item: "Item", qty: "Qty",
         price: "Price", amount: "Amount", subtotal: "Subtotal", discount: "Discount",
         total: "Total", paid: "Paid", due: "Balance due",
         payTitle: "Payment details", statusPaid: "PAID", statusVoid: "VOID",
+        poweredBy: "Powered by Clinicti",
       };
 
   return (
@@ -222,6 +225,15 @@ export default async function PublicInvoicePage({
               {inv.invoice_footer}
             </p>
           )}
+
+          {/*
+            The credit sits below anything the clinic wrote itself, and carries
+            its own hairline only when the clinic's footer did not already draw
+            one — two rules stacked at the foot of an invoice look like a mistake.
+          */}
+          <div className={`flex justify-center ${inv.invoice_footer ? "mt-3" : "mt-8 border-t border-line pt-4"}`}>
+            <PoweredBy label={L.poweredBy} showUrl={!!print} />
+          </div>
         </div>
       </div>
     </main>

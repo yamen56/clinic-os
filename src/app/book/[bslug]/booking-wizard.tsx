@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DateTime } from "luxon";
 import { en } from "@/lib/i18n/en";
 import { ar } from "@/lib/i18n/ar";
+import { PoweredBy } from "@/components/powered-by";
 import {
   CalendarCheck2,
   ChevronRight,
@@ -482,7 +483,9 @@ export function BookingWizard({
           )}
         </div>
 
-        <footer className="pt-8 text-center text-[11px] text-ink-400">{t.poweredBy}</footer>
+        <footer className="pt-8 text-center">
+          <PoweredBy label={t.poweredBy} />
+        </footer>
       </div>
     </main>
   );

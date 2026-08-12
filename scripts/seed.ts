@@ -85,7 +85,7 @@ async function main() {
   const adminId = demoOnly
     ? ((await c.query(`select id from users where is_super_admin order by created_at limit 1`))
         .rows[0]?.id as string | undefined) ?? null
-    : await upsertUser(SEED.adminEmail, SEED.adminPassword, "Makan Admin", {
+    : await upsertUser(SEED.adminEmail, SEED.adminPassword, "Clinicti Admin", {
         superAdmin: true,
         locale: "en",
       });

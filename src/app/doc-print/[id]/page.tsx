@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { loadPrintDocument, CERT_LABELS, type PrintDocument, type PrintSigner } from "@/lib/esign/print-data";
 import { verifyPrintKey } from "@/lib/esign/print-token";
 import { DocumentBody } from "@/components/esign/document-body";
+import { PoweredBy } from "@/components/powered-by";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -52,7 +53,10 @@ export default async function DocumentPrintPage({
             <DocumentBody html={doc.snapshot} />
             <SignatureBlocks doc={doc} />
           </div>
-          {doc.clinic.invoiceFooter && <footer className="sheet-foot">{doc.clinic.invoiceFooter}</footer>}
+          <footer className="sheet-foot">
+            {doc.clinic.invoiceFooter && <div className="foot-clinic">{doc.clinic.invoiceFooter}</div>}
+            <PoweredBy label={CERT_LABELS[doc.language].poweredBy} showUrl />
+          </footer>
         </section>
       )}
       <Certificate doc={doc} />
@@ -276,6 +280,9 @@ function Certificate({ doc }: { doc: PrintDocument }) {
         <p className="cert-foot">
           {L.footer} {L.tzNote} {doc.timezone}.
         </p>
+        <div className="cert-credit">
+          <PoweredBy label={L.poweredBy} showUrl />
+        </div>
       </div>
     </section>
   );
@@ -355,6 +362,7 @@ html, body { margin: 0; padding: 0; background: #fff; }
 .clinic-meta { font-size: 11.5px; color: #7a828c; }
 .sheet-foot { position: absolute; inset-inline: 18mm; bottom: 10mm; text-align: center;
               font-size: 10.5px; color: #9aa2ac; border-top: 1px solid #e3e6eb; padding-top: 6px; }
+.foot-clinic { margin-bottom: 4px; }
 
 .doc-title { font-family: var(--font-display), sans-serif; font-size: 20px; font-weight: 700;
              margin: 0 0 14px; }
@@ -415,6 +423,7 @@ html, body { margin: 0; padding: 0; background: #fff; }
 .cert-rows td { padding: 2px 0; }
 .cert-utc { display: block; font-size: 9.5px; color: #9aa2ac; }
 .cert-foot { margin-top: 14px; font-size: 10px; color: #9aa2ac; line-height: 1.6; }
+.cert-credit { margin-top: 10px; text-align: center; }
 
 /* Uploaded-PDF overlay layers: transparent, exactly one per page. */
 .ov-root { margin: 0; background: transparent; }
