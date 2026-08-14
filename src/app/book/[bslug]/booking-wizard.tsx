@@ -417,6 +417,24 @@ export function BookingWizard({
                   label={t.sendCode}
                 />
               </div>
+              {/*
+                On the details step, not the verify step: `start` is what POSTs
+                the name and phone, and it commits the booking outright when the
+                clinic's WhatsApp is offline — that path never reaches an OTP, so
+                a notice living there would be skipped exactly when it matters.
+              */}
+              <p className="mt-4 text-center text-[11px] leading-5 text-ink-400">
+                {t.privacyConsent.split("{link}")[0]}
+                <a
+                  href={CLINICTI_PRIVACY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-ink-200 underline-offset-2 hover:text-ink-600"
+                >
+                  {t.privacy}
+                </a>
+                {t.privacyConsent.split("{link}")[1]}
+              </p>
             </section>
           )}
 
@@ -440,23 +458,6 @@ export function BookingWizard({
                 <BackBtn onClick={() => setStep("details")} label={t.back} />
                 <PrimaryBtn disabled={code.length !== 6 || busy} busy={busy} onClick={verify} label={t.verifyAndBook} />
               </div>
-              {/*
-                The notice belongs on the step that actually writes the booking,
-                not on the one that collects the phone number — this is the tap
-                that commits their details, so this is where consent is given.
-              */}
-              <p className="mt-4 text-center text-[11px] leading-5 text-ink-400">
-                {t.privacyConsent.split("{link}")[0]}
-                <a
-                  href={CLINICTI_PRIVACY_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline decoration-ink-200 underline-offset-2 hover:text-ink-600"
-                >
-                  {t.privacy}
-                </a>
-                {t.privacyConsent.split("{link}")[1]}
-              </p>
             </section>
           )}
 
