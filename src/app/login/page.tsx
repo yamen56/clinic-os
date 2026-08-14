@@ -32,20 +32,16 @@ export default async function LoginPage({
         <LanguageToggle onDark />
       </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-8 p-6">
-        <div className="flex flex-col items-center gap-4">
-          <BrandMark size={72} />
-          {/* The one place italic ships. Latin, so it keeps its own direction. */}
-          <p
-            dir="ltr"
-            className="latin font-display text-lg font-bold italic tracking-[-0.005em] text-white/70"
-          >
-            Solutions Engineered for Success.
-          </p>
-        </div>
+        <BrandMark size={72} />
         <LoginForm next={next ?? undefined} google={googleConfigured()} oauthError={sp.error} />
       </div>
       <footer className="flex items-center justify-center gap-3 pb-6 text-center text-xs text-white/40">
-        <span>Clinicti</span>
+        <a
+          href="https://clinicti.app"
+          className="no-underline transition-colors hover:text-white/70"
+        >
+          Clinicti
+        </a>
         <a
           href="https://privacy.clinicti.app"
           target="_blank"
