@@ -3,6 +3,7 @@ import { cache } from "react";
 import { en, type Dict } from "./en";
 import { ar } from "./ar";
 
+import { applyVocabulary } from "./vocab";
 export type Locale = "ar" | "en";
 export type { Dict };
 
@@ -24,3 +25,17 @@ export const getLocale = cache(async (): Promise<Locale> => {
 });
 
 export const getDict = cache(async (): Promise<Dict> => dictFor(await getLocale()));
+
+/**
+ * The dictionary for a workspace, which is not always the dictionary for the
+ * visitor.
+ *
+ * Locale still comes from the person — their cookie, their choice. Vocabulary
+ * comes from the clinic they are standing in, because "patient" or "clinic" is a
+ * property of whose data this is, not of who is reading it. A Clinicti staffer
+ * browsing a customer's workspace should see that customer's words.
+ */
+export async function dictForClinic(vocabulary: "medical" | "agency"): Promise<Dict> {
+  const locale = await getLocale();
+  return applyVocabulary(dictFor(locale), vocabulary, locale);
+}

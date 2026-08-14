@@ -1,6 +1,6 @@
 import { guardClinic } from "@/lib/guard";
 import { redirect } from "next/navigation";
-import { getDict } from "@/lib/i18n";
+import { dictForClinic } from "@/lib/i18n";
 import { PageHeader } from "@/components/ui/card";
 import { SettingsNav } from "./settings-nav";
 import { can } from "@/lib/auth";
@@ -15,7 +15,7 @@ export default async function SettingsLayout({
   const { slug } = await params;
   const access = await guardClinic(slug);
   if (!can(access, "settings")) redirect(`/c/${slug}`);
-  const t = await getDict();
+  const t = await dictForClinic(access.clinic.vocabulary);
 
   return (
     <>

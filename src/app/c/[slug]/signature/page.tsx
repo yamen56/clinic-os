@@ -4,7 +4,7 @@ import { readFileBuffer } from "@/lib/storage";
 import { PageHeader } from "@/components/ui/card";
 import { Card, CardHeader } from "@/components/ui/card";
 import { PhotoPicker } from "@/components/photo-picker";
-import { getDict } from "@/lib/i18n";
+import { dictForClinic } from "@/lib/i18n";
 import { SignatureSettings } from "./signature-client";
 
 /**
@@ -43,7 +43,7 @@ export default async function SignatureSettingsPage({
     if (buf) current = `data:image/png;base64,${buf.toString("base64")}`;
   }
 
-  const t = await getDict();
+  const t = await dictForClinic(access.clinic.vocabulary);
 
   return (
     <>

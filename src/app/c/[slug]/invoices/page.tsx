@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
-import { getDict, getLocale } from "@/lib/i18n";
+import { dictForClinic, getLocale } from "@/lib/i18n";
 import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtMoney, fmtDate } from "@/lib/dates";
 import { PageHeader, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ export default async function InvoicesPage({
   const sp = await searchParams;
   const access = await guardClinic(slug);
   if (!can(access, "invoices")) redirect(`/c/${slug}`);
-  const t = await getDict();
+  const t = await dictForClinic(access.clinic.vocabulary);
   const locale = await getLocale();
   const tab = sp.tab === "payments" ? "payments" : "invoices";
 

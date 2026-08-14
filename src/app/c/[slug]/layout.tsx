@@ -2,6 +2,8 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { ServiceWorkerRegistrar } from "@/components/pwa";
 import { Shell } from "./shell";
+import { dictForClinic, getLocale } from "@/lib/i18n";
+import { I18nProvider } from "@/lib/i18n/client";
 
 export default async function ClinicLayout({
   children,
@@ -41,7 +43,23 @@ export default async function ClinicLayout({
   const dismissed = (access.session.user.settings?.dismissedAnnouncements ?? []) as string[];
   const clinic = access.clinic;
 
+  /*
+    A second provider, inside the root one.
+
+    The root layout mounts the visitor's dictionary before it knows which
+    workspace is being opened — it has to, because /login and the public pages
+    need one too. By the time we are here the clinic is known, so this remounts
+    the context with that clinic's vocabulary. React takes the nearest provider,
+    so every client component below reads the right words without being told.
+
+    For a clinic on the default vocabulary this is the same object the root
+    already provided, so the extra provider costs nothing but a render.
+  */
+  const locale = await getLocale();
+  const dict = await dictForClinic(clinic.vocabulary);
+
   return (
+    <I18nProvider dict={dict} locale={locale}>
     <Shell
       clinic={{
         id: clinic.id,
@@ -74,5 +92,6 @@ export default async function ClinicLayout({
       <ServiceWorkerRegistrar />
       {children}
     </Shell>
+    </I18nProvider>
   );
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { guardClinic } from "@/lib/guard";
 import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
-import { getDict, getLocale } from "@/lib/i18n";
+import { dictForClinic, getLocale } from "@/lib/i18n";
 import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtTime, fmtMoney } from "@/lib/dates";
 import { Card, CardHeader, PageHeader } from "@/components/ui/card";
 import { Badge, type StatusKey } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ const apptStatus: Record<string, StatusKey> = {
 export default async function DashboardPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const a = await guardClinic(slug);
-  const t = await getDict();
+  const t = await dictForClinic(a.clinic.vocabulary);
   const locale = await getLocale();
 
   const tz = a.clinic.timezone;

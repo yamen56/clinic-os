@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
-import { getDict } from "@/lib/i18n";
+import { dictForClinic } from "@/lib/i18n";
 import { PageHeader, Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PhotoPicker } from "@/components/photo-picker";
@@ -23,7 +23,7 @@ import { PenTool, Bell, LogOut, ChevronLeft, Building2, Lock } from "lucide-reac
 export default async function ProfilePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const access = await guardClinic(slug);
-  const t = await getDict();
+  const t = await dictForClinic(access.clinic.vocabulary);
   const base = `/c/${slug}`;
 
   const me = await inClinic(access, async (c) => {

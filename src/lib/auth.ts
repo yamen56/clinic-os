@@ -30,6 +30,11 @@ export type ClinicProfile = {
   logoPath: string | null;
   defaultLocale: "ar" | "en";
   subscriptionStatus: string;
+  /**
+   * Which words this workspace uses for the same objects. "medical" everywhere
+   * but Clinicti's own workspace — see migrations/0030 and lib/i18n/vocab.
+   */
+  vocabulary: "medical" | "agency";
 };
 
 export type Membership = ClinicProfile & {
@@ -119,7 +124,7 @@ const CLINIC_JSON = `json_build_object(
   'id', cl.id, 'name', cl.name, 'nameAr', cl.name_ar, 'slug', cl.slug,
   'timezone', cl.timezone, 'currency', cl.currency, 'brandColor', cl.brand_color,
   'logoPath', cl.logo_path, 'defaultLocale', cl.default_locale,
-  'subscriptionStatus', cl.subscription_status
+  'subscriptionStatus', cl.subscription_status, 'vocabulary', cl.vocabulary
 )`;
 
 type SessionRow = {
