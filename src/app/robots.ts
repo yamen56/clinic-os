@@ -21,6 +21,16 @@ import { appUrl } from "@/lib/urls";
  *    and the token-bearing paths where a fetch means handing a crawler somebody
  *    else's invoice or consent form.
  */
+/*
+  Rendered per request, not at build.
+
+  Next.js treats this as a static route by default and runs it during the build,
+  where Railway exposes no service variables — so `appUrl()` fell back to
+  localhost and the deployed robots.txt advertised
+  `Sitemap: http://localhost:3000/sitemap.xml` to every crawler that asked.
+*/
+export const dynamic = "force-dynamic";
+
 export default function robots(): MetadataRoute.Robots {
   const base = appUrl();
   return {

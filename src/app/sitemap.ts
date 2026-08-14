@@ -2,7 +2,17 @@ import type { MetadataRoute } from "next";
 import { withSystem } from "@/lib/db";
 import { appUrl } from "@/lib/urls";
 
-export const revalidate = 3600;
+/*
+  Per request, for the same reason as robots.ts, and one worse: the build has no
+  database either. The `catch` below turned that into a valid, empty sitemap
+  that was then cached as a static file — the deployed site advertised zero
+  pages and nothing failed loudly enough to notice.
+
+  The catch stays, because at runtime a sitemap that 500s during a database
+  blip is worse than one that comes back short. It just must not be the thing
+  standing between a build-time failure and a shipped artefact.
+*/
+export const dynamic = "force-dynamic";
 
 /**
  * Every booking page a clinic has switched on.
