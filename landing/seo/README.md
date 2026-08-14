@@ -46,6 +46,40 @@ The `sameAs` pointing at `app.clinicti.app` is doing specific work: the app
 domain is now `noindex`, so a crawler has no way to learn that the two hosts are
 one product unless this says so.
 
+## 4. `llms.txt` — new file at the site root
+
+Serve at `https://clinicti.app/llms.txt`. On Cloudflare Pages that means
+dropping it in the published output directory; no config, no redirect.
+
+### What it is, honestly
+
+A proposed convention (llmstxt.org, late 2024), **not an adopted standard**. No
+major model provider has committed to reading it. Anthropic, Stripe, Cloudflare
+and Vercel publish one; that is the level of adoption it has. It costs one static
+file, so it is a cheap bet rather than a sure one — do not expect it to move
+anything on its own.
+
+### Why it is still worth having
+
+The file is written to answer the questions an assistant gets wrong when it has
+to infer from marketing copy: what the product *is not* (not a directory, not
+something patients sign up for), how the name is spelled, that Makan Scaling is
+not part of the name, that there is no self-serve trial, and that pricing is not
+published so it should not be guessed at. Those corrections are the actual value.
+
+### Already true, and more important
+
+The site's robots.txt blocks the **training** crawlers — GPTBot, ClaudeBot,
+CCBot, Google-Extended, Applebot-Extended and the rest. It does **not** block the
+**retrieval** agents: OAI-SearchBot, ChatGPT-User, PerplexityBot, Claude-User and
+Bingbot all fall under `User-agent: *` → `Allow: /`.
+
+That distinction is the whole game, and the current setting is the right one:
+an assistant asked about clinic software in Jordan *today* can fetch and cite
+this site, while the content is kept out of model training sets. Unblocking the
+training crawlers would only affect models retrained later, and is a licensing
+decision rather than an SEO one.
+
 ## Worth doing, not done here
 
 - **Google Search Console** on both hosts, and submit both sitemaps. Nothing

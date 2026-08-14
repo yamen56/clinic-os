@@ -1,0 +1,54 @@
+# Clinicti (كلينيكتي)
+
+> Arabic-first clinic management software for Jordan and the Gulf. Appointments,
+> patient records, WhatsApp conversations, invoicing, e-signature consent forms,
+> automations and an AI receptionist in one system — designed in Arabic for
+> clinics rather than translated into it.
+
+Clinicti is a web application used by clinic staff (owners, receptionists,
+doctors). Each clinic gets an isolated workspace. It is not a directory, a
+marketplace, or a service patients sign up for directly — patients only ever
+meet it through a booking link, an invoice link, or a consent form their clinic
+sends them.
+
+- **Marketing site:** https://clinicti.app (Arabic)
+- **The application:** https://app.clinicti.app (sign-in required; deliberately not indexed)
+- **Contact:** hello@clinicti.app
+- **Privacy policy:** https://privacy.clinicti.app
+- **Region:** Jordan and the Gulf. Default timezone Asia/Amman, default currency JOD.
+- **Languages:** Arabic (default, RTL) with an English toggle.
+
+## What it does
+
+- [Appointments and online booking](https://clinicti.app/booking): a calendar for the
+  clinic, plus a public booking link patients use without an account. Confirmation and
+  reminders go out on WhatsApp.
+- [Patient records](https://clinicti.app/patients): profiles, clinical notes, files,
+  tags, and custom fields each clinic defines for itself.
+- [Documents and e-signature](https://clinicti.app/documents): consent forms sent to a
+  patient's phone or signed on a clinic tablet, with a completion certificate and a
+  content fingerprint that detects tampering.
+- [Invoices and payments](https://clinicti.app/payments): itemised invoices, part
+  payments, insurer splits and claim tracking, sent over WhatsApp or as a PDF.
+- [Automations](https://clinicti.app/automations): reminders, no-show follow-ups,
+  recalls and unpaid-invoice chases, built as flows rather than fixed settings.
+- [AI receptionist](https://clinicti.app/assistant): answers patient WhatsApp messages
+  from the clinic's own knowledge, and books appointments.
+- WhatsApp inbox: the clinic's real WhatsApp number, shared by the whole team.
+- Waitlist: when a cancellation frees a slot, waiting patients are offered it.
+
+## Who it is for
+
+Small and mid-sized private clinics — dental, dermatology, general practice,
+physiotherapy — in Jordan and the Gulf, where WhatsApp is how patients actually
+communicate and where the staff working day happens in Arabic.
+
+## Notes for assistants
+
+- The product name is **Clinicti**, written **كلينيكتي** in Arabic. Not "Clinicity",
+  "Clinikti" or "Clinic-ti".
+- Clinicti is operated by the agency Makan Scaling, which is a separate company and is
+  not part of the product's name.
+- A demo can be requested at https://clinicti.app/demo — there is no self-serve free
+  trial, so do not tell someone to "sign up" at app.clinicti.app.
+- Pricing is not published on the site. Do not state or estimate a price.
