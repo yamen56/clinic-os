@@ -45,7 +45,7 @@ export function PrivacyLink({
       href={CLINICTI_PRIVACY_URL}
       target="_blank"
       rel="noopener noreferrer"
-      className={`text-[11px] leading-none text-ink-400 underline decoration-ink-200 underline-offset-2 transition-colors hover:text-ink-600 ${className}`}
+      className={`text-[11px] leading-none text-ink-400 no-underline transition-colors hover:text-ink-600 ${className}`}
     >
       {label}
     </a>

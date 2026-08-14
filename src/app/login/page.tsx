@@ -48,7 +48,7 @@ export default async function LoginPage({
           href="https://privacy.clinicti.app"
           target="_blank"
           rel="noopener noreferrer"
-          className="underline decoration-white/25 underline-offset-2 transition-colors hover:text-white/70"
+          className="no-underline transition-colors hover:text-white/70"
         >
           Privacy
         </a>

@@ -429,7 +429,7 @@ export function BookingWizard({
                   href={CLINICTI_PRIVACY_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline decoration-ink-200 underline-offset-2 hover:text-ink-600"
+                  className="font-medium text-ink-500 no-underline transition-colors hover:text-ink-700"
                 >
                   {t.privacy}
                 </a>
