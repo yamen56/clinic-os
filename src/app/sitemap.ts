@@ -15,6 +15,11 @@ export const revalidate = 3600;
  * Inactive links are left out rather than listed and disallowed: a sitemap
  * saying "index this" about a page that has been turned off is a contradiction
  * a crawler resolves by trusting neither.
+ *
+ * The suspension filter has to match `loadPublicLink` exactly, for the same
+ * reason. A suspended clinic's booking page renders "no longer active" and is
+ * noindex, so listing it here would submit a page we simultaneously ask not to
+ * be indexed — and the mismatch would only appear once a clinic stopped paying.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = appUrl();
@@ -24,6 +29,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
          from booking_links b
          join clinics cl on cl.id = b.clinic_id
         where b.active
+          and cl.subscription_status <> 'suspended'
         order by touched desc
         limit 5000`
     );
