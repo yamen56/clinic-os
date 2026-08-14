@@ -1,0 +1,56 @@
+<!-- Paste into index.html only, just before </head>.
+
+     Two nodes, one job each:
+     - Organization is the entity. `sameAs` is what tells a search engine that
+       app.clinicti.app is the same product and not a separate site competing
+       with this one — the app domain is noindex, so this is the only place the
+       relationship is stated.
+     - SoftwareApplication is what earns the product-style result: category,
+       language, and the fact that it is priced rather than free. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://clinicti.app/#org",
+      "name": "كلينيكتي",
+      "alternateName": "Clinicti",
+      "url": "https://clinicti.app/",
+      "logo": "https://clinicti.app/assets/img/favicon.png",
+      "email": "hello@clinicti.app",
+      "areaServed": { "@type": "Country", "name": "Jordan" },
+      "sameAs": ["https://app.clinicti.app"]
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://clinicti.app/#app",
+      "name": "كلينيكتي",
+      "alternateName": "Clinicti",
+      "url": "https://clinicti.app/",
+      "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "Clinic management",
+      "operatingSystem": "Web",
+      "inLanguage": ["ar", "en"],
+      "publisher": { "@id": "https://clinicti.app/#org" },
+      "featureList": [
+        "إدارة المواعيد والحجز الإلكتروني",
+        "ملفات المرضى",
+        "محادثات واتساب",
+        "الفواتير والمدفوعات",
+        "نماذج الموافقة والتوقيع الإلكتروني",
+        "الأتمتة والتذكيرات",
+        "المساعد الذكي"
+      ]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://clinicti.app/#site",
+      "url": "https://clinicti.app/",
+      "name": "كلينيكتي",
+      "inLanguage": "ar-JO",
+      "publisher": { "@id": "https://clinicti.app/#org" }
+    }
+  ]
+}
+</script>
