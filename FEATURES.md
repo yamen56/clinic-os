@@ -1319,6 +1319,32 @@ Two things run against local doubles because both need credentials the dev envir
 - A clinic sets its **own** `brand_color` (schema default `#0f6e5c`) and logo; every
   patient-facing surface wears the clinic's colour, not Clinicti's.
 
+### Privacy policy
+
+`https://privacy.clinicti.app` — Arabic by default with an English toggle, written against
+Jordan's **Personal Data Protection Law No. 24 of 2023**, contact `privacy@clinicti.app`.
+Hosted separately (Netlify), so it stays reachable when the app is not.
+
+Linked from every surface that collects personal data, and the two that only display it:
+
+| Surface | Form |
+|---|---|
+| Public booking | Footer link **and** a consent line on the step that writes the booking |
+| Remote signing | Footer link |
+| In-clinic signing kiosk | Address printed as **text**, not a link |
+| Public invoice (screen) | Footer link |
+| Login | Footer link |
+| Invitation + password-reset emails | Footer link, both languages |
+| Landing page | Footer link |
+
+Deliberately **absent** from the printed surfaces — the invoice PDF and the document sheet.
+A URL nobody can click is clutter on a financial record, and the signing certificate already
+states in full what was recorded and why.
+
+Note on roles: the **clinic** is the data controller for its patients' records; Clinicti is
+the processor. The policy covers Clinicti's own handling, and does not replace whatever
+notice a clinic owes its own patients.
+
 ### The credit
 
 `src/components/powered-by.tsx` — the mark, the product name and a link to
