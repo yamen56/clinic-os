@@ -23,6 +23,7 @@ import { renderUrlToPdf } from "../src/lib/pdf";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const LINK = "https://clinicti.app";
+const PRIVACY = "https://privacy.clinicti.app";
 
 let pass = 0;
 const fails: string[] = [];
@@ -36,7 +37,7 @@ async function creditOn(
   page: Page,
   url: string,
   label: string,
-  opts: { url?: boolean; count?: number } = {}
+  opts: { url?: boolean; count?: number; privacy?: boolean } = {}
 ) {
   const res = await page.goto(url, { waitUntil: "networkidle", timeout: 120_000 });
   ok(`${label}: page loads`, !!res && res.status() < 400, String(res?.status()));
@@ -63,6 +64,16 @@ async function creditOn(
   const text = ((await a.textContent()) || "").trim();
   ok(`${label}: names the product`, /Clinicti|كلينيكتي/.test(text), JSON.stringify(text));
   if (opts.url) ok(`${label}: prints the address for paper`, text.includes("clinicti.app"), JSON.stringify(text));
+  if (opts.privacy !== false) {
+    const p = page.locator(`a[href="${PRIVACY}"]`);
+    const pn = await p.count();
+    ok(`${label}: links the privacy policy`, pn >= 1, `found ${pn}`);
+    if (pn) {
+      ok(`${label}: privacy opens safely`,
+        (await p.first().getAttribute("rel"))?.includes("noopener") === true);
+    }
+  }
+
   // Silent, not shouty: the credit must stay small and grey.
   const size = await a.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   ok(`${label}: stays quiet (${size}px <= 12)`, size <= 12, `${size}px`);
@@ -118,7 +129,7 @@ async function main() {
   await creditOn(page, `${BASE}/inv/${token}`, "invoice");
 
   console.log("\n[public invoice — print]");
-  await creditOn(page, `${BASE}/inv/${token}?print=1`, "invoice print", { url: true });
+  await creditOn(page, `${BASE}/inv/${token}?print=1`, "invoice print", { url: true, privacy: false });
 
   // --- Signed document ----------------------------------------------------
   // Both printed sheets are checked: the document itself, and the certificate,
@@ -135,10 +146,10 @@ async function main() {
   );
 
   console.log("\n[document sheet]");
-  await creditOn(page, printUrl(BASE, doc.id, "document"), "document", { url: true, count: 2 });
+  await creditOn(page, printUrl(BASE, doc.id, "document"), "document", { url: true, count: 2, privacy: false });
 
   console.log("\n[signing certificate]");
-  await creditOn(page, printUrl(BASE, doc.id, "certificate"), "certificate", { url: true });
+  await creditOn(page, printUrl(BASE, doc.id, "certificate"), "certificate", { url: true, privacy: false });
 
   console.log("\n[document PDF]");
   try {

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { withSystem } from "@/lib/db";
 import { fmtDate, fmtMoney } from "@/lib/dates";
-import { PoweredBy } from "@/components/powered-by";
+import { PoweredBy, PrivacyLink } from "@/components/powered-by";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -64,14 +64,14 @@ export default async function PublicInvoicePage({
         price: "السعر", amount: "المجموع", subtotal: "المجموع الفرعي", discount: "الخصم",
         total: "الإجمالي", paid: "المدفوع", due: "المستحق",
         payTitle: "تفاصيل الدفع", statusPaid: "مدفوعة", statusVoid: "ملغاة",
-        poweredBy: "مدعوم من كلينيكتي",
+        poweredBy: "مدعوم من كلينيكتي", privacy: "سياسة الخصوصية",
       }
     : {
         invoice: "Invoice", billTo: "Billed to", date: "Date", item: "Item", qty: "Qty",
         price: "Price", amount: "Amount", subtotal: "Subtotal", discount: "Discount",
         total: "Total", paid: "Paid", due: "Balance due",
         payTitle: "Payment details", statusPaid: "PAID", statusVoid: "VOID",
-        poweredBy: "Powered by Clinicti",
+        poweredBy: "Powered by Clinicti", privacy: "Privacy Policy",
       };
 
   return (
@@ -233,6 +233,7 @@ export default async function PublicInvoicePage({
           */}
           <div className={`flex justify-center ${inv.invoice_footer ? "mt-3" : "mt-8 border-t border-line pt-4"}`}>
             <PoweredBy label={L.poweredBy} showUrl={!!print} />
+            {!print && <PrivacyLink label={L.privacy} className="ms-3" />}
           </div>
         </div>
       </div>

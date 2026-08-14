@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DateTime } from "luxon";
 import { en } from "@/lib/i18n/en";
 import { ar } from "@/lib/i18n/ar";
-import { PoweredBy } from "@/components/powered-by";
+import { PoweredBy, PrivacyLink, CLINICTI_PRIVACY_URL } from "@/components/powered-by";
 import {
   CalendarCheck2,
   ChevronRight,
@@ -440,6 +440,23 @@ export function BookingWizard({
                 <BackBtn onClick={() => setStep("details")} label={t.back} />
                 <PrimaryBtn disabled={code.length !== 6 || busy} busy={busy} onClick={verify} label={t.verifyAndBook} />
               </div>
+              {/*
+                The notice belongs on the step that actually writes the booking,
+                not on the one that collects the phone number — this is the tap
+                that commits their details, so this is where consent is given.
+              */}
+              <p className="mt-4 text-center text-[11px] leading-5 text-ink-400">
+                {t.privacyConsent.split("{link}")[0]}
+                <a
+                  href={CLINICTI_PRIVACY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-ink-200 underline-offset-2 hover:text-ink-600"
+                >
+                  {t.privacy}
+                </a>
+                {t.privacyConsent.split("{link}")[1]}
+              </p>
             </section>
           )}
 
@@ -483,8 +500,9 @@ export function BookingWizard({
           )}
         </div>
 
-        <footer className="pt-8 text-center">
+        <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 pt-8 text-center">
           <PoweredBy label={t.poweredBy} />
+          <PrivacyLink label={t.privacy} />
         </footer>
       </div>
     </main>

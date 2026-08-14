@@ -1,7 +1,7 @@
 "use client";
 
 import { dictFor, type Locale } from "@/lib/i18n/client-dict";
-import { PoweredBy } from "@/components/powered-by";
+import { PoweredBy, PrivacyLink } from "@/components/powered-by";
 
 /**
  * The shell every signing screen sits in, remote and in-clinic alike.
@@ -73,12 +73,13 @@ export function SigningChrome({
 
       {footer}
 
-      <footer className="shrink-0 px-4 pb-4 pt-2 text-center">
+      <footer className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-2 px-4 pb-4 pt-2 text-center">
         {credit === "link" ? (
           <PoweredBy label={t.sign.poweredBy} />
         ) : (
           <span className="text-[11px] text-ink-400">{t.sign.poweredBy}</span>
         )}
+        <PrivacyLink label={t.sign.privacy} as={credit === "link" ? "link" : "text"} />
       </footer>
     </div>
   );

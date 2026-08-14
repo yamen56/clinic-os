@@ -13,6 +13,44 @@
  */
 
 export const CLINICTI_URL = "https://clinicti.app";
+export const CLINICTI_PRIVACY_URL = "https://privacy.clinicti.app";
+
+/**
+ * The privacy notice, wherever someone is about to hand over their details.
+ *
+ * Separate from the credit rather than folded into it: the credit is vanity and
+ * could be dropped tomorrow, this is the notice that has to be reachable from
+ * every page that collects a name, a phone number or a signature. They happen
+ * to share a footer, which is not the same as sharing a purpose.
+ */
+export function PrivacyLink({
+  label,
+  className = "",
+  as = "link",
+}: {
+  label: string;
+  className?: string;
+  /** "text" prints the address instead of linking — for the kiosk, which offers no way out. */
+  as?: "link" | "text";
+}) {
+  if (as === "text") {
+    return (
+      <span className={`text-[11px] leading-none text-ink-400 ${className}`}>
+        {label} · privacy.clinicti.app
+      </span>
+    );
+  }
+  return (
+    <a
+      href={CLINICTI_PRIVACY_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`text-[11px] leading-none text-ink-400 underline decoration-ink-200 underline-offset-2 transition-colors hover:text-ink-600 ${className}`}
+    >
+      {label}
+    </a>
+  );
+}
 
 export function PoweredBy({
   label,

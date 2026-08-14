@@ -42,7 +42,17 @@ export default async function LoginPage({
         </div>
         <LoginForm next={next ?? undefined} />
       </div>
-      <footer className="pb-6 text-center text-xs text-white/40">Clinicti</footer>
+      <footer className="flex items-center justify-center gap-3 pb-6 text-center text-xs text-white/40">
+        <span>Clinicti</span>
+        <a
+          href="https://privacy.clinicti.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-white/25 underline-offset-2 transition-colors hover:text-white/70"
+        >
+          Privacy
+        </a>
+      </footer>
     </main>
   );
 }
