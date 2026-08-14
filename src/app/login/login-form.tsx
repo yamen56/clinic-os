@@ -6,8 +6,9 @@ import { loginAction } from "./actions";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
+import { GoogleButton } from "@/components/google-button";
 
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({ next, google, oauthError }: { next?: string; google?: boolean; oauthError?: string }) {
   const { t } = useI18n();
   const [state, formAction, pending] = useActionState(loginAction, null);
 
@@ -41,14 +42,37 @@ export function LoginForm({ next }: { next?: string }) {
         <Field label={t.common.password} required>
           <Input name="password" type="password" dir="ltr" autoComplete="current-password" required />
         </Field>
-        {state?.error && (
+        {(state?.error || oauthError) && (
           <p className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">
-            {t.auth.wrongCredentials}
+            {oauthError
+              ? oauthError === "google_no_account"
+                ? t.auth.googleNoAccount
+                : oauthError === "google_unverified"
+                  ? t.auth.googleUnverified
+                  : oauthError === "google_cancelled"
+                    ? t.auth.googleCancelled
+                    : t.auth.googleFailed
+              : t.auth.wrongCredentials}
           </p>
         )}
         <Button type="submit" size="lg" loading={busy}>
           {t.auth.signIn}
         </Button>
+        {/*
+          Rendered only when the server has credentials configured. A button
+          that leads to a redirect loop is worse than no button, so the absence
+          of the env vars removes it rather than breaking it.
+        */}
+        {google && (
+          <>
+            <div className="flex items-center gap-3 text-[12px] text-ink-400">
+              <span className="h-px flex-1 bg-line" />
+              {t.auth.orDivider}
+              <span className="h-px flex-1 bg-line" />
+            </div>
+            <GoogleButton next={next} />
+          </>
+        )}
         <Link
           href="/forgot"
           className="text-center text-[13px] text-ink-500 underline underline-offset-4 hover:text-ink-900"

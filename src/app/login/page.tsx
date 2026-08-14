@@ -3,6 +3,7 @@ import { getSession, landingPathFor, safeNextPath } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 import { LanguageToggle } from "@/components/language-toggle";
 import { BrandMark } from "@/components/brand-mark";
+import { googleConfigured } from "@/lib/google-oauth";
 
 /**
  * Auth is the one working-adjacent screen on the night surface — the brand
@@ -11,9 +12,10 @@ import { BrandMark } from "@/components/brand-mark";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
-  const next = safeNextPath((await searchParams).next);
+  const sp = await searchParams;
+  const next = safeNextPath(sp.next);
   const s = await getSession();
   if (s) {
     redirect(
@@ -40,7 +42,7 @@ export default async function LoginPage({
             Solutions Engineered for Success.
           </p>
         </div>
-        <LoginForm next={next ?? undefined} />
+        <LoginForm next={next ?? undefined} google={googleConfigured()} oauthError={sp.error} />
       </div>
       <footer className="flex items-center justify-center gap-3 pb-6 text-center text-xs text-white/40">
         <span>Clinicti</span>

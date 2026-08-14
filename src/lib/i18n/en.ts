@@ -65,6 +65,17 @@ export const en = {
     signInTitle: "Sign in to Clinicti",
     signInSub: "The operating system for your clinic",
     wrongCredentials: "Email or password is incorrect.",
+    orDivider: "or",
+    signInGoogle: "Continue with Google",
+    /*
+      Said plainly. Somebody who has not been invited has done nothing wrong and
+      needs to know who can let them in — "sign-in failed" would send them round
+      the loop again.
+    */
+    googleNoAccount: "That Google account isn't registered. Ask your clinic to invite you first.",
+    googleUnverified: "That Google address hasn't been verified with Google yet.",
+    googleCancelled: "Sign-in was cancelled.",
+    googleFailed: "Couldn't sign in with Google. Try again, or use your password.",
     suspendedTitle: "This workspace is suspended",
     suspendedBody: "Your clinic's subscription is paused. Get in touch to reactivate it. Your data is safe.",
     noAccess: "You don't have access to this page.",
