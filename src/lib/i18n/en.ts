@@ -65,6 +65,7 @@ export const en = {
     signInTitle: "Sign in to Clinicti",
     signInSub: "The operating system for your clinic",
     wrongCredentials: "Email or password is incorrect.",
+    tooManyAttempts: "Too many sign-in attempts. Wait about 15 minutes and try again.",
     orDivider: "or",
     signInGoogle: "Continue with Google",
     /*

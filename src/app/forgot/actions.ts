@@ -4,6 +4,7 @@ import { withSystem } from "@/lib/db";
 import { createAuthToken, pruneAuthTokens } from "@/lib/invites";
 import { sendEmail, renderEmail, emailConfigured } from "@/lib/email";
 import { appUrl } from "@/lib/urls";
+import { actionIp, isThrottled, recordFailure } from "@/lib/auth-throttle";
 
 export type ForgotState = { sent?: boolean; devUrl?: string } | null;
 
@@ -20,6 +21,16 @@ export async function requestResetAction(
 ): Promise<ForgotState> {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   if (!email || !email.includes("@")) return { sent: true };
+
+  /*
+    Reports success when throttled, exactly as it does for an unknown address.
+    Saying "too many attempts" here would answer the question the generic
+    response exists to refuse — whether this address has an account — and this
+    form's other job is to not be usable for flooding somebody's inbox.
+  */
+  const ip = await actionIp();
+  if (await isThrottled("reset", ip, email)) return { sent: true };
+  await recordFailure("reset", ip, email);
 
   const url = await withSystem(async (c) => {
     await pruneAuthTokens(c).catch(() => {});

@@ -67,6 +67,7 @@ export const ar: Dict = {
     signInTitle: "تسجيل الدخول إلى كلينيكتي",
     signInSub: "نظام التشغيل الكامل لعيادتك",
     wrongCredentials: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    tooManyAttempts: "محاولات تسجيل دخول كثيرة. انتظر ١٥ دقيقة تقريباً ثم حاول مجدداً.",
     orDivider: "أو",
     signInGoogle: "المتابعة عبر Google",
     googleNoAccount: "حساب Google هذا غير مسجّل. اطلب من عيادتك دعوتك أولاً.",

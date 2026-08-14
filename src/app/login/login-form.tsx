@@ -52,7 +52,9 @@ export function LoginForm({ next, google, oauthError }: { next?: string; google?
                   : oauthError === "google_cancelled"
                     ? t.auth.googleCancelled
                     : t.auth.googleFailed
-              : t.auth.wrongCredentials}
+              : state?.error === "throttled"
+                ? t.auth.tooManyAttempts
+                : t.auth.wrongCredentials}
           </p>
         )}
         <Button type="submit" size="lg" loading={busy}>

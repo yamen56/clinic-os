@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
+import { actionIp, isThrottled, recordFailure, clearFailures } from "@/lib/auth-throttle";
 import { withSystem } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import {
@@ -40,6 +41,16 @@ export async function loginAction(
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "missing" };
 
+  /*
+    Checked before the password is, and before the user is even looked up.
+    Answering a throttled attempt with the same work as a real one would let the
+    response time say whether the account exists, and would keep bcrypt burning
+    CPU for whoever is guessing — a rate limit that costs us more than the
+    attacker is not one.
+  */
+  const ip = await actionIp();
+  if (await isThrottled("login", ip, email)) return { error: "throttled" };
+
   const user = await withSystem(async (c) => {
     const r = await c.query(
       "select id, password_hash, locale, is_super_admin from users where lower(email) = $1",
@@ -49,8 +60,13 @@ export async function loginAction(
   });
 
   if (!user || !verifyPassword(password, user.password_hash)) {
+    await recordFailure("login", ip, email);
+    // Still "credentials", never "no such account": the throttle must not become
+    // the enumeration oracle the generic message exists to prevent.
     return { error: "credentials" };
   }
+  // Proved the account is theirs — forget its failures, but not the address's.
+  await clearFailures("login", email);
 
   const ua = (await headers()).get("user-agent") ?? undefined;
   const token = await createSession(user.id, { userAgent: ua });
