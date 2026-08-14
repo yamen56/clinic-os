@@ -262,7 +262,7 @@ export function AiClient({
                 <ShieldCheck className="h-4.5 w-4.5 text-brand-600" />
                 {t.ai.guardrails}
               </h3>
-              <p className="text-[13px] leading-6 text-ink-600 text-ink-700">{t.ai.guardrailsBody}</p>
+              <p className="text-[13px] leading-6 text-ink-700">{t.ai.guardrailsBody}</p>
             </Card>
           </>
         )}

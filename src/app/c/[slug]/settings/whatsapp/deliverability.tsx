@@ -57,7 +57,7 @@ export function Deliverability({ stats: s }: { stats: DeliveryStats }) {
               {rows.map((r) => (
                 <div key={r.label} className="flex items-center gap-2 text-[13px]">
                   {r.icon}
-                  <dt className="flex-1 text-ink-600">{r.label}</dt>
+                  <dt className="flex-1 text-ink-700">{r.label}</dt>
                   <dd className="tnum font-medium text-ink-900">{r.n}</dd>
                 </div>
               ))}
@@ -66,7 +66,7 @@ export function Deliverability({ stats: s }: { stats: DeliveryStats }) {
         )}
 
         {s.unreachable > 0 && (
-          <p className="mt-4 rounded-lg bg-sunken p-3 text-[13px] text-ink-600">
+          <p className="mt-4 rounded-lg bg-sunken p-3 text-[13px] text-ink-700">
             {t.wa.unreachableNote.replace("{n}", String(s.unreachable))}
           </p>
         )}

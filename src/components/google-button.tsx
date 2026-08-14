@@ -26,7 +26,7 @@ export function GoogleButton({ next }: { next?: string }) {
   return (
     <a
       href={href}
-      className="flex h-11 w-full items-center justify-center gap-2.5 rounded-control border border-line bg-surface text-[14px] font-medium text-ink-800 transition-colors hover:bg-subtle"
+      className="flex h-11 w-full items-center justify-center gap-2.5 rounded-control border border-line bg-surface text-[14px] font-medium text-ink-900 transition-colors hover:bg-subtle"
     >
       <GoogleG />
       <span>{t.auth.signInGoogle}</span>

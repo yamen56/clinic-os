@@ -232,7 +232,7 @@ export function WhatsappClient({
               not a business API: volume to people who never wrote first is what
               gets numbers banned, and a banned number cannot be appealed.
             */}
-            <p className="mt-3 max-w-prose rounded-lg bg-sunken p-3 text-[13px] text-ink-600">
+            <p className="mt-3 max-w-prose rounded-lg bg-sunken p-3 text-[13px] text-ink-700">
               {t.wa.capWarning}
             </p>
           </div>
