@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/auth";
+import { requireAdminCap } from "@/lib/auth";
 import { withSystem } from "@/lib/db";
 import { audit } from "@/lib/audit";
 
 export async function createAnnouncementAction(data: { title: string; body: string }) {
-  const s = await requireSuperAdmin();
+  const s = await requireAdminCap("announcements");
   if (!data.title.trim()) return { error: "invalid" };
   await withSystem(async (c) => {
     const r = await c.query(
@@ -26,13 +26,13 @@ export async function createAnnouncementAction(data: { title: string; body: stri
 }
 
 export async function toggleAnnouncementAction(id: string, active: boolean) {
-  await requireSuperAdmin();
+  await requireAdminCap("announcements");
   await withSystem((c) => c.query(`update announcements set active = $2 where id = $1`, [id, active]));
   revalidatePath("/admin/announcements");
 }
 
 export async function deleteAnnouncementAction(id: string) {
-  await requireSuperAdmin();
+  await requireAdminCap("announcements");
   await withSystem((c) => c.query(`delete from announcements where id = $1`, [id]));
   revalidatePath("/admin/announcements");
 }

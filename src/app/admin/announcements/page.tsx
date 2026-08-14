@@ -1,11 +1,11 @@
-import { guardAdmin } from "@/lib/guard";
+import { guardAdminCap } from "@/lib/guard";
 import { withSystem } from "@/lib/db";
 import { getDict } from "@/lib/i18n";
 import { PageHeader } from "@/components/ui/card";
 import { AnnouncementsClient } from "./announcements-client";
 
 export default async function AnnouncementsPage() {
-  await guardAdmin();
+  await guardAdminCap("announcements");
   const t = await getDict();
   const rows = await withSystem(async (c) => {
     const r = await c.query(

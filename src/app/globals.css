@@ -64,6 +64,23 @@
   --color-night: #0b1220;
   --color-night-deep: #050810;
 
+  /*
+    The one colour data wears.
+
+    Every chart in the admin panel is single-series — a count over time, a
+    magnitude next to a clinic's name — so there is no categorical palette to
+    get wrong and no legend to read. That is a deliberate choice of *form*: two
+    measures on one axis is the mistake this avoids by never having the option.
+
+    Measured rather than picked. The neighbouring --color-cyan-ink reads as grey
+    once converted (OKLCh chroma 0.082, under the 0.1 floor), which is fine for
+    an icon and wrong for a bar: data ink has to separate from chrome ink. This
+    step clears the floor at 0.106 and holds 4.3:1 against the surface, so a
+    label sitting on it is still legible.
+  */
+  --color-chart: #3a6ea5;
+  --color-chart-soft: #e6edf5;
+
   /* Chart / accent series (§5) */
   --color-cyan: #5bc6e3;
   --color-cyan-ink: #1f6e85;

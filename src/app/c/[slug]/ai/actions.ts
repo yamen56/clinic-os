@@ -7,7 +7,7 @@ import { audit } from "@/lib/audit";
 import { z } from "zod";
 
 function canEdit(access: ClinicAccess): boolean {
-  return can(access, "automations");
+  return can(access, "ai");
 }
 
 const settingsSchema = z.object({

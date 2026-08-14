@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { guardAdmin } from "@/lib/guard";
+import { guardAdminCap } from "@/lib/guard";
 import { withSystem } from "@/lib/db";
 import { getDict, getLocale } from "@/lib/i18n";
 import { storageUsageBytes } from "@/lib/storage";
@@ -17,7 +17,7 @@ import { FileSignature, HardDrive } from "lucide-react";
  * neither gets looked at.
  */
 export default async function AdminDocumentsPage() {
-  await guardAdmin();
+  await guardAdminCap("documents");
   const t = await getDict();
   const locale = await getLocale();
 

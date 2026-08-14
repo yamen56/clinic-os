@@ -10,6 +10,12 @@ import {
   type CapabilityMap,
   type MemberRole,
 } from "./permissions";
+import { maskByFeatures, resolveFeatures, type FeatureMap } from "./features";
+import {
+  resolveAdminCapabilities,
+  type AdminCapability,
+  type AdminCapabilityMap,
+} from "./admin-permissions";
 
 const COOKIE = "cos_session";
 const SESSION_DAYS = 30;
@@ -35,6 +41,10 @@ export type ClinicProfile = {
    * but Clinicti's own workspace — see migrations/0030 and lib/i18n/vocab.
    */
   vocabulary: "medical" | "agency";
+  /** The modules the agency licensed to this clinic. See lib/features. */
+  features: FeatureMap;
+  /** Set once the agency has deleted it; the workspace is closed from then on. */
+  deletedAt: string | null;
 };
 
 export type Membership = ClinicProfile & {
@@ -62,6 +72,11 @@ export type SessionInfo = {
   };
   impersonatedBy: string | null;
   memberships: Membership[];
+  /**
+   * What this person may do in the agency panel. All false for everybody who
+   * is not a super admin, so a page can read it without checking the flag first.
+   */
+  adminCaps: AdminCapabilityMap;
 };
 
 export function hashPassword(pw: string): string {
@@ -124,7 +139,8 @@ const CLINIC_JSON = `json_build_object(
   'id', cl.id, 'name', cl.name, 'nameAr', cl.name_ar, 'slug', cl.slug,
   'timezone', cl.timezone, 'currency', cl.currency, 'brandColor', cl.brand_color,
   'logoPath', cl.logo_path, 'defaultLocale', cl.default_locale,
-  'subscriptionStatus', cl.subscription_status, 'vocabulary', cl.vocabulary
+  'subscriptionStatus', cl.subscription_status, 'vocabulary', cl.vocabulary,
+  'features', cl.features, 'deletedAt', cl.deleted_at
 )`;
 
 type SessionRow = {
@@ -135,6 +151,7 @@ type SessionRow = {
   full_name: string;
   phone_e164: string | null;
   is_super_admin: boolean;
+  admin_permissions: Record<string, unknown> | null;
   locale: "ar" | "en";
   settings: Record<string, unknown> | null;
   memberships: {
@@ -162,7 +179,8 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
   const rows = await readOneShot<SessionRow>(
     { isAdmin: true },
     `select s.id as session_id, s.impersonated_by,
-            u.id, u.email, u.full_name, u.phone_e164, u.is_super_admin, u.locale, u.settings,
+            u.id, u.email, u.full_name, u.phone_e164, u.is_super_admin, u.admin_permissions,
+            u.locale, u.settings,
             coalesce((
               select json_agg(json_build_object(
                 'memberId', cm.id, 'role', cm.role, 'isOwner', cm.is_owner,
@@ -181,6 +199,9 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
   return {
     sessionId: row.session_id,
     impersonatedBy: row.impersonated_by,
+    adminCaps: resolveAdminCapabilities(row.admin_permissions, {
+      isSuperAdmin: row.is_super_admin,
+    }),
     user: {
       id: row.id,
       email: row.email,
@@ -190,8 +211,14 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
       locale: row.locale,
       settings: row.settings ?? {},
     },
-    memberships: (row.memberships ?? []).map((m) => ({
+    memberships: (row.memberships ?? []).map((m) => {
+      // The column holds only the exceptions ({} for a clinic with everything),
+      // so it is expanded once here and the complete map is what every consumer
+      // sees — no screen has to remember that a missing key means "on".
+      const features = resolveFeatures(m.clinic.features as unknown as Record<string, unknown>);
+      return {
       ...m.clinic,
+      features,
       memberId: m.memberId,
       clinicId: m.clinic.id,
       clinicName: m.clinic.name,
@@ -199,8 +226,19 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
       clinicSlug: m.clinic.slug,
       role: m.role,
       isOwner: !!m.isOwner,
-      caps: resolveCapabilities(m.permissions, { isOwner: !!m.isOwner, role: m.role }),
-    })),
+      /*
+        Two gates, in this order. The member's own permissions resolve first and
+        are stored untouched, then the clinic's licence masks whatever it does
+        not include — so switching a module off hides it from the owner too, and
+        switching it back on returns everybody to exactly the access they had
+        rather than to a blank slate somebody has to re-tick.
+      */
+      caps: maskByFeatures(
+        resolveCapabilities(m.permissions, { isOwner: !!m.isOwner, role: m.role }),
+        features
+      ),
+      };
+    }),
   };
 });
 
@@ -229,7 +267,7 @@ export function safeNextPath(next: string | undefined | null): string | null {
 }
 
 export class AuthError extends Error {
-  constructor(public code: "unauthenticated" | "forbidden" | "suspended") {
+  constructor(public code: "unauthenticated" | "forbidden" | "suspended" | "deleted") {
     super(code);
   }
 }
@@ -244,6 +282,24 @@ export async function requireSuperAdmin(): Promise<SessionInfo> {
   const s = await requireUser();
   if (!s.user.isSuperAdmin) throw new AuthError("forbidden");
   return s;
+}
+
+/**
+ * A super admin who may do a specific thing in the agency panel.
+ *
+ * The spelling every admin server action uses, for the same reason `can()`
+ * exists on the clinic side: a mutation that only checks `requireSuperAdmin`
+ * is a mutation any limited admin can call directly, and the difference between
+ * the two calls has to be visible at a glance in review.
+ */
+export async function requireAdminCap(cap: AdminCapability): Promise<SessionInfo> {
+  const s = await requireSuperAdmin();
+  if (!s.adminCaps[cap]) throw new AuthError("forbidden");
+  return s;
+}
+
+export function canAdmin(s: SessionInfo, cap: AdminCapability): boolean {
+  return s.adminCaps[cap] === true;
 }
 
 export type ClinicAccess = {
@@ -276,6 +332,14 @@ export async function requireClinic(slug: string): Promise<ClinicAccess> {
   const s = await requireUser();
   const m = s.memberships.find((x) => x.clinicSlug === slug);
   if (m) {
+    /*
+      Deleted stops everybody, the agency included. The rows are still there for
+      the length of the restore window, but the workspace is not a place anyone
+      works any more — and a support session inside a clinic that is on its way
+      to being purged would produce audit entries, messages and documents that
+      are about to be destroyed. Restoring it is a button in /admin.
+    */
+    if (m.deletedAt) throw new AuthError("deleted");
     if (m.subscriptionStatus === "suspended" && !s.user.isSuperAdmin) throw new AuthError("suspended");
     return {
       session: s,
@@ -299,15 +363,23 @@ export async function requireClinic(slug: string): Promise<ClinicAccess> {
       return (r.rows[0]?.clinic ?? null) as ClinicProfile | null;
     });
     if (!clinic) throw new AuthError("forbidden");
+    if (clinic.deletedAt) throw new AuthError("deleted");
+    const features = resolveFeatures(clinic.features as unknown as Record<string, unknown>);
     return {
       session: s,
       clinicId: clinic.id,
       clinicSlug: slug,
-      clinic,
+      clinic: { ...clinic, features },
       role: "other",
       isOwner: true,
       memberId: null,
-      caps: allCapabilities(),
+      /*
+        Masked like anybody else's. Support mode exists to see what the clinic
+        sees; an agency screen showing a module the customer does not have is
+        how you end up walking somebody through a page they cannot open. The
+        licence is changed from /admin, not from inside the workspace.
+      */
+      caps: maskByFeatures(allCapabilities(), features),
       isImpersonating: true,
     };
   }

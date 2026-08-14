@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import {
   AuthError,
   can,
+  requireAdminCap,
   requireClinic,
   requireSuperAdmin,
   requireUser,
@@ -9,6 +10,7 @@ import {
   type SessionInfo,
 } from "./auth";
 import type { Capability } from "./permissions";
+import type { AdminCapability } from "./admin-permissions";
 
 /** Page-level guards: translate auth failures into redirects. */
 
@@ -29,11 +31,31 @@ export async function guardAdmin(): Promise<SessionInfo> {
   }
 }
 
+/**
+ * An admin page that needs a specific agency capability. Sends anyone without
+ * it back to the clinic list, which every admin can see — the same rule as
+ * `guardCap`, and for the same reason.
+ */
+export async function guardAdminCap(cap: AdminCapability): Promise<SessionInfo> {
+  try {
+    return await requireAdminCap(cap);
+  } catch (e) {
+    if (e instanceof AuthError && e.code === "forbidden") {
+      const s = await requireUser().catch(() => null);
+      redirect(s?.user.isSuperAdmin ? "/admin" : "/");
+    }
+    redirect("/login");
+  }
+}
+
 export async function guardClinic(slug: string): Promise<ClinicAccess> {
   try {
     return await requireClinic(slug);
   } catch (e) {
     if (e instanceof AuthError) {
+      // Same page, different sentence: one is a bill to settle, the other is a
+      // workspace that is not coming back unless the agency restores it.
+      if (e.code === "deleted") redirect("/suspended?removed=1");
       if (e.code === "suspended") redirect("/suspended");
       if (e.code === "forbidden") redirect("/");
     }

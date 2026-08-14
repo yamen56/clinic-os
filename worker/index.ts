@@ -18,7 +18,18 @@ import { startStatusHeartbeat } from "./status";
 
 async function resumeDesiredSessions() {
   const rows = await withSystem(async (c) => {
-    const r = await c.query(`select clinic_id from whatsapp_sessions where desired`);
+    /*
+      Joined to clinics so a deleted one is skipped. Deleting a clinic clears
+      `desired` in the same transaction, but this loop runs every fifteen
+      seconds against whatever the column says — and a session that reconnected
+      from a stale row would put a closed clinic's number back online, sending
+      on behalf of people who can no longer sign in to see it.
+    */
+    const r = await c.query(
+      `select ws.clinic_id from whatsapp_sessions ws
+         join clinics cl on cl.id = ws.clinic_id
+        where ws.desired and cl.deleted_at is null`
+    );
     return r.rows as { clinic_id: string }[];
   });
   for (const row of rows) {

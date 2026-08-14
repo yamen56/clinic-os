@@ -27,6 +27,7 @@ export const CAPABILITIES = [
   "invoices",
   "campaigns",
   "automations",
+  "ai",
   "settings",
   "settings.clinic",
   "settings.staff",
@@ -105,8 +106,18 @@ export function resolveCapabilities(
 
   let caps: CapabilityMap;
   if (stored.level === "custom" && stored.caps && typeof stored.caps === "object") {
+    const ticked = stored.caps as Record<string, unknown>;
     caps = empty();
-    for (const c of CAPABILITIES) if ((stored.caps as Record<string, unknown>)[c] === true) caps[c] = true;
+    for (const c of CAPABILITIES) if (ticked[c] === true) caps[c] = true;
+    /*
+      `ai` was split out of `automations` after these rows were written, so a
+      map saved before the split has no opinion about it — only a `true` under
+      `automations`, which at the time meant both screens. Reading that silence
+      as a denial would have taken the AI agent away from every member who had
+      it, in every clinic, on deploy. An explicit false is still honoured; only
+      the absence inherits.
+    */
+    if (!("ai" in ticked) && caps.automations) caps.ai = true;
   } else {
     /*
       No level recorded: a row written before this model existed, or one whose
@@ -116,6 +127,7 @@ export function resolveCapabilities(
     caps = capabilitiesFor(ROLE_DEFAULTS[opts.role] ?? []);
     if (stored.automations === true) {
       caps.automations = true;
+      caps.ai = true;
       caps.campaigns = true;
     }
   }
@@ -155,5 +167,6 @@ export const CAPABILITY_GROUPS: { section: Capability; actions: Capability[] }[]
   { section: "invoices", actions: [] },
   { section: "campaigns", actions: [] },
   { section: "automations", actions: [] },
+  { section: "ai", actions: [] },
   { section: "settings", actions: ["settings.clinic", "settings.staff"] },
 ];

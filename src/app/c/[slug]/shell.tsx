@@ -127,7 +127,7 @@ export function Shell({
     { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
     { key: "automations", href: `${base}/automations`, show: caps.automations },
-    { key: "aiAgent", href: `${base}/ai`, show: caps.automations },
+    { key: "aiAgent", href: `${base}/ai`, show: caps.ai },
     { key: "settings", href: `${base}/settings`, show: caps.settings },
   ];
   const visible = items.filter((i) => i.show);

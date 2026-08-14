@@ -34,19 +34,39 @@ export default async function Home() {
             </Card>
           </Link>
         )}
-        {s.memberships.map((m) => (
-          <Link key={m.clinicId} href={`/c/${m.clinicSlug}`}>
-            <Card className="flex items-center gap-3 p-4 transition-shadow hover:shadow-pop">
-              <Avatar name={m.clinicName} />
-              <div>
-                <div className="font-medium">{m.clinicNameAr || m.clinicName}</div>
-                <div className="text-sm text-ink-500">
-                  {m.isOwner ? t.staff.owner : t.staff.roles[m.role]}
+        {s.memberships.map((m) => {
+          /*
+            A removed workspace stays on this list rather than vanishing —
+            somebody who worked there should see what happened to it, not find
+            their clinic quietly missing — but it is not a link. Clicking
+            through would only reach the same message with a page load in
+            between.
+          */
+          if (m.deletedAt) {
+            return (
+              <Card key={m.clinicId} className="flex items-center gap-3 p-4 opacity-60">
+                <Avatar name={m.clinicName} />
+                <div>
+                  <div className="font-medium">{m.clinicNameAr || m.clinicName}</div>
+                  <div className="text-sm text-ink-500">{t.auth.removedTitle}</div>
                 </div>
-              </div>
-            </Card>
-          </Link>
-        ))}
+              </Card>
+            );
+          }
+          return (
+            <Link key={m.clinicId} href={`/c/${m.clinicSlug}`}>
+              <Card className="flex items-center gap-3 p-4 transition-shadow hover:shadow-pop">
+                <Avatar name={m.clinicName} />
+                <div>
+                  <div className="font-medium">{m.clinicNameAr || m.clinicName}</div>
+                  <div className="text-sm text-ink-500">
+                    {m.isOwner ? t.staff.owner : t.staff.roles[m.role]}
+                  </div>
+                </div>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
     </main>
   );

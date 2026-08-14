@@ -13,7 +13,14 @@ export async function apiClinic(slug: string): Promise<
     return { ok: true, access };
   } catch (e) {
     const code = e instanceof AuthError ? e.code : "unauthenticated";
-    const status = code === "forbidden" ? 403 : code === "suspended" ? 402 : 401;
+    /*
+      403 for a deleted clinic, not 401. A 401 tells the client its credentials
+      are stale and to try again with better ones, which would send an
+      already-signed-in browser round the login loop; the credentials are fine,
+      the clinic is gone.
+    */
+    const status =
+      code === "forbidden" || code === "deleted" ? 403 : code === "suspended" ? 402 : 401;
     return { ok: false, res: NextResponse.json({ error: code }, { status }) };
   }
 }

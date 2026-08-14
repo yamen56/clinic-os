@@ -41,6 +41,7 @@ const SUITES = [
   ["pdf: browser released when idle", "scripts/qa-pdf-idle.ts"],
   ["backup: dump and restore", "scripts/qa-backup.ts"],
   ["access: what each member can reach", "scripts/qa-access.ts"],
+  ["agency: modules, limited admins, deleting a clinic", "scripts/qa-agency-control.ts"],
 ] as const;
 
 function run(script: string): Promise<{ ok: boolean; out: string }> {

@@ -19,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </span>
               {t.admin.title}
             </Link>
-            <AdminNav />
+            <AdminNav caps={s.adminCaps} />
           </div>
           <div className="flex items-center gap-2">
             <LanguageToggle compact />

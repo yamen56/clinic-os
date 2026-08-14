@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/misc";
 import { ClinicAdminPanel } from "./clinic-admin-panel";
 import { OwnerInvite } from "./owner-invite";
+import { DangerZone } from "./danger-zone";
+import { FEATURES, resolveFeatures } from "@/lib/features";
 import { CheckCircle2, Circle } from "lucide-react";
 
 const CHECKLIST: { key: string; en: string; ar: string }[] = [
@@ -22,7 +24,7 @@ export default async function AdminClinicDetail({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  await guardAdmin();
+  const s = await guardAdmin();
   const { slug } = await params;
   const t = await getDict();
   const locale = await getLocale();
@@ -64,6 +66,8 @@ export default async function AdminClinicDetail({
   });
   if (!data) notFound();
   const { clinic, members, stats } = data;
+  const features = resolveFeatures(clinic.features);
+  const missing = FEATURES.filter((f) => !features[f]);
 
   const checklistState: Record<string, boolean> = {
     /*
@@ -89,13 +93,20 @@ export default async function AdminClinicDetail({
           </span>
         }
         sub={`/${clinic.slug} · ${clinic.timezone}`}
-        action={<ClinicAdminPanel clinic={{
-          id: clinic.id,
-          slug: clinic.slug,
-          subscriptionStatus: clinic.subscription_status,
-          plan: clinic.plan,
-          planPrice: Number(clinic.plan_price),
-        }} />}
+        action={
+          <ClinicAdminPanel
+            caps={s.adminCaps}
+            clinic={{
+              id: clinic.id,
+              slug: clinic.slug,
+              subscriptionStatus: clinic.subscription_status,
+              plan: clinic.plan,
+              planPrice: Number(clinic.plan_price),
+              features,
+              deleted: !!clinic.deleted_at,
+            }}
+          />
+        }
       />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
@@ -132,6 +143,28 @@ export default async function AdminClinicDetail({
               <Badge status={clinic.wa_status === "connected" ? "ok" : "danger"} dot>
                 {clinic.wa_status ?? "—"}
               </Badge>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="shrink-0 text-ink-500">{t.admin.features}</span>
+              <span className="text-end">
+                {missing.length === 0 ? (
+                  <Badge status="ok">{t.admin.featuresAll}</Badge>
+                ) : (
+                  /*
+                    What is missing, named — not "6 of 8". The count answers a
+                    question nobody has; the list answers the one the agency
+                    actually opens this page with, which is why the customer
+                    cannot see a screen they were told about.
+                  */
+                  <span className="flex flex-wrap justify-end gap-1">
+                    {missing.map((f) => (
+                      <Badge key={f} status="cancelled">
+                        {t.caps[f]}
+                      </Badge>
+                    ))}
+                  </span>
+                )}
+              </span>
             </div>
           </div>
         </Card>
@@ -170,7 +203,8 @@ export default async function AdminClinicDetail({
             ))}
             {/* Only while it can still be accepted; once a password exists an
                 invitation would be a reset link nobody asked for. */}
-            {members.some((m) => m.is_owner && m.invite_pending) && (
+            {s.adminCaps["clinics.edit"] &&
+              members.some((m) => m.is_owner && m.invite_pending) && (
               <li className="pt-1">
                 <OwnerInvite clinicId={clinic.id as string} />
               </li>
@@ -191,6 +225,16 @@ export default async function AdminClinicDetail({
           </Card>
         ))}
       </div>
+
+      {s.adminCaps["clinics.delete"] && (
+        <DangerZone
+          clinic={{
+            id: clinic.id,
+            slug: clinic.slug,
+            deletedAt: clinic.deleted_at ? new Date(clinic.deleted_at).toISOString() : null,
+          }}
+        />
+      )}
     </>
   );
 }

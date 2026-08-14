@@ -1,4 +1,4 @@
-import { guardAdmin } from "@/lib/guard";
+import { guardAdminCap } from "@/lib/guard";
 import { withSystem } from "@/lib/db";
 import { getDict, getLocale } from "@/lib/i18n";
 import { fmtRelative } from "@/lib/dates";
@@ -26,7 +26,7 @@ async function workerHealth(): Promise<{ ok: boolean; sessions: { clinicId: stri
 }
 
 export default async function MonitoringPage() {
-  await guardAdmin();
+  await guardAdminCap("monitoring");
   const t = await getDict();
   const locale = await getLocale();
   const health = await workerHealth();

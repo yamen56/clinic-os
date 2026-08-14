@@ -8,6 +8,9 @@ import { deliveryWatch } from "./delivery-watch";
 import { expirePastWaitlist, requeueStaleOffers } from "./waitlist";
 import { sessions } from "./wa/session";
 import { resolvePendingLids } from "./wa/lid-mapping";
+import { deleteClinicFiles } from "../src/lib/storage";
+import { RESTORE_WINDOW_DAYS } from "../src/lib/clinic-lifecycle";
+import { licensed } from "./features";
 
 /**
  * Threads that arrived addressed by identity rather than number, every ten
@@ -53,7 +56,8 @@ async function appointmentReminders() {
   await withSystem(async (c) => {
     const autos = await c.query(
       `select a.id, a.clinic_id, a.trigger_config from automations a
-       where a.active and a.trigger_type = 'before_appointment'`
+       join clinics cl on cl.id = a.clinic_id
+       where a.active and a.trigger_type = 'before_appointment' and ${licensed("automations")}`
     );
     for (const auto of autos.rows) {
       const hours = Number((auto.trigger_config ?? {}).hours ?? 24);
@@ -89,7 +93,7 @@ async function recallReminders() {
     const autos = await c.query(
       `select a.id, a.clinic_id, a.trigger_config, cl.timezone
        from automations a join clinics cl on cl.id = a.clinic_id
-       where a.active and a.trigger_type = 'after_last_visit'`
+       where a.active and a.trigger_type = 'after_last_visit' and ${licensed("automations")}`
     );
     for (const auto of autos.rows) {
       const localNow = DateTime.now().setZone(auto.timezone);
@@ -127,7 +131,7 @@ async function birthdays() {
     const autos = await c.query(
       `select a.id, a.clinic_id, cl.timezone from automations a
        join clinics cl on cl.id = a.clinic_id
-       where a.active and a.trigger_type = 'birthday'`
+       where a.active and a.trigger_type = 'birthday' and ${licensed("automations")}`
     );
     for (const auto of autos.rows) {
       const localNow = DateTime.now().setZone(auto.timezone);
@@ -159,7 +163,7 @@ async function unpaidInvoices() {
     const autos = await c.query(
       `select a.id, a.clinic_id, a.trigger_config, cl.timezone from automations a
        join clinics cl on cl.id = a.clinic_id
-       where a.active and a.trigger_type = 'invoice_unpaid'`
+       where a.active and a.trigger_type = 'invoice_unpaid' and ${licensed("automations")}`
     );
     for (const auto of autos.rows) {
       const localNow = DateTime.now().setZone(auto.timezone);
@@ -213,6 +217,66 @@ async function dailyBackup() {
   );
 }
 
+/**
+ * Destroys clinics whose restore window has closed.
+ *
+ * This is the only place in the product that performs an irreversible delete of
+ * a tenant, and it deliberately lives in the worker rather than behind a button.
+ * A deletion that happens on a schedule is one nobody has to remember to do, and
+ * — more to the point — one that cannot be done in anger: sixty days pass, with
+ * the clinic sitting visibly in the deleted list and a countdown on its page,
+ * before anything is destroyed.
+ *
+ * Once an hour, not once a minute. Nothing about a sixty-day deadline needs
+ * minute precision, and the query would otherwise scan for work 1,440 times a
+ * day to find none.
+ *
+ * Files first, then the row. The row is the only record that this clinic ever
+ * existed, so losing it before the bucket is cleared strands a folder of patient
+ * scans that nobody can attribute or find. The other order costs at worst a
+ * retry an hour later: the clinic is still deleted, still due, still here.
+ */
+async function purgeDeletedClinics() {
+  const now = new Date();
+  if (now.getUTCMinutes() !== 7) return;
+
+  const due = await withSystem(async (c) => {
+    const r = await c.query(
+      `select id, slug, name from clinics
+        where deleted_at is not null
+          and deleted_at < now() - ($1 || ' days')::interval
+        limit 5`,
+      [String(RESTORE_WINDOW_DAYS)]
+    );
+    return r.rows as { id: string; slug: string; name: string }[];
+  });
+
+  for (const clinic of due) {
+    // One at a time, and never inside a shared transaction: a cascade across
+    // forty-nine tables is a long-running statement, and batching several would
+    // hold locks over rows other clinics' requests are reading.
+    const files = await deleteClinicFiles(clinic.id).catch((e) => {
+      console.error(`[purge ${clinic.slug}] storage`, (e as Error).message);
+      return -1;
+    });
+    // A storage failure stops the row from going: deleting it now would lose
+    // the only handle on those files forever. Next hour tries again.
+    if (files < 0) continue;
+
+    await withSystem(async (c) => {
+      await c.query(`delete from clinics where id = $1`, [clinic.id]);
+      // clinic_id stays null — audit_log cascades with the clinic, so an entry
+      // filed against it would be destroyed by the delete it records.
+      await c.query(
+        `insert into audit_log (action, entity, entity_id, detail)
+         values ('admin.clinic.purge.auto', 'clinic', $1, $2)`,
+        [clinic.id, JSON.stringify({ slug: clinic.slug, name: clinic.name, filesDeleted: files })]
+      );
+    });
+    console.log(`[purge] destroyed ${clinic.slug} (${files} files)`);
+  }
+}
+
 export function startScheduler() {
   const tick = async () => {
     for (const fn of [
@@ -225,6 +289,7 @@ export function startScheduler() {
       sweepUnsignedDocuments,
       sendPendingDigest,
       dailyBackup,
+      purgeDeletedClinics,
       sweepLidNumbers,
       deliveryWatch,
       requeueStaleOffers,

@@ -1,4 +1,4 @@
-import { guardAdmin } from "@/lib/guard";
+import { guardAdminCap } from "@/lib/guard";
 import { withSystem } from "@/lib/db";
 import { getDict } from "@/lib/i18n";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Workflow, BookOpen } from "lucide-react";
 
 export default async function DefaultsPage() {
-  await guardAdmin();
+  await guardAdminCap("defaults");
   const t = await getDict();
 
   const data = await withSystem(async (c) => {

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin, createSession, setSessionCookie } from "@/lib/auth";
+import { requireSuperAdmin, requireAdminCap, createSession, setSessionCookie } from "@/lib/auth";
 import { createAuthToken } from "@/lib/invites";
 import { sendEmail, renderEmail } from "@/lib/email";
 import { appUrl } from "@/lib/urls";
@@ -11,7 +11,27 @@ import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { sanitizeHtml } from "@/lib/esign/render";
 import { RECIPES_ON_BY_DEFAULT } from "@/lib/esign/constants";
+import { deleteClinicFiles } from "@/lib/storage";
+import { FEATURES, toFeatureSetting, type Feature, type FeatureMap } from "@/lib/features";
+import { RESTORE_WINDOW_DAYS } from "@/lib/clinic-lifecycle";
 import { z } from "zod";
+
+/**
+ * The licence, as it arrives from the form.
+ *
+ * A comma-separated list of the modules that are *on*, because that is what an
+ * HTML form gives you for free and because the alternative — a checkbox per
+ * feature, absent when unticked — makes "everything off" indistinguishable from
+ * "an old client that did not send the field". An explicit list of one is still
+ * a list; a missing field is rejected below.
+ */
+const featureListSchema = z
+  .string()
+  .default("")
+  .transform((raw): FeatureMap => {
+    const on = new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
+    return Object.fromEntries(FEATURES.map((f) => [f, on.has(f)])) as FeatureMap;
+  });
 
 const createClinicSchema = z.object({
   name: z.string().min(2).max(80),
@@ -26,6 +46,7 @@ const createClinicSchema = z.object({
   planPrice: z.coerce.number().min(0).default(0),
   ownerName: z.string().min(2).max(80),
   ownerEmail: z.string().email(),
+  features: featureListSchema,
 });
 
 export type CreateClinicResult = { error?: string; fieldErrors?: Record<string, string> } | null;
@@ -66,7 +87,7 @@ export async function createClinicAction(
   _prev: CreateClinicResult,
   formData: FormData
 ): Promise<CreateClinicResult> {
-  const s = await requireSuperAdmin();
+  const s = await requireAdminCap("clinics.create");
   const parsed = createClinicSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -88,9 +109,14 @@ export async function createClinicAction(
       if (dup.rowCount) throw new Error("slug_taken");
 
       const clinic = await c.query(
-        `insert into clinics (name, name_ar, slug, phone_e164, plan, plan_price)
-         values ($1, $2, $3, $4, $5, $6) returning id, slug`,
-        [d.name, d.nameAr || null, d.slug, phone, d.plan, d.planPrice]
+        `insert into clinics (name, name_ar, slug, phone_e164, plan, plan_price, features)
+         values ($1, $2, $3, $4, $5, $6, $7) returning id, slug`,
+        // Written out in full rather than as "only the exceptions", so the row
+        // records what was actually sold on the day it was sold. A feature added
+        // to the product next year then arrives switched *on* for this clinic —
+        // the same rule every existing clinic gets — and the agency turns it off
+        // deliberately if it is not part of the deal.
+        [d.name, d.nameAr || null, d.slug, phone, d.plan, d.planPrice, JSON.stringify(toFeatureSetting(d.features))]
       );
       clinicId = clinic.rows[0].id as string;
 
@@ -210,7 +236,7 @@ export async function createClinicAction(
         action: "admin.clinic.create",
         entity: "clinic",
         entityId: clinicId,
-        detail: { name: d.name, slug: d.slug },
+        detail: { name: d.name, slug: d.slug, features: toFeatureSetting(d.features) },
       });
       return clinic.rows[0].slug as string;
     });
@@ -286,7 +312,7 @@ async function sendOwnerInvite(
 export async function resendOwnerInviteAction(
   clinicId: string
 ): Promise<{ error?: string; url?: string; emailed?: boolean }> {
-  const s = await requireSuperAdmin();
+  const s = await requireAdminCap("clinics.edit");
   const owner = await withSystem(async (c) => {
     const r = await c.query(
       `select u.id, u.email, u.full_name, u.password_hash
@@ -326,7 +352,7 @@ export async function updateSubscriptionAction(
   clinicId: string,
   data: { status?: string; plan?: string; planPrice?: number }
 ) {
-  const s = await requireSuperAdmin();
+  const s = await requireAdminCap("clinics.edit");
   const status = data.status;
   if (status && !["trial", "active", "past_due", "suspended"].includes(status)) return;
   await withSystem(async (c) => {
@@ -350,6 +376,264 @@ export async function updateSubscriptionAction(
   revalidatePath("/admin");
 }
 
+/* -------------------------------------------------------- clinic licensing */
+
+/**
+ * Changes which modules a clinic has.
+ *
+ * Nothing is deleted when a module is switched off — the automations, the
+ * campaigns and the documents stay exactly where they are, and reappear intact
+ * if it is switched back on. This is a licence, not an uninstall: a clinic that
+ * lapses for a month and renews should find its work waiting for it, and an
+ * agency that had to warn "this will erase your automations" would never dare
+ * use the switch at all.
+ *
+ * It takes effect on the clinic's next page load, because capabilities are
+ * resolved per request from the session query rather than cached on the
+ * session row.
+ */
+export async function updateClinicFeaturesAction(
+  clinicId: string,
+  features: Record<string, boolean>
+): Promise<{ error?: string }> {
+  const s = await requireAdminCap("clinics.features");
+
+  // Whatever the client sent, only known keys are stored and every one of them
+  // is written explicitly — a partial map would leave old keys behind and make
+  // the stored row disagree with the screen that wrote it.
+  const clean = Object.fromEntries(
+    FEATURES.map((f) => [f, features[f] === true])
+  ) as Record<Feature, boolean>;
+
+  await withSystem(async (c) => {
+    const r = await c.query(
+      `update clinics set features = $2, updated_at = now()
+        where id = $1 and deleted_at is null
+        returning slug`,
+      [clinicId, JSON.stringify(clean)]
+    );
+    if (!r.rowCount) return;
+    await audit(c, {
+      clinicId,
+      userId: s.user.id,
+      action: "admin.clinic.features",
+      entity: "clinic",
+      entityId: clinicId,
+      detail: clean,
+    });
+  });
+
+  revalidatePath("/admin");
+  return {};
+}
+
+/* --------------------------------------------------------- clinic deletion */
+
+const WORKER_URL = process.env.WORKER_URL || "http://localhost:4020";
+const INTERNAL_SECRET =
+  process.env.INTERNAL_API_SECRET || "dev-internal-secret-change-in-production";
+
+/**
+ * Drops the clinic's WhatsApp connection.
+ *
+ * Best effort on purpose, and never allowed to fail the caller: a worker that
+ * is down must not be able to block a deletion, and the session cannot outlive
+ * it in any case — `desired` is cleared in the same transaction, and the
+ * worker's resume loop skips deleted clinics. This is here so the phone stops
+ * receiving messages within seconds rather than at the next worker restart.
+ */
+async function disconnectWhatsApp(clinicId: string): Promise<void> {
+  await fetch(`${WORKER_URL}/sessions/${clinicId}/disconnect`, {
+    method: "POST",
+    headers: { "x-internal-secret": INTERNAL_SECRET },
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => {});
+}
+
+/**
+ * Deletes a clinic — reversibly, for the length of the restore window.
+ *
+ * What this does *not* do is `delete from clinics`. Every foreign key into that
+ * table cascades, all forty-nine of them, so the real delete takes the patient
+ * files, the appointment history, the signed consent forms and the invoices
+ * with it in one statement and leaves nothing to apologise with. That is the
+ * right outcome for a clinic that has genuinely gone, and an unrecoverable
+ * accident for a mis-click, and until now they were the same keystroke.
+ *
+ * So the clinic goes dark instead: nobody can sign in (see `requireClinic`),
+ * WhatsApp disconnects, queued outbound is dropped, and it moves to the deleted
+ * list with a countdown. The worker performs the irreversible part once the
+ * window closes.
+ *
+ * The typed slug is not decoration. It is the difference between "I clicked the
+ * wrong row" and "I meant this clinic", and it is checked on the server because
+ * a confirmation the client can skip is not a confirmation.
+ */
+export async function deleteClinicAction(
+  clinicId: string,
+  confirmSlug: string
+): Promise<{ error?: string }> {
+  const s = await requireAdminCap("clinics.delete");
+
+  const result = await withSystem(async (c) => {
+    const r = await c.query(
+      `select slug, name, deleted_at from clinics where id = $1`,
+      [clinicId]
+    );
+    const clinic = r.rows[0] as { slug: string; name: string; deleted_at: Date | null } | undefined;
+    if (!clinic) return { error: "not_found" as const };
+    if (clinic.deleted_at) return { error: "already_deleted" as const };
+    if (clinic.slug !== confirmSlug.trim()) return { error: "slug_mismatch" as const };
+
+    await c.query(
+      `update clinics set deleted_at = now(), deleted_by = $2, updated_at = now() where id = $1`,
+      [clinicId, s.user.id]
+    );
+
+    /*
+      Sessions are deliberately left alone.
+
+      The instinct is to sign everybody out, and it is wrong here. A session is
+      per *user*, not per clinic, so deleting them would also sign out a
+      receptionist who works at a second clinic that has nothing to do with
+      this — for no gain, because the flag above already closes the door: every
+      screen under /c/[slug] goes through `requireClinic`, every API route
+      through `apiClinic`, and both now refuse a deleted clinic on the next
+      request. There is no window in which the old cookie is worth anything.
+    */
+    await c.query(`update whatsapp_sessions set desired = false where clinic_id = $1`, [clinicId]);
+    // Anything the worker has not sent yet never should be — a reminder landing
+    // on a patient's phone the day after their clinic closed is worse than none.
+    await c.query(
+      `update messages set status = 'cancelled'
+        where clinic_id = $1 and status = 'queued'`,
+      [clinicId]
+    );
+    await c.query(`delete from jobs where clinic_id = $1 and status = 'pending'`, [clinicId]);
+
+    /*
+      Audited with clinic_id null. `audit_log.clinic_id` cascades like everything
+      else, so filing this against the clinic would mean the record of the
+      deletion is destroyed by the deletion it records. The slug and name go in
+      `detail` instead, where they survive the purge.
+    */
+    await audit(c, {
+      userId: s.user.id,
+      action: "admin.clinic.delete",
+      entity: "clinic",
+      entityId: clinicId,
+      detail: { slug: clinic.slug, name: clinic.name, restoreWindowDays: RESTORE_WINDOW_DAYS },
+    });
+    return { slug: clinic.slug };
+  });
+
+  if ("error" in result) return result;
+
+  await disconnectWhatsApp(clinicId);
+  revalidatePath("/admin");
+  return {};
+}
+
+/** Puts a deleted clinic back. Everything is still there; only the flag moves. */
+export async function restoreClinicAction(clinicId: string): Promise<{ error?: string }> {
+  const s = await requireAdminCap("clinics.delete");
+
+  const ok = await withSystem(async (c) => {
+    const r = await c.query(
+      `update clinics set deleted_at = null, deleted_by = null, updated_at = now()
+        where id = $1 and deleted_at is not null
+        returning slug, name`,
+      [clinicId]
+    );
+    if (!r.rowCount) return false;
+    await audit(c, {
+      clinicId,
+      userId: s.user.id,
+      action: "admin.clinic.restore",
+      entity: "clinic",
+      entityId: clinicId,
+      detail: { slug: r.rows[0].slug, name: r.rows[0].name },
+    });
+    return true;
+  });
+  if (!ok) return { error: "not_found" };
+
+  /*
+    WhatsApp is deliberately left disconnected. Reconnecting a Baileys session
+    unattended means a clinic's number silently starts sending again — possibly
+    weeks of queued automation logic later — with nobody at the clinic aware it
+    came back. The owner reconnects it from their own settings, which is a
+    scan they will be present for.
+  */
+  revalidatePath("/admin");
+  return {};
+}
+
+/**
+ * The irreversible one.
+ *
+ * Normally the worker does this on the window expiring; this is the manual
+ * override for a clinic that was never real — a demo, a typo, a test tenant —
+ * where waiting sixty days to tidy up is silly. Same guard as the delete: the
+ * clinic must already be deleted, and the slug must be typed again. Deleting
+ * something twice on purpose is about as much friction as this deserves.
+ */
+export async function purgeClinicAction(
+  clinicId: string,
+  confirmSlug: string
+): Promise<{ error?: string }> {
+  const s = await requireAdminCap("clinics.delete");
+
+  const clinic = await withSystem(async (c) => {
+    const r = await c.query(`select slug, name, deleted_at from clinics where id = $1`, [clinicId]);
+    return r.rows[0] as { slug: string; name: string; deleted_at: Date | null } | undefined;
+  });
+  if (!clinic) return { error: "not_found" };
+  // Never a one-step destruction. Deleting first is what gives anybody the
+  // chance to notice, and skipping straight here would put the cascade back
+  // behind a single button.
+  if (!clinic.deleted_at) return { error: "not_deleted" };
+  if (clinic.slug !== confirmSlug.trim()) return { error: "slug_mismatch" };
+
+  await purgeClinic(clinicId, clinic.slug, clinic.name, s.user.id);
+  revalidatePath("/admin");
+  return {};
+}
+
+/**
+ * Destroys a clinic and everything filed under it.
+ *
+ * Files first, row second, and the order matters: the row is the only thing
+ * that says this clinic ever existed, so losing it before the bucket is cleared
+ * would leave a folder of patient scans nobody can attribute or find. Doing it
+ * the other way round costs at worst a retry — the delete is idempotent, and a
+ * clinic whose files went but whose row survived is still in the deleted list,
+ * still due to be purged.
+ */
+async function purgeClinic(
+  clinicId: string,
+  slug: string,
+  name: string,
+  byUserId: string | null
+): Promise<void> {
+  const files = await deleteClinicFiles(clinicId).catch((e) => {
+    console.error("[purge] storage", (e as Error).message);
+    return -1;
+  });
+
+  await withSystem(async (c) => {
+    // One statement, forty-nine cascades.
+    await c.query(`delete from clinics where id = $1`, [clinicId]);
+    await audit(c, {
+      userId: byUserId,
+      action: "admin.clinic.purge",
+      entity: "clinic",
+      entityId: clinicId,
+      detail: { slug, name, filesDeleted: files },
+    });
+  });
+}
+
 /** Ends support mode: drops the impersonation session and issues a clean admin one. */
 export async function exitImpersonationAction() {
   const s = await requireSuperAdmin();
@@ -370,9 +654,11 @@ export async function exitImpersonationAction() {
 
 /** Support-mode entry: a new audited session that keeps the admin identity attached. */
 export async function impersonateAction(clinicSlug: string) {
-  const s = await requireSuperAdmin();
+  const s = await requireAdminCap("clinics.impersonate");
   await withSystem(async (c) => {
-    const r = await c.query("select id from clinics where slug = $1", [clinicSlug]);
+    const r = await c.query("select id from clinics where slug = $1 and deleted_at is null", [
+      clinicSlug,
+    ]);
     if (!r.rowCount) throw new Error("clinic not found");
     await audit(c, {
       clinicId: r.rows[0].id,
@@ -416,7 +702,7 @@ const librarySchema = z.object({
 export async function saveLibraryTemplateAction(
   input: unknown
 ): Promise<{ error?: string; id?: string }> {
-  const s = await requireSuperAdmin();
+  const s = await requireAdminCap("documents");
   const parsed = librarySchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -459,7 +745,7 @@ export async function saveLibraryTemplateAction(
 }
 
 export async function deleteLibraryTemplateAction(id: string): Promise<void> {
-  const s = await requireSuperAdmin();
+  const s = await requireAdminCap("documents");
   await withSystem(async (c) => {
     await c.query(`delete from document_template_library where id = $1`, [id]);
     await audit(c, {

@@ -194,3 +194,63 @@ export async function storageUsageBytes(clinicId?: string): Promise<number> {
   walk(dir);
   return total;
 }
+
+/**
+ * Removes everything filed under a clinic.
+ *
+ * The counterpart to the purge in the worker: `delete from clinics` cascades
+ * through 49 tables and leaves not one row behind, but the rows only ever held
+ * *paths*. Without this the scans, the signed PDFs and the WhatsApp media of a
+ * clinic that no longer exists sit in the bucket forever, unreferenced and
+ * unfindable — and still, legally, that clinic's patient data.
+ *
+ * Safe to call twice, and safe to call for a clinic that never uploaded
+ * anything: both drivers treat "nothing there" as success.
+ */
+export async function deleteClinicFiles(clinicId: string): Promise<number> {
+  // Guard the prefix. Everything under ROOT would be deleted by an empty or
+  // traversing id, and this is called from a code path whose whole job is
+  // destroying data — the one place a defensive check is worth its keystrokes.
+  if (!/^[0-9a-f-]{36}$/i.test(clinicId)) throw new Error("deleteClinicFiles: bad clinic id");
+
+  if (usingObjectStore()) {
+    const { mod, client, bucket } = await s3();
+    let deleted = 0;
+    let token: string | undefined;
+    do {
+      const listed = await client.send(
+        new mod.ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: `${clinicId}/`,
+          ContinuationToken: token,
+        })
+      );
+      const keys = (listed.Contents ?? []).map((o) => ({ Key: o.Key! })).filter((o) => o.Key);
+      if (keys.length) {
+        // DeleteObjects takes 1000 keys at a time; ListObjectsV2 returns at
+        // most 1000, so one call per page is always within the limit.
+        await client.send(
+          new mod.DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys, Quiet: true } })
+        );
+        deleted += keys.length;
+      }
+      token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+    } while (token);
+    return deleted;
+  }
+
+  const abs = path.join(ROOT, clinicId);
+  if (!abs.startsWith(ROOT)) return 0;
+  const before = await countFiles(abs);
+  await fs.promises.rm(abs, { recursive: true, force: true });
+  return before;
+}
+
+async function countFiles(dir: string): Promise<number> {
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true }).catch(() => []);
+  let n = 0;
+  for (const e of entries) {
+    n += e.isDirectory() ? await countFiles(path.join(dir, e.name)) : 1;
+  }
+  return n;
+}

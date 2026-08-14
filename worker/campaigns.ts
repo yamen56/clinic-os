@@ -5,6 +5,7 @@ import { sessions } from "./wa/session";
 import { withinWindow } from "./automations";
 import { loadContext, renderTemplate } from "./templates";
 import { queueWhatsAppMessage } from "../src/lib/outbound";
+import { licensed } from "./features";
 
 /**
  * Campaign drip.
@@ -69,9 +70,17 @@ async function processOnce() {
  */
 export async function pumpClinic(clinicId: string) {
   await withSystem(async (c) => {
+    /*
+      Joined to clinics so the licence is part of the question. A drip that was
+      started while the clinic had Campaigns would otherwise keep releasing
+      recipients after the agency withdrew the module — the clinic could no
+      longer open the screen to stop it, and neither could they see it running.
+    */
     const due = (
       await c.query(
-        `select 1 from campaigns where clinic_id = $1 and status = 'running' limit 1`,
+        `select 1 from campaigns ca join clinics cl on cl.id = ca.clinic_id
+          where ca.clinic_id = $1 and ca.status = 'running'
+            and ${licensed("campaigns")} limit 1`,
         [clinicId]
       )
     ).rowCount;

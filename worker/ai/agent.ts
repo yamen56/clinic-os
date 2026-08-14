@@ -44,7 +44,8 @@ async function shouldRespond(
       `select aa.enabled, aa.agent_name, aa.instructions, aa.language_mode, aa.hours_mode,
               aa.custom_hours, aa.escalation_notes, aa.max_daily_messages, aa.model, aa.greeting,
               cl.name, cl.name_ar, cl.timezone, cl.address, cl.address_ar, cl.google_maps_url,
-              cl.phone_e164, cl.working_hours, cl.subscription_status
+              cl.phone_e164, cl.working_hours, cl.subscription_status,
+              cl.deleted_at, coalesce((cl.features->>'ai')::boolean, true) as ai_licensed
        from ai_agents aa join clinics cl on cl.id = aa.clinic_id
        where aa.clinic_id = $1`,
       [conv.clinic_id]
@@ -53,6 +54,17 @@ async function shouldRespond(
 
   if (!row) return { ok: false, reason: "no_agent" };
   if (!row.enabled) return { ok: false, reason: "disabled" };
+  /*
+    The licence, checked here and not only on the screen.
+
+    `ai_agents.enabled` is the clinic's own switch and stays exactly as they
+    left it — this is the agency's, and it is the one that has money attached.
+    Without this check, withdrawing the AI module would hide the settings page
+    while the agent carried on answering WhatsApp and spending tokens, which is
+    precisely backwards: the screen is the cheap half.
+  */
+  if (!row.ai_licensed) return { ok: false, reason: "not_licensed" };
+  if (row.deleted_at) return { ok: false, reason: "clinic_deleted" };
   if (row.subscription_status === "suspended") return { ok: false, reason: "suspended" };
   if (!conv.ai_enabled) return { ok: false, reason: "thread_off" };
   if (conv.ai_paused_until && new Date(conv.ai_paused_until) > new Date()) {

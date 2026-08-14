@@ -5,6 +5,8 @@ import { createClinicAction } from "../../actions";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
+import { FeaturePicker } from "../../feature-picker";
+import { allFeatures } from "@/lib/features";
 
 function slugify(s: string): string {
   return s
@@ -20,6 +22,13 @@ export function NewClinicForm() {
   const [state, formAction, pending] = useActionState(createClinicAction, null);
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
+  /*
+    Everything on, and the agency takes away what this clinic did not buy.
+    Starting from nothing would make the common case — a clinic buying the
+    product — eight clicks of ceremony, and would make a forgotten switch look
+    exactly like a deliberate one.
+  */
+  const [features, setFeatures] = useState(allFeatures());
 
   return (
     <form
@@ -63,6 +72,12 @@ export function NewClinicForm() {
         <Field label={t.admin.planPrice}>
           <Input name="planPrice" dir="ltr" type="number" min={0} step="0.01" defaultValue={0} />
         </Field>
+      </div>
+      <div className="my-1 border-t border-line" />
+      <div>
+        <div className="mb-1 text-sm font-medium text-ink-900">{t.admin.features}</div>
+        <p className="mb-2.5 text-[13px] text-ink-500">{t.admin.featuresSub}</p>
+        <FeaturePicker value={features} onChange={setFeatures} disabled={pending} />
       </div>
       <div className="my-1 border-t border-line" />
       <div className="grid gap-4 sm:grid-cols-2">

@@ -197,6 +197,32 @@ async function main() {
   await db.query(`update ai_agents set enabled = true where clinic_id = $1`, [clinic.id]);
   console.log("✓ respects the clinic-wide off switch");
 
+  /*
+    7b. Gating: the agency withdrew the AI module.
+
+    Distinct from the switch above, and the distinction is the money. The
+    clinic's own `enabled` flag stays true throughout this check — what changes
+    is the licence on the clinics row. If the agent answered anyway, taking the
+    module away would hide the settings screen while the tokens carried on being
+    spent, which is the opposite of what withdrawing it is for.
+  */
+  await db.query(`update clinics set features = '{"ai": false}'::jsonb where id = $1`, [clinic.id]);
+  await respondToConversation(c4);
+  await wait(1200);
+  n = await db.query(`select count(*)::int as n from messages where conversation_id = $1 and sender_kind = 'ai'`, [c4]);
+  if (n.rows[0].n !== 0) throw new Error("AI replied for a clinic without the AI module");
+  await db.query(`update clinics set features = '{}'::jsonb where id = $1`, [clinic.id]);
+  console.log("✓ stays silent when the agency has not licensed the AI module");
+
+  // 7c. And a deleted clinic never answers, whatever its own switches say.
+  await db.query(`update clinics set deleted_at = now() where id = $1`, [clinic.id]);
+  await respondToConversation(c4);
+  await wait(1200);
+  n = await db.query(`select count(*)::int as n from messages where conversation_id = $1 and sender_kind = 'ai'`, [c4]);
+  if (n.rows[0].n !== 0) throw new Error("AI replied for a deleted clinic");
+  await db.query(`update clinics set deleted_at = null where id = $1`, [clinic.id]);
+  console.log("✓ stays silent for a deleted clinic");
+
   // 8. Gating: daily cap
   await db.query(`update ai_agents set max_daily_messages = 1 where clinic_id = $1`, [clinic.id]);
   await respondToConversation(c4);

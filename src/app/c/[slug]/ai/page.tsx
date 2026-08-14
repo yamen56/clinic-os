@@ -14,7 +14,7 @@ export default async function AiAgentPage({
   const { slug } = await params;
   const sp = await searchParams;
   const access = await guardClinic(slug);
-  const canEdit = can(access, "automations");
+  const canEdit = can(access, "ai");
   if (!canEdit) redirect(`/c/${slug}`);
 
   const data = await inClinic(access, async (c) => {
