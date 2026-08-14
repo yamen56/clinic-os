@@ -1329,7 +1329,7 @@ Linked from every surface that collects personal data, and the two that only dis
 
 | Surface | Form |
 |---|---|
-| Public booking | Footer link **and** a consent line on the step that writes the booking |
+| Public booking | Footer link **and** a consent line on the details step, under the button that submits the name and phone — not the OTP step, which does not exist when the clinic's WhatsApp is offline |
 | Remote signing | Footer link |
 | In-clinic signing kiosk | Address printed as **text**, not a link |
 | Public invoice (screen) | Footer link |
