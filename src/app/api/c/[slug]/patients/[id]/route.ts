@@ -8,7 +8,7 @@ const TEXT_FIELDS = new Set(["full_name", "notes_summary", "whatsapp_name"]);
 /** Autosave endpoint for a patient file. Accepts a partial patch; last write wins, all versions audited. */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "patients");
   if (!g.ok) return g.res;
   const access = g.access;
 

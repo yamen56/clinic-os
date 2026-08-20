@@ -7,7 +7,7 @@ const MAX_SIZE = 25 * 1024 * 1024;
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "patients");
   if (!g.ok) return g.res;
   const access = g.access;
 

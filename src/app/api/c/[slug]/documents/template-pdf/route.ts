@@ -12,7 +12,7 @@ import { readFileBuffer } from "@/lib/storage";
  */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const auth = await apiClinic(slug);
+  const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;
 

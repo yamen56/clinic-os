@@ -10,8 +10,10 @@
  * needs no session — it just has to be able to reach APP_URL.
  */
 
+import { internalSecret } from "./internal-secret";
+
 const WORKER_URL = () => process.env.WORKER_URL || "http://localhost:4020";
-const SECRET = () => process.env.INTERNAL_API_SECRET || "dev-internal-secret-change-in-production";
+const SECRET = () => internalSecret();
 
 export async function renderUrlToPdf(url: string): Promise<Buffer> {
   const res = await fetch(`${WORKER_URL()}/render-pdf`, {

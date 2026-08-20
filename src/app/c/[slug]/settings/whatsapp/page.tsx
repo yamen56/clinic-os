@@ -1,4 +1,4 @@
-import { guardClinic } from "@/lib/guard";
+import { guardCap } from "@/lib/guard";
 import { WhatsappClient } from "./whatsapp-client";
 import { Deliverability } from "./deliverability";
 import { can } from "@/lib/auth";
@@ -10,7 +10,7 @@ export default async function WhatsappSettingsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const access = await guardClinic(slug);
+  const access = await guardCap(slug, "settings");
 
   /*
     What actually landed this week. Connection status on its own says nothing

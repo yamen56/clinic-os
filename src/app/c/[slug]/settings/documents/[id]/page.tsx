@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { guardClinic } from "@/lib/guard";
+import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { loadFieldDefinitions } from "@/lib/esign/fields";
 import { TemplateEditor } from "./template-editor";
@@ -14,7 +14,7 @@ export default async function TemplateEditorPage({
 }) {
   const { slug, id } = await params;
   const { source, import: openImport } = await searchParams;
-  const access = await guardClinic(slug);
+  const access = await guardCap(slug, "settings");
   const isNew = id === "new";
 
   const data = await inClinic(access, async (c) => {

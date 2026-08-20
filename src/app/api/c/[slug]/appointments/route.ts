@@ -4,7 +4,7 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 /** Calendar data: appointments in range + doctors + services + clinic hours. */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "calendar");
   if (!g.ok) return g.res;
   const access = g.access;
   const url = new URL(req.url);

@@ -9,7 +9,7 @@ import { saveFile } from "@/lib/storage";
  */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "conversations");
   if (!g.ok) return g.res;
   const access = g.access;
 

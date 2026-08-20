@@ -4,8 +4,10 @@ import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 
+import { internalSecret } from "@/lib/internal-secret";
+
 const WORKER_URL = process.env.WORKER_URL || "http://localhost:4020";
-const SECRET = process.env.INTERNAL_API_SECRET || "dev-internal-secret-change-in-production";
+const SECRET = () => internalSecret();
 
 export async function whatsappControlAction(
   slug: string,
@@ -16,7 +18,7 @@ export async function whatsappControlAction(
   try {
     const res = await fetch(`${WORKER_URL}/sessions/${access.clinicId}/${op}`, {
       method: "POST",
-      headers: { "x-internal-secret": SECRET },
+      headers: { "x-internal-secret": SECRET() },
       signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) return { error: "worker_error" };

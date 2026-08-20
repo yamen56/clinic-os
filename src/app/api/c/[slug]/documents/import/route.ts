@@ -17,7 +17,7 @@ const MAX_BYTES = 15 * 1024 * 1024;
  */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const auth = await apiClinic(slug);
+  const auth = await apiClinic(slug, "documents.manage");
   if (!auth.ok) return auth.res;
   if (!can(auth.access, "settings")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });

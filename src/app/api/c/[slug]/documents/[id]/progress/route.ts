@@ -11,7 +11,7 @@ import { saveSigningSession } from "@/lib/esign/public";
  */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const auth = await apiClinic(slug);
+  const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;
 

@@ -1,16 +1,31 @@
 import { NextResponse } from "next/server";
-import { AuthError, requireClinic, type ClinicAccess } from "./auth";
+import { AuthError, can, requireClinic, type ClinicAccess } from "./auth";
 import { withCtx } from "./db";
+import type { Capability } from "./permissions";
 import type { PoolClient } from "pg";
 
-/** Route-handler guard: resolves clinic access or returns an error response. */
-export async function apiClinic(slug: string): Promise<
-  | { ok: true; access: ClinicAccess }
-  | { ok: false; res: NextResponse }
-> {
+/**
+ * Route-handler guard: resolves clinic access or returns an error response.
+ *
+ * `need` is the same gate the matching page applies, and passing it is not
+ * optional politeness — the nav hides a section a member may not use, but the
+ * endpoint behind it stays reachable by URL. A route that only proves
+ * membership is a route every member of the clinic can call, whatever their
+ * access says, which is how a receptionist with the patient list switched off
+ * reads the whole patient list anyway.
+ *
+ * An array means *any of* — `patients/search` backs the calendar, the invoice
+ * builder and the automation editor as well as the patient list, so the
+ * question it has to answer is "may this person look a patient up at all",
+ * not "may they open the patients screen".
+ */
+export async function apiClinic(
+  slug: string,
+  need?: Capability | Capability[]
+): Promise<{ ok: true; access: ClinicAccess } | { ok: false; res: NextResponse }> {
+  let access: ClinicAccess;
   try {
-    const access = await requireClinic(slug);
-    return { ok: true, access };
+    access = await requireClinic(slug);
   } catch (e) {
     const code = e instanceof AuthError ? e.code : "unauthenticated";
     /*
@@ -23,6 +38,14 @@ export async function apiClinic(slug: string): Promise<
       code === "forbidden" || code === "deleted" ? 403 : code === "suspended" ? 402 : 401;
     return { ok: false, res: NextResponse.json({ error: code }, { status }) };
   }
+
+  if (need) {
+    const wanted = Array.isArray(need) ? need : [need];
+    if (!wanted.some((cap) => can(access, cap))) {
+      return { ok: false, res: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
+    }
+  }
+  return { ok: true, access };
 }
 
 /** Runs fn in the RLS context of the given clinic access. */

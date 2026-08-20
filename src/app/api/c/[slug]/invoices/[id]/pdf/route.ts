@@ -6,7 +6,7 @@ import { saveFile, readFileBuffer } from "@/lib/storage";
 /** On-demand branded PDF for an invoice (cached in storage after first render). */
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "invoices");
   if (!g.ok) return g.res;
 
   const inv = await inClinic(g.access, async (c) => {

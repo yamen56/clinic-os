@@ -3,7 +3,7 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "conversations");
   if (!g.ok) return g.res;
   const url = new URL(req.url);
   const filter = url.searchParams.get("filter") ?? "all";

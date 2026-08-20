@@ -4,7 +4,10 @@ import { patientSearchClause } from "@/lib/patients";
 
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const g = await apiClinic(slug);
+  // Backs the calendar, the invoice builder, the automation editor and the
+  // waitlist as well as the patient list, so the gate is "may they look a
+  // patient up at all" rather than any one screen's capability.
+  const g = await apiClinic(slug, ["patients", "calendar", "invoices", "conversations", "automations"]);
   if (!g.ok) return g.res;
   const q = new URL(req.url).searchParams.get("q")?.trim() ?? "";
   if (q.length < 2) return NextResponse.json({ results: [] });

@@ -4,7 +4,7 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 /** Autosave endpoint for a single patient note. */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; noteId: string }> }) {
   const { slug, noteId } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "patients");
   if (!g.ok) return g.res;
 
   let body: { patch?: { body?: string; kind?: string } };

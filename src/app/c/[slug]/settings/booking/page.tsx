@@ -1,4 +1,4 @@
-import { guardClinic } from "@/lib/guard";
+import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { BookingLinksClient } from "./booking-client";
 import { can } from "@/lib/auth";
@@ -9,7 +9,7 @@ export default async function BookingSettingsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const access = await guardClinic(slug);
+  const access = await guardCap(slug, "settings");
   const data = await inClinic(access, async (c) => {
     const links = (
       await c.query(

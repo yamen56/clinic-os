@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { guardClinic } from "@/lib/guard";
+import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { loadDocumentList } from "@/lib/esign/queries";
 import { PatientProfile } from "./profile-client";
@@ -12,7 +12,7 @@ export default async function PatientProfilePage({
   params: Promise<{ slug: string; id: string }>;
 }) {
   const { slug, id } = await params;
-  const access = await guardClinic(slug);
+  const access = await guardCap(slug, "patients");
 
   const data = await inClinic(access, async (c) => {
     const p = (

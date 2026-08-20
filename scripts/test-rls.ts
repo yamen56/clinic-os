@@ -78,6 +78,26 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     )
   ).id;
   await q(`insert into booking_links (clinic_id, slug) values ($1, $2) returning id`, [clinic, `rls-bl-${tag}`]);
+  /*
+    Three tables that arrived after this fixture was written — insurers and the
+    waitlist in 0024, import batches in 0025. The loop below discovers every
+    clinic-scoped table from the catalogue, so they were being asserted on
+    already; what was missing was a row to assert *about*, which turned the
+    "sees its own rows" half of the proof into a failure nobody could act on and
+    left the positive path for those three unproven.
+  */
+  await q(`insert into insurers (clinic_id, name) values ($1, $2) returning id`, [
+    clinic,
+    `Insurer ${tag}`,
+  ]);
+  await q(
+    `insert into waitlist_entries (clinic_id, patient_id) values ($1, $2) returning id`,
+    [clinic, patient]
+  );
+  await q(`insert into import_batches (clinic_id, filename) values ($1, $2) returning id`, [
+    clinic,
+    `rls-${tag}.csv`,
+  ]);
   await q(
     `insert into booking_verifications (clinic_id, phone_e164, code, expires_at)
      values ($1, $2, '123456', now() + interval '10 minutes') returning id`,

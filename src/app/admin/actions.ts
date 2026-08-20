@@ -12,6 +12,7 @@ import { normalizePhone } from "@/lib/phone";
 import { sanitizeHtml } from "@/lib/esign/render";
 import { RECIPES_ON_BY_DEFAULT } from "@/lib/esign/constants";
 import { deleteClinicFiles } from "@/lib/storage";
+import { internalSecret } from "@/lib/internal-secret";
 import { FEATURES, toFeatureSetting, type Feature, type FeatureMap } from "@/lib/features";
 import { RESTORE_WINDOW_DAYS } from "@/lib/clinic-lifecycle";
 import { z } from "zod";
@@ -429,9 +430,9 @@ export async function updateClinicFeaturesAction(
 
 /* --------------------------------------------------------- clinic deletion */
 
+
 const WORKER_URL = process.env.WORKER_URL || "http://localhost:4020";
-const INTERNAL_SECRET =
-  process.env.INTERNAL_API_SECRET || "dev-internal-secret-change-in-production";
+const INTERNAL_SECRET = () => internalSecret();
 
 /**
  * Drops the clinic's WhatsApp connection.
@@ -445,7 +446,7 @@ const INTERNAL_SECRET =
 async function disconnectWhatsApp(clinicId: string): Promise<void> {
   await fetch(`${WORKER_URL}/sessions/${clinicId}/disconnect`, {
     method: "POST",
-    headers: { "x-internal-secret": INTERNAL_SECRET },
+    headers: { "x-internal-secret": INTERNAL_SECRET() },
     signal: AbortSignal.timeout(8000),
   }).catch(() => {});
 }

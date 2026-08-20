@@ -5,7 +5,7 @@ import { DateTime } from "luxon";
 /** Payments as CSV (Excel-friendly UTF-8 BOM). */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "invoices");
   if (!g.ok) return g.res;
   const url = new URL(req.url);
   const from = url.searchParams.get("from");

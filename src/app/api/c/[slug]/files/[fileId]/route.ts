@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { openFile } from "@/lib/storage";
+import { fileResponseHeaders } from "@/lib/download";
 
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string; fileId: string }> }) {
   const { slug, fileId } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "patients");
   if (!g.ok) return g.res;
 
   const meta = await inClinic(g.access, async (c) => {
@@ -19,13 +20,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string; f
   const f = await openFile(meta.storage_path);
   if (!f) return NextResponse.json({ error: "gone" }, { status: 410 });
 
-  const download = new URL(req.url).searchParams.has("download");
+  // The stored mime came from the uploader's browser, so it decides nothing on
+  // its own — see lib/download.
   return new NextResponse(new Uint8Array(f.data), {
-    headers: {
-      "Content-Type": meta.mime_type,
-      "Content-Length": String(f.size),
-      "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(meta.file_name)}`,
-      "Cache-Control": "private, max-age=3600",
-    },
+    headers: fileResponseHeaders({
+      declaredType: meta.mime_type,
+      fileName: meta.file_name,
+      size: f.size,
+      wantsDownload: new URL(req.url).searchParams.has("download"),
+    }),
   });
 }

@@ -1,4 +1,4 @@
-import { guardClinic } from "@/lib/guard";
+import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { patientFilterSql } from "@/lib/patients";
 import { PatientsList } from "./patients-list";
@@ -12,7 +12,7 @@ export default async function PatientsPage({
 }) {
   const { slug } = await params;
   const sp = await searchParams;
-  const access = await guardClinic(slug);
+  const access = await guardCap(slug, "patients");
 
   const { where, values } = patientFilterSql(access.clinicId, sp);
 

@@ -14,7 +14,7 @@ import { generateFinalPdf } from "@/lib/esign/pdf";
  */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const auth = await apiClinic(slug);
+  const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;
 

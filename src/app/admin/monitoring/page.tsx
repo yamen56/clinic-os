@@ -8,13 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Activity, HardDrive, MessageCircle, Sparkles, AlertTriangle } from "lucide-react";
 
+import { internalSecret } from "@/lib/internal-secret";
+
 const WORKER_URL = process.env.WORKER_URL || "http://localhost:4020";
-const SECRET = process.env.INTERNAL_API_SECRET || "dev-internal-secret-change-in-production";
+const SECRET = () => internalSecret();
 
 async function workerHealth(): Promise<{ ok: boolean; sessions: { clinicId: string; connected: boolean }[]; uptime?: number }> {
   try {
     const res = await fetch(`${WORKER_URL}/health`, {
-      headers: { "x-internal-secret": SECRET },
+      headers: { "x-internal-secret": SECRET() },
       cache: "no-store",
       signal: AbortSignal.timeout(4000),
     });

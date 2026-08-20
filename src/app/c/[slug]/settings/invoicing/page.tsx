@@ -1,4 +1,4 @@
-import { guardClinic } from "@/lib/guard";
+import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { InvoicingForm } from "./invoicing-form";
 import { can } from "@/lib/auth";
@@ -9,7 +9,7 @@ export default async function InvoicingSettingsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const access = await guardClinic(slug);
+  const access = await guardCap(slug, "settings");
   const clinic = await inClinic(access, async (c) => {
     const r = await c.query(
       `select invoice_prefix, invoice_counter, invoice_tax_rate, invoice_tax_label,

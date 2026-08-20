@@ -14,7 +14,7 @@ import { can } from "@/lib/auth";
  */
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const auth = await apiClinic(slug);
+  const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;
 
@@ -27,7 +27,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
 /** Raises one of the required documents, optionally sending it straight away. */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const auth = await apiClinic(slug);
+  const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;
   if (!can(access, "documents.manage")) return NextResponse.json({ error: "forbidden" }, { status: 403 });

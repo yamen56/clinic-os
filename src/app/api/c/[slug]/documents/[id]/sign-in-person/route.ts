@@ -24,7 +24,7 @@ export async function POST(
   ctx: { params: Promise<{ slug: string; id: string }> }
 ) {
   const { slug, id } = await ctx.params;
-  const auth = await apiClinic(slug);
+  const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;
 
@@ -145,7 +145,7 @@ export async function PATCH(
   ctx: { params: Promise<{ slug: string; id: string }> }
 ) {
   const { slug, id } = await ctx.params;
-  const auth = await apiClinic(slug);
+  const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;
 

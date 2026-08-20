@@ -1,4 +1,4 @@
-import { guardClinic } from "@/lib/guard";
+import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { CalendarClient } from "./calendar-client";
 
@@ -11,7 +11,7 @@ export default async function CalendarPage({
 }) {
   const { slug } = await params;
   const sp = await searchParams;
-  const access = await guardClinic(slug);
+  const access = await guardCap(slug, "calendar");
 
   const data = await inClinic(access, async (c) => {
     let initialPatient: { id: string; name: string } | null = null;

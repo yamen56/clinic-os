@@ -4,7 +4,7 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 /** Thread detail: messages + linked patient panel. */
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "conversations");
   if (!g.ok) return g.res;
 
   const data = await inClinic(g.access, async (c) => {
@@ -58,7 +58,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
 /** Thread commands: read / ai toggle / assign / status. */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const g = await apiClinic(slug);
+  const g = await apiClinic(slug, "conversations");
   if (!g.ok) return g.res;
   const body = (await req.json().catch(() => ({}))) as {
     op?: string;

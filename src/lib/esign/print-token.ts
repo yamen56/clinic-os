@@ -11,8 +11,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * stored — an HMAC over the document id and an expiry, valid for minutes.
  */
 
-const secret = () =>
-  process.env.INTERNAL_API_SECRET || "dev-internal-secret-change-in-production";
+import { internalSecret } from "../internal-secret";
+
+const secret = () => internalSecret();
 
 const TTL_MS = 5 * 60_000;
 
