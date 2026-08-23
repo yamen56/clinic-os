@@ -768,6 +768,59 @@ switched off by accident, and duplicating them as automations would nudge every 
 What ships as recipes is what a flow can do that a fixed reminder cannot: escalate, chase an
 expiry, open a task on a decline.
 
+### Specialty packs
+
+A clinic is asked what it practises when it is created (`clinics.specialty`, admin →
+**New clinic**, changeable later from the clinic's admin page). It gets the `general`
+library **plus** the pack for its own field — the specialty adds, it never replaces.
+
+`general` · `dental` · `dermatology` · `ophthalmology` · `obgyn` · `pediatrics` ·
+`orthopedics` · `physiotherapy` · `ent` · `cardiology` · `nutrition` · `psychiatry` ·
+`plastic_surgery` · `urology` · `internal_medicine` (`src/lib/specialties.ts`)
+
+37 recipes across the 14 packs (`scripts/specialty-recipes.ts`) — post-extraction aftercare,
+laser prep, telling an eye patient they will not be able to drive home, a 40-day postpartum
+check, a discreet psychiatry reminder that names no clinic, cast-removal follow-up. They
+arrive **off**, like the rest of the library: the specialty decides what is on the shelf,
+never what is running. Tag-triggered ones name the tag in Arabic, because that is what
+reception types.
+
+Installing is additive and re-runnable — a recipe the clinic already holds a copy of is
+skipped, so correcting a wrongly chosen specialty never touches flows they have edited. The
+clinic's copies remember their pack in `automations.recipe_specialty`, which is what groups
+them under their own heading on the automations page.
+
+### System messages (`clinic_system_messages`)
+
+The eleven messages the platform sends **outside** the automation engine, listed and editable
+on the automations page (**System messages** tab). They used to be strings in seven source
+files that a clinic could read nowhere and change nowhere.
+
+| Group | Keys | Off-switch |
+|---|---|---|
+| Booking | `booking_confirmed` · `booking_pending` | yes |
+| Booking | `booking_otp` | **no** |
+| Waitlist | `waitlist_offer` | yes |
+| Documents | `document_reminder` · `document_signed_copy` | yes |
+| Documents | `document_sign_request` · `document_bundle` · `signing_otp` | **no** |
+| Invoices | `invoice_sent` · `invoice_receipt` | **no** |
+
+- Same `{{variable}}` syntax as the builder. `src/lib/system-messages.ts` holds the
+  registry, the defaults in **both** languages, and the variables offered as chips.
+- **Language is per send**, not per clinic: the patient's booking locale, the document's
+  language. Both bodies are stored.
+- **The four that cannot be silenced** are the ones whose flow stops working without them —
+  a patient who never gets their code cannot finish booking, an unsent link is a document
+  nobody can sign. Editable, never disableable, and the server enforces it too.
+- **Overrides are sparse.** A clinic that has not changed a message has no row, so improving
+  a default reaches everyone who never wrote their own. Saving wording identical to the
+  default stores nothing; saving nothing at all deletes the row.
+- A line that held only variables and rendered empty is **dropped** — an unassigned doctor or
+  a clinic with no address leaves no blank line mid-message. Deliberate blank lines survive.
+- Switching one off skips the whole surrounding step, never queues a blank message: a
+  disabled `waitlist_offer` means nothing is offered *and* nobody's place or cooldown is
+  spent.
+
 ### Tasks
 
 `tasks` — title, body, patient, assignee, due date, done flag, `created_by` (`staff` or
@@ -988,18 +1041,37 @@ document_expired · document_digest · document_integrity · document_new_link
   cancellations, unread message digest, end-of-day summary; plus per-member
   `reminder_minutes` (default 30).
 
-### Scheduled digests (clinic-local time)
+### Doctor and team alerts (`clinic_staff_alerts`)
 
-| When | What | To whom |
+Rows the clinic edits on its own automations page (**Team alerts** tab), not hardcoded
+rules. Every clinic is given these four — by a trigger on `clinics`, so a clinic created
+down any path has them, because a clinic missing them does not look broken, its doctors
+simply stop being reminded.
+
+| Kind | Default | To whom |
 |---|---|---|
-| `reminder_minutes` before each appointment | "Your next appointment" | the doctor |
-| 08:00 | Today's schedule (count + first appointment) | each doctor |
-| 12:00 | Unread WhatsApp digest (only if ≥ 3 unread) | owners + receptionists |
-| 20:00 | End of day: completed, no-shows, revenue | owners |
-| Sunday 09:00 | Documents still waiting for signature (+ how many expire within 2 days) | owners |
+| `appointment_reminder` | each recipient's own `reminder_minutes` | the appointment's doctor |
+| `day_schedule` | 08:00 | each doctor |
+| `unread_digest` | 12:00, only if ≥ 3 unread | owners + receptionists |
+| `day_end` | 20:00 — completed, no-shows, revenue | owners |
 
-Sunday is the start of the working week in Jordan — a digest landing on a Saturday evening
-is one nobody reads. Dedupe key is the ISO week, so a worker restart can't double-send.
+- `minutes_before = null` means **"whatever each person set for themselves"** — the
+  per-member `reminder_minutes` the notifications page writes. A number overrides it
+  clinic-wide, which is how a clinic adds a second, earlier nudge without touching anybody's
+  preferences.
+- A clinic can add rows, change the hour, change the audience, or delete what nobody reads.
+  Two rows of the same kind at different hours are two different digests.
+- `day_schedule` sends a **doctor** their own list and anyone else the clinic's whole day —
+  "how busy are we today" and "what have I got" are the same question about different rows.
+- Notification `kind` values are unchanged (`doctor_reminder`, `daily_summary`, `day_end`,
+  `unread_digest`) because every user's saved preferences are keyed by them.
+- Claims are per alert per clinic-local day (`digest:{kind}:{alertId}:{date}`), so the
+  three-minute firing window still cannot send twice. Migration 0033 pre-claimed the day it
+  shipped, so nobody was told twice on the changeover.
+
+Not a row, and still fixed: **Sunday 09:00** — documents still waiting for signature (+ how
+many expire within 2 days), to owners. Sunday is the start of the working week in Jordan; a
+digest landing on a Saturday evening is one nobody reads. Dedupe key is the ISO week.
 
 ### PWA
 
@@ -1267,10 +1339,10 @@ Real browser (Playwright) against the running app, asserting against the databas
 5. WhatsApp inbox · 6. invoicing · 7. automations · 8. AI receptionist ·
 9. PWA & notifications · 10. admin & demo data
 
-Plus focused suites: `qa-access`, `qa-backup`, `qa-booking-race`, `qa-brand-credit`,
-`qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`, `qa-esign-browser`,
-`qa-first-message`, `qa-import-digest`, `qa-mobile`, `qa-mobile-width`, `qa-payments`,
-`qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.
+Plus focused suites: `qa-access`, `qa-automation-coverage`, `qa-backup`, `qa-booking-race`,
+`qa-brand-credit`, `qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`,
+`qa-esign-browser`, `qa-first-message`, `qa-import-digest`, `qa-mobile`, `qa-mobile-width`,
+`qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.
 
 Run `qa-warm` first. A cold `next dev` compiles routes on first hit, and the resulting
 timeouts look exactly like a dozen regressions.
