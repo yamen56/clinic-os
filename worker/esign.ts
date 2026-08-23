@@ -8,7 +8,7 @@ import {
   deliverToSigner,
   loadClinicDelivery,
   clinicDisplayName,
-  signedCopyMessage,
+  documentMessage,
   notifyStaffOfSignerAction,
 } from "../src/lib/esign/delivery";
 import { createAndSendFromTemplate } from "../src/lib/esign/flow";
@@ -57,21 +57,29 @@ async function finalize(documentId: string): Promise<void> {
       (s) => s.role_key === "patient" && s.phone_e164
     );
     if (doc.status === "completed" && patientSigner?.phone_e164 && clinic.wa_connected) {
-      await queueWhatsAppMessage(c, {
+      const msg = await documentMessage(c, {
         clinicId: doc.clinic_id,
-        phoneE164: patientSigner.phone_e164,
-        senderKind: "system",
-        body: signedCopyMessage({
-          lang: doc.language,
-          clinicName: clinicDisplayName(clinic, doc.language),
-          title: doc.title,
-        }),
-        msgType: "document",
-        mediaPath: result.path,
-        mediaName: `${doc.title.slice(0, 50)}.pdf`,
-        mediaMime: "application/pdf",
-        patientId: doc.patient_id,
+        key: "document_signed_copy",
+        lang: doc.language,
+        clinicName: clinicDisplayName(clinic, doc.language),
+        title: doc.title,
       });
+      // A clinic that hands the signed copy over at the desk turns this off, and
+      // then the PDF should not go out either — it is the attachment, not a
+      // separate delivery.
+      if (msg.enabled) {
+        await queueWhatsAppMessage(c, {
+          clinicId: doc.clinic_id,
+          phoneE164: patientSigner.phone_e164,
+          senderKind: "system",
+          body: msg.body,
+          msgType: "document",
+          mediaPath: result.path,
+          mediaName: `${doc.title.slice(0, 50)}.pdf`,
+          mediaMime: "application/pdf",
+          patientId: doc.patient_id,
+        });
+      }
     }
 
     if (doc.status === "completed") {

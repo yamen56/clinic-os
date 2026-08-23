@@ -4,9 +4,10 @@ import { useActionState, useState } from "react";
 import { createClinicAction } from "../../actions";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
-import { Input, Field } from "@/components/ui/input";
+import { Input, Field, Select } from "@/components/ui/input";
 import { FeaturePicker } from "../../feature-picker";
 import { allFeatures } from "@/lib/features";
+import { SPECIALTIES } from "@/lib/specialties";
 
 function slugify(s: string): string {
   return s
@@ -73,6 +74,21 @@ export function NewClinicForm() {
           <Input name="planPrice" dir="ltr" type="number" min={0} step="0.01" defaultValue={0} />
         </Field>
       </div>
+      {/*
+        Asked here rather than left to the clinic, because the answer is only
+        useful on the day the workspace is built: it decides which recipes are
+        copied in, and after that it is a label. The agency knows it — they just
+        sold to them.
+      */}
+      <Field label={t.admin.specialty} hint={t.admin.specialtySub}>
+        <Select name="specialty" defaultValue="general">
+          {SPECIALTIES.map((s) => (
+            <option key={s} value={s}>
+              {t.specialties[s]}
+            </option>
+          ))}
+        </Select>
+      </Field>
       <div className="my-1 border-t border-line" />
       <div>
         <div className="mb-1 text-sm font-medium text-ink-900">{t.admin.features}</div>

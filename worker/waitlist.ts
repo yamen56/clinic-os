@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import { withSystem } from "./db";
 import { appUrl } from "../src/lib/urls";
 import { notifyClinicStaff } from "../src/lib/notify";
+import { systemMessageTemplate, renderSystemMessage } from "../src/lib/system-messages";
 
 /**
  * Turning a cancelled appointment back into a booked one.
@@ -124,13 +125,27 @@ export async function offerFreedSlot(slot: FreedSlot): Promise<number> {
     const when = local.setLocale(ar ? "ar" : "en").toFormat("cccc d LLLL, h:mm a");
     const url = `${appUrl()}/book/${link.slug}`;
 
+    /*
+      The clinic's wording, fetched once for the whole fan-out rather than once
+      per candidate — only the patient's name differs between them.
+
+      A clinic that has switched the offer message off has switched offering off:
+      there is no other way a waitlist entry reaches a patient. Checked before
+      the loop so nothing is marked as offered — the entries keep their place,
+      and no cooldown starts running against a message never sent.
+    */
+    const lang = ar ? "ar" : "en";
+    const offer = await systemMessageTemplate(c, slot.clinicId, "waitlist_offer", lang);
+    if (!offer.enabled) return 0;
+
     for (const cand of candidates.rows) {
       const first = String(cand.full_name ?? "").trim().split(/\s+/)[0] || "";
-      const body = ar
-        ? `مرحباً ${first} 👋\nفضي موعد في ${clinicName}:\n📅 ${when}\n\n` +
-          `إذا بناسبك احجزه من هنا قبل ما ينحجز:\n${url}`
-        : `Hello ${first} 👋\nA slot has opened at ${clinicName}:\n📅 ${when}\n\n` +
-          `If it suits you, book it here before someone else does:\n${url}`;
+      const body = renderSystemMessage(offer.template, {
+        "patient.first_name": first,
+        "clinic.name": clinicName,
+        "appointment.when": when,
+        link: url,
+      });
 
       /*
         Straight into `messages` as queued, exactly as an automation does, so the

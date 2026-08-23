@@ -4,6 +4,7 @@ import { withSystem } from "@/lib/db";
 import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
 import { normalizePhone } from "@/lib/phone";
 import { queueWhatsAppMessage } from "@/lib/outbound";
+import { systemMessage } from "@/lib/system-messages";
 import { finalizeBooking } from "../finalize";
 
 /**
@@ -75,14 +76,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
        values ($1, $2, $3, $4, now() + interval '10 minutes') returning id`,
       [data.clinic.id, phone, code, JSON.stringify(payload)]
     );
+    const msg = await systemMessage(c, {
+      clinicId: data.clinic.id,
+      key: "booking_otp",
+      lang: payload.locale,
+      vars: {
+        code,
+        "clinic.name":
+          payload.locale === "en" ? data.clinic.name : data.clinic.name_ar || data.clinic.name,
+      },
+    });
     await queueWhatsAppMessage(c, {
       clinicId: data.clinic.id,
       phoneE164: phone,
       senderKind: "system",
-      body:
-        payload.locale === "en"
-          ? `${code} is your ${data.clinic.name} verification code.`
-          : `${code} هو رمز التحقق الخاص بك من ${data.clinic.name_ar || data.clinic.name}.`,
+      body: msg.body,
     });
     return r.rows[0].id as string;
   });

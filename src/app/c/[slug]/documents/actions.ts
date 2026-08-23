@@ -28,7 +28,6 @@ import { sendDocument, afterSignature, sendAllPendingForPatient } from "@/lib/es
 import { recordSignature, declineDocument, saveStaffSignature } from "@/lib/esign/signing";
 import { revokeSignerTokens, issueSigningToken } from "@/lib/esign/tokens";
 import {
-  bundleMessage,
   clinicDisplayName,
   firstName,
   loadClinicDelivery,

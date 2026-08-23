@@ -14,14 +14,36 @@ export async function staffInRoles(
   clinicId: string,
   roles: readonly string[]
 ): Promise<string[]> {
+  return (await staffMembersInRoles(c, clinicId, roles)).map((m) => m.userId);
+}
+
+export type StaffMember = { memberId: string; userId: string; role: string; isOwner: boolean };
+
+/**
+ * The same audience, with the membership kept.
+ *
+ * The morning digest needs to know which of the recipients is a doctor, because
+ * a doctor is sent their own list and everybody else is sent the clinic's — and
+ * that question is about the membership row, not the user.
+ */
+export async function staffMembersInRoles(
+  c: PoolClient,
+  clinicId: string,
+  roles: readonly string[]
+): Promise<StaffMember[]> {
   const wantsOwner = roles.includes("owner");
   const jobs = roles.filter((r) => r !== "owner");
   const r = await c.query(
-    `select user_id from clinic_members
+    `select id, user_id, role, is_owner from clinic_members
       where clinic_id = $1 and active and (($2 and is_owner) or role = any($3))`,
     [clinicId, wantsOwner, jobs]
   );
-  return r.rows.map((x) => x.user_id as string);
+  return r.rows.map((x) => ({
+    memberId: x.id as string,
+    userId: x.user_id as string,
+    role: x.role as string,
+    isOwner: x.is_owner as boolean,
+  }));
 }
 
 /**

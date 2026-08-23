@@ -4,6 +4,8 @@ import { withSystem } from "@/lib/db";
 import { rateLimit, clientIp } from "@/lib/booking-public";
 import { resolveIn } from "@/lib/esign/public";
 import { queueWhatsAppMessage } from "@/lib/outbound";
+import { systemMessage } from "@/lib/system-messages";
+import { clinicDisplayName, loadClinicDelivery } from "@/lib/esign/delivery";
 import { logDocEvent } from "@/lib/esign/events";
 
 /**
@@ -56,14 +58,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
           JSON.stringify({ kind: "document", signerId: view.signer.id }),
         ]
       );
+      const lang = doc.language === "en" ? "en" : "ar";
+      const clinic = await loadClinicDelivery(c, doc.clinic_id);
+      const msg = await systemMessage(c, {
+        clinicId: doc.clinic_id,
+        key: "signing_otp",
+        lang,
+        vars: { code, "clinic.name": clinicDisplayName(clinic, lang) },
+      });
       await queueWhatsAppMessage(c, {
         clinicId: doc.clinic_id,
         phoneE164: signer.phone_e164,
         senderKind: "system",
-        body:
-          doc.language === "ar"
-            ? `${code} هو رمز تأكيد توقيعك.`
-            : `${code} is your signing verification code.`,
+        body: msg.body,
       });
       await logDocEvent(c, {
         clinicId: doc.clinic_id,

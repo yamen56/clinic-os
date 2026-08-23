@@ -9,8 +9,8 @@ import {
   type DocumentRow,
 } from "./documents";
 import {
-  bundleMessage,
   clinicDisplayName,
+  documentMessage,
   dispatchDueSigners,
   firstName,
   loadClinicDelivery,
@@ -285,17 +285,20 @@ export async function sendAllPendingForPatient(
   if (!items.length) return { ok: false, error: "nothing_sendable", blocked };
 
   const lang = (docs.rows[0].language ?? clinic.default_locale) as "ar" | "en";
+  const msg = await documentMessage(c, {
+    clinicId: args.clinicId,
+    key: "document_bundle",
+    lang,
+    clinicName: clinicDisplayName(clinic, lang),
+    patientFirstName: firstName(patient.full_name),
+    items,
+  });
   await queueWhatsAppMessage(c, {
     clinicId: args.clinicId,
     phoneE164: patient.phone_e164,
     senderKind: "staff",
     senderUserId: args.userId ?? null,
-    body: bundleMessage({
-      lang,
-      clinicName: clinicDisplayName(clinic, lang),
-      patientFirstName: firstName(patient.full_name),
-      items,
-    }),
+    body: msg.body,
     patientId: args.patientId,
   });
 

@@ -147,6 +147,16 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     )
   ).id;
   await q(`insert into automation_run_logs (clinic_id, run_id, step_id, status) values ($1, $2, $3, 'ok') returning id`, [clinic, run, step]);
+  /*
+    An override, because the table is sparse by design: a clinic that has never
+    reworded a built-in message has no row here at all, and the sweep below
+    demands at least one per clinic. `clinic_staff_alerts` needs no fixture —
+    the trigger on `clinics` has already given this one its four.
+  */
+  await q(
+    `insert into clinic_system_messages (clinic_id, key, body_ar) values ($1, 'booking_confirmed', 'x') returning id`,
+    [clinic]
+  );
   await q(`insert into tasks (clinic_id, title) values ($1, 'task') returning id`, [clinic]);
   await q(`insert into ai_agents (clinic_id) values ($1) returning clinic_id`, [clinic]);
   await q(`insert into ai_knowledge_items (clinic_id, title) values ($1, 'k') returning id`, [clinic]);

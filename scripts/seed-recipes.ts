@@ -1,11 +1,31 @@
 import { Client } from "pg";
+import { SPECIALTY_RECIPES } from "./specialty-recipes";
 
 /**
  * Agency-level defaults: automation recipes + AI knowledge structure.
  * Copied (disabled, fully editable) into every clinic on creation.
  */
 
-export const RECIPES = [
+export type RecipeStep = {
+  step_type: string;
+  config?: Record<string, unknown>;
+  children?: { yes?: RecipeStep[]; no?: RecipeStep[] };
+};
+
+export type Recipe = {
+  key: string;
+  name: string;
+  name_ar: string;
+  description: string;
+  trigger_type: string;
+  trigger_config: Record<string, unknown>;
+  sort: number;
+  steps: RecipeStep[];
+  /** Omitted means 'general': suits every clinic, whatever it practises. */
+  specialty?: string;
+};
+
+export const RECIPES: Recipe[] = [
   {
     key: "confirm_on_booking",
     name: "Appointment confirmation",
@@ -284,18 +304,26 @@ export const KNOWLEDGE = [
   { category: "faq", title: "أسئلة شائعة", content: "", sort: 7 },
 ];
 
+/**
+ * Everything the agency hands out: the library every clinic gets, then the
+ * per-field packs on top. One list, because a recipe is a recipe — the
+ * `specialty` column is the only thing that decides who is offered it.
+ */
+export const ALL_RECIPES: Recipe[] = [...RECIPES, ...SPECIALTY_RECIPES];
+
 export async function seedAgencyDefaults(c: Client) {
-  for (const r of RECIPES) {
+  for (const r of ALL_RECIPES) {
     await c.query(
-      `insert into recipe_templates (key, name, name_ar, description, trigger_type, trigger_config, steps, sort)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
+      `insert into recipe_templates (key, name, name_ar, description, trigger_type, trigger_config, steps, sort, specialty)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        on conflict (key) do update set
          name = excluded.name, name_ar = excluded.name_ar, description = excluded.description,
          trigger_type = excluded.trigger_type, trigger_config = excluded.trigger_config,
-         steps = excluded.steps, sort = excluded.sort`,
+         steps = excluded.steps, sort = excluded.sort, specialty = excluded.specialty`,
       [
         r.key, r.name, r.name_ar, r.description, r.trigger_type,
         JSON.stringify(r.trigger_config), JSON.stringify(r.steps), r.sort,
+        r.specialty ?? "general",
       ]
     );
   }
@@ -320,7 +348,9 @@ if (process.argv[1]?.includes("seed-recipes")) {
   c.connect()
     .then(() => seedAgencyDefaults(c))
     .then(() => {
-      console.log(`[seed] ${RECIPES.length} recipes, ${KNOWLEDGE.length} knowledge templates`);
+      console.log(
+        `[seed] ${RECIPES.length} general + ${SPECIALTY_RECIPES.length} specialty recipes, ${KNOWLEDGE.length} knowledge templates`
+      );
       return c.end();
     })
     .catch((e) => {

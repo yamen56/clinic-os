@@ -6,7 +6,9 @@ import {
   impersonateAction,
   updateSubscriptionAction,
   updateClinicFeaturesAction,
+  setClinicSpecialtyAction,
 } from "../../actions";
+import { SPECIALTIES, type Specialty } from "@/lib/specialties";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -15,7 +17,7 @@ import { useToast } from "@/components/ui/toast";
 import { FeaturePicker } from "../../feature-picker";
 import { toFeatureSetting, type FeatureMap } from "@/lib/features";
 import type { AdminCapabilityMap } from "@/lib/admin-permissions";
-import { ExternalLink, Settings2, SlidersHorizontal } from "lucide-react";
+import { ExternalLink, Settings2, SlidersHorizontal, Stethoscope } from "lucide-react";
 
 export function ClinicAdminPanel({
   clinic,
@@ -28,6 +30,7 @@ export function ClinicAdminPanel({
     plan: string;
     planPrice: number;
     features: FeatureMap;
+    specialty: Specialty;
     deleted: boolean;
   };
   caps: AdminCapabilityMap;
@@ -41,8 +44,11 @@ export function ClinicAdminPanel({
   const [plan, setPlan] = useState(clinic.plan);
   const [price, setPrice] = useState(String(clinic.planPrice));
   const [features, setFeatures] = useState(clinic.features);
+  const [specialtyOpen, setSpecialtyOpen] = useState(false);
+  const [specialty, setSpecialty] = useState<Specialty>(clinic.specialty);
   const [pending, start] = useTransition();
   const [featPending, startFeat] = useTransition();
+  const [specPending, startSpec] = useTransition();
   const [impPending, startImp] = useTransition();
 
   /*
@@ -59,6 +65,12 @@ export function ClinicAdminPanel({
         <Button variant="outline" onClick={() => setFeaturesOpen(true)}>
           <SlidersHorizontal className="h-4 w-4" />
           {t.admin.features}
+        </Button>
+      )}
+      {caps["clinics.edit"] && (
+        <Button variant="outline" onClick={() => setSpecialtyOpen(true)}>
+          <Stethoscope className="h-4 w-4" />
+          {t.admin.specialty}
         </Button>
       )}
       {caps["clinics.edit"] && (
@@ -122,6 +134,55 @@ export function ClinicAdminPanel({
               }
             >
               {t.common.save}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={specialtyOpen}
+        onClose={() => setSpecialtyOpen(false)}
+        title={t.admin.specialty}
+      >
+        <div className="grid gap-4">
+          <p className="text-[13px] text-ink-500">{t.admin.specialtySub}</p>
+          <Field label={t.admin.specialty} hint={t.admin.specialtyHint}>
+            <Select value={specialty} onChange={(e) => setSpecialty(e.target.value as Specialty)}>
+              {SPECIALTIES.map((s) => (
+                <option key={s} value={s}>
+                  {t.specialties[s]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSpecialty(clinic.specialty);
+                setSpecialtyOpen(false);
+              }}
+            >
+              {t.common.cancel}
+            </Button>
+            <Button
+              loading={specPending}
+              onClick={() =>
+                startSpec(async () => {
+                  const r = await setClinicSpecialtyAction(clinic.slug, specialty);
+                  if (r.error) toast(t.common.genericError, "error");
+                  else
+                    toast(
+                      r.installed
+                        ? t.admin.packInstalled.replace("{n}", String(r.installed))
+                        : t.admin.packUpToDate
+                    );
+                  setSpecialtyOpen(false);
+                  router.refresh();
+                })
+              }
+            >
+              {t.admin.installPack}
             </Button>
           </div>
         </div>

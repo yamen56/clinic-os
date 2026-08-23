@@ -15,6 +15,8 @@ import { deleteClinicFiles } from "@/lib/storage";
 import { internalSecret } from "@/lib/internal-secret";
 import { FEATURES, toFeatureSetting, type Feature, type FeatureMap } from "@/lib/features";
 import { RESTORE_WINDOW_DAYS } from "@/lib/clinic-lifecycle";
+import { SPECIALTIES, asSpecialty, type Specialty } from "@/lib/specialties";
+import { seedStaffAlerts } from "@/lib/staff-alerts";
 import { z } from "zod";
 
 /**
@@ -48,6 +50,10 @@ const createClinicSchema = z.object({
   ownerName: z.string().min(2).max(80),
   ownerEmail: z.string().email(),
   features: featureListSchema,
+  // Unknown values fall back to 'general' rather than rejecting the form: a
+  // clinic is not worth failing to create over which pack of disabled recipes
+  // it starts with, and the agency can change it afterwards.
+  specialty: z.enum(SPECIALTIES).catch("general" as Specialty),
 });
 
 export type CreateClinicResult = { error?: string; fieldErrors?: Record<string, string> } | null;
@@ -84,6 +90,83 @@ async function copySteps(
   }
 }
 
+/**
+ * Gives a clinic the recipe library for its field: the general one everybody
+ * gets, plus its own specialty's pack.
+ *
+ * Additive and re-runnable. A recipe the clinic already holds a copy of is
+ * skipped rather than duplicated, which is what makes this safe to call again
+ * when the agency corrects a specialty that was chosen wrongly — the clinic's
+ * own edits to the copies it already has are never touched.
+ *
+ * Returns how many were newly installed, because "nothing happened" and "eleven
+ * flows appeared in their workspace" should not look the same to whoever
+ * pressed the button.
+ */
+async function installRecipes(
+  c: import("pg").PoolClient,
+  clinicId: string,
+  specialty: Specialty
+): Promise<number> {
+  const recipes = await c.query(
+    `select * from recipe_templates
+      where active and specialty in ('general', $1)
+        and key not in (select recipe_key from automations where clinic_id = $2 and recipe_key is not null)
+      order by sort`,
+    [specialty, clinicId]
+  );
+  for (const r of recipes.rows) {
+    const a = await c.query(
+      `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key, recipe_specialty)
+       values ($1, $2, $3, $4, $5, $7, $6, $8) returning id`,
+      [
+        clinicId,
+        r.name_ar || r.name,
+        r.description,
+        r.trigger_type,
+        JSON.stringify(r.trigger_config ?? {}),
+        r.key,
+        RECIPES_ON_BY_DEFAULT.has(r.key as string),
+        r.specialty ?? "general",
+      ]
+    );
+    await copySteps(c, clinicId, a.rows[0].id, Array.isArray(r.steps) ? r.steps : [], null, null);
+  }
+  return recipes.rowCount ?? 0;
+}
+
+/**
+ * Changes a clinic's field and hands it the recipes that come with it.
+ *
+ * Nothing is removed. A clinic that was set up as general practice and is
+ * really a dental clinic has spent months editing the flows it does have, and
+ * deleting them to "clean up" would throw that away to fix a dropdown.
+ */
+export async function setClinicSpecialtyAction(
+  slug: string,
+  specialty: string
+): Promise<{ installed?: number; error?: string }> {
+  const s = await requireAdminCap("clinics.edit");
+  const chosen = asSpecialty(specialty);
+  return withSystem(async (c) => {
+    const clinic = await c.query(`select id from clinics where slug = $1`, [slug]);
+    if (!clinic.rowCount) return { error: "not_found" };
+    const clinicId = clinic.rows[0].id as string;
+    await c.query(`update clinics set specialty = $2 where id = $1`, [clinicId, chosen]);
+    const installed = await installRecipes(c, clinicId, chosen);
+    await audit(c, {
+      clinicId,
+      userId: s.user.id,
+      action: "admin.clinic.specialty",
+      entity: "clinic",
+      entityId: clinicId,
+      detail: { specialty: chosen, installed },
+    });
+    revalidatePath(`/admin/clinics/${slug}`);
+    return { installed };
+  });
+}
+
 export async function createClinicAction(
   _prev: CreateClinicResult,
   formData: FormData
@@ -110,14 +193,17 @@ export async function createClinicAction(
       if (dup.rowCount) throw new Error("slug_taken");
 
       const clinic = await c.query(
-        `insert into clinics (name, name_ar, slug, phone_e164, plan, plan_price, features)
-         values ($1, $2, $3, $4, $5, $6, $7) returning id, slug`,
+        `insert into clinics (name, name_ar, slug, phone_e164, plan, plan_price, features, specialty)
+         values ($1, $2, $3, $4, $5, $6, $7, $8) returning id, slug`,
         // Written out in full rather than as "only the exceptions", so the row
         // records what was actually sold on the day it was sold. A feature added
         // to the product next year then arrives switched *on* for this clinic —
         // the same rule every existing clinic gets — and the agency turns it off
         // deliberately if it is not part of the deal.
-        [d.name, d.nameAr || null, d.slug, phone, d.plan, d.planPrice, JSON.stringify(toFeatureSetting(d.features))]
+        [
+          d.name, d.nameAr || null, d.slug, phone, d.plan, d.planPrice,
+          JSON.stringify(toFeatureSetting(d.features)), d.specialty,
+        ]
       );
       clinicId = clinic.rows[0].id as string;
 
@@ -168,25 +254,10 @@ export async function createClinicAction(
       );
 
       // Copy agency defaults: automation recipes (disabled) and knowledge structure
-      const recipes = await c.query(
-        "select * from recipe_templates where active order by sort"
-      );
-      for (const r of recipes.rows) {
-        const a = await c.query(
-          `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key)
-           values ($1, $2, $3, $4, $5, $7, $6) returning id`,
-          [
-            clinicId,
-            r.name_ar || r.name,
-            r.description,
-            r.trigger_type,
-            r.trigger_config,
-            r.key,
-            RECIPES_ON_BY_DEFAULT.has(r.key as string),
-          ]
-        );
-        await copySteps(c, clinicId, a.rows[0].id, Array.isArray(r.steps) ? r.steps : [], null, null);
-      }
+      await installRecipes(c, clinicId, d.specialty);
+      // The doctor and staff alerts this clinic will be able to edit from its
+      // own automations page. Seeded with exactly what the worker used to do.
+      await seedStaffAlerts(c, clinicId);
       const kts = await c.query("select * from knowledge_templates order by sort");
       for (const k of kts.rows) {
         await c.query(

@@ -6,6 +6,7 @@ import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { nextInvoiceNumber, computeTotals, refreshInvoiceStatus, round2, type InvoiceItemInput } from "@/lib/invoices";
 import { queueWhatsAppMessage } from "@/lib/outbound";
+import { systemMessage } from "@/lib/system-messages";
 import { emitTrigger } from "@/lib/triggers";
 import { renderUrlToPdf } from "@/lib/pdf";
 import { saveFile } from "@/lib/storage";
@@ -146,13 +147,20 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
       and produces exactly the phone call this was meant to save.
     */
     const settled = pre.status === "paid";
-    const body = settled
-      ? isAr
-        ? `إيصال الدفع من ${clinicName}\nرقم ${pre.number} — مدفوع ${Number(pre.amount_paid).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`
-        : `Payment receipt from ${clinicName}\n${pre.number} — paid ${Number(pre.amount_paid).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`
-      : isAr
-        ? `فاتورتك من ${clinicName}\nرقم ${pre.number} — الإجمالي ${Number(pre.total).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`
-        : `Your invoice from ${clinicName}\n${pre.number} — total ${Number(pre.total).toFixed(2)} ${pre.currency}\n${base}/inv/${pre.public_token}`;
+    const body = (
+      await systemMessage(c, {
+        clinicId: access.clinicId,
+        key: settled ? "invoice_receipt" : "invoice_sent",
+        lang: isAr ? "ar" : "en",
+        vars: {
+          "clinic.name": clinicName,
+          "invoice.number": pre.number,
+          "invoice.total": `${Number(pre.total).toFixed(2)} ${pre.currency}`,
+          "invoice.paid": `${Number(pre.amount_paid).toFixed(2)} ${pre.currency}`,
+          "invoice.link": `${base}/inv/${pre.public_token}`,
+        },
+      })
+    ).body;
 
     await queueWhatsAppMessage(c, {
       clinicId: access.clinicId,

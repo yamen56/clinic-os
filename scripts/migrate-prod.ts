@@ -64,20 +64,46 @@ async function main() {
     return;
   }
 
-  // 1. Agency defaults first — see the note at the top of this file.
-  const seedClient = connect();
-  await seedClient.connect();
-  const { seedAgencyDefaults, RECIPES } = await import("./seed-recipes");
-  await seedAgencyDefaults(seedClient);
-  await seedClient.end();
-  console.log(`✓ seeded ${RECIPES.length} agency recipes`);
+  const { seedAgencyDefaults, ALL_RECIPES } = await import("./seed-recipes");
+  const seed = async () => {
+    const c = connect();
+    await c.connect();
+    try {
+      await seedAgencyDefaults(c);
+    } finally {
+      await c.end();
+    }
+  };
+
+  /*
+    1. Agency defaults first — see the note at the top of this file.
+
+    Allowed to fail, and only here. The seed writes whatever columns the current
+    code knows about, so against a database that has not yet had this release's
+    migrations it can be writing a column that does not exist yet. That is
+    exactly the situation this pass exists for — it runs early only so that a
+    migration which reads `recipe_templates` finds it populated — and a release
+    that adds a recipe column must not be blocked by it. Pass three is the one
+    that has to succeed.
+  */
+  try {
+    await seed();
+    console.log(`✓ seeded ${ALL_RECIPES.length} agency recipes`);
+  } catch (e) {
+    console.log(`… pre-migration seed deferred: ${(e as Error).message}`);
+  }
 
   // 2. Migrations. `runMigrations` reads DATABASE_SUPER_URL from the environment,
   //    which this script has already loaded.
   const { runMigrations } = await import("./lib-migrate");
   await runMigrations();
 
-  // 3. Report what actually changed, rather than assuming.
+  // 3. And again, now that the schema matches the code. This is the pass whose
+  //    result is the one that ships.
+  await seed();
+  console.log(`✓ seeded ${ALL_RECIPES.length} agency recipes`);
+
+  // 4. Report what actually changed, rather than assuming.
   const after = connect();
   await after.connect();
   const q = async (sql: string) => (await after.query(sql)).rows[0].n as number;

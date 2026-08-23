@@ -4,6 +4,7 @@ import { getDict } from "@/lib/i18n";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Workflow, BookOpen } from "lucide-react";
+import type { Specialty } from "@/lib/specialties";
 
 export default async function DefaultsPage() {
   await guardAdminCap("defaults");
@@ -12,7 +13,8 @@ export default async function DefaultsPage() {
   const data = await withSystem(async (c) => {
     const recipes = (
       await c.query(
-        `select key, name, name_ar, description, trigger_type, trigger_config, steps, active, sort
+        `select key, name, name_ar, description, trigger_type, trigger_config, steps, active, sort,
+                specialty
          from recipe_templates order by sort`
       )
     ).rows;
@@ -57,6 +59,11 @@ export default async function DefaultsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium">{r.name_ar || r.name}</span>
                     <Badge status="brand">{r.trigger_type}</Badge>
+                    {/* Only the packs are labelled. 'general' is every clinic,
+                        which is the default and needs no chip. */}
+                    {r.specialty !== "general" && (
+                      <Badge status="pending">{t.specialties[r.specialty as Specialty]}</Badge>
+                    )}
                     {!r.active && <Badge status="cancelled">hidden</Badge>}
                   </div>
                   <p className="mt-0.5 text-[13px] text-ink-500">{r.description}</p>

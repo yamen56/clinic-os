@@ -3,6 +3,7 @@ import { withSystem } from "@/lib/db";
 import { findOrCreatePatient } from "@/lib/patients";
 import { lockClinicSchedule } from "@/lib/appointments";
 import { queueWhatsAppMessage } from "@/lib/outbound";
+import { systemMessage } from "@/lib/system-messages";
 import { notifyClinicStaff } from "@/lib/notify";
 import { emitTrigger } from "@/lib/triggers";
 import type { PublicLink } from "@/lib/booking-public";
@@ -105,21 +106,32 @@ export async function finalizeBooking(
     const serviceName = p.locale === "en" ? service.name : service.name_ar || service.name;
     const doctorName = data.doctors.find((d) => d.id === chosen)?.name;
 
-    const confirmBody =
-      status === "confirmed"
-        ? p.locale === "en"
-          ? `Hi ${p.fullName} 👋\nYour appointment at ${clinicName} is confirmed:\n${serviceName}${doctorName ? ` — ${doctorName}` : ""}\n🗓 ${when}\n${data.clinic.address ?? ""}`.trim()
-          : `مرحباً ${p.fullName} 👋\nتم تأكيد موعدك في ${clinicName}:\n${serviceName}${doctorName ? ` — ${doctorName}` : ""}\n🗓 ${when}\n${data.clinic.address_ar ?? data.clinic.address ?? ""}`.trim()
-        : p.locale === "en"
-          ? `Hi ${p.fullName}, we received your booking request at ${clinicName} for ${when}. We'll confirm it shortly.`
-          : `مرحباً ${p.fullName}، استلمنا طلب حجزك في ${clinicName} ليوم ${when}. سنؤكده لك قريباً.`;
+    const confirm = await systemMessage(c, {
+      clinicId: data.clinic.id,
+      key: status === "confirmed" ? "booking_confirmed" : "booking_pending",
+      lang: p.locale,
+      vars: {
+        "patient.first_name": p.fullName.trim().split(/\s+/)[0] || p.fullName,
+        "patient.name": p.fullName,
+        "clinic.name": clinicName,
+        "clinic.address":
+          (p.locale === "en" ? data.clinic.address : data.clinic.address_ar || data.clinic.address) ??
+          "",
+        "appointment.service": serviceName,
+        "appointment.doctor": doctorName ?? "",
+        "appointment.when": when,
+      },
+    });
 
-    if (data.clinic.wa_connected) {
+    // `enabled` is the clinic's own switch on the automations page. A clinic
+    // that greets every booking by hand, or from a flow of its own, turns this
+    // off — and then nothing should go out at all, rather than a blank message.
+    if (data.clinic.wa_connected && confirm.enabled) {
       await queueWhatsAppMessage(c, {
         clinicId: data.clinic.id,
         phoneE164: phone,
         senderKind: "system",
-        body: confirmBody,
+        body: confirm.body,
         patientId: patient.id,
       });
     }

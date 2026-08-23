@@ -3,6 +3,7 @@ import { randomInt } from "node:crypto";
 import { withSystem } from "@/lib/db";
 import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
 import { queueWhatsAppMessage } from "@/lib/outbound";
+import { systemMessage } from "@/lib/system-messages";
 import { finalizeBooking, type BookingPayload } from "../finalize";
 
 /** Step 2: check the WhatsApp OTP, then finalize the booking. */
@@ -41,14 +42,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
          values ($1, $2, $3, $4, now() + interval '10 minutes') returning id`,
         [data.clinic.id, v.phone_e164, code, JSON.stringify(v.payload)]
       );
+      const lang = (v.payload as BookingPayload).locale === "en" ? "en" : "ar";
+      const msg = await systemMessage(c, {
+        clinicId: data.clinic.id,
+        key: "booking_otp",
+        lang,
+        vars: {
+          code,
+          "clinic.name": lang === "en" ? data.clinic.name : data.clinic.name_ar || data.clinic.name,
+        },
+      });
       await queueWhatsAppMessage(c, {
         clinicId: data.clinic.id,
         phoneE164: v.phone_e164,
         senderKind: "system",
-        body:
-          (v.payload as BookingPayload).locale === "en"
-            ? `${code} is your ${data.clinic.name} verification code.`
-            : `${code} هو رمز التحقق الخاص بك من ${data.clinic.name_ar || data.clinic.name}.`,
+        body: msg.body,
       });
       return { error: "expired" as const, newVerificationId: nv.rows[0].id as string };
     }

@@ -9,6 +9,7 @@ import { ClinicAdminPanel } from "./clinic-admin-panel";
 import { OwnerInvite } from "./owner-invite";
 import { DangerZone } from "./danger-zone";
 import { FEATURES, resolveFeatures } from "@/lib/features";
+import { asSpecialty } from "@/lib/specialties";
 import { CheckCircle2, Circle } from "lucide-react";
 
 const CHECKLIST: { key: string; en: string; ar: string }[] = [
@@ -103,6 +104,7 @@ export default async function AdminClinicDetail({
               plan: clinic.plan,
               planPrice: Number(clinic.plan_price),
               features,
+              specialty: asSpecialty(clinic.specialty),
               deleted: !!clinic.deleted_at,
             }}
           />

@@ -298,6 +298,15 @@ export const ar: Dict = {
     editFeatures: "تعديل الوحدات",
     featuresSaved: "تم تحديث الوحدات",
 
+    /* --- تخصص العيادة --- */
+    specialty: "التخصص",
+    specialtySub:
+      "يحدّد باقة الأتمتة التي تبدأ بها العيادة. المكتبة العامة تصلها في كل الأحوال، وهذا يضيف ما كُتب لتخصصها.",
+    specialtyHint: "لا يُحذف شيء أبداً — تغييره لاحقاً يضيف الناقص فقط.",
+    installPack: "ثبّت أتمتة التخصص",
+    packInstalled: "أُضيفت {n} أتمتة، متوقفة وجاهزة للتعديل.",
+    packUpToDate: "كل أتمتة هذا التخصص مثبّتة مسبقاً.",
+
     /* --- الحذف --- */
     dangerZone: "منطقة الخطر",
     deleteClinic: "حذف العيادة",
@@ -986,6 +995,116 @@ export const ar: Dict = {
     testRunHint: "ينفّذ المسار على مريض تختاره، ويرسل رسائل حقيقية.",
     deleteAutomation: "حذف الأتمتة",
     saved: "تم حفظ الأتمتة",
+
+    /* --- التبويبات --- */
+    tabFlows: "المسارات",
+    tabMessages: "رسائل النظام",
+    tabAlerts: "تنبيهات الفريق",
+
+    /* --- باقة التخصص --- */
+    specialtyPack: "أتمتة {specialty}",
+    specialtyPackSub: "جاهزة لتخصص عيادتك. فعّل ما يناسبك وعدّل نصه كما تريد.",
+
+    /* --- رسائل النظام --- */
+    systemMessages: "رسائل النظام",
+    systemMessagesSub:
+      "رسائل يرسلها النظام من نفسه خارج المسارات. هذا نصّها الفعلي — عدّله أو أوقف ما لا تريده.",
+    messageGroups: {
+      booking: "الحجز",
+      waitlist: "قائمة الانتظار",
+      documents: "المستندات",
+      billing: "الفواتير",
+    },
+    messageNames: {
+      booking_confirmed: "تأكيد حجز إلكتروني",
+      booking_pending: "استلام طلب حجز",
+      booking_otp: "رمز التحقق للحجز",
+      waitlist_offer: "عرض موعد فاضي",
+      document_sign_request: "رابط توقيع مستند",
+      document_reminder: "تذكير بتوقيع مستند",
+      document_bundle: "عدة مستندات للتوقيع",
+      document_signed_copy: "إرسال النسخة الموقّعة",
+      signing_otp: "رمز تأكيد التوقيع",
+      invoice_sent: "إرسال فاتورة",
+      invoice_receipt: "إرسال إيصال دفع",
+    },
+    messageWhen: {
+      booking_confirmed: "عند تأكيد حجز من رابط الحجز الإلكتروني",
+      booking_pending: "عند وصول طلب حجز بحاجة لموافقتكم",
+      booking_otp: "عند بدء الحجز الإلكتروني، للتحقق من الرقم",
+      waitlist_offer: "عند شغور موعد ووجود من ينتظره",
+      document_sign_request: "عند إرسال مستند للمريض ليوقّعه",
+      document_reminder: "عند مرور المدة المحددة بدون توقيع",
+      document_bundle: "عند إرسال أكثر من مستند دفعة واحدة",
+      document_signed_copy: "عند اكتمال التوقيع، مع ملف PDF",
+      signing_otp: "قبل التوقيع مباشرة، للتحقق من هوية الموقّع",
+      invoice_sent: "عند إرسال فاتورة عبر واتساب",
+      invoice_receipt: "عند إرسال فاتورة مدفوعة كإيصال",
+    },
+    alwaysOn: "دائماً مفعّلة",
+    alwaysOnHint: "لا يمكن إيقافها لأن العملية نفسها تتوقف بدونها. النص قابل للتعديل.",
+    editMessage: "تعديل النص",
+    arabicText: "النص العربي",
+    englishText: "النص الإنجليزي",
+    languageHint: "تُرسل حسب لغة المريض أو لغة المستند، وليس حسب لغة العيادة.",
+    restoreDefault: "استعادة النص الأصلي",
+    messageSaved: "تم حفظ الرسالة",
+    messageRestored: "رجع النص الأصلي",
+    insertVariable: "المتغيّرات — اضغط لإدراجها",
+    emptyLineNote: "أي سطر يحتوي متغيّراً فارغاً يُحذف تلقائياً عند الإرسال.",
+
+    /* --- تنبيهات الفريق --- */
+    staffAlerts: "تنبيهات الأطباء والفريق",
+    staffAlertsSub:
+      "متى ينبّه النظام فريقك داخل التطبيق. أضف ما تحتاجه، واحذف ما لا يقرأه أحد.",
+    addAlert: "إضافة تنبيه",
+    alertKinds: {
+      appointment_reminder: "تذكير قبل الموعد",
+      day_schedule: "جدول اليوم",
+      day_end: "ملخص نهاية اليوم",
+      unread_digest: "رسائل غير مقروءة",
+    },
+    alertKindHints: {
+      appointment_reminder: "ينبّه طبيب الموعد قبل بدايته.",
+      day_schedule: "قائمة مواعيد اليوم صباحاً — لكل طبيب جدوله، وللبقية جدول العيادة.",
+      day_end: "المواعيد المكتملة وحالات عدم الحضور والمقبوضات.",
+      unread_digest: "عدد المحادثات التي ما زالت بانتظار الرد.",
+    },
+    recipients: "المستلمون",
+    alertRoles: { owner: "المالك", doctor: "الأطباء", receptionist: "الاستقبال" },
+    doctorOfAppointment: "طبيب الموعد",
+    leadTime: "قبل الموعد بـ",
+    ownSetting: "حسب إعداد كل شخص",
+    minutesUnit: "دقيقة",
+    atHour: "الساعة",
+    threshold: "لا تُرسل تحت",
+    thresholdUnit: "محادثة",
+    deleteAlert: "حذف التنبيه",
+    alertSaved: "تم الحفظ",
+    alertDeleted: "تم حذف التنبيه",
+    noRecipients: "اختر مستلماً واحداً على الأقل.",
+    alertsEmpty: "لا توجد تنبيهات",
+    alertsEmptyBody: "أضف تنبيهاً ليعرف فريقك بما يحتاج معرفته دون أن يفتح التطبيق.",
+  },
+  /**
+   * ما تمارسه العيادة فعلياً. يُستخدم لاختيار باقة الأتمتة عند إنشائها.
+   */
+  specialties: {
+    general: "طب عام",
+    dental: "أسنان",
+    dermatology: "جلدية وتجميل",
+    ophthalmology: "عيون",
+    obgyn: "نسائية وتوليد",
+    pediatrics: "أطفال",
+    orthopedics: "عظام",
+    physiotherapy: "علاج طبيعي",
+    ent: "أنف وأذن وحنجرة",
+    cardiology: "قلبية",
+    nutrition: "تغذية",
+    psychiatry: "نفسية وإرشاد",
+    plastic_surgery: "جراحة تجميلية",
+    urology: "مسالك بولية",
+    internal_medicine: "باطنية",
   },
   invoices: {
     title: "الفواتير",

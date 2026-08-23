@@ -6,6 +6,7 @@ import { Client } from "pg";
 import bcrypt from "bcryptjs";
 import { DateTime } from "luxon";
 import { seedAgencyDefaults } from "./seed-recipes";
+import { seedStaffAlerts } from "../src/lib/staff-alerts";
 import { ROLE_DEFAULTS, type MemberRole } from "../src/lib/permissions";
 
 const PG_PORT = Number(process.env.PG_PORT || 5544);
@@ -96,13 +97,13 @@ async function main() {
     await c.query(
       `insert into clinics (name, name_ar, slug, phone_e164, address, address_ar, google_maps_url,
                             brand_color, invoice_prefix, invoice_tax_rate, invoice_tax_label,
-                            payment_instructions, invoice_footer, subscription_status, plan, plan_price)
+                            payment_instructions, invoice_footer, subscription_status, plan, plan_price, specialty)
        values ('Rima Dental Center', 'مركز ريما لطب الأسنان', $1, '+96264616161',
                'Amman, 7th Circle, Zahran St. 42', 'عمان، الدوار السابع، شارع زهران ٤٢',
                'https://maps.google.com/?q=31.9539,35.8656',
                '#0b1220', 'RIMA', 16, 'ضريبة المبيعات',
                'الدفع نقداً في العيادة، أو عبر كليك: RIMADENTAL',
-               'شكراً لثقتكم بمركز ريما لطب الأسنان', 'active', 'standard', 149)
+               'شكراً لثقتكم بمركز ريما لطب الأسنان', 'active', 'standard', 149, 'dental')
        returning id, timezone`,
       [SLUG]
     )
@@ -231,14 +232,23 @@ async function main() {
     );
   }
 
+  // ---- Doctor and team alerts (what the worker used to hardcode)
+  await seedStaffAlerts(c as never, clinicId);
+
   // ---- Automation recipes copied in (two enabled for the demo)
-  const recipes = await c.query(`select * from recipe_templates where active order by sort`);
+  // The demo is a dental clinic, so it gets the general library plus dental.
+  const recipes = await c.query(
+    `select * from recipe_templates where active and specialty in ('general', 'dental') order by sort`
+  );
   for (const r of recipes.rows) {
     const enable = r.key === "confirm_on_booking" || r.key === "reminder_24h";
     const a = await c.query(
-      `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key)
-       values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-      [clinicId, r.name_ar || r.name, r.description, r.trigger_type, r.trigger_config, enable, r.key]
+      `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key, recipe_specialty)
+       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+      [
+        clinicId, r.name_ar || r.name, r.description, r.trigger_type,
+        JSON.stringify(r.trigger_config ?? {}), enable, r.key, r.specialty ?? "general",
+      ]
     );
     const writeSteps = async (
       steps: { step_type: string; config?: Record<string, unknown>; children?: { yes?: unknown[]; no?: unknown[] } }[],

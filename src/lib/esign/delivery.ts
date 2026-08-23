@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { queueWhatsAppMessage } from "../outbound";
+import { systemMessage } from "../system-messages";
 import { notifyClinicStaff, notifyUser } from "../notify";
 import { logDocEvent } from "./events";
 import { issueSigningToken } from "./tokens";
@@ -16,52 +17,47 @@ import { isStaffRole, markSent, type DocumentRow, type SignerRow } from "./docum
 
 type Lang = "ar" | "en";
 
-export function signRequestMessage(args: {
-  lang: Lang;
-  clinicName: string;
-  patientFirstName: string;
-  title: string;
-  url: string;
-}): string {
-  return args.lang === "ar"
-    ? `مرحباً ${args.patientFirstName}، من ${args.clinicName}.\n` +
-        `لديك مستند بحاجة إلى توقيعك: ${args.title}\n` +
-        `افتح الرابط لقراءته وتوقيعه — يستغرق أقل من دقيقة:\n${args.url}`
-    : `Hi ${args.patientFirstName}, this is ${args.clinicName}.\n` +
-        `You have a document to sign: ${args.title}\n` +
-        `Open the link to read and sign it — it takes under a minute:\n${args.url}`;
-}
+/**
+ * The four texts a document sends, as the clinic has them.
+ *
+ * These were four fixed strings until the automations page grew a place to show
+ * built-in messages; now they are templates the clinic can rewrite, and this is
+ * the one door between the signing module and that registry. The wording is
+ * unchanged out of the box — see src/lib/system-messages.ts.
+ */
+export type DocumentMessageKey =
+  | "document_sign_request"
+  | "document_reminder"
+  | "document_signed_copy"
+  | "document_bundle";
 
-export function reminderMessage(args: {
-  lang: Lang;
-  clinicName: string;
-  patientFirstName: string;
-  title: string;
-  url: string;
-}): string {
-  return args.lang === "ar"
-    ? `تذكير من ${args.clinicName}: ما زال المستند "${args.title}" بانتظار توقيعك.\n${args.url}`
-    : `A reminder from ${args.clinicName}: "${args.title}" is still waiting for your signature.\n${args.url}`;
-}
-
-export function signedCopyMessage(args: { lang: Lang; clinicName: string; title: string }): string {
-  return args.lang === "ar"
-    ? `شكراً لك. هذه نسختك الموقّعة من "${args.title}" من ${args.clinicName}. احتفظ بها لسجلاتك.`
-    : `Thank you. Here is your signed copy of "${args.title}" from ${args.clinicName}. Keep it for your records.`;
-}
-
-export function bundleMessage(args: {
-  lang: Lang;
-  clinicName: string;
-  patientFirstName: string;
-  items: { title: string; url: string }[];
-}): string {
-  const list = args.items.map((it, i) => `${i + 1}. ${it.title}\n${it.url}`).join("\n\n");
-  return args.lang === "ar"
-    ? `مرحباً ${args.patientFirstName}، من ${args.clinicName}.\n` +
-        `لديك ${args.items.length} مستندات بحاجة إلى توقيعك. لكل واحد رابط خاص به:\n\n${list}`
-    : `Hi ${args.patientFirstName}, this is ${args.clinicName}.\n` +
-        `You have ${args.items.length} documents waiting for your signature. Each has its own link:\n\n${list}`;
+export async function documentMessage(
+  c: PoolClient,
+  args: {
+    clinicId: string;
+    key: DocumentMessageKey;
+    lang: Lang;
+    clinicName: string;
+    patientFirstName?: string;
+    title?: string;
+    url?: string;
+    items?: { title: string; url: string }[];
+  }
+): Promise<{ enabled: boolean; body: string }> {
+  const items = args.items ?? [];
+  return systemMessage(c, {
+    clinicId: args.clinicId,
+    key: args.key,
+    lang: args.lang,
+    vars: {
+      "clinic.name": args.clinicName,
+      "patient.first_name": args.patientFirstName ?? "",
+      "document.title": args.title ?? "",
+      "document.count": String(items.length),
+      "document.list": items.map((it, i) => `${i + 1}. ${it.title}\n${it.url}`).join("\n\n"),
+      link: args.url ?? "",
+    },
+  });
 }
 
 export type ClinicDelivery = {
@@ -111,7 +107,7 @@ export async function deliverToSigner(
     senderUserId?: string | null;
     isReminder?: boolean;
   }
-): Promise<{ sent: boolean; reason?: "staff" | "no_phone" | "wa_offline"; url?: string }> {
+): Promise<{ sent: boolean; reason?: "staff" | "no_phone" | "wa_offline" | "off"; url?: string }> {
   const { clinic, doc, signer } = args;
 
   if (isStaffRole(signer.role_key) || signer.user_id) {
@@ -143,21 +139,23 @@ export async function deliverToSigner(
   }
 
   const lang = doc.language;
-  const body = args.isReminder
-    ? reminderMessage({
-        lang,
-        clinicName: clinicDisplayName(clinic, lang),
-        patientFirstName: firstName(signer.display_name),
-        title: doc.title,
-        url,
-      })
-    : signRequestMessage({
-        lang,
-        clinicName: clinicDisplayName(clinic, lang),
-        patientFirstName: firstName(signer.display_name),
-        title: doc.title,
-        url,
-      });
+  const msg = await documentMessage(c, {
+    clinicId: clinic.id,
+    key: args.isReminder ? "document_reminder" : "document_sign_request",
+    lang,
+    clinicName: clinicDisplayName(clinic, lang),
+    patientFirstName: firstName(signer.display_name),
+    title: doc.title,
+    url,
+  });
+  /*
+    Only the reminder can be switched off, and switching it off is a real
+    answer rather than a failure: the link still exists, the patient still has
+    it, and the clinic has said it would rather chase by phone. The request
+    itself cannot be silenced — see canDisable in the registry.
+  */
+  if (!msg.enabled) return { sent: false, reason: "off", url };
+  const body = msg.body;
 
   await queueWhatsAppMessage(c, {
     clinicId: clinic.id,
