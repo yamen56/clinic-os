@@ -36,7 +36,10 @@ export function InvoicingForm({
             onChange={(e) => patch({ invoice_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) })} />
         </Field>
         <div className="grid grid-cols-2 gap-4">
-          <Field label={`${t.invoices.tax} %`}>
+          {/* A default, not the invoice's rate. Tax lives on the line now, so
+              this is what a new line starts at — and 0 starts it outside the
+              scope of tax, which is what a clinic that is not registered wants. */}
+          <Field label={`${t.invoices.tax} %`} hint={t.settings.defaultTaxHint}>
             <Input dir="ltr" type="number" min={0} max={100} step="0.5" defaultValue={Number(clinic.invoice_tax_rate)} disabled={ro}
               onChange={(e) => patch({ invoice_tax_rate: Number(e.target.value) || 0 })} />
           </Field>

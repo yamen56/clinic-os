@@ -4,7 +4,14 @@ import { revalidatePath } from "next/cache";
 import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
-import { nextInvoiceNumber, computeTotals, refreshInvoiceStatus, round2, type InvoiceItemInput } from "@/lib/invoices";
+import {
+  nextInvoiceNumber,
+  computeInvoice,
+  refreshInvoiceStatus,
+  round2,
+  TAX_CATEGORIES,
+  type InvoiceItemInput,
+} from "@/lib/invoices";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { emitTrigger } from "@/lib/triggers";
@@ -22,11 +29,13 @@ const createSchema = z.object({
         description: z.string().min(1).max(200),
         qty: z.coerce.number().positive().max(999),
         unitPrice: z.coerce.number().min(0).max(1_000_000),
+        // Per line now, not once at the bottom of the invoice — see computeInvoice.
+        discountAmount: z.coerce.number().min(0).default(0),
+        taxCategory: z.enum(TAX_CATEGORIES).default("S"),
+        taxRate: z.coerce.number().min(0).max(100).default(0),
       })
     )
     .min(1),
-  discountAmount: z.coerce.number().min(0).default(0),
-  taxRate: z.coerce.number().min(0).max(100).default(0),
   notes: z.string().max(1000).default(""),
 });
 
@@ -50,7 +59,7 @@ export async function createInvoiceAction(
     if (!patient) return { error: "patient_not_found" };
 
     const { seq, number } = await nextInvoiceNumber(c, access.clinicId);
-    const totals = computeTotals(d.items as InvoiceItemInput[], d.discountAmount, d.taxRate);
+    const totals = computeInvoice(d.items as InvoiceItemInput[]);
     const currency = access.clinic.currency;
 
     const inv = await c.query(
@@ -62,27 +71,33 @@ export async function createInvoiceAction(
       */
       `insert into invoices (clinic_id, patient_id, appointment_id, seq, number, currency,
                              subtotal, discount_amount, tax_rate, tax_amount, total, notes, created_by,
-                             insurer_id, claim_status)
+                             issue_date, insurer_id, claim_status)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+               ((now() at time zone (select timezone from clinics where id = $1)))::date,
                (select insurer_id from patients where id = $2 and clinic_id = $1),
                case when (select insurer_id from patients where id = $2 and clinic_id = $1) is null
                     then 'none' else 'to_submit' end)
        returning id`,
       [
         access.clinicId, d.patientId, d.appointmentId ?? null, seq, number, currency,
-        totals.subtotal, totals.discount, d.taxRate, totals.taxAmount, totals.total,
+        totals.subtotal, totals.discount, totals.taxRate, totals.taxAmount, totals.total,
         d.notes, access.session.user.id,
       ]
     );
     const invoiceId = inv.rows[0].id as string;
     let sort = 0;
-    for (const it of d.items) {
+    for (const [i, it] of d.items.entries()) {
+      // Straight from computeInvoice, so what is stored on the line is exactly
+      // what the header was summed from — nothing recalculated a second way.
+      const line = totals.lines[i];
       await c.query(
-        `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount, sort)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount,
+                                    discount_amount, tax_category, tax_rate, tax_amount, sort)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           access.clinicId, invoiceId, it.serviceId ?? null, it.description,
-          it.qty, it.unitPrice, round2(it.qty * it.unitPrice), sort++,
+          it.qty, it.unitPrice, line.amount,
+          line.discount, line.taxCategory, line.taxRate, line.tax, sort++,
         ]
       );
     }

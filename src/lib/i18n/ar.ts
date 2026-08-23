@@ -1121,6 +1121,17 @@ export const ar: Dict = {
     freeItem: "بند مخصص",
     discount: "الخصم",
     tax: "الضريبة",
+    taxCategory: "الضريبة",
+    /* تصنيفات UBL 2.1. «خارج نطاق الضريبة» ليست «صفر بالمئة» — العيادة غير
+       المسجّلة في ضريبة المبيعات تقول الأولى. */
+    taxCategories: {
+      S: "خاضعة",
+      Z: "صفرية",
+      E: "معفاة",
+      O: "خارج نطاق الضريبة",
+    },
+    taxSummary: "تفصيل الضريبة",
+    net: "الصافي",
     subtotal: "المجموع الفرعي",
     total: "الإجمالي",
     paid: "المدفوع",
@@ -1305,6 +1316,7 @@ export const ar: Dict = {
     bookingLinks: "روابط الحجز",
     whatsapp: "واتساب",
     invoiceSettings: "إعدادات الفواتير",
+    defaultTaxHint: "نقطة البداية لأي بند جديد. كل بند قابل للتعديل على حدة.",
     documentTemplates: "قوالب المستندات",
     signerRoles: "صفات الموقّعين",
     mySignature: "توقيعي",

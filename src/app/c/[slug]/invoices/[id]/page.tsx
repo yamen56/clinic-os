@@ -32,7 +32,8 @@ export default async function InvoiceDetailPage({
     if (!inv) return null;
     const items = (
       await c.query(
-        `select description, qty, unit_price, amount from invoice_items where invoice_id = $1 order by sort`,
+        `select description, qty, unit_price, amount, discount_amount, tax_category, tax_rate, tax_amount
+           from invoice_items where invoice_id = $1 order by sort`,
         [id]
       )
     ).rows;

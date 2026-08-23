@@ -392,17 +392,26 @@ async function main() {
 
     const inv = await c.query(
       `insert into invoices (clinic_id, patient_id, appointment_id, seq, number, status, subtotal,
-                             discount_amount, tax_rate, tax_amount, total, amount_paid, sent_at, created_at, created_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, $11, $12, $12, $13) returning id`,
+                             discount_amount, tax_rate, tax_amount, total, amount_paid, sent_at, created_at, created_by,
+                             issue_date)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, $11, $12, $12, $13,
+               (($12::timestamptz at time zone $14))::date) returning id`,
       [
         clinicId, ap.patient_id, ap.id, seq, number, status, subtotal, discount, taxRate,
-        total, paid, ap.starts_at, ownerId,
+        total, paid, ap.starts_at, ownerId, tz,
       ]
     );
+    /*
+      The discount goes on the line, not just in the header. Tax and discount are
+      per line now, and a fixture whose header says 5 while its only line says 0
+      is an invoice that does not foot — exactly the thing the e-invoice checks
+      reject, discovered in QA rather than at a tax authority.
+    */
     await c.query(
-      `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount, sort)
-       values ($1, $2, $3, $4, 1, $5, $5, 0)`,
-      [clinicId, inv.rows[0].id, ap.service_id, ap.name_ar || ap.name, price]
+      `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount,
+                                  discount_amount, tax_category, tax_rate, tax_amount, sort)
+       values ($1, $2, $3, $4, 1, $5, $5, $6, 'O', 0, 0, 0)`,
+      [clinicId, inv.rows[0].id, ap.service_id, ap.name_ar || ap.name, price, discount]
     );
     if (paid > 0) {
       await c.query(

@@ -57,9 +57,13 @@ async function main() {
   await page.click("button:has-text('+ Filling')");
   await page.click("text=Custom item");
   await page.locator('input[placeholder="Item"]').last().fill("أشعة بانوراما");
-  const priceInputs = page.locator('input[type="number"][step="0.5"]');
-  await priceInputs.nth(1).fill("20"); // custom item price
-  await page.locator('input[dir="ltr"][step="0.5"]').nth(2).fill("5"); // discount
+  /*
+    By label, not by position. Tax and discount moved onto the line, so a row is
+    now four number boxes rather than two and "the third input with step 0.5" is
+    whatever the layout last happened to make it.
+  */
+  await page.getByLabel("Price", { exact: true }).nth(1).fill("20"); // custom item price
+  await page.getByLabel("Discount", { exact: true }).nth(1).fill("5"); // on that line
   await page.waitForTimeout(300);
   await page.click("button:has-text('Create')");
   await page.waitForURL(/\/invoices\/[0-9a-f-]{36}$/, { timeout: 30000 });

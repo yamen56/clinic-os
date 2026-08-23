@@ -1126,6 +1126,17 @@ export const en = {
     freeItem: "Custom item",
     discount: "Discount",
     tax: "Tax",
+    taxCategory: "Tax",
+    /* UBL 2.1 categories. "Outside tax" is not the same as "0%" — a clinic that
+       is not registered for sales tax is making the first statement. */
+    taxCategories: {
+      S: "Taxable",
+      Z: "Zero-rated",
+      E: "Exempt",
+      O: "Outside tax",
+    },
+    taxSummary: "Tax breakdown",
+    net: "Net",
     subtotal: "Subtotal",
     total: "Total",
     paid: "Paid",
@@ -1310,6 +1321,7 @@ export const en = {
     bookingLinks: "Booking links",
     whatsapp: "WhatsApp",
     invoiceSettings: "Invoice settings",
+    defaultTaxHint: "Where a new invoice line starts. Each line can be changed.",
     documentTemplates: "Document templates",
     signerRoles: "Signer roles",
     mySignature: "My signature",

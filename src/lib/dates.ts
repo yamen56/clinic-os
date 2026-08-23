@@ -39,6 +39,20 @@ export function fmtDate(iso: string | Date, tz: string, locale: string): string 
   return DateTime.fromJSDate(new Date(iso)).setZone(tz).setLocale(numLocale(locale)).toFormat("d LLL yyyy");
 }
 
+/**
+ * A calendar date that is already a calendar date.
+ *
+ * `fmtDate` converts an instant into a timezone, which is right for a timestamp
+ * and wrong for a `date` column: node-pg hands one back as a JS Date at local
+ * midnight, and pushing that through another zone moves it a day whenever the
+ * server and the clinic disagree. An invoice's issue date is the date the clinic
+ * wrote on it, not a moment to be re-interpreted.
+ */
+export function fmtDateOnly(d: string | Date, locale: string): string {
+  const dt = typeof d === "string" ? DateTime.fromISO(d.slice(0, 10)) : DateTime.fromJSDate(d);
+  return dt.setLocale(numLocale(locale)).toFormat("d LLL yyyy");
+}
+
 export function fmtDateTime(iso: string | Date, tz: string, locale: string): string {
   return DateTime.fromJSDate(new Date(iso)).setZone(tz).setLocale(numLocale(locale)).toFormat("d LLL · h:mm a");
 }

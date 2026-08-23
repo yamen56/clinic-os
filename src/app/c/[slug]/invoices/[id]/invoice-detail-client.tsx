@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/dates";
+import { asTaxCategory, taxBreakdown } from "@/lib/invoices";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge, type StatusKey } from "@/components/ui/badge";
@@ -62,7 +63,16 @@ export function InvoiceDetailClient({
 }: {
   slug: string;
   invoice: Invoice;
-  items: { description: string; qty: string; unit_price: string; amount: string }[];
+  items: {
+    description: string;
+    qty: string;
+    unit_price: string;
+    amount: string;
+    discount_amount: string;
+    tax_category: string;
+    tax_rate: string;
+    tax_amount: string;
+  }[];
   payments: { id: string; amount: string; method: string; reference: string; paid_at: string; recorded_by: string | null }[];
   /** Active companies. Empty for a clinic that only takes cash. */
   insurers: { id: string; name: string }[];
@@ -194,8 +204,23 @@ export function InvoiceDetailClient({
                   <td className="w-28 px-2 py-2.5 text-end tnum">
                     {fmtMoney(Number(it.unit_price), inv.currency, locale)}
                   </td>
+                  {/* Only says something when there is something to say — a line
+                      with no discount and the clinic's usual tax stays quiet. */}
+                  <td className="w-28 px-2 py-2.5 text-end text-[12px] text-ink-500 tnum">
+                    {Number(it.discount_amount) > 0 &&
+                      `−${fmtMoney(Number(it.discount_amount), inv.currency, locale)} `}
+                    {Number(it.tax_amount) > 0
+                      ? `${Number(it.tax_rate)}%`
+                      : it.tax_category !== "S"
+                        ? t.invoices.taxCategories[it.tax_category as "S" | "Z" | "E" | "O"]
+                        : ""}
+                  </td>
                   <td className="w-32 px-5 py-2.5 text-end font-medium tnum">
-                    {fmtMoney(Number(it.amount), inv.currency, locale)}
+                    {fmtMoney(
+                      Number(it.amount) - Number(it.discount_amount) + Number(it.tax_amount),
+                      inv.currency,
+                      locale
+                    )}
                   </td>
                 </tr>
               ))}
@@ -213,12 +238,23 @@ export function InvoiceDetailClient({
                   <span className="tnum">−{fmtMoney(Number(inv.discount_amount), inv.currency, locale)}</span>
                 </div>
               )}
-              {Number(inv.tax_rate) > 0 && (
-                <div className="flex justify-between text-ink-500">
-                  <span>{t.invoices.tax} ({Number(inv.tax_rate)}%)</span>
-                  <span className="tnum">{fmtMoney(Number(inv.tax_amount), inv.currency, locale)}</span>
-                </div>
-              )}
+              {taxBreakdown(
+                items.map((it) => ({
+                  net: Number(it.amount) - Number(it.discount_amount),
+                  tax: Number(it.tax_amount),
+                  taxCategory: asTaxCategory(it.tax_category),
+                  taxRate: Number(it.tax_rate),
+                }))
+              )
+                .filter((r) => r.tax > 0)
+                .map((r) => (
+                  <div key={`${r.taxCategory}${r.taxRate}`} className="flex justify-between text-ink-500">
+                    <span>
+                      {t.invoices.tax} ({r.taxRate}%)
+                    </span>
+                    <span className="tnum">{fmtMoney(r.tax, inv.currency, locale)}</span>
+                  </div>
+                ))}
               <div className="flex justify-between border-t border-line pt-2 text-base font-bold">
                 <span>{t.invoices.total}</span>
                 <span className="tnum">{fmtMoney(Number(inv.total), inv.currency, locale)}</span>

@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { withSystem } from "@/lib/db";
-import { fmtDate, fmtMoney } from "@/lib/dates";
+import { fmtDate, fmtDateOnly, fmtMoney } from "@/lib/dates";
+import { asTaxCategory, taxBreakdown } from "@/lib/invoices";
 import { PoweredBy, PrivacyLink } from "@/components/powered-by";
 
 export const metadata: Metadata = { robots: { index: false } };
@@ -24,7 +25,8 @@ async function loadInvoice(token: string) {
     if (!inv) return null;
     const items = (
       await c.query(
-        `select description, qty, unit_price, amount from invoice_items where invoice_id = $1 order by sort`,
+        `select description, qty, unit_price, amount, discount_amount, tax_category, tax_rate, tax_amount
+           from invoice_items where invoice_id = $1 order by sort`,
         [inv.id]
       )
     ).rows;
@@ -62,17 +64,36 @@ export default async function PublicInvoicePage({
     ? {
         invoice: "فاتورة", billTo: "فاتورة إلى", date: "التاريخ", item: "البند", qty: "الكمية",
         price: "السعر", amount: "المجموع", subtotal: "المجموع الفرعي", discount: "الخصم",
-        total: "الإجمالي", paid: "المدفوع", due: "المستحق",
+        total: "الإجمالي", paid: "المدفوع", due: "المستحق", tax: "الضريبة",
         payTitle: "تفاصيل الدفع", statusPaid: "مدفوعة", statusVoid: "ملغاة",
+        cat: { S: "خاضعة", Z: "صفرية", E: "معفاة", O: "خارج نطاق الضريبة" } as Record<string, string>,
         poweredBy: "مدعوم من كلينيكتي", privacy: "سياسة الخصوصية",
       }
     : {
         invoice: "Invoice", billTo: "Billed to", date: "Date", item: "Item", qty: "Qty",
         price: "Price", amount: "Amount", subtotal: "Subtotal", discount: "Discount",
-        total: "Total", paid: "Paid", due: "Balance due",
+        total: "Total", paid: "Paid", due: "Balance due", tax: "Tax",
         payTitle: "Payment details", statusPaid: "PAID", statusVoid: "VOID",
+        cat: { S: "Taxable", Z: "Zero-rated", E: "Exempt", O: "Outside tax" } as Record<string, string>,
         poweredBy: "Powered by Clinicti", privacy: "Privacy Policy",
       };
+
+  /*
+    Tax is presented per rate, never as one merged number. An invoice carrying an
+    exempt consultation beside a taxable procedure has to say which was which —
+    that is the whole point of moving tax onto the line, and a single "Tax" row
+    would put the clinic right back where it started.
+  */
+  const taxRows = taxBreakdown(
+    items.map((it) => ({
+      net: Number(it.amount) - Number(it.discount_amount),
+      tax: Number(it.tax_amount),
+      taxCategory: asTaxCategory(it.tax_category),
+      taxRate: Number(it.tax_rate),
+    }))
+  );
+  const anyLineDiscount = items.some((it) => Number(it.discount_amount) > 0);
+  const taxed = taxRows.filter((r) => r.tax > 0);
 
   return (
     <main
@@ -123,7 +144,7 @@ export default async function PublicInvoicePage({
                 {inv.number}
               </div>
               <div className="mt-1 text-[13px] text-ink-500">
-                {L.date}: {fmtDate(inv.created_at, inv.timezone, locale)}
+                {L.date}: {inv.issue_date ? fmtDateOnly(inv.issue_date, locale) : fmtDate(inv.created_at, inv.timezone, locale)}
               </div>
               {inv.status === "paid" && (
                 <span className="mt-2 inline-block rounded-full px-3 py-1 text-[12px] font-bold text-white" style={{ background: "var(--bk)" }}>
@@ -156,6 +177,11 @@ export default async function PublicInvoicePage({
                 <th className="py-2 text-start font-semibold">{L.item}</th>
                 <th className="w-16 py-2 text-center font-semibold">{L.qty}</th>
                 <th className="w-28 py-2 text-end font-semibold">{L.price}</th>
+                {/* Both columns appear only when some line actually uses them —
+                    an invoice from a clinic outside the tax net stays the same
+                    four columns it has always been. */}
+                {anyLineDiscount && <th className="w-24 py-2 text-end font-semibold">{L.discount}</th>}
+                {taxed.length > 0 && <th className="w-24 py-2 text-end font-semibold">{L.tax}</th>}
                 <th className="w-28 py-2 text-end font-semibold">{L.amount}</th>
               </tr>
             </thead>
@@ -165,7 +191,27 @@ export default async function PublicInvoicePage({
                   <td className="py-2.5">{it.description}</td>
                   <td className="py-2.5 text-center tnum">{Number(it.qty)}</td>
                   <td className="py-2.5 text-end tnum">{fmtMoney(Number(it.unit_price), inv.currency, locale)}</td>
-                  <td className="py-2.5 text-end tnum">{fmtMoney(Number(it.amount), inv.currency, locale)}</td>
+                  {anyLineDiscount && (
+                    <td className="py-2.5 text-end tnum">
+                      {Number(it.discount_amount) > 0
+                        ? `−${fmtMoney(Number(it.discount_amount), inv.currency, locale)}`
+                        : "—"}
+                    </td>
+                  )}
+                  {taxed.length > 0 && (
+                    <td className="py-2.5 text-end text-[13px] tnum">
+                      {Number(it.tax_amount) > 0
+                        ? `${Number(it.tax_rate)}%`
+                        : L.cat[String(it.tax_category)] || "—"}
+                    </td>
+                  )}
+                  <td className="py-2.5 text-end tnum">
+                    {fmtMoney(
+                      Number(it.amount) - Number(it.discount_amount) + Number(it.tax_amount),
+                      inv.currency,
+                      locale
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -183,14 +229,14 @@ export default async function PublicInvoicePage({
                   <span className="tnum">−{fmtMoney(Number(inv.discount_amount), inv.currency, locale)}</span>
                 </div>
               )}
-              {Number(inv.tax_rate) > 0 && (
-                <div className="flex justify-between text-ink-500">
+              {taxed.map((r) => (
+                <div key={`${r.taxCategory}${r.taxRate}`} className="flex justify-between text-ink-500">
                   <span>
-                    {inv.invoice_tax_label || "Tax"} ({Number(inv.tax_rate)}%)
+                    {inv.invoice_tax_label || L.tax} ({r.taxRate}%)
                   </span>
-                  <span className="tnum">{fmtMoney(Number(inv.tax_amount), inv.currency, locale)}</span>
+                  <span className="tnum">{fmtMoney(r.tax, inv.currency, locale)}</span>
                 </div>
-              )}
+              ))}
               <div className="flex justify-between border-t-2 pt-2 font-display text-base font-bold" style={{ borderColor: "var(--bk)" }}>
                 <span>{L.total}</span>
                 <span className="tnum">{fmtMoney(Number(inv.total), inv.currency, locale)}</span>

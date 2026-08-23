@@ -7,14 +7,23 @@ import { fmtMoney } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { PageHeader, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Textarea } from "@/components/ui/input";
+import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
+import { computeInvoice, taxBreakdown, TAX_CATEGORIES, type TaxCategory } from "@/lib/invoices";
 import { createInvoiceAction } from "../actions";
 import { Plus, Trash2, X } from "lucide-react";
 
 type Service = { id: string; name: string; name_ar: string | null; price: string };
-type Item = { serviceId: string | null; description: string; qty: number; unitPrice: number };
+type Item = {
+  serviceId: string | null;
+  description: string;
+  qty: number;
+  unitPrice: number;
+  discountAmount: number;
+  taxCategory: TaxCategory;
+  taxRate: number;
+};
 
 export function NewInvoiceClient({
   slug,
@@ -39,23 +48,41 @@ export function NewInvoiceClient({
   const { toast } = useToast();
   const router = useRouter();
   const [patient, setPatient] = useState(initialPatient);
+  /*
+    A clinic that charges no sales tax should never have to think about it, so a
+    new line inherits the clinic's setting: a rate means standard-rated, no rate
+    means outside the scope of tax. Only the mixed invoice — an exempt
+    consultation beside a taxable procedure — costs anybody a click.
+  */
+  const newLine = (serviceId: string | null, description: string, unitPrice: number): Item => ({
+    serviceId,
+    description,
+    qty: 1,
+    unitPrice,
+    discountAmount: 0,
+    taxCategory: defaultTaxRate > 0 ? "S" : "O",
+    taxRate: defaultTaxRate,
+  });
+
   const [items, setItems] = useState<Item[]>(() => {
     const svc = services.find((s) => s.id === appointmentServiceId);
     return svc
-      ? [{ serviceId: svc.id, description: (locale === "ar" ? svc.name_ar : null) || svc.name, qty: 1, unitPrice: Number(svc.price) }]
+      ? [newLine(svc.id, (locale === "ar" ? svc.name_ar : null) || svc.name, Number(svc.price))]
       : [];
   });
-  const [discount, setDiscount] = useState(0);
-  const [taxRate, setTaxRate] = useState(defaultTaxRate);
   const [notes, setNotes] = useState("");
   const [pending, start] = useTransition();
 
-  const totals = useMemo(() => {
-    const subtotal = items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
-    const disc = Math.min(discount, subtotal);
-    const tax = ((subtotal - disc) * taxRate) / 100;
-    return { subtotal, disc, tax, total: subtotal - disc + tax };
-  }, [items, discount, taxRate]);
+  /*
+    The very same function the server bills with, rather than a second copy of
+    the arithmetic. The preview used to be an unrounded restatement of the
+    server's maths, which agreed only by luck once rounding entered.
+  */
+  const totals = useMemo(() => computeInvoice(items), [items]);
+  const taxRows = useMemo(() => taxBreakdown(totals.lines).filter((r) => r.tax > 0), [totals]);
+
+  const setItem = (i: number, patch: Partial<Item>) =>
+    setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
   const svcName = (s: Service) => (locale === "ar" ? s.name_ar || s.name : s.name);
 
@@ -69,8 +96,6 @@ export function NewInvoiceClient({
         patientId: patient.id,
         appointmentId,
         items,
-        discountAmount: discount,
-        taxRate,
         notes,
       });
       if (r.error || !r.id) {
@@ -109,19 +134,14 @@ export function NewInvoiceClient({
                 {services.slice(0, 6).map((s) => (
                   <button
                     key={s.id}
-                    onClick={() =>
-                      setItems((xs) => [
-                        ...xs,
-                        { serviceId: s.id, description: svcName(s), qty: 1, unitPrice: Number(s.price) },
-                      ])
-                    }
+                    onClick={() => setItems((xs) => [...xs, newLine(s.id, svcName(s), Number(s.price))])}
                     className="rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-[12px] font-medium text-brand-700 hover:bg-brand-100"
                   >
                     + {svcName(s)}
                   </button>
                 ))}
                 <button
-                  onClick={() => setItems((xs) => [...xs, { serviceId: null, description: "", qty: 1, unitPrice: 0 }])}
+                  onClick={() => setItems((xs) => [...xs, newLine(null, "", 0)])}
                   className="flex items-center gap-1 rounded-full border border-dashed border-line-strong px-3 py-1 text-[12px] font-medium text-ink-500 hover:border-brand-400"
                 >
                   <Plus className="h-3 w-3" />
@@ -134,42 +154,99 @@ export function NewInvoiceClient({
                 {t.invoices.addItem}
               </p>
             ) : (
-              <div className="grid gap-2">
-                {items.map((it, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_4.5rem_6rem_6rem_2rem] items-center gap-2">
-                    <Input
-                      value={it.description}
-                      placeholder={t.invoices.item}
-                      onChange={(e) =>
-                        setItems((xs) => xs.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))
-                      }
-                    />
-                    <Input
-                      type="number" dir="ltr" min={1}
-                      value={it.qty}
-                      onChange={(e) =>
-                        setItems((xs) => xs.map((x, j) => (j === i ? { ...x, qty: Number(e.target.value) || 1 } : x)))
-                      }
-                    />
-                    <Input
-                      type="number" dir="ltr" min={0} step="0.5"
-                      value={it.unitPrice}
-                      onChange={(e) =>
-                        setItems((xs) => xs.map((x, j) => (j === i ? { ...x, unitPrice: Number(e.target.value) || 0 } : x)))
-                      }
-                    />
-                    <span className="text-end text-sm font-medium tnum">
-                      {fmtMoney(it.qty * it.unitPrice, currency, locale)}
-                    </span>
-                    <button
-                      aria-label={t.common.delete}
-                      onClick={() => setItems((xs) => xs.filter((_, j) => j !== i))}
-                      className="text-ink-300 hover:text-danger"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+              <div className="grid gap-3">
+                {items.map((it, i) => {
+                  const line = totals.lines[i];
+                  return (
+                    <div key={i} className="grid gap-1.5 rounded-lg border border-line p-2.5">
+                      <div className="grid grid-cols-[1fr_4.5rem_6rem_6rem_2rem] items-center gap-2">
+                        <Input
+                          value={it.description}
+                          placeholder={t.invoices.item}
+                          onChange={(e) => setItem(i, { description: e.target.value })}
+                        />
+                        {/* Labelled, because a bare number box in a row of number
+                            boxes tells a screen reader nothing — and now that the
+                            line carries a discount and a rate as well, position is
+                            no longer enough to say which is which. */}
+                        <Input
+                          type="number" dir="ltr" min={1}
+                          aria-label={t.invoices.qty}
+                          value={it.qty}
+                          onChange={(e) => setItem(i, { qty: Number(e.target.value) || 1 })}
+                        />
+                        <Input
+                          type="number" dir="ltr" min={0} step="0.5"
+                          aria-label={t.invoices.unitPrice}
+                          value={it.unitPrice}
+                          onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) || 0 })}
+                        />
+                        <span className="text-end text-sm font-medium tnum">
+                          {fmtMoney(line.net + line.tax, currency, locale)}
+                        </span>
+                        <button
+                          aria-label={t.common.delete}
+                          onClick={() => setItems((xs) => xs.filter((_, j) => j !== i))}
+                          className="text-ink-300 hover:text-danger"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      {/*
+                        The quiet row. Tax and discount belong to the line now,
+                        but almost every line uses the clinic's default and
+                        no discount at all — so they sit here, small, rather than
+                        widening the row above past a phone.
+                      */}
+                      <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-500">
+                        <label className="flex items-center gap-1.5">
+                          <span className="whitespace-nowrap">{t.invoices.discount}</span>
+                          <Input
+                            type="number" dir="ltr" min={0} step="0.5"
+                            aria-label={t.invoices.discount}
+                            className="!h-8 !w-20 !text-[13px]"
+                            value={it.discountAmount}
+                            onChange={(e) => setItem(i, { discountAmount: Number(e.target.value) || 0 })}
+                          />
+                        </label>
+                        <label className="flex items-center gap-1.5">
+                          <span className="whitespace-nowrap">{t.invoices.taxCategory}</span>
+                          <Select
+                            className="!h-8 !w-auto !text-[13px]"
+                            value={it.taxCategory}
+                            onChange={(e) => {
+                              const next = e.target.value as TaxCategory;
+                              // A non-standard category carries no rate at all;
+                              // leaving a stray one behind is how an exempt
+                              // consultation quietly gets taxed.
+                              setItem(i, {
+                                taxCategory: next,
+                                taxRate: next === "S" ? it.taxRate || defaultTaxRate : 0,
+                              });
+                            }}
+                          >
+                            {TAX_CATEGORIES.map((k) => (
+                              <option key={k} value={k}>
+                                {t.invoices.taxCategories[k]}
+                              </option>
+                            ))}
+                          </Select>
+                        </label>
+                        {it.taxCategory === "S" && (
+                          <label className="flex items-center gap-1.5">
+                            <span className="whitespace-nowrap">{taxLabel || t.invoices.tax} %</span>
+                            <Input
+                              type="number" dir="ltr" min={0} max={100} step="0.5"
+                              className="!h-8 !w-20 !text-[13px]"
+                              value={it.taxRate}
+                              onChange={(e) => setItem(i, { taxRate: Number(e.target.value) || 0 })}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Card>
@@ -183,33 +260,30 @@ export function NewInvoiceClient({
 
         <Card className="h-fit p-5">
           <div className="grid gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={`${t.invoices.discount} (${currency})`}>
-                <Input type="number" dir="ltr" min={0} step="0.5" value={discount}
-                  onChange={(e) => setDiscount(Number(e.target.value) || 0)} />
-              </Field>
-              <Field label={`${taxLabel || t.invoices.tax} %`}>
-                <Input type="number" dir="ltr" min={0} max={100} step="0.5" value={taxRate}
-                  onChange={(e) => setTaxRate(Number(e.target.value) || 0)} />
-              </Field>
-            </div>
-            <div className="space-y-1.5 border-t border-line pt-3 text-sm">
+            <div className="space-y-1.5 text-sm">
               <div className="flex justify-between text-ink-500">
                 <span>{t.invoices.subtotal}</span>
                 <span className="tnum">{fmtMoney(totals.subtotal, currency, locale)}</span>
               </div>
-              {totals.disc > 0 && (
+              {totals.discount > 0 && (
                 <div className="flex justify-between text-ink-500">
                   <span>{t.invoices.discount}</span>
-                  <span className="tnum">−{fmtMoney(totals.disc, currency, locale)}</span>
+                  <span className="tnum">−{fmtMoney(totals.discount, currency, locale)}</span>
                 </div>
               )}
-              {totals.tax > 0 && (
-                <div className="flex justify-between text-ink-500">
-                  <span>{taxLabel || t.invoices.tax}</span>
-                  <span className="tnum">{fmtMoney(totals.tax, currency, locale)}</span>
+              {/*
+                One row per rate, not one row for "tax". An invoice carrying an
+                exempt line beside a 16% line has to say so — a single merged
+                figure is exactly the statement the clinic is not allowed to make.
+              */}
+              {taxRows.map((r) => (
+                <div key={`${r.taxCategory}${r.taxRate}`} className="flex justify-between text-ink-500">
+                  <span>
+                    {taxLabel || t.invoices.tax} ({r.taxRate}%)
+                  </span>
+                  <span className="tnum">{fmtMoney(r.tax, currency, locale)}</span>
                 </div>
-              )}
+              ))}
               <div className="flex justify-between border-t border-line pt-2 text-base font-bold">
                 <span>{t.invoices.total}</span>
                 <span className="tnum">{fmtMoney(totals.total, currency, locale)}</span>
