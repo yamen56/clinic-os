@@ -910,8 +910,39 @@ total, amount paid, notes, `public_token`, `pdf_path`.
   price; the patient's share is `total - insurer_amount`.
 - Line items (`invoice_items`) added from a service or as a custom item, with qty, unit
   price, amount, sort.
+- `issue_date` is the invoice's own calendar date in the clinic's timezone. `created_at` used
+  to double as it, which for an invoice raised at 01:30 in Amman was the day before.
 - Clinic-level invoice settings: prefix, counter, `invoice_tax_rate`, `invoice_tax_label`,
-  `invoice_footer`, `payment_instructions`.
+  `invoice_footer`, `payment_instructions`. The tax rate is a **default for a new line**, not
+  the invoice's rate.
+
+### Tax and discount, per line
+
+Both live on `invoice_items`, not on the invoice: `discount_amount`, `tax_rate`, `tax_amount`
+and a **UBL 2.1 tax category** — `S` standard · `Z` zero-rated · `E` exempt · `O` outside the
+scope of tax. `O` is not the same statement as `Z`, and a clinic that is not registered for
+sales tax needs to be able to say which it means.
+
+The old model applied one rate to `subtotal − discount`. That is wrong for the ordinary
+case: a visit with an exempt consultation and a taxable cosmetic procedure is one visit and
+should be one invoice, and the only ways to bill it were to get the tax wrong or to hand the
+patient two pieces of paper.
+
+- `computeInvoice` ([src/lib/invoices.ts](src/lib/invoices.ts)) folds per line —
+  `net = qty × price − discount`, then `tax = net × rate` — and **every header figure is the
+  sum of the stored line figures**, never a second calculation over the whole. That is what
+  makes an invoice foot once two rates or a rounded discount are involved, and it is what a
+  tax authority recomputes.
+- Only an `S` line carries a rate; a stray rate on an exempt line is dropped rather than
+  charged. A discount is clamped to its own line.
+- The editor's live preview calls the same function the server bills with.
+- Migration `0034` spread each existing header discount and rate across its lines in
+  proportion, handing the rounding remainder to the last line. Headers were deliberately
+  **not** recomputed — payments had been taken against those totals, and moving one by a cent
+  would flip a settled invoice back to partly paid.
+- Money is still `numeric(12,2)`. JOD divides into 1000 fils and ISTD compares at finer
+  precision; that is a recorded limitation, mitigated by deriving every reported total from
+  the same rounded line values.
 
 ### Actions
 
@@ -944,6 +975,68 @@ serverless function.
 
 Invoices list filters (All / Unpaid / Partly paid / Paid) plus Today, This week, This month
 and Outstanding totals.
+
+### JoFotara — Jordan's national e-invoicing (`einvoicing` module)
+
+Mandatory for taxpayers inside the net since 1 April 2025. Off unless the agency licenses it
+**and** the clinic fills in its registration — the only opt-in module, because a missing
+feature key meaning "enabled" is right for something a clinic already pays for and wrong for
+something that files their sales with a tax authority (`OPT_IN_FEATURES`,
+[src/lib/features.ts](src/lib/features.ts)).
+
+**Registration** (`clinic_einvoice_settings`, one row per clinic, RLS-isolated, read by the
+worker under `withSystem`, never returned to the browser): taxpayer type `income` |
+`general`, registered name, tax number, income source sequence, Client ID, Secret Key, and a
+live/test device switch. A separate table rather than columns on `clinics` because several
+server components select `cl.*` and pass the row to a client component. The settings screen
+receives `hasSecret`, never the key; saving a blank key means *unchanged*.
+
+**Taxpayer types.** `income` charges no sales tax and has no activity number — most small
+Jordanian clinics, the services registration threshold being JOD 30,000. `general` is
+per-line 16%/15%. Special sales tax is deliberately not offered: it covers goods no clinic
+sells, and a menu entry nobody should pick is one somebody eventually picks.
+
+**The document** ([src/lib/einvoice/ubl.ts](src/lib/einvoice/ubl.ts)) is UBL 2.1 XML, base64
+in a JSON body, `POST /core/invoices/` with `Client-Id` and `Secret-Key` headers. `388`
+invoice / `381` credit note; sub-type digits encode taxpayer type and cash (`012`/`011`) vs
+receivable (`022`/`021`). **Buyer details are not required for a cash invoice**, so reception
+never has to ask a patient for a tax number. Generated here because no Node library exists.
+
+> ⚠️ The element set follows the profile published integrators describe. The authoritative
+> spec ships with the device credentials inside the taxpayer's own JoFotara portal account.
+> Reconcile against it, and against a test device, before a clinic files anything real.
+
+**When it files.** Three triggers, one function, one dedupe key — whichever fires first wins:
+
+1. the first payment is recorded (the primary trigger, and where cash/receivable is decided);
+2. the invoice is delivered (WhatsApp send or PDF download);
+3. a daily 04:00 sweep for anything non-draft still unfiled after 24 hours, which also
+   rescues submissions stranded by a worker restart.
+
+Never in the path of taking money — always a queued job. Sending and downloading **wait for
+the stamp**, because an invoice PDF without its QR is the document that is not compliant; a
+successful submission clears `pdf_path` so the next render includes the QR.
+
+**Failure.** A 4xx is not retried — it is the invoice, not the weather, and would be rejected
+identically four more times. Timeouts, 5xx and 429 get the job runner's backoff; when the
+attempts run out the invoice goes `failed`, keeps ISTD's own words, and staff are notified
+once (`dedupeKey`). A **Try filing again** button on the invoice clears the dedupe key and
+requeues.
+
+**Corrections.** ISTD has no delete. Voiding a *filed* invoice raises a **credit note** —
+`381`, `credit_note_of` pointing at the original, lines mirrored, own number, submitted the
+same way — and both invoices show the link. Voiding an unfiled one behaves as before. It does
+not touch the payment ledger: `payments.amount > 0` forbids a negative row, so refunds remain
+a gap this product has.
+
+**On the invoice**: the QR (rendered from `einvoice_qr` at request time), the seller's tax
+number, the UUID, and the credit-note reference. **Trail**: `invoice_einvoice_events` records
+every queue, acceptance and rejection per invoice — mirroring `document_events` rather than
+`audit_log`, which has no clinic-facing viewer.
+
+**Testing**: [scripts/mock-jofotara.ts](scripts/mock-jofotara.ts) stands in via
+`JOFOTARA_BASE_URL` and validates the document rather than rubber-stamping it — the real
+endpoint is never in a test's reach, because filing an invoice is recorded and irreversible.
 
 ---
 
@@ -1342,7 +1435,7 @@ Real browser (Playwright) against the running app, asserting against the databas
 Plus focused suites: `qa-access`, `qa-automation-coverage`, `qa-backup`, `qa-booking-race`,
 `qa-brand-credit`, `qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`,
 `qa-esign-browser`, `qa-first-message`, `qa-import-digest`, `qa-mobile`, `qa-mobile-width`,
-`qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.
+`qa-einvoicing`, `qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.
 
 Run `qa-warm` first. A cold `next dev` compiles routes on first hit, and the resulting
 timeouts look exactly like a dozen regressions.
@@ -1372,6 +1465,7 @@ Two things run against local doubles because both need credentials the dev envir
 | `STORAGE_DIR` | Local storage root (dev) |
 | `S3_BUCKET` / `S3_REGION` / `S3_ENDPOINT` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Object storage (**required in production**) |
 | `ANTHROPIC_API_KEY` | Enables the AI receptionist. **Must be set on the worker**, which is where the agent runs |
+| `JOFOTARA_BASE_URL` | Overrides the ISTD host. Only for QA, which points it at `scripts/mock-jofotara.ts` — the real endpoint is the default |
 | `ANTHROPIC_MODEL` | Fallback model when a clinic hasn't picked one |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web push |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Same public key, exposed to the browser |
