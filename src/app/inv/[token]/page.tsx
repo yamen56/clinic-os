@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { withSystem } from "@/lib/db";
 import { fmtDate, fmtDateOnly, fmtMoney } from "@/lib/dates";
 import { asTaxCategory, taxBreakdown } from "@/lib/invoices";
+import QRCode from "qrcode";
 import { PoweredBy, PrivacyLink } from "@/components/powered-by";
 
 export const metadata: Metadata = { robots: { index: false } };
@@ -14,10 +15,14 @@ async function loadInvoice(token: string) {
         `select i.*, p.full_name as patient_name, p.phone_e164 as patient_phone,
                 cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.address_ar,
                 cl.phone_e164 as clinic_phone, cl.default_locale, cl.timezone,
-                cl.invoice_footer, cl.payment_instructions, cl.invoice_tax_label
+                cl.invoice_footer, cl.payment_instructions, cl.invoice_tax_label,
+                es.tax_number as seller_tax_number, es.registered_name as seller_registered_name,
+                orig.number as corrects_number
          from invoices i
          join patients p on p.id = i.patient_id
          join clinics cl on cl.id = i.clinic_id
+         left join clinic_einvoice_settings es on es.clinic_id = i.clinic_id and es.enabled
+         left join invoices orig on orig.id = i.credit_note_of
          where i.public_token = $1`,
         [token]
       )
@@ -65,6 +70,7 @@ export default async function PublicInvoicePage({
         invoice: "فاتورة", billTo: "فاتورة إلى", date: "التاريخ", item: "البند", qty: "الكمية",
         price: "السعر", amount: "المجموع", subtotal: "المجموع الفرعي", discount: "الخصم",
         total: "الإجمالي", paid: "المدفوع", due: "المستحق", tax: "الضريبة",
+        taxNo: "الرقم الضريبي", creditNote: "إشعار دائن عن الفاتورة", scan: "امسح الرمز للتحقق من الفاتورة",
         payTitle: "تفاصيل الدفع", statusPaid: "مدفوعة", statusVoid: "ملغاة",
         cat: { S: "خاضعة", Z: "صفرية", E: "معفاة", O: "خارج نطاق الضريبة" } as Record<string, string>,
         poweredBy: "مدعوم من كلينيكتي", privacy: "سياسة الخصوصية",
@@ -73,6 +79,7 @@ export default async function PublicInvoicePage({
         invoice: "Invoice", billTo: "Billed to", date: "Date", item: "Item", qty: "Qty",
         price: "Price", amount: "Amount", subtotal: "Subtotal", discount: "Discount",
         total: "Total", paid: "Paid", due: "Balance due", tax: "Tax",
+        taxNo: "Tax number", creditNote: "Credit note for invoice", scan: "Scan to verify this invoice",
         payTitle: "Payment details", statusPaid: "PAID", statusVoid: "VOID",
         cat: { S: "Taxable", Z: "Zero-rated", E: "Exempt", O: "Outside tax" } as Record<string, string>,
         poweredBy: "Powered by Clinicti", privacy: "Privacy Policy",
@@ -94,6 +101,23 @@ export default async function PublicInvoicePage({
   );
   const anyLineDiscount = items.some((it) => Number(it.discount_amount) > 0);
   const taxed = taxRows.filter((r) => r.tax > 0);
+
+  /*
+    The stamp. Rendered here rather than stored, because the payload is what ISTD
+    returned and the image is only a way of showing it — regenerating costs
+    nothing and there is no second copy to fall out of step. A failure to encode
+    must not take the invoice page down with it: the invoice is still the
+    invoice, and a missing square is better than a 500 for the patient who was
+    sent this link.
+  */
+  let qrDataUrl: string | null = null;
+  if (inv.einvoice_qr) {
+    qrDataUrl = await QRCode.toDataURL(String(inv.einvoice_qr), {
+      margin: 0,
+      width: 320,
+      errorCorrectionLevel: "M",
+    }).catch(() => null);
+  }
 
   return (
     <main
@@ -128,6 +152,14 @@ export default async function PublicInvoicePage({
               )}
               <div>
                 <h1 className="font-display text-xl font-bold">{clinicName}</h1>
+                {/* The tax number is a statutory line on a filed invoice, and it
+                    has to be the name and number ISTD holds, not the trade name
+                    in the header above. */}
+                {inv.seller_tax_number && (
+                  <p className="text-[13px] text-ink-500">
+                    {L.taxNo}: <span className="tnum" dir="ltr">{inv.seller_tax_number}</span>
+                  </p>
+                )}
                 {address && <p className="text-[13px] text-ink-500">{address}</p>}
                 {inv.clinic_phone && (
                   <p className="text-[13px] text-ink-500 tnum" dir="ltr">
@@ -255,6 +287,32 @@ export default async function PublicInvoicePage({
               )}
             </div>
           </div>
+
+          {/* A credit note is only meaningful against what it corrects, so it
+              says so on its face rather than only in the database. */}
+          {inv.corrects_number && (
+            <p className="mt-6 rounded-lg border border-line bg-subtle px-4 py-2.5 text-[13px]">
+              {L.creditNote}{" "}
+              <span className="font-semibold tnum" dir="ltr">
+                {inv.corrects_number}
+              </span>
+            </p>
+          )}
+
+          {qrDataUrl && (
+            <section className="mt-8 flex items-center gap-4 border-t border-line pt-6">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qrDataUrl} alt="" className="h-24 w-24" />
+              <div className="text-[12px] text-ink-500">
+                <div className="font-semibold text-ink-700">{L.scan}</div>
+                {inv.einvoice_uuid && (
+                  <div className="mt-1 tnum" dir="ltr">
+                    {String(inv.einvoice_uuid)}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           {inv.payment_instructions && inv.status !== "paid" && inv.status !== "void" && (
             <section className="mt-8 rounded-xl border border-line bg-subtle p-4">

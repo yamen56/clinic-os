@@ -77,6 +77,7 @@ export function ConfirmDialog({
   cancelLabel,
   danger = true,
   loading,
+  children,
 }: {
   open: boolean;
   onClose: () => void;
@@ -87,10 +88,19 @@ export function ConfirmDialog({
   cancelLabel: string;
   danger?: boolean;
   loading?: boolean;
+  /**
+   * One thing to fill in before confirming — a reason, usually.
+   *
+   * Deliberately narrow. A confirmation that grows a form is no longer a
+   * confirmation and should be a Modal; this exists for the case where the
+   * answer to "are you sure" is "yes, because —".
+   */
+  children?: React.ReactNode;
 }) {
   return (
     <Modal open={open} onClose={onClose} title={title}>
       {body && <p className="text-sm text-ink-700">{body}</p>}
+      {children && <div className="mt-4">{children}</div>}
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="outline" onClick={onClose}>
           {cancelLabel}

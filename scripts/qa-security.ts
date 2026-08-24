@@ -63,8 +63,26 @@ function api(page: Page, path: string): Promise<number> {
 }
 
 /** Where a page navigation actually landed — guards redirect rather than 403. */
+/**
+ * Where you actually end up asking for a page.
+ *
+ * A guard that runs below a `loading.tsx` runs inside a Suspense boundary, so
+ * by the time it calls `redirect()` the shell has already been flushed and there
+ * are no headers left to put a 307 in. Next falls back to performing the
+ * redirect on the client once React hydrates — the page still never renders
+ * (the server component threw before producing any of it), it just arrives a
+ * beat later. Reading the URL at `networkidle` therefore measures the flush
+ * rather than the guard, and passes or fails on how warm the dev server is.
+ *
+ * So: give a client-side redirect a bounded moment to happen. Nothing is
+ * loosened — a page that is genuinely allowed simply stays put and costs the
+ * three seconds nothing.
+ */
 async function land(page: Page, path: string): Promise<string> {
   await page.goto(BASE + path, { waitUntil: "networkidle" });
+  await page
+    .waitForURL((u) => new URL(u).pathname !== path, { timeout: 3000 })
+    .catch(() => {});
   return new URL(page.url()).pathname;
 }
 

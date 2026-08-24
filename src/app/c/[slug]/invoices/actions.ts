@@ -15,6 +15,7 @@ import {
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { emitTrigger } from "@/lib/triggers";
+import { enqueueEinvoiceSubmit, requeueEinvoiceSubmit } from "@/lib/einvoice/jobs";
 import { renderUrlToPdf } from "@/lib/pdf";
 import { saveFile } from "@/lib/storage";
 import { z } from "zod";
@@ -124,7 +125,7 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
     const inv = (
       await c.query(
         `select i.id, i.number, i.total, i.currency, i.public_token, i.pdf_path,
-                i.status, i.amount_paid,
+                i.status, i.amount_paid, i.einvoice_status,
                 p.phone_e164, p.full_name, cl.name, cl.name_ar, cl.default_locale,
                 coalesce(ws.status = 'connected', false) as wa_connected
          from invoices i
@@ -135,11 +136,32 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
         [invoiceId, access.clinicId]
       )
     ).rows[0];
-    return inv ?? null;
+    if (!inv) return null;
+    /*
+      Handing the invoice to the patient is the other moment it must be filed.
+      Payment is the primary trigger, but a bill they take away and never settle
+      would otherwise never be reported at all — and the PDF about to be sent is
+      the very document that has to carry the stamp.
+    */
+    if (inv.einvoice_status === "not_required") {
+      await enqueueEinvoiceSubmit(c, access.clinicId, invoiceId, "delivered");
+      inv.einvoice_status = (
+        await c.query(`select einvoice_status from invoices where id = $1`, [invoiceId])
+      ).rows[0].einvoice_status;
+    }
+    return inv;
   });
   if (!pre) return { error: "not_found" };
   if (!pre.phone_e164) return { error: "no_phone" };
   if (!pre.wa_connected) return { error: "wa_disconnected" };
+  /*
+    An invoice PDF without its QR is precisely the document that is not
+    compliant, so sending waits for the stamp rather than racing it. In practice
+    that is a second or two; when it is longer, the clinic is told why instead of
+    handing the patient something they will have to be given again.
+  */
+  if (pre.einvoice_status === "pending") return { error: "einvoice_pending" };
+  if (pre.einvoice_status === "failed") return { error: "einvoice_failed" };
 
   let pdfPath = pre.pdf_path as string | null;
   try {
@@ -244,6 +266,13 @@ export async function recordPaymentAction(
       ]
     );
     await refreshInvoiceStatus(c, data.invoiceId);
+    /*
+      The moment the sale is real, and the moment cash-versus-receivable becomes
+      knowable — which is why it is the primary trigger. It queues a job and
+      returns: whether ISTD is reachable has no bearing on whether this clinic
+      can take money from the person in front of them.
+    */
+    await enqueueEinvoiceSubmit(c, access.clinicId, data.invoiceId, "paid");
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,
@@ -329,15 +358,83 @@ export async function setInvoiceInsuranceAction(
   });
 }
 
-export async function voidInvoiceAction(slug: string, invoiceId: string): Promise<{ error?: string }> {
+/**
+ * Cancelling an invoice.
+ *
+ * An invoice that was never filed is simply marked void, as it always was. One
+ * that has been filed cannot be — a tax authority has it, and ISTD offers no
+ * delete. The only way back is a credit note referencing the original, so that
+ * is what this raises: a second document, mirroring the lines, filed the same
+ * way. Both stay on the books, which is the point of the mechanism.
+ *
+ * It does not touch the payment ledger. `payments.amount > 0` forbids a negative
+ * row, so a refund is a separate thing this product still does not do; saying so
+ * plainly is better than a half-reversal that makes the balance lie.
+ */
+export async function voidInvoiceAction(
+  slug: string,
+  invoiceId: string,
+  reason = ""
+): Promise<{ error?: string; creditNoteId?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "invoices")) return { error: "forbidden" };
+  const why = String(reason).slice(0, 300);
+
   return inClinic(access, async (c) => {
-    const r = await c.query(
-      `update invoices set status = 'void' where id = $1 and clinic_id = $2`,
-      [invoiceId, access.clinicId]
+    const inv = (
+      await c.query(
+        `select * from invoices where id = $1 and clinic_id = $2 and status <> 'void' for update`,
+        [invoiceId, access.clinicId]
+      )
+    ).rows[0];
+    if (!inv) return { error: "not_found" };
+
+    // Filed and stamped: mid-flight is not a state we can correct from, because
+    // we do not yet know what ISTD has. Ask them to wait rather than raising a
+    // credit note against a document that may not exist at the other end.
+    if (inv.einvoice_status === "pending") return { error: "einvoice_pending" };
+
+    await c.query(
+      `update invoices set status = 'void', void_reason = $3, voided_at = now()
+        where id = $1 and clinic_id = $2`,
+      [invoiceId, access.clinicId, why]
     );
-    if (!r.rowCount) return { error: "not_found" };
+
+    let creditNoteId: string | undefined;
+    if (inv.einvoice_status === "submitted") {
+      const { seq, number } = await nextInvoiceNumber(c, access.clinicId);
+      const note = await c.query(
+        /*
+          A document in its own right: its own number, its own place in the
+          clinic's sequence, its own submission. `credit_note_of` is what ties
+          the pair together for both the tax authority and the person reading it.
+          Marked paid from the start — it settles nothing and is owed by nobody.
+        */
+        `insert into invoices (clinic_id, patient_id, appointment_id, seq, number, currency,
+                               subtotal, discount_amount, tax_rate, tax_amount, total, amount_paid,
+                               notes, created_by, issue_date, credit_note_of, void_reason, status)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12, $13,
+                 ((now() at time zone (select timezone from clinics where id = $1)))::date,
+                 $14, $15, 'paid')
+         returning id`,
+        [
+          access.clinicId, inv.patient_id, inv.appointment_id, seq, number, inv.currency,
+          inv.subtotal, inv.discount_amount, inv.tax_rate, inv.tax_amount, inv.total,
+          inv.notes, access.session.user.id, invoiceId, why,
+        ]
+      );
+      creditNoteId = note.rows[0].id as string;
+      await c.query(
+        `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount,
+                                    discount_amount, tax_category, tax_rate, tax_amount, sort)
+         select clinic_id, $2, service_id, description, qty, unit_price, amount,
+                discount_amount, tax_category, tax_rate, tax_amount, sort
+           from invoice_items where invoice_id = $1`,
+        [invoiceId, creditNoteId]
+      );
+      await enqueueEinvoiceSubmit(c, access.clinicId, creditNoteId, "credit_note");
+    }
+
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,
@@ -345,8 +442,21 @@ export async function voidInvoiceAction(slug: string, invoiceId: string): Promis
       action: "invoice.void",
       entity: "invoice",
       entityId: invoiceId,
+      detail: { reason: why, creditNoteId: creditNoteId ?? null },
     });
     revalidatePath(`/c/${slug}/invoices`);
-    return {};
+    return { creditNoteId };
   });
+}
+
+/** Re-files an invoice whose submission failed, from the button on its page. */
+export async function retryEinvoiceAction(
+  slug: string,
+  invoiceId: string
+): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices")) return { error: "forbidden" };
+  const ok = await inClinic(access, (c) => requeueEinvoiceSubmit(c, access.clinicId, invoiceId));
+  revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
+  return ok ? {} : { error: "not_retryable" };
 }

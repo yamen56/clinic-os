@@ -9,11 +9,14 @@ export function SettingsNav({
   slug,
   canClinic,
   canStaff,
+  hasEinvoicing,
 }: {
   slug: string;
   /** Clinic-wide configuration: profile, custom fields, templates, invoicing. */
   canClinic: boolean;
   canStaff: boolean;
+  /** The JoFotara tab only exists for a clinic licensed for it. */
+  hasEinvoicing: boolean;
 }) {
   const { t } = useI18n();
   const pathname = usePathname();
@@ -41,6 +44,7 @@ export function SettingsNav({
     { href: `${base}/insurers`, label: t.insurers.title, show: canClinic },
     { href: `${base}/whatsapp`, label: t.settings.whatsapp },
     { href: `${base}/invoicing`, label: t.settings.invoiceSettings },
+    { href: `${base}/einvoicing`, label: t.einvoicing.title, show: hasEinvoicing && canClinic },
     // Personal, not clinic configuration — and it lives outside /settings so that
     // members without the settings capability can still reach it.
     { href: `/c/${slug}/signature`, label: t.settings.mySignature },

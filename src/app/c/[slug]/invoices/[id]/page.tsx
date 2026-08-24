@@ -19,11 +19,15 @@ export default async function InvoiceDetailPage({
         `select i.*, p.full_name as patient_name, p.phone_e164 as patient_phone,
                 cl.timezone, cl.currency as clinic_currency,
                 ins.name as insurer_name,
+                orig.number as corrects_number,
+                fix.id as credit_note_id, fix.number as credit_note_number,
                 coalesce(ws.status = 'connected', false) as wa_connected
          from invoices i
          join patients p on p.id = i.patient_id
          join clinics cl on cl.id = i.clinic_id
          left join insurers ins on ins.id = i.insurer_id
+         left join invoices orig on orig.id = i.credit_note_of
+         left join invoices fix on fix.credit_note_of = i.id
          left join whatsapp_sessions ws on ws.clinic_id = i.clinic_id
          where i.id = $1 and i.clinic_id = $2`,
         [id, access.clinicId]

@@ -9,14 +9,20 @@
  * and spending tokens nobody is being billed for. The commercially important
  * half of "switch this module off" happens here, not in the nav.
  *
- * Mirrors `resolveFeatures` in src/lib/features.ts, including the rule that
- * matters most: an absent key means enabled. Every clinic that predates the
- * column has `{}` and must keep working exactly as before.
+ * Mirrors `resolveFeatures` in src/lib/features.ts, including both of its
+ * rules: an absent key means enabled — every clinic that predates the column
+ * has `{}` and must keep working exactly as before — except for the opt-in
+ * modules, where absent means off and only an explicit `true` counts.
  */
+
+/** Kept in step with OPT_IN_FEATURES in src/lib/features.ts. */
+const OPT_IN = new Set(["einvoicing"]);
 
 /** True while the clinic still has this module. Expects `clinics` aliased `cl`. */
 export function hasFeature(feature: string, alias = "cl"): string {
-  return `coalesce((${alias}.features->>'${feature}')::boolean, true)`;
+  return OPT_IN.has(feature)
+    ? `coalesce((${alias}.features->>'${feature}')::boolean, false)`
+    : `coalesce((${alias}.features->>'${feature}')::boolean, true)`;
 }
 
 /** The full predicate for "this clinic is live and licensed for X". */

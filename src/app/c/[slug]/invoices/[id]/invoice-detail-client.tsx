@@ -17,8 +17,17 @@ import {
   recordPaymentAction,
   voidInvoiceAction,
   setInvoiceInsuranceAction,
+  retryEinvoiceAction,
 } from "../actions";
-import { MessageCircle, FileDown, ExternalLink, BadgeDollarSign, Ban, UserRound } from "lucide-react";
+import {
+  MessageCircle,
+  FileDown,
+  ExternalLink,
+  BadgeDollarSign,
+  Ban,
+  UserRound,
+  TriangleAlert,
+} from "lucide-react";
 
 const invStatus: Record<string, StatusKey> = {
   draft: "neutral",
@@ -52,6 +61,19 @@ type Invoice = {
   patient_phone: string | null;
   timezone: string;
   wa_connected: boolean;
+  einvoice_status: string;
+  einvoice_error: string | null;
+  einvoice_uuid: string | null;
+  credit_note_of: string | null;
+  corrects_number: string | null;
+  credit_note_id: string | null;
+  credit_note_number: string | null;
+};
+
+const einvStatus: Record<string, StatusKey> = {
+  pending: "pending",
+  submitted: "confirmed",
+  failed: "danger",
 };
 
 export function InvoiceDetailClient({
@@ -95,6 +117,10 @@ export function InvoiceDetailClient({
   const [savingClaim, startClaim] = useTransition();
   const [pending, start] = useTransition();
   const [sendPending, startSend] = useTransition();
+  const [retrying, startRetry] = useTransition();
+  const [voidReason, setVoidReason] = useState("");
+  /** Filed with ISTD, so cancelling means a credit note rather than a delete. */
+  const filed = inv.einvoice_status === "submitted";
 
   const send = () =>
     startSend(async () => {
@@ -105,9 +131,17 @@ export function InvoiceDetailClient({
             ? t.invoices.noPhone
             : r.error === "wa_disconnected"
               ? t.invoices.waDisconnected
-              : t.common.genericError,
+              : // Not a failure to send but a refusal to send the wrong thing:
+                // the PDF has no stamp on it yet.
+                r.error === "einvoice_pending"
+                ? t.einvoicing.pendingBlocks
+                : r.error === "einvoice_failed"
+                  ? t.einvoicing.failedBlocks
+                  : t.common.genericError,
           "error"
         );
+        // Pressing send is what queues the filing, so the page has to catch up.
+        if (r.error === "einvoice_pending") router.refresh();
         return;
       }
       toast(t.invoices.sentOk);
@@ -140,6 +174,18 @@ export function InvoiceDetailClient({
             <Badge status={invStatus[inv.status]}>
               {(t.invoices.statuses as Record<string, string>)[inv.status]}
             </Badge>
+            {/* Only for a clinic that files. Everyone else's invoices sit at
+                'not_required' and say nothing, exactly as before. */}
+            {inv.einvoice_status !== "not_required" && (
+              <Badge status={einvStatus[inv.einvoice_status] ?? "neutral"}>
+                {t.einvoicing.status} ·{" "}
+                {inv.einvoice_status === "submitted"
+                  ? t.einvoicing.statusSubmitted
+                  : inv.einvoice_status === "pending"
+                    ? t.einvoicing.statusPending
+                    : t.einvoicing.statusFailed}
+              </Badge>
+            )}
           </span>
         }
         sub={`${inv.patient_name} · ${fmtDate(inv.created_at, inv.timezone, locale)}`}
@@ -191,6 +237,62 @@ export function InvoiceDetailClient({
           </div>
         }
       />
+
+      {/*
+        A filing that failed is the one thing on this page somebody has to act
+        on, so it is said at the top with the reason and the way out — not left
+        as a red chip they have to interpret.
+      */}
+      {inv.einvoice_status === "failed" && (
+        <Card className="mb-4 !border-danger/40">
+          <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+            <TriangleAlert className="h-4 w-4 shrink-0 text-danger" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-danger">{t.einvoicing.statusFailed}</div>
+              {inv.einvoice_error && (
+                <p className="mt-0.5 break-words text-[13px] text-ink-500">{inv.einvoice_error}</p>
+              )}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={retrying}
+              onClick={() =>
+                startRetry(async () => {
+                  const r = await retryEinvoiceAction(slug, inv.id);
+                  toast(r.error ? t.common.genericError : t.einvoicing.retried, r.error ? "error" : "success");
+                  router.refresh();
+                })
+              }
+            >
+              {t.einvoicing.retry}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* The pair, from either end. */}
+      {(inv.corrects_number || inv.credit_note_number) && (
+        <p className="mb-4 rounded-lg border border-line bg-subtle px-4 py-2.5 text-[13px]">
+          {inv.corrects_number ? (
+            <>
+              {t.einvoicing.creditNoteFor}{" "}
+              <span className="font-semibold tnum" dir="ltr">{inv.corrects_number}</span>
+            </>
+          ) : (
+            <>
+              {t.einvoicing.creditNoted}{" "}
+              <Link
+                href={`/c/${slug}/invoices/${inv.credit_note_id}`}
+                className="font-semibold text-brand-700 tnum"
+                dir="ltr"
+              >
+                {inv.credit_note_number}
+              </Link>
+            </>
+          )}
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -418,15 +520,33 @@ export function InvoiceDetailClient({
         open={voidOpen}
         onClose={() => setVoidOpen(false)}
         title={t.invoices.voidConfirm}
-        body={t.invoices.voidBody}
+        /*
+          A filed invoice cannot be deleted — ISTD has it — so cancelling raises
+          a credit note against it instead. Saying that here, rather than after
+          the fact, is the difference between a decision and a surprise.
+        */
+        body={filed ? t.einvoicing.voidReasonHint : t.invoices.voidBody}
         confirmLabel={t.invoices.voidInvoice}
         cancelLabel={t.common.cancel}
         onConfirm={async () => {
           setVoidOpen(false);
-          await voidInvoiceAction(slug, inv.id);
+          const r = await voidInvoiceAction(slug, inv.id, voidReason);
+          if (r.error === "einvoice_pending") toast(t.einvoicing.pendingBlocks, "error");
+          else if (r.creditNoteId) toast(t.einvoicing.creditNoteRaised);
+          setVoidReason("");
           router.refresh();
         }}
-      />
+      >
+        {filed && (
+          <Field label={t.einvoicing.voidReason}>
+            <Input
+              value={voidReason}
+              maxLength={300}
+              onChange={(e) => setVoidReason(e.target.value)}
+            />
+          </Field>
+        )}
+      </ConfirmDialog>
     </>
   );
 }

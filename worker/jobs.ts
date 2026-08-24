@@ -9,7 +9,23 @@ import { offerFreedSlot, closeWaitlistOnBooking } from "./waitlist";
  * instances never process the same job. Failures retry with exponential backoff.
  */
 
-type JobHandler = (payload: Record<string, unknown>, clinicId: string | null) => Promise<void>;
+/**
+ * The third argument is how many goes this job has left.
+ *
+ * Almost every handler ignores it and should: throwing is the right way to fail,
+ * and the runner below does the backoff. It exists for the handlers whose
+ * failure has to be *reported* to somebody — filing an invoice with a tax
+ * authority, say — which can only be done on the attempt that turns out to be
+ * the last one. Optional, so the handlers that do not care stay two-argument
+ * functions.
+ */
+export type JobAttempt = { attempts: number; maxAttempts: number; isLastAttempt: boolean };
+
+type JobHandler = (
+  payload: Record<string, unknown>,
+  clinicId: string | null,
+  attempt: JobAttempt
+) => Promise<void>;
 
 const handlers: Record<string, JobHandler> = {
   "automation:advance": async (payload) => {
@@ -113,7 +129,12 @@ async function runOne(): Promise<boolean> {
     } else {
       const handler = handlers[job.kind];
       if (!handler) throw new Error(`no handler for ${job.kind}`);
-      await handler(job.payload ?? {}, job.clinic_id);
+      // `attempts` was already incremented by claimJob, so it counts this one.
+      await handler(job.payload ?? {}, job.clinic_id, {
+        attempts: job.attempts,
+        maxAttempts: job.max_attempts,
+        isLastAttempt: job.attempts >= job.max_attempts,
+      });
     }
     await withSystem((c) =>
       c.query(`update jobs set status = 'done', last_error = null where id = $1`, [job.id])

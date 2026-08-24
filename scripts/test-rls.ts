@@ -125,6 +125,10 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   ).id;
   await q(`insert into invoice_items (clinic_id, invoice_id, description) values ($1, $2, 'item') returning id`, [clinic, invoice]);
   await q(
+    `insert into invoice_einvoice_events (clinic_id, invoice_id, kind) values ($1, $2, 'queued') returning id`,
+    [clinic, invoice]
+  );
+  await q(
     `insert into payments (clinic_id, invoice_id, patient_id, amount, method) values ($1, $2, $3, 10, 'cash') returning id`,
     [clinic, invoice, patient]
   );
@@ -155,6 +159,16 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   */
   await q(
     `insert into clinic_system_messages (clinic_id, key, body_ar) values ($1, 'booking_confirmed', 'x') returning id`,
+    [clinic]
+  );
+  /*
+    Both sparse for the same reason as the row above: a clinic that does not file
+    with JoFotara has no registration and no submission history, so neither table
+    has a row until somebody opts in. The sweep below insists every clinic-scoped
+    table can be read, so the fixture has to opt in.
+  */
+  await q(
+    `insert into clinic_einvoice_settings (clinic_id, tax_number) values ($1, '12345678') returning clinic_id`,
     [clinic]
   );
   await q(`insert into tasks (clinic_id, title) values ($1, 'task') returning id`, [clinic]);

@@ -11,6 +11,7 @@ import { resolvePendingLids } from "./wa/lid-mapping";
 import { deleteClinicFiles } from "../src/lib/storage";
 import { RESTORE_WINDOW_DAYS } from "../src/lib/clinic-lifecycle";
 import { licensed } from "./features";
+import { enqueueEinvoiceSubmit } from "../src/lib/einvoice/jobs";
 
 /**
  * Threads that arrived addressed by identity rather than number, every ten
@@ -157,6 +158,59 @@ async function birthdays() {
   });
 }
 
+/**
+ * The backstop for invoices ISTD never heard about.
+ *
+ * Filing is triggered by payment, and again by delivery. Both are the ordinary
+ * path and both are usually enough — but an invoice that was raised, never
+ * settled and never sent would fall through both, and "we forgot to report it"
+ * is not a defence anyone wants to make to a tax authority. So once a day,
+ * anything issued and still unfiled gets queued.
+ *
+ * It also rescues invoices left mid-flight. A worker killed between claiming the
+ * job and finishing it leaves the job row `running` and the invoice `pending`
+ * forever; nothing else in the system would ever look at it again.
+ */
+async function sweepEinvoices() {
+  await withSystem(async (c) => {
+    const now = DateTime.now();
+    // Once a day, at a quiet hour, rather than on every minute's tick.
+    if (now.hour !== 4 || now.minute > 2) return;
+
+    const due = await c.query(
+      `select i.id, i.clinic_id
+         from invoices i
+         join clinics cl on cl.id = i.clinic_id
+         join clinic_einvoice_settings s on s.clinic_id = i.clinic_id
+        where s.enabled and ${licensed("einvoicing")}
+          and i.status not in ('draft', 'void')
+          and i.einvoice_status = 'not_required'
+          and i.created_at < now() - interval '24 hours'
+        limit 500`
+    );
+    for (const inv of due.rows) {
+      await enqueueEinvoiceSubmit(c, inv.clinic_id as string, inv.id as string, "sweep");
+    }
+    if (due.rowCount) console.log(`[einvoice] swept ${due.rowCount} unfiled invoice(s)`);
+
+    const stranded = await c.query(
+      `select i.id, i.clinic_id from invoices i
+        where i.einvoice_status = 'pending' and i.updated_at < now() - interval '1 hour'
+        limit 200`
+    );
+    for (const inv of stranded.rows) {
+      // Clear the key first: a stale row would swallow the new job silently.
+      await c.query(`delete from jobs where dedupe_key = $1`, [`einvoice:submit:${inv.id}`]);
+      await c.query(
+        `insert into jobs (clinic_id, kind, payload, dedupe_key)
+         values ($1, 'einvoice:submit', $2, $3) on conflict (dedupe_key) do nothing`,
+        [inv.clinic_id, JSON.stringify({ invoiceId: inv.id, reason: "sweep" }), `einvoice:submit:${inv.id}`]
+      );
+    }
+    if (stranded.rowCount) console.log(`[einvoice] requeued ${stranded.rowCount} stranded submission(s)`);
+  });
+}
+
 /** "Invoice unpaid after X days". */
 async function unpaidInvoices() {
   await withSystem(async (c) => {
@@ -285,6 +339,7 @@ export function startScheduler() {
       recallReminders,
       birthdays,
       unpaidInvoices,
+      sweepEinvoices,
       sweepExpiredDocuments,
       sweepUnsignedDocuments,
       sendPendingDigest,

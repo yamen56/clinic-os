@@ -12,6 +12,7 @@ import {
   Megaphone,
   Workflow,
   Sparkles,
+  Landmark,
 } from "lucide-react";
 
 const icons: Record<Feature, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
@@ -23,10 +24,11 @@ const icons: Record<Feature, React.ComponentType<{ className?: string; strokeWid
   campaigns: Megaphone,
   automations: Workflow,
   ai: Sparkles,
+  einvoicing: Landmark,
 };
 
 /**
- * What a clinic is licensed for, as eight switches.
+ * What a clinic is licensed for, as a switch each.
  *
  * Deliberately the plain product names rather than plan tiers. "Standard" and
  * "Pro" would need a table of what each contains, kept in step with the product

@@ -14,6 +14,7 @@ import { startScheduler } from "./scheduler";
 import { startNotificationLoop } from "./notifications";
 import { startCampaignLoop } from "./campaigns";
 import { registerEsignJobs } from "./esign";
+import { registerEinvoiceJobs } from "./einvoice";
 import { startStatusHeartbeat } from "./status";
 
 async function resumeDesiredSessions() {
@@ -47,6 +48,7 @@ async function main() {
   // Catch sessions marked desired while the worker was down (or by another instance)
   setInterval(() => void resumeDesiredSessions().catch(() => {}), 15000);
   registerEsignJobs();
+  registerEinvoiceJobs();
   startOutboundLoop();
   startCampaignLoop();
   startJobLoop();

@@ -31,10 +31,27 @@ export const FEATURES = [
   "campaigns",
   "automations",
   "ai",
+  "einvoicing",
 ] as const;
 
 export type Feature = (typeof FEATURES)[number];
 export type FeatureMap = Record<Feature, boolean>;
+
+/**
+ * Modules that are **off** until somebody asks for them.
+ *
+ * The rule everywhere else is that a missing key means on, because the column
+ * arrived in a database full of clinics who had bought the whole product. That
+ * rule is wrong for a module which files a clinic's invoices with a tax
+ * authority under credentials only that clinic can supply: switching it on by
+ * default would put a compliance obligation in front of six clinics who never
+ * asked for one, and it cannot work for any of them anyway until they paste in
+ * an ISTD client id.
+ *
+ * So these are opt-in twice over — the agency licenses it, and the clinic still
+ * has to configure it before a single invoice moves.
+ */
+export const OPT_IN_FEATURES = new Set<Feature>(["einvoicing"]);
 
 /**
  * The capabilities each module owns.
@@ -52,10 +69,15 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
   campaigns: ["campaigns"],
   automations: ["automations"],
   ai: ["ai"],
+  // E-invoicing rides on the invoices module rather than owning a capability of
+  // its own: it is not a screen somebody visits, it is what happens to an
+  // invoice. Its own settings tab is gated on the feature directly.
+  einvoicing: [],
 };
 
+/** What the new-clinic form starts from: everything except the opt-ins. */
 export function allFeatures(): FeatureMap {
-  return Object.fromEntries(FEATURES.map((f) => [f, true])) as FeatureMap;
+  return Object.fromEntries(FEATURES.map((f) => [f, !OPT_IN_FEATURES.has(f)])) as FeatureMap;
 }
 
 /**
@@ -70,7 +92,11 @@ export function allFeatures(): FeatureMap {
  */
 export function resolveFeatures(raw: Record<string, unknown> | null | undefined): FeatureMap {
   const stored = raw ?? {};
-  return Object.fromEntries(FEATURES.map((f) => [f, stored[f] !== false])) as FeatureMap;
+  return Object.fromEntries(
+    // Opt-in modules invert the rule: absent means off, and only an explicit
+    // `true` turns one on. See OPT_IN_FEATURES.
+    FEATURES.map((f) => [f, OPT_IN_FEATURES.has(f) ? stored[f] === true : stored[f] !== false])
+  ) as FeatureMap;
 }
 
 /** Serialises the admin editor's state back into the column. */
