@@ -24,7 +24,9 @@
     "fonts": "tsx scripts/fetch-fonts.ts",
     "bench": "tsx scripts/bench.ts",
     "icons": "tsx scripts/make-icons.ts",
-    "test:search": "tsx scripts/test-search.ts"
+    "test:search": "tsx scripts/test-search.ts",
+    "deploy": "tsx scripts/deploy.ts",
+    "migrate:prod": "tsx scripts/migrate-prod.ts"
   },
   "type": "commonjs",
   "dependencies": {
