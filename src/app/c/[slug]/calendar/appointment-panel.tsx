@@ -17,7 +17,7 @@ import {
 } from "./actions";
 import { RequiredDocuments } from "@/components/esign/required-documents";
 import type { Appt, Doctor, Service } from "./calendar-client";
-import { X, UserPlus } from "lucide-react";
+import { X, UserPlus, ClipboardList } from "lucide-react";
 
 export type PanelState =
   | null
@@ -271,6 +271,36 @@ export function AppointmentPanel({
             <Field label={t.common.notes}>
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-20" />
             </Field>
+
+            {/*
+              What the patient told the booking page, read-only. It is a record
+              of what was said at a moment, not a field to correct — staff who
+              disagree with it write a note or fix the patient file instead.
+            */}
+            {state.mode === "edit" && state.appt.intake_answers?.length > 0 && (
+              <div>
+                <span className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-ink-900">
+                  <ClipboardList className="h-3.5 w-3.5 text-ink-400" />
+                  {t.calendar.bookingAnswers}
+                </span>
+                <dl className="divide-y divide-line rounded-lg border border-line bg-sunken/40">
+                  {state.appt.intake_answers.map((a) => (
+                    <div key={a.id} className="px-3 py-2">
+                      <dt className="text-[12px] text-ink-500">
+                        {locale === "ar" ? a.labelAr || a.label : a.label}
+                      </dt>
+                      <dd className="whitespace-pre-line text-[13px] font-medium text-ink-900">
+                        {a.type === "checkbox"
+                          ? a.value === "yes"
+                            ? t.common.yes
+                            : t.common.no
+                          : a.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
 
             {state.mode === "edit" && (
               <RequiredDocuments

@@ -146,7 +146,15 @@ export function NotificationsClient({
                           {(t.notifications.kinds as Record<string, string>)[n.kind] ?? n.kind}
                         </Badge>
                       </div>
-                      {n.body && <p className="mt-0.5 text-[13px] text-ink-500">{n.body}</p>}
+                      {/*
+                        `whitespace-pre-line` because some bodies are a short
+                        list rather than a sentence — a booking's intake answers
+                        are one per line, and collapsing them ran the labels and
+                        values together into something unreadable.
+                      */}
+                      {n.body && (
+                        <p className="mt-0.5 whitespace-pre-line text-[13px] text-ink-500">{n.body}</p>
+                      )}
                       <div className="mt-0.5 text-[12px] text-ink-400" suppressHydrationWarning>
                         {fmtDateTime(n.created_at, tz, locale)}
                       </div>

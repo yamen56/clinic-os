@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useId, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { Search } from "lucide-react";
 
 /*
@@ -49,9 +49,16 @@ export function Field({
   required?: boolean;
   children: React.ReactNode;
 }) {
-  const id = useId();
+  /*
+    No `htmlFor`. It used to carry a `useId()` that was never put on the control
+    inside, and a `for` naming nothing is worse than no `for` at all: the browser
+    stops looking, so the label had no labelled control — clicking the text
+    focused nothing, and assistive tech read the field as unlabelled. A label
+    that simply wraps its control is associated with it implicitly, which is
+    what every one of these was already doing.
+  */
   return (
-    <label className="block" htmlFor={id}>
+    <label className="block">
       <span className="mb-1.5 flex items-baseline gap-1 text-[13px] font-semibold text-ink-900">
         {label}
         {required && <span className="text-danger">*</span>}

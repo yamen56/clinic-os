@@ -6,6 +6,7 @@ import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { notifyClinicStaff } from "@/lib/notify";
 import { emitTrigger } from "@/lib/triggers";
+import { applyAnswersToPatient, answersSummary, type IntakeAnswer } from "@/lib/booking-intake";
 import type { PublicLink } from "@/lib/booking-public";
 
 export type BookingPayload = {
@@ -14,6 +15,8 @@ export type BookingPayload = {
   startISO: string;
   fullName: string;
   locale: "ar" | "en";
+  /** Already validated against the clinic's questions before it got here. */
+  answers?: IntakeAnswer[];
 };
 
 /**
@@ -82,10 +85,11 @@ export async function finalizeBooking(
       });
     }
 
+    const answers = p.answers ?? [];
     const status = data.link.approval_mode === "approval" ? "pending_approval" : "confirmed";
     const appt = await c.query(
-      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes)
-       values ($1, $2, $3, $4, $5, $6, $7, 'booking_link', $8) returning id`,
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, intake_answers)
+       values ($1, $2, $3, $4, $5, $6, $7, 'booking_link', $8, $9::jsonb) returning id`,
       [
         data.clinic.id,
         patient.id,
@@ -95,9 +99,21 @@ export async function finalizeBooking(
         end.toUTC().toISO(),
         status,
         verified ? "" : "Booked while WhatsApp was offline — number not verified.",
+        // Stringified, or a JS array reaches jsonb as a Postgres array literal.
+        JSON.stringify(answers),
       ]
     );
     const appointmentId = appt.rows[0].id as string;
+
+    /*
+      The patient file is updated after the appointment exists, and only where
+      it is blank — see `applyAnswersToPatient`. A booking form is a good source
+      of a birth date nobody had, and a bad source of one staff already checked
+      against an ID card.
+    */
+    if (answers.length) {
+      await applyAnswersToPatient(c, data.clinic.id, patient.id, data.rawQuestions, answers);
+    }
 
     const tz = data.clinic.timezone;
     const local = start.setZone(tz).setLocale(p.locale === "en" ? "en-GB" : "ar-JO-u-nu-latn");
@@ -136,13 +152,17 @@ export async function finalizeBooking(
       });
     }
 
+    // What the patient told us goes into the notification itself. A reception
+    // desk that has to open the appointment to find out it is an emergency has
+    // already lost the minute the question was asked to save.
+    const summary = answers.length ? answersSummary(answers, "ar") : "";
     await notifyClinicStaff(c, data.clinic.id, {
       kind: "booking",
       title:
         status === "confirmed"
           ? `حجز جديد: ${p.fullName}`
           : `طلب حجز بانتظار الموافقة: ${p.fullName}`,
-      body: `${serviceName} · ${when}`,
+      body: `${serviceName} · ${when}${summary ? `\n${summary}` : ""}`,
       url: `/c/${data.clinic.slug}/calendar`,
     });
     await emitTrigger(c, data.clinic.id, "booking_submitted", {

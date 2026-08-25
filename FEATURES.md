@@ -356,16 +356,64 @@ Configured per **booking link** (`booking_links`), and a clinic can have several
 | `approval_mode` | `instant` (or `approval`) |
 | `doctor_member_id` | null = any doctor |
 | `service_ids[]` | empty = all bookable services |
+| `headline` / `headline_ar` | null — the clinic's own line above step 1 |
+| `intro` / `intro_ar` | null — paragraph under the headline |
+| `success_note` / `success_note_ar` | null — parking, what to bring, when to arrive |
+| `show_prices` | `true` — off for clinics that quote per case |
+| `allow_any_doctor` | `true` — off forces the patient to choose a doctor |
+| `require_consent` + `consent_text` / `consent_text_ar` | `false` — a tick-box in the clinic's words |
 
 ### Wizard
 
 1. Choose a service
-2. Choose a doctor (or "First available doctor")
+2. Choose a doctor (or "First available doctor", unless `allow_any_doctor` is off)
 3. Pick a time
 4. Your details — name + WhatsApp number
-5. **WhatsApp OTP**: a 6-digit code is sent to the number, verified against
-   `booking_verifications` (attempt counting, expiry, auto-resend on expiry)
-6. Confirmed — or "Request received" when the link is in approval mode
+5. **The clinic's own questions** — shown only when the link has any that apply to
+   the chosen service (see below); also carries the consent tick-box
+6. **WhatsApp OTP**: a 6-digit code is sent to the number, verified against
+   `booking_verifications` (attempt counting, expiry, auto-resend on expiry, and a
+   patient-driven **resend** with a 45-second cooldown at `/resend`)
+7. Confirmed — or "Request received" when the link is in approval mode. The
+   confirmation screen offers an **`.ics` download** built in the browser and a
+   call button for the clinic.
+
+Availability is shown, not discovered: `GET /api/public/book/{slug}/days` returns a
+slot count per day for the whole window in one request, so closed and full days are
+greyed out, the wizard opens on the first day that has something, and an empty day
+offers "next available". Times are grouped morning / afternoon / evening.
+
+### Booking questions (`booking_questions`)
+
+What a clinic asks beyond name and phone. Per clinic, optionally scoped to one
+booking link and/or to specific services.
+
+| Column | Meaning |
+|---|---|
+| `booking_link_id` | null = asked on every link |
+| `field_type` | `text` · `longtext` · `number` · `date` · `select` · `multiselect` · `checkbox` · `phone` · `email` |
+| `options` / `options_ar` | choice lists; the Arabic column is display-only, the stored value is always the `options` entry |
+| `required` | blocks the booking until answered (a required `checkbox` must be ticked) |
+| `service_ids[]` | empty = asked on every service |
+| `patient_field_key` | a `patient_field_definitions` key — the answer also lands on the patient file |
+| `active` | switch off to stop asking without losing past answers |
+
+**Answers are frozen onto the appointment** (`appointments.intake_answers`, an array
+of `{id, label, labelAr, type, value}`). A snapshot rather than a foreign key, so
+rewording or deleting a question never changes what an old appointment shows. The
+answers appear read-only in the appointment panel and inside the staff notification.
+
+**A mapped answer only fills a blank.** `applyAnswersToPatient` writes through the
+field definition — `source_column` for `birth_date` / `gender` /
+`secondary_phone_e164`, otherwise `patients.custom_fields[storage_key]` — and every
+write is a `coalesce`. Booking is not the authority on the patient record: a returning
+patient's birth date, already checked against an ID card, is never overwritten by
+whatever was typed on a phone in a waiting room. Name and phone are not writable
+at all (phone is the identity rule).
+
+**Validation is server-side, against the clinic's own rows.** The form is public, so a
+required question the browser chose not to render is still required at `/start`, and a
+`select` still only accepts an option the clinic wrote.
 
 ### Availability engine (`src/lib/slots.ts`)
 
@@ -1218,7 +1266,8 @@ than a slow query.
 | **Staff & access** | Add/invite members, photo, job, title, specialty, calendar colour, reminder minutes, **full vs limited access with per-capability tick boxes**, custom working hours, deactivate/reactivate, resend invitation |
 | **Services** | Name (+Arabic), duration, price, colour, buffer after, bookable online, doctors who perform it |
 | **Working hours** | Weekly ranges per day, multiple ranges, blocked dates |
-| **Booking links** | Name, URL slug, min notice, max days ahead, slot granularity, approval mode, doctor restriction, service restriction, copy link, open page |
+| **Booking links** | Name, URL slug, min notice, max days ahead, slot granularity, approval mode, doctor restriction, service restriction, copy link, open page; the page's own headline / intro / after-booking note in both languages, show-prices, allow-any-doctor, required agreement text |
+| **Booking questions** | What else the page asks: label (+Arabic), help text, answer type, choices, required, which link, which services, whether the answer also fills a patient field, reorder, switch off without losing past answers |
 | **WhatsApp** | Connect/disconnect, QR, number, last activity, **daily message cap**, sent today, number-protection explainer |
 | **Invoice settings** | Prefix, tax rate + label, footer, payment instructions, currency |
 | **Patient fields** | The merge-variable list: label (+Arabic), key, type, options, required, hidden, show-in-profile, reorder; built-ins renameable but not deletable; "used in N templates" |
@@ -1345,7 +1394,7 @@ E.164 normalisation is **the single source of patient identity**.
 `patient_field_definitions`, `import_batches`
 
 **Scheduling** — `services`, `service_doctors`, `appointments`, `booking_links`,
-`booking_verifications`, `waitlist_entries`
+`booking_verifications`, `booking_questions`, `waitlist_entries`
 
 **Messaging** — `conversations`, `messages`, `quick_replies`, `whatsapp_sessions`,
 `whatsapp_auth_state`, `campaigns`, `campaign_recipients`
@@ -1397,7 +1446,7 @@ Every table with `updated_at` gets a `touch_updated_at` trigger automatically.
 
 `/api/health` · `/api/c/{slug}/events` (SSE) · `/api/c/{slug}/…` (patients, appointments,
 conversations, documents, invoices, files, staff photos, WhatsApp status, payments export) ·
-`/api/public/book/{bslug}/{slots,start,verify}` · `/api/public/sign/{token}/{code,decline,pdf,progress,request-link,submit}` ·
+`/api/public/book/{bslug}/{slots,days,start,verify,resend}` · `/api/public/sign/{token}/{code,decline,pdf,progress,request-link,submit}` ·
 `/api/public/clinic-logo/{slug}` · `/api/me/{notifications,push,dismiss-announcement}`
 
 ---

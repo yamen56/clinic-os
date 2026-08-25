@@ -1,5 +1,11 @@
 import type { PoolClient } from "pg";
 import { withSystem } from "./db";
+import {
+  loadBookingQuestions,
+  toPublicQuestion,
+  type BookingQuestion,
+  type PublicQuestion,
+} from "./booking-intake";
 
 export type PublicLink = {
   link: {
@@ -11,6 +17,17 @@ export type PublicLink = {
     max_days_ahead: number;
     slot_granularity_min: number;
     approval_mode: "instant" | "approval";
+    headline: string | null;
+    headline_ar: string | null;
+    intro: string | null;
+    intro_ar: string | null;
+    success_note: string | null;
+    success_note_ar: string | null;
+    show_prices: boolean;
+    allow_any_doctor: boolean;
+    consent_text: string | null;
+    consent_text_ar: string | null;
+    require_consent: boolean;
   };
   clinic: {
     id: string;
@@ -38,6 +55,10 @@ export type PublicLink = {
     color: string;
   }[];
   doctors: { id: string; name: string; title: string | null; specialty: string | null }[];
+  /** Everything the page renders. The mapping onto the patient file stays server-side. */
+  questions: PublicQuestion[];
+  /** The same rows with their mapping, for the code that writes the answers away. */
+  rawQuestions: BookingQuestion[];
 };
 
 /** Loads everything the public booking page needs, or null if inactive/unknown. */
@@ -89,6 +110,8 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       )
     ).rows;
 
+    const rawQuestions = await loadBookingQuestions(c, link.clinic_id, { linkId: link.id });
+
     return {
       link: {
         id: link.id,
@@ -99,10 +122,23 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
         max_days_ahead: link.max_days_ahead,
         slot_granularity_min: link.slot_granularity_min,
         approval_mode: link.approval_mode,
+        headline: link.headline,
+        headline_ar: link.headline_ar,
+        intro: link.intro,
+        intro_ar: link.intro_ar,
+        success_note: link.success_note,
+        success_note_ar: link.success_note_ar,
+        show_prices: link.show_prices,
+        allow_any_doctor: link.allow_any_doctor,
+        consent_text: link.consent_text,
+        consent_text_ar: link.consent_text_ar,
+        require_consent: link.require_consent,
       },
       clinic,
       services,
       doctors,
+      questions: rawQuestions.map(toPublicQuestion),
+      rawQuestions,
     } as PublicLink;
   });
 }

@@ -181,6 +181,18 @@ async function main() {
   // Named for what it is testing, so a failure says which content broke it.
   if (doc) pages.push(["document detail (oversized image + wide table)", `${s}/documents/${doc.id}`]);
   if (automation) pages.push(["automation builder", `${s}/automations/${automation.id}`]);
+  /*
+    The one page here that is not part of the workspace, and the one most
+    certain to be opened on a phone: patients reach it from a WhatsApp message.
+    It is public, so it needs no session — only step one renders on load, which
+    is the header, the clinic's own intro and the service cards.
+  */
+  const bookingLink = (
+    await db.query(`select slug from booking_links where clinic_id = $1 and active limit 1`, [
+      clinic.id,
+    ])
+  ).rows[0];
+  if (bookingLink) pages.push(["public booking page", `${BASE}/book/${bookingLink.slug}`]);
 
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: PHONE.height });

@@ -5,6 +5,7 @@ import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
 import { normalizePhone } from "@/lib/phone";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
+import { questionsForService, validateAnswers } from "@/lib/booking-intake";
 import { finalizeBooking } from "../finalize";
 
 /**
@@ -27,6 +28,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
     fullName?: string;
     phone?: string;
     locale?: string;
+    answers?: Record<string, unknown>;
+    consent?: boolean;
   };
   try {
     body = await req.json();
@@ -42,6 +45,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   }
   const phone = normalizePhone(body.phone);
   if (!phone) return NextResponse.json({ error: "invalid_phone" }, { status: 422 });
+
+  /*
+    The intake questions are re-checked here against the clinic's own rows.
+    The form is public, so what the browser rendered proves nothing: a required
+    question the page chose not to draw is still required, and a choice list
+    still only accepts the clinic's own options.
+  */
+  if (data.link.require_consent && body.consent !== true) {
+    return NextResponse.json({ error: "consent_required" }, { status: 422 });
+  }
+  const applicable = questionsForService(data.questions, serviceId);
+  const checked = validateAnswers(applicable, body.answers);
+  if ("error" in checked) {
+    return NextResponse.json(checked, { status: 422 });
+  }
 
   /*
     Also limit per number, not just per caller. Every call here sends a WhatsApp
@@ -60,6 +78,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
     startISO,
     fullName: fullName.trim().slice(0, 80),
     locale: (body.locale === "en" ? "en" : "ar") as "ar" | "en",
+    // Carried through the OTP round trip already validated, so the code path
+    // that finalises never has to trust the browser a second time.
+    answers: checked.answers,
   };
 
   // Clinic WhatsApp offline → book unverified rather than losing the patient

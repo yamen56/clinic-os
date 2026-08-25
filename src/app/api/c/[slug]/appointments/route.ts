@@ -16,7 +16,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
     const [appts, doctors, services, clinic] = await Promise.all([
       c.query(
         `select a.id, a.patient_id, a.doctor_member_id, a.service_id, a.starts_at, a.ends_at,
-                a.status, a.source, a.notes,
+                a.status, a.source, a.notes, a.intake_answers,
                 p.full_name as patient_name, p.phone_e164 as patient_phone,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
                 cm.color as doctor_color, u.full_name as doctor_name

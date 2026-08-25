@@ -5,6 +5,7 @@ import { DateTime } from "luxon";
 import { useI18n } from "@/lib/i18n/client";
 import { useRealtime } from "@/lib/use-realtime";
 import { rangesForDay, hmToMin, effectiveHours, type WeeklyHours } from "@/lib/hours";
+import type { IntakeAnswer } from "@/lib/booking-intake";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/misc";
@@ -24,6 +25,8 @@ export type Appt = {
   status: string;
   source: string;
   notes: string;
+  /** Answers to the clinic's booking questions, frozen at booking time. */
+  intake_answers: IntakeAnswer[];
   patient_name: string;
   patient_phone: string | null;
   service_name: string | null;

@@ -77,7 +77,13 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
       [clinic, patient, member, service]
     )
   ).id;
-  await q(`insert into booking_links (clinic_id, slug) values ($1, $2) returning id`, [clinic, `rls-bl-${tag}`]);
+  const bookingLink = (
+    await q(`insert into booking_links (clinic_id, slug) values ($1, $2) returning id`, [clinic, `rls-bl-${tag}`])
+  ).id;
+  await q(
+    `insert into booking_questions (clinic_id, booking_link_id, label, field_type) values ($1, $2, 'Why are you coming in?', 'text') returning id`,
+    [clinic, bookingLink]
+  );
   /*
     Three tables that arrived after this fixture was written — insurers and the
     waitlist in 0024, import batches in 0025. The loop below discovers every

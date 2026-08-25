@@ -132,6 +132,7 @@ export default async function PublicBookingPage({
         address: data.clinic.address,
         addressAr: data.clinic.address_ar,
         mapsUrl: data.clinic.google_maps_url,
+        phone: data.clinic.phone_e164,
         tz: data.clinic.timezone,
         defaultLocale: data.clinic.default_locale,
       }}
@@ -148,6 +149,20 @@ export default async function PublicBookingPage({
         title: d.title,
         specialty: d.specialty,
       }))}
+      questions={data.questions}
+      copy={{
+        headline: data.link.headline,
+        headlineAr: data.link.headline_ar,
+        intro: data.link.intro,
+        introAr: data.link.intro_ar,
+        successNote: data.link.success_note,
+        successNoteAr: data.link.success_note_ar,
+        showPrices: data.link.show_prices,
+        allowAnyDoctor: data.link.allow_any_doctor,
+        consentText: data.link.consent_text,
+        consentTextAr: data.link.consent_text_ar,
+        requireConsent: data.link.require_consent,
+      }}
       maxDaysAhead={data.link.max_days_ahead}
       approvalMode={data.link.approval_mode}
       lockedDoctor={data.link.doctor_member_id}

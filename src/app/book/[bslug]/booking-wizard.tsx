@@ -1,30 +1,52 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DateTime } from "luxon";
 import { en } from "@/lib/i18n/en";
 import { ar } from "@/lib/i18n/ar";
 import { PoweredBy, PrivacyLink, CLINICTI_PRIVACY_URL } from "@/components/powered-by";
+import { questionsForService, type PublicQuestion } from "@/lib/booking-intake";
 import {
   CalendarCheck2,
+  CalendarPlus,
   ChevronRight,
   Clock,
+  ClipboardList,
   MapPin,
   MessageCircle,
+  Phone,
   Stethoscope,
   User,
-  
   Check,
 } from "lucide-react";
 
 type Service = { id: string; name: string; nameAr: string | null; durationMin: number; price: number };
 type Doctor = { id: string; name: string; title: string | null; specialty: string | null };
 
+export type LinkCopy = {
+  headline: string | null;
+  headlineAr: string | null;
+  intro: string | null;
+  introAr: string | null;
+  successNote: string | null;
+  successNoteAr: string | null;
+  showPrices: boolean;
+  allowAnyDoctor: boolean;
+  consentText: string | null;
+  consentTextAr: string | null;
+  requireConsent: boolean;
+};
+
+/** What the patient has typed, keyed by question id. */
+type AnswerMap = Record<string, string | string[] | boolean>;
+
 export function BookingWizard({
   bslug,
   clinic,
   services,
   doctors,
+  questions,
+  copy,
   maxDaysAhead,
   approvalMode,
   lockedDoctor,
@@ -39,11 +61,14 @@ export function BookingWizard({
     address: string | null;
     addressAr: string | null;
     mapsUrl: string | null;
+    phone: string | null;
     tz: string;
     defaultLocale: "ar" | "en";
   };
   services: Service[];
   doctors: Doctor[];
+  questions: PublicQuestion[];
+  copy: LinkCopy;
   maxDaysAhead: number;
   approvalMode: "instant" | "approval";
   lockedDoctor: string | null;
@@ -53,29 +78,78 @@ export function BookingWizard({
   const dir = locale === "en" ? "ltr" : "rtl";
   const isAr = locale === "ar";
 
-  type Step = "service" | "doctor" | "time" | "details" | "verify" | "done";
+  type Step = "service" | "doctor" | "time" | "details" | "questions" | "verify" | "done";
   const [step, setStep] = useState<Step>("service");
   const [service, setService] = useState<Service | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(lockedDoctor);
   const [date, setDate] = useState(() => DateTime.now().setZone(clinic.tz).toISODate()!);
+  const [dayCounts, setDayCounts] = useState<Record<string, number> | null>(null);
   const [slots, setSlots] = useState<{ startISO: string; doctorMemberId: string | null }[] | null>(null);
   const [slot, setSlot] = useState<{ startISO: string; doctorMemberId: string | null } | null>(null);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [answers, setAnswers] = useState<AnswerMap>({});
+  const [consent, setConsent] = useState(false);
   const [verificationId, setVerificationId] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [badQuestion, setBadQuestion] = useState("");
+  const [resendIn, setResendIn] = useState(0);
   const [doneStatus, setDoneStatus] = useState<"confirmed" | "pending_approval">("confirmed");
 
   const clinicName = isAr ? clinic.nameAr || clinic.name : clinic.name;
   const address = isAr ? clinic.addressAr || clinic.address : clinic.address;
+  const headline = isAr ? copy.headlineAr || copy.headline : copy.headline;
+  const intro = isAr ? copy.introAr || copy.intro : copy.intro;
+  const successNote = isAr ? copy.successNoteAr || copy.successNote : copy.successNote;
+  const consentText = isAr ? copy.consentTextAr || copy.consentText : copy.consentText;
   const fmtLocale = isAr ? "ar-JO-u-nu-latn" : "en-GB";
+
+  /** Only the questions the chosen service actually calls for. */
+  const activeQuestions = useMemo(
+    () => questionsForService(questions, service?.id ?? null),
+    [questions, service]
+  );
+  const hasQuestionStep = activeQuestions.length > 0 || copy.requireConsent;
 
   const days = useMemo(() => {
     const today = DateTime.now().setZone(clinic.tz).startOf("day");
     return Array.from({ length: Math.min(maxDaysAhead, 30) }, (_, i) => today.plus({ days: i }));
   }, [clinic.tz, maxDaysAhead]);
+
+  /*
+    Which days are worth tapping, fetched once per service/doctor pair.
+
+    Without this the strip is thirty identical buttons and the patient discovers
+    the clinic's schedule one "no available times" at a time. `null` means the
+    answer has not arrived; every day stays tappable until it does, so the strip
+    never blocks a patient who is faster than the request.
+  */
+  useEffect(() => {
+    if (!service) return;
+    let alive = true;
+    setDayCounts(null);
+    const q = new URLSearchParams({ serviceId: service.id });
+    if (doctorId) q.set("doctorId", doctorId);
+    fetch(`/api/public/book/${bslug}/days?${q}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive || !d.counts) return;
+        setDayCounts(d.counts);
+        // Land on the first day that has something rather than on today, which
+        // is the day most likely to be past its last slot.
+        setDate((current) =>
+          d.counts[current] > 0
+            ? current
+            : (Object.keys(d.counts) as string[]).sort().find((k) => d.counts[k] > 0) ?? current
+        );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [service, doctorId, bslug]);
 
   useEffect(() => {
     if (step !== "time" || !service) return;
@@ -97,10 +171,48 @@ export function BookingWizard({
     };
   }, [step, service, doctorId, date, bslug]);
 
-  const start = async () => {
+  // Resend cooldown, so the button is honest about when it will work again.
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const id = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendIn]);
+
+  /*
+    The next day worth offering — and only one the strip can actually show. The
+    counts run to the link's full window, which can be longer than the thirty
+    chips rendered, and pointing at a day with no button would move the slots
+    while nothing on screen moved with them.
+  */
+  const firstOpenDay = useMemo(() => {
+    if (!dayCounts) return null;
+    const last = days[days.length - 1]?.toISODate();
+    return (
+      Object.keys(dayCounts)
+        .sort()
+        .find((k) => dayCounts[k] > 0 && k > date && (!last || k <= last)) ?? null
+    );
+  }, [dayCounts, date, days]);
+
+  const detailsValid = !!fullName.trim() && phone.replace(/\D/g, "").length >= 9;
+
+  /** Everything the clinic marked required has an answer. */
+  const questionsValid = useMemo(() => {
+    if (copy.requireConsent && !consent) return false;
+    return activeQuestions.every((q) => {
+      if (!q.required) return true;
+      const v = answers[q.id];
+      if (q.type === "checkbox") return v === true;
+      if (q.type === "multiselect") return Array.isArray(v) && v.length > 0;
+      return typeof v === "string" && v.trim().length > 0;
+    });
+  }, [activeQuestions, answers, consent, copy.requireConsent]);
+
+  const submit = useCallback(async () => {
     if (!service || !slot) return;
     setBusy(true);
     setError("");
+    setBadQuestion("");
     try {
       const res = await fetch(`/api/public/book/${bslug}/start`, {
         method: "POST",
@@ -112,11 +224,33 @@ export function BookingWizard({
           fullName,
           phone,
           locale,
+          answers,
+          consent,
         }),
       });
       const d = await res.json();
       if (!res.ok) {
-        setError(d.error === "invalid_phone" ? t.invalidPhone : d.error === "slot_taken" ? t.slotTaken : "!");
+        if (d.error === "answer_required" || d.error === "answer_invalid") {
+          setBadQuestion(d.questionId ?? "");
+          setError(d.error === "answer_required" ? t.answerRequired : t.answerInvalid);
+          setStep("questions");
+          return;
+        }
+        if (d.error === "consent_required") {
+          setError(t.consentRequired);
+          setStep("questions");
+          return;
+        }
+        setError(
+          d.error === "invalid_phone"
+            ? t.invalidPhone
+            : d.error === "slot_taken"
+              ? t.slotTaken
+              : d.error === "rate_limited"
+                ? t.tooMany
+                : t.genericError
+        );
+        if (d.error === "invalid_phone") setStep("details");
         return;
       }
       if (d.skipVerify) {
@@ -124,12 +258,15 @@ export function BookingWizard({
         setStep("done");
       } else {
         setVerificationId(d.verificationId);
+        setResendIn(45);
         setStep("verify");
       }
+    } catch {
+      setError(t.genericError);
     } finally {
       setBusy(false);
     }
-  };
+  }, [service, slot, doctorId, bslug, fullName, phone, locale, answers, consent, t]);
 
   const verify = async () => {
     setBusy(true);
@@ -145,6 +282,7 @@ export function BookingWizard({
         if (d.error === "expired" && d.newVerificationId) {
           setVerificationId(d.newVerificationId);
           setCode("");
+          setResendIn(45);
           setError(t.codeExpired);
         } else if (d.error === "slot_taken") {
           setStep("time");
@@ -156,6 +294,34 @@ export function BookingWizard({
       }
       setDoneStatus(d.status);
       setStep("done");
+    } catch {
+      setError(t.genericError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resend = async () => {
+    if (resendIn > 0 || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/public/book/${bslug}/resend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verificationId }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setError(d.error === "rate_limited" ? t.tooMany : t.genericError);
+        return;
+      }
+      setVerificationId(d.verificationId);
+      setCode("");
+      setResendIn(45);
+      setError(t.codeResent);
+    } catch {
+      setError(t.genericError);
     } finally {
       setBusy(false);
     }
@@ -163,8 +329,30 @@ export function BookingWizard({
 
   const slotLocal = slot ? DateTime.fromISO(slot.startISO).setZone(clinic.tz).setLocale(fmtLocale) : null;
   const chosenDoctor = doctors.find((d) => d.id === (slot?.doctorMemberId ?? doctorId));
+  const showDoctorStep = doctors.length > 1 && !lockedDoctor;
+  const backFromTime = () => setStep(showDoctorStep ? "doctor" : "service");
 
-  const stepIndex = { service: 0, doctor: 1, time: 2, details: 3, verify: 3, done: 4 }[step];
+  const totalSteps = hasQuestionStep ? 5 : 4;
+  const stepIndex = {
+    service: 0,
+    doctor: 1,
+    time: 2,
+    details: 3,
+    questions: 4,
+    verify: 4,
+    done: totalSteps,
+  }[step];
+
+  const reset = () => {
+    setStep("service");
+    setService(null);
+    setSlot(null);
+    setAnswers({});
+    setConsent(false);
+    setCode("");
+    setError("");
+    setBadQuestion("");
+  };
 
   return (
     <main
@@ -215,7 +403,7 @@ export function BookingWizard({
         {/* Progress */}
         {step !== "done" && (
           <div className="mb-5 flex gap-1.5">
-            {[0, 1, 2, 3].map((i) => (
+            {Array.from({ length: totalSteps }, (_, i) => (
               <span
                 key={i}
                 className="h-1 flex-1 rounded-full transition-colors"
@@ -229,6 +417,12 @@ export function BookingWizard({
           {/* STEP: service */}
           {step === "service" && (
             <section className="animate-fade-up">
+              {(headline || intro) && (
+                <div className="mb-5">
+                  {headline && <h2 className="text-[17px] font-bold tracking-tight">{headline}</h2>}
+                  {intro && <p className="mt-1 whitespace-pre-line text-[14px] leading-6 text-ink-500">{intro}</p>}
+                </div>
+              )}
               <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold">
                 <Stethoscope className="h-4.5 w-4.5" style={{ color: "var(--bk)" }} />
                 {t.chooseService}
@@ -239,7 +433,7 @@ export function BookingWizard({
                     key={s.id}
                     onClick={() => {
                       setService(s);
-                      setStep(doctors.length > 1 && !lockedDoctor ? "doctor" : "time");
+                      setStep(showDoctorStep ? "doctor" : "time");
                     }}
                     className="flex items-center gap-3 rounded-card border border-line bg-surface p-4 text-start shadow-card transition-all hover:shadow-pop"
                   >
@@ -248,7 +442,7 @@ export function BookingWizard({
                       <div className="mt-0.5 flex items-center gap-2 text-[13px] text-ink-500 tnum">
                         <Clock className="h-3.5 w-3.5" />
                         {s.durationMin} {t.duration}
-                        {s.price > 0 && <span>· {s.price.toFixed(2)} JOD</span>}
+                        {copy.showPrices && s.price > 0 && <span>· {s.price.toFixed(2)} JOD</span>}
                       </div>
                     </div>
                     <ChevronRight className="h-4.5 w-4.5 text-ink-300 rtl:rotate-180" />
@@ -266,15 +460,17 @@ export function BookingWizard({
                 {t.chooseDoctor}
               </h2>
               <div className="grid gap-2.5">
-                <button
-                  onClick={() => {
-                    setDoctorId(null);
-                    setStep("time");
-                  }}
-                  className="rounded-card border border-dashed border-line-strong bg-surface/70 p-4 text-start text-[15px] font-medium text-ink-700 transition-all hover:shadow-card"
-                >
-                  {t.anyDoctor}
-                </button>
+                {copy.allowAnyDoctor && (
+                  <button
+                    onClick={() => {
+                      setDoctorId(null);
+                      setStep("time");
+                    }}
+                    className="rounded-card border border-dashed border-line-strong bg-surface/70 p-4 text-start text-[15px] font-medium text-ink-700 transition-all hover:shadow-card"
+                  >
+                    {t.anyDoctor}
+                  </button>
+                )}
                 {doctors.map((d) => (
                   <button
                     key={d.id}
@@ -314,11 +510,15 @@ export function BookingWizard({
                 {days.map((d) => {
                   const iso = d.toISODate()!;
                   const active = iso === date;
+                  // `null` counts = still loading; never disable on unknown.
+                  const closed = dayCounts !== null && !dayCounts[iso];
                   return (
                     <button
                       key={iso}
                       onClick={() => setDate(iso)}
-                      className="flex w-14 shrink-0 flex-col items-center gap-0.5 rounded-xl border py-2 transition-colors"
+                      disabled={closed}
+                      aria-label={d.setLocale(fmtLocale).toFormat("cccc d LLLL")}
+                      className="flex w-14 shrink-0 flex-col items-center gap-0.5 rounded-xl border py-2 transition-colors disabled:opacity-35"
                       style={
                         active
                           ? { background: "var(--bk)", borderColor: "var(--bk)", color: "#fff" }
@@ -339,37 +539,36 @@ export function BookingWizard({
                   <span className="slim-progress w-32 rounded-full" />
                 </div>
               ) : slots.length === 0 ? (
-                <p className="rounded-card border border-dashed border-line-strong bg-surface/60 px-4 py-8 text-center text-sm text-ink-500">
-                  {t.noSlots}
-                </p>
-              ) : (
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {slots.map((s) => {
-                    const local = DateTime.fromISO(s.startISO).setZone(clinic.tz).setLocale(fmtLocale);
-                    const active = slot?.startISO === s.startISO;
-                    return (
-                      <button
-                        key={s.startISO}
-                        onClick={() => setSlot(s)}
-                        className="rounded-xl border py-2.5 text-sm font-semibold tnum transition-colors"
-                        style={
-                          active
-                            ? { background: "var(--bk)", borderColor: "var(--bk)", color: "#fff" }
-                            : { borderColor: "var(--color-line)", background: "var(--color-surface)" }
-                        }
-                      >
-                        {local.toFormat("h:mm a")}
-                      </button>
-                    );
-                  })}
+                <div className="rounded-card border border-dashed border-line-strong bg-surface/60 px-4 py-8 text-center">
+                  <p className="text-sm text-ink-500">{t.noSlots}</p>
+                  {/*
+                    A dead end otherwise. The strip already knows where the next
+                    open day is, so offer it instead of making the patient hunt.
+                  */}
+                  {firstOpenDay && (
+                    <button
+                      onClick={() => setDate(firstOpenDay)}
+                      className="mt-3 text-sm font-semibold underline underline-offset-4"
+                      style={{ color: "var(--bk)" }}
+                    >
+                      {t.nextAvailable}{" "}
+                      {DateTime.fromISO(firstOpenDay).setLocale(fmtLocale).toFormat("cccc d LLLL")}
+                    </button>
+                  )}
                 </div>
+              ) : (
+                <SlotGroups
+                  slots={slots}
+                  tz={clinic.tz}
+                  fmtLocale={fmtLocale}
+                  selected={slot?.startISO ?? null}
+                  onPick={setSlot}
+                  labels={{ morning: t.morning, afternoon: t.afternoon, evening: t.evening }}
+                />
               )}
               {error && <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
               <div className="mt-5 flex items-center justify-between">
-                <BackBtn
-                  onClick={() => setStep(doctors.length > 1 && !lockedDoctor ? "doctor" : "service")}
-                  label={t.back}
-                />
+                <BackBtn onClick={backFromTime} label={t.back} />
                 <PrimaryBtn disabled={!slot} onClick={() => { setError(""); setStep("details"); }} label={t.next} />
               </div>
             </section>
@@ -390,12 +589,14 @@ export function BookingWizard({
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder={t.fullName}
+                  autoComplete="name"
                   className="h-12 rounded-xl border border-line-strong bg-surface px-4 text-[15px] outline-none focus:border-[var(--bk)]"
                 />
                 <div>
                   <input
                     dir="ltr"
                     inputMode="tel"
+                    autoComplete="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="079 000 0000"
@@ -411,30 +612,66 @@ export function BookingWizard({
               <div className="mt-5 flex items-center justify-between">
                 <BackBtn onClick={() => setStep("time")} label={t.back} />
                 <PrimaryBtn
-                  disabled={!fullName.trim() || phone.replace(/\D/g, "").length < 9 || busy}
+                  disabled={!detailsValid || busy}
                   busy={busy}
-                  onClick={start}
+                  onClick={() => {
+                    setError("");
+                    if (hasQuestionStep) setStep("questions");
+                    else void submit();
+                  }}
+                  label={hasQuestionStep ? t.next : t.sendCode}
+                />
+              </div>
+              {!hasQuestionStep && <PrivacyNote t={t} />}
+            </section>
+          )}
+
+          {/* STEP: the clinic's own questions */}
+          {step === "questions" && (
+            <section className="animate-fade-up">
+              <h2 className="mb-1 flex items-center gap-2 text-[15px] font-semibold">
+                <ClipboardList className="h-4.5 w-4.5" style={{ color: "var(--bk)" }} />
+                {t.fewMore}
+              </h2>
+              <p className="mb-4 text-[13px] text-ink-500">{t.fewMoreHint}</p>
+              <div className="grid gap-4">
+                {activeQuestions.map((q) => (
+                  <QuestionField
+                    key={q.id}
+                    q={q}
+                    isAr={isAr}
+                    value={answers[q.id]}
+                    invalid={badQuestion === q.id}
+                    optionalLabel={t.optional}
+                    choosePlaceholder={t.choose}
+                    onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
+                  />
+                ))}
+                {copy.requireConsent && consentText && (
+                  <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-line-strong bg-surface p-3.5">
+                    <input
+                      type="checkbox"
+                      checked={consent}
+                      onChange={(e) => setConsent(e.target.checked)}
+                      className="mt-0.5 h-4.5 w-4.5 shrink-0 accent-[var(--bk)]"
+                    />
+                    <span className="whitespace-pre-line text-[13px] leading-6 text-ink-700">
+                      {consentText}
+                    </span>
+                  </label>
+                )}
+              </div>
+              {error && <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+              <div className="mt-5 flex items-center justify-between">
+                <BackBtn onClick={() => setStep("details")} label={t.back} />
+                <PrimaryBtn
+                  disabled={!questionsValid || busy}
+                  busy={busy}
+                  onClick={submit}
                   label={t.sendCode}
                 />
               </div>
-              {/*
-                On the details step, not the verify step: `start` is what POSTs
-                the name and phone, and it commits the booking outright when the
-                clinic's WhatsApp is offline — that path never reaches an OTP, so
-                a notice living there would be skipped exactly when it matters.
-              */}
-              <p className="mt-4 text-center text-[11px] leading-5 text-ink-400">
-                {t.privacyConsent.split("{link}")[0]}
-                <a
-                  href={CLINICTI_PRIVACY_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-ink-500 no-underline transition-colors hover:text-ink-700"
-                >
-                  {t.privacy}
-                </a>
-                {t.privacyConsent.split("{link}")[1]}
-              </p>
+              <PrivacyNote t={t} />
             </section>
           )}
 
@@ -447,6 +684,7 @@ export function BookingWizard({
               <input
                 dir="ltr"
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 maxLength={6}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
@@ -454,8 +692,15 @@ export function BookingWizard({
                 className="mx-auto block h-14 w-48 rounded-xl border border-line-strong bg-surface text-center text-2xl font-bold tracking-[0.3em] tnum outline-none focus:border-[var(--bk)]"
               />
               {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+              <button
+                onClick={resend}
+                disabled={resendIn > 0 || busy}
+                className="mt-4 text-[13px] font-medium text-ink-500 underline underline-offset-4 disabled:no-underline disabled:opacity-60"
+              >
+                {resendIn > 0 ? `${t.resendIn} ${resendIn}` : t.resend}
+              </button>
               <div className="mt-5 flex items-center justify-center gap-3">
-                <BackBtn onClick={() => setStep("details")} label={t.back} />
+                <BackBtn onClick={() => setStep(hasQuestionStep ? "questions" : "details")} label={t.back} />
                 <PrimaryBtn disabled={code.length !== 6 || busy} busy={busy} onClick={verify} label={t.verifyAndBook} />
               </div>
             </section>
@@ -484,15 +729,32 @@ export function BookingWizard({
                   withLabel={t.with}
                 />
               </div>
+              {successNote && (
+                <p className="mt-4 whitespace-pre-line rounded-card border border-line bg-surface/70 p-4 text-start text-[13px] leading-6 text-ink-700">
+                  {successNote}
+                </p>
+              )}
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                <AddToCalendar
+                  label={t.addToCalendar}
+                  startISO={slot!.startISO}
+                  minutes={service.durationMin}
+                  title={`${isAr ? service.nameAr || service.name : service.name} — ${clinicName}`}
+                  location={address ?? ""}
+                />
+                {clinic.phone && (
+                  <a
+                    href={`tel:${clinic.phone}`}
+                    className="inline-flex h-10 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-[13px] font-medium"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                    {t.callClinic}
+                  </a>
+                )}
+              </div>
               <button
-                onClick={() => {
-                  setStep("service");
-                  setService(null);
-                  setSlot(null);
-                  setCode("");
-                  setError("");
-                }}
-                className="mt-6 text-sm font-medium underline underline-offset-4"
+                onClick={reset}
+                className="mt-6 block w-full text-sm font-medium underline underline-offset-4"
                 style={{ color: "var(--bk)" }}
               >
                 {t.bookAgain}
@@ -507,6 +769,276 @@ export function BookingWizard({
         </footer>
       </div>
     </main>
+  );
+}
+
+/**
+ * Times split into morning / afternoon / evening.
+ *
+ * A clinic open nine to seven at fifteen-minute granularity produces forty
+ * buttons, and a flat grid of them is a wall rather than a choice. The headings
+ * are how people already describe when they want to come.
+ */
+function SlotGroups({
+  slots,
+  tz,
+  fmtLocale,
+  selected,
+  onPick,
+  labels,
+}: {
+  slots: { startISO: string; doctorMemberId: string | null }[];
+  tz: string;
+  fmtLocale: string;
+  selected: string | null;
+  onPick: (s: { startISO: string; doctorMemberId: string | null }) => void;
+  labels: { morning: string; afternoon: string; evening: string };
+}) {
+  const groups = useMemo(() => {
+    const out: { key: "morning" | "afternoon" | "evening"; items: typeof slots }[] = [
+      { key: "morning", items: [] },
+      { key: "afternoon", items: [] },
+      { key: "evening", items: [] },
+    ];
+    for (const s of slots) {
+      const h = DateTime.fromISO(s.startISO).setZone(tz).hour;
+      out[h < 12 ? 0 : h < 17 ? 1 : 2].items.push(s);
+    }
+    return out.filter((g) => g.items.length);
+  }, [slots, tz]);
+
+  return (
+    <div className="grid gap-4">
+      {groups.map((g) => (
+        <div key={g.key}>
+          {groups.length > 1 && (
+            <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-400">
+              {labels[g.key]}
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {g.items.map((s) => {
+              const local = DateTime.fromISO(s.startISO).setZone(tz).setLocale(fmtLocale);
+              const active = selected === s.startISO;
+              return (
+                <button
+                  key={s.startISO}
+                  onClick={() => onPick(s)}
+                  className="rounded-xl border py-2.5 text-sm font-semibold tnum transition-colors"
+                  style={
+                    active
+                      ? { background: "var(--bk)", borderColor: "var(--bk)", color: "#fff" }
+                      : { borderColor: "var(--color-line)", background: "var(--color-surface)" }
+                  }
+                >
+                  {local.toFormat("h:mm a")}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** One clinic-defined question, rendered as whatever type it was defined as. */
+function QuestionField({
+  q,
+  isAr,
+  value,
+  invalid,
+  optionalLabel,
+  choosePlaceholder,
+  onChange,
+}: {
+  q: PublicQuestion;
+  isAr: boolean;
+  value: string | string[] | boolean | undefined;
+  invalid: boolean;
+  optionalLabel: string;
+  choosePlaceholder: string;
+  onChange: (v: string | string[] | boolean) => void;
+}) {
+  const label = isAr ? q.labelAr : q.label;
+  const help = isAr ? q.helpAr : q.help;
+  // The stored value is always the option as the clinic wrote it in `options`;
+  // `optionsAr` is a display translation, never what gets sent.
+  const optionLabel = (o: string, i: number) => (isAr ? q.optionsAr[i] ?? o : o);
+  const ring = invalid ? "border-danger" : "border-line-strong";
+  const box = `w-full rounded-xl border ${ring} bg-surface px-4 text-[15px] outline-none focus:border-[var(--bk)]`;
+
+  if (q.type === "checkbox") {
+    return (
+      <label className="flex cursor-pointer items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={value === true}
+          onChange={(e) => onChange(e.target.checked)}
+          className="mt-0.5 h-4.5 w-4.5 shrink-0 accent-[var(--bk)]"
+        />
+        <span className="text-[14px] leading-6">
+          {label}
+          {help && <span className="block text-[12px] text-ink-500">{help}</span>}
+        </span>
+      </label>
+    );
+  }
+
+  return (
+    <div>
+      <span className="mb-1.5 block text-[13px] font-semibold">
+        {label}
+        {!q.required && <span className="ms-1.5 font-normal text-ink-400">{optionalLabel}</span>}
+      </span>
+
+      {q.type === "longtext" ? (
+        <textarea
+          value={typeof value === "string" ? value : ""}
+          onChange={(e) => onChange(e.target.value)}
+          rows={3}
+          maxLength={2000}
+          className={`${box} min-h-24 py-3`}
+        />
+      ) : q.type === "select" ? (
+        <select
+          value={typeof value === "string" ? value : ""}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${box} h-12 appearance-none`}
+        >
+          <option value="">{choosePlaceholder}</option>
+          {q.options.map((o, i) => (
+            <option key={o} value={o}>
+              {optionLabel(o, i)}
+            </option>
+          ))}
+        </select>
+      ) : q.type === "multiselect" ? (
+        <div className="flex flex-wrap gap-2">
+          {q.options.map((o, i) => {
+            const picked = Array.isArray(value) && value.includes(o);
+            return (
+              <button
+                key={o}
+                type="button"
+                onClick={() =>
+                  onChange(
+                    picked
+                      ? (value as string[]).filter((x) => x !== o)
+                      : [...(Array.isArray(value) ? value : []), o]
+                  )
+                }
+                className="rounded-full border px-3.5 py-2 text-[13px] font-medium transition-colors"
+                style={
+                  picked
+                    ? { background: "var(--bk)", borderColor: "var(--bk)", color: "#fff" }
+                    : { borderColor: "var(--color-line)", background: "var(--color-surface)" }
+                }
+              >
+                {optionLabel(o, i)}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <input
+          type={q.type === "date" ? "date" : q.type === "number" ? "number" : q.type === "email" ? "email" : q.type === "phone" ? "tel" : "text"}
+          dir={q.type === "phone" || q.type === "email" || q.type === "number" ? "ltr" : undefined}
+          inputMode={q.type === "phone" ? "tel" : q.type === "number" ? "numeric" : undefined}
+          value={typeof value === "string" ? value : ""}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={200}
+          className={`${box} h-12`}
+        />
+      )}
+
+      {help && (
+        <p className="mt-1.5 text-[12px] leading-5 text-ink-500">{help}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The appointment as a calendar entry.
+ *
+ * Built in the browser rather than fetched: the details are all on screen
+ * already, and a download that needs a round trip is one more thing that can
+ * fail on a phone with one bar of signal.
+ */
+function AddToCalendar({
+  label,
+  startISO,
+  minutes,
+  title,
+  location,
+}: {
+  label: string;
+  startISO: string;
+  minutes: number;
+  title: string;
+  location: string;
+}) {
+  const href = useMemo(() => {
+    const start = DateTime.fromISO(startISO).toUTC();
+    const stamp = (d: DateTime) => d.toFormat("yyyyLLdd'T'HHmmss'Z'");
+    const esc = (s: string) => s.replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n");
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Clinicti//Booking//EN",
+      "BEGIN:VEVENT",
+      `UID:${startISO}-clinicti`,
+      `DTSTAMP:${stamp(DateTime.utc())}`,
+      `DTSTART:${stamp(start)}`,
+      `DTEND:${stamp(start.plus({ minutes }))}`,
+      `SUMMARY:${esc(title)}`,
+      location ? `LOCATION:${esc(location)}` : "",
+      "BEGIN:VALARM",
+      "TRIGGER:-PT2H",
+      "ACTION:DISPLAY",
+      `DESCRIPTION:${esc(title)}`,
+      "END:VALARM",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ]
+      .filter(Boolean)
+      .join("\r\n");
+    return `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
+  }, [startISO, minutes, title, location]);
+
+  return (
+    <a
+      href={href}
+      download="appointment.ics"
+      className="inline-flex h-10 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-[13px] font-medium"
+    >
+      <CalendarPlus className="h-3.5 w-3.5" />
+      {label}
+    </a>
+  );
+}
+
+/*
+  Shown on whichever step submits, not on the verify step: `submit` is what
+  POSTs the details, and it commits the booking outright when the clinic's
+  WhatsApp is offline — that path never reaches an OTP, so a notice living
+  there would be skipped exactly when it matters.
+*/
+function PrivacyNote({ t }: { t: { privacyConsent: string; privacy: string } }) {
+  return (
+    <p className="mt-4 text-center text-[11px] leading-5 text-ink-400">
+      {t.privacyConsent.split("{link}")[0]}
+      <a
+        href={CLINICTI_PRIVACY_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-medium text-ink-500 no-underline transition-colors hover:text-ink-700"
+      >
+        {t.privacy}
+      </a>
+      {t.privacyConsent.split("{link}")[1]}
+    </p>
   );
 }
 
@@ -560,7 +1092,7 @@ function PrimaryBtn({
       className="inline-flex h-11 items-center gap-2 rounded-full px-6 text-[15px] font-semibold text-white shadow-card transition-opacity disabled:opacity-40"
       style={{ background: "var(--bk)" }}
     >
-      
+      {busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
       {label}
     </button>
   );
