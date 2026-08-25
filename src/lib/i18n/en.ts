@@ -112,6 +112,15 @@ export const en = {
     submit: "Activate account",
     invalidTitle: "This invitation is no longer valid",
     invalidBody: "Invitations expire after 7 days and can be used once. Ask your clinic to send a new one.",
+    /*
+      Shown at the moment an account is activated, which is the moment the
+      clinic starts being bound by the subscription agreement. {terms} comes
+      before {privacy} in both languages: the page splits the sentence on the
+      two tokens and relies on that order.
+    */
+    legal: "By activating your account you agree to the {terms} and the {privacy}.",
+    terms: "Terms of Service",
+    privacy: "Privacy Policy",
   },
   nav: {
     dashboard: "Dashboard",

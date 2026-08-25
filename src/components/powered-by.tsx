@@ -16,6 +16,18 @@ export const CLINICTI_URL = "https://clinicti.app";
 export const CLINICTI_PRIVACY_URL = "https://privacy.clinicti.app";
 
 /**
+ * The subscription agreement, which binds the clinic and nobody else.
+ *
+ * Deliberately not exported alongside a `TermsLink` component, because there is
+ * no patient-facing surface that should carry one. A patient booking an
+ * appointment or signing a consent form is not a party to these terms — the
+ * clinic is — and a "Terms" link sitting next to "Privacy" in the same footer
+ * reads as an agreement the patient is entering into. Privacy belongs on every
+ * page that collects a name; this belongs where a clinic signs up and signs in.
+ */
+export const CLINICTI_TERMS_URL = "https://terms.clinicti.app";
+
+/**
  * The privacy notice, wherever someone is about to hand over their details.
  *
  * Separate from the credit rather than folded into it: the credit is vanity and

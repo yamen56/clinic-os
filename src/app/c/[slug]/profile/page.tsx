@@ -8,6 +8,7 @@ import { PhotoPicker } from "@/components/photo-picker";
 import { LanguageToggle } from "@/components/language-toggle";
 import { InstallApp } from "@/components/pwa";
 import { logoutAction } from "@/app/login/actions";
+import { CLINICTI_PRIVACY_URL, CLINICTI_TERMS_URL } from "@/components/powered-by";
 import { CAPABILITY_GROUPS, accessLevelOf, resolveCapabilities } from "@/lib/permissions";
 import { PenTool, Bell, LogOut, ChevronLeft, Building2, Lock } from "lucide-react";
 
@@ -157,6 +158,32 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
             <InstallApp presentation="button" />
           </div>
         </Card>
+
+        {/*
+          The one place a signed-in clinic can go back and read what it agreed
+          to. The mobile "more" sheet would be the obvious alternative and is
+          already at the height it overflows at, and a party to an agreement
+          should not have to find it through a marketing site.
+        */}
+        <p className="flex items-center justify-center gap-3 text-xs text-ink-400">
+          <a
+            href={CLINICTI_TERMS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="no-underline transition-colors hover:text-ink-700"
+          >
+            {t.invite.terms}
+          </a>
+          <span aria-hidden="true">·</span>
+          <a
+            href={CLINICTI_PRIVACY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="no-underline transition-colors hover:text-ink-700"
+          >
+            {t.invite.privacy}
+          </a>
+        </p>
 
         <form action={logoutAction}>
           <button className="flex w-full touch-manipulation items-center justify-center gap-2 rounded-card border border-line bg-surface px-4 py-3 text-sm font-medium text-danger transition-colors duration-140 ease-out hover:bg-danger-soft">

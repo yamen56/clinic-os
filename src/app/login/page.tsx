@@ -43,6 +43,14 @@ export default async function LoginPage({
           Clinicti
         </a>
         <a
+          href="https://terms.clinicti.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="no-underline transition-colors hover:text-white/70"
+        >
+          Terms
+        </a>
+        <a
           href="https://privacy.clinicti.app"
           target="_blank"
           rel="noopener noreferrer"
