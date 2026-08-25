@@ -3,6 +3,7 @@ import { guardAdmin } from "@/lib/guard";
 import { getDict } from "@/lib/i18n";
 import { LanguageToggle } from "@/components/language-toggle";
 import { logoutAction } from "@/app/login/actions";
+import { BrandPlate } from "@/components/brand-mark";
 import { AdminNav } from "./admin-nav";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -14,9 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
           <div className="flex items-center gap-6">
             <Link href="/admin" className="flex items-center gap-2 font-semibold tracking-tight">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-ink-900 text-[13px] text-white">
-                M
-              </span>
+              <BrandPlate size={32} />
               {t.admin.title}
             </Link>
             <AdminNav caps={s.adminCaps} />

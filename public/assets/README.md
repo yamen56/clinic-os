@@ -10,9 +10,11 @@ everywhere else the mark needs a plate under it.
 
 `npm run icons` builds every derived asset from that one file, compositing it
 onto the brand navy (`#0b1220`) — the PWA icons, the favicon, and
-`mark-light.png`, which is the logo emails use. Emails are the reason that last
-one is generated rather than copied: an email body is white, so the raw mark
-would be an invisible rectangle in every invitation we send.
+`mark-light.png`, the mark on its own plate. Emails are the reason that last one
+is generated rather than copied: an email body is white, so the raw mark would be
+an invisible rectangle in every invitation we send. The admin header uses it for
+the same reason, through `BrandPlate`, which rounds the corners at the point of
+use — the plate is a full square in the file on purpose.
 
 **Replacing `logo-mark-primary.png` and re-running `npm run icons` rebrands the
 whole product.** Nothing else needs editing.
@@ -26,6 +28,6 @@ Rules worth repeating:
 | File | Where it's used | Generated? |
 |---|---|---|
 | `logo-mark-primary.png` | Sidebar (64px), login (72px), source for all icons | no — the source |
-| `mark-light.png` | Email header logo | yes, `npm run icons` |
+| `mark-light.png` | Email header logo; admin header via `BrandPlate` | yes, `npm run icons` |
 | `logo-mark-wide.png` | Wide lockup, kept for decks and docs | no |
 | `bg-aurora-grain.png` | Login background, in place of the CSS gradient | no |

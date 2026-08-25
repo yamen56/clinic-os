@@ -47,6 +47,41 @@ export function BrandLockup({ className = "" }: { className?: string }) {
   );
 }
 
+/**
+ * The mark on its own navy plate, for chrome that sits on a light surface.
+ *
+ * The source mark is white on transparency, so a light header cannot show it
+ * directly — which is exactly why the admin header used to draw a literal "M"
+ * on a dark square instead. This is that same dark square with the real mark on
+ * it, and it reuses `mark-light.png` rather than introducing a second hand-made
+ * asset: that file is generated from `logo-mark-primary.png` by `npm run icons`,
+ * so replacing the one source still rebrands everything.
+ *
+ * Rounding is applied here rather than baked into the asset. Every generated
+ * plate is a full square on purpose — a radius in the file would leave
+ * transparent corners that read as white notches — so the corners are clipped
+ * at the point of use, where the surface behind them is known.
+ */
+export function BrandPlate({
+  size = 32,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/assets/mark-light.png"
+      alt="Clinicti"
+      width={size}
+      height={size}
+      className={`shrink-0 rounded-lg object-contain ${className}`}
+      style={{ width: size, height: size }}
+    />
+  );
+}
+
 export function BrandMark({
   size = 64,
   className = "",
