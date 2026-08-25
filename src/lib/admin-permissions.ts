@@ -75,7 +75,7 @@ export const ADMIN_CAPABILITY_GROUPS: { key: string; caps: AdminCapability[] }[]
   { key: "clinics", caps: ["clinics.create", "clinics.edit", "clinics.features", "clinics.impersonate", "clinics.delete"] },
   { key: "insight", caps: ["analytics", "monitoring"] },
   { key: "content", caps: ["documents", "announcements", "defaults"] },
-  { key: "agency", caps: ["admins"] },
+  { key: "team", caps: ["admins"] },
 ];
 
 function empty(): AdminCapabilityMap {

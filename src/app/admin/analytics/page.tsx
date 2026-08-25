@@ -31,6 +31,9 @@ type ClinicRow = {
   appointments: number;
   messages: number;
   documents: number;
+  docs_pending: number;
+  docs_expired: number;
+  docs_declined: number;
   invoiced: string;
   ai_replies: number;
   ai_tokens: string;
@@ -169,6 +172,20 @@ export default async function AnalyticsPage({
                 (select count(*) from documents d
                    where d.clinic_id = cl.id and d.status = 'completed'
                      and d.completed_at > now() - ($1 || ' days')::interval)::int as documents,
+                /*
+                  Paperwork that has stalled. Unlike every other number here it
+                  is deliberately not windowed by the range: a consent form sent
+                  four months ago and never signed is more of a problem than one
+                  sent last week, and a 30-day view would hide exactly the worst
+                  cases.
+                */
+                (select count(*) from documents d
+                   where d.clinic_id = cl.id
+                     and d.status in ('sent', 'partially_signed'))::int as docs_pending,
+                (select count(*) from documents d
+                   where d.clinic_id = cl.id and d.status = 'expired')::int as docs_expired,
+                (select count(*) from documents d
+                   where d.clinic_id = cl.id and d.status = 'declined')::int as docs_declined,
                 coalesce((select sum(i.total) from invoices i
                    where i.clinic_id = cl.id and i.status = 'paid'
                      and i.created_at > now() - ($1 || ' days')::interval), 0)::numeric as invoiced,
@@ -209,6 +226,15 @@ export default async function AnalyticsPage({
   );
   const maxOf = (k: "patients" | "appointments" | "messages" | "documents") =>
     Math.max(1, ...clinics.map((c) => Number(c[k])));
+
+  // Worst first: the clinic with the most unsigned paperwork is the one to call.
+  const stalled = clinics
+    .filter((c) => c.docs_pending + c.docs_expired + c.docs_declined > 0)
+    .sort(
+      (a, b) =>
+        b.docs_pending + b.docs_expired + b.docs_declined -
+        (a.docs_pending + a.docs_expired + a.docs_declined)
+    );
 
   const daysQuiet = (d: Date | null) =>
     d ? Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000) : null;
@@ -385,6 +411,48 @@ export default async function AnalyticsPage({
                 </ul>
               )}
             </Card>
+
+            {/*
+              Paperwork that has stalled, and only that.
+
+              This used to be a full per-clinic document table on a tab of its
+              own, repeating the volume column already in the league table above.
+              What it alone could tell you was which clinics have forms sitting
+              unsigned — so that is all it shows now, and only for the clinics
+              where the answer is not zero. A list of zeroes is not a report.
+            */}
+            {stalled.length > 0 && (
+              <Card>
+                <CardHeader title={t.admin.paperwork} sub={t.admin.paperworkSub} />
+                <ul className="divide-y divide-line">
+                  {stalled.map((cl) => (
+                    <li key={cl.id} className="flex flex-wrap items-center gap-2 px-5 py-2.5">
+                      <Link
+                        href={`/c/${cl.slug}/documents`}
+                        className="min-w-32 flex-1 truncate text-[13px] font-medium hover:text-brand-700"
+                      >
+                        {cl.name_ar || cl.name}
+                      </Link>
+                      {cl.docs_pending > 0 && (
+                        <Badge status="pending">
+                          {t.docs.tabPending} {cl.docs_pending}
+                        </Badge>
+                      )}
+                      {cl.docs_expired > 0 && (
+                        <Badge status="no_show">
+                          {t.docs.statuses.expired} {cl.docs_expired}
+                        </Badge>
+                      )}
+                      {cl.docs_declined > 0 && (
+                        <Badge status="cancelled">
+                          {t.docs.statuses.declined} {cl.docs_declined}
+                        </Badge>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
 
             <Card>
               <CardHeader title={t.admin.waHealth} sub={t.admin.waHealthSub} />

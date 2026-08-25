@@ -812,7 +812,7 @@ export async function saveLibraryTemplateAction(
       detail: { key: d.key },
     })
   );
-  revalidatePath("/admin/documents");
+  revalidatePath("/admin/defaults");
   return { id };
 }
 
@@ -827,5 +827,5 @@ export async function deleteLibraryTemplateAction(id: string): Promise<void> {
       entityId: id,
     });
   });
-  revalidatePath("/admin/documents");
+  revalidatePath("/admin/defaults");
 }

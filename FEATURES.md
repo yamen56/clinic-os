@@ -556,10 +556,10 @@ searchable.
 
 ### Starter library
 
-`document_template_library` — agency-level, Arabic + English ready-made forms (general
+`document_template_library` — platform-level, Arabic + English ready-made forms (general
 treatment consent and others), **copied into each new clinic at creation** and never
-referenced again, so a clinic owns and can rewrite every word. The agency edits the library
-at `/admin/documents`.
+referenced again, so a clinic owns and can rewrite every word. The library is edited at
+`/admin/defaults`, alongside the other content every new clinic is seeded with.
 
 ### Uploaded PDFs + field placement
 
@@ -1253,8 +1253,7 @@ than a slow query.
 | **Clinic detail** | Subscription modal (status / plan / price) and **Open workspace** (impersonation) |
 | **Monitoring** | Worker up/down + uptime; jobs pending / failed / running / stale; outbox queued & failed; storage MB; per-clinic WhatsApp status, sent-today vs cap, AI replies, AI tokens, failed runs/messages/WA errors, last activity; the 10 most recent failed jobs with their errors; total AI token spend across all clinics (30 days) |
 | **Announcements** | Platform-wide messages to all clinics, dismissible per user |
-| **Defaults** | Agency-level automation recipes and AI knowledge templates copied into new clinics |
-| **Documents** | The starter document template library editor |
+| **Defaults** | Everything a new clinic is seeded with: the starter document template library, the automation recipes and the AI knowledge templates. Gated per section — `documents` opens the library, `defaults` the rest |
 
 ---
 

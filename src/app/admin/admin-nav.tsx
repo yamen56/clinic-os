@@ -19,9 +19,15 @@ export function AdminNav({ caps }: { caps: AdminCapabilityMap }) {
     { href: "/admin", label: t.admin.clinics, exact: true, show: true },
     { href: "/admin/analytics", label: t.admin.analytics, show: caps.analytics },
     { href: "/admin/monitoring", label: t.admin.monitoring, show: caps.monitoring },
-    { href: "/admin/documents", label: t.nav.documents, show: caps.documents },
     { href: "/admin/announcements", label: t.admin.announcements, show: caps.announcements },
-    { href: "/admin/defaults", label: t.admin.defaults, show: caps.defaults },
+    /*
+      Two capabilities, one tab. The document library moved here from its own
+      "Documents" tab, which paired it with per-clinic document counts that the
+      analytics league table already carried. Somebody may hold `documents`
+      without `defaults`, so the tab shows for either and the page gates each
+      section for itself.
+    */
+    { href: "/admin/defaults", label: t.admin.defaults, show: caps.defaults || caps.documents },
     { href: "/admin/team", label: t.admin.team, show: caps.admins },
   ];
 

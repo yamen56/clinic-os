@@ -48,6 +48,21 @@ export async function guardAdminCap(cap: AdminCapability): Promise<SessionInfo> 
   }
 }
 
+/**
+ * An admin page built from independently-gated sections.
+ *
+ * The seeded-defaults page holds the automation recipes, the knowledge starters
+ * and the document library, and a clinic-content person may hold `documents`
+ * without holding `defaults`. Guarding on one capability would shut them out of
+ * the only screen their own work now lives on, so the door opens for any of
+ * them and each section checks for itself.
+ */
+export async function guardAdminAnyCap(...caps: AdminCapability[]): Promise<SessionInfo> {
+  const s = await guardAdmin();
+  if (!caps.some((c) => s.adminCaps[c])) redirect("/admin");
+  return s;
+}
+
 export async function guardClinic(slug: string): Promise<ClinicAccess> {
   try {
     return await requireClinic(slug);

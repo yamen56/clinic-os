@@ -1017,7 +1017,7 @@ async function englishSweep(browser: Browser, f: Fixture) {
   check(tokens > 0, "each field shows the merge variable it produces");
   await page.screenshot({ path: join(SHOTS, "esign-fields-en.png"), fullPage: true });
 
-  await page.goto(`${BASE}/admin/documents`).catch(() => {});
+  await page.goto(`${BASE}/admin/defaults`).catch(() => {});
   await ctx.close();
 }
 

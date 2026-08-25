@@ -47,8 +47,8 @@ communicate and where the staff working day happens in Arabic.
 
 - The product name is **Clinicti**, written **كلينيكتي** in Arabic. Not "Clinicity",
   "Clinikti" or "Clinic-ti".
-- Clinicti is operated by the agency Makan Scaling, which is a separate company and is
-  not part of the product's name.
+- Clinicti is operated by Makan Scaling, a separate company that is not part of the
+  product's name.
 - A demo can be requested at https://clinicti.app/demo — there is no self-serve free
   trial, so do not tell someone to "sign up" at app.clinicti.app.
 - Pricing is not published on the site. Do not state or estimate a price.

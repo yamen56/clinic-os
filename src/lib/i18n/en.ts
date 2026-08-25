@@ -81,7 +81,7 @@ export const en = {
     suspendedBody: "Your clinic's subscription is paused. Get in touch to reactivate it. Your data is safe.",
     removedTitle: "This workspace has been closed",
     removedBody:
-      "Your clinic was removed by the agency, so nobody can sign in to it any more. The records are kept for a limited time — contact the agency straight away if this was not expected.",
+      "Your clinic was removed, so nobody can sign in to it any more. The records are kept for a limited time — contact support straight away if this was not expected.",
     noAccess: "You don't have access to this page.",
     forgotPassword: "Forgot your password?",
     forgotTitle: "Reset your password",
@@ -264,11 +264,13 @@ export const en = {
     emptyDay: "A quiet day — no appointments scheduled yet.",
   },
   admin: {
-    title: "Agency Admin",
+    title: "Platform Admin",
     clinics: "Clinics",
     monitoring: "Monitoring",
     announcements: "Announcements",
     defaults: "Defaults",
+    paperwork: "Paperwork waiting",
+    paperworkSub: "Clinics with forms still unsigned. Not limited to the range above — an old one matters more.",
     newClinic: "New clinic",
     clinicName: "Clinic name",
     clinicNameAr: "Clinic name (Arabic)",
@@ -285,7 +287,7 @@ export const en = {
     planPrice: "Monthly price",
     createClinic: "Create clinic",
     openWorkspace: "Open workspace",
-    impersonating: "Support mode — you're viewing this clinic as the agency. Actions are logged.",
+    impersonating: "Support mode — you're viewing this clinic as the platform team. Actions are logged.",
     exitImpersonation: "Exit support mode",
     health: "Health",
     lastActivity: "Last activity",
@@ -345,7 +347,7 @@ export const en = {
       not_deleted: "Delete the clinic first — permanent destruction is never one step.",
     },
 
-    /* --- agency team --- */
+    /* --- team --- */
     teamSub: "Who can get into this panel, and exactly how much of it they see.",
     addAdmin: "Add admin",
     adminAccess: "Access",
@@ -386,7 +388,7 @@ export const en = {
       "clinics.features": "Change which modules a clinic has",
       "clinics.impersonate": "Open a clinic's workspace (support mode)",
       "clinics.delete": "Delete and restore clinics",
-      documents: "Agency document library",
+      documents: "Starter document library",
       announcements: "Announcements",
       defaults: "Seeded defaults",
       admins: "Manage this team",
@@ -394,8 +396,8 @@ export const en = {
     adminCapGroups: {
       clinics: "Clinics",
       insight: "Insight",
-      content: "Agency content",
-      agency: "The agency itself",
+      content: "Shared content",
+      team: "This team",
     },
 
     /* --- analytics --- */

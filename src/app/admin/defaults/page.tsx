@@ -1,33 +1,65 @@
-import { guardAdminCap } from "@/lib/guard";
+import { guardAdminAnyCap } from "@/lib/guard";
+import { canAdmin } from "@/lib/auth";
 import { withSystem } from "@/lib/db";
-import { getDict } from "@/lib/i18n";
+import { getDict, getLocale } from "@/lib/i18n";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { LibraryEditor } from "./library-editor";
 import { Workflow, BookOpen } from "lucide-react";
 import type { Specialty } from "@/lib/specialties";
 
+/**
+ * Everything a new clinic is handed on day one.
+ *
+ * The consent library used to live on its own "Documents" tab next to a table
+ * of per-clinic document counts — a content job and an analytics job sharing a
+ * screen because they both had the word "documents" in them. The counts moved
+ * to Analytics, which is where every other per-clinic number already was, and
+ * the library came here, where the other seeded content lives. The capability
+ * model had this right the whole time: `documents`, `announcements` and
+ * `defaults` are all grouped as "content".
+ *
+ * The two halves are gated separately, because a content person may hold
+ * `documents` without holding `defaults`.
+ */
 export default async function DefaultsPage() {
-  await guardAdminCap("defaults");
+  const s = await guardAdminAnyCap("defaults", "documents");
   const t = await getDict();
+  const locale = await getLocale();
+  const showSeeded = canAdmin(s, "defaults");
+  const showLibrary = canAdmin(s, "documents");
 
   const data = await withSystem(async (c) => {
-    const recipes = (
-      await c.query(
-        `select key, name, name_ar, description, trigger_type, trigger_config, steps, active, sort,
-                specialty
-         from recipe_templates order by sort`
-      )
-    ).rows;
-    const knowledge = (
-      await c.query(`select category, title, sort from knowledge_templates order by sort`)
-    ).rows;
-    const usage = (
-      await c.query(
-        `select recipe_key, count(*)::int as clinics, count(*) filter (where active)::int as enabled
-         from automations where recipe_key is not null group by recipe_key`
-      )
-    ).rows;
-    return { recipes, knowledge, usage };
+    const recipes = showSeeded
+      ? (
+          await c.query(
+            `select key, name, name_ar, description, trigger_type, trigger_config, steps, active, sort,
+                    specialty
+             from recipe_templates order by sort`
+          )
+        ).rows
+      : [];
+    const knowledge = showSeeded
+      ? (await c.query(`select category, title, sort from knowledge_templates order by sort`)).rows
+      : [];
+    const usage = showSeeded
+      ? (
+          await c.query(
+            `select recipe_key, count(*)::int as clinics, count(*) filter (where active)::int as enabled
+             from automations where recipe_key is not null group by recipe_key`
+          )
+        ).rows
+      : [];
+    const library = showLibrary
+      ? (
+          await c.query(
+            `select l.*,
+                    (select count(*)::int from document_templates dt where dt.library_key = l.key) as copies
+             from document_template_library l order by l.sort, l.name`
+          )
+        ).rows
+      : [];
+    return { recipes, knowledge, usage, library };
   });
 
   const usageFor = (key: string) => data.usage.find((u) => u.recipe_key === key);
@@ -39,70 +71,80 @@ export default async function DefaultsPage() {
         sub="Copied into every new clinic, disabled and fully editable by them."
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader
-            title={
-              <span className="flex items-center gap-2">
-                <Workflow className="h-4 w-4 text-ink-400" />
-                Automation recipes
-              </span>
-            }
-            sub={`${data.recipes.length} recipes`}
-          />
-          <ul className="divide-y divide-line">
-            {data.recipes.map((r) => {
-              const u = usageFor(r.key);
-              const steps = Array.isArray(r.steps) ? r.steps.length : 0;
-              return (
-                <li key={r.key} className="px-5 py-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium">{r.name_ar || r.name}</span>
-                    <Badge status="brand">{r.trigger_type}</Badge>
-                    {/* Only the packs are labelled. 'general' is every clinic,
-                        which is the default and needs no chip. */}
-                    {r.specialty !== "general" && (
-                      <Badge status="pending">{t.specialties[r.specialty as Specialty]}</Badge>
-                    )}
-                    {!r.active && <Badge status="cancelled">hidden</Badge>}
-                  </div>
-                  <p className="mt-0.5 text-[13px] text-ink-500">{r.description}</p>
-                  <div className="mt-1 text-[12px] text-ink-400 tnum">
-                    {steps} step{steps === 1 ? "" : "s"}
-                    {u ? ` · in ${u.clinics} clinics, ${u.enabled} enabled` : " · not yet used"}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
+      {showLibrary && (
+        <div className="mb-4">
+          <LibraryEditor entries={JSON.parse(JSON.stringify(data.library))} locale={locale} />
+        </div>
+      )}
 
-        <Card className="h-fit">
-          <CardHeader
-            title={
-              <span className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-ink-400" />
-                AI knowledge structure
-              </span>
-            }
-            sub={`${data.knowledge.length} entries seeded per clinic`}
-          />
-          <ul className="divide-y divide-line">
-            {data.knowledge.map((k, i) => (
-              <li key={i} className="flex items-center gap-3 px-5 py-2.5">
-                <span className="flex-1 text-sm">{k.title}</span>
-                <Badge status="neutral">{k.category}</Badge>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
+      {showSeeded && (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader
+                title={
+                  <span className="flex items-center gap-2">
+                    <Workflow className="h-4 w-4 text-ink-400" />
+                    Automation recipes
+                  </span>
+                }
+                sub={`${data.recipes.length} recipes`}
+              />
+              <ul className="divide-y divide-line">
+                {data.recipes.map((r) => {
+                  const u = usageFor(r.key);
+                  const steps = Array.isArray(r.steps) ? r.steps.length : 0;
+                  return (
+                    <li key={r.key} className="px-5 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{r.name_ar || r.name}</span>
+                        <Badge status="brand">{r.trigger_type}</Badge>
+                        {/* Only the packs are labelled. 'general' is every clinic,
+                            which is the default and needs no chip. */}
+                        {r.specialty !== "general" && (
+                          <Badge status="pending">{t.specialties[r.specialty as Specialty]}</Badge>
+                        )}
+                        {!r.active && <Badge status="cancelled">hidden</Badge>}
+                      </div>
+                      <p className="mt-0.5 text-[13px] text-ink-500">{r.description}</p>
+                      <div className="mt-1 text-[12px] text-ink-400 tnum">
+                        {steps} step{steps === 1 ? "" : "s"}
+                        {u ? ` · in ${u.clinics} clinics, ${u.enabled} enabled` : " · not yet used"}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
 
-      <p className="mt-4 text-[13px] text-ink-500">
-        Edit these in <code className="rounded bg-ink-900/5 px-1.5 py-0.5">scripts/seed-recipes.ts</code>, then run{" "}
-        <code className="rounded bg-ink-900/5 px-1.5 py-0.5">npm run seed:recipes</code>. Existing clinics keep their
-        own copies untouched.
-      </p>
+            <Card className="h-fit">
+              <CardHeader
+                title={
+                  <span className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-ink-400" />
+                    AI knowledge structure
+                  </span>
+                }
+                sub={`${data.knowledge.length} entries seeded per clinic`}
+              />
+              <ul className="divide-y divide-line">
+                {data.knowledge.map((k, i) => (
+                  <li key={i} className="flex items-center gap-3 px-5 py-2.5">
+                    <span className="flex-1 text-sm">{k.title}</span>
+                    <Badge status="neutral">{k.category}</Badge>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+
+          <p className="mt-4 text-[13px] text-ink-500">
+            Edit these in <code className="rounded bg-ink-900/5 px-1.5 py-0.5">scripts/seed-recipes.ts</code>, then run{" "}
+            <code className="rounded bg-ink-900/5 px-1.5 py-0.5">npm run seed:recipes</code>. Existing clinics keep their
+            own copies untouched.
+          </p>
+        </>
+      )}
     </>
   );
 }
