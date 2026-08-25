@@ -7,11 +7,11 @@ import { randomUUID } from "node:crypto";
  *
  * Two drivers behind one API:
  *  - local disk for development
- *  - S3-compatible object storage for production (Supabase Storage, R2, S3)
+ *  - S3-compatible object storage for production (Cloudflare R2)
  *
- * Serverless filesystems are ephemeral and mostly read-only, so anything
- * deployed to Vercel MUST run the S3 driver or uploads vanish between requests.
- * The driver is chosen by whether S3_BUCKET is configured.
+ * A container filesystem does not survive a redeploy, so production MUST run
+ * the S3 driver or every upload is lost on the next release. The driver is
+ * chosen by whether S3_BUCKET is configured.
  */
 
 const ROOT = path.resolve(process.cwd(), process.env.STORAGE_DIR || "./storage");
@@ -43,7 +43,7 @@ async function s3(): Promise<{ mod: S3Module; client: InstanceType<S3Module["S3C
     s3Client = new s3Mod.S3Client({
       region: process.env.S3_REGION || "auto",
       endpoint: process.env.S3_ENDPOINT,
-      // Supabase and R2 both require path-style addressing.
+      // R2 requires path-style addressing.
       forcePathStyle: true,
       credentials: {
         accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",

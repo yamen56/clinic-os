@@ -2,7 +2,7 @@
  * Applies pending migrations and the agency defaults to the production database.
  *
  * Reads `.env.production.local` rather than taking a connection string on the
- * command line, so the Supabase password never lands in a shell history, a
+ * command line, so the database password never lands in a shell history, a
  * process list or a log.
  *
  * Order matters: the agency recipes are seeded *before* the migrations run,

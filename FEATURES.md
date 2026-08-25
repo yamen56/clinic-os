@@ -32,15 +32,15 @@ tenants.
 
 | Piece | Runtime | Notes |
 |---|---|---|
-| Web app | Next.js 15 App Router (React 19), Railway/Vercel | `src/app` |
+| Web app | Next.js 15 App Router (React 19), Railway | `src/app` |
 | Worker | Long-running Node process, Railway | `worker/` — **never serverless** |
-| Database | PostgreSQL (Supabase-hosted or self-hosted), **session pooler required** | plain SQL migrations |
+| Database | PostgreSQL (Railway-hosted or self-hosted); whatever fronts it must support `LISTEN/NOTIFY` | plain SQL migrations |
 | Storage | Local disk in dev, S3-compatible in production | `src/lib/storage.ts` |
 
 The worker holds **one live WhatsApp socket per clinic**, owns the scheduler, runs the AI
 agent, and renders PDFs with headless Chromium — none of which fit a serverless function.
 
-Stack notes: raw `pg` (no supabase-js, no ORM, no TanStack Query), `luxon` for time,
+Stack notes: raw `pg` (no ORM, no query-cache library), `luxon` for time,
 `zod` for validation, `bcryptjs` + SHA-256 session tokens for auth, `@whiskeysockets/baileys`
 6.7.21 for WhatsApp, `playwright` Chromium for PDF, `pdf-lib` as a PDF compositor,
 `pdfjs-dist` for PDF rendering in the browser, `mammoth` for .docx import,
@@ -1286,7 +1286,7 @@ than a slow query.
 One API, two drivers, chosen by whether `S3_BUCKET` is set:
 
 - **Local disk** in development: `./storage/{clinicId}/…`, with traversal guarding.
-- **S3-compatible** in production (Supabase Storage, R2, S3) — path-style addressing.
+- **S3-compatible** in production (Cloudflare R2) — path-style addressing.
 
 **Serverless filesystems are ephemeral, so production must set S3 or uploads vanish between
 requests.** Everything is served through authenticated API routes; nothing is a public URL.

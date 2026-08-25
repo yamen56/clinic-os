@@ -21,7 +21,4 @@ public/pdf.worker.min.mjs
 
 # Generated env paste-blocks (contain real secrets)
 RAILWAY-ENV.txt
-VERCEL-ENV.txt
-
-.vercel
 .env*

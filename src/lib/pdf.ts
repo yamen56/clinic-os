@@ -2,9 +2,10 @@
  * Invoice PDF rendering, delegated to the worker.
  *
  * The renderer itself lives in `worker/pdf.ts` because it needs a headless
- * Chromium, which exceeds a Vercel function's size limit and cannot be launched
- * in a serverless sandbox. The worker already runs Chromium and is always-on, so
- * the web app posts the print URL to it and gets the bytes back.
+ * Chromium — a heavy dependency the web image has no other use for, and one
+ * that needs a process alive long enough to drive it. The worker already ships
+ * Chromium and is always-on, so the web app posts the print URL to it and gets
+ * the bytes back.
  *
  * The print page authenticates with the invoice's public token, so the worker
  * needs no session — it just has to be able to reach APP_URL.

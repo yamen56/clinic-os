@@ -55,11 +55,6 @@ async function deployChecks() {
     ? add("ok", "GitHub CLI", (gh.match(/account (\S+)/)?.[1] ?? "authenticated"))
     : add("warn", "GitHub CLI", "not logged in — run: gh auth login");
 
-  const vercel = run("npx --yes vercel whoami");
-  vercel
-    ? add("ok", "Vercel CLI", vercel.split("\n").pop() ?? "authenticated")
-    : add("warn", "Vercel CLI", "not logged in — run: npx vercel login");
-
   const railway = run("npx --yes @railway/cli whoami");
   railway
     ? add("ok", "Railway CLI", railway.split("\n").pop() ?? "authenticated")

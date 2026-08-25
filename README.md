@@ -118,10 +118,11 @@ Two things are exercised against local doubles rather than live third parties, b
 
 **See [DEPLOY.md](DEPLOY.md) for the full walkthrough.** In short:
 
-- **Web app** → Vercel. Needs `DATABASE_URL`, `APP_URL`, `WORKER_URL`, `INTERNAL_API_SECRET`, the `S3_*` values and the VAPID keys.
-- **Worker** → Railway (`Dockerfile.worker`, pinned in `railway.json`). **Never serverless** — it holds a live WhatsApp socket per clinic and owns the scheduler. It also renders invoice PDFs, because headless Chromium does not fit in a serverless function.
-- **Database + storage** → Supabase. Run `npm run migrate` with `DATABASE_SUPER_URL` pointed at it; the RLS policies come along with the migrations. Use the **session** pooler, not the transaction pooler — realtime needs `LISTEN/NOTIFY`.
-- **Storage** — `src/lib/storage.ts` picks its driver from `S3_BUCKET`: local disk in development, S3-compatible object storage in production. Serverless filesystems are ephemeral, so production must set it.
+- **Everything runs on Railway**: `clinic-web` (the app), `clinic-os` (the worker) and a Postgres service, in one project. Ship with `npm run deploy` — auto-deploy does not fire, and the script is what passes the commit SHA Railway needs.
+- **Web app** needs `DATABASE_URL`, `APP_URL`, `WORKER_URL`, `INTERNAL_API_SECRET`, the `S3_*` values and the VAPID keys.
+- **Worker** (`Dockerfile.worker`, pinned in `railway.worker.json`) **must never sleep** — it holds a live WhatsApp socket per clinic and owns the scheduler. It also renders invoice PDFs with headless Chromium, and applies migrations on boot.
+- **Database** — run `npm run migrate` with `DATABASE_SUPER_URL` pointed at it; the RLS policies come along with the migrations. Whatever sits in front of Postgres must support `LISTEN/NOTIFY`, which realtime depends on.
+- **Storage** — `src/lib/storage.ts` picks its driver from `S3_BUCKET`: local disk in development, S3-compatible object storage (Cloudflare R2) in production. A container filesystem does not survive a redeploy, so production must set it.
 - **Booking subdomain** — `book.domain.com/{slug}` maps to `/book/{slug}` with a rewrite.
 
 `.env.production.example` documents every production variable and which service needs it.

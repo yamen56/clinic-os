@@ -56,7 +56,7 @@ async function client(c: Conn) {
   return new S3Client({
     region: c.region,
     endpoint: c.endpoint,
-    // Supabase and R2 both accept path-style; virtual-hosted needs DNS per bucket.
+    // R2 accepts path-style; virtual-hosted needs DNS per bucket.
     forcePathStyle: true,
     credentials: { accessKeyId: c.accessKeyId, secretAccessKey: c.secretAccessKey },
   });

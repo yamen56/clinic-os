@@ -2,7 +2,7 @@
  * Does the app ride out a brief database outage, or turn it into a 500?
  *
  * Written after production spent seven minutes showing "Application error: a
- * server-side exception has occurred" because Supabase's pooler could not reach
+ * server-side exception has occurred" because the managed pooler could not reach
  * Postgres. The database recovering on its own is not the fix — surviving the
  * next one is.
  *
@@ -71,8 +71,8 @@ async function main() {
     // Measured: Railway's postgres-ssl image accepts TLS on its private domain
     // as well as its public proxy, so the private network gets it too.
     ["postgres://u:p@postgres.railway.internal:5432/railway", true, "railway private network"],
-    ["postgres://u:p@aws-0-eu-central-1.pooler.supabase.com:5432/postgres", true, "supabase"],
-    ["postgres://u:p@db.abc.supabase.co:5432/postgres", true, "supabase direct"],
+    ["postgres://u:p@shuttle.proxy.rlwy.net:13547/railway", true, "railway public proxy"],
+    ["postgres://u:p@aws-0-eu-central-1.pooler.example.com:5432/postgres", true, "a managed pooler"],
     ["postgres://u:p@some-host.example.com:5432/db", true, "public host"],
   ] as [string, boolean, string][]) {
     const got = sslFor(url) !== undefined;
@@ -170,7 +170,7 @@ async function main() {
 
   /* ------------------- 3b. the direct route carries the app when the pooler dies */
   /*
-    The case this was built for: Supabase's pooler unreachable for hours while
+    The case this was built for: a managed pooler unreachable for hours while
     Postgres itself is fine. A dead primary plus a live fallback must serve, not
     fail — and must then stop paying the primary's retry on every request.
   */
@@ -289,7 +289,7 @@ async function main() {
 
   /* --------------- 3c. an unroutable fallback is abandoned, not paid for */
   /*
-    Measured in production: Railway has no IPv6 egress, so Supabase's AAAA-only
+    Measured in production: our host has no IPv6 egress, so an AAAA-only
     direct host answers ENETUNREACH every time. Retrying it turned a 1-second
     failure into a 15-second one on every request. It must be tried once and
     then dropped.

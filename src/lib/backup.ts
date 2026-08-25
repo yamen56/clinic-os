@@ -18,7 +18,7 @@ import { saveSystemFile, listSystemFiles, openFile, deleteFile } from "./storage
  * text format. Two properties matter and neither is available from a volume
  * snapshot:
  *
- *   portable — it restores into any Postgres anywhere. Railway, Supabase, a
+ *   portable — it restores into any Postgres anywhere. A managed service, a
  *     laptop. Nothing about it is tied to the host it came from, which is what
  *     stops a hosting problem from becoming a data problem.
  *   inspectable — it is text. When something has gone wrong you can read it,

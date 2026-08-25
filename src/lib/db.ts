@@ -23,15 +23,11 @@ declare global {
  * Failures that mean the fallback can never work from here, as opposed to
  * "not right now".
  *
- * Measured, not guessed: Railway has no IPv6 egress, so the direct Supabase
- * host — which publishes only a AAAA record — answers every attempt with
- * ENETUNREACH. Retrying that is pure cost, and paying it on every request
- * turned a 1-second failure into a 15-second one during the very outage the
- * fallback exists to survive.
- *
- * (The fix on the infrastructure side is Supabase's IPv4 add-on, which gives
- * the direct host an A record. Nothing here needs to change when it appears —
- * the route simply starts working.)
+ * Measured, not guessed: our host has no IPv6 egress, and a fallback that
+ * publishes only a AAAA record answers every attempt with ENETUNREACH.
+ * Retrying that is pure cost, and paying it on every request turned a 1-second
+ * failure into a 15-second one during the very outage the fallback exists to
+ * survive. Marking the route unusable once is what keeps that from happening.
  */
 function isUnroutable(e: unknown): boolean {
   const code = String((e as { code?: string })?.code ?? "");
@@ -39,8 +35,7 @@ function isUnroutable(e: unknown): boolean {
 }
 
 /**
- * Hosted Postgres (Supabase, Neon, Railway) requires TLS; the local embedded
- * server does not offer it. Managed providers commonly present certificates
+ * Hosted Postgres requires TLS; the local embedded server does not offer it. Managed providers commonly present certificates
  * that Node will not chain-verify, so verification is relaxed for remote hosts
  * only — the connection is still encrypted.
  */
@@ -77,10 +72,10 @@ function makePool(url: string, name: string): Pool {
     ssl: sslFor(url),
     max: Number(process.env.PG_POOL_MAX || 12),
     /*
-      A healthy connection to Supabase takes well under a second. Supavisor in
-      trouble, however, sits on the attempt for about three seconds before
-      refusing — measured in production — so without this bound the retry loop
-      alone took ten. Cap it: anything this slow is not going to succeed.
+      A healthy connection to a managed Postgres takes well under a second. A
+      pooler in trouble, however, sits on the attempt for about three seconds
+      before refusing — measured in production — so without this bound the retry
+      loop alone took ten. Cap it: anything this slow is not going to succeed.
     */
     connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 4000),
     // A remote database makes a new connection expensive — TCP, TLS, then
@@ -102,40 +97,23 @@ export function getPool(): Pool {
 /**
  * A second way in, for when the first one is not the database's fault.
  *
- * Supabase puts a pooler (Supavisor) in front of Postgres, and on 2026-07-31 it
- * lost its route to a completely healthy instance three times in ten hours —
- * `pg_postmaster_start_time` showed days of unbroken uptime through every one.
- * With a single connection string there was nothing to do but wait: both pooler
- * ports were dead at once, so this is not something a different port solves.
+ * Managed Postgres usually sits behind a pooler, and a pooler can lose its
+ * route to a completely healthy instance: on 2026-07-31 the then-host's did so
+ * three times in ten hours, with `pg_postmaster_start_time` showing days of
+ * unbroken uptime through every one. Both of its pooler ports were dead at
+ * once, so a different port is not the answer — a different *host* is.
  *
- * Supabase also publishes a direct host, `db.<ref>.supabase.co`, which does not
- * involve the pooler at all. That is the fallback. It is derived from the
- * primary URL — the pooler username carries the project ref as
- * `user.<ref>` — or given explicitly as DATABASE_FALLBACK_URL.
- *
- * Returns null when there is nothing sensible to fall back to, which is the
- * case locally and for any non-Supabase host. Then everything behaves exactly
- * as it did before.
+ * Set `DATABASE_FALLBACK_URL` to a route that does not share the primary's
+ * pooler and retries will use it. Returns null when there is none, which is the
+ * usual case and the local one; then everything behaves as if this did not
+ * exist.
  */
 function getFallbackPool(): Pool | null {
   if (globalThis.__cosFallbackUnusable) return null;
   if (globalThis.__cosFallbackPool) return globalThis.__cosFallbackPool;
 
-  let url = process.env.DATABASE_FALLBACK_URL;
-  if (!url) {
-    try {
-      const u = new URL(primaryUrl());
-      const [user, ref] = u.username.split(".");
-      // Only Supabase's pooler has this shape, and only it has a direct host.
-      if (!ref || !/\.pooler\.supabase\.com$/.test(u.hostname)) return null;
-      u.hostname = `db.${ref}.supabase.co`;
-      u.port = "5432";
-      u.username = user;
-      url = u.toString();
-    } catch {
-      return null;
-    }
-  }
+  const url = process.env.DATABASE_FALLBACK_URL;
+  if (!url) return null;
   globalThis.__cosFallbackPool = makePool(url, "clinicos-web-direct");
   return globalThis.__cosFallbackPool;
 }
@@ -157,9 +135,11 @@ export type DbCtx = {
  * pooler was mid-restart, DNS blinked, TLS was reset — and where trying again a
  * second later genuinely works.
  *
- * The Supavisor codes are here because they are what a Supabase blip actually
- * produces: EAUTHQUERY when its credential lookup times out, ECIRCUITBREAKER
- * once it has given up and is refusing new connections for a few seconds.
+ * EAUTHQUERY and ECIRCUITBREAKER are Supavisor's, from the pooler this ran
+ * behind before Railway: the first when its credential lookup timed out, the
+ * second once it had given up and was refusing new connections. They are kept
+ * because they cost nothing and the next managed pooler may well speak the
+ * same dialect — but they are the reason two odd strings are in this regex.
  */
 function isHostUnreachable(e: unknown): boolean {
   const err = e as { code?: string; message?: string };
@@ -325,8 +305,8 @@ async function connectWithRetry(): Promise<PoolClient> {
         // fast instead of adding a dead route's latency to every request.
         globalThis.__cosFallbackUnusable = true;
         console.warn(
-          `[pg] direct connection is unroutable from this host (${(fe as { code?: string }).code}) — ` +
-            "not trying it again. Supabase's IPv4 add-on would make it usable."
+          `[pg] DATABASE_FALLBACK_URL is unroutable from this host (${(fe as { code?: string }).code}) — ` +
+            "not trying it again. Check that the fallback resolves over IPv4."
         );
       }
     }

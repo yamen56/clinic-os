@@ -2,10 +2,10 @@
  * Installs the Chromium used for invoice PDFs — but only where it is actually
  * used and not already present.
  *
- * Skipped on Vercel: the web app delegates PDF rendering to the worker, so
- * downloading ~150MB of browser there would slow every build for nothing (and
- * can trip the build image's size limits). The worker's Docker image ships
- * Chromium in its base layer, so it skips too.
+ * Both Docker images set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: the worker already
+ * ships Chromium in its base layer, and the web image delegates PDF rendering
+ * to the worker, so downloading ~150MB of browser into either would slow every
+ * build for nothing. This matters for local installs, where it is wanted.
  */
 const { execSync } = require("node:child_process");
 
@@ -23,7 +23,6 @@ try {
 }
 
 const skip =
-  process.env.VERCEL ||
   process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD ||
   process.env.PLAYWRIGHT_BROWSERS_PATH === "0";
 

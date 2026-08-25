@@ -1,7 +1,7 @@
 /**
  * Copies a whole CLINIC OS database from one Postgres to another.
  *
- * Written to move off a Supabase project whose connection pooler kept losing
+ * Written to move off a managed project whose connection pooler kept losing
  * its route to a healthy database. There is no pg_dump here — the embedded
  * Postgres this project ships for development is a minimal build without the
  * client tools — so the copy goes over `COPY ... TO/FROM STDOUT` instead.

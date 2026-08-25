@@ -7,7 +7,7 @@ const PG_PORT = Number(process.env.PG_PORT || 5544);
 /**
  * Migrations run as a superuser: they create the `clinicos_app` role and the
  * RLS policies bound to it. Locally that is the embedded server's postgres
- * user. Against a hosted provider (Supabase, Neon, Railway) set
+ * user. Against a hosted provider set
  * DATABASE_SUPER_URL to its owner connection string.
  */
 const REMOTE = process.env.DATABASE_SUPER_URL;
