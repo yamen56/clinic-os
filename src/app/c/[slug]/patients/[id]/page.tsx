@@ -21,11 +21,16 @@ export default async function PatientProfilePage({
     if (!p) return null;
     if (p.merged_into) return { mergedInto: p.merged_into as string };
 
-    const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags, insurers] =
+    const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags, insurers, noteCategories] =
       await Promise.all([
         c.query(
-          `select n.id, n.kind, n.body, n.created_at, u.full_name as author
-           from patient_notes n left join users u on u.id = n.author_id
+          `select n.id, n.body, n.category_id, n.created_at, n.edited_at,
+                  n.audio_path, n.audio_mime, n.audio_seconds,
+                  u.full_name as author, e.full_name as edited_by_name,
+                  (select count(*)::int from patient_note_versions v where v.note_id = n.id) as version_count
+           from patient_notes n
+           left join users u on u.id = n.author_id
+           left join users e on e.id = n.edited_by
            where n.patient_id = $1 and n.clinic_id = $2 order by n.created_at desc limit 100`,
           [id, access.clinicId]
         ),
@@ -99,6 +104,13 @@ export default async function PatientProfilePage({
         c.query(`select id, name from insurers where clinic_id = $1 and active order by name`, [
           access.clinicId,
         ]),
+        // The note categories this clinic defined. Inactive ones come too: a note
+        // filed under a retired category still has to show which one.
+        c.query(
+          `select id, key, name, name_ar, color, is_system, active, sort
+           from note_categories where clinic_id = $1 order by sort, name`,
+          [access.clinicId]
+        ),
       ]);
 
     return {
@@ -115,6 +127,7 @@ export default async function PatientProfilePage({
       templates: templates.rows,
       clinicTags: clinicTags.rows,
       insurers: insurers.rows,
+      noteCategories: noteCategories.rows,
     };
   });
 
@@ -140,6 +153,7 @@ export default async function PatientProfilePage({
       docTemplates={JSON.parse(JSON.stringify(d.templates))}
       clinicTags={JSON.parse(JSON.stringify(d.clinicTags))}
       insurers={JSON.parse(JSON.stringify(d.insurers))}
+      noteCategories={JSON.parse(JSON.stringify(d.noteCategories))}
       canSendDocuments={can(access, "documents.manage")}
       country={countryFromClinic(access.clinic)}
     />

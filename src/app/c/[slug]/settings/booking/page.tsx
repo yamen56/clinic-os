@@ -45,7 +45,7 @@ export default async function BookingSettingsPage({
     */
     const patientFields = (
       await c.query(
-        `select key, label, label_ar from patient_field_definitions
+        `select key, label, label_ar, field_type, options from patient_field_definitions
          where clinic_id = $1 and scope = 'patient' and not hidden
            and key not in ('patient.full_name', 'patient.phone')
          order by display_order, label`,

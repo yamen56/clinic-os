@@ -13,7 +13,7 @@ import { Input, Field, Select, Textarea } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import type { CountryCode } from "@/lib/phone";
 import { Badge, type StatusKey } from "@/components/ui/badge";
-import { Avatar, EmptyState, Tabs } from "@/components/ui/misc";
+import { Avatar, EmptyState, Spinner, Tabs } from "@/components/ui/misc";
 import { SaveIndicator } from "@/components/ui/save-indicator";
 import { useToast } from "@/components/ui/toast";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -21,13 +21,16 @@ import {
   addTagAction,
   removeTagAction,
   addNoteAction,
-  deleteNoteAction,
+  noteHistoryAction,
+  setNoteCategoryAction,
+  saveNoteCategoryAction,
   deletePatientFileAction,
   setPatientStatusAction,
   mergePatientsAction,
   openConversationAction,
 } from "../actions";
 import { sendAllPendingAction } from "../../documents/actions";
+import { VoiceRecorder } from "@/components/voice-recorder";
 import { DOC_STATUS_BADGE } from "@/components/esign/status";
 import { DownloadSignedPdf } from "@/components/esign/download-signed";
 import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-document-modal";
@@ -49,7 +52,35 @@ import {
   Archive,
   MoreVertical,
   StickyNote,
+  History,
+  Filter,
 } from "lucide-react";
+
+export type NoteRow = {
+  id: string;
+  body: string;
+  category_id: string | null;
+  created_at: string;
+  edited_at: string | null;
+  author: string | null;
+  edited_by_name: string | null;
+  audio_path: string | null;
+  audio_mime: string | null;
+  audio_seconds: number | null;
+  /** 1 means written once and never changed. */
+  version_count: number;
+};
+
+export type NoteCategoryRow = {
+  id: string;
+  key: string | null;
+  name: string;
+  name_ar: string | null;
+  color: string;
+  is_system: boolean;
+  active: boolean;
+  sort: number;
+};
 
 type Patient = {
   id: string;
@@ -104,7 +135,8 @@ export function PatientProfile(props: {
   currency: string;
   balanceDue: number;
   patient: Patient;
-  notes: { id: string; kind: string; body: string; created_at: string; author: string | null }[];
+  notes: NoteRow[];
+  noteCategories: NoteCategoryRow[];
   files: { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string }[];
   appointments: { id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null }[];
   invoices: { id: string; number: string; status: string; total: string; amount_paid: string; created_at: string }[];
@@ -523,7 +555,15 @@ export function PatientProfile(props: {
           </div>
         )}
 
-        {tab === "notes" && <NotesTab slug={slug} patientId={p.id} notes={props.notes} tz={tz} />}
+        {tab === "notes" && (
+          <NotesTab
+            slug={slug}
+            patientId={p.id}
+            notes={props.notes}
+            categories={props.noteCategories}
+            tz={tz}
+          />
+        )}
         {tab === "appointments" && (
           <Card>
             {props.appointments.length === 0 ? (
@@ -826,89 +866,240 @@ function TagsRow({
   );
 }
 
+/**
+ * The notes tab.
+ *
+ * Three rules the UI has to carry, all of them about a note being a clinical
+ * record rather than a scratchpad:
+ *
+ *  - **There is no delete.** A note is corrected, never removed. The edit is
+ *    autosaved as before, but every version is kept and the original stays one
+ *    tap away, so correcting a note is safe and losing one is not possible.
+ *  - **Categories are the clinic's**, not two names we picked. They filter the
+ *    list, and a new one can be made from here — the moment you need a category
+ *    is the moment you are writing a note that does not fit the ones you have.
+ *  - **A note can be spoken.** Fifteen seconds of dictation between patients
+ *    beats two minutes of typing that never happens.
+ */
 function NotesTab({
   slug,
   patientId,
   notes,
+  categories,
   tz,
 }: {
   slug: string;
   patientId: string;
-  notes: { id: string; kind: string; body: string; created_at: string; author: string | null }[];
+  notes: NoteRow[];
+  categories: NoteCategoryRow[];
   tz: string;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
   const { toast } = useToast();
-  const [kind, setKind] = useState<"clinical" | "admin">("clinical");
   const [draft, setDraft] = useState("");
+  const [recording, setRecording] = useState<{ blob: Blob; seconds: number } | null>(null);
   const [pending, start] = useTransition();
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<string | null>(null);
+  const [newCat, setNewCat] = useState(false);
+  const [catName, setCatName] = useState("");
+
+  const active = categories.filter((c) => c.active);
+  const [categoryId, setCategoryId] = useState<string | null>(
+    active.find((c) => c.key === "clinical")?.id ?? active[0]?.id ?? null
+  );
+  const catName_ = (c: NoteCategoryRow) => (locale === "ar" ? c.name_ar || c.name : c.name);
+  const byId = new Map(categories.map((c) => [c.id, c]));
+
+  const shown = filter ? notes.filter((n) => n.category_id === filter) : notes;
+  const countFor = (id: string) => notes.filter((n) => n.category_id === id).length;
+
+  const submit = () =>
+    start(async () => {
+      if (recording) {
+        // Voice goes over multipart, so it cannot ride the server action.
+        setBusy(true);
+        try {
+          const fd = new FormData();
+          const ext = (recording.blob.type.split("/")[1] ?? "webm").split(";")[0];
+          fd.append("audio", recording.blob, `voice.${ext}`);
+          fd.append("patientId", patientId);
+          fd.append("seconds", String(recording.seconds));
+          fd.append("body", draft.trim());
+          if (categoryId) fd.append("categoryId", categoryId);
+          const res = await fetch(`/api/c/${slug}/notes/voice`, { method: "POST", body: fd });
+          if (!res.ok) {
+            toast(t.common.genericError, "error");
+            return;
+          }
+        } finally {
+          setBusy(false);
+        }
+      } else {
+        if (!draft.trim()) return;
+        await addNoteAction(slug, patientId, draft.trim(), categoryId);
+      }
+      setDraft("");
+      setRecording(null);
+      router.refresh();
+    });
+
+  const addCategory = () =>
+    start(async () => {
+      const name = catName.trim();
+      if (!name) return;
+      const r = await saveNoteCategoryAction(slug, { name });
+      if (r.error || !r.id) {
+        toast(t.common.genericError, "error");
+        return;
+      }
+      setCategoryId(r.id);
+      setCatName("");
+      setNewCat(false);
+      router.refresh();
+    });
 
   return (
     <div className="grid gap-4">
+      {/* ------------------------------------------------------- composer */}
       <Card className="p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <StickyNote className="h-4 w-4 text-ink-400" />
-          <div className="flex gap-1 rounded-full bg-sunken p-0.5">
-            {(["clinical", "admin"] as const).map((k) => (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <StickyNote className="h-4 w-4 shrink-0 text-ink-400" />
+          <div className="flex flex-wrap gap-1 rounded-full bg-sunken p-0.5">
+            {active.map((c) => (
               <button
-                key={k}
-                onClick={() => setKind(k)}
+                key={c.id}
+                onClick={() => setCategoryId(c.id)}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  kind === k ? "bg-surface text-brand-700 shadow-card" : "text-ink-500"
+                  categoryId === c.id ? "bg-surface shadow-card" : "text-ink-500"
                 }`}
+                style={categoryId === c.id ? { color: c.color } : undefined}
               >
-                {k === "clinical" ? t.patients.notes.clinical : t.patients.notes.admin}
+                {catName_(c)}
               </button>
             ))}
+            <button
+              onClick={() => setNewCat(true)}
+              aria-label={t.patients.notes.newCategory}
+              className="rounded-full px-2 py-1 text-xs text-ink-400 transition-colors hover:text-ink-700"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
+
+        {newCat && (
+          <div className="mb-2 flex items-center gap-2">
+            <Input
+              autoFocus
+              value={catName}
+              onChange={(e) => setCatName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addCategory()}
+              placeholder={t.patients.notes.newCategory}
+              className="!h-8 max-w-56"
+            />
+            <Button size="sm" onClick={addCategory} loading={pending} disabled={!catName.trim()}>
+              {t.common.save}
+            </Button>
+            <button
+              onClick={() => {
+                setNewCat(false);
+                setCatName("");
+              }}
+              className="text-[13px] text-ink-500"
+            >
+              {t.common.cancel}
+            </button>
+          </div>
+        )}
+
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={t.patients.notes.placeholder}
+          placeholder={recording ? t.patients.notes.voicePlaceholder : t.patients.notes.placeholder}
         />
-        <div className="mt-2 flex justify-end">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <VoiceRecorder
+            onReady={setRecording}
+            disabled={pending || busy}
+            labels={{
+              record: t.patients.notes.record,
+              stop: t.patients.notes.stopRecording,
+              discard: t.common.delete,
+              denied: t.patients.notes.micDenied,
+              unsupported: t.patients.notes.micUnsupported,
+            }}
+          />
           <Button
             size="sm"
-            disabled={!draft.trim()}
-            loading={pending}
-            onClick={() =>
-              start(async () => {
-                await addNoteAction(slug, patientId, draft.trim(), kind);
-                setDraft("");
-                router.refresh();
-              })
-            }
+            disabled={(!draft.trim() && !recording) || pending || busy}
+            loading={pending || busy}
+            onClick={submit}
           >
-            {t.patients.notes.add}
+            {recording ? t.patients.notes.addVoice : t.patients.notes.add}
           </Button>
         </div>
       </Card>
 
-      {notes.length === 0 ? (
-        <EmptyState icon={<StickyNote />} title={t.patients.notes.empty} body={t.patients.notes.emptyBody} />
-      ) : (
-        notes.map((n) => <NoteItem key={n.id} slug={slug} note={n} tz={tz} locale={locale} onDelete={() => setDeleteId(n.id)} />)
+      {/* --------------------------------------------------------- filter */}
+      {notes.length > 0 && categories.length > 1 && (
+        <div className="-mt-1 flex flex-wrap items-center gap-1.5">
+          <Filter className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+          <button
+            onClick={() => setFilter(null)}
+            className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+              filter === null ? "border-ink-900 bg-ink-900 text-white" : "border-line-strong text-ink-500"
+            }`}
+          >
+            {t.common.all} <span className="tnum opacity-70">{notes.length}</span>
+          </button>
+          {categories
+            // A retired category still gets a chip while notes sit under it —
+            // otherwise those notes are unreachable from the filter bar.
+            .filter((c) => c.active || countFor(c.id) > 0)
+            .map((c) => {
+              const n = countFor(c.id);
+              if (!n) return null;
+              const on = filter === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setFilter(on ? null : c.id)}
+                  className="rounded-full border px-3 py-1 text-[12px] font-medium transition-colors"
+                  style={
+                    on
+                      ? { background: c.color, borderColor: c.color, color: "#fff" }
+                      : { borderColor: "var(--color-line-strong)", color: c.color }
+                  }
+                >
+                  {catName_(c)} <span className="tnum opacity-70">{n}</span>
+                </button>
+              );
+            })}
+        </div>
       )}
 
-      <ConfirmDialog
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        title={t.common.confirmDeleteTitle}
-        body={t.common.confirmDeleteBody}
-        confirmLabel={t.common.delete}
-        cancelLabel={t.common.cancel}
-        onConfirm={async () => {
-          if (deleteId) {
-            await deleteNoteAction(slug, deleteId);
-            toast(t.patients.notes.deleted);
-            setDeleteId(null);
-            router.refresh();
-          }
-        }}
-      />
+      {/* ---------------------------------------------------------- list */}
+      {shown.length === 0 ? (
+        <EmptyState
+          icon={<StickyNote />}
+          title={notes.length ? t.patients.notes.noneInFilter : t.patients.notes.empty}
+          body={notes.length ? undefined : t.patients.notes.emptyBody}
+        />
+      ) : (
+        shown.map((n) => (
+          <NoteItem
+            key={n.id}
+            slug={slug}
+            note={n}
+            category={n.category_id ? byId.get(n.category_id) ?? null : null}
+            categories={active}
+            tz={tz}
+            locale={locale}
+          />
+        ))
+      )}
     </div>
   );
 }
@@ -916,43 +1107,144 @@ function NotesTab({
 function NoteItem({
   slug,
   note,
+  category,
+  categories,
   tz,
   locale,
-  onDelete,
 }: {
   slug: string;
-  note: { id: string; kind: string; body: string; created_at: string; author: string | null };
+  note: NoteRow;
+  category: NoteCategoryRow | null;
+  categories: NoteCategoryRow[];
   tz: string;
   locale: string;
-  onDelete: () => void;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
+  const [history, setHistory] = useState<
+    { id: string; body: string; author: string | null; created_at: string }[] | null
+  >(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [pending, start] = useTransition();
   const { patch, state } = useAutosave({
     url: `/api/c/${slug}/notes/${note.id}`,
     entityKey: `note:${note.id}`,
   });
+
+  const catName = (c: NoteCategoryRow | null) =>
+    c ? (locale === "ar" ? c.name_ar || c.name : c.name) : t.patients.notes.uncategorised;
+
+  const openHistory = () => {
+    setShowHistory(true);
+    if (history) return;
+    start(async () => setHistory(await noteHistoryAction(slug, note.id)));
+  };
+
   return (
     <Card className="p-4">
-      <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px] text-ink-400">
-        <span>
-          {note.kind === "clinical" ? t.patients.notes.clinical : t.patients.notes.admin}
-          {note.author ? ` · ${note.author}` : ""} · {fmtDateTime(note.created_at, tz, locale)}
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink-400">
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span
+            className="inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold"
+            style={{ color: category?.color ?? "var(--color-ink-500)", background: "var(--color-sunken)" }}
+          >
+            {catName(category)}
+          </span>
+          {note.author ? `${note.author} · ` : ""}
+          {fmtDateTime(note.created_at, tz, locale)}
+          {/*
+            "Edited" is stated rather than implied. A record that changed and
+            does not say so is the thing the version history exists to prevent.
+          */}
+          {note.edited_at && (
+            <button
+              onClick={openHistory}
+              className="font-medium text-ink-500 underline underline-offset-2 transition-colors hover:text-brand-700"
+            >
+              {t.patients.notes.edited}
+            </button>
+          )}
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-2">
           <SaveIndicator state={state} />
-          <button onClick={onDelete} className="text-ink-300 transition-colors hover:text-danger" aria-label={t.common.delete}>
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {/* No delete. See lib/notes.ts. */}
+          {note.version_count > 1 && !note.edited_at && (
+            <button onClick={openHistory} className="text-ink-400 hover:text-ink-700" aria-label={t.patients.notes.history}>
+              <History className="h-4 w-4" />
+            </button>
+          )}
         </span>
       </div>
+
+      {note.audio_path && (
+        <audio
+          controls
+          preload="none"
+          src={`/api/c/${slug}/notes/${note.id}/audio`}
+          className="mb-2 h-9 w-full max-w-md"
+        />
+      )}
+
       <Textarea
         defaultValue={note.body}
+        placeholder={note.audio_path ? t.patients.notes.voicePlaceholder : undefined}
         className="min-h-16 !border-transparent !bg-transparent px-0 focus:!border-line"
         onChange={(e) => patch({ body: e.target.value })}
       />
+
+      {categories.length > 1 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              disabled={pending || c.id === note.category_id}
+              onClick={() =>
+                start(async () => {
+                  await setNoteCategoryAction(slug, note.id, c.id);
+                  router.refresh();
+                })
+              }
+              className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                c.id === note.category_id ? "opacity-40" : "text-ink-400 hover:text-ink-900"
+              }`}
+            >
+              {c.id === note.category_id ? "" : "→ "}
+              {locale === "ar" ? c.name_ar || c.name : c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <Modal
+        open={showHistory}
+        onClose={() => setShowHistory(false)}
+        title={t.patients.notes.history}
+      >
+        {!history ? (
+          <Spinner />
+        ) : (
+          <ol className="grid gap-3">
+            {history.map((v, i) => (
+              <li key={v.id} className="rounded-lg border border-line p-3">
+                <div className="mb-1 flex items-center gap-2 text-[12px] text-ink-400">
+                  <Badge status={i === 0 ? "brand" : "neutral"}>
+                    {i === 0 ? t.patients.notes.original : `${t.patients.notes.version} ${i + 1}`}
+                  </Badge>
+                  {v.author ? `${v.author} · ` : ""}
+                  {fmtDateTime(v.created_at, tz, locale)}
+                </div>
+                <p className="whitespace-pre-wrap text-[13px] text-ink-900">
+                  {v.body || <span className="text-ink-400">{t.patients.notes.emptyVersion}</span>}
+                </p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Modal>
     </Card>
   );
 }
+
 
 function FilesTab({
   slug,

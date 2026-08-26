@@ -28,6 +28,7 @@ import {
   ChevronDown,
   ClipboardList,
   Link2,
+  ListPlus,
 } from "lucide-react";
 
 type LinkRow = {
@@ -71,7 +72,13 @@ type QuestionRow = {
   display_order: number;
 };
 
-type PatientField = { key: string; label: string; label_ar: string | null };
+type PatientField = {
+  key: string;
+  label: string;
+  label_ar: string | null;
+  field_type: string;
+  options: string[];
+};
 
 export function BookingLinksClient({
   slug,
@@ -97,6 +104,7 @@ export function BookingLinksClient({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [question, setQuestion] = useState<Partial<QuestionRow> | null>(null);
   const [deleteQuestion, setDeleteQuestion] = useState<QuestionRow | null>(null);
+  const [pickField, setPickField] = useState(false);
   const [pending, start] = useTransition();
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -269,10 +277,25 @@ export function BookingLinksClient({
           sub={tb.questionsSub}
           action={
             canEdit && (
-              <Button size="sm" onClick={() => setQuestion({ field_type: "text", options: [], options_ar: [], service_ids: [], required: false, active: true, booking_link_id: null })}>
-                <Plus className="h-4 w-4" />
-                {tb.addQuestion}
-              </Button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/*
+                  Two doors to the same thing, because there are two ways a
+                  clinic arrives here. Either it has a question in mind and
+                  types it, or it already keeps this on the patient file and
+                  wants the patient to fill it in themselves — and the second
+                  should not mean retyping a field that already exists.
+                */}
+                {patientFields.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={() => setPickField(true)}>
+                    <ListPlus className="h-4 w-4" />
+                    {tb.fromPatientFields}
+                  </Button>
+                )}
+                <Button size="sm" onClick={() => setQuestion({ field_type: "text", options: [], options_ar: [], service_ids: [], required: false, active: true, booking_link_id: null })}>
+                  <Plus className="h-4 w-4" />
+                  {tb.addQuestion}
+                </Button>
+              </div>
             )
           }
         />
@@ -680,6 +703,63 @@ export function BookingLinksClient({
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ------------------------------------------- pick a patient field */}
+      <Modal open={pickField} onClose={() => setPickField(false)} title={tb.fromPatientFields}>
+        <p className="mb-3 text-[13px] text-ink-500">{tb.fromPatientFieldsHint}</p>
+        <ul className="divide-y divide-line">
+          {patientFields.map((f) => {
+            // A field already asked on this page is not offered twice.
+            const used = questions.some((q) => q.patient_field_key === f.key);
+            return (
+              <li key={f.key} className="flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">
+                    {locale === "ar" ? f.label_ar || f.label : f.label}
+                  </div>
+                  <div className="text-[12px] text-ink-500">
+                    {tb.types[(f.field_type as QuestionType) ?? "text"] ?? f.field_type}
+                  </div>
+                </div>
+                {used ? (
+                  <Badge status="neutral">{tb.alreadyAsked}</Badge>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      /*
+                        Prefilled from the definition, then fully editable. The
+                        wording a clinic uses on its own file is not always the
+                        wording it wants to put to a patient — "DOB" on the
+                        profile, "Your date of birth" on the booking page.
+                      */
+                      setPickField(false);
+                      setQuestion({
+                        label: f.label,
+                        label_ar: f.label_ar ?? "",
+                        field_type: (QUESTION_TYPES as readonly string[]).includes(f.field_type)
+                          ? (f.field_type as QuestionType)
+                          : "text",
+                        options: f.options ?? [],
+                        options_ar: [],
+                        service_ids: [],
+                        required: false,
+                        active: true,
+                        booking_link_id: null,
+                        patient_field_key: f.key,
+                      });
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {tb.addQuestion}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </Modal>
 
       <ConfirmDialog

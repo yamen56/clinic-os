@@ -193,8 +193,9 @@ export async function commitImportAction(
         );
         if (r.notes.trim()) {
           await c.query(
-            `insert into patient_notes (clinic_id, patient_id, author_id, kind, body)
-             values ($1, $2, $3, 'admin', $4)`,
+            `insert into patient_notes (clinic_id, patient_id, author_id, kind, category_id, body)
+             values ($1, $2, $3, 'admin',
+                     (select id from note_categories where clinic_id = $1 and key = 'admin'), $4)`,
             [access.clinicId, existingId, access.session.user.id, r.notes.slice(0, 5000)]
           );
         }
@@ -222,8 +223,9 @@ export async function commitImportAction(
       const newId = ins.rows[0].id as string;
       if (r.notes.trim()) {
         await c.query(
-          `insert into patient_notes (clinic_id, patient_id, author_id, kind, body)
-           values ($1, $2, $3, 'admin', $4)`,
+          `insert into patient_notes (clinic_id, patient_id, author_id, kind, category_id, body)
+           values ($1, $2, $3, 'admin',
+                   (select id from note_categories where clinic_id = $1 and key = 'admin'), $4)`,
           [access.clinicId, newId, access.session.user.id, r.notes.slice(0, 5000)]
         );
       }

@@ -271,6 +271,10 @@ export async function createClinicAction(
       // the agency's consent-form library. Copies, not references — the clinic
       // owns its forms from the first day and can rewrite any of them.
       await c.query(`select seed_esign_defaults($1)`, [clinicId]);
+      // The two note categories every clinic starts with. Renameable and
+      // reorderable from the patient file; never deletable, because the notes
+      // written under them point here.
+      await c.query(`select seed_note_categories($1)`, [clinicId]);
       const docTemplates = await c.query(
         "select * from document_template_library where active order by sort"
       );

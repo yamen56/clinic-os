@@ -78,7 +78,7 @@ export function BookingWizard({
   const dir = locale === "en" ? "ltr" : "rtl";
   const isAr = locale === "ar";
 
-  type Step = "service" | "doctor" | "time" | "details" | "questions" | "verify" | "done";
+  type Step = "service" | "doctor" | "time" | "details" | "verify" | "done";
   const [step, setStep] = useState<Step>("service");
   const [service, setService] = useState<Service | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(lockedDoctor);
@@ -111,8 +111,6 @@ export function BookingWizard({
     () => questionsForService(questions, service?.id ?? null),
     [questions, service]
   );
-  const hasQuestionStep = activeQuestions.length > 0 || copy.requireConsent;
-
   const days = useMemo(() => {
     const today = DateTime.now().setZone(clinic.tz).startOf("day");
     return Array.from({ length: Math.min(maxDaysAhead, 30) }, (_, i) => today.plus({ days: i }));
@@ -233,12 +231,12 @@ export function BookingWizard({
         if (d.error === "answer_required" || d.error === "answer_invalid") {
           setBadQuestion(d.questionId ?? "");
           setError(d.error === "answer_required" ? t.answerRequired : t.answerInvalid);
-          setStep("questions");
+          setStep("details");
           return;
         }
         if (d.error === "consent_required") {
           setError(t.consentRequired);
-          setStep("questions");
+          setStep("details");
           return;
         }
         setError(
@@ -332,14 +330,13 @@ export function BookingWizard({
   const showDoctorStep = doctors.length > 1 && !lockedDoctor;
   const backFromTime = () => setStep(showDoctorStep ? "doctor" : "service");
 
-  const totalSteps = hasQuestionStep ? 5 : 4;
+  const totalSteps = 4;
   const stepIndex = {
     service: 0,
     doctor: 1,
     time: 2,
     details: 3,
-    questions: 4,
-    verify: 4,
+    verify: 3,
     done: totalSteps,
   }[step];
 
@@ -574,7 +571,16 @@ export function BookingWizard({
             </section>
           )}
 
-          {/* STEP: details */}
+          {/*
+            STEP: details — name, number, and whatever else the clinic asks.
+
+            One step, not two. Splitting the clinic's questions onto a screen of
+            their own added a tap and a progress segment to say nothing new: the
+            patient has already chosen a time and is now simply telling the
+            clinic about themselves, and "your name" and "what brings you in"
+            are the same errand. Merged, the whole form is visible at once and
+            the length of it is honest before you start typing.
+          */}
           {step === "details" && service && slotLocal && (
             <section className="animate-fade-up">
               <SummaryCard
@@ -608,64 +614,49 @@ export function BookingWizard({
                   </p>
                 </div>
               </div>
+
+              {activeQuestions.length > 0 && (
+                <>
+                  <div className="mt-6 mb-3 flex items-center gap-2 border-t border-line pt-5">
+                    <ClipboardList className="h-4 w-4" style={{ color: "var(--bk)" }} />
+                    <span className="text-[13px] text-ink-500">{t.fewMoreHint}</span>
+                  </div>
+                  <div className="grid gap-4">
+                    {activeQuestions.map((q) => (
+                      <QuestionField
+                        key={q.id}
+                        q={q}
+                        isAr={isAr}
+                        value={answers[q.id]}
+                        invalid={badQuestion === q.id}
+                        optionalLabel={t.optional}
+                        choosePlaceholder={t.choose}
+                        onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {copy.requireConsent && consentText && (
+                <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-line-strong bg-surface p-3.5">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                    className="mt-0.5 h-4.5 w-4.5 shrink-0 accent-[var(--bk)]"
+                  />
+                  <span className="whitespace-pre-line text-[13px] leading-6 text-ink-700">
+                    {consentText}
+                  </span>
+                </label>
+              )}
+
               {error && <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
               <div className="mt-5 flex items-center justify-between">
                 <BackBtn onClick={() => setStep("time")} label={t.back} />
                 <PrimaryBtn
-                  disabled={!detailsValid || busy}
-                  busy={busy}
-                  onClick={() => {
-                    setError("");
-                    if (hasQuestionStep) setStep("questions");
-                    else void submit();
-                  }}
-                  label={hasQuestionStep ? t.next : t.sendCode}
-                />
-              </div>
-              {!hasQuestionStep && <PrivacyNote t={t} />}
-            </section>
-          )}
-
-          {/* STEP: the clinic's own questions */}
-          {step === "questions" && (
-            <section className="animate-fade-up">
-              <h2 className="mb-1 flex items-center gap-2 text-[15px] font-semibold">
-                <ClipboardList className="h-4.5 w-4.5" style={{ color: "var(--bk)" }} />
-                {t.fewMore}
-              </h2>
-              <p className="mb-4 text-[13px] text-ink-500">{t.fewMoreHint}</p>
-              <div className="grid gap-4">
-                {activeQuestions.map((q) => (
-                  <QuestionField
-                    key={q.id}
-                    q={q}
-                    isAr={isAr}
-                    value={answers[q.id]}
-                    invalid={badQuestion === q.id}
-                    optionalLabel={t.optional}
-                    choosePlaceholder={t.choose}
-                    onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
-                  />
-                ))}
-                {copy.requireConsent && consentText && (
-                  <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-line-strong bg-surface p-3.5">
-                    <input
-                      type="checkbox"
-                      checked={consent}
-                      onChange={(e) => setConsent(e.target.checked)}
-                      className="mt-0.5 h-4.5 w-4.5 shrink-0 accent-[var(--bk)]"
-                    />
-                    <span className="whitespace-pre-line text-[13px] leading-6 text-ink-700">
-                      {consentText}
-                    </span>
-                  </label>
-                )}
-              </div>
-              {error && <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
-              <div className="mt-5 flex items-center justify-between">
-                <BackBtn onClick={() => setStep("details")} label={t.back} />
-                <PrimaryBtn
-                  disabled={!questionsValid || busy}
+                  disabled={!detailsValid || !questionsValid || busy}
                   busy={busy}
                   onClick={submit}
                   label={t.sendCode}
@@ -700,7 +691,7 @@ export function BookingWizard({
                 {resendIn > 0 ? `${t.resendIn} ${resendIn}` : t.resend}
               </button>
               <div className="mt-5 flex items-center justify-center gap-3">
-                <BackBtn onClick={() => setStep(hasQuestionStep ? "questions" : "details")} label={t.back} />
+                <BackBtn onClick={() => setStep("details")} label={t.back} />
                 <PrimaryBtn disabled={code.length !== 6 || busy} busy={busy} onClick={verify} label={t.verifyAndBook} />
               </div>
             </section>

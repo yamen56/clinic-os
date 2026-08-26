@@ -61,7 +61,22 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     )
   ).id;
   await q(`insert into custom_field_defs (clinic_id, key, label) values ($1, 'k', 'K') returning id`, [clinic]);
-  await q(`insert into patient_notes (clinic_id, patient_id, body) values ($1, $2, 'note') returning id`, [clinic, patient]);
+  // The two categories every clinic is seeded with, then a note under one and
+  // the version row that note's history always has.
+  await q(`select seed_note_categories($1)`, [clinic]);
+  const noteCategory = (
+    await q(`select id from note_categories where clinic_id = $1 and key = 'clinical'`, [clinic])
+  ).id;
+  const note = (
+    await q(
+      `insert into patient_notes (clinic_id, patient_id, category_id, body) values ($1, $2, $3, 'note') returning id`,
+      [clinic, patient, noteCategory]
+    )
+  ).id;
+  await q(
+    `insert into patient_note_versions (clinic_id, note_id, body, category_id) values ($1, $2, 'note', $3) returning id`,
+    [clinic, note, noteCategory]
+  );
   await q(
     `insert into patient_files (clinic_id, patient_id, file_name, mime_type, storage_path) values ($1, $2, 'f.png', 'image/png', 'x') returning id`,
     [clinic, patient]

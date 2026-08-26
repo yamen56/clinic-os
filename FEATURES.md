@@ -182,8 +182,22 @@ Overview · Notes · Appointments · Files · Documents · Invoices · Conversat
 
 - **Overview**: details, additional (custom) fields, summary notes, upcoming appointment,
   balance due, recent activity.
-- **Notes** (`patient_notes`): `clinical` or `admin` kind, author recorded, optionally tied
-  to an appointment, **autosaved as you type**.
+- **Notes** (`patient_notes`): author recorded, optionally tied to an appointment,
+  **autosaved as you type**. A note is a clinical record, which shapes all of it:
+  - **There is no delete.** No action, no button. A note is corrected, never removed.
+  - **Every version is kept** (`patient_note_versions`). The autosave route and every
+    action write through `saveNoteVersion`, so editing a note down to nothing loses
+    no more than editing one word — the original stays readable from the note. An
+    unchanged save files nothing, or focus-and-blur would fill the history with
+    duplicates. The note records `edited_at` / `edited_by` and says "edited" on screen.
+  - **Categories are the clinic's** (`note_categories`), seeded with Clinical and
+    Administrative — renameable, recolourable, never deletable, since existing notes
+    point at them. New ones are made from the patient file itself. They filter the
+    list, and moving a note between them is recorded like any other change.
+  - **A note can be spoken.** `POST /api/c/{slug}/notes/voice` takes a browser
+    recording (10 MB cap, audio types only), files it as a note with an optional typed
+    body, and playback is served by `/notes/{id}/audio` — path read from the note,
+    never from the caller, behind the `patients` capability like every other file.
 - **Files** (`patient_files`): upload with kind `xray` | `lab` | `consent` | `photo` |
   `other`. **25 MB limit**. Served through authenticated API routes, never public URLs.
 - **Merge records**: moves all notes, appointments, invoices and conversations from a
@@ -368,13 +382,15 @@ Configured per **booking link** (`booking_links`), and a clinic can have several
 1. Choose a service
 2. Choose a doctor (or "First available doctor", unless `allow_any_doctor` is off)
 3. Pick a time
-4. Your details — name + WhatsApp number
-5. **The clinic's own questions** — shown only when the link has any that apply to
-   the chosen service (see below); also carries the consent tick-box
-6. **WhatsApp OTP**: a 6-digit code is sent to the number, verified against
+4. **Your details, on one step** — name, WhatsApp number, the clinic's own
+   questions (those that apply to the chosen service) and the consent tick-box.
+   Questions used to be a step of their own; that added a tap and a progress
+   segment to say nothing new, since "your name" and "what brings you in" are
+   the same errand. The step gates on the details *and* the required answers.
+5. **WhatsApp OTP**: a 6-digit code is sent to the number, verified against
    `booking_verifications` (attempt counting, expiry, auto-resend on expiry, and a
    patient-driven **resend** with a 45-second cooldown at `/resend`)
-7. Confirmed — or "Request received" when the link is in approval mode. The
+6. Confirmed — or "Request received" when the link is in approval mode. The
    confirmation screen offers an **`.ics` download** built in the browser and a
    call button for the clinic.
 
@@ -1394,6 +1410,8 @@ E.164 normalisation is **the single source of patient identity**.
 
 **Scheduling** — `services`, `service_doctors`, `appointments`, `booking_links`,
 `booking_verifications`, `booking_questions`, `waitlist_entries`
+
+**Notes** — `patient_notes`, `patient_note_versions`, `note_categories`
 
 **Messaging** — `conversations`, `messages`, `quick_replies`, `whatsapp_sessions`,
 `whatsapp_auth_state`, `campaigns`, `campaign_recipients`

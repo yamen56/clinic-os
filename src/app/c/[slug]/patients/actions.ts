@@ -8,6 +8,7 @@ import { findOrCreatePatient } from "@/lib/patients";
 import { normalizePhone } from "@/lib/phone";
 import { deleteFile } from "@/lib/storage";
 import { emitTrigger } from "@/lib/triggers";
+import { createNote, defaultCategoryId, loadNoteHistory, saveNoteVersion } from "@/lib/notes";
 
 export async function createPatientAction(
   slug: string,
@@ -156,45 +157,112 @@ export async function addNoteAction(
   slug: string,
   patientId: string,
   body: string,
-  kind: "clinical" | "admin"
+  categoryId: string | null
 ): Promise<{ id: string }> {
   const access = await requireClinic(slug);
   return inClinic(access, async (c) => {
-    const r = await c.query(
-      `insert into patient_notes (clinic_id, patient_id, author_id, kind, body)
-       values ($1, $2, $3, $4, $5) returning id`,
-      [access.clinicId, patientId, access.session.user.id, kind, body]
-    );
+    const id = await createNote(c, access.clinicId, {
+      patientId,
+      authorId: access.session.user.id,
+      body,
+      categoryId: categoryId ?? (await defaultCategoryId(c, access.clinicId)),
+    });
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,
       impersonatedBy: access.session.impersonatedBy,
       action: "patient.note.create",
       entity: "patient_note",
-      entityId: r.rows[0].id,
+      entityId: id,
       detail: { patientId },
     });
+    return { id };
+  });
+}
+
+/** The versions of one note, oldest first. The first row is the original. */
+export async function noteHistoryAction(
+  slug: string,
+  noteId: string
+): Promise<{ id: string; body: string; author: string | null; created_at: string }[]> {
+  const access = await requireClinic(slug);
+  return inClinic(access, (c) =>
+    loadNoteHistory(c, access.clinicId, noteId).then((rows) =>
+      JSON.parse(JSON.stringify(rows))
+    )
+  );
+}
+
+/**
+ * Move a note to another category.
+ *
+ * Goes through `saveNoteVersion` like every other change, so recategorising is
+ * recorded rather than silently rewriting a filed record.
+ */
+export async function setNoteCategoryAction(
+  slug: string,
+  noteId: string,
+  categoryId: string | null
+): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  return inClinic(access, async (c) => {
+    const ok = await saveNoteVersion(
+      c,
+      access.clinicId,
+      noteId,
+      { categoryId },
+      access.session.user.id
+    );
+    if (!ok) return { error: "not_found" };
+    revalidatePath(`/c/${slug}/patients`);
+    return {};
+  });
+}
+
+/**
+ * Categories are clinic-defined, and managed from the patient file rather than
+ * a settings screen — the moment you want a new one is the moment you are
+ * writing a note that does not fit the existing ones.
+ */
+export async function saveNoteCategoryAction(
+  slug: string,
+  input: { id?: string; name: string; nameAr?: string; color?: string; active?: boolean }
+): Promise<{ error?: string; id?: string }> {
+  const access = await requireClinic(slug);
+  const name = input.name.trim().slice(0, 60);
+  if (!name) return { error: "invalid" };
+  const color = /^#[0-9a-fA-F]{6}$/.test(input.color ?? "") ? input.color! : "#6989a6";
+
+  return inClinic(access, async (c) => {
+    if (input.id) {
+      const r = await c.query(
+        `update note_categories set name = $3, name_ar = $4, color = $5, active = $6
+         where id = $1 and clinic_id = $2`,
+        [input.id, access.clinicId, name, input.nameAr?.trim() || null, color, input.active !== false]
+      );
+      if (!r.rowCount) return { error: "not_found" };
+      revalidatePath(`/c/${slug}/patients`);
+      return { id: input.id };
+    }
+    const r = await c.query(
+      `insert into note_categories (clinic_id, name, name_ar, color, sort)
+       values ($1, $2, $3, $4,
+               (select coalesce(max(sort), 0) + 10 from note_categories where clinic_id = $1))
+       returning id`,
+      [access.clinicId, name, input.nameAr?.trim() || null, color]
+    );
+    revalidatePath(`/c/${slug}/patients`);
     return { id: r.rows[0].id as string };
   });
 }
 
-export async function deleteNoteAction(slug: string, noteId: string) {
-  const access = await requireClinic(slug);
-  await inClinic(access, async (c) => {
-    await c.query(`delete from patient_notes where id = $1 and clinic_id = $2`, [
-      noteId,
-      access.clinicId,
-    ]);
-    await audit(c, {
-      clinicId: access.clinicId,
-      userId: access.session.user.id,
-      impersonatedBy: access.session.impersonatedBy,
-      action: "patient.note.delete",
-      entity: "patient_note",
-      entityId: noteId,
-    });
-  });
-}
+/*
+  There is no deleteNoteAction, and its absence is the feature.
+
+  A patient note is a clinical record: the thing you most want to remove is
+  usually the thing that most needs to still be there. Corrections go through
+  saveNoteVersion, which keeps what the note said before — see lib/notes.ts.
+*/
 
 export async function deletePatientFileAction(slug: string, fileId: string) {
   const access = await requireClinic(slug);
