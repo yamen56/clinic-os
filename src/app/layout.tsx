@@ -33,8 +33,18 @@ export const metadata: Metadata = {
     title: "Clinicti",
     statusBarStyle: "default",
   },
+  /*
+    The tab gets `favicon.png`, not `icon-192`. They are the same mark on the
+    same plate and differ in the one way that matters here: the favicon is drawn
+    for a browser tab, which masks nothing, so it carries its own rounded
+    corners. `icon-192` was standing in for it and arriving as a hard square.
+
+    `apple-touch-icon` stays square on purpose — iOS rounds it itself and does
+    not support transparency, so a radius baked in here would be double-rounded
+    with black corners.
+  */
   icons: {
-    icon: "/icons/icon-192.png",
+    icon: "/icons/favicon.png",
     apple: "/icons/apple-touch-icon.png",
   },
 };

@@ -19,6 +19,13 @@ use — the plate is a full square in the file on purpose.
 **Replacing `logo-mark-primary.png` and re-running `npm run icons` rebrands the
 whole product.** Nothing else needs editing.
 
+**Corners.** Whether an icon carries its own radius depends on who masks it.
+The browser tab and the `purpose: "any"` icons are shown exactly as shipped, so
+they are rounded here; `apple-touch-icon` and the maskable icon stay full square
+because iOS and Android supply the shape themselves. The generator drops the
+screenshot background for anything rounded — without that the corners ship white
+rather than transparent, which is how an earlier attempt at this went wrong.
+
 Rules worth repeating:
 
 - Use the mark **alone** — never set the wordmark in type beside it in app chrome.
