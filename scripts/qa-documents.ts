@@ -41,90 +41,6 @@ async function makePdf(lines: string[]): Promise<Buffer> {
   return Buffer.from(await doc.save());
 }
 
-/**
- * A minimal .docx. Word files are zips of XML, and the only part that matters
- * for the conversion is `word/document.xml`, so this writes the container by
- * hand rather than pulling in a authoring library for one fixture.
- */
-function makeDocx(paragraphs: string[]): Buffer {
-  const zlib = require("node:zlib") as typeof import("node:zlib");
-  const body = paragraphs
-    .map((p) => `<w:p><w:r><w:t xml:space="preserve">${p}</w:t></w:r></w:p>`)
-    .join("");
-  const files: [string, string][] = [
-    [
-      "[Content_Types].xml",
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
-    ],
-    [
-      "_rels/.rels",
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
-    ],
-    [
-      "word/document.xml",
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`,
-    ],
-  ];
-
-  const chunks: Buffer[] = [];
-  const central: Buffer[] = [];
-  let offset = 0;
-  for (const [name, content] of files) {
-    const data = Buffer.from(content, "utf8");
-    const deflated = zlib.deflateRawSync(data);
-    const crc = zlib.crc32 ? zlib.crc32(data) : crc32(data);
-    const nameBuf = Buffer.from(name, "utf8");
-
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0, 6);
-    local.writeUInt16LE(8, 8); // deflate
-    local.writeUInt32LE(0, 10); // time/date
-    local.writeUInt32LE(crc >>> 0, 14);
-    local.writeUInt32LE(deflated.length, 18);
-    local.writeUInt32LE(data.length, 22);
-    local.writeUInt16LE(nameBuf.length, 26);
-    local.writeUInt16LE(0, 28);
-    chunks.push(local, nameBuf, deflated);
-
-    const cd = Buffer.alloc(46);
-    cd.writeUInt32LE(0x02014b50, 0);
-    cd.writeUInt16LE(20, 4);
-    cd.writeUInt16LE(20, 6);
-    cd.writeUInt16LE(0, 8);
-    cd.writeUInt16LE(8, 10);
-    cd.writeUInt32LE(0, 12);
-    cd.writeUInt32LE(crc >>> 0, 16);
-    cd.writeUInt32LE(deflated.length, 20);
-    cd.writeUInt32LE(data.length, 24);
-    cd.writeUInt16LE(nameBuf.length, 28);
-    cd.writeUInt32LE(0, 38);
-    cd.writeUInt32LE(offset, 42);
-    central.push(cd, nameBuf);
-
-    offset += local.length + nameBuf.length + deflated.length;
-  }
-  const cdBuf = Buffer.concat(central);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(files.length, 8);
-  end.writeUInt16LE(files.length, 10);
-  end.writeUInt32LE(cdBuf.length, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...chunks, cdBuf, end]);
-}
-
-/** Node 24 has zlib.crc32; this is the fallback for older runtimes. */
-function crc32(buf: Buffer): number {
-  let c = ~0;
-  for (let i = 0; i < buf.length; i++) {
-    c ^= buf[i];
-    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
-  }
-  return ~c;
-}
-
 async function signIn(page: Page, email: string) {
   await page.goto(`${BASE}/login`);
   await page.waitForLoadState("networkidle");
@@ -336,62 +252,52 @@ async function main() {
     String(notReady.status())
   );
 
-  /* --------------------------------------------------- 3. importing a file */
-  const docxRes = await page.request.post(`${BASE}/api/c/${slug}/documents/import`, {
-    multipart: {
-      file: {
-        name: "consent.docx",
-        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        buffer: makeDocx(["Treatment consent", "I agree to the treatment described above."]),
+  /* ------------------------------ 3. the withdrawn import and upload paths */
+  /*
+    Both are gone, and this asserts they stay gone rather than that they work.
+    Converting a Word file or a PDF into an editable template never did so
+    reliably — Arabic came back reversed and disconnected out of a PDF text
+    layer (decision 27), and a consent form that comes out wrong is worse than
+    one somebody has to type. Existing uploaded templates still render and
+    still sign; only the making of new ones was removed.
+  */
+  for (const route of ["import", "upload-template"]) {
+    const gone = await page.request.post(`${BASE}/api/c/${slug}/documents/${route}`, {
+      multipart: {
+        file: { name: "x.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-") },
       },
-    },
-  });
-  const docxJson = await docxRes.json();
-  check("a Word file converts", docxRes.ok() && docxJson.format === "docx", JSON.stringify(docxJson).slice(0, 120));
+    });
+    /*
+      Any 4xx/5xx will do, and pinning an exact code here would be wrong: Next
+      answers an unmatched POST with a 404 when signed out and a rendered 500
+      error page when signed in. What matters is that nothing accepts the file.
+    */
+    check(
+      `/documents/${route} is gone`,
+      !gone.ok(),
+      `${gone.status()} — the route still answers`
+    );
+  }
+
+  await page.goto(`${BASE}/c/${slug}/settings/documents`);
+  await page.waitForLoadState("networkidle");
+  // Wait for the page's own content, not just the shell: reading innerText at
+  // networkidle can catch the nav alone and pass on an empty page.
+  await page.locator("button:has-text('New template')").first().waitFor({ timeout: 30000 });
+  const offered = await page.evaluate(() => document.body.innerText);
   check(
-    "its wording survives",
-    typeof docxJson.html === "string" && docxJson.html.includes("I agree to the treatment"),
-    String(docxJson.html).slice(0, 80)
+    "the templates page offers neither upload nor import",
+    !/Upload a PDF|Import Word or PDF/i.test(offered),
+    (offered.match(/.{0,90}(Upload a PDF|Import Word or PDF).{0,90}/i)?.[0] ?? offered.slice(0, 120))
+      .replace(/\s+/g, " ")
   );
 
-  const pdfImport = await page.request.post(`${BASE}/api/c/${slug}/documents/import`, {
-    multipart: {
-      file: {
-        name: "old.pdf",
-        mimeType: "application/pdf",
-        buffer: await makePdf(["Privacy notice", "Your records are kept for seven years."]),
-      },
-    },
-  });
-  const pdfJson = await pdfImport.json();
-  check("a PDF gives up its text", pdfImport.ok() && pdfJson.characters > 0, `${pdfJson.characters} chars`);
-  check(
-    "the text is the right text",
-    String(pdfJson.html).includes("seven years"),
-    String(pdfJson.html).slice(0, 90)
-  );
-  check(
-    "and the clinic is warned the layout is gone",
-    Array.isArray(pdfJson.warnings) && pdfJson.warnings.includes("pdf_layout_lost"),
-    JSON.stringify(pdfJson.warnings)
-  );
-
-  const badRes = await page.request.post(`${BASE}/api/c/${slug}/documents/import`, {
-    multipart: {
-      file: { name: "old.doc", mimeType: "application/msword", buffer: Buffer.from("\xd0\xcf\x11\xe0rubbish", "latin1") },
-    },
-  });
-  check(
-    "an old .doc is refused by name, not silently mangled",
-    badRes.status() === 415 && (await badRes.json()).error === "unsupported_format"
-  );
-
-  // The import button is reachable from the editor, which is where the result lands.
+  // And writing one still works, which is the path that remains.
   await page.goto(`${BASE}/c/${slug}/settings/documents/new`);
   await page.waitForLoadState("networkidle");
   check(
-    "the editor offers the import",
-    (await page.locator("button:has-text('Import Word or PDF')").count()) > 0
+    "a template is still written in the editor",
+    (await page.locator("[contenteditable='true']").count()) > 0
   );
 
   check("no page errors", errors.length === 0, errors.join(" | "));

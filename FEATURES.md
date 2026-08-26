@@ -1286,7 +1286,7 @@ than a slow query.
 | **WhatsApp** | Connect/disconnect, QR, number, last activity, **daily message cap**, sent today, number-protection explainer |
 | **Invoice settings** | Prefix, tax rate + label, footer, payment instructions, currency |
 | **Patient fields** | The merge-variable list: label (+Arabic), key, type, options, required, hidden, show-in-profile, reorder; built-ins renameable but not deletable; "used in N templates" |
-| **Document templates** | Create, copy from library, upload PDF + place fields, versions, signer setup, extra questions, attached services + auto-send, preview in either language |
+| **Document templates** | Create, copy from library, versions, signer setup, extra questions, attached services + auto-send, preview in either language. PDF upload and Word/PDF import were withdrawn — see decision 44 |
 | **Signer roles** | Built-in six plus custom roles (key, label +Arabic, signs-in-workspace flag) |
 | **Signing** | Link expiry days, require WhatsApp code, first reminder hours |
 | **My signature** | Draw once, reuse; device PIN (4–8 digits) |

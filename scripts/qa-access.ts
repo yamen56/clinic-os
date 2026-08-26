@@ -204,14 +204,22 @@ async function main() {
     "documents open without the create button",
     (await page.locator("button:has-text('New document')").count()) === 0
   );
-  // And the API says no when asked directly, which is the assertion that counts.
-  const uploadStatus = await page.evaluate(async (s) => {
-    const fd = new FormData();
-    fd.append("file", new File([new Uint8Array([37, 80, 68, 70, 45])], "x.pdf", { type: "application/pdf" }));
-    const r = await fetch(`/api/c/${s}/documents/upload-template`, { method: "POST", body: fd });
+  /*
+    And the API says no when asked directly, which is the assertion that counts.
+    The route has to be guarded by the capability this member actually lacks —
+    they hold `documents` and not `documents.manage`, so a route behind plain
+    `documents` would let them through and prove nothing. Raising a document
+    against an appointment is the manage-gated one.
+  */
+  const apiStatus = await page.evaluate(async (s) => {
+    const r = await fetch(`/api/c/${s}/appointments/00000000-0000-0000-0000-000000000000/documents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templateId: "00000000-0000-0000-0000-000000000000" }),
+    });
     return r.status;
   }, slug);
-  check("the documents API refuses them", uploadStatus === 403, `status ${uploadStatus}`);
+  check("the documents API refuses them", apiStatus === 403, `status ${apiStatus}`);
 
   /* ------------------------------------------------------- the receptionist */
   await signIn(page, `reception-${slug}@test.local`);

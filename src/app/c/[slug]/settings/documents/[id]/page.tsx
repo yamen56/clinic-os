@@ -7,13 +7,10 @@ import { can } from "@/lib/auth";
 
 export default async function TemplateEditorPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ slug: string; id: string }>;
-  searchParams: Promise<{ source?: string; import?: string }>;
 }) {
   const { slug, id } = await params;
-  const { source, import: openImport } = await searchParams;
   const access = await guardCap(slug, "settings");
   const isNew = id === "new";
 
@@ -45,9 +42,18 @@ export default async function TemplateEditorPage({
 
     const [versions, attached, fields] = await Promise.all([
       c.query(
-        `select version, name, created_at, u.full_name as author
+        /*
+          Every column qualified, and `v.created_at` is the reason: both
+          `document_template_versions` and `users` have one, so a bare
+          `created_at` across this join is ambiguous and Postgres refuses the
+          whole statement. It took down the editor for every template — the
+          error surfaced only after saving a new one, because the `isNew` branch
+          above returns before this query runs, so creating appeared to be what
+          broke it.
+        */
+        `select v.version, v.name, v.created_at, u.full_name as author
          from document_template_versions v left join users u on u.id = v.created_by
-         where v.template_id = $1 order by version desc limit 20`,
+         where v.template_id = $1 order by v.version desc limit 20`,
         [id]
       ),
       c.query(
@@ -82,8 +88,6 @@ export default async function TemplateEditorPage({
     <TemplateEditor
       slug={slug}
       isOwner={can(access, "settings.clinic")}
-      defaultSource={source === "upload" ? "upload" : "template"}
-      autoImport={openImport === "1"}
       defs={JSON.parse(JSON.stringify(data.defs))}
       roles={JSON.parse(JSON.stringify(data.roles))}
       services={JSON.parse(JSON.stringify(data.services))}

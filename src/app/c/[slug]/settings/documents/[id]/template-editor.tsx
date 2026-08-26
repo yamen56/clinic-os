@@ -13,8 +13,6 @@ import { Tabs } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { RichText, insertTokenAtCaret } from "@/components/esign/rich-text";
-import { ImportFileButton } from "@/components/esign/import-file";
-import { PdfFieldPlacer, type PlacedField } from "@/components/esign/pdf-field-placer";
 import { saveTemplateAction } from "../actions";
 import { ArrowLeft, Plus, Trash2, Eye, Braces, ChevronUp, ChevronDown } from "lucide-react";
 
@@ -37,11 +35,28 @@ type ExtraField = {
 };
 type SignerCfg = { role_key: string; required: boolean; order: number };
 
+/**
+ * A signature box placed on an uploaded PDF, in page fractions rather than
+ * pixels. Declared here rather than imported: the placer that created these
+ * is gone, but existing templates still carry boxes and this editor still has
+ * to round-trip them on save without moving anything.
+ */
+type PlacedField = {
+  page_number: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  field_type: "signature" | "initials" | "date" | "text" | "checkbox";
+  assigned_role_key: string;
+  is_required: boolean;
+  label: string;
+  prefilled_value: string | null;
+  sort: number;
+};
 export function TemplateEditor({
   slug,
   isOwner,
-  defaultSource,
-  autoImport,
   defs,
   roles,
   services,
@@ -51,9 +66,7 @@ export function TemplateEditor({
 }: {
   slug: string;
   isOwner: boolean;
-  defaultSource: "template" | "upload";
   /** Arrived from "import a file" — open the picker rather than a blank page. */
-  autoImport?: boolean;
   defs: Def[];
   roles: Role[];
   services: Service[];
@@ -66,7 +79,9 @@ export function TemplateEditor({
   const { toast } = useToast();
   const [pending, start] = useTransition();
 
-  const source = (template?.source as string) ?? defaultSource;
+  // Every new template is written here; "upload" only ever comes off an
+  // existing row, from before that path was withdrawn.
+  const source = (template?.source as string) ?? "template";
   const isUpload = source === "upload";
 
   const [name, setName] = useState((template?.name as string) ?? "");
@@ -264,17 +279,34 @@ export function TemplateEditor({
         </label>
       </Card>
 
-      {isUpload ? (
-        <PdfFieldPlacer
-          slug={slug}
-          templateId={(template?.id as string) ?? null}
-          pdfPath={pdfPath}
-          onPdfPathChange={setPdfPath}
-          roles={roles}
-          fields={fields}
-          onFieldsChange={setFields}
-        />
-      ) : (
+      {/*
+        A template built from an uploaded PDF can still be opened, renamed and
+        switched off — a few were made before that path was withdrawn, and the
+        documents signed from them are records. What is gone is making a new
+        one: the upload and the Word/PDF import never converted reliably, and a
+        consent form that comes out wrong is worse than one you have to type.
+      */}
+      {isUpload && (
+        <Card className="p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold">{t.docTemplates.uploadedPdf}</div>
+              <p className="mt-0.5 text-[12px] text-ink-500">{t.docTemplates.uploadedPdfHint}</p>
+            </div>
+            {pdfPath && (
+              <a
+                href={`/api/c/${slug}/documents/template-pdf?path=${encodeURIComponent(pdfPath)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Button variant="outline" size="sm">{t.docTemplates.openPdf}</Button>
+              </a>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {!isUpload && (
         <div className="grid gap-4 lg:grid-cols-[1fr_16rem]">
           <Card className="p-5">
             {language === "both" && (
@@ -293,21 +325,6 @@ export function TemplateEditor({
               <span className="text-[13px] font-semibold">
                 {tab === "ar" ? t.docTemplates.bodyAr : t.docTemplates.bodyEn}
               </span>
-              {/*
-                Bumping `imported` remounts RichText, which is uncontrolled and
-                reads its content from `defaultValue` once. Without it the state
-                would hold the imported body while the editor still showed the
-                old one.
-              */}
-              <ImportFileButton
-                slug={slug}
-                dir={tab === "ar" ? "rtl" : "ltr"}
-                autoOpen={autoImport && !template}
-                onInsert={(html) => {
-                  setCurrentBody(html);
-                  setImported((n) => n + 1);
-                }}
-              />
             </div>
             <RichText
               key={`${tab}-${imported}`}

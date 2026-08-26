@@ -26,7 +26,6 @@ import {
   Pencil,
   Library,
   Upload,
-  FileUp,
   Users,
   ShieldCheck,
 } from "lucide-react";
@@ -118,24 +117,6 @@ export function DocumentSettingsClient({
                 {t.docTemplates.fromLibrary}
               </Button>
             )}
-            {/*
-              Two different things, and the difference is which file survives.
-              "Upload PDF" keeps the clinic's own file and draws signatures onto
-              it. "Import" reads the words out and hands them to the editor, so
-              from then on the template is ours and the original is history.
-            */}
-            <Link href={`/c/${slug}/settings/documents/new?source=upload`}>
-              <Button variant="outline" size="sm">
-                <Upload className="h-4 w-4" />
-                {t.docTemplates.uploadTitle}
-              </Button>
-            </Link>
-            <Link href={`/c/${slug}/settings/documents/new?import=1`}>
-              <Button variant="outline" size="sm">
-                <FileUp className="h-4 w-4" />
-                {t.docImport.cta}
-              </Button>
-            </Link>
             <Link href={`/c/${slug}/settings/documents/new`}>
               <Button size="sm">
                 <Plus className="h-4 w-4" />

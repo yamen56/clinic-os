@@ -745,32 +745,6 @@ export const en = {
     "settings.clinic": "Clinic profile, fields and templates",
     "settings.staff": "Manage staff and their access",
   },
-  docImport: {
-    cta: "Import Word or PDF",
-    reviewTitle: "Check the import",
-    reviewBody:
-      "This is what came out of the file. Nothing is saved yet — insert it and you can edit it like any other template.",
-    insert: "Use this text",
-    inserted: "Imported into the editor",
-    nothingFound: "No text could be read from this file.",
-    warnings: {
-      docx_partial: "Some formatting in the Word file could not be carried across. Check the text below.",
-      images_dropped: "Images were left out. Your clinic logo and letterhead come from the clinic profile instead.",
-      pdf_layout_lost:
-        "A PDF stores positioned text, not paragraphs, so the wording comes across but the layout does not. Expect to tidy it up.",
-      pdf_arabic:
-        "Arabic extracted from a PDF often comes back reversed or with the letters disconnected — that is how the file stores it, not a mistake here. Read it carefully, and use Upload PDF instead if it is wrong.",
-      pdf_no_text: "This PDF has no text layer — it is probably a scan. Use Upload PDF to keep the file as it is.",
-    },
-    errors: {
-      no_file: "No file was chosen.",
-      too_large: "That file is too large (15 MB maximum).",
-      unsupported_format:
-        "Only .docx and .pdf can be read. An older .doc file needs to be saved as .docx in Word first.",
-      unreadable_file: "That file could not be read.",
-      forbidden: "You don't have access to do that.",
-    },
-  },
   hours: {
     title: "Working hours",
     sub: "When the clinic is open. Doctors can have their own hours in Staff settings.",
@@ -1508,7 +1482,6 @@ export const en = {
     newDocument: "New document",
     chooseTemplate: "Choose a template",
     chooseTemplateSub: "Everything is filled in for you — check it and send.",
-    uploadInstead: "Upload a PDF instead",
     forPatient: "For {name}",
     noTemplates: "No templates yet",
     noTemplatesBody: "Add a document template in settings, then it appears here.",
@@ -1847,7 +1820,10 @@ export const en = {
     attachedServices: "Required for these services",
     attachedServicesSub: "Booking one of these raises this document automatically.",
     autoSend: "Send it when the appointment is confirmed",
-    uploadTitle: "Upload a PDF",
+    uploadedPdf: "Built from an uploaded PDF",
+    uploadedPdfHint:
+      "Made before PDF upload was withdrawn. It still sends and signs; new templates are written here instead.",
+    openPdf: "Open the PDF",
     uploadSub: "Your own file, unchanged. Place the boxes and we stamp the signatures in.",
     uploadPick: "Choose a PDF",
     uploadReplace: "Replace the file",
@@ -1872,7 +1848,7 @@ export const en = {
     deleteBody:
       "Documents already created from it keep their own frozen copy and are unaffected.",
     empty: "No templates yet",
-    emptyBody: "Copy one from the library, write your own, or upload a PDF you already use.",
+    emptyBody: "Copy one from the library, or write your own.",
     errors: {
       nameRequired: "Give the template a name.",
       bodyRequired: "Write the document text in at least one language.",

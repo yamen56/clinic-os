@@ -41,7 +41,7 @@ const extraFieldSchema = z.object({
 /**
  * A box placed on an uploaded PDF. Coordinates are page fractions, never pixels,
  * so a box placed on a phone lands in the same spot when the page is printed at
- * A4 — see components/esign/pdf-field-placer.
+ * A4. Nothing creates these any more; existing templates still carry them.
  */
 const placedFieldSchema = z.object({
   page_number: z.coerce.number().int().min(1).max(200),
