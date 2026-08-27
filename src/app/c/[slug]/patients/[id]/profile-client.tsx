@@ -22,7 +22,6 @@ import {
   removeTagAction,
   addNoteAction,
   noteHistoryAction,
-  setNoteCategoryAction,
   saveNoteCategoryAction,
   deletePatientFileAction,
   setPatientStatusAction,
@@ -31,6 +30,7 @@ import {
 } from "../actions";
 import { sendAllPendingAction } from "../../documents/actions";
 import { VoiceRecorder } from "@/components/voice-recorder";
+import { VoiceNote } from "@/components/voice-note";
 import { DOC_STATUS_BADGE } from "@/components/esign/status";
 import { DownloadSignedPdf } from "@/components/esign/download-signed";
 import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-document-modal";
@@ -54,6 +54,7 @@ import {
   StickyNote,
   History,
   Filter,
+  Pencil,
 } from "lucide-react";
 
 export type NoteRow = {
@@ -1029,6 +1030,9 @@ function NotesTab({
               discard: t.common.delete,
               denied: t.patients.notes.micDenied,
               unsupported: t.patients.notes.micUnsupported,
+              noMic: t.patients.notes.micNone,
+              insecure: t.patients.notes.micInsecure,
+              retry: t.patients.notes.micRetry,
             }}
           />
           <Button
@@ -1121,18 +1125,52 @@ function NoteItem({
 }) {
   const { t } = useI18n();
   const router = useRouter();
+  const { toast } = useToast();
   const [history, setHistory] = useState<
     { id: string; body: string; author: string | null; created_at: string }[] | null
   >(null);
   const [showHistory, setShowHistory] = useState(false);
   const [pending, start] = useTransition();
-  const { patch, state } = useAutosave({
-    url: `/api/c/${slug}/notes/${note.id}`,
-    entityKey: `note:${note.id}`,
-  });
+
+  /*
+    An explicit edit, rather than a textarea that is always live.
+
+    A note is a clinical record. Leaving it as an open box invited a stray
+    keystroke into somebody's history, and it forced the category switcher to
+    live permanently under every note — a row of chips repeated down the whole
+    page for something that is changed once, if ever. Both now sit behind one
+    button, and the text underneath is just text.
+  */
+  const [editing, setEditing] = useState(false);
+  const [draftBody, setDraftBody] = useState(note.body);
+  const [draftCat, setDraftCat] = useState<string>(note.category_id ?? "");
 
   const catName = (c: NoteCategoryRow | null) =>
     c ? (locale === "ar" ? c.name_ar || c.name : c.name) : t.patients.notes.uncategorised;
+
+  const openEdit = () => {
+    // Reopening after a cancel must show what is saved, not the abandoned edit.
+    setDraftBody(note.body);
+    setDraftCat(note.category_id ?? "");
+    setEditing(true);
+  };
+
+  const save = () =>
+    start(async () => {
+      const res = await fetch(`/api/c/${slug}/notes/${note.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // The same endpoint the autosave used, so the edit still lands through
+        // saveNoteVersion and the previous text is kept in the history.
+        body: JSON.stringify({
+          patch: { body: draftBody, categoryId: draftCat || null },
+        }),
+      });
+      if (!res.ok) return toast(t.common.genericError, "error");
+      setEditing(false);
+      toast(t.patients.notes.noteSaved);
+      router.refresh();
+    });
 
   const openHistory = () => {
     setShowHistory(true);
@@ -1166,54 +1204,89 @@ function NoteItem({
           )}
         </span>
         <span className="flex items-center gap-2">
-          <SaveIndicator state={state} />
           {/* No delete. See lib/notes.ts. */}
           {note.version_count > 1 && !note.edited_at && (
             <button onClick={openHistory} className="text-ink-400 hover:text-ink-700" aria-label={t.patients.notes.history}>
               <History className="h-4 w-4" />
             </button>
           )}
+          {/* No aria-label: it would override the visible word with a different
+              one, and then somebody driving by voice says "Edit" and nothing
+              happens. Label and accessible name should be the same string. */}
+          <button
+            onClick={openEdit}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            {t.common.edit}
+          </button>
         </span>
       </div>
 
       {note.audio_path && (
-        <audio
-          controls
-          preload="none"
+        <VoiceNote
           src={`/api/c/${slug}/notes/${note.id}/audio`}
-          className="mb-2 h-9 w-full max-w-md"
+          seconds={note.audio_seconds}
+          label={t.patients.notes.playVoice}
         />
       )}
 
-      <Textarea
-        defaultValue={note.body}
-        placeholder={note.audio_path ? t.patients.notes.voicePlaceholder : undefined}
-        className="min-h-16 !border-transparent !bg-transparent px-0 focus:!border-line"
-        onChange={(e) => patch({ body: e.target.value })}
-      />
-
-      {categories.length > 1 && (
-        <div className="mt-1 flex flex-wrap gap-1">
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              disabled={pending || c.id === note.category_id}
-              onClick={() =>
-                start(async () => {
-                  await setNoteCategoryAction(slug, note.id, c.id);
-                  router.refresh();
-                })
-              }
-              className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                c.id === note.category_id ? "opacity-40" : "text-ink-400 hover:text-ink-900"
-              }`}
-            >
-              {c.id === note.category_id ? "" : "→ "}
-              {locale === "ar" ? c.name_ar || c.name : c.name}
-            </button>
-          ))}
-        </div>
+      {/*
+        Read-only. `whitespace-pre-wrap` because a doctor's note is written in
+        lines — a list of findings collapses into a paragraph without it.
+      */}
+      {note.body ? (
+        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900">{note.body}</p>
+      ) : (
+        note.audio_path && (
+          <p className="text-[13px] italic text-ink-400">{t.patients.notes.voicePlaceholder}</p>
+        )
       )}
+
+      <Modal
+        open={editing}
+        onClose={() => setEditing(false)}
+        title={t.patients.notes.editNote}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setEditing(false)}>
+              {t.common.cancel}
+            </Button>
+            <Button onClick={save} loading={pending}>
+              {t.patients.notes.saveNote}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-4">
+          {categories.length > 0 && (
+            <Field label={t.patients.notes.noteCategory}>
+              <Select value={draftCat} onChange={(e) => setDraftCat(e.target.value)}>
+                <option value="">{t.patients.notes.uncategorised}</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {locale === "ar" ? c.name_ar || c.name : c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          <Field label={t.patients.notes.noteText}>
+            <Textarea
+              autoFocus
+              rows={6}
+              value={draftBody}
+              onChange={(e) => setDraftBody(e.target.value)}
+              placeholder={note.audio_path ? t.patients.notes.voicePlaceholder : undefined}
+            />
+          </Field>
+          {/* Says what this dialog does not touch, because a recording is the
+              one part of a note nobody can retype. */}
+          {note.audio_path && (
+            <p className="text-[12px] text-ink-500">{t.patients.notes.voiceKept}</p>
+          )}
+        </div>
+      </Modal>
 
       <Modal
         open={showHistory}

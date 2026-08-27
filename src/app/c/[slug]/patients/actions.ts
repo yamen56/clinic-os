@@ -194,32 +194,6 @@ export async function noteHistoryAction(
 }
 
 /**
- * Move a note to another category.
- *
- * Goes through `saveNoteVersion` like every other change, so recategorising is
- * recorded rather than silently rewriting a filed record.
- */
-export async function setNoteCategoryAction(
-  slug: string,
-  noteId: string,
-  categoryId: string | null
-): Promise<{ error?: string }> {
-  const access = await requireClinic(slug);
-  return inClinic(access, async (c) => {
-    const ok = await saveNoteVersion(
-      c,
-      access.clinicId,
-      noteId,
-      { categoryId },
-      access.session.user.id
-    );
-    if (!ok) return { error: "not_found" };
-    revalidatePath(`/c/${slug}/patients`);
-    return {};
-  });
-}
-
-/**
  * Categories are clinic-defined, and managed from the patient file rather than
  * a settings screen — the moment you want a new one is the moment you are
  * writing a note that does not fit the existing ones.

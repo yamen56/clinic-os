@@ -26,15 +26,17 @@ function assert(cond: unknown, msg: string): asserts cond {
 const text = (p: Page) => p.evaluate(() => document.body.innerText || "");
 
 /*
-  Note bodies live in <textarea> values, and a textarea's value is not part of
-  innerText — it is a property, not a text node. Reading the notes list off
-  innerText finds nothing and looks exactly like a component that failed to
-  render. Everything else on the tab (chips, buttons, the history modal) is real
-  text and is asserted through .
+  A filed note is now read-only text, edited behind a button, so its body is
+  ordinary innerText. It used to be the value of an always-live <textarea> —
+  which is a property rather than a text node, so this had to reach into the DOM
+  for it. The one textarea still on the tab is the composer, and excluding the
+  card it sits in is what keeps a half-typed draft out of these assertions.
 */
 const noteBodies = (p: Page) =>
   p.evaluate(() =>
-    Array.from(document.querySelectorAll("main textarea")).map((t) => (t as HTMLTextAreaElement).value)
+    Array.from(document.querySelectorAll("main p.whitespace-pre-wrap")).map(
+      (el) => el.textContent ?? ""
+    )
   );
 async function shows(p: Page, re: RegExp, what: string, timeoutMs = 20000) {
   const deadline = Date.now() + timeoutMs;
@@ -99,8 +101,45 @@ async function main() {
     [clinic.id, note2.id, B, admin.id]
   );
 
+  /*
+    A third note that is a recording.
+
+    A real, tiny WAV rather than a stub: the point of the assertions below is
+    that a doctor's voice comes back out of the app, and a file the browser
+    cannot decode would pass a "the player rendered" check while failing the
+    only thing anybody cares about.
+  */
+  const { saveFile } = await import("../src/lib/storage");
+  const wav = (() => {
+    const samples = 8000; // one second at 8kHz, silent
+    const buf = Buffer.alloc(44 + samples * 2);
+    buf.write("RIFF", 0);
+    buf.writeUInt32LE(36 + samples * 2, 4);
+    buf.write("WAVEfmt ", 8);
+    buf.writeUInt32LE(16, 16);
+    buf.writeUInt16LE(1, 20); // PCM
+    buf.writeUInt16LE(1, 22); // mono
+    buf.writeUInt32LE(8000, 24);
+    buf.writeUInt32LE(16000, 28);
+    buf.writeUInt16LE(2, 32);
+    buf.writeUInt16LE(16, 34);
+    buf.write("data", 36);
+    buf.writeUInt32LE(samples * 2, 40);
+    return buf;
+  })();
+  const stored = await saveFile(clinic.id, "notes", `qa-${STAMP}.wav`, wav);
+  const voiceNote = (
+    await db.query(
+      `insert into patient_notes (clinic_id, patient_id, category_id, body, audio_path, audio_mime, audio_seconds)
+       values ($1,$2,$3,'',$4,'audio/wav',1) returning id`,
+      [clinic.id, patient.id, clinical.id, stored.storagePath]
+    )
+  ).rows[0];
+
   const cleanup = async () => {
-    await db.query(`delete from patient_notes where id = any($1::uuid[])`, [[note.id, note2.id]]);
+    await db.query(`delete from patient_notes where id = any($1::uuid[])`, [
+      [note.id, note2.id, voiceNote.id],
+    ]);
   };
 
   const browser = await chromium.launch();
@@ -166,6 +205,93 @@ async function main() {
       .count();
     assert(trash === 0, `found ${trash} delete buttons on the notes tab`);
     ok("there is no delete button on a note");
+
+    /* ------------------------------------------- editing behind a button */
+    /*
+      A filed note is not an open box. It used to render as a live textarea with
+      a row of category chips underneath every single one — a control repeated
+      down the whole page for something changed once, if ever. The only textarea
+      left on the tab is the composer.
+    */
+    const liveBoxes = await p.locator("main textarea").count();
+    assert(liveBoxes === 1, `expected only the composer to be editable, found ${liveBoxes}`);
+    ok("a filed note is text, not an open textarea");
+
+    const arrows = await p.locator("main").getByText(/^→\s/).count();
+    assert(arrows === 0, `the per-note category switcher is still there (${arrows} chips)`);
+    ok("and carries no row of category chips");
+
+    const editBtn = p.getByRole("button", { name: /^Edit$|^تعديل$/ }).first();
+    await editBtn.click();
+    const dialog = p.getByRole("dialog");
+    await dialog.waitFor({ state: "visible", timeout: 20000 });
+    ok("Edit opens a dialog");
+
+    // Both things are editable in the one place, which is the point of it.
+    const catSelect = dialog.locator("select").first();
+    const bodyBox = dialog.locator("textarea").first();
+    assert(await catSelect.isVisible(), "the edit dialog has no category control");
+    assert(await bodyBox.isVisible(), "the edit dialog has no text box");
+    ok("with the category and the text together");
+
+    /*
+      Appended, not replaced. This dialog opens on whichever note is first, and
+      overwriting its body would delete the text the filter assertions below
+      look for — a test failure two sections later with no obvious cause.
+    */
+    await bodyBox.fill(`${await bodyBox.inputValue()} edited-${STAMP}`);
+    await dialog.getByRole("button", { name: /Save changes|حفظ التعديلات/ }).click();
+    await p.waitForTimeout(1500);
+    await shows(p, new RegExp(`edited-${STAMP}`), "the edited text never appeared on the note");
+    ok("saving writes the new text back to the note");
+
+    /* ---------------------------------------------------- voice notes */
+    /*
+      A recording has to be listenable in the list beside the typed notes, the
+      way a voice message is. The browser's own <audio controls> is not that —
+      different on every platform, carrying a download button we do not want on
+      a clinical record, and wide enough to bury the note it belongs to.
+    */
+    /*
+      The bug this was all downstream of: `Permissions-Policy: microphone=()`
+      denied our own origin, so the browser rejected getUserMedia without ever
+      showing a prompt — a doctor pressed Record and was told the microphone was
+      blocked by a dialog that had never appeared.
+
+      Asked of the live document rather than of the header string, because this
+      is the question the browser actually answers when Record is pressed.
+    */
+    const mayAsk = await p.evaluate(() => {
+      const fp = (document as unknown as { featurePolicy?: { allowsFeature(f: string): boolean } })
+        .featurePolicy;
+      return fp ? fp.allowsFeature("microphone") : "unsupported";
+    });
+    assert(mayAsk !== false, "the page is not allowed to ask for the microphone");
+    ok(`the page may ask for the microphone (${mayAsk})`);
+
+    const native = await p.locator("main audio[controls]").count();
+    assert(native === 0, `the browser's default player is still being used (${native})`);
+    ok("a recording is not left to the browser's own player");
+
+    const playBtn = p
+      .getByRole("button", { name: /Play the voice note|تشغيل الملاحظة الصوتية/ })
+      .first();
+    await playBtn.waitFor({ state: "visible", timeout: 20000 });
+    ok("it has a play button of its own");
+
+    // Does sound actually come back? Drive the element, not the button, so the
+    // assertion is about the audio rather than about React state.
+    const played = await p.evaluate(async () => {
+      const el = document.querySelector("main audio") as HTMLAudioElement | null;
+      if (!el) return "no audio element";
+      await el.play().catch(() => {});
+      await new Promise((r) => setTimeout(r, 800));
+      if (el.readyState < 2) return `never loaded (readyState ${el.readyState})`;
+      if (!Number.isFinite(el.duration) || el.duration <= 0) return `bad duration ${el.duration}`;
+      return "ok";
+    });
+    assert(played === "ok", `the recording did not play back: ${played}`);
+    ok("and the audio decodes and plays");
 
     /* --------------------------------------------------- the filter */
     await shows(p, /Clinical|سريرية/, "no category chip on the filter bar");

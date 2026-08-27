@@ -24,11 +24,20 @@ export function VoiceRecorder({
   /** Called with the finished recording, or null when it is discarded. */
   onReady: (rec: { blob: Blob; seconds: number } | null) => void;
   disabled?: boolean;
-  labels: { record: string; stop: string; discard: string; denied: string; unsupported: string };
+  labels: {
+    record: string;
+    stop: string;
+    discard: string;
+    denied: string;
+    unsupported: string;
+    noMic: string;
+    insecure: string;
+    retry: string;
+  };
 }) {
-  const [state, setState] = useState<"idle" | "recording" | "ready" | "denied" | "unsupported">(
-    "idle"
-  );
+  const [state, setState] = useState<
+    "idle" | "recording" | "ready" | "denied" | "nomic" | "insecure" | "unsupported"
+  >("idle");
   const [seconds, setSeconds] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
@@ -57,6 +66,17 @@ export function VoiceRecorder({
 
   const start = async () => {
     try {
+      /*
+        `mediaDevices` is undefined outside a secure context, and "outside a
+        secure context" includes the case that actually happens: a clinic opening
+        the app on the office network by IP rather than by hostname. Reading it
+        blind throws a TypeError that lands in the same catch as a refusal, and
+        the person is told they denied a permission they were never asked for.
+      */
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setState("insecure");
+        return;
+      }
       const s = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.current = s;
       const mr = new MediaRecorder(s);
@@ -84,8 +104,17 @@ export function VoiceRecorder({
         elapsed.current += 1;
         setSeconds(elapsed.current);
       }, 1000);
-    } catch {
-      setState("denied");
+    } catch (e) {
+      /*
+        Which refusal this was decides what the person can do about it, so it is
+        worth telling them apart. NotAllowedError is the browser saying no —
+        either the person clicked Block, or a Permissions-Policy header did it
+        for them without ever showing a prompt (which is how this shipped:
+        `microphone=()` in next.config.ts denied our own origin). NotFoundError
+        is a machine with no microphone, which no amount of clicking fixes.
+      */
+      const name = (e as DOMException)?.name;
+      setState(name === "NotFoundError" || name === "OverconstrainedError" ? "nomic" : "denied");
     }
   };
 
@@ -113,8 +142,33 @@ export function VoiceRecorder({
   if (state === "unsupported") {
     return <span className="text-[12px] text-ink-400">{labels.unsupported}</span>;
   }
-  if (state === "denied") {
-    return <span className="text-[12px] text-danger">{labels.denied}</span>;
+  /*
+    A refusal is a state to recover from, not a dead end. This used to render a
+    line of red text and nothing else — so somebody who denied the prompt by
+    accident, or who was denied by a header they could not see, had no way back
+    short of reloading the page. The message says what happened and the button
+    lets them try again once they have fixed it in the browser.
+  */
+  if (state === "denied" || state === "nomic" || state === "insecure") {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12px] text-danger">
+          {state === "nomic" ? labels.noMic : state === "insecure" ? labels.insecure : labels.denied}
+        </span>
+        {state !== "insecure" && (
+          <button
+            type="button"
+            onClick={() => {
+              setState("idle");
+              void start();
+            }}
+            className="text-[12px] font-medium text-brand-700 underline underline-offset-2 hover:text-brand-800"
+          >
+            {labels.retry}
+          </button>
+        )}
+      </div>
+    );
   }
 
   if (state === "ready" && url) {

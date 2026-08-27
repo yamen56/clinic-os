@@ -62,12 +62,20 @@ const securityHeaders = [
   */
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   /*
-    The signature pad wants a pointer, the QR screen wants nothing. Hardware
-    this app never asks for should not be askable by anything injected into it.
+    Hardware this app never asks for should not be askable by anything injected
+    into it — but the microphone is now hardware it *does* ask for, and an empty
+    allowlist is not a stricter version of "ask the user", it is a refusal.
+    `microphone=()` blocks the origin itself, so `getUserMedia` rejected before
+    the browser ever showed a prompt, and a doctor pressing Record met a flat
+    "denied" that no permission dialog had been offered for.
+
+    `(self)` restores the ordinary behaviour: our own pages may ask, the person
+    decides, and an injected iframe still cannot. Everything else stays shut,
+    including the camera — the signature pad wants a pointer, not a lens.
   */
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+    value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()",
   },
   /*
     Two years, subdomains included. Both hosts are HTTPS-only already, so this

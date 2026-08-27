@@ -227,6 +227,20 @@ async function main() {
     ok((h["x-frame-options"] ?? "") === "DENY", "X-Frame-Options DENY");
     ok(/max-age=/.test(h["strict-transport-security"] ?? ""), "HSTS present");
 
+    /*
+      Permissions-Policy, both halves.
+
+      This shipped as `microphone=()`, which is not a stricter way of asking the
+      person — it is a refusal on their behalf, and it meant voice notes could
+      never record: the browser rejected getUserMedia without ever showing a
+      prompt. So the microphone must be allowed to `self`, and everything the
+      app genuinely never asks for must still be shut. Both are asserted,
+      because the tempting "fix" in either direction breaks the other.
+    */
+    const pp = h["permissions-policy"] ?? "";
+    ok(/microphone=\(self\)/.test(pp), `microphone is askable by this origin (${pp})`);
+    ok(/camera=\(\)/.test(pp) && /geolocation=\(\)/.test(pp), "camera and location stay shut");
+
     // The token pages are the ones where the URL is the credential.
     const signRes = await page.goto(`${BASE}/sign/definitely-not-a-real-token`, {
       waitUntil: "domcontentloaded",
