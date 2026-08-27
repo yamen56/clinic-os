@@ -48,10 +48,29 @@ async function reclaimStranded() {
   if (r.rowCount) console.log(`[outbound] reclaimed ${r.rowCount} stranded message(s)`);
 }
 
+/**
+ * How often to go looking for stranded messages.
+ *
+ * It used to run on every outbound tick, which is 1.5 seconds — two hundred
+ * times more often than a five-minute threshold can possibly reward. Even with
+ * the partial index from migration 0038 that is work nobody asked for, and
+ * without it, it was the single most expensive thing the worker did.
+ *
+ * The cost of the slower cadence is that a stranded message waits up to 5m30s
+ * instead of 5m01s. Nothing measures the difference: the message was stranded
+ * by a worker that died, and the five minutes is already a guess at "long
+ * enough that it is definitely not still in flight".
+ */
+const RECLAIM_EVERY_MS = 30_000;
+let lastReclaim = 0;
+
 export async function processOnce() {
-  await reclaimStranded().catch((e) =>
-    console.error("[outbound] reclaim failed:", (e as Error).message)
-  );
+  if (Date.now() - lastReclaim > RECLAIM_EVERY_MS) {
+    lastReclaim = Date.now();
+    await reclaimStranded().catch((e) =>
+      console.error("[outbound] reclaim failed:", (e as Error).message)
+    );
+  }
   const connected = [...sessions.entries()].filter(([, s]) => s.connected);
   await Promise.all(
     connected.map(async ([clinicId, session]) => {

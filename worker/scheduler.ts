@@ -52,37 +52,67 @@ async function wakeSleepingRuns() {
   });
 }
 
-/** "X hours before appointment" — fires inside a one-minute window. */
+/**
+ * "X hours before appointment" — fires inside a one-minute window.
+ *
+ * Unlike recall, birthdays and unpaid invoices, this one cannot be gated to a
+ * single hour of the day: a reminder falls due whenever its appointment happens
+ * to be, so the window has to be checked every minute. What it can stop doing is
+ * asking once per automation. That was one round trip per active reminder per
+ * minute — at a few hundred clinics, a thousand queries a minute to discover
+ * that almost always nothing is due.
+ *
+ * One join instead, with the lead time read out of each automation's own config
+ * inside the query. The `~` guard is there because a `hours` value that is not a
+ * number would abort the whole statement: before, a hand-edited config broke one
+ * clinic's reminders, and it must not now break everybody's.
+ */
 async function appointmentReminders() {
   await withSystem(async (c) => {
-    const autos = await c.query(
-      `select a.id, a.clinic_id, a.trigger_config from automations a
-       join clinics cl on cl.id = a.clinic_id
-       where a.active and a.trigger_type = 'before_appointment' and ${licensed("automations")}`
+    const due = await c.query(
+      `with reminder as (
+         select a.id, a.clinic_id,
+                case when a.trigger_config->>'hours' ~ '^[0-9]+(\\.[0-9]+)?$'
+                     then (a.trigger_config->>'hours')::numeric else 24 end as hours
+           from automations a
+           join clinics cl on cl.id = a.clinic_id
+          where a.active and a.trigger_type = 'before_appointment' and ${licensed("automations")}
+       )
+       select r.id as automation_id, r.clinic_id, ap.id as appointment_id, ap.patient_id
+         from reminder r
+         join appointments ap
+           on ap.clinic_id = r.clinic_id
+          /*
+            The window written as a range on starts_at rather than on
+            starts_at - hours, which is the same arithmetic and a completely
+            different query plan. Subtracting inside the comparison makes the
+            column non-indexable, so Postgres read every future appointment on
+            the platform and filtered them one by one; this way each reminder
+            does a ninety-second index range scan over
+            appointments_clinic_time_idx and touches nothing else.
+          */
+          and ap.starts_at >  now() + (r.hours * interval '1 hour') - interval '90 seconds'
+          and ap.starts_at <= now() + (r.hours * interval '1 hour')
+        where ap.status in ('scheduled', 'confirmed')
+          -- Redundant above unless somebody sets a lead time under 90 seconds.
+          and ap.starts_at > now()
+        limit 500`
     );
-    for (const auto of autos.rows) {
-      const hours = Number((auto.trigger_config ?? {}).hours ?? 24);
-      const appts = await c.query(
-        `select ap.id, ap.patient_id from appointments ap
-         where ap.clinic_id = $1
-           and ap.status in ('scheduled', 'confirmed')
-           and ap.starts_at > now()
-           and ap.starts_at - ($2 * interval '1 hour') <= now()
-           and ap.starts_at - ($2 * interval '1 hour') > now() - interval '90 seconds'`,
-        [auto.clinic_id, hours]
-      );
-      for (const ap of appts.rows) {
-        const runId = await startRun(c, auto.clinic_id, auto.id, {
-          patientId: ap.patient_id,
-          appointmentId: ap.id,
-        });
-        if (runId) {
-          await c.query(
-            `insert into jobs (clinic_id, kind, payload, dedupe_key)
-             values ($1, 'automation:advance', $2, $3) on conflict (dedupe_key) do nothing`,
-            [auto.clinic_id, JSON.stringify({ runId }), `reminder:${auto.id}:${ap.id}`]
-          );
-        }
+    for (const row of due.rows) {
+      const runId = await startRun(c, row.clinic_id, row.automation_id, {
+        patientId: row.patient_id,
+        appointmentId: row.appointment_id,
+      });
+      if (runId) {
+        await c.query(
+          `insert into jobs (clinic_id, kind, payload, dedupe_key)
+           values ($1, 'automation:advance', $2, $3) on conflict (dedupe_key) do nothing`,
+          [
+            row.clinic_id,
+            JSON.stringify({ runId }),
+            `reminder:${row.automation_id}:${row.appointment_id}`,
+          ]
+        );
       }
     }
   });

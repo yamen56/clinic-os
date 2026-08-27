@@ -539,6 +539,28 @@ async function main() {
     check("and the original is voided, not deleted", original.status === "void", original.status);
 
     if (note) {
+      /*
+        Take the job off the queue before filing it here.
+
+        Voiding enqueues an `einvoice:submit` for the credit note, and if a
+        worker is running on this machine it will claim it — from a process that
+        never saw JOFOTARA_BASE_URL and so calls the real endpoint, fails, and
+        leaves the invoice marked failed before this test has done anything. The
+        test owns every other submission in this file by calling submitEinvoice
+        directly; this makes that true here too, rather than depending on
+        winning a race against a live worker.
+      */
+      await db.query(
+        `delete from jobs where kind = 'einvoice:submit' and payload->>'invoiceId' = $1`,
+        [note.id]
+      );
+      // And undo anything it managed before the delete landed. Resetting the
+      // row is safe here precisely because the assertion below is about the
+      // document this test then files, not about how it got queued.
+      await db.query(
+        `update invoices set einvoice_status = 'pending', einvoice_error = null where id = $1`,
+        [note.id]
+      );
       await submitEinvoice(note.id, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
       const filedNote = (
         await db.query(`select einvoice_status, einvoice_type from invoices where id = $1`, [note.id])
@@ -562,6 +584,17 @@ async function main() {
       await page.setViewportSize({ width, height: 844 });
       await page.goto(`${BASE}/c/${filer.slug}/settings/einvoicing`);
       await page.waitForLoadState("networkidle");
+      /*
+        Hide the dev overlay and let the page settle, exactly as
+        qa-mobile-width does. Both matter and neither is superstition: the
+        `nextjs-portal` indicator is itself wider than a 320px phone, so
+        measuring with it mounted reports an overflow the product does not have;
+        and `networkidle` can fire while the shell is still streaming under the
+        Suspense boundary in c/[slug]/loading.tsx, which measures a half-built
+        page.
+      */
+      await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
+      await page.waitForTimeout(250);
       const over = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth
       );

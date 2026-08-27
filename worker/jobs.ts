@@ -40,13 +40,44 @@ export function registerJobHandler(kind: string, fn: JobHandler) {
   handlers[kind] = fn;
 }
 
-async function claimJob() {
+/**
+ * The kinds whose work happens on somebody else's server.
+ *
+ * Everything the runner does is fast — a few database statements, tens of
+ * milliseconds — except these, which wait on a third party: Anthropic for a
+ * reply, the tax authority for a stamp, our own Chromium for a PDF. Seconds
+ * each, and until now they took the only lane with them. One clinic's busy
+ * morning of AI conversations delayed every other clinic's appointment
+ * reminders behind it, and nothing anywhere said so.
+ *
+ * They get their own loop. Both loops claim with FOR UPDATE SKIP LOCKED, which
+ * is what makes two of them safe — it is the same mechanism that already let
+ * two worker instances coexist.
+ *
+ * Matched by prefix so a new document or e-invoice job joins the slow lane by
+ * being named like its siblings, rather than by somebody remembering to come
+ * back here.
+ */
+const SLOW_PREFIXES = ["ai:", "einvoice:", "document:"] as const;
+
+export function isSlowKind(kind: string): boolean {
+  return SLOW_PREFIXES.some((p) => kind.startsWith(p));
+}
+
+/** SQL for "this job belongs to my lane", built from the same list. */
+function laneFilter(slow: boolean): string {
+  const tests = SLOW_PREFIXES.map((p) => `kind like '${p}%'`).join(" or ");
+  return slow ? `(${tests})` : `not (${tests})`;
+}
+
+async function claimJob(slow: boolean) {
   return withSystem(async (c) => {
     const r = await c.query(
       `update jobs set status = 'running', attempts = attempts + 1, updated_at = now()
        where id = (
-         select id from jobs where status = 'pending' and run_at <= now()
-         order by run_at limit 1 for update skip locked
+         select id from jobs
+          where status = 'pending' and run_at <= now() and ${laneFilter(slow)}
+          order by run_at limit 1 for update skip locked
        )
        returning *`
     );
@@ -54,8 +85,8 @@ async function claimJob() {
   });
 }
 
-async function runOne(): Promise<boolean> {
-  const job = await claimJob();
+async function runOne(slow: boolean): Promise<boolean> {
+  const job = await claimJob(slow);
   if (!job) return false;
 
   try {
@@ -156,16 +187,42 @@ async function runOne(): Promise<boolean> {
   return true;
 }
 
-export function startJobLoop() {
+/**
+ * One lane. `budget` is how many jobs it may drain before yielding.
+ *
+ * The fast lane takes twenty, because twenty of its jobs is under a second. The
+ * slow lane takes one: its jobs are seconds each, and draining twenty of them
+ * back to back would just rebuild the queue this split exists to break up — on
+ * a schedule, rather than by accident.
+ */
+function startLane(slow: boolean, budgetPerTick: number, everyMs: number) {
+  const label = slow ? "jobs:slow" : "jobs";
   const tick = async () => {
     try {
       let worked = true;
-      let budget = 20;
-      while (worked && budget-- > 0) worked = await runOne();
+      let budget = budgetPerTick;
+      while (worked && budget-- > 0) worked = await runOne(slow);
     } catch (e) {
-      console.error("[jobs]", (e as Error).message);
+      console.error(`[${label}]`, (e as Error).message);
     }
-    setTimeout(tick, 1000);
+    setTimeout(tick, everyMs);
   };
   void tick();
+}
+
+/**
+ * How many slow jobs may be in flight at once.
+ *
+ * One is enough for a long way: a lane that spends ~6 seconds per job clears
+ * around 14,000 a day, and 250 clinics holding thirty AI conversations each
+ * comes to 7,500. Raising it multiplies the load we put on somebody else's
+ * service — Anthropic, ISTD, and our own single Chromium, which renders PDFs
+ * one at a time — so it is a number to raise deliberately after measuring, not
+ * a default to be generous with.
+ */
+const SLOW_LANES = Math.max(1, Number(process.env.WORKER_SLOW_LANES || 1));
+
+export function startJobLoop() {
+  startLane(false, 20, 1000);
+  for (let i = 0; i < SLOW_LANES; i++) startLane(true, 1, 1000);
 }

@@ -237,8 +237,16 @@ async function main() {
   await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 120000 });
   await page.goto(`${BASE}/c/${slug}/settings/whatsapp`);
   await page.waitForLoadState("networkidle");
+  /*
+    Wait for the control, not for the network.
 
+    Clinic pages stream under the Suspense boundary in c/[slug]/loading.tsx, so
+    `networkidle` can fire while the skeleton is still on screen — and then
+    counting the field finds nothing and reports it missing from the product.
+    Waiting for the element itself is the assertion this test meant to make.
+  */
   const capInput = page.locator("#daily-cap");
+  await capInput.waitFor({ state: "visible", timeout: 30_000 }).catch(() => {});
   check("the daily cap is an input, not a read-only number", (await capInput.count()) === 1);
   check(
     "the number safety warning sits next to it",
