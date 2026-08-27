@@ -1331,9 +1331,18 @@ source PDFs, signature SVG/PNG, final signed PDFs.
   double-process. `dedupe_key` (unique) gives idempotency.
 - Retries with backoff (`least(attempts,6) × 30s`), `max_attempts` default 5, then `failed`
   with the error recorded.
-- Ticks every second, up to 20 jobs per tick.
+- **Two lanes**, because a job that waits on somebody else's server used to hold up every
+  job behind it. The fast lane ticks every second and drains up to 20; the slow lane takes
+  one at a time. Kinds are sorted by prefix, so a new sibling job joins the right lane by
+  being named like one:
+  - **slow** — `ai:*` (Anthropic), `einvoice:*` (ISTD), `document:*` (Chromium). Seconds each.
+  - **fast** — everything else: `trigger:*`, `automation:advance`. Tens of milliseconds.
+- `WORKER_SLOW_LANES` (default 1) is how many slow jobs may be in flight. One clears roughly
+  14,000/day; raising it multiplies load on third parties and on the single Chromium, so it
+  is a number to raise after measuring.
 - Kinds: `trigger:*` (domain triggers), `automation:advance`, `ai:respond`,
-  `document:finalize`, `document:advance`, `document:remind`, `document:digest`.
+  `einvoice:submit`, `document:finalize`, `document:advance`, `document:remind`,
+  `document:digest`.
 
 ### Scheduler (`worker/scheduler.ts`) — every 60 seconds
 

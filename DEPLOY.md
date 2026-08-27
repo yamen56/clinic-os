@@ -106,9 +106,30 @@ customer — it carries invented patients and appointments.
 ## Known limits
 
 **Realtime.** Live inbox and calendar updates use Server-Sent Events backed by
-Postgres `LISTEN`. Each open stream holds a database connection; if you outgrow
-the connection limit, move the SSE endpoint onto the worker, which can hold one
-`LISTEN` for everyone.
+Postgres `LISTEN`. One connection per web process, not per stream:
+`src/lib/realtime-server.ts` holds a single `LISTEN` and fans out through an
+EventEmitter capped at 500 listeners, so the ceiling is ~500 concurrent open
+tabs per replica, not a database limit. Streams end and re-open every 60s
+(`maxDuration`), which costs one auth query per tab per minute.
+
+**Where it stops scaling.** Measured 2026-08-27, in the order the limits bite:
+
+| Limit | Roughly | Why |
+|---|---|---|
+| WhatsApp sessions | 60–100 clinics | One Baileys socket per clinic, all in a single worker process (`resumeDesiredSessions`). Unmeasured — estimate only. |
+| Slow-lane jobs | ~14,000/day | One AI reply, filing or PDF at a time. `WORKER_SLOW_LANES` raises it. |
+| Postgres connections | ~7 web replicas | `max_connections` 100, pool `PG_POOL_MAX` 12 per process. Add PgBouncer past that. |
+| Per-clinic data | ~30 MB | A busy multi-year practice: 5k patients, 25k appointments, 40k messages. Every screen's query is under 2ms at that size (`npm run bench`). |
+
+`shared_buffers` is 128 MB and the whole database is far smaller, so raising it
+is premature. The trigger to watch is the cache hit ratio — currently 100%:
+
+```sql
+select round(100.0*sum(blks_hit)/nullif(sum(blks_hit)+sum(blks_read),0),2) from pg_stat_database;
+```
+
+Below ~99% means the working set has outgrown the cache; raise `shared_buffers`
+and the instance's RAM then, not before.
 
 **WhatsApp account risk.** Baileys is an unofficial client and WhatsApp can ban
 numbers for automated sending. The rails — randomised 3–10s delays, daily caps,
