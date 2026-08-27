@@ -390,8 +390,82 @@ async function main() {
     untouched.phone_e164
   );
 
+  /* ------------------------------------------------- and on the screen */
+  /*
+    Everything above proves the *data* is right, which is exactly why the
+    screen was wrong for so long: `conversations.phone_e164` holds the LID for
+    an identity thread, and the inbox header rendered it through formatPhone
+    like any other number. Fifteen digits with a plus in front, sitting under
+    the person's name, read as their phone — and got copied onto patient files
+    and dialled.
+  */
+  const { chromium } = await import("playwright");
+  const bcrypt = (await import("bcryptjs")).default;
+  const BASE = process.env.APP_URL || "http://localhost:3000";
+
+  const uiSlug = (await db.query(`select slug from clinics where id = $1`, [clinic.id])).rows[0].slug;
+  const owner = (
+    await db.query(
+      `insert into users (email, password_hash, full_name, locale) values ($1,$2,'LID QA','en') returning id`,
+      [`lidui-${uiSlug}@test.local`, bcrypt.hashSync("password123", 10)]
+    )
+  ).rows[0];
+  await db.query(
+    `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions)
+     values ($1,$2,'receptionist',true,'{"level":"full"}')`,
+    [clinic.id, owner.id]
+  );
+  const standIn = "+177176108388417";
+  await db.query(
+    `insert into conversations (clinic_id, phone_e164, wa_lid, identifier_kind, whatsapp_name,
+                                last_message_at, last_message_preview)
+     values ($1,$2,$3,'lid','Screen Test', now(), 'hello')`,
+    [clinic.id, standIn, standIn.slice(1)]
+  );
+
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  try {
+    await page.goto(`${BASE}/login`);
+    await page.waitForLoadState("networkidle");
+    await page.fill('input[name="email"]', `lidui-${uiSlug}@test.local`);
+    await page.fill('input[name="password"]', "password123");
+    await page.click('button[type="submit"]');
+    await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 120_000 });
+
+    await page.goto(`${BASE}/c/${uiSlug}/conversations`);
+    await page.waitForLoadState("networkidle");
+    await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
+    await page.getByText("Screen Test").first().click({ timeout: 30_000 });
+    /*
+      Prove the thread is open before asserting what it does not contain. Every
+      check below is a negative, and a negative passes beautifully against a
+      page that never rendered — which would be a test that guards nothing.
+    */
+    const opened = page.getByText(/WhatsApp has not shared their number|واتساب لم يشارك رقمهم/);
+    await opened.first().waitFor({ state: "visible", timeout: 30_000 });
+    check("the thread opens and says why there is no number", true, "");
+
+    const shown = await page.locator("body").innerText();
+    const digits = standIn.slice(1);
+    check(
+      "an identity thread never shows its LID as a phone number",
+      !shown.includes(digits) && !shown.includes("+" + digits),
+      shown.includes(digits) ? "the LID is on screen" : ""
+    );
+    // Formatted as well as raw: formatPhone would have grouped it.
+    check(
+      "not even prettified into one",
+      !/177\s?176\s?108\s?388\s?417/.test(shown.replace(/‎|‏/g, "")),
+      ""
+    );
+  } finally {
+    await browser.close();
+  }
+
   sessions.delete(clinic.id);
   await db.query(`delete from clinics where id = $1`, [clinic.id]);
+  await db.query(`delete from users where id = $1`, [owner.id]);
   await db.end();
   const { pool } = await import("../worker/db");
   await pool.end();

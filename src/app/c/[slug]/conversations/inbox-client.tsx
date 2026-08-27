@@ -360,9 +360,27 @@ export function InboxClient({
               <Avatar name={displayName(cv)} size={36} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold"><Title cv={cv} /></div>
-                <div className="text-[12px] text-ink-400 tnum" dir="ltr">
-                  {formatPhone(cv.phone_e164)}
-                </div>
+                {/*
+                  A LID thread has no phone number. `phone_e164` is holding the
+                  WhatsApp identity that stands in for one, and it is fifteen
+                  digits with a plus on the front — which read as a real number
+                  sitting under the person's name, and got copied onto patient
+                  files and dialled. The title above has always been guarded;
+                  this line was not.
+
+                  Saying why there is no number is more use than showing
+                  nothing: it tells reception to ask for it rather than go
+                  looking for where the app hid it.
+                */}
+                {cv.identifier_kind === "lid" ? (
+                  <div className="truncate text-[12px] text-ink-400">
+                    {t.conversations.numberNotShared}
+                  </div>
+                ) : (
+                  <div className="text-[12px] text-ink-400 tnum" dir="ltr">
+                    {formatPhone(cv.phone_e164)}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2.5">
                 <label className="flex items-center gap-1.5">

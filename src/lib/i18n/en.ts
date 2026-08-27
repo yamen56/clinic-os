@@ -1317,6 +1317,7 @@ export const en = {
     noPatient: "No patient file linked",
     createPatient: "Create patient file",
     whatsappUser: "WhatsApp user",
+    numberNotShared: "WhatsApp has not shared their number",
     patientCreated: "Patient file created",
     markDone: "Close conversation",
     reopen: "Reopen",

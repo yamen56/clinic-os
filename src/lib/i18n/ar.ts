@@ -1307,6 +1307,7 @@ export const ar: Dict = {
     noPatient: "لا يوجد ملف مريض مرتبط",
     createPatient: "إنشاء ملف مريض",
     whatsappUser: "مستخدم واتساب",
+    numberNotShared: "واتساب لم يشارك رقمهم",
     patientCreated: "تم إنشاء ملف المريض",
     markDone: "إغلاق المحادثة",
     reopen: "إعادة فتح",
