@@ -13,6 +13,7 @@ const SUITES = [
   ["phones: country codes and RTL display", "scripts/qa-phone-ui.ts"],
   ["unit: surviving a database blip", "scripts/qa-db-resilience.ts"],
   ["phase 1: foundation, auth, tenancy", "scripts/qa-phase1.ts"],
+  ["dashboard: analytics, shortcuts, and what each member may see", "scripts/qa-dashboard.ts"],
   ["phase 2: patients", "scripts/qa-phase2.ts"],
   ["phase 3: calendar", "scripts/qa-phase3.ts"],
   ["phase 4: public booking", "scripts/qa-phase4.ts"],

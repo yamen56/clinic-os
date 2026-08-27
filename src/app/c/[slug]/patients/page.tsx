@@ -8,7 +8,7 @@ export default async function PatientsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ q?: string; tag?: string; source?: string; visit?: string }>;
+  searchParams: Promise<{ q?: string; tag?: string; source?: string; visit?: string; new?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -58,6 +58,8 @@ export default async function PatientsPage({
       allTags={data.tags}
       tz={access.clinic.timezone}
       initialFilters={{ q: sp.q ?? "", tag: sp.tag ?? "", source: sp.source ?? "", visit: sp.visit ?? "" }}
+      /* ?new=1 — what the dashboard shortcut and its keyboard accelerator open. */
+      openNew={sp.new === "1"}
     />
   );
 }

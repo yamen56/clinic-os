@@ -262,6 +262,32 @@ export const en = {
     noAppointmentsToday: "No appointments today",
     viewCalendar: "Open calendar",
     emptyDay: "A quiet day — no appointments scheduled yet.",
+
+    /* --- quick actions --- */
+    newAppointment: "Appointment",
+    newPatient: "Patient",
+    newInvoice: "Invoice",
+    openInbox: "Inbox",
+    shortcutHint: "Press {key}",
+
+    /* --- tiles --- */
+    outstanding: "Owed to the clinic",
+    outstandingSub: "{n} unpaid",
+    newPatientsMonth: "New patients this month",
+    vsLastMonth: "vs last month",
+
+    /* --- charts --- */
+    revenueTrend: "Collected, last 14 days",
+    appointmentsTrend: "Appointments, last 14 days",
+    topServices: "What earns, this month",
+    topServicesSub: "Billed, excluding cancelled invoices",
+    byDoctor: "By doctor, this month",
+    byDoctorSub: "Completed appointments, and how many were missed",
+    noShowShare: "{n}% of finished appointments were missed this month",
+    unassigned: "Unassigned",
+    noneYet: "Nothing yet this month",
+    completedShort: "done",
+    noShowShort: "missed",
   },
   admin: {
     title: "Platform Admin",

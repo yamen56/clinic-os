@@ -34,6 +34,7 @@ export function PatientsList({
   allTags,
   tz,
   initialFilters,
+  openNew,
 }: {
   slug: string;
   patients: Row[];
@@ -41,12 +42,14 @@ export function PatientsList({
   allTags: string[];
   tz: string;
   initialFilters: { q: string; tag: string; source: string; visit: string };
+  /** Open the new-patient dialog on arrival — the dashboard shortcut. */
+  openNew?: boolean;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
   const { toast } = useToast();
   const [f, setF] = useState(initialFilters);
-  const [newOpen, setNewOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(Boolean(openNew));
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [err, setErr] = useState("");

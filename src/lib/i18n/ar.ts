@@ -253,6 +253,32 @@ export const ar: Dict = {
     noAppointmentsToday: "لا توجد مواعيد اليوم",
     viewCalendar: "فتح التقويم",
     emptyDay: "يوم هادئ — لا توجد مواعيد مجدولة بعد.",
+
+    /* --- إجراءات سريعة --- */
+    newAppointment: "موعد",
+    newPatient: "مريض",
+    newInvoice: "فاتورة",
+    openInbox: "المحادثات",
+    shortcutHint: "اضغط {key}",
+
+    /* --- البطاقات --- */
+    outstanding: "مستحق للعيادة",
+    outstandingSub: "{n} غير مدفوعة",
+    newPatientsMonth: "مرضى جدد هذا الشهر",
+    vsLastMonth: "مقارنة بالشهر الماضي",
+
+    /* --- الرسوم --- */
+    revenueTrend: "المقبوضات، آخر ١٤ يوم",
+    appointmentsTrend: "المواعيد، آخر ١٤ يوم",
+    topServices: "مصدر الدخل هذا الشهر",
+    topServicesSub: "المفوتر، عدا الفواتير الملغاة",
+    byDoctor: "حسب الطبيب هذا الشهر",
+    byDoctorSub: "المواعيد المكتملة، وكم منها لم يحضر",
+    noShowShare: "{n}% من المواعيد المنتهية لم يحضرها أصحابها هذا الشهر",
+    unassigned: "غير محدد",
+    noneYet: "لا شيء بعد هذا الشهر",
+    completedShort: "مكتمل",
+    noShowShort: "لم يحضر",
   },
   admin: {
     title: "لوحة المنصة",

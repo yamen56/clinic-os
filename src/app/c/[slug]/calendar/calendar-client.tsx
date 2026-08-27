@@ -75,12 +75,15 @@ export function CalendarClient({
   isDoctor,
   selfMemberId,
   initialPatient,
+  openNew,
 }: {
   slug: string;
   tz: string;
   isDoctor: boolean;
   selfMemberId: string | null;
   initialPatient: { id: string; name: string } | null;
+  /** Open an empty create panel on arrival — the dashboard shortcut. */
+  openNew?: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -97,7 +100,7 @@ export function CalendarClient({
     blockedDates: string[];
   } | null>(null);
   const [panel, setPanel] = useState<PanelState>(
-    initialPatient ? { mode: "create", patient: initialPatient } : null
+    initialPatient ? { mode: "create", patient: initialPatient } : openNew ? { mode: "create" } : null
   );
 
   const anchorDt = useMemo(() => DateTime.fromISO(anchor, { zone: tz }), [anchor, tz]);

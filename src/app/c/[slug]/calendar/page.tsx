@@ -7,7 +7,7 @@ export default async function CalendarPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ patient?: string }>;
+  searchParams: Promise<{ patient?: string; new?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -34,6 +34,8 @@ export default async function CalendarPage({
       isDoctor={access.role === "doctor"}
       selfMemberId={access.memberId}
       initialPatient={data.initialPatient}
+      /* ?new=1 — what the dashboard shortcut and its keyboard accelerator open. */
+      openNew={sp.new === "1"}
     />
   );
 }

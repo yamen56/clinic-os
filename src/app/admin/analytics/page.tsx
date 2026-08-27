@@ -6,7 +6,7 @@ import { fmtRelative } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
-import { BarChart, RowBar, type Point } from "./bar-chart";
+import { BarChart, RowBar, type Point } from "@/components/ui/chart";
 import {
   BarChart3,
   Users,
