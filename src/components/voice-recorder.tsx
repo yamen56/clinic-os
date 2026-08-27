@@ -19,11 +19,22 @@ import { Mic, Square, Trash2, Play, Pause } from "lucide-react";
 export function VoiceRecorder({
   onReady,
   disabled,
+  immediate,
   labels,
 }: {
   /** Called with the finished recording, or null when it is discarded. */
   onReady: (rec: { blob: Blob; seconds: number } | null) => void;
   disabled?: boolean;
+  /**
+   * Stop means save.
+   *
+   * Without this the recorder holds the clip in a preview — play it back,
+   * discard it, then press Save — which is two presses for something a doctor
+   * does between patients with a hand already reaching for the door. The caller
+   * takes the blob straight from `onReady` and files it; the button goes back to
+   * idle rather than into a preview it would never be read.
+   */
+  immediate?: boolean;
   labels: {
     record: string;
     stop: string;
@@ -86,14 +97,26 @@ export function VoiceRecorder({
         const blob = new Blob(chunks.current, { type: mr.mimeType || "audio/webm" });
         stream.current?.getTracks().forEach((t) => t.stop());
         stream.current = null;
+        // Read the count off the ref rather than the closure: `seconds` here
+        // would be whatever it was when recording started, which is zero.
+        const rec = { blob, seconds: elapsed.current };
+
+        if (immediate) {
+          // Straight back to idle. There is no preview to keep an object URL
+          // alive for, and the caller is filing this clip as we return.
+          setSeconds(0);
+          elapsed.current = 0;
+          setState("idle");
+          onReady(rec);
+          return;
+        }
+
         setUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return URL.createObjectURL(blob);
         });
         setState("ready");
-        // Read the count off the ref rather than the closure: `seconds` here
-        // would be whatever it was when recording started, which is zero.
-        onReady({ blob, seconds: elapsed.current });
+        onReady(rec);
       };
       mr.start();
       recorder.current = mr;

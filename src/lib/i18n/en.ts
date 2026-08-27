@@ -509,7 +509,6 @@ export const en = {
     },
     notes: {
       add: "Add note",
-      addVoice: "Save voice note",
       placeholder: "Write a note…",
       voicePlaceholder: "Add a line of context (optional)",
       clinical: "Clinical",
@@ -531,6 +530,8 @@ export const en = {
       micNone: "No microphone found on this device.",
       micInsecure: "Recording needs a secure connection — open the app over https.",
       micRetry: "Try again",
+      voiceSaved: "Voice note saved",
+      voiceTooShort: "Too short to keep — hold Record a moment longer.",
       playVoice: "Play the voice note",
       editNote: "Edit note",
       noteCategory: "Category",

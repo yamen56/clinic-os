@@ -142,7 +142,15 @@ async function main() {
     ]);
   };
 
-  const browser = await chromium.launch();
+  /*
+    A fake microphone, so recording can be driven for real rather than mocked.
+    Headless Chromium has no audio input at all, and without these flags
+    getUserMedia rejects with NotSupportedError — which looks exactly like the
+    Permissions-Policy bug this suite exists to catch.
+  */
+  const browser = await chromium.launch({
+    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
+  });
   /*
     Service workers blocked. This app registers one for offline use, and it will
     happily answer a navigation from its cache — which in a suite means asserting
@@ -292,6 +300,50 @@ async function main() {
     });
     assert(played === "ok", `the recording did not play back: ${played}`);
     ok("and the audio decodes and plays");
+
+    /* ------------------------------------------- stop means saved */
+    /*
+      One press, not two. The recorder used to park the clip in a preview and
+      wait for the composer's Save button — which is two presses for something a
+      doctor does between patients with a hand already on the door.
+    */
+    /*
+      Counted by players, not by note bodies. A voice note is saved with an
+      empty body, so it renders no paragraph at all — waiting on the paragraph
+      count is a condition that is already true, which is a wait that does not
+      wait and a count taken before the list has repainted.
+    */
+    const players = () =>
+      p.getByRole("button", { name: /Play the voice note|تشغيل الملاحظة الصوتية/ }).count();
+    const playersBefore = await players();
+
+    await p.getByRole("button", { name: /^Record$|^تسجيل$/ }).click();
+    await p.locator("main button.bg-danger-soft").first().waitFor({ timeout: 20000 });
+    // Long enough to clear the under-a-second mis-tap guard.
+    await p.waitForTimeout(1800);
+    await p.locator("main button.bg-danger-soft").first().click();
+
+    await p
+      .waitForFunction(
+        (n) =>
+          document.querySelectorAll(
+            'main button[aria-label="Play the voice note"], main button[aria-label="تشغيل الملاحظة الصوتية"]'
+          ).length > n,
+        playersBefore,
+        { timeout: 30000 }
+      )
+      .catch(() => {});
+    const playersNow = await players();
+    assert(
+      playersNow > playersBefore,
+      `stopping did not file the recording (${playersBefore} → ${playersNow} players)`
+    );
+    ok("stopping the recorder files the note on its own");
+
+    // And nothing is left waiting to be confirmed.
+    const leftover = await p.locator("main button.bg-brand-50").count();
+    assert(leftover === 0, "a recording is still sitting in a preview after stop");
+    ok("with no preview left to confirm");
 
     /* --------------------------------------------------- the filter */
     await shows(p, /Clinical|سريرية/, "no category chip on the filter bar");

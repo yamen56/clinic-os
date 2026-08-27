@@ -899,7 +899,6 @@ function NotesTab({
   const router = useRouter();
   const { toast } = useToast();
   const [draft, setDraft] = useState("");
-  const [recording, setRecording] = useState<{ blob: Blob; seconds: number } | null>(null);
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
@@ -916,35 +915,57 @@ function NotesTab({
   const shown = filter ? notes.filter((n) => n.category_id === filter) : notes;
   const countFor = (id: string) => notes.filter((n) => n.category_id === id).length;
 
+  /** A typed note. Server action, so it rides a transition like everything else. */
   const submit = () =>
     start(async () => {
-      if (recording) {
-        // Voice goes over multipart, so it cannot ride the server action.
-        setBusy(true);
-        try {
-          const fd = new FormData();
-          const ext = (recording.blob.type.split("/")[1] ?? "webm").split(";")[0];
-          fd.append("audio", recording.blob, `voice.${ext}`);
-          fd.append("patientId", patientId);
-          fd.append("seconds", String(recording.seconds));
-          fd.append("body", draft.trim());
-          if (categoryId) fd.append("categoryId", categoryId);
-          const res = await fetch(`/api/c/${slug}/notes/voice`, { method: "POST", body: fd });
-          if (!res.ok) {
-            toast(t.common.genericError, "error");
-            return;
-          }
-        } finally {
-          setBusy(false);
-        }
-      } else {
-        if (!draft.trim()) return;
-        await addNoteAction(slug, patientId, draft.trim(), categoryId);
-      }
+      if (!draft.trim()) return;
+      await addNoteAction(slug, patientId, draft.trim(), categoryId);
       setDraft("");
-      setRecording(null);
       router.refresh();
     });
+
+  /**
+   * A recording, filed the moment the recorder stops.
+   *
+   * Deliberately outside `startTransition`. Voice goes over multipart, so it is
+   * a plain fetch rather than a server action, and running a second-long upload
+   * inside a transition had the `router.refresh()` at the end of it aborted —
+   * the note was created (the POST returned 200 with its id) and the list never
+   * repainted, which reads as a recording that vanished. `busy` drives the
+   * pending state instead, which is what it was already there for.
+   *
+   * The clip is an argument rather than state: the setState from the stop event
+   * has not landed by the time this runs, so reading it back would file a note
+   * with no audio on it.
+   *
+   * A note cannot be deleted, only corrected, so a clip that was never meant to
+   * exist would sit in the patient's record forever. Under a second is a mis-tap
+   * rather than a note, and is thrown away.
+   */
+  const onRecorded = async (rec: { blob: Blob; seconds: number } | null) => {
+    if (!rec) return;
+    if (rec.seconds < 1) return toast(t.patients.notes.voiceTooShort, "error");
+
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      const ext = (rec.blob.type.split("/")[1] ?? "webm").split(";")[0];
+      fd.append("audio", rec.blob, `voice.${ext}`);
+      fd.append("patientId", patientId);
+      fd.append("seconds", String(rec.seconds));
+      fd.append("body", draft.trim());
+      if (categoryId) fd.append("categoryId", categoryId);
+      const res = await fetch(`/api/c/${slug}/notes/voice`, { method: "POST", body: fd });
+      if (!res.ok) return toast(t.common.genericError, "error");
+      // The preview is gone, so this toast is the only confirmation that the
+      // recording became a note.
+      toast(t.patients.notes.voiceSaved);
+      setDraft("");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const addCategory = () =>
     start(async () => {
@@ -1018,11 +1039,12 @@ function NotesTab({
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={recording ? t.patients.notes.voicePlaceholder : t.patients.notes.placeholder}
+          placeholder={t.patients.notes.placeholder}
         />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <VoiceRecorder
-            onReady={setRecording}
+            immediate
+            onReady={onRecorded}
             disabled={pending || busy}
             labels={{
               record: t.patients.notes.record,
@@ -1037,11 +1059,11 @@ function NotesTab({
           />
           <Button
             size="sm"
-            disabled={(!draft.trim() && !recording) || pending || busy}
+            disabled={!draft.trim() || pending || busy}
             loading={pending || busy}
             onClick={submit}
           >
-            {recording ? t.patients.notes.addVoice : t.patients.notes.add}
+            {t.patients.notes.add}
           </Button>
         </div>
       </Card>

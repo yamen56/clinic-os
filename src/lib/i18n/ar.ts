@@ -499,7 +499,6 @@ export const ar: Dict = {
     },
     notes: {
       add: "إضافة ملاحظة",
-      addVoice: "حفظ الملاحظة الصوتية",
       placeholder: "اكتب ملاحظة…",
       voicePlaceholder: "أضف سطراً للتوضيح (اختياري)",
       clinical: "سريرية",
@@ -521,6 +520,8 @@ export const ar: Dict = {
       micNone: "لا يوجد ميكروفون على هذا الجهاز.",
       micInsecure: "التسجيل يحتاج اتصالاً آمناً — افتح التطبيق عبر https.",
       micRetry: "أعد المحاولة",
+      voiceSaved: "تم حفظ الملاحظة الصوتية",
+      voiceTooShort: "قصيرة جداً — استمر بالتسجيل لحظة أطول.",
       playVoice: "تشغيل الملاحظة الصوتية",
       editNote: "تعديل الملاحظة",
       noteCategory: "التصنيف",
