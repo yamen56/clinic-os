@@ -194,6 +194,15 @@ Overview · Notes · Appointments · Files · Documents · Invoices · Conversat
     Administrative — renameable, recolourable, never deletable, since existing notes
     point at them. New ones are made from the patient file itself. They filter the
     list, and moving a note between them is recorded like any other change.
+  - **A note can belong to a visit.** `appointment_id` has been on the table since
+    0001 and nothing wrote to it. Both ends do now: the composer on the patient file
+    offers the patient's own appointments, and the calendar's appointment panel reads
+    and writes the notes for that visit through
+    `/api/c/{slug}/appointments/{id}/notes`. The patient the note belongs to is taken
+    from the appointment, never from the caller, and filing against another patient's
+    visit is refused. Deleting an appointment unfiles its notes rather than destroying
+    them (`on delete set null`). Filing is recorded in the audit log rather than as a
+    new version — it changes where a note sits, not what it says.
   - **A note can be spoken.** `POST /api/c/{slug}/notes/voice` takes a browser
     recording (10 MB cap, audio types only), files it as a note with an optional typed
     body, and playback is served by `/notes/{id}/audio` — path read from the note,

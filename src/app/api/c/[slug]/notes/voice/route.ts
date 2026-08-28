@@ -36,6 +36,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   const file = form.get("audio");
   const patientId = String(form.get("patientId") ?? "");
   const categoryId = String(form.get("categoryId") ?? "") || null;
+  const appointmentId = String(form.get("appointmentId") ?? "") || null;
   const body = String(form.get("body") ?? "").slice(0, 20000);
   const seconds = Math.max(0, Math.min(3600, Number(form.get("seconds")) || 0));
 
@@ -68,6 +69,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     }
     if (!cat) cat = await defaultCategoryId(c, access.clinicId);
 
+    // And the visit, if one was named, must be this patient's own.
+    let visit = appointmentId;
+    if (visit) {
+      const ok = await c.query(
+        `select 1 from appointments where id = $1 and clinic_id = $2 and patient_id = $3`,
+        [visit, access.clinicId, patientId]
+      );
+      if (!ok.rowCount) visit = null;
+    }
+
     const ext = (file.type.split("/")[1] ?? "webm").split(";")[0];
     const { storagePath } = await saveFile(
       access.clinicId,
@@ -80,6 +91,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       authorId: access.session.user.id,
       body,
       categoryId: cat,
+      appointmentId: visit,
       audio: { path: storagePath, mime: file.type, seconds: Math.round(seconds) },
     });
     await audit(c, {
@@ -89,7 +101,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       action: "patient.note.voice",
       entity: "patient_note",
       entityId: id,
-      detail: { patientId, seconds: Math.round(seconds) },
+      detail: { patientId, seconds: Math.round(seconds), appointmentId: visit },
     });
     return { id };
   });

@@ -24,13 +24,23 @@ export default async function PatientProfilePage({
     const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags, insurers, noteCategories] =
       await Promise.all([
         c.query(
+          /*
+            Every column qualified, across the joins to users, appointments and
+            services alike — all of those tables carry a `created_at`, and a bare
+            one here is the ambiguity that once took down the template editor.
+          */
           `select n.id, n.body, n.category_id, n.created_at, n.edited_at,
                   n.audio_path, n.audio_mime, n.audio_seconds,
                   u.full_name as author, e.full_name as edited_by_name,
-                  (select count(*)::int from patient_note_versions v where v.note_id = n.id) as version_count
+                  (select count(*)::int from patient_note_versions v where v.note_id = n.id) as version_count,
+                  n.appointment_id,
+                  a.starts_at as appointment_starts_at,
+                  s.name as appointment_service, s.name_ar as appointment_service_ar
            from patient_notes n
            left join users u on u.id = n.author_id
            left join users e on e.id = n.edited_by
+           left join appointments a on a.id = n.appointment_id
+           left join services s on s.id = a.service_id
            where n.patient_id = $1 and n.clinic_id = $2 order by n.created_at desc limit 100`,
           [id, access.clinicId]
         ),

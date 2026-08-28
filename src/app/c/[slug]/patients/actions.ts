@@ -8,7 +8,13 @@ import { findOrCreatePatient } from "@/lib/patients";
 import { normalizePhone } from "@/lib/phone";
 import { deleteFile } from "@/lib/storage";
 import { emitTrigger } from "@/lib/triggers";
-import { createNote, defaultCategoryId, loadNoteHistory, saveNoteVersion } from "@/lib/notes";
+import {
+  createNote,
+  defaultCategoryId,
+  loadNoteHistory,
+  saveNoteVersion,
+  setNoteAppointment,
+} from "@/lib/notes";
 
 export async function createPatientAction(
   slug: string,
@@ -157,15 +163,32 @@ export async function addNoteAction(
   slug: string,
   patientId: string,
   body: string,
-  categoryId: string | null
+  categoryId: string | null,
+  /** The visit this note is about, when it is about one. */
+  appointmentId: string | null = null
 ): Promise<{ id: string }> {
   const access = await requireClinic(slug);
   return inClinic(access, async (c) => {
+    /*
+      The appointment has to be this patient's. It arrives from a form, and a
+      note filed against someone else's visit would surface on their timeline —
+      a patient's clinical note appearing under another patient's appointment is
+      the worst kind of bug this app could have.
+    */
+    let visit = appointmentId;
+    if (visit) {
+      const ok = await c.query(
+        `select 1 from appointments where id = $1 and clinic_id = $2 and patient_id = $3`,
+        [visit, access.clinicId, patientId]
+      );
+      if (!ok.rowCount) visit = null;
+    }
     const id = await createNote(c, access.clinicId, {
       patientId,
       authorId: access.session.user.id,
       body,
       categoryId: categoryId ?? (await defaultCategoryId(c, access.clinicId)),
+      appointmentId: visit,
     });
     await audit(c, {
       clinicId: access.clinicId,
@@ -174,9 +197,33 @@ export async function addNoteAction(
       action: "patient.note.create",
       entity: "patient_note",
       entityId: id,
-      detail: { patientId },
+      detail: { patientId, appointmentId: visit },
     });
     return { id };
+  });
+}
+
+/** File an existing note against a visit, or take it off one. */
+export async function setNoteAppointmentAction(
+  slug: string,
+  noteId: string,
+  appointmentId: string | null
+): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  return inClinic(access, async (c) => {
+    const ok = await setNoteAppointment(c, access.clinicId, noteId, appointmentId);
+    if (!ok) return { error: "not_found" };
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: appointmentId ? "patient.note.link_visit" : "patient.note.unlink_visit",
+      entity: "patient_note",
+      entityId: noteId,
+      detail: { appointmentId },
+    });
+    revalidatePath(`/c/${slug}/patients`);
+    return {};
   });
 }
 

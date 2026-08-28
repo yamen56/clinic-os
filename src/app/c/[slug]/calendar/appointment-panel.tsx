@@ -16,6 +16,7 @@ import {
   setAppointmentStatusAction,
 } from "./actions";
 import { RequiredDocuments } from "@/components/esign/required-documents";
+import { AppointmentNotes } from "@/components/appointment-notes";
 import type { Appt, Doctor, Service } from "./calendar-client";
 import { X, UserPlus, ClipboardList } from "lucide-react";
 
@@ -307,6 +308,20 @@ export function AppointmentPanel({
                 slug={slug}
                 appointmentId={state.appt.id}
                 canSend={canSendDocuments}
+              />
+            )}
+
+            {/*
+              Notes about this visit, written where the visit is. The same
+              records the patient file shows, filed against this appointment —
+              see components/appointment-notes.
+            */}
+            {state.mode === "edit" && (
+              <AppointmentNotes
+                slug={slug}
+                appointmentId={state.appt.id}
+                patientId={state.appt.patient_id}
+                tz={tz}
               />
             )}
 

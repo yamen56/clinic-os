@@ -44,6 +44,24 @@ export type PatientNote = {
   audio_seconds: number | null;
   /** How many times it has been rewritten. 1 = never edited. */
   version_count: number;
+  /**
+   * The visit this note is about, when it is about one. Most notes are about
+   * the patient rather than a particular appointment, so null is the norm.
+   */
+  appointment_id: string | null;
+  appointment_starts_at: string | null;
+  appointment_service: string | null;
+  appointment_service_ar: string | null;
+};
+
+/** One of the patient's visits, as offered when filing a note against one. */
+export type NoteAppointment = {
+  id: string;
+  starts_at: string;
+  status: string;
+  service_name: string | null;
+  service_name_ar: string | null;
+  doctor_name: string | null;
 };
 
 export async function loadNoteCategories(
@@ -80,15 +98,110 @@ export async function loadPatientNotes(
     `select n.id, n.body, n.category_id, n.created_at, n.edited_at,
             n.audio_path, n.audio_mime, n.audio_seconds,
             u.full_name as author, e.full_name as edited_by_name,
-            (select count(*)::int from patient_note_versions v where v.note_id = n.id) as version_count
+            (select count(*)::int from patient_note_versions v where v.note_id = n.id) as version_count,
+            n.appointment_id,
+            a.starts_at as appointment_starts_at,
+            s.name as appointment_service, s.name_ar as appointment_service_ar
      from patient_notes n
      left join users u on u.id = n.author_id
      left join users e on e.id = n.edited_by
+     left join appointments a on a.id = n.appointment_id
+     left join services s on s.id = a.service_id
      where n.clinic_id = $1 and n.patient_id = $2
      order by n.created_at desc`,
     [clinicId, patientId]
   );
   return r.rows as PatientNote[];
+}
+
+/**
+ * The visits a note may be filed against.
+ *
+ * Cancelled ones are included on purpose: a note explaining *why* a visit was
+ * cancelled belongs to that visit, and is exactly the note somebody goes
+ * looking for later.
+ */
+export async function loadNoteAppointments(
+  c: PoolClient,
+  clinicId: string,
+  patientId: string
+): Promise<NoteAppointment[]> {
+  const r = await c.query(
+    `select a.id, a.starts_at, a.status,
+            s.name as service_name, s.name_ar as service_name_ar,
+            u.full_name as doctor_name
+     from appointments a
+     left join services s on s.id = a.service_id
+     left join clinic_members cm on cm.id = a.doctor_member_id
+     left join users u on u.id = cm.user_id
+     where a.clinic_id = $1 and a.patient_id = $2
+     order by a.starts_at desc
+     limit 100`,
+    [clinicId, patientId]
+  );
+  return r.rows as NoteAppointment[];
+}
+
+/** The notes written about one visit, newest first. */
+export async function loadAppointmentNotes(
+  c: PoolClient,
+  clinicId: string,
+  appointmentId: string
+): Promise<PatientNote[]> {
+  const r = await c.query(
+    `select n.id, n.body, n.category_id, n.created_at, n.edited_at,
+            n.audio_path, n.audio_mime, n.audio_seconds,
+            u.full_name as author, e.full_name as edited_by_name,
+            (select count(*)::int from patient_note_versions v where v.note_id = n.id) as version_count,
+            n.appointment_id,
+            a.starts_at as appointment_starts_at,
+            s.name as appointment_service, s.name_ar as appointment_service_ar
+     from patient_notes n
+     left join users u on u.id = n.author_id
+     left join users e on e.id = n.edited_by
+     left join appointments a on a.id = n.appointment_id
+     left join services s on s.id = a.service_id
+     where n.clinic_id = $1 and n.appointment_id = $2
+     order by n.created_at desc`,
+    [clinicId, appointmentId]
+  );
+  return r.rows as PatientNote[];
+}
+
+/**
+ * File a note against a visit, or unfile it.
+ *
+ * Not routed through `saveNoteVersion`, and the distinction is deliberate:
+ * versions exist to preserve what a note *said*, and this changes only which
+ * drawer it sits in. Recording "filed under the 14th" as a new revision of the
+ * text would pad the history with entries whose body is identical to the one
+ * before, which is precisely what the version list is meant not to be. The move
+ * is still recorded — in the audit log, by the caller.
+ *
+ * The appointment is checked to belong to the same patient. Without that, a note
+ * could be filed against a stranger's visit and would then show up on their
+ * timeline.
+ */
+export async function setNoteAppointment(
+  c: PoolClient,
+  clinicId: string,
+  noteId: string,
+  appointmentId: string | null
+): Promise<boolean> {
+  if (appointmentId) {
+    const ok = await c.query(
+      `select 1 from appointments a
+       join patient_notes n on n.patient_id = a.patient_id
+       where a.id = $1 and n.id = $2 and a.clinic_id = $3 and n.clinic_id = $3`,
+      [appointmentId, noteId, clinicId]
+    );
+    if (!ok.rowCount) return false;
+  }
+  const r = await c.query(
+    `update patient_notes set appointment_id = $3 where id = $1 and clinic_id = $2`,
+    [noteId, clinicId, appointmentId]
+  );
+  return !!r.rowCount;
 }
 
 /** Every version of one note, oldest first — so the first row is the original. */

@@ -22,6 +22,7 @@ import {
   removeTagAction,
   addNoteAction,
   noteHistoryAction,
+  setNoteAppointmentAction,
   saveNoteCategoryAction,
   deletePatientFileAction,
   setPatientStatusAction,
@@ -70,6 +71,21 @@ export type NoteRow = {
   audio_seconds: number | null;
   /** 1 means written once and never changed. */
   version_count: number;
+  /** The visit this note is about, when it is about one. */
+  appointment_id: string | null;
+  appointment_starts_at: string | null;
+  appointment_service: string | null;
+  appointment_service_ar: string | null;
+};
+
+/** A visit a note can be filed against. */
+export type NoteVisit = {
+  id: string;
+  starts_at: string;
+  status: string;
+  service_name: string | null;
+  service_name_ar: string | null;
+  doctor_name: string | null;
 };
 
 export type NoteCategoryRow = {
@@ -562,6 +578,12 @@ export function PatientProfile(props: {
             patientId={p.id}
             notes={props.notes}
             categories={props.noteCategories}
+            /*
+              The appointments already loaded for the tab beside this one. A
+              note is filed against a visit the patient actually has, so the
+              same list serves both.
+            */
+            visits={props.appointments}
             tz={tz}
           />
         )}
@@ -918,17 +940,71 @@ function TagsRow({
  *  - **A note can be spoken.** Fifteen seconds of dictation between patients
  *    beats two minutes of typing that never happens.
  */
+/**
+ * Which visit a note is about.
+ *
+ * Most notes are about the patient rather than a particular appointment, so
+ * "not about a visit" is the default and stays the first option — a picker that
+ * forced a choice would get whatever is nearest the top attached to everything.
+ *
+ * Shown only when the patient has visits at all: on a file with none this is a
+ * control whose every option is the empty one.
+ */
+function VisitPicker({
+  visits,
+  value,
+  onChange,
+  tz,
+  locale,
+  labels,
+}: {
+  visits: NoteVisit[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+  tz: string;
+  locale: string;
+  labels: { about: string; none: string };
+}) {
+  if (!visits.length) return null;
+  return (
+    <label className="flex min-w-0 items-center gap-1.5">
+      <CalendarPlus className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+      <span className="shrink-0 text-[12px] text-ink-500">{labels.about}</span>
+      <Select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="!h-8 max-w-64 !text-[13px]"
+      >
+        <option value="">{labels.none}</option>
+        {visits.map((v) => (
+          <option key={v.id} value={v.id}>
+            {visitLabel(v, tz, locale)}
+          </option>
+        ))}
+      </Select>
+    </label>
+  );
+}
+
+/** "14 Mar 2026 · Cleaning" — the date first, because that is how staff ask. */
+function visitLabel(v: NoteVisit, tz: string, locale: string): string {
+  const svc = (locale === "ar" ? v.service_name_ar : null) || v.service_name;
+  return `${fmtDate(v.starts_at, tz, locale)}${svc ? ` · ${svc}` : ""}`;
+}
+
 function NotesTab({
   slug,
   patientId,
   notes,
   categories,
+  visits,
   tz,
 }: {
   slug: string;
   patientId: string;
   notes: NoteRow[];
   categories: NoteCategoryRow[];
+  visits: NoteVisit[];
   tz: string;
 }) {
   const { t, locale } = useI18n();
@@ -940,6 +1016,7 @@ function NotesTab({
   const [filter, setFilter] = useState<string | null>(null);
   const [newCat, setNewCat] = useState(false);
   const [catName, setCatName] = useState("");
+  const [visitId, setVisitId] = useState<string | null>(null);
 
   const active = categories.filter((c) => c.active);
   const [categoryId, setCategoryId] = useState<string | null>(
@@ -955,7 +1032,7 @@ function NotesTab({
   const submit = () =>
     start(async () => {
       if (!draft.trim()) return;
-      await addNoteAction(slug, patientId, draft.trim(), categoryId);
+      await addNoteAction(slug, patientId, draft.trim(), categoryId, visitId);
       setDraft("");
       router.refresh();
     });
@@ -991,6 +1068,7 @@ function NotesTab({
       fd.append("seconds", String(rec.seconds));
       fd.append("body", draft.trim());
       if (categoryId) fd.append("categoryId", categoryId);
+      if (visitId) fd.append("appointmentId", visitId);
       const res = await fetch(`/api/c/${slug}/notes/voice`, { method: "POST", body: fd });
       if (!res.ok) return toast(t.common.genericError, "error");
       // The preview is gone, so this toast is the only confirmation that the
@@ -1077,7 +1155,16 @@ function NotesTab({
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t.patients.notes.placeholder}
         />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <VisitPicker
+            visits={visits}
+            value={visitId}
+            onChange={setVisitId}
+            tz={tz}
+            locale={locale}
+            labels={{ about: t.patients.notes.aboutVisit, none: t.patients.notes.noVisit }}
+          />
+          <span className="flex-1" />
           <VoiceRecorder
             immediate
             onReady={onRecorded}
@@ -1157,6 +1244,7 @@ function NotesTab({
             note={n}
             category={n.category_id ? byId.get(n.category_id) ?? null : null}
             categories={active}
+            visits={visits}
             tz={tz}
             locale={locale}
           />
@@ -1171,6 +1259,7 @@ function NoteItem({
   note,
   category,
   categories,
+  visits,
   tz,
   locale,
 }: {
@@ -1178,6 +1267,7 @@ function NoteItem({
   note: NoteRow;
   category: NoteCategoryRow | null;
   categories: NoteCategoryRow[];
+  visits: NoteVisit[];
   tz: string;
   locale: string;
 }) {
@@ -1202,6 +1292,7 @@ function NoteItem({
   const [editing, setEditing] = useState(false);
   const [draftBody, setDraftBody] = useState(note.body);
   const [draftCat, setDraftCat] = useState<string>(note.category_id ?? "");
+  const [draftVisit, setDraftVisit] = useState<string>(note.appointment_id ?? "");
 
   const catName = (c: NoteCategoryRow | null) =>
     c ? (locale === "ar" ? c.name_ar || c.name : c.name) : t.patients.notes.uncategorised;
@@ -1210,6 +1301,7 @@ function NoteItem({
     // Reopening after a cancel must show what is saved, not the abandoned edit.
     setDraftBody(note.body);
     setDraftCat(note.category_id ?? "");
+    setDraftVisit(note.appointment_id ?? "");
     setEditing(true);
   };
 
@@ -1225,6 +1317,16 @@ function NoteItem({
         }),
       });
       if (!res.ok) return toast(t.common.genericError, "error");
+      /*
+        Filing is a separate call because it is a separate kind of change: the
+        body and category go through saveNoteVersion and are kept in the
+        history, while which visit a note sits under is where it is filed, not
+        what it says. Only sent when it actually changed.
+      */
+      if ((note.appointment_id ?? "") !== draftVisit) {
+        const r = await setNoteAppointmentAction(slug, note.id, draftVisit || null);
+        if (r.error) return toast(t.common.genericError, "error");
+      }
       setEditing(false);
       toast(t.patients.notes.noteSaved);
       router.refresh();
@@ -1259,6 +1361,29 @@ function NoteItem({
             >
               {t.patients.notes.edited}
             </button>
+          )}
+          {/*
+            The visit this note is about. A chip and not a link: the calendar
+            only takes a patient, so anything here would open the day with a
+            blank booking panel rather than this appointment — a link that goes
+            somewhere adjacent is worse than a label that goes nowhere.
+          */}
+          {note.appointment_id && note.appointment_starts_at && (
+            <span className="inline-flex h-5 items-center gap-1 rounded-full bg-brand-50 px-2 text-[11px] font-medium text-brand-700">
+              <CalendarPlus className="h-3 w-3" />
+              {visitLabel(
+                {
+                  id: note.appointment_id,
+                  starts_at: note.appointment_starts_at,
+                  status: "",
+                  service_name: note.appointment_service,
+                  service_name_ar: note.appointment_service_ar,
+                  doctor_name: null,
+                },
+                tz,
+                locale
+              )}
+            </span>
           )}
         </span>
         <span className="flex items-center gap-2">
@@ -1324,6 +1449,18 @@ function NoteItem({
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {locale === "ar" ? c.name_ar || c.name : c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {visits.length > 0 && (
+            <Field label={t.patients.notes.aboutVisit} hint={t.patients.notes.aboutVisitHint}>
+              <Select value={draftVisit} onChange={(e) => setDraftVisit(e.target.value)}>
+                <option value="">{t.patients.notes.noVisit}</option>
+                {visits.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {visitLabel(v, tz, locale)}
                   </option>
                 ))}
               </Select>

@@ -31,6 +31,7 @@ const SUITES = [
   ["booking: settings and the public page, in a browser", "scripts/qa-booking-ui.ts"],
   ["notes: versions, categories, voice", "scripts/qa-notes.ts"],
   ["notes: the tab and the merged booking step", "scripts/qa-notes-ui.ts"],
+  ["notes: filed against a visit", "scripts/qa-notes-visits.ts"],
   ["signing: integrity, tokens, orchestration", "scripts/qa-esign.ts"],
   ["signing: both journeys in the browser", "scripts/qa-esign-browser.ts"],
   ["documents: tabs, signed copies, imports", "scripts/qa-documents.ts"],
