@@ -1,31 +1,23 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { printKeyFor, verifyPrintKeyFor } from "../print-token";
 
 /**
- * A short-lived key that lets the worker's Chromium open one document's print
- * page without a session.
+ * The document module's view of the print key.
  *
- * The invoice PDF solved the same problem with the invoice's permanent public
- * token, which is fine for a document the patient is meant to be able to open
- * forever. A signed consent form is not that: nothing about it should be
- * reachable by URL after the render finishes. So the key is derived, not
- * stored — an HMAC over the document id and an expiry, valid for minutes.
+ * The mechanism moved to `src/lib/print-token.ts` when the patient record
+ * needed the same thing — one HMAC shared beats two that drift. This keeps the
+ * typed vocabulary the signing code is written against, and keeps `PrintKind`
+ * as the allowlist so a key minted for a certificate cannot open an overlay.
+ *
+ * The signed string is unchanged, so nothing about existing behaviour moved
+ * with it.
  */
-
-import { internalSecret } from "../internal-secret";
-
-const secret = () => internalSecret();
-
-const TTL_MS = 5 * 60_000;
 
 export type PrintKind = "document" | "certificate" | "overlay";
 
-function sign(documentId: string, kind: PrintKind, exp: number): string {
-  return createHmac("sha256", secret()).update(`${documentId}:${kind}:${exp}`).digest("base64url");
-}
+const KINDS: readonly PrintKind[] = ["document", "certificate", "overlay"];
 
 export function printKey(documentId: string, kind: PrintKind = "document"): { exp: number; sig: string } {
-  const exp = Date.now() + TTL_MS;
-  return { exp, sig: sign(documentId, kind, exp) };
+  return printKeyFor(documentId, kind);
 }
 
 export function printUrl(base: string, documentId: string, kind: PrintKind = "document"): string {
@@ -39,12 +31,5 @@ export function verifyPrintKey(
   exp: string | undefined,
   sig: string | undefined
 ): boolean {
-  if (!exp || !sig) return false;
-  const expNum = Number(exp);
-  if (!Number.isFinite(expNum) || expNum < Date.now()) return false;
-  if (kind !== "document" && kind !== "certificate" && kind !== "overlay") return false;
-  const expected = Buffer.from(sign(documentId, kind, expNum));
-  const given = Buffer.from(sig);
-  if (expected.length !== given.length) return false;
-  return timingSafeEqual(expected, given);
+  return verifyPrintKeyFor(documentId, kind, exp, sig, KINDS);
 }
