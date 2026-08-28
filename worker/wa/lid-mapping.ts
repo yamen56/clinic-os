@@ -1,4 +1,5 @@
 import type { BaileysEventMap } from "@whiskeysockets/baileys";
+import type { PoolClient } from "pg";
 import { withSystem } from "../db";
 import { jidToE164 } from "../../src/lib/phone";
 import { findPatientByPhone } from "../../src/lib/patients";
@@ -12,6 +13,110 @@ import { findPatientByPhone } from "../../src/lib/patients";
  * on contact syncs where a contact carries both forms. This takes it whenever
  * it is offered and upgrades the conversation in place.
  */
+
+/**
+ * The number behind one LID, asked the moment a message arrives.
+ *
+ * This is the difference between preventing the split and repairing it. Baileys
+ * often already knows the pairing when the message lands — it just is not
+ * volunteered on the message itself — so asking here means an incoming message
+ * from a patient we have on file goes straight onto their existing thread. Ask
+ * ten minutes later instead and there are two threads to reconcile, and in
+ * between them a receptionist reading a stranger's chat.
+ *
+ * Every failure is a `null`: an older library with no store, a store that has
+ * not learned this pairing, a lookup that throws. All of them mean the same
+ * thing to the caller — carry on with the LID, exactly as before.
+ */
+export async function pnForLid(sock: unknown, lidJid: string): Promise<string | null> {
+  const store = (
+    sock as {
+      signalRepository?: { lidMapping?: { getPNForLID?: (lid: string) => Promise<string | null> } };
+    }
+  ).signalRepository?.lidMapping;
+  if (typeof store?.getPNForLID !== "function") return null;
+  try {
+    const pn = await store.getPNForLID.call(store, lidJid);
+    if (!pn) return null;
+    // It answers with a JID; tolerate bare digits in case that ever changes.
+    return jidToE164(pn) ?? (/^\+?\d{7,15}$/.test(pn) ? `+${pn.replace(/^\+/, "")}` : null);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Folds a LID thread into the thread its real number already had.
+ *
+ * One person, one conversation. Everything the identity thread accumulated
+ * moves across — messages first, because `messages.conversation_id` cascades on
+ * delete and a mistake in the order here does not merge a thread, it destroys
+ * one. The caller runs inside `withSystem`, which is a transaction, so a
+ * failure anywhere rolls the whole fold back rather than leaving half a thread.
+ *
+ * The surviving row keeps the patient link and the number, and takes the LID
+ * thread's *address*: that is the one WhatsApp is currently delivering to, and
+ * replacing it with the older phone address is how a reply goes nowhere.
+ */
+async function mergeThreads(
+  c: PoolClient,
+  clinicId: string,
+  args: { from: string; into: string; lid: string; phone: string }
+): Promise<void> {
+  const { from, into } = args;
+
+  const moved = await c.query(
+    `update messages set conversation_id = $2 where conversation_id = $1`,
+    [from, into]
+  );
+  await c.query(`update automation_runs set conversation_id = $2 where conversation_id = $1`, [
+    from,
+    into,
+  ]);
+  /*
+    AI state is keyed by conversation, one row each, so the two cannot both
+    survive. The thread being kept kept its own; the identity thread's copy is
+    scratch — where the agent had got to in a conversation that is about to stop
+    existing — and is dropped rather than overwriting it.
+  */
+  await c.query(`delete from ai_conversation_state where conversation_id = $1`, [from]);
+
+  await c.query(
+    `update conversations tgt
+        set wa_jid = src.wa_jid,
+            wa_lid = coalesce(src.wa_lid, tgt.wa_lid),
+            whatsapp_name = coalesce(tgt.whatsapp_name, src.whatsapp_name),
+            unread_count = tgt.unread_count + src.unread_count,
+            flagged = tgt.flagged or src.flagged,
+            flag_reason = coalesce(tgt.flag_reason, src.flag_reason),
+            -- Whichever thread was spoken in last is what the inbox should show.
+            last_message_at = greatest(
+              coalesce(tgt.last_message_at, 'epoch'::timestamptz),
+              coalesce(src.last_message_at, 'epoch'::timestamptz)),
+            last_message_preview = case
+              when coalesce(src.last_message_at, 'epoch'::timestamptz)
+                 > coalesce(tgt.last_message_at, 'epoch'::timestamptz)
+              then src.last_message_preview else tgt.last_message_preview end,
+            last_message_direction = case
+              when coalesce(src.last_message_at, 'epoch'::timestamptz)
+                 > coalesce(tgt.last_message_at, 'epoch'::timestamptz)
+              then src.last_message_direction else tgt.last_message_direction end,
+            identifier_kind = 'phone',
+            -- Reachability is answerable again now there is a number to ask about.
+            on_whatsapp = null,
+            wa_checked_at = null
+       from conversations src
+      where tgt.id = $2 and src.id = $1`,
+    [from, into]
+  );
+
+  // Only now, with nothing left pointing at it.
+  await c.query(`delete from conversations where id = $1 and clinic_id = $2`, [from, clinicId]);
+
+  console.log(
+    `[wa ${clinicId}] lid ${args.lid} is ${args.phone} — folded ${moved.rowCount} message(s) into its existing thread`
+  );
+}
 
 export async function learnLidMapping(
   clinicId: string,
@@ -34,19 +139,25 @@ export async function learnLidMapping(
       if (!conv) continue;
 
       /*
-        The real number may already have a thread of its own — the patient
-        wrote from a number once and by LID later. Two threads for one person
-        is worse than a thread still labelled by its LID, so leave this one
-        alone and let a human merge them.
+        The real number usually already has a thread of its own: the patient
+        wrote from a number once, was saved as a file, and WhatsApp moved them
+        to identity addressing afterwards. That is the ordinary case, not the
+        exotic one.
+
+        This used to log and give up, on the reasoning that a human should merge
+        them — but conversations have never been mergeable by hand, so "leave it
+        for a human" meant leaving it forever. The patient's own thread went
+        quiet while their messages piled up in a second one that showed a
+        fifteen-digit stand-in and was attached to nobody.
       */
       const clash = (
         await c.query(
-          `select 1 from conversations where clinic_id = $1 and phone_e164 = $2 and id <> $3`,
+          `select id from conversations where clinic_id = $1 and phone_e164 = $2 and id <> $3`,
           [clinicId, phone, conv.id]
         )
-      ).rowCount;
+      ).rows[0] as { id: string } | undefined;
       if (clash) {
-        console.log(`[wa ${clinicId}] lid ${lid} is ${phone}, which already has a thread`);
+        await mergeThreads(c, clinicId, { from: conv.id, into: clash.id, lid, phone });
         continue;
       }
 

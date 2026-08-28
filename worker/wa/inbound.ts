@@ -8,6 +8,7 @@ import pino from "pino";
 import { withSystem } from "../db";
 import { findPatientByPhone } from "../../src/lib/patients";
 import { jidToE164 } from "../../src/lib/phone";
+import { pnForLid } from "./lid-mapping";
 import { saveFile } from "../../src/lib/storage";
 
 const logger = pino({ level: "silent" });
@@ -93,7 +94,19 @@ async function handleOne(clinicId: string, sock: WASocket, msg: WAMessage) {
   */
   const isLid = jid.endsWith("@lid");
   const lid = isLid ? jid.split("@")[0] : null;
-  const phone = isLid ? null : jidToE164(jid);
+  /*
+    Ask for the number before deciding this is a stranger.
+
+    Baileys frequently knows the pairing already; it just does not attach it to
+    the message. Without asking, a patient we have on file who moves to identity
+    addressing arrives as somebody new, gets a second thread keyed by their LID,
+    and their own thread goes quiet — which is what a clinic sees as "WhatsApp
+    put my patient's messages somewhere else under a number that isn't theirs".
+
+    A null here is the ordinary case for a genuinely unknown sender, and leaves
+    the behaviour exactly as it was.
+  */
+  const phone = isLid ? await pnForLid(sock, jid) : jidToE164(jid);
   // The identifier the conversation is keyed by. For a LID chat we do not know
   // the number yet — `chats.phoneNumberShare` and the contact list fill it in
   // later, and until then the LID stands in for it.

@@ -374,20 +374,182 @@ async function main() {
     (await resolvePendingLids(clinic.id, {})) === 0
   );
 
-  // A number that already has its own thread must not be merged behind our back.
-  const other = (
+  /* ------------------- the split, prevented rather than repaired */
+  /*
+    The fold above is the safety net. This is the thing that should mean it
+    rarely fires: when a message arrives by LID and Baileys already knows whose
+    number that is, the message belongs on the thread that number already has —
+    now, not in ten minutes after a sweep, with a stranger's chat sitting in the
+    inbox in between.
+  */
+  const { handleUpsert } = await import("../worker/wa/inbound");
+  const KNOWN_PN = "+962791112223";
+  const KNOWN_LID = "770880990110220";
+  const knownPatient = (
     await db.query(
-      `insert into conversations (clinic_id, phone_e164, wa_lid, identifier_kind)
-       values ($1,'+962790777222','888777666','lid') returning id`,
+      `insert into patients (clinic_id, full_name, phone_e164, source)
+       values ($1,'Known Already',$2,'staff') returning id`,
+      [clinic.id, KNOWN_PN]
+    )
+  ).rows[0];
+  const knownThread = (
+    await db.query(
+      `insert into conversations (clinic_id, phone_e164, patient_id, identifier_kind)
+       values ($1,$2,$3,'phone') returning id`,
+      [clinic.id, KNOWN_PN, knownPatient.id]
+    )
+  ).rows[0];
+
+  /** A socket whose mapping store can answer "whose LID is this". */
+  const knowingSock = {
+    signalRepository: {
+      lidMapping: {
+        getPNForLID: async (l: string) =>
+          l.startsWith(KNOWN_LID) ? `${KNOWN_PN.replace("+", "")}@s.whatsapp.net` : null,
+      },
+    },
+    updateMediaMessage: async () => ({}),
+  };
+  await handleUpsert(clinic.id, knowingSock as never, {
+    type: "notify",
+    messages: [
+      {
+        key: { remoteJid: `${KNOWN_LID}@lid`, id: "PREVENTQA1", fromMe: false },
+        message: { conversation: "أنا نفس الشخص" },
+        pushName: "Known Already",
+      },
+    ],
+  } as never);
+
+  const threads = await db.query(
+    `select id, identifier_kind, patient_id from conversations
+      where clinic_id = $1 and (phone_e164 = $2 or wa_lid = $3)`,
+    [clinic.id, KNOWN_PN, KNOWN_LID]
+  );
+  check(
+    "a known patient writing by LID does not get a second thread",
+    threads.rowCount === 1,
+    `${threads.rowCount} threads`
+  );
+  check(
+    "the message lands on the thread they already had",
+    threads.rows[0]?.id === knownThread.id,
+    ""
+  );
+  check(
+    "which stays attached to their file",
+    threads.rows[0]?.patient_id === knownPatient.id,
+    ""
+  );
+  const landed = await db.query(
+    `select count(*)::int n from messages where conversation_id = $1 and wa_message_id = 'PREVENTQA1'`,
+    [knownThread.id]
+  );
+  check("and the message itself is on it", landed.rows[0].n === 1, `${landed.rows[0].n}`);
+
+  // A sender nobody knows must still be handled exactly as before.
+  await handleUpsert(clinic.id, knowingSock as never, {
+    type: "notify",
+    messages: [
+      {
+        key: { remoteJid: `660550440330220@lid`, id: "PREVENTQA2", fromMe: false },
+        message: { conversation: "من أنا" },
+        pushName: "Stranger",
+      },
+    ],
+  } as never);
+  const strangerThread = (
+    await db.query(
+      `select identifier_kind, patient_id from conversations where clinic_id = $1 and wa_lid = '660550440330220'`,
       [clinic.id]
     )
   ).rows[0];
-  await learnLidMapping(clinic.id, [{ lid: "888777666", jid: `${REAL.replace("+", "")}@s.whatsapp.net` }]);
-  const untouched = (await db.query(`select phone_e164 from conversations where id = $1`, [other.id])).rows[0];
   check(
-    "a clashing number is left for a human rather than merged",
-    untouched.phone_e164 === "+962790777222",
-    untouched.phone_e164
+    "an unknown LID sender still gets an identity thread, as before",
+    strangerThread?.identifier_kind === "lid" && strangerThread?.patient_id === null,
+    strangerThread?.identifier_kind ?? "missing"
+  );
+
+  /*
+    The number already has a thread, which is the ordinary case rather than the
+    exotic one: the patient wrote from a number, was saved as a file, and
+    WhatsApp moved them to identity addressing afterwards.
+
+    This used to log and give up, deferring to a human merge that the product
+    has never offered — so one person kept two threads for good, and the live
+    one was attached to nobody. It folds them together now, and the assertion
+    that matters is that nothing was lost doing it.
+  */
+  const MERGE_PN = "+962799887766";
+  const mergePatient = (
+    await db.query(
+      `insert into patients (clinic_id, full_name, phone_e164, source)
+       values ($1,'Merge Target',$2,'staff') returning id`,
+      [clinic.id, MERGE_PN]
+    )
+  ).rows[0];
+  const kept = (
+    await db.query(
+      `insert into conversations (clinic_id, phone_e164, patient_id, wa_jid, identifier_kind,
+                                  unread_count, last_message_at, last_message_preview)
+       values ($1,$2,$3,$4,'phone',1, now() - interval '2 days','older') returning id`,
+      [clinic.id, MERGE_PN, mergePatient.id, `${MERGE_PN.replace("+", "")}@s.whatsapp.net`]
+    )
+  ).rows[0];
+  const stray = (
+    await db.query(
+      `insert into conversations (clinic_id, phone_e164, wa_lid, wa_jid, identifier_kind,
+                                  unread_count, whatsapp_name, last_message_at, last_message_preview)
+       values ($1,'+555444333222111','555444333222111','555444333222111@lid','lid',2,'Merge Target',
+               now(),'newer') returning id`,
+      [clinic.id]
+    )
+  ).rows[0];
+  for (const [n, body] of [[1, "one"], [2, "two"], [3, "three"]] as const) {
+    await db.query(
+      `insert into messages (clinic_id, conversation_id, direction, sender_kind, msg_type, body, status, wa_message_id)
+       values ($1,$2,'in','patient','text',$3,'delivered',$4)`,
+      [clinic.id, stray.id, body, `MERGEQA${n}`]
+    );
+  }
+
+  await learnLidMapping(clinic.id, [
+    { lid: "555444333222111", jid: `${MERGE_PN.replace("+", "")}@s.whatsapp.net` },
+  ]);
+
+  const gone = await db.query(`select 1 from conversations where id = $1`, [stray.id]);
+  check("the duplicate thread is folded away", gone.rowCount === 0);
+  const survivors = await db.query(
+    `select count(*)::int n from messages where conversation_id = $1`,
+    [kept.id]
+  );
+  check("and every one of its messages moved across", survivors.rows[0].n === 3, `${survivors.rows[0].n}`);
+  const orphaned = await db.query(
+    `select count(*)::int n from messages where clinic_id = $1 and conversation_id = $2`,
+    [clinic.id, stray.id]
+  );
+  check("with none left behind to be cascaded away", orphaned.rows[0].n === 0);
+
+  const merged = (
+    await db.query(
+      `select phone_e164, patient_id, identifier_kind, wa_jid, wa_lid, unread_count,
+              last_message_preview from conversations where id = $1`,
+      [kept.id]
+    )
+  ).rows[0];
+  check("the surviving thread keeps the patient", merged.patient_id === mergePatient.id);
+  check("and the real number", merged.phone_e164 === MERGE_PN, merged.phone_e164);
+  check(
+    "it takes the address WhatsApp is actually delivering to",
+    merged.wa_jid === "555444333222111@lid",
+    merged.wa_jid
+  );
+  check("remembering the identity behind it", merged.wa_lid === "555444333222111", merged.wa_lid ?? "");
+  check("unread counts add up rather than one being dropped", merged.unread_count === 3, String(merged.unread_count));
+  check(
+    "and the newer message is the one the inbox shows",
+    merged.last_message_preview === "newer",
+    merged.last_message_preview
   );
 
   /* ------------------------------------------------- and on the screen */
