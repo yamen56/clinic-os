@@ -710,22 +710,58 @@ export function PatientProfile(props: {
               />
             ) : (
               <>
-                <div className="grid gap-2">
-                  {[...props.conversation.msgs].reverse().map((m) => (
-                    <div
-                      key={m.id}
-                      className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
-                        m.direction === "out"
-                          ? "self-end bg-brand-50 text-brand-900"
-                          : "self-start border border-line bg-sunken"
-                      }`}
-                    >
-                      {m.body || `[${m.msg_type}]`}
-                      <div className="mt-0.5 text-[11px] text-ink-400">
-                        {m.sender_kind} · {fmtDateTime(m.created_at, tz, locale)}
+                {/*
+                  flex, not grid.
+
+                  These bubbles carried `self-end` / `self-start` inside a
+                  `grid`, where those properties align on the block axis and do
+                  nothing horizontally — so every message, inbound and outbound,
+                  stacked against the same edge and the thread read as one
+                  person talking. In a flex column they align on the cross axis,
+                  which is the axis that was meant all along.
+
+                  Same shape as the inbox, deliberately: the two are the same
+                  conversation, and a patient file that draws it differently
+                  makes staff read it twice.
+                */}
+                <div className="flex flex-col gap-1.5">
+                  {[...props.conversation.msgs].reverse().map((m) => {
+                    const out = m.direction === "out";
+                    const label =
+                      out && m.sender_kind !== "patient"
+                        ? (t.conversations.sentBy as Record<string, string>)[m.sender_kind] ??
+                          m.sender_kind
+                        : "";
+                    return (
+                      <div key={m.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                            out
+                              ? m.sender_kind === "ai"
+                                ? "rounded-be-md bg-brand-100 text-brand-900"
+                                : "rounded-be-md bg-brand-600 text-white"
+                              : "rounded-bs-md border border-line bg-surface"
+                          }`}
+                        >
+                          {/* A WhatsApp message keeps its line breaks, and a long
+                              unbroken string must wrap rather than widen the card. */}
+                          <div className="whitespace-pre-wrap break-words">
+                            {m.body || `[${m.msg_type}]`}
+                          </div>
+                          <div
+                            /* The meta line sits on a solid brand bubble for an
+                               outbound message, where ink-400 is unreadable. */
+                            className={`mt-0.5 text-[11px] ${
+                              out && m.sender_kind !== "ai" ? "text-white/70" : "text-ink-400"
+                            }`}
+                          >
+                            {label ? `${label} · ` : ""}
+                            {fmtDateTime(m.created_at, tz, locale)}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="mt-4">
                   <Link href={`/c/${slug}/conversations?open=${props.conversation.id}`}>

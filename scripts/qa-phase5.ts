@@ -223,6 +223,53 @@ async function main() {
   }
   console.log("✓ and the LID appears on no tab of the file it created");
 
+  /*
+    The same thread, drawn on the patient file.
+
+    Its bubbles carried `self-end` / `self-start` inside a `grid`, where those
+    align on the block axis and do nothing horizontally — so inbound and
+    outbound stacked against the same edge and the thread read as one person
+    talking to themselves. Measured rather than asserted on class names,
+    because the property that matters is where the bubble ended up.
+  */
+  const withThread = await db.query(
+    `select cv.patient_id from conversations cv
+      join messages m on m.conversation_id = cv.id
+     where cv.clinic_id = $1 and cv.patient_id is not null and m.direction = 'out'
+     limit 1`,
+    [clinic.id]
+  );
+  if (withThread.rowCount) {
+    await page.goto(`${BASE}/c/${slug}/patients/${withThread.rows[0].patient_id}`);
+    await page.waitForLoadState("networkidle");
+    const convTab = page.getByRole("tab", { name: /^Conversation|^المحادثة/ });
+    await convTab.first().click();
+    await page.waitForSelector("main .whitespace-pre-wrap", { timeout: 20000 });
+    await page.waitForTimeout(500);
+
+    const sides = await page.evaluate(() => {
+      const bubbles = Array.from(
+        document.querySelectorAll<HTMLElement>("main div.rounded-2xl")
+      );
+      return bubbles.map((b) => {
+        const row = b.parentElement as HTMLElement;
+        const rb = b.getBoundingClientRect();
+        const rr = row.getBoundingClientRect();
+        /*
+          Which edge it is against, not merely whether it has a gap. A bubble
+          pushed to either side has a gap on the other, so "has a gap" is true
+          for both alignments and tells them apart not at all. The bigger gap
+          names the side it moved away from.
+        */
+        return rb.left - rr.left > rr.right - rb.right ? "end" : "start";
+      });
+    });
+    if (sides.length < 2) throw new Error(`expected a thread on the file, found ${sides.length} bubbles`);
+    if (new Set(sides).size < 2)
+      throw new Error("every bubble sits on the same edge — inbound and outbound are not separated");
+    console.log("✓ and inbound and outbound sit on opposite sides of it");
+  }
+
   // 7. WhatsApp settings: connect → QR appears (live Baileys against WA servers)
   await page.goto(`${BASE}/c/${slug}/settings/whatsapp`);
   await page.waitForSelector("text=Connect WhatsApp", { timeout: 15000 });
