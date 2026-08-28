@@ -196,6 +196,33 @@ async function main() {
     throw new Error(`the WhatsApp name should name the file: ${fromLid.rows[0].full_name}`);
   console.log("✓ promoting a LID thread leaves the phone blank, not a fake number");
 
+  /*
+    And not on the screen either, on any tab.
+
+    The row being clean is necessary and was never the whole question — the
+    worry is "does that number turn up in the file", and a page can render
+    something the row does not hold. The inbox header did exactly that until
+    2026-08-28. Checked against the markup as well as the text, so a value
+    sitting in a hidden input would still be caught.
+  */
+  const lidPatient = await db.query(
+    `select p.id from patients p join conversations cv on cv.patient_id = p.id
+      where cv.clinic_id = $1 and cv.wa_lid = $2`,
+    [clinic.id, lid]
+  );
+  await page.goto(`${BASE}/c/${slug}/patients/${lidPatient.rows[0].id}`);
+  await page.waitForLoadState("networkidle");
+  for (const tabName of ["Overview", "Notes", "Appointments", "Files", "Invoices", "Conversation"]) {
+    const tab = page.getByRole("tab", { name: new RegExp(`^${tabName}`) });
+    if (await tab.count()) {
+      await tab.first().click();
+      await page.waitForTimeout(500);
+    }
+    const html = await page.locator("main").innerHTML();
+    if (html.includes(lid)) throw new Error(`the LID is on the ${tabName} tab of the patient file`);
+  }
+  console.log("✓ and the LID appears on no tab of the file it created");
+
   // 7. WhatsApp settings: connect → QR appears (live Baileys against WA servers)
   await page.goto(`${BASE}/c/${slug}/settings/whatsapp`);
   await page.waitForSelector("text=Connect WhatsApp", { timeout: 15000 });
