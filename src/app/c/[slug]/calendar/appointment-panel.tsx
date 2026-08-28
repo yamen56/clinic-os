@@ -321,6 +321,12 @@ export function AppointmentPanel({
                 slug={slug}
                 appointmentId={state.appt.id}
                 patientId={state.appt.patient_id}
+                patientName={state.appt.patient_name}
+                startsAt={state.appt.starts_at}
+                serviceName={
+                  (locale === "ar" ? state.appt.service_name_ar : null) ??
+                  state.appt.service_name
+                }
                 tz={tz}
               />
             )}

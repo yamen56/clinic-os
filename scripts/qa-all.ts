@@ -15,6 +15,7 @@ const SUITES = [
   ["phase 1: foundation, auth, tenancy", "scripts/qa-phase1.ts"],
   ["dashboard: analytics, shortcuts, and what each member may see", "scripts/qa-dashboard.ts"],
   ["phase 2: patients", "scripts/qa-phase2.ts"],
+  ["patients: exporting the record", "scripts/qa-patient-export.ts"],
   ["phase 3: calendar", "scripts/qa-phase3.ts"],
   ["phase 4: public booking", "scripts/qa-phase4.ts"],
   ["phase 5: WhatsApp inbox", "scripts/qa-phase5.ts"],

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useAutosave } from "@/lib/use-autosave";
-import { fmtDate, fmtDateTime, fmtMoney, fmtRelative } from "@/lib/dates";
+import { fmtDate, fmtDateTime, fmtMoney, fmtRelative, fmtTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,9 +53,11 @@ import {
   Archive,
   MoreVertical,
   StickyNote,
+  ChevronRight,
   History,
   Filter,
   Pencil,
+  Download,
 } from "lucide-react";
 
 export type NoteRow = {
@@ -344,6 +346,21 @@ export function PatientProfile(props: {
                   <Merge className="h-4 w-4 text-ink-400" />
                   {t.patients.merge.button}
                 </button>
+                {/*
+                  A plain link, not a fetch. The PDF is built by the worker and
+                  streamed back with a Content-Disposition; letting the browser
+                  own the download means it lands in the downloads folder like
+                  every other file, and a slow render shows the browser's own
+                  progress rather than a button that looks stuck.
+                */}
+                <a
+                  href={`/api/c/${slug}/patients/${p.id}/export`}
+                  onClick={() => setMenuOpen(false)}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink-900/4"
+                >
+                  <Download className="h-4 w-4 text-ink-400" />
+                  {t.patients.exportFile}
+                </a>
                 <button
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger-soft"
                   onClick={() => {
@@ -604,20 +621,16 @@ export function PatientProfile(props: {
             ) : (
               <ul className="divide-y divide-line">
                 {props.appointments.map((a) => (
-                  <li key={a.id} className="flex items-center gap-4 px-5 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium">
-                        {(locale === "ar" ? a.service_name_ar : null) || a.service_name || "—"}
-                      </div>
-                      <div className="text-[13px] text-ink-500">
-                        {fmtDateTime(a.starts_at, tz, locale)}
-                        {a.doctor_name ? ` · ${a.doctor_name}` : ""}
-                      </div>
-                    </div>
-                    <Badge status={apptStatus[a.status] ?? "neutral"}>
-                      {(t.calendar.statuses as Record<string, string>)[a.status] ?? a.status}
-                    </Badge>
-                  </li>
+                  <AppointmentRow
+                    key={a.id}
+                    slug={slug}
+                    patientName={p.full_name}
+                    appointment={a}
+                    notes={props.notes.filter((n) => n.appointment_id === a.id)}
+                    categories={props.noteCategories}
+                    tz={tz}
+                    locale={locale}
+                  />
                 ))}
               </ul>
             )}
@@ -950,6 +963,166 @@ function TagsRow({
  * Shown only when the patient has visits at all: on a file with none this is a
  * control whose every option is the empty one.
  */
+/**
+ * One past or upcoming visit on the patient file, with what was written about it.
+ *
+ * The notes are already in hand — the page loads every note for this patient
+ * with its `appointment_id` — so grouping them here costs nothing and opens
+ * instantly. Fetching per row would put a spinner between a doctor and the last
+ * thing they wrote about this exact visit, which is the thing they opened the
+ * appointment to read.
+ *
+ * Collapsed by default: a file with thirty visits would otherwise be a wall of
+ * text, and the count on the row is enough to say whether opening it is worth
+ * it. A visit with nothing written stays quiet rather than showing "0".
+ */
+function AppointmentRow({
+  slug,
+  patientName,
+  appointment,
+  notes,
+  categories,
+  tz,
+  locale,
+}: {
+  slug: string;
+  patientName: string;
+  appointment: {
+    id: string;
+    starts_at: string;
+    status: string;
+    service_name: string | null;
+    service_name_ar: string | null;
+    doctor_name: string | null;
+  };
+  notes: NoteRow[];
+  categories: NoteCategoryRow[];
+  tz: string;
+  locale: string;
+}) {
+  const { t } = useI18n();
+  const router = useRouter();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const service = (locale === "ar" ? appointment.service_name_ar : null) || appointment.service_name;
+  const byId = new Map(categories.map((c) => [c.id, c]));
+
+  const add = async () => {
+    const text = draft.trim();
+    if (!text) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/c/${slug}/appointments/${appointment.id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: text }),
+      });
+      if (!res.ok) return toast(t.common.genericError, "error");
+      setDraft("");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-4 px-5 py-3 text-start transition-colors hover:bg-ink-900/[0.02]"
+      >
+        <ChevronRight
+          className={`h-4 w-4 shrink-0 text-ink-300 transition-transform rtl:rotate-180 ${
+            open ? "rotate-90 rtl:rotate-90" : ""
+          }`}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">{service || "—"}</div>
+          <div className="text-[13px] text-ink-500">
+            {fmtDateTime(appointment.starts_at, tz, locale)}
+            {appointment.doctor_name ? ` · ${appointment.doctor_name}` : ""}
+          </div>
+        </div>
+        {notes.length > 0 && (
+          <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-medium text-ink-500">
+            <StickyNote className="h-3 w-3" />
+            <span className="tnum">{notes.length}</span>
+          </span>
+        )}
+        <Badge status={apptStatus[appointment.status] ?? "neutral"}>
+          {(t.calendar.statuses as Record<string, string>)[appointment.status] ?? appointment.status}
+        </Badge>
+      </button>
+
+      {open && (
+        <div className="border-t border-line bg-sunken/30 px-5 py-3">
+          {/* Whose visit and which one, restated where a note is about to be
+              written — the row above is a summary, this is the record. */}
+          <p className="mb-2 text-[12px] text-ink-500">
+            {patientName} · {fmtDateTime(appointment.starts_at, tz, locale)}
+            {service ? ` · ${service}` : ""}
+          </p>
+
+          {notes.length === 0 ? (
+            <p className="mb-2 text-[12px] text-ink-400">{t.patients.notes.noVisitNotes}</p>
+          ) : (
+            <ul className="mb-2 grid gap-2">
+              {notes.map((n) => {
+                const cat = n.category_id ? byId.get(n.category_id) : null;
+                return (
+                  <li key={n.id} className="rounded-lg border border-line bg-surface p-2.5">
+                    <div className="mb-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-400">
+                      {cat && (
+                        <span
+                          className="inline-flex h-4 items-center rounded-full px-1.5 font-semibold"
+                          style={{ color: cat.color, background: "var(--color-sunken)" }}
+                        >
+                          {locale === "ar" ? cat.name_ar || cat.name : cat.name}
+                        </span>
+                      )}
+                      {n.author ? `${n.author} · ` : ""}
+                      {fmtDateTime(n.created_at, tz, locale)}
+                      {n.edited_at ? ` · ${t.patients.notes.edited}` : ""}
+                    </div>
+                    {n.audio_path && (
+                      <VoiceNote
+                        src={`/api/c/${slug}/notes/${n.id}/audio`}
+                        seconds={n.audio_seconds}
+                        label={t.patients.notes.playVoice}
+                      />
+                    )}
+                    {n.body && (
+                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900">
+                        {n.body}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={t.patients.notes.addVisitNote}
+            className="min-h-16 bg-surface"
+          />
+          <div className="mt-1.5 flex justify-end">
+            <Button size="sm" onClick={add} loading={busy} disabled={!draft.trim() || busy}>
+              {t.patients.notes.add}
+            </Button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
 function VisitPicker({
   visits,
   value,
@@ -987,9 +1160,18 @@ function VisitPicker({
 }
 
 /** "14 Mar 2026 · Cleaning" — the date first, because that is how staff ask. */
+/**
+ * How a visit is named wherever a note points at one.
+ *
+ * Date, time and service, in that order. The date alone was ambiguous the
+ * moment a patient came twice in a day — which is ordinary for a cleaning
+ * followed by a filling — and the time is what staff say out loud when they
+ * mean a particular appointment.
+ */
 function visitLabel(v: NoteVisit, tz: string, locale: string): string {
   const svc = (locale === "ar" ? v.service_name_ar : null) || v.service_name;
-  return `${fmtDate(v.starts_at, tz, locale)}${svc ? ` · ${svc}` : ""}`;
+  const when = `${fmtDate(v.starts_at, tz, locale)} · ${fmtTime(v.starts_at, tz, locale)}`;
+  return `${when}${svc ? ` · ${svc}` : ""}`;
 }
 
 function NotesTab({

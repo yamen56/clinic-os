@@ -202,7 +202,11 @@ Overview · Notes · Appointments · Files · Documents · Invoices · Conversat
     from the appointment, never from the caller, and filing against another patient's
     visit is refused. Deleting an appointment unfiles its notes rather than destroying
     them (`on delete set null`). Filing is recorded in the audit log rather than as a
-    new version — it changes where a note sits, not what it says.
+    new version — it changes where a note sits, not what it says. A visit is named
+    everywhere as **date · time · service**: the date alone stopped being enough the
+    moment a patient came twice in a day. The **Appointments tab** on the patient file
+    expands each visit to show what was written about it, and takes a new note inline —
+    grouped from the notes already loaded, so it opens with no round trip.
   - **A note can be spoken.** `POST /api/c/{slug}/notes/voice` takes a browser
     recording (10 MB cap, audio types only), files it as a note with an optional typed
     body, and playback is served by `/notes/{id}/audio` — path read from the note,

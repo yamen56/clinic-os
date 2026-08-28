@@ -38,11 +38,19 @@ export function AppointmentNotes({
   slug,
   appointmentId,
   patientId,
+  patientName,
+  startsAt,
+  serviceName,
   tz,
 }: {
   slug: string;
   appointmentId: string;
   patientId: string;
+  /** Named on the heading: this panel is reached from a calendar grid, where
+   *  the surrounding context is the day rather than the person. */
+  patientName: string;
+  startsAt: string;
+  serviceName: string | null;
   tz: string;
 }) {
   const { t, locale } = useI18n();
@@ -86,11 +94,19 @@ export function AppointmentNotes({
 
   return (
     <div>
-      <span className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-ink-700">
+      <span className="mb-0.5 flex items-center gap-1.5 text-[13px] font-medium text-ink-700">
         <StickyNote className="h-3.5 w-3.5 text-ink-400" />
         {t.patients.notes.visitNotes}
         {rows?.length ? <span className="text-ink-400 tnum">{rows.length}</span> : null}
       </span>
+      {/* Whose visit, and which one. Written out because a note filed from here
+          is a clinical record about a named person, and the panel above is a
+          form that can still be edited — the heading should not be the only
+          thing standing between a note and the wrong patient. */}
+      <p className="mb-1.5 text-[12px] text-ink-500">
+        {patientName} · {fmtDateTime(startsAt, tz, locale)}
+        {serviceName ? ` · ${serviceName}` : ""}
+      </p>
 
       {rows === null ? (
         <div className="h-8 rounded-lg bg-sunken" />

@@ -109,6 +109,21 @@ async function main() {
     assert(byId[unfiled].appointment_id === null, "a note with no visit claims one");
     ok("the patient file shows every note, and which visit each one belongs to");
 
+    /*
+      The visit has to arrive named, not just identified. A label built from the
+      id alone would have to fetch the appointment again to say anything, and the
+      chip on the note reads "date · time · service".
+    */
+    assert(
+      "appointment_service" in byId[filed],
+      "the note carries no service, so a visit can only be labelled by date"
+    );
+    assert(
+      new Date(byId[filed].appointment_starts_at!).getTime() > 0,
+      "the visit time did not come back as a usable timestamp"
+    );
+    ok("a filed note carries the visit's time and service, enough to name it in full");
+
     /* ---------------------------------------- filing an existing note */
     assert(
       await notes.setNoteAppointment(db as never, clinic.id, unfiled, aliceVisit2),
