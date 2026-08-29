@@ -194,6 +194,13 @@ export function Shell({
           })}
         </nav>
         <div className="border-t border-white/6 p-3">
+          {/*
+            The name and role get this row to themselves. They used to share it
+            with the three icon buttons below, which left about ninety pixels
+            for both — an ordinary Arabic full name was clipped mid-word and the
+            role under it with it, and this row is the only place in the desktop
+            shell either one is written.
+          */}
           <div className="flex items-center gap-2.5 px-1">
             <Avatar
               name={userName}
@@ -203,38 +210,46 @@ export function Shell({
             />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] font-medium text-white">{userName}</div>
-              <div className="text-[11px] text-white/40">
+              <div className="truncate text-[11px] text-white/40">
                 {isOwner ? t.staff.owner : t.staff.roles[role]}
               </div>
             </div>
-            {/* Reachable for doctors too, who never see /settings. */}
-            <Link
-              href={`${base}/profile`}
-              className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
-              aria-label={t.profile.title}
-              title={t.profile.title}
-            >
-              <UserRound className="h-4.5 w-4.5" strokeWidth={1.75} />
-            </Link>
-            <Link
-              href={`${base}/notifications`}
-              className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
-              aria-label={t.nav.notifications}
-            >
-              <Bell className="h-4.5 w-4.5" strokeWidth={1.75} />
-            </Link>
-            <form action={logoutAction}>
-              <button
-                className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
-                aria-label={t.auth.signOut}
-              >
-                <LogOut className="h-4.5 w-4.5" strokeWidth={1.75} />
-              </button>
-            </form>
           </div>
           <div className="mt-2 space-y-1 px-1">
             <InstallApp onDark />
+          </div>
+          {/* The controls ride on the language row instead, where there is
+              room for all four and nothing has to be truncated to fit. */}
+          <div className="mt-2 flex items-center gap-1 px-1">
             <LanguageToggle onDark />
+            <div className="ms-auto flex items-center gap-0.5">
+              {/* Reachable for doctors too, who never see /settings. */}
+              <Link
+                href={`${base}/profile`}
+                className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
+                aria-label={t.profile.title}
+                title={t.profile.title}
+              >
+                <UserRound className="h-4.5 w-4.5" strokeWidth={1.75} />
+              </Link>
+              <Link
+                href={`${base}/notifications`}
+                className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
+                aria-label={t.nav.notifications}
+                title={t.nav.notifications}
+              >
+                <Bell className="h-4.5 w-4.5" strokeWidth={1.75} />
+              </Link>
+              <form action={logoutAction}>
+                <button
+                  className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
+                  aria-label={t.auth.signOut}
+                  title={t.auth.signOut}
+                >
+                  <LogOut className="h-4.5 w-4.5" strokeWidth={1.75} />
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </aside>
