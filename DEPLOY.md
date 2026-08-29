@@ -103,6 +103,75 @@ customer — it carries invented patients and appointments.
 
 ---
 
+## Email and its DNS
+
+Transactional mail — staff invitations and password resets — goes out through
+Resend. Two things matter and both are DNS, not code.
+
+**The sending domain must be verified in Resend.** Resend rejects any send whose
+From domain is not verified on the account, with a 403 at send time. By then
+`forgot/actions.ts` has already returned `{ sent: true }` (it must not reveal
+whether an address exists), so a wrong `EMAIL_FROM` is completely invisible in
+the product — nobody finds out until a locked-out owner says the reset never
+arrived. `npm run doctor` checks the From domain against Resend's verified list
+for exactly this reason; keep it passing.
+
+Current state, verified against the live account:
+
+| | |
+|---|---|
+| `EMAIL_FROM` | `Clinicti <system@clinicti.app>` |
+| Verified in Resend | `clinicti.app` only |
+| SPF | `send.clinicti.app` → `v=spf1 include:amazonses.com ~all` |
+| DKIM | `resend._domainkey.clinicti.app` |
+| DMARC | `v=DMARC1; p=none; rua=mailto:…` |
+| MX | none — `system@clinicti.app` cannot receive, hence `EMAIL_REPLY_TO` |
+
+### Tightening DMARC
+
+`p=none` publishes the policy but asks receivers to do nothing, so a spoofed
+Clinicti email is still delivered. Moving to enforcement is the single biggest
+deliverability improvement available, and it is a prerequisite for any inbox
+logo. Do it in that order, and only after reading a week of `rua` reports to
+confirm nothing legitimate is failing alignment:
+
+```
+_dmarc.clinicti.app   TXT   "v=DMARC1; p=quarantine; pct=100; rua=mailto:…; fo=1"
+```
+
+Go to `p=reject` once quarantine has run clean for a few weeks. Do not skip
+straight to `reject` — anything sending as clinicti.app that you have forgotten
+about will start bouncing silently.
+
+### The logo beside the sender (BIMI)
+
+The logo already in the message body is `src/emails/render.ts` → `logoUrl()`,
+which serves `/assets/mark-light.png`. That is just an `<img>` and needs
+nothing.
+
+The logo shown *next to the sender in the inbox list*, before the message is
+opened, is a different mechanism: **BIMI**. It needs, in order:
+
+1. DMARC at `p=quarantine` or `p=reject` — see above. `p=none` is not enough.
+2. The mark as **SVG Tiny P/S** (`baseProfile="tiny-ps"`, square, a `<title>`,
+   no script, no external references, and no embedded raster). `mark-light.png`
+   is already the right *design* — white mark centred on a solid navy square —
+   but BIMI will not take a PNG, and `src/components/brand-mark.tsx` is explicit
+   that the mark is never redrawn in SVG. **The vector has to come from the
+   original logo source**, not from tracing the PNG.
+3. A record: `default._bimi.clinicti.app TXT "v=BIMI1; l=https://app.clinicti.app/assets/mark.svg; a="`
+4. For **Gmail and Apple Mail**, a certificate in the `a=` field — a VMC, which
+   requires a *registered trademark* for the mark and runs roughly $1,000–1,500
+   a year from DigiCert or Entrust. A CMC is the cheaper non-trademark variant
+   but is honoured by fewer clients.
+
+Steps 1–3 cost nothing and get the logo into Yahoo, Fastmail and Zoho. Gmail and
+Apple will keep showing initials until step 4 is paid for, so treat the
+certificate as a branding purchase to make when there is a trademark and the
+volume to justify it — not as a prerequisite for shipping.
+
+---
+
 ## Known limits
 
 **Realtime.** Live inbox and calendar updates use Server-Sent Events backed by

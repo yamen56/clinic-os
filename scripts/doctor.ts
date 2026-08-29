@@ -70,6 +70,69 @@ async function deployChecks() {
     : add("warn", "Git remote", "none yet — created during deploy");
 }
 
+/**
+ * Whether mail will actually leave the building.
+ *
+ * Resend refuses any send whose From domain is not verified on the account, and
+ * it refuses it at send time with a 403 — by which point the invitation or the
+ * password reset has already been reported to the user as sent. `forgot` logs
+ * the error and returns `{ sent: true }` regardless, because it must not reveal
+ * whether an address exists. So the sending domain being wrong is invisible in
+ * the product, and this is the only place it gets said out loud.
+ */
+async function emailCheck() {
+  const from = process.env.EMAIL_FROM || "";
+  const key = process.env.RESEND_API_KEY;
+
+  if (!key) {
+    add("warn", "Email", "RESEND_API_KEY empty — invitations and resets must be copied by hand");
+    return;
+  }
+  const domain = from.match(/@([^>\s]+)/)?.[1]?.toLowerCase();
+  if (!domain) {
+    add("fail", "Email", `EMAIL_FROM is not an address: ${from || "(empty)"}`);
+    return;
+  }
+  /*
+    Resend's own shared sender is allowed to send without being verified, so it
+    is not the 403 below — but it is a shared domain carrying nobody's
+    reputation, and it lands in spam often enough that real staff should never
+    be invited from it. See usingSharedSender() in src/lib/email.ts.
+  */
+  if (/(^|\.)resend\.dev$/.test(domain)) {
+    add("warn", "Email", `from ${domain} — Resend's shared sender; often lands in spam`);
+    return;
+  }
+
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 15_000);
+    const r = await fetch("https://api.resend.com/domains", {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: ctl.signal,
+    });
+    clearTimeout(t);
+    if (!r.ok) {
+      add("warn", "Email", `could not check the sender with Resend (${r.status})`);
+      return;
+    }
+    const body = (await r.json()) as { data?: { name: string; status: string }[] };
+    const verified = (body.data ?? []).filter((d) => d.status === "verified").map((d) => d.name);
+    // A domain verified on the account also covers its subdomains.
+    const covered = verified.some((v) => domain === v || domain.endsWith(`.${v}`));
+    covered
+      ? add("ok", "Email", `from ${domain} · verified with Resend`)
+      : add(
+          "fail",
+          "Email",
+          `EMAIL_FROM uses ${domain}, which is not verified with Resend — every send fails 403. ` +
+            (verified.length ? `Verified: ${verified.join(", ")}` : "No verified domains on this account.")
+        );
+  } catch {
+    add("warn", "Email", "Resend unreachable — sender not checked");
+  }
+}
+
 async function main() {
   // Node
   const major = Number(process.versions.node.split(".")[0]);
@@ -162,6 +225,8 @@ async function main() {
   process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY
     ? add("ok", "Push notifications", "VAPID keys set")
     : add("warn", "Push notifications", "VAPID keys missing — push disabled");
+
+  await emailCheck();
 
   if (process.argv.includes("--deploy")) await deployChecks();
 
