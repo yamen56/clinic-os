@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useAutosave } from "@/lib/use-autosave";
 import { fmtDate, fmtDateTime, fmtMoney, fmtRelative, fmtTime } from "@/lib/dates";
+import { inkOn } from "@/lib/contrast";
 import { formatPhone } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1400,7 +1401,7 @@ function NotesTab({
                   className="rounded-full border px-3 py-1 text-[12px] font-medium transition-colors"
                   style={
                     on
-                      ? { background: c.color, borderColor: c.color, color: "#fff" }
+                      ? { background: c.color, borderColor: c.color, color: inkOn(c.color) }
                       : { borderColor: "var(--color-line-strong)", color: c.color }
                   }
                 >

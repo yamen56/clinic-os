@@ -10,6 +10,7 @@ const SUITES = [
   ["unit: phone normalization", "scripts/test-phone.ts"],
   ["unit: RLS tenant isolation", "scripts/test-rls.ts"],
   ["unit: Arabic-insensitive search", "scripts/test-search.ts"],
+  ["unit: readable ink on a clinic colour", "scripts/test-contrast.ts"],
   ["phones: country codes and RTL display", "scripts/qa-phone-ui.ts"],
   ["unit: surviving a database blip", "scripts/qa-db-resilience.ts"],
   ["phase 1: foundation, auth, tenancy", "scripts/qa-phase1.ts"],
