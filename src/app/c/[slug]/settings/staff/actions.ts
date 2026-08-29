@@ -67,17 +67,35 @@ export async function addStaffAction(
     for this happened above — the caller must be this clinic's owner.
     Membership and audit below stay tenant-scoped.
   */
-  const { userId, wasExisting } = await withSystem(async (sc) => {
-    const existing = await sc.query(`select id from users where lower(email) = $1`, [
-      d.email.toLowerCase(),
-    ]);
-    if (existing.rowCount) return { userId: existing.rows[0].id as string, wasExisting: true };
+  const { userId, wasExisting, needsInvite } = await withSystem(async (sc) => {
+    const existing = await sc.query(
+      `select id, password_hash from users where lower(email) = $1`,
+      [d.email.toLowerCase()]
+    );
+    if (existing.rowCount) {
+      const row = existing.rows[0] as { id: string; password_hash: string | null };
+      /*
+        An account with no password has never been used: either the invitation
+        was never accepted, or this person was removed before they got round to
+        it. Adding them again is adding them for the first time as far as they
+        are concerned, so the name on the form replaces whatever was typed
+        before, and an invitation goes out below.
+
+        Once there is a password the account belongs to a person who has chosen
+        their own name, and the same person can work at two clinics — so a
+        second clinic typing their email must never rename them.
+      */
+      if (!row.password_hash) {
+        await sc.query(`update users set full_name = $2 where id = $1`, [row.id, d.fullName]);
+      }
+      return { userId: row.id, wasExisting: true, needsInvite: !row.password_hash };
+    }
     // password_hash stays null until the invitation is accepted.
     const u = await sc.query(
       `insert into users (email, full_name) values ($1, $2) returning id`,
       [d.email, d.fullName]
     );
-    return { userId: u.rows[0].id as string, wasExisting: false };
+    return { userId: u.rows[0].id as string, wasExisting: false, needsInvite: true };
   });
 
   return inClinic(access, async (c) => {
@@ -86,10 +104,26 @@ export async function addStaffAction(
       [access.clinicId, userId]
     );
     if (dup.rowCount) {
+      /*
+        Everything the form collected, not just the role — somebody adding a
+        removed colleague back has just retyped their title, specialty and
+        colour, and leaving the old ones in place is the same surprise as
+        leaving the old name.
+      */
       await c.query(
-        `update clinic_members set active = true, role = $3, permissions = $4
+        `update clinic_members
+            set active = true, role = $3, permissions = $4,
+                title = $5, specialty = $6, color = coalesce($7, color)
           where id = $1 and clinic_id = $2`,
-        [dup.rows[0].id, access.clinicId, d.role, JSON.stringify(permissions)]
+        [
+          dup.rows[0].id,
+          access.clinicId,
+          d.role,
+          JSON.stringify(permissions),
+          d.title,
+          d.specialty,
+          d.color,
+        ]
       );
     } else {
       await c.query(
@@ -107,10 +141,14 @@ export async function addStaffAction(
       entityId: userId,
       detail: { role: d.role, email: d.email },
     });
-    // Existing accounts already have a password; only new ones need an invite.
+    /*
+      Whether an invitation is owed is about the account having no password, not
+      about the row being new. A person who was invited, never accepted, and then
+      removed has a user row and no way in — and used to get nothing at all here.
+    */
     let inviteUrl: string | undefined;
     let emailed = false;
-    if (!wasExisting) {
+    if (needsInvite) {
       const raw = await withSystem((sc) =>
         createAuthToken(sc, {
           userId,

@@ -254,9 +254,16 @@ export function StaffClient({
                     // Email could not be delivered — hand the owner the link.
                     setInviteLink(r.inviteUrl);
                   } else {
+                    /*
+                      What was sent, not whether a row already existed. Somebody
+                      re-adding a colleague who never accepted the first
+                      invitation does have an existing account, and does get a
+                      fresh invitation — telling them the email was "already
+                      taken" described the database rather than what happened.
+                    */
                     toast(
-                      r.existing ? t.staff.emailTaken : t.staff.invited,
-                      r.existing ? "info" : "success"
+                      r.emailed ? t.staff.invited : t.staff.emailTaken,
+                      r.emailed ? "success" : "info"
                     );
                   }
                   setAddOpen(false);

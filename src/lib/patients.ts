@@ -10,9 +10,9 @@ export async function findPatientByPhone(
   c: PoolClient,
   clinicId: string,
   phoneE164: string
-): Promise<{ id: string; full_name: string } | null> {
+): Promise<{ id: string; full_name: string; status: string } | null> {
   const r = await c.query(
-    `select id, full_name from patients
+    `select id, full_name, status from patients
      where clinic_id = $1 and merged_into is null
        and (phone_e164 = $2 or secondary_phone_e164 = $2 or $2 = any(extra_phones))
      order by (phone_e164 = $2) desc
@@ -32,8 +32,14 @@ export async function findOrCreatePatient(
     source: "staff" | "booking_link" | "whatsapp" | "ai_agent" | "import";
     status?: "lead" | "active";
     defaultCountry?: CountryCode;
+    /**
+     * Staff are deliberately re-creating a file, so an archived one is brought
+     * back and takes the details they just typed. Off by default: see the
+     * comment at the call below for why this is the caller's decision.
+     */
+    restoreArchived?: boolean;
   }
-): Promise<{ id: string; created: boolean; phoneE164: string | null }> {
+): Promise<{ id: string; created: boolean; restored: boolean; phoneE164: string | null }> {
   const phoneE164 = normalizePhone(input.phone, input.defaultCountry ?? "JO");
   if (phoneE164) {
     const existing = await findPatientByPhone(c, clinicId, phoneE164);
@@ -45,7 +51,30 @@ export async function findOrCreatePatient(
           [existing.id, input.whatsappName]
         );
       }
-      return { id: existing.id, created: false, phoneE164 };
+      /*
+        Somebody typing a name and a number into "new patient" for a file they
+        had archived is re-creating that patient, not navigating to them: the
+        archive comes off and the details they just typed win. Returning the old
+        record unchanged is what made this look broken — the file stayed out of
+        the list and still carried the previous name.
+
+        Two things this deliberately does not do. An *active* file is somebody's
+        live record and is never renamed underneath them, because the same
+        number reappearing usually means the same person, not a correction. And
+        an inbound WhatsApp message never resurrects a file the clinic archived
+        on purpose, which is why this is a flag the caller sets rather than
+        something that happens by itself.
+      */
+      let restored = false;
+      if (input.restoreArchived && existing.status === "archived") {
+        await c.query(
+          `update patients set status = 'active', full_name = coalesce($2, full_name)
+            where id = $1`,
+          [existing.id, input.fullName?.trim() || null]
+        );
+        restored = true;
+      }
+      return { id: existing.id, created: false, restored, phoneE164 };
     }
   }
   const name = input.fullName?.trim() || input.whatsappName?.trim() || phoneE164 || input.phone;
@@ -61,7 +90,7 @@ export async function findOrCreatePatient(
       input.status ?? (input.source === "whatsapp" ? "lead" : "active"),
     ]
   );
-  return { id: r.rows[0].id, created: true, phoneE164 };
+  return { id: r.rows[0].id, created: true, restored: false, phoneE164 };
 }
 
 export type PatientFilters = {

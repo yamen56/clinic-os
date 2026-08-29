@@ -54,6 +54,9 @@ export async function createPatientAction(
       phone: data.phone,
       fullName: name,
       source: "staff",
+      // Somebody filling in this form for a number they archived means to have
+      // that patient back, under the name they just typed.
+      restoreArchived: true,
     });
     if (result.created) {
       await audit(c, {
