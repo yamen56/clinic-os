@@ -56,6 +56,7 @@ export default async function PatientsPage({
         nextAppointment: r.next_appointment ? String(r.next_appointment) : null,
       }))}
       allTags={data.tags}
+      canExportAll={access.isOwner || access.session.user.isSuperAdmin}
       tz={access.clinic.timezone}
       initialFilters={{ q: sp.q ?? "", tag: sp.tag ?? "", source: sp.source ?? "", visit: sp.visit ?? "" }}
       /* ?new=1 — what the dashboard shortcut and its keyboard accelerator open. */

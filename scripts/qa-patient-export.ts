@@ -79,6 +79,14 @@ async function main() {
      values ($1,$2,'receptionist',$3)`,
     [clinicId, outsiderId, JSON.stringify({ level: "custom", caps: { conversations: true, patients: false } })]
   );
+  /* And somebody who may open any single file but does not own the clinic —
+     the whole point of the bulk gate is the gap between these two. */
+  const staffId = await mkUser("staff");
+  await db.query(
+    `insert into clinic_members (clinic_id, user_id, role, permissions)
+     values ($1,$2,'receptionist',$3)`,
+    [clinicId, staffId, JSON.stringify({ level: "custom", caps: { patients: true } })]
+  );
 
   const NOTE = `clinical-${stamp}`;
   const SECRET_MSG = `whatsapp-${stamp}`;
@@ -119,6 +127,14 @@ async function main() {
     `insert into messages (clinic_id, conversation_id, direction, sender_kind, msg_type, body, status)
      values ($1,$2,'in','patient','text',$3,'delivered')`,
     [clinicId, conv, SECRET_MSG]
+  );
+
+  // A second file, so "all of them" means more than one.
+  const SECOND = `مريض ثانٍ ${stamp}`;
+  await db.query(
+    `insert into patients (clinic_id, full_name, phone_e164, source)
+     values ($1,$2,'+962790424343','staff')`,
+    [clinicId, SECOND]
   );
 
   // A second clinic, to prove one cannot export the other's file.
@@ -253,6 +269,165 @@ async function main() {
     await page.waitForTimeout(400);
     const link = page.getByRole("link", { name: ar.patients.exportFile });
     check("the file offers it", (await link.count()) > 0, "");
+
+    /* ============================================ every record at once */
+    console.log("\n[the whole clinic, and who may take it]");
+
+    const bulkAnon = await page.request.get(`${BASE}/patients-print/${clinicId}`);
+    check("the bulk page needs a signature", bulkAnon.status() === 404, String(bulkAnon.status()));
+
+    /*
+      The kinds are an allowlist per page. A key minted to print one patient
+      must not be spendable on the page that prints the entire clinic, or the
+      narrower permission silently becomes the wider one.
+    */
+    const wrongKind = printKeyFor(clinicId, "patient");
+    const kindMix = await page.request.get(
+      `${BASE}/patients-print/${clinicId}?kind=patient&exp=${wrongKind.exp}&sig=${wrongKind.sig}`
+    );
+    check("a single-patient key does not open the clinic", kindMix.status() === 404, String(kindMix.status()));
+
+    // The one that matters most: another clinic's key over this clinic's id.
+    const otherKey = printKeyFor(other, "patients");
+    const crossClinic = await page.request.get(
+      `${BASE}/patients-print/${clinicId}?kind=patients&exp=${otherKey.exp}&sig=${otherKey.sig}`
+    );
+    check(
+      "one clinic's key does not open another's records",
+      crossClinic.status() === 404,
+      String(crossClinic.status())
+    );
+
+    const bulkKey = printKeyFor(clinicId, "patients");
+    const bulkUrl = `${BASE}/patients-print/${clinicId}?kind=patients&exp=${bulkKey.exp}&sig=${bulkKey.sig}`;
+    const bulkOk = await page.request.get(bulkUrl);
+    check("the clinic's own key opens it", bulkOk.status() === 200, String(bulkOk.status()));
+
+    const bulkAnonApi = await browser
+      .newContext()
+      .then(async (c2) => {
+        const r = await c2.request.get(`${BASE}/api/c/${slug}/patients/export-all`);
+        await c2.close();
+        return r;
+      });
+    check(
+      "a signed-out bulk export gets nothing",
+      bulkAnonApi.status() === 401 || bulkAnonApi.status() === 403,
+      String(bulkAnonApi.status())
+    );
+
+    /* Staff may export one file and may not export all of them. This is the
+       assertion the whole owner gate exists for. */
+    const staffCtx = await browser.newContext();
+    const staffPage = await staffCtx.newPage();
+    await signIn(staffPage, `staff-${slug}@test.local`);
+    const staffOne = await staffPage.request.get(
+      `${BASE}/api/c/${slug}/patients/${patient}/export`
+    );
+    check("staff may still export one file", staffOne.status() === 200, String(staffOne.status()));
+    const staffAll = await staffPage.request.get(`${BASE}/api/c/${slug}/patients/export-all`);
+    check("but not every file", staffAll.status() === 403, String(staffAll.status()));
+
+    await staffPage.goto(`${BASE}/c/${slug}/patients`);
+    await staffPage.waitForLoadState("networkidle");
+    await staffPage.addStyleTag({ content: "nextjs-portal{display:none!important}" });
+    check(
+      "and is not shown a button they cannot use",
+      (await staffPage.getByRole("button", { name: ar.patients.exportAll }).count()) === 0,
+      ""
+    );
+    await staffCtx.close();
+
+    /* ============================================ the document */
+    console.log("\n[the whole-clinic document]");
+    const all = await page.request.get(`${BASE}/api/c/${slug}/patients/export-all`);
+    check("the owner gets every record", all.status() === 200, String(all.status()));
+    const allBody = await all.body();
+    check("which is a PDF", allBody.subarray(0, 5).toString("latin1") === "%PDF-", "");
+    check(
+      "named for the clinic and the day",
+      /attachment/.test(all.headers()["content-disposition"] ?? "") &&
+        (all.headers()["content-disposition"] ?? "").includes(slug),
+      all.headers()["content-disposition"] ?? ""
+    );
+
+    await page.goto(bulkUrl);
+    await page.waitForLoadState("networkidle");
+    const bulkText = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+
+    check("both patients are in it", bulkText.includes("مريض التصدير") && bulkText.includes(SECOND), "");
+    check("each record starts its own sheet", (await page.locator(".patient-sheet").count()) === 2, "");
+    check("it carries an index", (await page.locator(".toc tr").count()) === 2, "");
+    check("the cover states the count", bulkText.includes(ar.patients.exportAllCount), "");
+    check("no other clinic's patient is in it", !bulkText.includes("Someone Else"), "");
+    check("nor the WhatsApp thread", !bulkText.includes(SECRET_MSG), "");
+
+    /* The filters on screen are the filters in the document — and the cover
+       says which, so a slice is never mistaken for the whole. */
+    const filteredKey = printKeyFor(clinicId, "patients");
+    await page.goto(
+      `${BASE}/patients-print/${clinicId}?kind=patients&exp=${filteredKey.exp}&sig=${filteredKey.sig}&q=${encodeURIComponent(SECOND)}`
+    );
+    await page.waitForLoadState("networkidle");
+    const filtered = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+    check("a filtered export holds only the match", filtered.includes(SECOND) && !filtered.includes("مريض التصدير"), "");
+    check("and says so on the cover", filtered.includes(ar.patients.exportAllScope), "");
+
+    const nothing = await page.request.get(
+      `${BASE}/api/c/${slug}/patients/export-all?q=${encodeURIComponent(`nobody-${stamp}`)}`
+    );
+    check("a filter matching nobody is refused", nothing.status() === 404, String(nothing.status()));
+
+    check(
+      "taking every record is recorded",
+      (
+        await db.query(
+          `select count(*)::int n from audit_log
+            where clinic_id = $1 and action = 'patient.export_all'`,
+          [clinicId]
+        )
+      ).rows[0].n >= 1,
+      ""
+    );
+
+    /* ============================================ the ceiling */
+    console.log("\n[when there are too many]");
+    await db.query(
+      `insert into patients (clinic_id, full_name, phone_e164, source)
+       select $1, 'bulk ' || g, '+9627' || lpad(g::text, 8, '0'), 'staff'
+         from generate_series(1, 420) g`,
+      [clinicId]
+    );
+    const tooMany = await page.request.get(`${BASE}/api/c/${slug}/patients/export-all`);
+    check("too many records is refused, not truncated", tooMany.status() === 413, String(tooMany.status()));
+    const detail = (await tooMany.json().catch(() => ({}))) as { count?: number; max?: number };
+    check(
+      "and the refusal says how many and how many fit",
+      typeof detail.count === "number" && detail.count > 400 && detail.max === 400,
+      `${detail.count} / ${detail.max}`
+    );
+    /* Even holding a valid key, the page itself will not render past the cap —
+       the count check in the route is not the only thing standing there. */
+    const cappedKey = printKeyFor(clinicId, "patients");
+    await page.goto(
+      `${BASE}/patients-print/${clinicId}?kind=patients&exp=${cappedKey.exp}&sig=${cappedKey.sig}`
+    );
+    await page.waitForLoadState("networkidle");
+    check(
+      "the page refuses to render past the cap on its own",
+      (await page.locator(".patient-sheet").count()) === 400,
+      String(await page.locator(".patient-sheet").count())
+    );
+
+    /* ============================================ the button */
+    await page.goto(`${BASE}/c/${slug}/patients`);
+    await page.waitForLoadState("networkidle");
+    await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
+    check(
+      "the owner is offered it on the list",
+      (await page.getByRole("button", { name: ar.patients.exportAll }).count()) > 0,
+      ""
+    );
   } finally {
     await browser.close();
   }

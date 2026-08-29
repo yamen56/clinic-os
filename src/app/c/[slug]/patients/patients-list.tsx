@@ -14,7 +14,7 @@ import { EmptyState, Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { createPatientAction } from "./actions";
-import { Users, Plus, Upload } from "lucide-react";
+import { Users, Plus, Upload, Download } from "lucide-react";
 
 type Row = {
   id: string;
@@ -35,6 +35,7 @@ export function PatientsList({
   tz,
   initialFilters,
   openNew,
+  canExportAll,
 }: {
   slug: string;
   patients: Row[];
@@ -44,6 +45,8 @@ export function PatientsList({
   initialFilters: { q: string; tag: string; source: string; visit: string };
   /** Open the new-patient dialog on arrival — the dashboard shortcut. */
   openNew?: boolean;
+  /** Owner only: opening one file is the job, taking every file is not. */
+  canExportAll: boolean;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -54,6 +57,7 @@ export function PatientsList({
   const [phone, setPhone] = useState("");
   const [err, setErr] = useState("");
   const [pending, start] = useTransition();
+  const [exporting, setExporting] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const apply = (next: typeof f) => {
@@ -86,6 +90,67 @@ export function PatientsList({
       router.push(`/c/${slug}/patients/${r.id}`);
     });
 
+  /*
+    Fetched rather than linked, because this one takes real time: the worker
+    renders every record in a single Chromium pass, which is a moment for a
+    small clinic and most of a minute for a large one. A plain <a download>
+    would sit there looking broken for all of it, so the button goes busy on
+    the click and the file is handed to the browser once the bytes arrive.
+
+    It exports what is on screen. The filters are the ones the list is already
+    showing, so "export all" after a search means that search — and the cover
+    sheet says which, so nobody mistakes a slice for the whole.
+  */
+  const exportAll = async () => {
+    setExporting(true);
+    try {
+      const p = new URLSearchParams();
+      if (f.q) p.set("q", f.q);
+      if (f.tag) p.set("tag", f.tag);
+      if (f.source) p.set("source", f.source);
+      if (f.visit) p.set("visit", f.visit);
+      const res = await fetch(`/api/c/${slug}/patients/export-all${p.size ? `?${p}` : ""}`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          count?: number;
+          max?: number;
+        };
+        if (body.error === "too_many") {
+          toast(
+            t.patients.exportAllTooMany
+              .replace("{n}", String(body.count))
+              .replace("{max}", String(body.max)),
+            "error"
+          );
+        } else {
+          toast(
+            body.error === "empty" ? t.patients.exportAllEmpty : t.patients.exportAllFailed,
+            "error"
+          );
+        }
+        return;
+      }
+      const name =
+        decodeURIComponent(
+          res.headers.get("content-disposition")?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)/i)?.[1] ?? ""
+        ) || `${slug}-patients.pdf`;
+      const href = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+      toast(t.patients.exportDone, "success");
+    } catch {
+      toast(t.patients.exportAllFailed, "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const sourceLabel = (s: string) =>
     (t.patients.sources as Record<string, string>)[s] ?? s;
 
@@ -97,6 +162,12 @@ export function PatientsList({
           <>
             {/* Beside "new patient", because a clinic arriving with a list is
                 looking for it on this screen and nowhere else. */}
+            {canExportAll && (
+              <Button variant="outline" onClick={exportAll} loading={exporting} disabled={exporting}>
+                <Download className="h-4 w-4" />
+                {exporting ? t.patients.exportAllPreparing : t.patients.exportAll}
+              </Button>
+            )}
             <Link href={`/c/${slug}/patients/import`}>
               <Button variant="outline">
                 <Upload className="h-4 w-4" />
