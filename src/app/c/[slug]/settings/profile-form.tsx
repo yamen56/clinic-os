@@ -9,7 +9,8 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { SaveIndicator } from "@/components/ui/save-indicator";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { Upload } from "lucide-react";
+import { Upload, Image as ImageIcon } from "lucide-react";
+import { clinicLogoUrl } from "@/lib/clinic-logo";
 
 export function ClinicProfileForm({
   slug,
@@ -28,6 +29,7 @@ export function ClinicProfileForm({
     brand_color: string;
     default_locale: string;
     timezone: string;
+    logo_path: string | null;
   };
 }) {
   const { t } = useI18n();
@@ -42,18 +44,40 @@ export function ClinicProfileForm({
   const logoInput = useRef<HTMLInputElement>(null);
   const ro = !isOwner;
 
+  /*
+    The file the browser already has, shown the instant it is chosen. The saved
+    logo is served from an endpoint that caches, and `router.refresh()` only
+    re-renders — so without this the clinic picks a logo, is told it saved, and
+    the square in front of them does not change.
+  */
+  const [preview, setPreview] = useState<string | null>(null);
+  const logoSrc = preview ?? clinicLogoUrl(slug, clinic.logo_path);
+
   const uploadLogo = async (files: FileList | null) => {
     const file = files?.[0];
     if (!file) return;
     setUploading(true);
+    const local = URL.createObjectURL(file);
     try {
       const fd = new FormData();
       fd.set("file", file);
       const res = await fetch(`/api/c/${slug}/clinic/logo`, { method: "POST", body: fd });
       if (!res.ok) {
-        toast(t.common.genericError, "error");
+        URL.revokeObjectURL(local);
+        toast(
+          res.status === 413
+            ? t.settings.logoTooLarge
+            : res.status === 415
+              ? t.settings.logoBadType
+              : t.common.genericError,
+          "error"
+        );
         return;
       }
+      setPreview((old) => {
+        if (old) URL.revokeObjectURL(old);
+        return local;
+      });
       toast(t.common.saved);
       router.refresh();
     } finally {
@@ -105,6 +129,30 @@ export function ClinicProfileForm({
               className="h-9 w-14 cursor-pointer rounded-md border border-line-strong bg-surface"
             />
             <span dir="ltr" className="text-sm text-ink-500 tnum">{color}</span>
+
+            {/*
+              What is actually saved, beside the button that changes it. A
+              chequerboard behind it because most clinic logos are transparent
+              PNGs: on a plain white card a white mark is an empty square, and
+              the clinic cannot tell an uploaded logo from a failed upload.
+            */}
+            <span
+              className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-ctl border border-line bg-surface"
+              style={{
+                backgroundImage:
+                  "linear-gradient(45deg,var(--color-sunken) 25%,transparent 25%,transparent 75%,var(--color-sunken) 75%),linear-gradient(45deg,var(--color-sunken) 25%,transparent 25%,transparent 75%,var(--color-sunken) 75%)",
+                backgroundSize: "10px 10px",
+                backgroundPosition: "0 0, 5px 5px",
+              }}
+            >
+              {logoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoSrc} alt={t.settings.logo} className="h-full w-full object-contain" />
+              ) : (
+                <ImageIcon className="h-4 w-4 text-ink-300" />
+              )}
+            </span>
+
             {!ro && (
               <>
                 <input
@@ -119,7 +167,7 @@ export function ClinicProfileForm({
                 />
                 <Button variant="outline" size="sm" loading={uploading} onClick={() => logoInput.current?.click()}>
                   <Upload className="h-3.5 w-3.5" />
-                  Logo
+                  {logoSrc ? t.settings.logoReplace : t.settings.logo}
                 </Button>
               </>
             )}

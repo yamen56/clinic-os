@@ -1,5 +1,7 @@
 "use client";
 
+import { inkOn } from "@/lib/contrast";
+
 export function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-md bg-ink-900/6 ${className}`} />;
 }
@@ -44,12 +46,19 @@ export function Avatar({
   size = 36,
   color,
   src,
+  fit = "cover",
 }: {
   name: string;
   size?: number;
   color?: string;
   /** A photo. Initials are drawn underneath and show through if it fails. */
   src?: string | null;
+  /**
+   * How the image fills the circle. "cover" for a face, where cropping the
+   * edges is what you want; "contain" for a logo, where a clinic's horizontal
+   * lockup would otherwise be cropped to the few letters in its middle.
+   */
+  fit?: "cover" | "contain";
 }) {
   const initials = name
     .split(/\s+/)
@@ -64,7 +73,9 @@ export function Avatar({
         height: size,
         fontSize: size * 0.38,
         background: color || "var(--color-brand-100)",
-        color: color ? "#fff" : "var(--color-brand-700)",
+        // Initials sit on a colour the clinic chose, so white is not a safe
+        // assumption — a pale brand colour made them invisible.
+        color: color ? inkOn(color) : "var(--color-brand-700)",
       }}
     >
       {initials}
@@ -84,7 +95,7 @@ export function Avatar({
           height={size}
           loading="lazy"
           decoding="async"
-          className="absolute inset-0 h-full w-full object-cover"
+          className={`absolute inset-0 h-full w-full ${fit === "contain" ? "object-contain" : "object-cover"}`}
           onError={(e) => {
             e.currentTarget.style.display = "none";
           }}

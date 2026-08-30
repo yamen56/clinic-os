@@ -40,6 +40,7 @@ const SUITES = [
   ["documents: tabs, signed copies, imports", "scripts/qa-documents.ts"],
   ["payments: part-paid invoices", "scripts/qa-payments.ts"],
   ["photos: staff pictures & who may set them", "scripts/qa-photos.ts"],
+  ["branding: the clinic logo where it belongs", "scripts/qa-clinic-logo.ts"],
   ["tablet: iPad layouts", "scripts/qa-tablet.ts"],
   ["phone: nothing scrolls sideways", "scripts/qa-mobile-width.ts"],
   ["account & tags: the profile page and the tag catalogue", "scripts/qa-profile-tags.ts"],

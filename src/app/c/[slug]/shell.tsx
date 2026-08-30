@@ -9,6 +9,7 @@ import { InstallApp } from "@/components/pwa";
 import { logoutAction } from "@/app/login/actions";
 import { exitImpersonationAction } from "@/app/admin/actions";
 import { Avatar } from "@/components/ui/misc";
+import { clinicLogoUrl } from "@/lib/clinic-logo";
 import { BrandLockup } from "@/components/brand-mark";
 import type { CapabilityMap, MemberRole } from "@/lib/permissions";
 import {
@@ -152,7 +153,16 @@ export function Shell({
           <BrandLockup />
         </div>
         <div className="flex items-center gap-2.5 px-4 py-3.5">
-          <Avatar name={clinic.name} size={30} color={clinic.brandColor} />
+          {/* Their own logo once one is uploaded. The initials stay underneath
+              rather than being swapped out, so a logo that fails to load leaves
+              a marked circle rather than a hole. */}
+          <Avatar
+            name={clinic.name}
+            size={30}
+            color={clinic.brandColor}
+            src={clinicLogoUrl(clinic.slug, clinic.logoPath)}
+            fit="contain"
+          />
           <div className="min-w-0">
             <div className="truncate text-[13px] font-semibold leading-tight text-white">
               {clinicDisplay}
