@@ -281,12 +281,24 @@ export function CampaignsClient({
                 {audience.sample.length > 0 && (
                   <div className="mt-1 truncate text-ink-500">{audience.sample.join(" · ")}…</div>
                 )}
-                {audience.total > audience.reachable && (
+                {/*
+                  Two reasons somebody in the filter is not in the send, and
+                  they are not interchangeable. "No number" is a gap in the file
+                  that reception can fill; "asked not to be messaged" is a
+                  decision, and rolling it into the first would invite exactly
+                  the wrong fix.
+                */}
+                {audience.total - audience.reachable - audience.muted > 0 && (
                   <div className="mt-1 text-ink-500">
                     {t.campaigns.noPhoneSkipped.replace(
                       "{n}",
-                      String(audience.total - audience.reachable)
+                      String(audience.total - audience.reachable - audience.muted)
                     )}
+                  </div>
+                )}
+                {audience.muted > 0 && (
+                  <div className="mt-1 text-ink-500">
+                    {t.campaigns.mutedSkipped.replace("{n}", String(audience.muted))}
                   </div>
                 )}
               </>

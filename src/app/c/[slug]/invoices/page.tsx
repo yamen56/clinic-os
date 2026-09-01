@@ -35,21 +35,41 @@ export default async function InvoicesPage({
   const tab = sp.tab === "payments" ? "payments" : "invoices";
 
   const tz = access.clinic.timezone;
+  /*
+    The totals across the top are the clinic's takings, which is a different
+    question from whether somebody may raise and settle an invoice. A receptionist
+    can be given the till without being shown the month's revenue.
+
+    The query behind them does not run for a member who may not see the answer —
+    the same rule the dashboard already follows, and the reason a hidden section
+    there cannot leak through a page that everybody can open.
+  */
+  const showTotals = can(access, "invoices.analytics");
 
   const data = await inClinic(access, async (c) => {
     const today = dayRangeUtc(tz);
     const week = weekRangeUtc(tz);
     const month = monthRangeUtc(tz);
 
+    /*
+      `partial_count` is not one of the totals — it is the number beside the
+      "Partly paid" filter chip, and a member who can work the list needs it
+      whether or not they may see money. So it is asked for either way, and the
+      four sums are only added to the statement when they will be shown.
+    */
     const [stats] = (
       await c.query(
-        `select
-           (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $2 and paid_at < $3) as today,
-           (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $4 and paid_at < $5) as week,
-           (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $6 and paid_at < $7) as month,
-           (select coalesce(sum(total - amount_paid), 0) from invoices where clinic_id = $1 and status in ('sent', 'partially_paid')) as outstanding,
-           (select count(*) from invoices where clinic_id = $1 and status = 'partially_paid')::int as partial_count`,
-        [access.clinicId, today.start, today.end, week.start, week.end, month.start, month.end]
+        showTotals
+          ? `select
+               (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $2 and paid_at < $3) as today,
+               (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $4 and paid_at < $5) as week,
+               (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $6 and paid_at < $7) as month,
+               (select coalesce(sum(total - amount_paid), 0) from invoices where clinic_id = $1 and status in ('sent', 'partially_paid')) as outstanding,
+               (select count(*) from invoices where clinic_id = $1 and status = 'partially_paid')::int as partial_count`
+          : `select (select count(*) from invoices where clinic_id = $1 and status = 'partially_paid')::int as partial_count`,
+        showTotals
+          ? [access.clinicId, today.start, today.end, week.start, week.end, month.start, month.end]
+          : [access.clinicId]
       )
     ).rows;
 
@@ -67,7 +87,7 @@ export default async function InvoicesPage({
       else if (sp.status === "paid") conds.push(`i.status = 'paid'`);
       invoices = (
         await c.query(
-          `select i.id, i.number, i.status, i.total, i.amount_paid, i.created_at, i.sent_at,
+          `select i.id, i.number, i.title, i.status, i.total, i.amount_paid, i.created_at, i.sent_at,
                   p.full_name as patient_name
            from invoices i join patients p on p.id = i.patient_id
            where ${conds.join(" and ")}
@@ -118,21 +138,23 @@ export default async function InvoicesPage({
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {(
-          [
-            [t.invoices.todayTotal, data.stats.today],
-            [t.invoices.weekTotal, data.stats.week],
-            [t.invoices.monthTotal, data.stats.month],
-            [t.invoices.outstanding, data.stats.outstanding],
-          ] as [string, string][]
-        ).map(([label, val], i) => (
-          <Card key={i} className="p-4">
-            <div className="text-[13px] text-ink-500">{label}</div>
-            <div className="mt-1 text-xl font-semibold tnum">{fmtMoney(Number(val), access.clinic.currency, locale)}</div>
-          </Card>
-        ))}
-      </div>
+      {showTotals && (
+        <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {(
+            [
+              [t.invoices.todayTotal, data.stats.today],
+              [t.invoices.weekTotal, data.stats.week],
+              [t.invoices.monthTotal, data.stats.month],
+              [t.invoices.outstanding, data.stats.outstanding],
+            ] as [string, string][]
+          ).map(([label, val], i) => (
+            <Card key={i} className="p-4">
+              <div className="text-[13px] text-ink-500">{label}</div>
+              <div className="mt-1 text-xl font-semibold tnum">{fmtMoney(Number(val), access.clinic.currency, locale)}</div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <div className="mb-4 flex gap-1 border-b border-line">
         {[
@@ -215,7 +237,20 @@ export default async function InvoicesPage({
                       <span className="w-24 shrink-0 truncate text-sm font-semibold tnum sm:w-36" dir="ltr">
                         {String(inv.number)}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-sm">{String(inv.patient_name)}</span>
+                      {/*
+                        The name the clinic gave this invoice, after the person it
+                        is for. Both truncate inside one min-w-0 column, so a long
+                        title shortens rather than widening the row — the same
+                        rule the rest of this list already follows.
+                      */}
+                      <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                        <span className="truncate text-sm">{String(inv.patient_name)}</span>
+                        {inv.title ? (
+                          <span className="truncate text-[13px] text-ink-400">
+                            {String(inv.title)}
+                          </span>
+                        ) : null}
+                      </span>
                       <span className="hidden text-[13px] text-ink-400 sm:block">
                         {fmtDate(String(inv.created_at), tz, locale)}
                       </span>

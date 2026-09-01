@@ -38,6 +38,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
     behind them do not run at all for somebody who cannot see the answer.
   */
   const showMoney = can(a, "invoices");
+  /*
+    Narrower than showMoney, and the reason the comment above still holds after
+    the split. "May raise an invoice" and "may see what the clinic took this
+    week" became two separate answers; the shortcut follows the first, every
+    figure and chart below follows the second. Without this the front page would
+    quietly hand back exactly the totals the invoice list was told to hide.
+  */
+  const showRevenue = can(a, "invoices.analytics");
   const showInbox = can(a, "conversations");
   const showCalendar = can(a, "calendar");
   const showPatients = can(a, "patients");
@@ -150,7 +158,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       later, because the cheapest query is the one that does not run — and this
       is the most-opened page in the product.
     */
-    const services = showMoney
+    const services = showRevenue
       ? (
           await c.query(
             `select coalesce(nullif(s.name_ar, ''), s.name, '') as name,
@@ -209,7 +217,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           },
         ]
       : []),
-    ...(showMoney
+    ...(showRevenue
       ? [
           {
             key: "revenue",
@@ -405,7 +413,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {showMoney && (
+        {showRevenue && (
           <Card>
             <CardHeader title={t.dashboard.revenueTrend} />
             <div className="px-5 py-4">
@@ -413,7 +421,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             </div>
           </Card>
         )}
-        <Card className={showMoney ? "" : "lg:col-span-2"}>
+        {/* Widens to fill the row when the chart beside it is not there, so a
+            member without the revenue view gets a full-width page rather than a
+            half-empty one. */}
+        <Card className={showRevenue ? "" : "lg:col-span-2"}>
           <CardHeader title={t.dashboard.appointmentsTrend} />
           <div className="px-5 py-4">
             <BarChart data={apptPoints} locale={intl} />
@@ -422,7 +433,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {showMoney && (
+        {showRevenue && (
           <Card>
             <CardHeader title={t.dashboard.topServices} sub={t.dashboard.topServicesSub} />
             {data.services.length === 0 ? (
@@ -449,7 +460,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           </Card>
         )}
 
-        <Card className={showMoney ? "" : "lg:col-span-2"}>
+        <Card className={showRevenue ? "" : "lg:col-span-2"}>
           {/*
             The clinic-wide rate lives here rather than in a tile of its own.
             A bare percentage is a number to worry about; the same number above

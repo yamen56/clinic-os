@@ -41,7 +41,13 @@ export default async function PatientsPrintPage({
   const { exp, sig, kind = "patients" } = sp;
   if (!verifyPrintKeyFor(clinicId, kind, exp, sig, KINDS)) notFound();
 
-  const filters: PatientFilters = { q: sp.q, tag: sp.tag, source: sp.source, visit: sp.visit };
+  const filters: PatientFilters = {
+    q: sp.q,
+    tag: sp.tag,
+    source: sp.source,
+    visit: sp.visit,
+    optedOut: sp.optedOut,
+  };
 
   const data = await withSystem(async (c) => {
     const exists = (await c.query(`select 1 from clinics where id = $1`, [clinicId])).rows[0];

@@ -10,7 +10,7 @@ import { inkOn } from "@/lib/contrast";
 import { formatPhone } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Field, Select, Textarea } from "@/components/ui/input";
+import { Input, Field, Select, Textarea, Toggle } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import type { CountryCode } from "@/lib/phone";
 import { Badge, type StatusKey } from "@/components/ui/badge";
@@ -59,6 +59,7 @@ import {
   Filter,
   Pencil,
   Download,
+  BellOff,
 } from "lucide-react";
 
 export type NoteRow = {
@@ -114,6 +115,8 @@ type Patient = {
   source: string;
   status: string;
   notes_summary: string;
+  /** Muted from every automation and campaign. Staff can still message them. */
+  automation_opt_out: boolean;
   custom_fields: Record<string, unknown>;
   insurer_id: string | null;
   insurance_no: string;
@@ -266,6 +269,18 @@ export function PatientProfile(props: {
             />
             {p.status === "lead" && <Badge status="pending">{t.patients.statusLead}</Badge>}
             {p.status === "archived" && <Badge status="cancelled">{t.patients.statusArchived}</Badge>}
+            {/*
+              Said in the header rather than only on the tab that sets it.
+              Whoever is about to build a recall list, or wondering why this
+              person never got their reminder, has to be able to see it without
+              going looking for it.
+            */}
+            {p.automation_opt_out && (
+              <Badge status="neutral">
+                <BellOff className="h-3 w-3" />
+                {t.patients.automations.muted}
+              </Badge>
+            )}
             <SaveIndicator state={state} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-500">
@@ -543,6 +558,33 @@ export function PatientProfile(props: {
               </Card>
             </div>
             <div className="grid content-start gap-4">
+              {/*
+                One switch covering every automation and every campaign.
+
+                In the sidebar rather than among the fields on the left, because
+                it is not a fact about the patient — it is an instruction about
+                how the clinic behaves towards them, and it belongs beside the
+                other things this column says about their standing.
+              */}
+              <Card className="p-5">
+                <div className="flex items-start gap-3">
+                  <Toggle
+                    checked={p.automation_opt_out}
+                    label={t.patients.automations.title}
+                    onChange={(v) => set({ automation_opt_out: v })}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[13px] font-semibold text-ink-500">
+                      {t.patients.automations.title}
+                    </h3>
+                    <p className="mt-1 text-[13px] text-ink-500">
+                      {p.automation_opt_out
+                        ? t.patients.automations.offHint
+                        : t.patients.automations.onHint}
+                    </p>
+                  </div>
+                </div>
+              </Card>
               <Card className="p-5">
                 <h3 className="text-[13px] font-semibold text-ink-500">{t.patients.overview.balanceDue}</h3>
                 <div className={`mt-1 text-2xl font-semibold tnum ${props.balanceDue > 0 ? "text-st-pending" : ""}`}>

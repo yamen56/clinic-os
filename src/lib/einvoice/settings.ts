@@ -14,6 +14,16 @@ export type TaxpayerType = (typeof TAXPAYER_TYPES)[number];
 
 export type EinvoiceSettings = {
   enabled: boolean;
+  /**
+   * Whether a new invoice is filed unless somebody says otherwise.
+   *
+   * Separate from `enabled` because they answer different questions. `enabled`
+   * is "does this clinic file at all"; this is "does it file everything". A
+   * practice that raises the occasional internal receipt turns this off and
+   * decides invoice by invoice; one that files its whole book never notices the
+   * setting is there.
+   */
+  fileByDefault: boolean;
   taxpayerType: TaxpayerType;
   registeredName: string;
   taxNumber: string;
@@ -30,6 +40,7 @@ export type EinvoiceSettingsView = Omit<EinvoiceSettings, "secretKey"> & { hasSe
 
 export const EMPTY_SETTINGS: EinvoiceSettings = {
   enabled: false,
+  fileByDefault: true,
   taxpayerType: "income",
   registeredName: "",
   taxNumber: "",
@@ -45,6 +56,9 @@ function fromRow(r: Record<string, unknown> | undefined): EinvoiceSettings {
   if (!r) return { ...EMPTY_SETTINGS };
   return {
     enabled: Boolean(r.enabled),
+    // A missing column reads as true: this was added after the fact, and a
+    // clinic that was filing everything must carry on filing everything.
+    fileByDefault: r.file_by_default === undefined ? true : Boolean(r.file_by_default),
     taxpayerType: (r.taxpayer_type === "general" ? "general" : "income") as TaxpayerType,
     registeredName: String(r.registered_name ?? ""),
     taxNumber: String(r.tax_number ?? ""),

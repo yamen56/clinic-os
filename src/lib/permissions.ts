@@ -25,6 +25,7 @@ export const CAPABILITIES = [
   "documents.manage",
   "documents.void",
   "invoices",
+  "invoices.analytics",
   "campaigns",
   "automations",
   "ai",
@@ -54,6 +55,7 @@ export type AccessSetting = {
 const REQUIRES: Partial<Record<Capability, Capability>> = {
   "documents.manage": "documents",
   "documents.void": "documents",
+  "invoices.analytics": "invoices",
   "settings.clinic": "settings",
   "settings.staff": "settings",
 };
@@ -68,6 +70,9 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
     "documents",
     "documents.manage",
     "invoices",
+    // The desk takes the money, so it starts able to see the day's takings.
+    // An owner who does not want that unticks one box.
+    "invoices.analytics",
     "settings",
   ],
   other: ["calendar", "patients"],
@@ -118,6 +123,16 @@ export function resolveCapabilities(
       the absence inherits.
     */
     if (!("ai" in ticked) && caps.automations) caps.ai = true;
+    /*
+      The same silence, for the same reason. `invoices.analytics` was split out
+      of `invoices` after these rows were written: a map saved before the split
+      says only that this member has Invoices, which at the time included the
+      revenue tiles at the top of the list. Reading that silence as a denial
+      would take those away from every existing member on deploy — a change
+      nobody asked for, arriving as a bug report. An explicit false still
+      denies; only the absence inherits.
+    */
+    if (!("invoices.analytics" in ticked) && caps.invoices) caps["invoices.analytics"] = true;
   } else {
     /*
       No level recorded: a row written before this model existed, or one whose
@@ -164,7 +179,7 @@ export const CAPABILITY_GROUPS: { section: Capability; actions: Capability[] }[]
   { section: "calendar", actions: [] },
   { section: "patients", actions: [] },
   { section: "documents", actions: ["documents.manage", "documents.void"] },
-  { section: "invoices", actions: [] },
+  { section: "invoices", actions: ["invoices.analytics"] },
   { section: "campaigns", actions: [] },
   { section: "automations", actions: [] },
   { section: "ai", actions: [] },

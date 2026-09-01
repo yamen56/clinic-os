@@ -18,7 +18,16 @@ import { StaffAlertsCard } from "./staff-alerts-card";
 import { SYSTEM_MESSAGES, type SystemMessageState } from "@/lib/system-messages";
 import type { StaffAlert } from "@/lib/staff-alerts";
 import type { Specialty } from "@/lib/specialties";
-import { Workflow, Plus, ChevronRight, History, AlertTriangle, Clock, Stethoscope } from "lucide-react";
+import {
+  Workflow,
+  Plus,
+  ChevronRight,
+  History,
+  AlertTriangle,
+  Clock,
+  Stethoscope,
+  BellOff,
+} from "lucide-react";
 
 type Automation = {
   id: string;
@@ -43,6 +52,7 @@ export function AutomationsClient({
   alerts,
   windowStart,
   windowEnd,
+  mutedPatients,
 }: {
   slug: string;
   isOwner: boolean;
@@ -52,6 +62,8 @@ export function AutomationsClient({
   alerts: StaffAlert[];
   windowStart: string;
   windowEnd: string;
+  /** Patients muted from every flow on this page, and from campaigns. */
+  mutedPatients: number;
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -262,6 +274,40 @@ export function AutomationsClient({
                 className="!w-auto min-w-0 max-w-full"
                 onChange={(e) => patch({ message_window_end: e.target.value })}
               />
+            </div>
+          </Card>
+
+          {/*
+            The other thing that decides whether a flow on this page runs.
+
+            Stated here, beside the sending window, because both are limits on
+            everything above rather than settings of any one automation — and
+            because the switch itself lives on a patient file, which is not
+            somewhere anybody would think to look for the rule.
+          */}
+          <Card className="mt-4">
+            <CardHeader
+              title={
+                <span className="flex items-center gap-2">
+                  <BellOff className="h-4 w-4 text-ink-400" />
+                  {t.automations.optOut}
+                </span>
+              }
+              sub={t.automations.optOutSub}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+              <span className="text-sm text-ink-500">
+                {mutedPatients === 0
+                  ? t.automations.optOutNone
+                  : t.automations.optOutCount.replace("{n}", String(mutedPatients))}
+              </span>
+              {mutedPatients > 0 && (
+                <Link href={`/c/${slug}/patients?optedOut=1`}>
+                  <Button variant="outline" size="sm">
+                    {t.automations.optOutSee}
+                  </Button>
+                </Link>
+              )}
             </div>
           </Card>
         </>

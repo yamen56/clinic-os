@@ -70,6 +70,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
         push(k, v);
       } else if (k === "enabled") {
         push("enabled", raw === true);
+      } else if (k === "file_by_default") {
+        push("file_by_default", raw === true);
       } else if (k === "taxpayer_type") {
         if (!(TAXPAYER_TYPES as readonly string[]).includes(String(raw))) continue;
         push("taxpayer_type", String(raw));

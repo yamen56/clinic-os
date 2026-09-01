@@ -12,6 +12,24 @@ import {
 } from "./constants";
 
 /**
+ * Who a campaign may actually be sent to.
+ *
+ * A number to send to, and no standing request not to be sent to. Written once
+ * and used by the preview, the audience snapshot and the count beside it, so
+ * the number the user approves is the number of people who get the message —
+ * the preview promising 200 and the send reaching 190 would be a worse bug than
+ * either figure being wrong.
+ */
+const SENDABLE = "p.phone_e164 is not null and not p.automation_opt_out";
+/*
+  Note what this does to a filter of `optedOut: "1"`: the two conditions cancel
+  and the audience is empty. That is the right answer rather than an edge case to
+  handle — "send a campaign to everyone who asked not to receive campaigns" has
+  no sensible reading, and an empty audience says so where quietly dropping the
+  filter would send to everybody instead.
+*/
+
+/**
  * Bulk messaging is the one action here that can reach hundreds of patients at
  * once, so it sits behind the same flag as automations rather than being open
  * to anyone who can open a conversation.
@@ -34,18 +52,25 @@ export async function previewAudienceAction(
     const r = await c.query(
       `select
          (select count(*)::int from patients p where ${where}) as total,
-         (select count(distinct p.phone_e164)::int from patients p where ${where}) as reachable,
+         (select count(distinct p.phone_e164)::int from patients p
+           where ${where} and ${SENDABLE}) as reachable,
+         (select count(*)::int from patients p where ${where} and p.automation_opt_out) as muted,
          coalesce((
            select json_agg(s.name) from (
              select p.full_name as name from patients p
-             where ${where} and p.phone_e164 is not null
+             where ${where} and ${SENDABLE}
              order by p.full_name limit 5
            ) s
          ), '[]'::json) as sample`,
       values
     );
     const row = r.rows[0];
-    return { total: row.total, reachable: row.reachable, sample: row.sample ?? [] };
+    return {
+      total: row.total,
+      reachable: row.reachable,
+      muted: row.muted,
+      sample: row.sample ?? [],
+    };
   });
 }
 
@@ -101,7 +126,7 @@ export async function createCampaignAction(
        from (
          select distinct on (p.phone_e164) p.id, p.phone_e164, p.full_name
          from patients p
-         where ${where} and p.phone_e164 is not null
+         where ${where} and ${SENDABLE}
          order by p.phone_e164, p.updated_at desc
        ) s`,
       [access.clinicId, campaign.id, ...values]

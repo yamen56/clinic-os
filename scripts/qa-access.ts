@@ -110,6 +110,11 @@ async function main() {
           "documents.manage": false,
           "documents.void": false,
           invoices: true,
+          /*
+            The case this capability exists for: somebody who raises and settles
+            invoices, but is not shown what the clinic took this week.
+          */
+          "invoices.analytics": false,
           campaigns: false,
           automations: false,
           settings: false,
@@ -195,6 +200,39 @@ async function main() {
   check(
     "the inbox actually opens",
     (await landsOn(page, `/c/${slug}/conversations`)).includes("/conversations")
+  );
+
+  /*
+    Invoices without the takings.
+
+    Two screens, because there are two doors to the same number: the totals
+    across the top of the invoice list, and the revenue tile and charts on the
+    front page — which is the one screen every member can open, and therefore
+    the one where hiding a section elsewhere leaks if the dashboard is forgotten.
+  */
+  await page.goto(`${BASE}/c/${slug}/invoices`);
+  await page.waitForLoadState("networkidle");
+  const seen = async () => (await page.locator("main").first().innerText()).replace(/[\s]+/g, " ");
+  const docInvoices = await seen();
+  check("the invoice list still opens for them", docInvoices.includes("Invoices"), docInvoices.slice(0, 80));
+  check(
+    "but the totals across the top are not there",
+    !docInvoices.includes("This week") && !docInvoices.includes("Outstanding"),
+    docInvoices.slice(0, 160)
+  );
+  check(
+    "while the filter chips, which need no money, are",
+    docInvoices.includes("Partly paid"),
+    docInvoices.slice(0, 160)
+  );
+
+  await page.goto(`${BASE}/c/${slug}`);
+  await page.waitForLoadState("networkidle");
+  const docHome = await seen();
+  check(
+    "and the front page does not hand the same figure back",
+    !docHome.includes("Revenue"),
+    docHome.slice(0, 200)
   );
 
   // Documents: visible, but the create button is not offered.
@@ -318,6 +356,29 @@ async function main() {
     { isOwner: false, role: "other" }
   );
   check("an action cannot outlive its section", !inconsistent["documents.void"]);
+
+  /*
+    The split that shipped after these rows were written. A stored map saying
+    only `invoices: true` was written when that included the revenue totals, so
+    it has to keep including them — the alternative is every existing member
+    losing the tiles on deploy, which is a change nobody asked for arriving as a
+    bug report.
+  */
+  const beforeSplit = resolveCapabilities(
+    { level: "custom", caps: { invoices: true } },
+    { isOwner: false, role: "receptionist" }
+  );
+  check("a map written before the split keeps the totals", beforeSplit["invoices.analytics"]);
+  const explicitlyDenied = resolveCapabilities(
+    { level: "custom", caps: { invoices: true, "invoices.analytics": false } },
+    { isOwner: false, role: "receptionist" }
+  );
+  check("an explicit denial is still a denial", !explicitlyDenied["invoices.analytics"]);
+  const noInvoices = resolveCapabilities(
+    { level: "custom", caps: { invoices: false, "invoices.analytics": true } },
+    { isOwner: false, role: "receptionist" }
+  );
+  check("and the totals cannot outlive the section", !noInvoices["invoices.analytics"]);
 
   // A row written before this model existed still behaves like it used to.
   const legacy = resolveCapabilities({ automations: true }, { isOwner: false, role: "receptionist" });

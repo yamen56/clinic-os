@@ -23,6 +23,7 @@ const SUITES = [
   ["phase 5: WhatsApp inbox", "scripts/qa-phase5.ts"],
   ["phase 6: invoicing", "scripts/qa-phase6.ts"],
   ["tax & e-invoicing: per-line tax, JoFotara, credit notes", "scripts/qa-einvoicing.ts"],
+  ["invoices & patients: a title, filing one at a time, muting somebody", "scripts/qa-invoice-title-opt-outs.ts"],
   ["phase 7: automations", "scripts/qa-phase7.ts"],
   ["automations: built-in messages, team alerts, specialty packs", "scripts/qa-automation-coverage.ts"],
   ["phase 8: AI receptionist", "scripts/qa-phase8.ts"],

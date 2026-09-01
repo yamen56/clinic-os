@@ -14,7 +14,7 @@ import { EmptyState, Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { createPatientAction } from "./actions";
-import { Users, Plus, Upload, Download } from "lucide-react";
+import { Users, Plus, Upload, Download, BellOff } from "lucide-react";
 
 type Row = {
   id: string;
@@ -25,6 +25,7 @@ type Row = {
   status: string;
   lastVisitAt: string | null;
   nextAppointment: string | null;
+  mutedFromAutomations: boolean;
 };
 
 export function PatientsList({
@@ -42,7 +43,7 @@ export function PatientsList({
   total: number;
   allTags: string[];
   tz: string;
-  initialFilters: { q: string; tag: string; source: string; visit: string };
+  initialFilters: { q: string; tag: string; source: string; visit: string; optedOut: string };
   /** Open the new-patient dialog on arrival — the dashboard shortcut. */
   openNew?: boolean;
   /** Owner only: opening one file is the job, taking every file is not. */
@@ -69,6 +70,7 @@ export function PatientsList({
       if (next.tag) p.set("tag", next.tag);
       if (next.source) p.set("source", next.source);
       if (next.visit) p.set("visit", next.visit);
+      if (next.optedOut) p.set("optedOut", next.optedOut);
       router.replace(`/c/${slug}/patients${p.size ? `?${p}` : ""}`);
     }, 300);
   };
@@ -109,6 +111,7 @@ export function PatientsList({
       if (f.tag) p.set("tag", f.tag);
       if (f.source) p.set("source", f.source);
       if (f.visit) p.set("visit", f.visit);
+      if (f.optedOut) p.set("optedOut", f.optedOut);
       const res = await fetch(`/api/c/${slug}/patients/export-all${p.size ? `?${p}` : ""}`);
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
@@ -222,6 +225,19 @@ export function PatientsList({
           <option value="90">{t.patients.filters.noVisit90}</option>
           <option value="180">{t.patients.filters.noVisit180}</option>
         </Select>
+        {/*
+          Two states, not three: "everyone" and "only the muted ones". Nobody
+          asks to see the list minus the handful of people who opted out — that
+          list is the list.
+        */}
+        <Select
+          className="!w-auto"
+          value={f.optedOut}
+          onChange={(e) => apply({ ...f, optedOut: e.target.value })}
+        >
+          <option value="">{t.patients.filters.anyMessaging}</option>
+          <option value="1">{t.patients.filters.mutedOnly}</option>
+        </Select>
       </div>
 
       {/* The query is capped, so say so rather than silently hiding records. */}
@@ -258,6 +274,9 @@ export function PatientsList({
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium">{p.fullName}</span>
                       {p.status === "lead" && <Badge status="pending">{t.patients.statusLead}</Badge>}
+                      {p.mutedFromAutomations && (
+                        <BellOff className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-label={t.patients.automations.muted} />
+                      )}
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-ink-500">
                       {p.phone && <span className="num tnum">{formatPhone(p.phone)}</span>}

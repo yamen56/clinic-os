@@ -41,6 +41,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
     tag: url.searchParams.get("tag") ?? undefined,
     source: url.searchParams.get("source") ?? undefined,
     visit: url.searchParams.get("visit") ?? undefined,
+    optedOut: url.searchParams.get("optedOut") ?? undefined,
   };
 
   /* Count before rendering. The print page applies the identical filter, so

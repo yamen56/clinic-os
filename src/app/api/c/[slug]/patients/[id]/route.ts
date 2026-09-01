@@ -89,6 +89,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
           if (!ok.rowCount) return NextResponse.json({ error: "unknown_insurer" }, { status: 422 });
           push(key, v);
         }
+      } else if (key === "automation_opt_out") {
+        /*
+          Muting the automations for one person. A plain boolean, but it goes
+          through the audit log like every other change on this form — "who
+          stopped this patient's reminders, and when" is a question that gets
+          asked after somebody misses an appointment.
+        */
+        push(key, raw === true);
       } else if (key === "insurance_no") {
         push(key, String(raw ?? "").slice(0, 60));
       } else if (key === "insurance_valid_until") {

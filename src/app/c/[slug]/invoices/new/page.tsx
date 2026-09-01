@@ -3,6 +3,7 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { NewInvoiceClient } from "./new-invoice-client";
 import { can } from "@/lib/auth";
+import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 
 export default async function NewInvoicePage({
   params,
@@ -48,7 +49,17 @@ export default async function NewInvoicePage({
       ).rows[0];
       if (a) appointment = { id: a.id, serviceId: a.service_id };
     }
-    return { services, clinic, patient, appointment };
+    /*
+      `isReady`, not `enabled`. A clinic that ticked the switch but has not
+      pasted its credentials in yet cannot file anything, so offering the choice
+      would be offering a switch between two identical outcomes.
+    */
+    const settings = await loadEinvoiceSettings(c, access.clinicId);
+    const einvoice =
+      access.clinic.features.einvoicing && isReady(settings)
+        ? { fileByDefault: settings.fileByDefault }
+        : null;
+    return { services, clinic, patient, appointment, einvoice };
   });
 
   return (
@@ -61,6 +72,7 @@ export default async function NewInvoicePage({
       initialPatient={data.patient}
       appointmentId={data.appointment?.id ?? null}
       appointmentServiceId={data.appointment?.serviceId ?? null}
+      einvoice={data.einvoice}
     />
   );
 }

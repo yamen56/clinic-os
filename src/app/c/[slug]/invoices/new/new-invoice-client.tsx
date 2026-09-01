@@ -7,7 +7,7 @@ import { fmtMoney } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { PageHeader, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { computeInvoice, taxBreakdown, TAX_CATEGORIES, type TaxCategory } from "@/lib/invoices";
@@ -34,6 +34,7 @@ export function NewInvoiceClient({
   initialPatient,
   appointmentId,
   appointmentServiceId,
+  einvoice,
 }: {
   slug: string;
   currency: string;
@@ -43,6 +44,12 @@ export function NewInvoiceClient({
   initialPatient: { id: string; name: string } | null;
   appointmentId: string | null;
   appointmentServiceId: string | null;
+  /**
+   * Null for every clinic that does not file with JoFotara, which is most of
+   * them — the switch is not rendered at all rather than rendered and disabled.
+   * `fileByDefault` is the clinic's standing answer and where this form starts.
+   */
+  einvoice: { fileByDefault: boolean } | null;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -71,6 +78,8 @@ export function NewInvoiceClient({
       : [];
   });
   const [notes, setNotes] = useState("");
+  const [title, setTitle] = useState("");
+  const [fileEinvoice, setFileEinvoice] = useState(einvoice?.fileByDefault ?? true);
   const [pending, start] = useTransition();
 
   /*
@@ -97,6 +106,10 @@ export function NewInvoiceClient({
         appointmentId,
         items,
         notes,
+        title,
+        // Only sent by a clinic that files. Everyone else leaves it absent and
+        // the server falls back to the clinic's own default.
+        ...(einvoice ? { fileEinvoice } : {}),
       });
       if (r.error || !r.id) {
         toast(t.common.genericError, "error");
@@ -111,7 +124,24 @@ export function NewInvoiceClient({
       <PageHeader title={t.invoices.newInvoice} />
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="grid content-start gap-4 lg:col-span-2">
-          <Card className="p-5">
+          {/* grid-cols-1, not a bare grid: an implicit column is sized `auto`,
+              whose floor is its content's min-content width — the same thing
+              that once pushed this page sideways on a phone. */}
+          <Card className="grid grid-cols-1 gap-4 p-5">
+            {/*
+              Above the patient, because it is the first thing somebody raising a
+              second invoice for the same person needs to tell the two apart —
+              and marked optional so nobody stops to think of a name for the
+              ordinary consultation that does not need one.
+            */}
+            <Field label={t.invoices.invoiceTitle} hint={t.common.optional}>
+              <Input
+                value={title}
+                maxLength={120}
+                placeholder={t.invoices.invoiceTitlePlaceholder}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </Field>
             <Field label={t.invoices.patient} required>
               {patient ? (
                 <div className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2">
@@ -256,6 +286,30 @@ export function NewInvoiceClient({
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t.invoices.notesPlaceholder} />
             </Field>
           </Card>
+
+          {/*
+            Asked before the invoice exists rather than after. Filing is
+            triggered by payment, and reception often takes the money in the same
+            minute they raise the bill — an opt-out offered only on the finished
+            invoice would frequently arrive after it had already gone to ISTD.
+          */}
+          {einvoice && (
+            <Card className="p-5">
+              <div className="flex items-start gap-3">
+                <Toggle
+                  checked={fileEinvoice}
+                  label={t.einvoicing.fileThisInvoice}
+                  onChange={setFileEinvoice}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">{t.einvoicing.fileThisInvoice}</div>
+                  <p className="mt-0.5 text-[13px] text-ink-500">
+                    {fileEinvoice ? t.einvoicing.fileThisOnHint : t.einvoicing.fileThisOffHint}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
 
         <Card className="h-fit p-5">

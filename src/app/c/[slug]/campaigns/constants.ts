@@ -9,4 +9,11 @@
 export const MIN_INTERVAL_SECONDS = 30;
 export const MAX_INTERVAL_SECONDS = 86400;
 
-export type CampaignAudience = { total: number; reachable: number; sample: string[] };
+export type CampaignAudience = {
+  total: number;
+  /** How many will actually be messaged: a number on file, and not muted. */
+  reachable: number;
+  /** Of those matched, how many are muted from automations and campaigns. */
+  muted: number;
+  sample: string[];
+};

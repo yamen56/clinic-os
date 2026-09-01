@@ -173,6 +173,33 @@ export async function pumpClinic(clinicId: string) {
       return;
     }
 
+    /*
+      Anyone who opted out since the list was frozen.
+
+      The audience is a snapshot taken when the campaign was built, which is what
+      makes "who did this actually go to" answerable — but it also means somebody
+      who asked to be left alone this morning is still sitting in a drip that
+      started yesterday. Checked on the one recipient just claimed rather than
+      swept across the table: this loop runs every two seconds per clinic, and
+      the cheap question is the one being asked anyway.
+
+      Cancelled rather than removed, so the campaign's own report still accounts
+      for them, and the tick returns — the next one takes the following name.
+    */
+    if (recipient.patient_id) {
+      const muted = await c.query(
+        `select 1 from patients where id = $1 and clinic_id = $2 and automation_opt_out`,
+        [recipient.patient_id, clinicId]
+      );
+      if (muted.rowCount) {
+        await c.query(
+          `update campaign_recipients set status = 'cancelled', error = 'opted out' where id = $1`,
+          [recipient.id]
+        );
+        return;
+      }
+    }
+
     const ctx = await loadContext(c, { clinicId, patientId: recipient.patient_id });
     const body = renderTemplate(campaign.body, ctx).trim();
     if (!body) {

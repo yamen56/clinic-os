@@ -599,6 +599,16 @@ export const en = {
       noVisit30: "No visit in 30 days",
       noVisit90: "No visit in 90 days",
       noVisit180: "No visit in 6 months",
+      anyMessaging: "Everyone",
+      mutedOnly: "Muted only",
+    },
+    /** The per-patient switch that silences every automation and campaign. */
+    automations: {
+      title: "Automated messages",
+      onHint: "Reminders, recalls, birthday notes and campaigns are sent to this patient.",
+      offHint:
+        "No automation or campaign will message this patient. Your team can still message them by hand, and booking confirmations still go out.",
+      muted: "Muted",
     },
   },
   campaigns: {
@@ -615,6 +625,7 @@ export const en = {
     window: "Window",
     willReach: "Will message {n} patients ({total} matched)",
     noPhoneSkipped: "{n} without a phone number will be skipped",
+    mutedSkipped: "{n} asked not to receive automated messages",
     estimated: "About {d} from start to finish",
     reviewN: "Review {n} recipients",
     startSending: "Start sending",
@@ -798,6 +809,7 @@ export const en = {
     "documents.manage": "Create, send and edit documents",
     "documents.void": "Void a signed document",
     invoices: "Invoices",
+    "invoices.analytics": "See revenue totals and outstanding",
     campaigns: "Campaigns",
     automations: "Automations",
     ai: "AI agent",
@@ -1050,6 +1062,14 @@ export const en = {
     variables: "Variables",
     sendingWindow: "Sending window",
     sendingWindowSub: "Automated messages only go out between these hours; the rest queue for the next window.",
+
+    /* The other limit on everything above: patients who asked to be left alone. */
+    optOut: "Patients who opted out",
+    optOutSub:
+      "Every flow on this page skips them, and so does every campaign. Turn it on or off from the patient's file — your team can still message them by hand.",
+    optOutNone: "Nobody has opted out.",
+    optOutCount: "{n} patients are muted",
+    optOutSee: "See who",
     empty: "No automations yet",
     emptyBody: "Turn on a starting point below, or build your own from scratch.",
     enable: "Enable",
@@ -1211,6 +1231,18 @@ export const en = {
     voidReason: "Why is it being cancelled?",
     voidReasonHint: "Filed invoices cannot be deleted. Cancelling raises a credit note against this one.",
     creditNoteRaised: "Cancelled, and a credit note was raised.",
+
+    /* --- choosing which invoices are filed --- */
+    fileByDefault: "File every invoice",
+    fileByDefaultOnHint:
+      "Every new invoice goes to JoFotara. You can still turn it off on an individual invoice.",
+    fileByDefaultOffHint:
+      "New invoices are not filed unless somebody says so on the invoice itself.",
+    fileThisInvoice: "File this invoice with JoFotara",
+    fileThisOnHint: "It will be filed when it is paid, or when you send it — whichever comes first.",
+    fileThisOffHint: "This invoice will not be reported to the tax authority.",
+    alreadyFiled: "Already filed. Cancelling it now raises a credit note instead.",
+    queuedNow: "Filing now",
   },
 
   /** What the clinic actually practises. Picks its automation pack at creation. */
@@ -1236,6 +1268,9 @@ export const en = {
     payments: "Payments",
     newInvoice: "New invoice",
     invoiceNo: "Invoice",
+    /* Optional, always. Most invoices are one visit and the number says enough. */
+    invoiceTitle: "Title",
+    invoiceTitlePlaceholder: "What is this invoice for?",
     patient: "Patient",
     item: "Item",
     qty: "Qty",

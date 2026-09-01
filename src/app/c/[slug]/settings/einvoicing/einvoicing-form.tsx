@@ -37,6 +37,7 @@ export function EinvoicingForm({
   });
   const ro = !isOwner;
   const [enabled, setEnabled] = useState(settings.enabled);
+  const [fileByDefault, setFileByDefault] = useState(settings.fileByDefault);
   const [taxpayerType, setTaxpayerType] = useState(settings.taxpayerType);
   const E = t.einvoicing;
 
@@ -92,6 +93,32 @@ export function EinvoicingForm({
               <ShieldCheck className="h-4 w-4 shrink-0" />
               {E.ready}
             </p>
+          )}
+
+          {/*
+            Everything, or one at a time. Shown only once filing is on, because
+            until then it is a preference about something that is not happening.
+            Either way the invoice itself carries the final answer — this only
+            decides which way a new one starts.
+          */}
+          {enabled && (
+            <div className="flex items-start gap-3 rounded-lg border border-line bg-sunken p-3.5">
+              <Toggle
+                checked={fileByDefault}
+                disabled={ro}
+                label={E.fileByDefault}
+                onChange={(v) => {
+                  setFileByDefault(v);
+                  patch({ file_by_default: v });
+                }}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">{E.fileByDefault}</div>
+                <p className="mt-0.5 text-[13px] text-ink-500">
+                  {fileByDefault ? E.fileByDefaultOnHint : E.fileByDefaultOffHint}
+                </p>
+              </div>
+            </div>
           )}
 
           <Field label={E.taxpayerType} hint={E.taxpayerTypeHint}>

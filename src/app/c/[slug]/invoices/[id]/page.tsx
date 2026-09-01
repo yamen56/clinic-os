@@ -3,6 +3,7 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { InvoiceDetailClient } from "./invoice-detail-client";
 import { can } from "@/lib/auth";
+import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 
 export default async function InvoiceDetailPage({
   params,
@@ -55,7 +56,11 @@ export default async function InvoiceDetailPage({
         [access.clinicId]
       )
     ).rows;
-    return { inv, items, payments, insurers };
+    // Whether this clinic can file at all decides whether the invoice shows a
+    // filing switch or says nothing about JoFotara, exactly as before.
+    const settings = await loadEinvoiceSettings(c, access.clinicId);
+    const filesEinvoices = Boolean(access.clinic.features.einvoicing) && isReady(settings);
+    return { inv, items, payments, insurers, filesEinvoices };
   });
   if (!data) notFound();
 
@@ -66,6 +71,7 @@ export default async function InvoiceDetailPage({
       items={JSON.parse(JSON.stringify(data.items))}
       payments={JSON.parse(JSON.stringify(data.payments))}
       insurers={JSON.parse(JSON.stringify(data.insurers))}
+      filesEinvoices={data.filesEinvoices}
     />
   );
 }

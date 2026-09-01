@@ -9,7 +9,7 @@ import { asTaxCategory, taxBreakdown } from "@/lib/invoices";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge, type StatusKey } from "@/components/ui/badge";
-import { Field, Input, Select } from "@/components/ui/input";
+import { Field, Input, Select, Toggle } from "@/components/ui/input";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -18,6 +18,8 @@ import {
   voidInvoiceAction,
   setInvoiceInsuranceAction,
   retryEinvoiceAction,
+  setInvoiceTitleAction,
+  setInvoiceFilingAction,
 } from "../actions";
 import {
   MessageCircle,
@@ -27,6 +29,7 @@ import {
   Ban,
   UserRound,
   TriangleAlert,
+  Landmark,
 } from "lucide-react";
 
 const invStatus: Record<string, StatusKey> = {
@@ -40,6 +43,8 @@ const invStatus: Record<string, StatusKey> = {
 type Invoice = {
   id: string;
   number: string;
+  title: string;
+  file_einvoice: boolean;
   status: string;
   currency: string;
   subtotal: string;
@@ -82,6 +87,7 @@ export function InvoiceDetailClient({
   items,
   payments,
   insurers,
+  filesEinvoices,
 }: {
   slug: string;
   invoice: Invoice;
@@ -98,6 +104,8 @@ export function InvoiceDetailClient({
   payments: { id: string; amount: string; method: string; reference: string; paid_at: string; recorded_by: string | null }[];
   /** Active companies. Empty for a clinic that only takes cash. */
   insurers: { id: string; name: string }[];
+  /** Whether this clinic files with JoFotara and has the credentials to do it. */
+  filesEinvoices: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -119,8 +127,39 @@ export function InvoiceDetailClient({
   const [sendPending, startSend] = useTransition();
   const [retrying, startRetry] = useTransition();
   const [voidReason, setVoidReason] = useState("");
+  const [title, setTitle] = useState(inv.title ?? "");
+  const [savingTitle, startTitle] = useTransition();
+  const [fileEinvoice, setFileEinvoice] = useState(inv.file_einvoice);
+  const [savingFiling, startFiling] = useTransition();
   /** Filed with ISTD, so cancelling means a credit note rather than a delete. */
   const filed = inv.einvoice_status === "submitted";
+  /*
+    Once ISTD holds the document, or while we do not yet know whether they do,
+    the switch is no longer a switch — the way back is a credit note. Shown
+    locked with the reason rather than hidden, so the state is legible.
+  */
+  const filingLocked =
+    inv.status === "void" ||
+    inv.einvoice_status === "submitted" ||
+    inv.einvoice_status === "pending";
+
+  /*
+    Saved on blur, not on every keystroke. A title is typed in one go and this
+    is a server action rather than the autosave endpoint the patient file uses;
+    firing per character would be a write per letter for no benefit.
+  */
+  const saveTitle = () => {
+    const next = title.trim();
+    if (next === (inv.title ?? "").trim()) return;
+    startTitle(async () => {
+      const r = await setInvoiceTitleAction(slug, inv.id, next);
+      if (r.error) {
+        setTitle(inv.title ?? "");
+        return toast(t.common.genericError, "error");
+      }
+      router.refresh();
+    });
+  };
 
   const send = () =>
     startSend(async () => {
@@ -239,6 +278,29 @@ export function InvoiceDetailClient({
       />
 
       {/*
+        The invoice's own name, editable where it is read.
+
+        A separate line rather than part of the header's `sub`: that is a <p>,
+        and the number above it is the identifier — the title is what the clinic
+        calls the work, and it is the thing most likely to need correcting after
+        the fact. Blank and quiet when there is no title, which is most invoices.
+      */}
+      {inv.status !== "void" ? (
+        <input
+          className="-mt-3 mb-5 w-full max-w-lg rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[15px] font-medium text-ink-700 outline-none transition-colors placeholder:font-normal placeholder:text-ink-300 hover:border-line focus:border-brand-500 focus:bg-surface"
+          value={title}
+          maxLength={120}
+          disabled={savingTitle}
+          aria-label={t.invoices.invoiceTitle}
+          placeholder={t.invoices.invoiceTitlePlaceholder}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={saveTitle}
+        />
+      ) : (
+        inv.title && <p className="-mt-3 mb-5 text-[15px] font-medium text-ink-700">{inv.title}</p>
+      )}
+
+      {/*
         A filing that failed is the one thing on this page somebody has to act
         on, so it is said at the top with the reason and the way out — not left
         as a red chip they have to interpret.
@@ -253,20 +315,28 @@ export function InvoiceDetailClient({
                 <p className="mt-0.5 break-words text-[13px] text-ink-500">{inv.einvoice_error}</p>
               )}
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              loading={retrying}
-              onClick={() =>
-                startRetry(async () => {
-                  const r = await retryEinvoiceAction(slug, inv.id);
-                  toast(r.error ? t.common.genericError : t.einvoicing.retried, r.error ? "error" : "success");
-                  router.refresh();
-                })
-              }
-            >
-              {t.einvoicing.retry}
-            </Button>
+            {/*
+              Only while this invoice is still meant to be filed. Switching it off
+              after a failure is a legitimate way out — the submission never
+              landed, so there is nothing to correct — and leaving the button
+              there would offer a retry the server is now right to refuse.
+            */}
+            {fileEinvoice && (
+              <Button
+                size="sm"
+                variant="outline"
+                loading={retrying}
+                onClick={() =>
+                  startRetry(async () => {
+                    const r = await retryEinvoiceAction(slug, inv.id);
+                    toast(r.error ? t.common.genericError : t.einvoicing.retried, r.error ? "error" : "success");
+                    router.refresh();
+                  })
+                }
+              >
+                {t.einvoicing.retry}
+              </Button>
+            )}
           </div>
         </Card>
       )}
@@ -458,6 +528,63 @@ export function InvoiceDetailClient({
               >
                 {t.common.save}
               </Button>
+            </div>
+          </Card>
+        )}
+
+        {/*
+          Whether the tax authority hears about this one. Only for a clinic that
+          files at all — everybody else's invoices say nothing about JoFotara,
+          on this page or anywhere else.
+        */}
+        {filesEinvoices && (
+          <Card className="h-fit">
+            <CardHeader
+              title={
+                <span className="flex items-center gap-2">
+                  <Landmark className="h-4 w-4 text-ink-400" />
+                  {t.einvoicing.status}
+                </span>
+              }
+            />
+            <div className="flex items-start gap-3 p-5">
+              <Toggle
+                checked={fileEinvoice}
+                disabled={filingLocked || savingFiling}
+                label={t.einvoicing.fileThisInvoice}
+                onChange={(v) => {
+                  setFileEinvoice(v);
+                  startFiling(async () => {
+                    const r = await setInvoiceFilingAction(slug, inv.id, v);
+                    if (r.error) {
+                      setFileEinvoice(!v);
+                      toast(
+                        r.error === "already_filed"
+                          ? t.einvoicing.alreadyFiled
+                          : r.error === "einvoice_pending"
+                            ? t.einvoicing.pendingBlocks
+                            : t.common.genericError,
+                        "error"
+                      );
+                      return;
+                    }
+                    toast(r.queued ? t.einvoicing.queuedNow : t.common.saved);
+                    router.refresh();
+                  });
+                }}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">{t.einvoicing.fileThisInvoice}</div>
+                <p className="mt-0.5 text-[13px] text-ink-500">
+                  {inv.einvoice_status === "submitted"
+                    ? t.einvoicing.alreadyFiled
+                    : inv.einvoice_status === "pending"
+                      ? t.einvoicing.statusPending
+                      : fileEinvoice
+                        ? t.einvoicing.fileThisOnHint
+                        : t.einvoicing.fileThisOffHint}
+                </p>
+              </div>
             </div>
           </Card>
         )}

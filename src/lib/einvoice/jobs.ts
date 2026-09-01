@@ -45,9 +45,16 @@ export async function enqueueEinvoiceSubmit(
       sent again — ISTD would treat the second document as a second sale — and a
       failed one is picked up by an explicit retry rather than by whoever next
       happens to open the invoice.
+
+      `file_einvoice` is the clinic's answer for this one invoice, and it is
+      checked here rather than at each of the four call sites: payment, delivery
+      and the nightly sweep all arrive through this function, so one condition
+      is the difference between an opt-out that holds and three that mostly do.
+      Turning the flag back on is what queues it, via setInvoiceFilingAction.
     */
     `update invoices set einvoice_status = 'pending'
-      where id = $1 and clinic_id = $2 and einvoice_status = 'not_required' and status <> 'void'
+      where id = $1 and clinic_id = $2 and einvoice_status = 'not_required'
+        and file_einvoice and status <> 'void'
       returning id`,
     [invoiceId, clinicId]
   );
@@ -80,7 +87,7 @@ export async function requeueEinvoiceSubmit(
 
   const marked = await c.query(
     `update invoices set einvoice_status = 'pending', einvoice_error = null
-      where id = $1 and clinic_id = $2 and einvoice_status = 'failed'
+      where id = $1 and clinic_id = $2 and einvoice_status = 'failed' and file_einvoice
       returning id`,
     [invoiceId, clinicId]
   );

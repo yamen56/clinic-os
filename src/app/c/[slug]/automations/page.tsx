@@ -35,7 +35,22 @@ export default async function AutomationsPage({ params }: { params: Promise<{ sl
     // anyway, so a Promise.all here would buy nothing but a harder stack trace.
     const messages = await loadSystemMessages(c, access.clinicId);
     const alerts = await loadStaffAlerts(c, access.clinicId);
-    return { automations, clinic, messages, alerts };
+    /*
+      How many people these flows will never reach. Every automation on this
+      screen quietly skips them, and a number that is only visible on individual
+      patient files is a number nobody knows — which is how a clinic ends up
+      wondering why a recall of 400 went to 340.
+    */
+    const muted = Number(
+      (
+        await c.query(
+          `select count(*)::int as n from patients
+            where clinic_id = $1 and automation_opt_out and merged_into is null`,
+          [access.clinicId]
+        )
+      ).rows[0].n
+    );
+    return { automations, clinic, messages, alerts, muted };
   });
 
   return (
@@ -48,6 +63,7 @@ export default async function AutomationsPage({ params }: { params: Promise<{ sl
       alerts={JSON.parse(JSON.stringify(data.alerts))}
       windowStart={String(data.clinic.message_window_start).slice(0, 5)}
       windowEnd={String(data.clinic.message_window_end).slice(0, 5)}
+      mutedPatients={data.muted}
     />
   );
 }

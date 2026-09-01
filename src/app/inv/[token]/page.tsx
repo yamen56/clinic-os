@@ -71,6 +71,7 @@ export default async function PublicInvoicePage({
         price: "السعر", amount: "المجموع", subtotal: "المجموع الفرعي", discount: "الخصم",
         total: "الإجمالي", paid: "المدفوع", due: "المستحق", tax: "الضريبة",
         taxNo: "الرقم الضريبي", creditNote: "إشعار دائن عن الفاتورة", scan: "امسح الرمز للتحقق من الفاتورة",
+        subject: "الموضوع",
         payTitle: "تفاصيل الدفع", statusPaid: "مدفوعة", statusVoid: "ملغاة",
         cat: { S: "خاضعة", Z: "صفرية", E: "معفاة", O: "خارج نطاق الضريبة" } as Record<string, string>,
         poweredBy: "مدعوم من كلينيكتي", privacy: "سياسة الخصوصية",
@@ -80,6 +81,7 @@ export default async function PublicInvoicePage({
         price: "Price", amount: "Amount", subtotal: "Subtotal", discount: "Discount",
         total: "Total", paid: "Paid", due: "Balance due", tax: "Tax",
         taxNo: "Tax number", creditNote: "Credit note for invoice", scan: "Scan to verify this invoice",
+        subject: "Subject",
         payTitle: "Payment details", statusPaid: "PAID", statusVoid: "VOID",
         cat: { S: "Taxable", Z: "Zero-rated", E: "Exempt", O: "Outside tax" } as Record<string, string>,
         poweredBy: "Powered by Clinicti", privacy: "Privacy Policy",
@@ -191,14 +193,31 @@ export default async function PublicInvoicePage({
             </div>
           </header>
 
-          <section className="mt-8">
-            <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
-              {L.billTo}
+          <section className="mt-8 flex flex-wrap items-start justify-between gap-6">
+            <div className="min-w-0">
+              <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+                {L.billTo}
+              </div>
+              <div className="mt-1 text-[15px] font-semibold">{inv.patient_name}</div>
+              {inv.patient_phone && (
+                <div className="text-[13px] text-ink-500 tnum" dir="ltr">
+                  {inv.patient_phone}
+                </div>
+              )}
             </div>
-            <div className="mt-1 text-[15px] font-semibold">{inv.patient_name}</div>
-            {inv.patient_phone && (
-              <div className="text-[13px] text-ink-500 tnum" dir="ltr">
-                {inv.patient_phone}
+            {/*
+              What the clinic called this invoice, opposite who it is for.
+              Optional, so the whole block disappears rather than leaving a
+              labelled empty space on the majority of invoices that have none —
+              and capped in width so a long title wraps instead of pushing the
+              patient's name off a printed page.
+            */}
+            {inv.title && (
+              <div className="min-w-0 max-w-[80mm] text-end">
+                <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+                  {L.subject}
+                </div>
+                <div className="mt-1 text-[15px] font-semibold">{inv.title}</div>
               </div>
             )}
           </section>

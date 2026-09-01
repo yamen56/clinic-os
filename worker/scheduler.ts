@@ -215,6 +215,10 @@ async function sweepEinvoices() {
         where s.enabled and ${licensed("einvoicing")}
           and i.status not in ('draft', 'void')
           and i.einvoice_status = 'not_required'
+          -- An invoice the clinic said not to file is not "unfiled", it is
+          -- finished. Without this the sweep would quietly undo every opt-out
+          -- twenty-four hours after it was made.
+          and i.file_einvoice
           and i.created_at < now() - interval '24 hours'
         limit 500`
     );

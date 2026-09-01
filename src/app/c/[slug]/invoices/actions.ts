@@ -16,6 +16,7 @@ import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { emitTrigger } from "@/lib/triggers";
 import { enqueueEinvoiceSubmit, requeueEinvoiceSubmit } from "@/lib/einvoice/jobs";
+import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 import { renderUrlToPdf } from "@/lib/pdf";
 import { saveFile } from "@/lib/storage";
 import { z } from "zod";
@@ -38,6 +39,19 @@ const createSchema = z.object({
     )
     .min(1),
   notes: z.string().max(1000).default(""),
+  /*
+    What the clinic calls this invoice. Optional by design — most invoices are
+    one visit and the number says enough — so `default("")` rather than a
+    required field with a placeholder somebody has to type past.
+  */
+  title: z.string().max(120).default(""),
+  /*
+    Whether this one goes to JoFotara. Absent means "whatever the clinic's
+    default is", which is not the same as false and is why it is optional rather
+    than defaulted here — the answer lives in clinic_einvoice_settings and is
+    read below.
+  */
+  fileEinvoice: z.boolean().optional(),
 });
 
 export async function createInvoiceAction(
@@ -62,6 +76,9 @@ export async function createInvoiceAction(
     const { seq, number } = await nextInvoiceNumber(c, access.clinicId);
     const totals = computeInvoice(d.items as InvoiceItemInput[]);
     const currency = access.clinic.currency;
+    // The clinic's standing answer, unless the person raising it said otherwise.
+    const einv = await loadEinvoiceSettings(c, access.clinicId);
+    const fileEinvoice = d.fileEinvoice ?? einv.fileByDefault;
 
     const inv = await c.query(
       /*
@@ -72,8 +89,9 @@ export async function createInvoiceAction(
       */
       `insert into invoices (clinic_id, patient_id, appointment_id, seq, number, currency,
                              subtotal, discount_amount, tax_rate, tax_amount, total, notes, created_by,
+                             title, file_einvoice,
                              issue_date, insurer_id, claim_status)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
                ((now() at time zone (select timezone from clinics where id = $1)))::date,
                (select insurer_id from patients where id = $2 and clinic_id = $1),
                case when (select insurer_id from patients where id = $2 and clinic_id = $1) is null
@@ -82,7 +100,7 @@ export async function createInvoiceAction(
       [
         access.clinicId, d.patientId, d.appointmentId ?? null, seq, number, currency,
         totals.subtotal, totals.discount, totals.taxRate, totals.taxAmount, totals.total,
-        d.notes, access.session.user.id,
+        d.notes, access.session.user.id, d.title.trim(), fileEinvoice,
       ]
     );
     const invoiceId = inv.rows[0].id as string;
@@ -109,7 +127,7 @@ export async function createInvoiceAction(
       action: "invoice.create",
       entity: "invoice",
       entityId: invoiceId,
-      detail: { number, total: totals.total },
+      detail: { number, total: totals.total, title: d.title.trim(), fileEinvoice },
     });
     revalidatePath(`/c/${slug}/invoices`);
     return { id: invoiceId };
@@ -409,18 +427,24 @@ export async function voidInvoiceAction(
           clinic's sequence, its own submission. `credit_note_of` is what ties
           the pair together for both the tax authority and the person reading it.
           Marked paid from the start — it settles nothing and is owed by nobody.
+
+          `file_einvoice` is hard-coded true rather than copied from the original.
+          This branch only runs when the original was submitted, and a credit
+          note is the only way ISTD accepts a correction: an unfiled one would
+          leave the tax authority holding a sale the clinic has cancelled.
         */
         `insert into invoices (clinic_id, patient_id, appointment_id, seq, number, currency,
                                subtotal, discount_amount, tax_rate, tax_amount, total, amount_paid,
-                               notes, created_by, issue_date, credit_note_of, void_reason, status)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12, $13,
+                               notes, created_by, title, file_einvoice,
+                               issue_date, credit_note_of, void_reason, status)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12, $13, $14, true,
                  ((now() at time zone (select timezone from clinics where id = $1)))::date,
-                 $14, $15, 'paid')
+                 $15, $16, 'paid')
          returning id`,
         [
           access.clinicId, inv.patient_id, inv.appointment_id, seq, number, inv.currency,
           inv.subtotal, inv.discount_amount, inv.tax_rate, inv.tax_amount, inv.total,
-          inv.notes, access.session.user.id, invoiceId, why,
+          inv.notes, access.session.user.id, inv.title, invoiceId, why,
         ]
       );
       creditNoteId = note.rows[0].id as string;
@@ -446,6 +470,112 @@ export async function voidInvoiceAction(
     });
     revalidatePath(`/c/${slug}/invoices`);
     return { creditNoteId };
+  });
+}
+
+/**
+ * Renaming an invoice.
+ *
+ * Its own small action rather than a general invoice patch, because the title is
+ * the only thing on a raised invoice that is safe to change. Every other field
+ * is either money the patient has been shown or something a tax authority may
+ * already hold.
+ */
+export async function setInvoiceTitleAction(
+  slug: string,
+  invoiceId: string,
+  title: string
+): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices")) return { error: "forbidden" };
+  const value = String(title ?? "").trim().slice(0, 120);
+
+  return inClinic(access, async (c) => {
+    const r = await c.query(
+      `update invoices set title = $3 where id = $1 and clinic_id = $2 and status <> 'void'
+       returning number`,
+      [invoiceId, access.clinicId, value]
+    );
+    if (!r.rowCount) return { error: "not_found" };
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "invoice.title",
+      entity: "invoice",
+      entityId: invoiceId,
+      detail: { title: value },
+    });
+    revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
+    return {};
+  });
+}
+
+/**
+ * Whether this invoice goes to JoFotara, decided per invoice.
+ *
+ * Turning it **on** files it there and then, rather than waiting for the next
+ * payment or the nightly sweep: somebody who just said "yes, report this one"
+ * has asked for it to be reported, and a switch that only takes effect at 4am
+ * reads as a switch that did nothing.
+ *
+ * Turning it **off** is only possible while ISTD has not been told. Once an
+ * invoice is submitted the tax authority holds it and the way back is a credit
+ * note, not a checkbox; once it is mid-flight we do not yet know which of those
+ * two states we are in. A filing that failed can be switched off, because a
+ * failure means nothing was recorded at the other end.
+ */
+export async function setInvoiceFilingAction(
+  slug: string,
+  invoiceId: string,
+  fileIt: boolean
+): Promise<{ error?: string; queued?: boolean }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices")) return { error: "forbidden" };
+
+  return inClinic(access, async (c) => {
+    const inv = (
+      await c.query(
+        `select id, status, einvoice_status from invoices
+          where id = $1 and clinic_id = $2 for update`,
+        [invoiceId, access.clinicId]
+      )
+    ).rows[0];
+    if (!inv) return { error: "not_found" };
+    if (inv.status === "void") return { error: "voided" };
+    if (!fileIt && inv.einvoice_status === "submitted") return { error: "already_filed" };
+    if (!fileIt && inv.einvoice_status === "pending") return { error: "einvoice_pending" };
+
+    await c.query(`update invoices set file_einvoice = $3 where id = $1 and clinic_id = $2`, [
+      invoiceId,
+      access.clinicId,
+      fileIt,
+    ]);
+
+    let queued = false;
+    if (fileIt) {
+      const settings = await loadEinvoiceSettings(c, access.clinicId);
+      // A draft has not been issued yet; it is filed when it is sent or paid,
+      // the same as one that was never opted out.
+      if (isReady(settings) && inv.status !== "draft") {
+        queued =
+          inv.einvoice_status === "failed"
+            ? await requeueEinvoiceSubmit(c, access.clinicId, invoiceId)
+            : await enqueueEinvoiceSubmit(c, access.clinicId, invoiceId, "manual");
+      }
+    }
+
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "invoice.filing",
+      entity: "invoice",
+      entityId: invoiceId,
+      detail: { fileEinvoice: fileIt, queued },
+    });
+    revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
+    return { queued };
   });
 }
 

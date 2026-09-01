@@ -99,6 +99,13 @@ export type PatientFilters = {
   source?: string;
   /** Days since last visit: "30" | "90" | "180". */
   visit?: string;
+  /**
+   * Only patients muted from automations and campaigns ("1").
+   *
+   * One-way on purpose: the question staff ask is "who did we stop messaging",
+   * never "who is still on the list", and the second is just the list.
+   */
+  optedOut?: string;
 };
 
 /**
@@ -136,6 +143,7 @@ export function patientFilterSql(
       `(p.last_visit_at is null or p.last_visit_at < now() - interval '${Number(f.visit)} days')`
     );
   }
+  if (f.optedOut === "1") conds.push("p.automation_opt_out");
   return { where: conds.join(" and "), values };
 }
 

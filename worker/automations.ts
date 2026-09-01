@@ -100,7 +100,20 @@ function nextAfter(steps: Step[], current: Step): Step | null {
   return parent ? nextAfter(steps, parent) : null;
 }
 
-/** Starts a run unless one is already active for this context. */
+/**
+ * Starts a run unless one is already active for this context — or unless the
+ * patient has asked not to be messaged by the machine.
+ *
+ * The opt-out is enforced here, at the single door every run comes through:
+ * a domain trigger, the scheduler's three time-based ones, and one automation
+ * handing off to another. Checking it at the send step instead would let the
+ * run start, log its way down the tree and merely fall silent at the end —
+ * which reads in the history as a broken automation rather than a respected
+ * request.
+ *
+ * A run with no patient (an inbound thread not yet matched to a file) has
+ * nobody to have opted out, and proceeds.
+ */
 export async function startRun(
   c: PoolClient,
   clinicId: string,
@@ -113,6 +126,14 @@ export async function startRun(
     documentId?: string | null;
   }
 ): Promise<string | null> {
+  if (ctx.patientId) {
+    const muted = await c.query(
+      `select 1 from patients where id = $1 and clinic_id = $2 and automation_opt_out`,
+      [ctx.patientId, clinicId]
+    );
+    if (muted.rowCount) return null;
+  }
+
   const r = await c.query(
     `insert into automation_runs (clinic_id, automation_id, patient_id, appointment_id, invoice_id, conversation_id, document_id, status)
      values ($1, $2, $3, $4, $5, $6, $7, 'running')
