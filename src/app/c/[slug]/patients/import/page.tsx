@@ -7,7 +7,7 @@ import { ImportClient } from "./import-client";
 export default async function ImportPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const access = await guardClinic(slug);
-  if (!can(access, "patients")) redirect(`/c/${slug}`);
+  if (!can(access, "patients.import")) redirect(`/c/${slug}/patients`);
 
   // Past imports, so an operator can find and undo the one they regret rather
   // than having to remember which of today's three attempts was wrong.

@@ -9,6 +9,7 @@ import { MAX_EXPORT_RECORDS, loadPatientExportBatch } from "@/lib/patient-export
 import { buildPatientWorkbook, MAX_SHEET_RECORDS } from "@/lib/patient-sheet";
 import { dictForClinic } from "@/lib/i18n";
 import { patientFilterSql, type PatientFilters } from "@/lib/patients";
+import { can } from "@/lib/auth";
 
 /**
  * Never cached, not even privately.
@@ -56,8 +57,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   if (!g.ok) return g.res;
   const { access } = g;
 
-  if (!access.isOwner && !access.session.user.isSuperAdmin) {
-    return NextResponse.json({ error: "owner_only" }, { status: 403 });
+  /*
+    Was owner-only; now a capability the owner can hand out, because a practice
+    manager who is not the account owner still has to be able to produce the
+    clinic's records. The owner keeps it either way — `resolveCapabilities`
+    grants an owner everything — so this is strictly a widening of who *can* be
+    given it, never of who has it by default: an existing member's stored map is
+    silent about `patients.export`, and silence here means no.
+  */
+  if (!can(access, "patients.export") && !access.session.user.isSuperAdmin) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   const url = new URL(req.url);

@@ -71,14 +71,19 @@ async function main() {
     [clinic.id, ownerId]
   );
   /*
-    Full access but not the owner. The export is owner-only, and "full access"
-    is the closest anybody else can get — so this is the account that proves the
-    gate is about ownership rather than about capabilities.
+    A member with the Patients section and nothing said about exporting it.
+
+    Not `{"level":"full"}`, which is what this used to be: full access is
+    documented as everything including capabilities that do not exist yet, so an
+    owner who chose it has chosen the export too. The case worth protecting is
+    the limited member — the stored map is silent about `patients.export`, and
+    silence has to keep meaning no, because that capability replaced an
+    owner-only rule.
   */
   await db.query(
     `insert into clinic_members (clinic_id, user_id, role, permissions)
-     values ($1,$2,'receptionist','{"level":"full"}')`,
-    [clinic.id, deskId]
+     values ($1,$2,'receptionist',$3)`,
+    [clinic.id, deskId, JSON.stringify({ level: "custom", caps: { patients: true } })]
   );
 
   /* An Arabic name with the letters that normalisation touches, and a Latin one. */
@@ -265,7 +270,11 @@ async function main() {
          return r.status;
        })()`
     );
-    check("full access is not enough — the whole database is owner-only", asDesk === 403, String(asDesk));
+    check(
+      "a member never granted the export cannot take the spreadsheet",
+      asDesk === 403,
+      String(asDesk)
+    );
 
     const asDeskPdf = await page.evaluate(
       `(async () => {
@@ -274,6 +283,19 @@ async function main() {
        })()`
     );
     check("and the two formats guard it identically", asDeskPdf === 403, String(asDeskPdf));
+
+    /*
+      The other half of the same switch: the section they do have still works, so
+      this is a member limited from taking the list out rather than one locked
+      out of patients altogether.
+    */
+    const asDeskList = await page.evaluate(
+      `(async () => {
+         const r = await fetch(${JSON.stringify(`${BASE}/c/${slug}/patients`)}, { cache: "no-store" });
+         return r.status;
+       })()`
+    );
+    check("while the patient list itself still opens for them", asDeskList === 200, String(asDeskList));
 
     /* ================================================================== */
     console.log("\n[the limits]");

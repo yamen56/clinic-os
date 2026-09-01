@@ -37,6 +37,7 @@ export function PatientsList({
   initialFilters,
   openNew,
   canExportAll,
+  canImport,
 }: {
   slug: string;
   patients: Row[];
@@ -46,8 +47,13 @@ export function PatientsList({
   initialFilters: { q: string; tag: string; source: string; visit: string; optedOut: string };
   /** Open the new-patient dialog on arrival — the dashboard shortcut. */
   openNew?: boolean;
-  /** Owner only: opening one file is the job, taking every file is not. */
+  /*
+    Opening one file is the job; taking every file is a separate decision, and so
+    is bringing a list in. Both are capabilities an owner grants — see
+    CAPABILITY_GROUPS — and both are enforced again at the door they open.
+  */
   canExportAll: boolean;
+  canImport: boolean;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -200,12 +206,14 @@ export function PatientsList({
                 </Button>
               </>
             )}
-            <Link href={`/c/${slug}/patients/import`}>
-              <Button variant="outline">
-                <Upload className="h-4 w-4" />
-                {t.import.title}
-              </Button>
-            </Link>
+            {canImport && (
+              <Link href={`/c/${slug}/patients/import`}>
+                <Button variant="outline">
+                  <Upload className="h-4 w-4" />
+                  {t.import.title}
+                </Button>
+              </Link>
+            )}
             <Button onClick={() => setNewOpen(true)}>
               <Plus className="h-4 w-4" />
               {t.patients.newPatient}

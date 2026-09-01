@@ -47,12 +47,20 @@ function readRow(
   cells: string[],
   mapping: ImportField[]
 ): { name: string; phone: string; secondary: string; birth: string; gender: string; notes: string; tags: string; insurance: string } {
+
   const get = (f: ImportField) => {
     const i = mapping.indexOf(f);
     return i >= 0 ? (cells[i] ?? "").trim() : "";
   };
+  /*
+    A name in one column, or in two. Joined here rather than asked of the
+    operator, because merging two columns in Excel before importing is the step
+    at which people give up — and the full-name column wins when a sheet somehow
+    carries both, so a name is never doubled up with its own surname.
+  */
+  const joined = [get("first_name"), get("last_name")].filter(Boolean).join(" ").trim();
   return {
-    name: get("full_name"),
+    name: get("full_name") || joined,
     phone: get("phone"),
     secondary: get("secondary_phone"),
     birth: get("birth_date"),
@@ -71,7 +79,7 @@ export async function previewImportAction(
   mappingOverride?: ImportField[]
 ): Promise<ImportPreview> {
   const access = await requireClinic(slug);
-  if (!can(access, "patients")) {
+  if (!can(access, "patients.import")) {
     return { headers: [], mapping: [], sample: [], plan: [], counts: { create: 0, match: 0, skip: 0 }, error: "forbidden" };
   }
 
@@ -136,13 +144,18 @@ export async function commitImportAction(
   filename: string
 ): Promise<{ batchId?: string; created?: number; matched?: number; skipped?: number; error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "patients")) return { error: "forbidden" };
+  if (!can(access, "patients.import")) return { error: "forbidden" };
 
   const { headers, rows } = parseDelimited(text);
   if (!headers.length || !rows.length) return { error: "empty" };
   if (rows.length > MAX_ROWS) return { error: "too_many" };
   if (mapping.length !== headers.length) return { error: "bad_mapping" };
-  if (!mapping.includes("full_name")) return { error: "name_required" };
+  // A name is required, but it may arrive as one column or as two.
+  const named =
+    mapping.includes("full_name") ||
+    mapping.includes("first_name") ||
+    mapping.includes("last_name");
+  if (!named) return { error: "name_required" };
 
   const country = countryFromClinic(access.clinic) as CountryCode;
 
@@ -274,7 +287,7 @@ export async function undoImportAction(
   batchId: string
 ): Promise<{ removed?: number; kept?: number; error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "patients")) return { error: "forbidden" };
+  if (!can(access, "patients.import")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
     const r = await c.query(

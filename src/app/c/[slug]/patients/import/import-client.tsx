@@ -8,6 +8,7 @@ import { fmtDateTime } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/input";
+import { IMPORT_ACCEPT } from "@/lib/import/sheet";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -22,6 +23,8 @@ import { Upload, ArrowLeft, Undo2 } from "lucide-react";
 const FIELDS: ImportField[] = [
   "ignore",
   "full_name",
+  "first_name",
+  "last_name",
   "phone",
   "secondary_phone",
   "birth_date",
@@ -57,6 +60,9 @@ export function ImportClient({
   const router = useRouter();
   const [text, setText] = useState("");
   const [filename, setFilename] = useState("");
+  /** A spreadsheet is read on the server, which is a round trip worth showing. */
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState("");
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [pending, start] = useTransition();
 
@@ -84,8 +90,41 @@ export function ImportClient({
   */
   const readFile = async (file: File) => {
     setFilename(file.name);
+    setReadError("");
     const buf = await file.arrayBuffer();
     const bytes = new Uint8Array(buf);
+
+    /*
+      An xlsx is a zip, not text, and decoding one here would show a screen of
+      mojibake. Those go to the server to be read — nothing is stored, and what
+      comes back is the same delimited text the paste box would have produced.
+      Detected by the bytes rather than the name, because a CSV renamed .xlsx is
+      a thing people try.
+    */
+    if (bytes.length > 4 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
+      setReading(true);
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch(`/api/c/${slug}/patients/import/read`, {
+          method: "POST",
+          body: form,
+        });
+        const body = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
+        if (!res.ok || !body.text) {
+          setReadError(body.error === "too_big" ? t.import.fileTooBig : t.import.fileUnreadable);
+          return;
+        }
+        setText(body.text);
+        setPreview(null);
+      } catch {
+        setReadError(t.import.fileUnreadable);
+      } finally {
+        setReading(false);
+      }
+      return;
+    }
+
     let decoded: string;
     if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
       decoded = new TextDecoder("utf-8").decode(bytes.subarray(3));
@@ -123,14 +162,20 @@ export function ImportClient({
             <div>
               <input
                 type="file"
-                accept=".csv,.tsv,.txt,text/csv,text/plain"
+                accept={IMPORT_ACCEPT}
+                disabled={reading}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) void readFile(f);
                 }}
                 className="block w-full text-sm file:me-3 file:rounded-ctl file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-700"
               />
-              <p className="mt-1 text-xs text-ink-500">{t.import.fileHint}</p>
+              <p className="mt-1 text-xs text-ink-500">
+                {reading ? t.import.reading : t.import.fileHint}
+              </p>
+              {readError && (
+                <p className="mt-1 text-xs text-danger">{readError}</p>
+              )}
             </div>
             {/* The path that never has an encoding problem: the clipboard
                 carries text, not bytes in some codepage. */}
@@ -145,7 +190,11 @@ export function ImportClient({
               dir="ltr"
             />
             <div>
-              <Button loading={pending} disabled={!text.trim()} onClick={() => runPreview()}>
+              <Button
+                loading={pending || reading}
+                disabled={!text.trim() || reading}
+                onClick={() => runPreview()}
+              >
                 <Upload className="h-4 w-4" />
                 {t.import.readIt}
               </Button>

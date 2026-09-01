@@ -21,6 +21,8 @@ export const CAPABILITIES = [
   "conversations",
   "calendar",
   "patients",
+  "patients.import",
+  "patients.export",
   "documents",
   "documents.manage",
   "documents.void",
@@ -53,6 +55,8 @@ export type AccessSetting = {
  * map — the same rule then applies to a hand-edited row, not just to the UI.
  */
 const REQUIRES: Partial<Record<Capability, Capability>> = {
+  "patients.import": "patients",
+  "patients.export": "patients",
   "documents.manage": "documents",
   "documents.void": "documents",
   "invoices.analytics": "invoices",
@@ -67,6 +71,9 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
     "conversations",
     "calendar",
     "patients",
+    // Bringing a list in is desk work. Taking the whole list out is not, and
+    // stays off until an owner says otherwise — see the note on the resolver.
+    "patients.import",
     "documents",
     "documents.manage",
     "invoices",
@@ -110,8 +117,14 @@ export function resolveCapabilities(
   if (stored.level === "full") return allCapabilities();
 
   let caps: CapabilityMap;
+  /*
+    What the stored map has an opinion about. Empty for a row written before this
+    model existed, which is the point: the inheritance rules below have to read
+    that silence the same way whichever shape the row is in.
+  */
+  let ticked: Record<string, unknown> = {};
   if (stored.level === "custom" && stored.caps && typeof stored.caps === "object") {
-    const ticked = stored.caps as Record<string, unknown>;
+    ticked = stored.caps as Record<string, unknown>;
     caps = empty();
     for (const c of CAPABILITIES) if (ticked[c] === true) caps[c] = true;
     /*
@@ -147,6 +160,24 @@ export function resolveCapabilities(
     }
   }
 
+  /*
+    Import inherits from `patients`, because it was open to anyone with the
+    section until it became a capability of its own — reading the silence as a
+    denial would take it away from people who have it today.
+
+    Outside the branch above, unlike the two rules in it, because a row with no
+    `level` at all is the *older* shape and so the one most certain to predate
+    the split. Inside the branch, a legacy doctor — whose job defaults grant
+    Patients — would have quietly lost the importer.
+
+    Export does **not** inherit, and the asymmetry is the whole point. It was
+    restricted to the clinic owner, so treating silence as a grant would hand
+    every member with Patients the ability to walk out with the entire database.
+    A capability that did not exist yesterday must never resolve to more access
+    than the rule it replaced.
+  */
+  if (!("patients.import" in ticked) && caps.patients) caps["patients.import"] = true;
+
   for (const [cap, needs] of Object.entries(REQUIRES) as [Capability, Capability][]) {
     if (!caps[needs]) caps[cap] = false;
   }
@@ -177,7 +208,7 @@ export function accessLevelOf(raw: Record<string, unknown> | null | undefined): 
 export const CAPABILITY_GROUPS: { section: Capability; actions: Capability[] }[] = [
   { section: "conversations", actions: [] },
   { section: "calendar", actions: [] },
-  { section: "patients", actions: [] },
+  { section: "patients", actions: ["patients.import", "patients.export"] },
   { section: "documents", actions: ["documents.manage", "documents.void"] },
   { section: "invoices", actions: ["invoices.analytics"] },
   { section: "campaigns", actions: [] },

@@ -13,6 +13,15 @@
 /** Columns the platform can fill from an import. */
 export type ImportField =
   | "full_name"
+  /*
+    A list split across two columns is as common as one that is not — every
+    system that ever asked for a title exports "First name" and "Last name"
+    separately. Mapped as their own fields and joined when the row is read, so
+    the operator does not have to merge the columns in Excel first, which is the
+    step at which somebody gives up.
+  */
+  | "first_name"
+  | "last_name"
   | "phone"
   | "secondary_phone"
   | "birth_date"
@@ -76,7 +85,17 @@ function sniffDelimiter(firstLine: string): string {
 export function parseDelimited(text: string): { headers: string[]; rows: string[][] } {
   const clean = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   if (!clean) return { headers: [], rows: [] };
-  const delim = sniffDelimiter(clean.split("\n", 1)[0]);
+  /*
+    Sniffed from the widest of the first few lines rather than from the first.
+    A sheet that opens with a title — "Patient list 2024" alone in A1 — has no
+    delimiter at all on line one, and guessing comma there would read a
+    semicolon-separated file as a single column.
+  */
+  const delim = sniffDelimiter(
+    clean
+      .split("\n", 5)
+      .reduce((best, line) => (countDelims(line) > countDelims(best) ? line : best), "")
+  );
 
   const rows: string[][] = [];
   let row: string[] = [];
@@ -115,10 +134,39 @@ export function parseDelimited(text: string): { headers: string[]; rows: string[
   row.push(field);
   rows.push(row);
 
-  const headers = (rows.shift() ?? []).map((h) => h.trim());
-  // A trailing delimiter, or a blank line at the end, is not a record.
-  const body = rows.filter((r) => r.some((cell) => cell.trim() !== ""));
-  return { headers, rows: body };
+  // A trailing delimiter, or a blank line anywhere, is not a record.
+  const filled = rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+  const head = headerRowIndex(filled);
+  const headers = (filled[head] ?? []).map((h) => h.trim());
+  return { headers, rows: filled.slice(head + 1) };
+}
+
+/** How many of the candidate delimiters a line carries. Used to pick a header. */
+function countDelims(line: string): number {
+  return (line.match(/[\t,;]/g) ?? []).length;
+}
+
+/**
+ * Which row is the header.
+ *
+ * Almost always the first, and that is what this returns unless the file opens
+ * with something narrower — a report title, a clinic name, an export timestamp
+ * — which spreadsheets put above the table often enough to matter. Taking such a
+ * line as the header names every column after the first "" and maps the whole
+ * file to `ignore`, which looks to the operator like the importer cannot read
+ * their file at all.
+ *
+ * Conservative on purpose: a row only loses to the one below it when it has
+ * fewer than half as many filled cells, so an ordinary sheet whose last column
+ * is blank in the header is untouched. Only the first few rows are considered,
+ * because a header is never buried deep.
+ */
+function headerRowIndex(rows: string[][]): number {
+  const filledCells = (r: string[]) => r.filter((c) => c.trim() !== "").length;
+  const limit = Math.min(rows.length - 1, 4);
+  let i = 0;
+  while (i < limit && filledCells(rows[i]) * 2 < filledCells(rows[i + 1])) i++;
+  return i;
 }
 
 /*
@@ -127,7 +175,9 @@ export function parseDelimited(text: string): { headers: string[]; rows: string[
   towards guessing rather than leaving everything blank.
 */
 const GUESSES: [ImportField, RegExp][] = [
-  ["full_name", /^(full[\s_-]?name|name|patient|الاسم|اسم|اسم المريض|الاسم الكامل)$/i],
+  ["full_name", /^(full[\s_-]?name|name|patient([\s_-]?name)?|الاسم|اسم|اسم المريض|الاسم الكامل)$/i],
+  ["first_name", /^(first[\s_-]?name|given[\s_-]?name|fname|الاسم الأول|الاسم الاول|الاسم ?1)$/i],
+  ["last_name", /^(last[\s_-]?name|surname|family[\s_-]?name|lname|اسم العائلة|العائلة|الكنية|اللقب)$/i],
   ["phone", /^(phone|mobile|cell|tel|telephone|whatsapp|هاتف|جوال|موبايل|تلفون|رقم|الهاتف|الجوال)$/i],
   ["secondary_phone", /^(phone ?2|second(ary)? ?phone|alt ?phone|هاتف ?2|هاتف اخر|هاتف آخر)$/i],
   ["birth_date", /^(birth|dob|date ?of ?birth|birth ?date|تاريخ الميلاد|الميلاد|المواليد)$/i],
@@ -138,14 +188,40 @@ const GUESSES: [ImportField, RegExp][] = [
 ];
 
 /** Pre-selects a field per column. Every choice is the operator's to override. */
+/**
+ * The forms of a header worth testing against the patterns above.
+ *
+ * Arabic headers arrive with and without the definite article — one clinic
+ * writes "ملاحظات", the next writes "الملاحظات" — and listing both spellings of
+ * every word would be a table nobody keeps up to date. The bare form is tried
+ * alongside the written one, so "ال" costs nothing.
+ *
+ * A trailing colon and a bracketed aside come off too, because "Phone (mobile):"
+ * is how a person writes a header and not how a matcher expects one.
+ */
+function headerForms(raw: string): string[] {
+  const base = raw
+    .trim()
+    .replace(/[:\uFF1A]\s*$/, "")
+    .replace(/\s*[([][^)\]]*[)\]]\s*$/, "")
+    .trim();
+  const forms = [base];
+  if (/^ال\p{L}/u.test(base)) forms.push(base.slice(2));
+  return forms;
+}
+
 export function guessMapping(headers: string[]): ImportField[] {
+  // A sheet carrying both a full name and its parts means the full one; mapping
+  // all three would append the surname to a name that already ends in it.
+  const hasFull = headers.some((h) => headerForms(h).some((f) => GUESSES[0][1].test(f)));
   const used = new Set<ImportField>();
   return headers.map((h) => {
-    const name = h.trim();
+    const forms = headerForms(h);
     for (const [field, re] of GUESSES) {
+      if (hasFull && (field === "first_name" || field === "last_name")) continue;
       // One column per field: a sheet with "Phone" and "Phone 2" must not map
       // both onto `phone` and silently drop one.
-      if (!used.has(field) && re.test(name)) {
+      if (!used.has(field) && forms.some((f) => re.test(f))) {
         used.add(field);
         return field;
       }

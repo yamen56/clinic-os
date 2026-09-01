@@ -1,4 +1,5 @@
 import { guardCap } from "@/lib/guard";
+import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { patientFilterSql } from "@/lib/patients";
 import { PatientsList } from "./patients-list";
@@ -66,7 +67,8 @@ export default async function PatientsPage({
         mutedFromAutomations: Boolean(r.automation_opt_out),
       }))}
       allTags={data.tags}
-      canExportAll={access.isOwner || access.session.user.isSuperAdmin}
+      canExportAll={can(access, "patients.export") || access.session.user.isSuperAdmin}
+      canImport={can(access, "patients.import")}
       tz={access.clinic.timezone}
       initialFilters={{
         q: sp.q ?? "",
