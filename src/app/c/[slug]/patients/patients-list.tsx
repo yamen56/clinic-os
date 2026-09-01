@@ -14,7 +14,7 @@ import { EmptyState, Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { createPatientAction } from "./actions";
-import { Users, Plus, Upload, Download, BellOff } from "lucide-react";
+import { Users, Plus, Upload, Download, BellOff, Sheet } from "lucide-react";
 
 type Row = {
   id: string;
@@ -58,7 +58,12 @@ export function PatientsList({
   const [phone, setPhone] = useState("");
   const [err, setErr] = useState("");
   const [pending, start] = useTransition();
-  const [exporting, setExporting] = useState(false);
+  /*
+    Which format is in flight, not merely whether one is. Two buttons sharing a
+    single boolean would put the spinner on both and leave somebody unsure which
+    file is coming.
+  */
+  const [exporting, setExporting] = useState<"pdf" | "xlsx" | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const apply = (next: typeof f) => {
@@ -103,10 +108,11 @@ export function PatientsList({
     showing, so "export all" after a search means that search — and the cover
     sheet says which, so nobody mistakes a slice for the whole.
   */
-  const exportAll = async () => {
-    setExporting(true);
+  const exportAll = async (format: "pdf" | "xlsx") => {
+    setExporting(format);
     try {
       const p = new URLSearchParams();
+      if (format === "xlsx") p.set("format", "xlsx");
       if (f.q) p.set("q", f.q);
       if (f.tag) p.set("tag", f.tag);
       if (f.source) p.set("source", f.source);
@@ -137,7 +143,7 @@ export function PatientsList({
       const name =
         decodeURIComponent(
           res.headers.get("content-disposition")?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)/i)?.[1] ?? ""
-        ) || `${slug}-patients.pdf`;
+        ) || `${slug}-patients.${format}`;
       const href = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
       a.href = href;
@@ -150,7 +156,7 @@ export function PatientsList({
     } catch {
       toast(t.patients.exportAllFailed, "error");
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
@@ -165,11 +171,34 @@ export function PatientsList({
           <>
             {/* Beside "new patient", because a clinic arriving with a list is
                 looking for it on this screen and nowhere else. */}
+            {/*
+              Two formats, because they answer different questions. The PDF is
+              the record — what a clinic hands to a patient, a lawyer or the next
+              practice. The spreadsheet is the data — what somebody sorts, counts
+              and pivots, and the only one of the two that a clinic with
+              thousands of files can actually get out.
+            */}
             {canExportAll && (
-              <Button variant="outline" onClick={exportAll} loading={exporting} disabled={exporting}>
-                <Download className="h-4 w-4" />
-                {exporting ? t.patients.exportAllPreparing : t.patients.exportAll}
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => exportAll("xlsx")}
+                  loading={exporting === "xlsx"}
+                  disabled={exporting !== null}
+                >
+                  <Sheet className="h-4 w-4" />
+                  {exporting === "xlsx" ? t.patients.exportAllPreparing : t.patients.exportExcel}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => exportAll("pdf")}
+                  loading={exporting === "pdf"}
+                  disabled={exporting !== null}
+                >
+                  <Download className="h-4 w-4" />
+                  {exporting === "pdf" ? t.patients.exportAllPreparing : t.patients.exportPdf}
+                </Button>
+              </>
             )}
             <Link href={`/c/${slug}/patients/import`}>
               <Button variant="outline">

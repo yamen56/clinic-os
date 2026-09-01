@@ -17,6 +17,7 @@ const SUITES = [
   ["dashboard: analytics, shortcuts, and what each member may see", "scripts/qa-dashboard.ts"],
   ["phase 2: patients", "scripts/qa-phase2.ts"],
   ["patients: exporting the record", "scripts/qa-patient-export.ts"],
+  ["patients: the list as a spreadsheet", "scripts/qa-patient-excel.ts"],
   ["adding somebody back after removing them", "scripts/qa-readd.ts"],
   ["phase 3: calendar", "scripts/qa-phase3.ts"],
   ["phase 4: public booking", "scripts/qa-phase4.ts"],

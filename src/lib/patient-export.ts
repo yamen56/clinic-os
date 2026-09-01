@@ -45,6 +45,18 @@ export type ExportedRecord = {
     insurer: string | null;
     insuranceNo: string | null;
     customFields: { label: string; value: string }[];
+    /*
+      Added for the spreadsheet, which is a list rather than a narrative and so
+      wants the columns the patient list itself is sorted and filtered by. The
+      printed record ignores them: a page that already says "Registered: 3 March"
+      does not also need a row saying `source: staff`.
+    */
+    extraPhones: string[];
+    source: string;
+    lastVisitAt: string | null;
+    insuranceValidUntil: string | null;
+    /** Muted from every automation and campaign — see migration 0040. */
+    automationOptOut: boolean;
   };
   notes: {
     id: string;
@@ -294,6 +306,11 @@ export async function loadPatientExportBatch(
         insurer: p.insurer_name ?? null,
         insuranceNo: p.insurance_no || null,
         customFields,
+        extraPhones: p.extra_phones ?? [],
+        source: p.source,
+        lastVisitAt: p.last_visit_at ? String(p.last_visit_at) : null,
+        insuranceValidUntil: p.insurance_valid_until ? String(p.insurance_valid_until) : null,
+        automationOptOut: Boolean(p.automation_opt_out),
       },
       notes: (notesBy.get(id) ?? []).map((n) => ({
         id: n.id,

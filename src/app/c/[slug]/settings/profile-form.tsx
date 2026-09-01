@@ -91,7 +91,16 @@ export function ClinicProfileForm({
         <h2 className="text-[15px] font-semibold">{t.settings.profile}</h2>
         <SaveIndicator state={state} />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/*
+        grid-cols-1, not a bare grid. Without an explicit column at the base size
+        the grid gets one implicit track sized `auto`, whose floor is the
+        min-content width of what it holds — here the Google Maps field, whose
+        input carries a long placeholder. The track therefore refused to be
+        narrower than that, pushed past the edge of a 320px phone, and took the
+        whole page sideways with it. `grid-cols-1` is `minmax(0, 1fr)`: the floor
+        becomes zero and the field shrinks as it was always meant to.
+      */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label={t.admin.clinicName} required>
           <Input defaultValue={clinic.name} disabled={ro} onChange={(e) => patch({ name: e.target.value })} />
         </Field>
