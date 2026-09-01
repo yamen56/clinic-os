@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Toggle, Input, Select, Field } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Toggle } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
@@ -293,13 +293,12 @@ function AlertEditor({
                 <option value="fixed">{t.automations.minutesUnit}</option>
               </Select>
               {minutes !== null && (
-                <Input
-                  type="number"
+                <NumberInput
                   dir="ltr"
                   min={0}
                   max={1440}
                   value={minutes}
-                  onChange={(e) => setMinutes(Math.max(0, Math.min(1440, Number(e.target.value) || 0)))}
+                  onChange={(v) => setMinutes(Math.max(0, Math.min(1440, v)))}
                   className="!w-24"
                 />
               )}
@@ -325,13 +324,12 @@ function AlertEditor({
 
         {shape.threshold && (
           <Field label={t.automations.threshold} hint={t.automations.thresholdUnit}>
-            <Input
-              type="number"
+            <NumberInput
               dir="ltr"
               min={0}
               max={999}
               value={threshold}
-              onChange={(e) => setThreshold(Math.max(0, Math.min(999, Number(e.target.value) || 0)))}
+              onChange={(v) => setThreshold(Math.max(0, Math.min(999, v)))}
               className="!w-24"
             />
           </Field>

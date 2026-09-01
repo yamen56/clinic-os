@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 
 /*
@@ -18,6 +18,98 @@ export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTML
     return <input ref={ref} className={`${base} h-10 ${className}`} {...rest} />;
   }
 );
+
+/**
+ * A number box you can actually empty.
+ *
+ * Every numeric field in this app was written as a controlled input whose
+ * handler read `Number(e.target.value) || fallback`. Select the price, press
+ * delete, and the box does not go blank: the empty string becomes `Number("")`,
+ * which is 0, which is falsy, so the fallback lands in state and React puts it
+ * straight back in the box. The caret sits after a `0` nobody can remove, and
+ * typing 50 gives 050. There is no keystroke that fixes it — the only way to
+ * replace a price was to select the zero and type over it, which is not
+ * something anyone should have to discover.
+ *
+ * The fix is to stop making the box show a number. It shows *text*, held here,
+ * and reports a number upwards whenever that text is one. Empty stays empty for
+ * as long as the person is in the field.
+ *
+ * What the parent sees while the box is blank is `fallback` — so an invoice
+ * total recomputed mid-edit is still arithmetic on real numbers rather than on
+ * NaN — and on blur the box settles to that same value, so a field left empty
+ * ends up agreeing with what was already reported.
+ */
+export const NumberInput = forwardRef<
+  HTMLInputElement,
+  Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
+    value: number;
+    onChange: (value: number) => void;
+    /** Where an emptied box settles. Defaults to `min`, or 0. */
+    fallback?: number;
+  }
+>(function NumberInput(
+  { value, onChange, fallback, min, max, onBlur, className = "", ...rest },
+  ref
+) {
+  const resting = fallback ?? (typeof min === "number" ? min : 0);
+  const [text, setText] = useState(() => String(value));
+  /*
+    The value this component last sent up. Without it the effect below cannot
+    tell a genuine outside change — picking a service, which sets the price —
+    from the echo of the keystroke just typed, and would re-normalise the text on
+    every character. That echo is the original bug wearing a different hat.
+  */
+  const reported = useRef(value);
+
+  useEffect(() => {
+    if (value !== reported.current) {
+      reported.current = value;
+      setText(String(value));
+    }
+  }, [value]);
+
+  const send = (n: number) => {
+    reported.current = n;
+    onChange(n);
+  };
+
+  return (
+    <input
+      ref={ref}
+      type="number"
+      inputMode="decimal"
+      min={min}
+      max={max}
+      value={text}
+      {...rest}
+      // After the spread, so a caller's className is appended to the base styles
+      // rather than replacing them — which is what `{...rest}` last would do.
+      className={`${base} h-10 ${className}`}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setText(raw);
+        if (raw === "") return send(resting);
+        const n = Number(raw);
+        // "-", "1e" and "1." are all somebody part-way through typing. Leave the
+        // text alone and say nothing upwards until it means something.
+        if (Number.isFinite(n)) send(n);
+      }}
+      onBlur={(e) => {
+        const n = Number(text);
+        let settled = text === "" || !Number.isFinite(n) ? resting : n;
+        // Clamped on the way out rather than on the way in: clamping per
+        // keystroke makes it impossible to type 50 into a field whose minimum
+        // is 10, because 5 is rejected before the 0 arrives.
+        if (typeof min === "number" && settled < min) settled = min;
+        if (typeof max === "number" && settled > max) settled = max;
+        setText(String(settled));
+        if (settled !== reported.current) send(settled);
+        onBlur?.(e);
+      }}
+    />
+  );
+});
 
 export const Textarea = forwardRef<
   HTMLTextAreaElement,

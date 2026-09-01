@@ -5,7 +5,7 @@ import { DateTime } from "luxon";
 import { useI18n } from "@/lib/i18n/client";
 import { formatPhone } from "@/lib/phone";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Textarea } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/misc";
 import { ConfirmDialog } from "@/components/ui/modal";
@@ -258,13 +258,13 @@ export function AppointmentPanel({
                 <Input type="time" value={time} step={900} onChange={(e) => setTime(e.target.value)} />
               </Field>
               <Field label={t.calendar.duration}>
-                <Input
-                  type="number"
+                <NumberInput
                   dir="ltr"
                   min={5}
                   step={5}
                   value={duration}
-                  onChange={(e) => setDuration(Number(e.target.value) || 30)}
+                  onChange={(v) => setDuration(v)}
+                  fallback={30}
                 />
               </Field>
             </div>

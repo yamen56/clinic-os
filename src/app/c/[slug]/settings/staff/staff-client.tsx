@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
@@ -487,13 +487,12 @@ function EditMember({
         </Field>
         {m.role === "doctor" && (
           <Field label={t.staff.reminderMinutes}>
-            <Input
-              type="number"
+            <NumberInput
               dir="ltr"
               min={0}
               max={1440}
               value={m.reminder_minutes}
-              onChange={(e) => setM({ ...m, reminder_minutes: Number(e.target.value) || 0 })}
+              onChange={(v) => setM({ ...m, reminder_minutes: v })}
             />
           </Field>
         )}

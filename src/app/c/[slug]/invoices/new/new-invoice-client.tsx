@@ -7,7 +7,7 @@ import { fmtMoney } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { PageHeader, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { computeInvoice, taxBreakdown, TAX_CATEGORIES, type TaxCategory } from "@/lib/invoices";
@@ -199,17 +199,18 @@ export function NewInvoiceClient({
                             boxes tells a screen reader nothing — and now that the
                             line carries a discount and a rate as well, position is
                             no longer enough to say which is which. */}
-                        <Input
-                          type="number" dir="ltr" min={1}
+                        <NumberInput
+                          dir="ltr" min={1}
                           aria-label={t.invoices.qty}
                           value={it.qty}
-                          onChange={(e) => setItem(i, { qty: Number(e.target.value) || 1 })}
+                          fallback={1}
+                          onChange={(qty) => setItem(i, { qty })}
                         />
-                        <Input
-                          type="number" dir="ltr" min={0} step="0.5"
+                        <NumberInput
+                          dir="ltr" min={0} step="0.5"
                           aria-label={t.invoices.unitPrice}
                           value={it.unitPrice}
-                          onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) || 0 })}
+                          onChange={(unitPrice) => setItem(i, { unitPrice })}
                         />
                         <span className="text-end text-sm font-medium tnum">
                           {fmtMoney(line.net + line.tax, currency, locale)}
@@ -231,12 +232,12 @@ export function NewInvoiceClient({
                       <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-500">
                         <label className="flex items-center gap-1.5">
                           <span className="whitespace-nowrap">{t.invoices.discount}</span>
-                          <Input
-                            type="number" dir="ltr" min={0} step="0.5"
+                          <NumberInput
+                            dir="ltr" min={0} step="0.5"
                             aria-label={t.invoices.discount}
                             className="!h-8 !w-20 !text-[13px]"
                             value={it.discountAmount}
-                            onChange={(e) => setItem(i, { discountAmount: Number(e.target.value) || 0 })}
+                            onChange={(discountAmount) => setItem(i, { discountAmount })}
                           />
                         </label>
                         <label className="flex items-center gap-1.5">
@@ -265,11 +266,11 @@ export function NewInvoiceClient({
                         {it.taxCategory === "S" && (
                           <label className="flex items-center gap-1.5">
                             <span className="whitespace-nowrap">{taxLabel || t.invoices.tax} %</span>
-                            <Input
-                              type="number" dir="ltr" min={0} max={100} step="0.5"
+                            <NumberInput
+                              dir="ltr" min={0} max={100} step="0.5"
                               className="!h-8 !w-20 !text-[13px]"
                               value={it.taxRate}
-                              onChange={(e) => setItem(i, { taxRate: Number(e.target.value) || 0 })}
+                              onChange={(taxRate) => setItem(i, { taxRate })}
                             />
                           </label>
                         )}

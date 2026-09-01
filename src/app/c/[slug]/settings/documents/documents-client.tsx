@@ -7,7 +7,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { fmtDate } from "@/lib/dates";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -263,25 +263,25 @@ export function DocumentSettingsClient({
         <div className="grid gap-4 p-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t.esignSettings.linkDays} hint={t.esignSettings.linkDaysHint}>
-              <Input
-                type="number"
+              <NumberInput
                 dir="ltr"
                 min={1}
                 max={90}
                 disabled={!isOwner}
                 value={cfg.linkDays}
-                onChange={(e) => setCfg({ ...cfg, linkDays: Number(e.target.value) || 7 })}
+                onChange={(v) => setCfg({ ...cfg, linkDays: v })}
+                fallback={7}
               />
             </Field>
             <Field label={t.esignSettings.reminderHours} hint={t.esignSettings.reminderHoursHint}>
-              <Input
-                type="number"
+              <NumberInput
                 dir="ltr"
                 min={1}
                 max={336}
                 disabled={!isOwner}
                 value={cfg.reminderHours}
-                onChange={(e) => setCfg({ ...cfg, reminderHours: Number(e.target.value) || 24 })}
+                onChange={(v) => setCfg({ ...cfg, reminderHours: v })}
+                fallback={24}
               />
             </Field>
           </div>

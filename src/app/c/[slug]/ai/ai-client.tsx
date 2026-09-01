@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, EmptyState } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -230,11 +230,11 @@ export function AiClient({
               )}
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <Field label={t.ai.dailyCap}>
-                  <Input
-                    type="number" dir="ltr" min={1} max={5000}
+                  <NumberInput dir="ltr" min={1} max={5000}
                     value={a.max_daily_messages}
-                    onChange={(e) => setA({ ...a, max_daily_messages: Number(e.target.value) || 200 })}
+                    onChange={(v) => setA({ ...a, max_daily_messages: v })}
                     onBlur={() => save()}
+                    fallback={200}
                   />
                 </Field>
                 <Field label={t.ai.model}>

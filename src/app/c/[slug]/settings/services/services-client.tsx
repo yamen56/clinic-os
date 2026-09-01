@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -187,24 +187,25 @@ export function ServicesClient({
             </div>
             <div className="grid grid-cols-3 gap-4">
               <Field label={t.services.duration}>
-                <Input
-                  type="number" dir="ltr" min={5} step={5}
+                <NumberInput
+                  dir="ltr" min={5} step={5}
                   value={draft.durationMin}
-                  onChange={(e) => setDraft({ ...draft, durationMin: Number(e.target.value) || 30 })}
+                  fallback={30}
+                  onChange={(durationMin) => setDraft({ ...draft, durationMin })}
                 />
               </Field>
               <Field label={`${t.services.price} (${currency})`}>
-                <Input
-                  type="number" dir="ltr" min={0} step="0.5"
+                <NumberInput
+                  dir="ltr" min={0} step="0.5"
                   value={draft.price}
-                  onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) || 0 })}
+                  onChange={(price) => setDraft({ ...draft, price })}
                 />
               </Field>
               <Field label={t.services.buffer}>
-                <Input
-                  type="number" dir="ltr" min={0} step={5}
+                <NumberInput
+                  dir="ltr" min={0} step={5}
                   value={draft.bufferAfterMin}
-                  onChange={(e) => setDraft({ ...draft, bufferAfterMin: Number(e.target.value) || 0 })}
+                  onChange={(bufferAfterMin) => setDraft({ ...draft, bufferAfterMin })}
                 />
               </Field>
             </div>

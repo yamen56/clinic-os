@@ -6,7 +6,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { fmtDateTime, fmtRelative } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState, Tabs, Avatar } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -268,9 +268,9 @@ function TriggerConfig({
     return (
       <div className="mt-3">
         <Field label={t.automations.hours}>
-          <Input type="number" dir="ltr" min={1} max={720}
-            value={String(config.hours ?? 24)}
-            onChange={(e) => onChange({ ...config, hours: Number(e.target.value) || 24 })} />
+          <NumberInput dir="ltr" min={1} max={720}
+            value={Number(config.hours ?? 24)}
+            onChange={(v) => onChange({ ...config, hours: v })} fallback={24} />
         </Field>
       </div>
     );
@@ -280,9 +280,9 @@ function TriggerConfig({
     return (
       <div className="mt-3">
         <Field label={t.automations.days}>
-          <Input type="number" dir="ltr" min={1} max={3650}
-            value={String(config.days ?? fallback)}
-            onChange={(e) => onChange({ ...config, days: Number(e.target.value) || 1 })} />
+          <NumberInput dir="ltr" min={1} max={3650}
+            value={Number(config.days ?? fallback)}
+            onChange={(v) => onChange({ ...config, days: v })} />
         </Field>
       </div>
     );
@@ -471,9 +471,9 @@ function StepCard({
         {step.step_type === "wait" && (
           <div className="grid grid-cols-2 gap-3">
             <Field label={t.automations.waitMinutes}>
-              <Input type="number" dir="ltr" min={0}
-                value={String(cfg.minutes ?? 60)}
-                onChange={(e) => setCfg({ minutes: Number(e.target.value) || 0 })} />
+              <NumberInput dir="ltr" min={0}
+                value={Number(cfg.minutes ?? 60)}
+                onChange={(v) => setCfg({ minutes: v })} />
             </Field>
             <Field label={t.automations.untilTime} hint={t.common.optional}>
               <Input type="time" value={String(cfg.until_time ?? "")}

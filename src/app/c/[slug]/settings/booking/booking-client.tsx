@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -410,16 +410,16 @@ export function BookingLinksClient({
             </div>
             <div className="grid grid-cols-3 gap-4">
               <Field label={tb.minNotice}>
-                <Input type="number" dir="ltr" min={0} value={editing.min_notice_min ?? 120}
-                  onChange={(e) => setEditing({ ...editing, min_notice_min: Number(e.target.value) || 0 })} />
+                <NumberInput dir="ltr" min={0} value={editing.min_notice_min ?? 120}
+                  onChange={(v) => setEditing({ ...editing, min_notice_min: v })} />
               </Field>
               <Field label={tb.maxDays}>
-                <Input type="number" dir="ltr" min={1} value={editing.max_days_ahead ?? 30}
-                  onChange={(e) => setEditing({ ...editing, max_days_ahead: Number(e.target.value) || 30 })} />
+                <NumberInput dir="ltr" min={1} value={editing.max_days_ahead ?? 30}
+                  onChange={(v) => setEditing({ ...editing, max_days_ahead: v })} fallback={30} />
               </Field>
               <Field label={tb.granularity}>
-                <Input type="number" dir="ltr" min={5} step={5} value={editing.slot_granularity_min ?? 30}
-                  onChange={(e) => setEditing({ ...editing, slot_granularity_min: Number(e.target.value) || 30 })} />
+                <NumberInput dir="ltr" min={5} step={5} value={editing.slot_granularity_min ?? 30}
+                  onChange={(v) => setEditing({ ...editing, slot_granularity_min: v })} fallback={30} />
               </Field>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">

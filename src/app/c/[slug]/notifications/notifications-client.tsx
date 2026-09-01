@@ -7,7 +7,7 @@ import { useRealtime } from "@/lib/use-realtime";
 import { fmtDateTime } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Toggle } from "@/components/ui/input";
+import { Input, NumberInput, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { PushManager } from "@/components/push-manager";
@@ -215,13 +215,12 @@ export function NotificationsClient({
                 <label className="mb-1.5 block text-[13px] font-medium text-ink-700">
                   {t.notifications.reminderMinutes}
                 </label>
-                <Input
-                  type="number"
+                <NumberInput
                   dir="ltr"
                   min={0}
                   max={1440}
                   value={reminder}
-                  onChange={(e) => setReminder(Number(e.target.value) || 0)}
+                  onChange={(v) => setReminder(v)}
                   onBlur={() => savePrefs(prefs, reminder)}
                 />
               </div>

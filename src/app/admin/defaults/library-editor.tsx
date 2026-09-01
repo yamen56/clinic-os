@@ -6,7 +6,7 @@ import { useI18n } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/client-dict";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Tabs } from "@/components/ui/misc";
@@ -207,11 +207,10 @@ export function LibraryEditor({ entries, locale }: { entries: Entry[]; locale: L
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t.fields.moveUp}>
-                <Input
-                  type="number"
+                <NumberInput
                   dir="ltr"
-                  value={String(editing.sort ?? 100)}
-                  onChange={(e) => setEditing({ ...editing, sort: Number(e.target.value) || 0 })}
+                  value={Number(editing.sort ?? 100)}
+                  onChange={(v) => setEditing({ ...editing, sort: v })}
                 />
               </Field>
               <label className="flex items-end justify-between gap-3 pb-1">
