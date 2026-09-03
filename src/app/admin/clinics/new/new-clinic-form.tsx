@@ -53,7 +53,13 @@ export function NewClinicForm() {
       <Field
         label={t.admin.slug}
         required
-        error={state?.fieldErrors?.slug ? "This slug is taken — choose another." : undefined}
+        error={
+          state?.fieldErrors?.slug === "reserved"
+            ? "That address is reserved by the platform — choose another."
+            : state?.fieldErrors?.slug
+              ? "This slug is taken — choose another."
+              : undefined
+        }
       >
         <Input
           name="slug"

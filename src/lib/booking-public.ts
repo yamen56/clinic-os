@@ -45,6 +45,15 @@ export type PublicLink = {
     working_hours: Record<string, [string, string][]>;
     blocked_dates: string[];
     wa_connected: boolean;
+    /*
+      Both carried for the public page. `currency` because the price line used to
+      print a literal "JOD" — wrong for any clinic that does not bill in dinars,
+      not only for the workspace selling software. `vocabulary` because this is
+      the one screen a prospective customer sees, and it was the one screen whose
+      words could not be changed: the wizard imported the raw dictionaries.
+    */
+    currency: string;
+    vocabulary: "medical" | "agency";
   };
   services: {
     id: string;
@@ -53,6 +62,8 @@ export type PublicLink = {
     duration_min: number;
     price: string;
     color: string;
+    /** 'online' swaps the address and the call button for a join link. */
+    location_kind: "in_person" | "online";
   }[];
   doctors: { id: string; name: string; title: string | null; specialty: string | null }[];
   /** Everything the page renders. The mapping onto the patient file stays server-side. */
@@ -78,6 +89,7 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       await c.query(
         `select cl.id, cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.address_ar,
                 cl.phone_e164, cl.google_maps_url, cl.timezone, cl.default_locale, cl.working_hours, cl.blocked_dates,
+                cl.currency, cl.vocabulary,
                 coalesce(ws.status = 'connected', false) as wa_connected
          from clinics cl left join whatsapp_sessions ws on ws.clinic_id = cl.id
          where cl.id = $1`,
@@ -92,7 +104,7 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
     if (serviceFilter) params.push(link.service_ids);
     const services = (
       await c.query(
-        `select s.id, s.name, s.name_ar, s.duration_min, s.price, s.color
+        `select s.id, s.name, s.name_ar, s.duration_min, s.price, s.color, s.location_kind
          from services s where s.clinic_id = $1 and s.active and s.bookable_online ${serviceFilter}
          order by s.sort, s.name`,
         params

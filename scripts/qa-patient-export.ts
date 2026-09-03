@@ -423,9 +423,20 @@ async function main() {
     await page.goto(`${BASE}/c/${slug}/patients`);
     await page.waitForLoadState("networkidle");
     await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
+    /*
+      Two buttons, not one. The list used to offer a single "Export all" that
+      always meant the PDF; it now offers the record and the spreadsheet side by
+      side, because they answer different questions — one is what you hand to a
+      patient or a lawyer, the other is what you sort and count.
+    */
     check(
-      "the owner is offered it on the list",
-      (await page.getByRole("button", { name: ar.patients.exportAll }).count()) > 0,
+      "the owner is offered the printed record",
+      (await page.getByRole("button", { name: ar.patients.exportPdf }).count()) > 0,
+      ""
+    );
+    check(
+      "and the spreadsheet beside it",
+      (await page.getByRole("button", { name: ar.patients.exportExcel }).count()) > 0,
       ""
     );
   } finally {

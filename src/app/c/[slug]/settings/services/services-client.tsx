@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, NumberInput, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Select, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -23,6 +23,7 @@ type Service = {
   color: string;
   buffer_after_min: number;
   bookable_online: boolean;
+  location_kind: "in_person" | "online";
   active: boolean;
   doctor_ids: string[];
 };
@@ -36,6 +37,7 @@ type Draft = {
   color: string;
   bufferAfterMin: number;
   bookableOnline: boolean;
+  locationKind: "in_person" | "online";
   doctorIds: string[];
 };
 
@@ -47,6 +49,7 @@ const empty: Draft = {
   color: "#0b1220",
   bufferAfterMin: 0,
   bookableOnline: true,
+  locationKind: "in_person",
   doctorIds: [],
 };
 
@@ -153,6 +156,7 @@ export function ServicesClient({
                           color: s.color,
                           bufferAfterMin: s.buffer_after_min,
                           bookableOnline: s.bookable_online,
+                          locationKind: s.location_kind,
                           doctorIds: s.doctor_ids,
                         })
                       }
@@ -222,6 +226,27 @@ export function ServicesClient({
                 <Toggle checked={draft.bookableOnline} onChange={(v) => setDraft({ ...draft, bookableOnline: v })} />
                 <span className="text-[13px] font-medium">{t.services.bookableOnline}</span>
               </label>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              {/*
+                Where it happens. An online meeting has no address to give, so the
+                booking page shows the host's join link instead of the map and the
+                phone number — see migration 0041.
+              */}
+              <Field label={t.services.locationKind}>
+                <Select
+                  value={draft.locationKind}
+                  onChange={(e) =>
+                    setDraft({ ...draft, locationKind: e.target.value as Draft["locationKind"] })
+                  }
+                >
+                  <option value="in_person">{t.services.inPerson}</option>
+                  <option value="online">{t.services.online}</option>
+                </Select>
+              </Field>
+              {draft.locationKind === "online" && (
+                <p className="text-[13px] text-ink-500">{t.services.onlineHint}</p>
+              )}
             </div>
             {doctors.length > 0 && (
               <Field label={t.services.doctors}>

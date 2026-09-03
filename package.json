@@ -19,6 +19,7 @@
     "qa:clean": "tsx scripts/qa-cleanup.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json",
     "seed:recipes": "tsx scripts/seed-recipes.ts",
+    "seed:clinicti": "tsx scripts/seed-clinicti.ts",
     "postinstall": "node scripts/postinstall.js",
     "doctor": "tsx scripts/doctor.ts",
     "fonts": "tsx scripts/fetch-fonts.ts",

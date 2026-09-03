@@ -35,6 +35,14 @@ export type PublicSigningView = {
     logoPath: string | null;
     brandColor: string;
     phone: string | null;
+    /*
+      Carried so the signing screen says what the signature actually means. A
+      clinic signing with Clinicti is agreeing to a commercial contract, and the
+      consent-to-treatment wording would be actively misleading about that — see
+      `sign.consentLabel` in i18n/vocab.ts, an override written for this screen
+      that until now never reached it.
+    */
+    vocabulary: "medical" | "agency";
   } | null;
   document: {
     id: string;
@@ -168,7 +176,7 @@ async function loadContextFor(
   const doc = (
     await c.query(
       `select d.*, cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color,
-              cl.phone_e164 as clinic_phone, t.fields_schema
+              cl.vocabulary, cl.phone_e164 as clinic_phone, t.fields_schema
        from documents d
        join clinics cl on cl.id = d.clinic_id
        left join document_templates t on t.id = d.template_id
@@ -234,6 +242,7 @@ async function loadContextFor(
         slug: doc.slug,
         logoPath: doc.logo_path,
         brandColor: doc.brand_color,
+        vocabulary: doc.vocabulary === "agency" ? "agency" : "medical",
         phone: doc.clinic_phone,
       },
       document: {

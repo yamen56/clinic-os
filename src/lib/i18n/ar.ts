@@ -270,6 +270,7 @@ export const ar: Dict = {
     outstanding: "مستحق للعيادة",
     outstandingSub: "{n} غير مدفوعة",
     newPatientsMonth: "مرضى جدد هذا الشهر",
+    demosMonth: "حجوزات إلكترونية هذا الشهر",
     vsLastMonth: "مقارنة بالشهر الماضي",
 
     /* --- الرسوم --- */
@@ -716,6 +717,11 @@ export const ar: Dict = {
     color: "اللون",
     buffer: "فاصل بعد الموعد (دقائق)",
     bookableOnline: "متاح للحجز الإلكتروني",
+    locationKind: "مكان الانعقاد",
+    inPerson: "في العيادة",
+    online: "اجتماع أونلاين",
+    onlineHint:
+      "صفحة الحجز تعرض رابط الانضمام بدل العنوان. حدّد غرفة الاجتماع لكل شخص من ملفه في الموظفين.",
     doctors: "الأطباء الذين يقدمونها",
     empty: "لا توجد خدمات بعد",
     emptyBody: "أضف خدمات مثل الكشفية أو التنظيف أو المراجعة ليتمكن المرضى من حجزها.",
@@ -773,6 +779,9 @@ export const ar: Dict = {
     specialty: "التخصص",
     color: "لون التقويم",
     reminderMinutes: "التذكير قبل المواعيد (دقائق)",
+    meetingUrl: "رابط غرفة الاجتماع",
+    meetingUrlHint:
+      "يُستخدم لكل ما يُحجز كاجتماع أونلاين. يصل هذا الرابط إلى العميل في رسالة التأكيد وفي دعوة التقويم.",
     accessTitle: "الصلاحيات",
     accessSub: "ما الذي يستطيع فتحه والقيام به. الوظيفة أعلاه تخص جدولة المواعيد لا الصلاحيات.",
     fullAccess: "صلاحية كاملة",
@@ -927,6 +936,8 @@ export const ar: Dict = {
   },
   notifications: {
     title: "الإشعارات",
+    bookingNew: "حجز جديد: {name}",
+    bookingPending: "طلب حجز بانتظار الموافقة: {name}",
     markAllRead: "تعليم الكل كمقروء",
     empty: "لا يوجد جديد",
     emptyBody: "الحجوزات والإلغاءات وتحويلات المساعد الذكي والملخصات اليومية تظهر هنا.",
@@ -1506,6 +1517,7 @@ export const ar: Dict = {
     tooMany: "محاولات كثيرة. يرجى الانتظار بضع دقائق.",
     genericError: "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
     addToCalendar: "إضافة إلى التقويم",
+    joinMeeting: "افتح رابط الاجتماع",
     callClinic: "اتصل بالعيادة",
   },
   bookingSettings: {

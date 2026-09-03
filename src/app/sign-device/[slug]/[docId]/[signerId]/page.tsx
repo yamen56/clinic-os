@@ -77,6 +77,7 @@ export default async function SignDevicePage({
         logoPath: doc.logo_path,
         brandColor: doc.brand_color,
         phone: doc.clinic_phone,
+        vocabulary: access.clinic.vocabulary,
       },
       document: {
         id: doc.id,

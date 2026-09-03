@@ -46,6 +46,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
     quietly hand back exactly the totals the invoice list was told to hide.
   */
   const showRevenue = can(a, "invoices.analytics");
+  /** Clinicti's own workspace — see clinics.vocabulary and i18n/vocab.ts. */
+  const isAgency = a.clinic.vocabulary === "agency";
   const showInbox = can(a, "conversations");
   const showCalendar = can(a, "calendar");
   const showPatients = can(a, "patients");
@@ -88,6 +90,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           -- The money owed, not just how many pieces of paper it is spread across.
           (select coalesce(sum(total - amount_paid),0) from invoices where clinic_id=$1 and status in ('sent','partially_paid')) as owed,
           (select count(*) from patients where clinic_id=$1 and merged_into is null and created_at >= $6 and created_at < $7)::int as new_patients,
+          /*
+            Bookings that came through the public link this month. Every clinic
+            has this number; only the workspace selling software puts it on the
+            front page, where "how many demos did we book" is the question the
+            morning actually starts with.
+          */
+          (select count(*) from appointments where clinic_id=$1 and source='booking_link' and starts_at >= $6 and starts_at < $7)::int as self_booked,
+          (select count(*) from patients where clinic_id=$1 and merged_into is null and status='lead')::int as leads,
           (select count(*) from appointments where clinic_id=$1 and status in ('scheduled','pending_approval') and starts_at > now())::int as unconfirmed`,
         [a.clinicId, thisWeek.start, thisWeek.end, lastWeek.start, lastWeek.end, month.start, month.end]
       )
@@ -249,17 +259,48 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           },
         ]
       : []),
-    { key: "noshow", label: t.dashboard.noShowRate, value: `${noShowRate}%` },
-    ...(showPatients
+    /*
+      The workspace that sells the product asks different questions of its own
+      front page. How many demos were booked, and how many prospects are waiting
+      on an answer, are the two numbers that decide what the day looks like — and
+      a no-show rate on a sales call means much less than it does on a filling.
+
+      Built from columns that already exist: `source = 'booking_link'` and the
+      three patient statuses. No pipeline field, no deal value, nothing new to
+      keep up to date.
+    */
+    ...(isAgency
       ? [
           {
-            key: "newpatients",
-            label: t.dashboard.newPatientsMonth,
-            value: String(data.stats.new_patients),
-            href: `${base}/patients`,
+            key: "demos",
+            label: t.dashboard.demosMonth,
+            value: String(data.stats.self_booked),
+            href: `${base}/calendar`,
           },
+          ...(showPatients
+            ? [
+                {
+                  key: "prospects",
+                  label: t.patients.statusLead,
+                  value: String(data.stats.leads),
+                  href: `${base}/patients?status=lead`,
+                },
+              ]
+            : []),
         ]
-      : []),
+      : [
+          { key: "noshow", label: t.dashboard.noShowRate, value: `${noShowRate}%` },
+          ...(showPatients
+            ? [
+                {
+                  key: "newpatients",
+                  label: t.dashboard.newPatientsMonth,
+                  value: String(data.stats.new_patients),
+                  href: `${base}/patients`,
+                },
+              ]
+            : []),
+        ]),
   ];
 
   const revenuePoints: Point[] = data.series.map((d) => ({

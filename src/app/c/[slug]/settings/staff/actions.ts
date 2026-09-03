@@ -254,6 +254,8 @@ export async function updateMemberAction(
     color?: string;
     active?: boolean;
     reminderMinutes?: number;
+    /** This person's standing meeting room, used by services held online. */
+    meetingUrl?: string;
     access?: { level: "full" | "custom"; caps: string[] };
     workingHours?: Record<string, [string, string][]> | null;
   }
@@ -304,6 +306,18 @@ export async function updateMemberAction(
     if (patch.active !== undefined) push("active", patch.active);
     if (patch.reminderMinutes !== undefined && patch.reminderMinutes >= 0)
       push("reminder_minutes", Math.min(patch.reminderMinutes, 1440));
+    if (patch.meetingUrl !== undefined) {
+      /*
+        Stored only if it is a real http(s) URL, because this one goes out to a
+        customer — in a WhatsApp message and in a calendar invite — and a
+        `javascript:` or `data:` link reaching either would be ours to answer
+        for. Blank clears it.
+      */
+      const raw = patch.meetingUrl.trim().slice(0, 500);
+      const ok = raw === "" || /^https?:\/\/\S+$/i.test(raw);
+      if (!ok) return { error: "bad_meeting_url" };
+      push("meeting_url", raw || null);
+    }
     if (patch.access !== undefined) {
       /*
         Rebuilt from the capability list rather than stored as sent. A client

@@ -8,6 +8,8 @@ import { notifyClinicStaff } from "@/lib/notify";
 import { emitTrigger } from "@/lib/triggers";
 import { applyAnswersToPatient, answersSummary, type IntakeAnswer } from "@/lib/booking-intake";
 import type { PublicLink } from "@/lib/booking-public";
+import { dictFor } from "@/lib/i18n/client-dict";
+import { applyVocabulary } from "@/lib/i18n/vocab";
 
 export type BookingPayload = {
   serviceId: string;
@@ -28,7 +30,10 @@ export async function finalizeBooking(
   phone: string,
   p: BookingPayload,
   verified: boolean
-): Promise<{ error?: string } | { appointmentId: string; startISO: string; status: string }> {
+): Promise<
+  | { error?: string }
+  | { appointmentId: string; startISO: string; status: string; meetingUrl: string | null }
+> {
   return withSystem(async (c) => {
     // Before the free/busy scan, so the slot this booking picks cannot be taken
     // by a simultaneous one between the check and the insert.
@@ -36,7 +41,7 @@ export async function finalizeBooking(
 
     const service = (
       await c.query(
-        `select id, name, name_ar, duration_min from services where id = $1 and clinic_id = $2 and active`,
+        `select id, name, name_ar, duration_min, location_kind from services where id = $1 and clinic_id = $2 and active`,
         [p.serviceId, data.clinic.id]
       )
     ).rows[0];
@@ -72,11 +77,21 @@ export async function finalizeBooking(
     }
     if (chosen === undefined) return { error: "slot_taken" };
 
+    /*
+      A demo booking is a prospect, not a customer.
+
+      Everywhere else on the platform somebody who books online is a patient the
+      clinic now has, and 'active' is right. In the workspace that sells the
+      product they are a clinic that has agreed to look at it — filing them as
+      Subscribed on the strength of a calendar invite would make the only
+      pipeline signal there is permanently wrong, and wrong in the flattering
+      direction, which is the worst kind.
+    */
     const patient = await findOrCreatePatient(c, data.clinic.id, {
       phone,
       fullName: p.fullName,
       source: "booking_link",
-      status: "active",
+      status: data.clinic.vocabulary === "agency" ? "lead" : "active",
     });
     if (patient.created) {
       await emitTrigger(c, data.clinic.id, "patient_created", {
@@ -87,9 +102,25 @@ export async function finalizeBooking(
 
     const answers = p.answers ?? [];
     const status = data.link.approval_mode === "approval" ? "pending_approval" : "confirmed";
+
+    /*
+      The room this meeting happens in, copied off the host rather than pointed
+      at them. A host who changes their standing room next year must not
+      silently rewrite where last month's meeting was — the confirmation we sent
+      on WhatsApp and the calendar invite the customer saved both already name a
+      URL, and the record has to keep agreeing with the two artefacts that have
+      already left the building.
+    */
+    const meetingUrl =
+      service.location_kind === "online" && chosen
+        ? ((
+            await c.query(`select meeting_url from clinic_members where id = $1`, [chosen])
+          ).rows[0]?.meeting_url as string | null) ?? null
+        : null;
+
     const appt = await c.query(
-      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, intake_answers)
-       values ($1, $2, $3, $4, $5, $6, $7, 'booking_link', $8, $9::jsonb) returning id`,
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, intake_answers, meeting_url)
+       values ($1, $2, $3, $4, $5, $6, $7, 'booking_link', $8, $9::jsonb, $10) returning id`,
       [
         data.clinic.id,
         patient.id,
@@ -101,6 +132,7 @@ export async function finalizeBooking(
         verified ? "" : "Booked while WhatsApp was offline — number not verified.",
         // Stringified, or a JS array reaches jsonb as a Postgres array literal.
         JSON.stringify(answers),
+        meetingUrl,
       ]
     );
     const appointmentId = appt.rows[0].id as string;
@@ -122,6 +154,7 @@ export async function finalizeBooking(
     const serviceName = p.locale === "en" ? service.name : service.name_ar || service.name;
     const doctorName = data.doctors.find((d) => d.id === chosen)?.name;
 
+
     const confirm = await systemMessage(c, {
       clinicId: data.clinic.id,
       key: status === "confirmed" ? "booking_confirmed" : "booking_pending",
@@ -136,6 +169,12 @@ export async function finalizeBooking(
         "appointment.service": serviceName,
         "appointment.doctor": doctorName ?? "",
         "appointment.when": when,
+        /*
+          Empty for an in-person booking, and `renderSystemMessage` drops any
+          line whose tokens all resolve empty — so a clinic that never holds a
+          meeting online sees no change to its confirmation at all.
+        */
+        "appointment.join_url": meetingUrl ?? "",
       },
     });
 
@@ -155,13 +194,27 @@ export async function finalizeBooking(
     // What the patient told us goes into the notification itself. A reception
     // desk that has to open the appointment to find out it is an emergency has
     // already lost the minute the question was asked to save.
-    const summary = answers.length ? answersSummary(answers, "ar") : "";
+    /*
+      In the clinic's own language, not always Arabic.
+
+      This notification is stored and read by staff, so the honest language is
+      the workspace's rather than the visitor's — but it was pinned to Arabic
+      outright, which made every booking notification unreadable for a clinic
+      running the product in English.
+    */
+    const staffLocale = data.clinic.default_locale === "en" ? "en" : "ar";
+    const t = applyVocabulary(dictFor(staffLocale), data.clinic.vocabulary, staffLocale);
+    const summary = answers.length ? answersSummary(answers, staffLocale) : "";
     await notifyClinicStaff(c, data.clinic.id, {
       kind: "booking",
       title:
-        status === "confirmed"
-          ? `حجز جديد: ${p.fullName}`
-          : `طلب حجز بانتظار الموافقة: ${p.fullName}`,
+        (status === "confirmed"
+          ? t.notifications.bookingNew
+          : t.notifications.bookingPending
+        ).replace(
+          "{name}",
+          p.fullName
+        ),
       body: `${serviceName} · ${when}${summary ? `\n${summary}` : ""}`,
       url: `/c/${data.clinic.slug}/calendar`,
     });
@@ -176,6 +229,6 @@ export async function finalizeBooking(
       source: "booking_link",
     });
 
-    return { appointmentId, startISO: start.toUTC().toISO()!, status };
+    return { appointmentId, startISO: start.toUTC().toISO()!, status, meetingUrl };
   });
 }

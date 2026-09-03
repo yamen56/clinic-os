@@ -14,7 +14,7 @@ export default async function ServicesSettingsPage({
     const services = (
       await c.query(
         `select s.id, s.name, s.name_ar, s.duration_min, s.price, s.color, s.buffer_after_min,
-                s.bookable_online, s.active,
+                s.bookable_online, s.location_kind, s.active,
                 coalesce(array_agg(sd.member_id) filter (where sd.member_id is not null), '{}') as doctor_ids
          from services s
          left join service_doctors sd on sd.service_id = s.id

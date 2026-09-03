@@ -15,6 +15,12 @@ const serviceSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   bufferAfterMin: z.coerce.number().int().min(0).max(120).default(0),
   bookableOnline: z.boolean().default(true),
+  /*
+    Where this is held. 'in_person' is every service that existed before this
+    column did, and stays the default, so a clinic that never opens this dropdown
+    is unaffected.
+  */
+  locationKind: z.enum(["in_person", "online"]).default("in_person"),
   doctorIds: z.array(z.string().uuid()).default([]),
 });
 
@@ -30,9 +36,9 @@ export async function saveServiceAction(slug: string, data: unknown): Promise<{ 
     if (serviceId) {
       const r = await c.query(
         `update services set name = $3, name_ar = $4, duration_min = $5, price = $6, color = $7,
-           buffer_after_min = $8, bookable_online = $9
+           buffer_after_min = $8, bookable_online = $9, location_kind = $10
          where id = $1 and clinic_id = $2`,
-        [serviceId, access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline]
+        [serviceId, access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind]
       );
       if (!r.rowCount) return { error: "not_found" };
       await c.query(`delete from service_doctors where service_id = $1 and clinic_id = $2`, [
@@ -41,11 +47,11 @@ export async function saveServiceAction(slug: string, data: unknown): Promise<{ 
       ]);
     } else {
       const r = await c.query(
-        `insert into services (clinic_id, name, name_ar, duration_min, price, color, buffer_after_min, bookable_online, sort)
-         values ($1, $2, $3, $4, $5, $6, $7, $8,
+        `insert into services (clinic_id, name, name_ar, duration_min, price, color, buffer_after_min, bookable_online, location_kind, sort)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9,
            (select coalesce(max(sort), 0) + 1 from services where clinic_id = $1))
          returning id`,
-        [access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline]
+        [access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind]
       );
       serviceId = r.rows[0].id;
     }

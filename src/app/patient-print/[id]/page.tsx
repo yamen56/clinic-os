@@ -6,6 +6,7 @@ import { loadPatientExport } from "@/lib/patient-export";
 import { fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { dictFor } from "@/lib/i18n/client-dict";
+import { applyVocabulary } from "@/lib/i18n/vocab";
 import { PatientRecord, PrintStyles } from "../record";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -48,7 +49,8 @@ export default async function PatientPrintPage({
   if (!data) notFound();
 
   const isAr = data.clinic.locale === "ar";
-  const t = dictFor(isAr ? "ar" : "en");
+  // The workspace's own wording, not just its language — see ExportedClinic.
+  const t = applyVocabulary(dictFor(isAr ? "ar" : "en"), data.clinic.vocabulary, isAr ? "ar" : "en");
   const locale = isAr ? "ar" : "en";
   const tz = data.clinic.timezone;
   const clinicName = (isAr ? data.clinic.nameAr : null) || data.clinic.name;

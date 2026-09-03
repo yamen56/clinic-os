@@ -36,6 +36,7 @@ type Member = {
   color: string;
   active: boolean;
   reminder_minutes: number;
+  meeting_url: string | null;
   permissions: Record<string, unknown>;
   working_hours: Record<string, [string, string][]> | null;
   full_name: string;
@@ -498,6 +499,25 @@ function EditMember({
         )}
       </div>
 
+      {/*
+        The room this person meets in, for services held online. One standing
+        link rather than one per booking: the slot search already guarantees they
+        are in at most one meeting at a time, so a fixed room cannot collide with
+        itself — and generating one per booking would put a third-party outage
+        inside the booking transaction.
+      */}
+      {m.role === "doctor" && (
+        <Field label={t.staff.meetingUrl} hint={t.staff.meetingUrlHint}>
+          <Input
+            dir="ltr"
+            type="url"
+            placeholder="https://meet.google.com/…"
+            value={m.meeting_url ?? ""}
+            onChange={(e) => setM({ ...m, meeting_url: e.target.value })}
+          />
+        </Field>
+      )}
+
       {accessLocked ? (
         <p className="rounded-lg border border-line bg-sunken px-4 py-3 text-[12px] leading-relaxed text-ink-500">
           {member.is_owner ? t.staff.ownerAccessLocked : t.staff.selfAccessLocked}
@@ -554,6 +574,7 @@ function EditMember({
                 specialty: m.specialty ?? "",
                 color: m.color,
                 reminderMinutes: m.reminder_minutes,
+                meetingUrl: m.meeting_url ?? "",
                 access: accessLocked
                   ? undefined
                   : { level, caps: CAPABILITIES.filter((c) => caps[c]) },

@@ -10,13 +10,12 @@ import { withSystem } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { sanitizeHtml } from "@/lib/esign/render";
-import { RECIPES_ON_BY_DEFAULT } from "@/lib/esign/constants";
 import { deleteClinicFiles } from "@/lib/storage";
 import { internalSecret } from "@/lib/internal-secret";
 import { FEATURES, toFeatureSetting, type Feature, type FeatureMap } from "@/lib/features";
 import { RESTORE_WINDOW_DAYS } from "@/lib/clinic-lifecycle";
 import { SPECIALTIES, asSpecialty, type Specialty } from "@/lib/specialties";
-import { seedStaffAlerts } from "@/lib/staff-alerts";
+import { provisionClinic, installRecipes, isReservedSlug } from "@/lib/clinic-provision";
 import { z } from "zod";
 
 /**
@@ -58,82 +57,6 @@ const createClinicSchema = z.object({
 
 export type CreateClinicResult = { error?: string; fieldErrors?: Record<string, string> } | null;
 
-type RecipeStep = {
-  step_type: string;
-  config?: Record<string, unknown>;
-  children?: { yes?: RecipeStep[]; no?: RecipeStep[] };
-};
-
-/** Copies a recipe's step tree (including condition branches) into a clinic. */
-async function copySteps(
-  c: import("pg").PoolClient,
-  clinicId: string,
-  automationId: string,
-  steps: unknown[],
-  parentId: string | null,
-  branch: "yes" | "no" | null
-) {
-  let sort = 0;
-  for (const raw of steps as RecipeStep[]) {
-    const r = await c.query(
-      `insert into automation_steps (clinic_id, automation_id, parent_step_id, branch, sort, step_type, config)
-       values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-      [clinicId, automationId, parentId, branch, sort++, raw.step_type, JSON.stringify(raw.config ?? {})]
-    );
-    const stepId = r.rows[0].id as string;
-    if (raw.children?.yes?.length) {
-      await copySteps(c, clinicId, automationId, raw.children.yes, stepId, "yes");
-    }
-    if (raw.children?.no?.length) {
-      await copySteps(c, clinicId, automationId, raw.children.no, stepId, "no");
-    }
-  }
-}
-
-/**
- * Gives a clinic the recipe library for its field: the general one everybody
- * gets, plus its own specialty's pack.
- *
- * Additive and re-runnable. A recipe the clinic already holds a copy of is
- * skipped rather than duplicated, which is what makes this safe to call again
- * when the agency corrects a specialty that was chosen wrongly — the clinic's
- * own edits to the copies it already has are never touched.
- *
- * Returns how many were newly installed, because "nothing happened" and "eleven
- * flows appeared in their workspace" should not look the same to whoever
- * pressed the button.
- */
-async function installRecipes(
-  c: import("pg").PoolClient,
-  clinicId: string,
-  specialty: Specialty
-): Promise<number> {
-  const recipes = await c.query(
-    `select * from recipe_templates
-      where active and specialty in ('general', $1)
-        and key not in (select recipe_key from automations where clinic_id = $2 and recipe_key is not null)
-      order by sort`,
-    [specialty, clinicId]
-  );
-  for (const r of recipes.rows) {
-    const a = await c.query(
-      `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key, recipe_specialty)
-       values ($1, $2, $3, $4, $5, $7, $6, $8) returning id`,
-      [
-        clinicId,
-        r.name_ar || r.name,
-        r.description,
-        r.trigger_type,
-        JSON.stringify(r.trigger_config ?? {}),
-        r.key,
-        RECIPES_ON_BY_DEFAULT.has(r.key as string),
-        r.specialty ?? "general",
-      ]
-    );
-    await copySteps(c, clinicId, a.rows[0].id, Array.isArray(r.steps) ? r.steps : [], null, null);
-  }
-  return recipes.rowCount ?? 0;
-}
 
 /**
  * Changes a clinic's field and hands it the recipes that come with it.
@@ -187,124 +110,31 @@ export async function createClinicAction(
   let ownerIsNew = false;
   let ownerId = "";
   let clinicId = "";
+  /*
+    Reserved before uniqueness is even checked. `clinicti` is the vendor's own
+    workspace and the only clinic carrying the agency vocabulary; a customer who
+    registered that slug would take the name and quietly break the assertion in
+    qa-vocabulary.ts that no other clinic has been switched.
+  */
+  if (isReservedSlug(d.slug)) return { fieldErrors: { slug: "reserved" } };
+
   try {
     slug = await withSystem(async (c) => {
-      const dup = await c.query("select 1 from clinics where slug = $1", [d.slug]);
-      if (dup.rowCount) throw new Error("slug_taken");
-
-      const clinic = await c.query(
-        `insert into clinics (name, name_ar, slug, phone_e164, plan, plan_price, features, specialty)
-         values ($1, $2, $3, $4, $5, $6, $7, $8) returning id, slug`,
-        // Written out in full rather than as "only the exceptions", so the row
-        // records what was actually sold on the day it was sold. A feature added
-        // to the product next year then arrives switched *on* for this clinic —
-        // the same rule every existing clinic gets — and the agency turns it off
-        // deliberately if it is not part of the deal.
-        [
-          d.name, d.nameAr || null, d.slug, phone, d.plan, d.planPrice,
-          JSON.stringify(toFeatureSetting(d.features)), d.specialty,
-        ]
-      );
-      clinicId = clinic.rows[0].id as string;
-
-      /*
-        Owner account: reuse an existing user with this email, otherwise create
-        one with no password at all.
-
-        The agency used to type a password here and pass it to the owner, which
-        meant we chose it, we knew it, and it travelled to them over whatever
-        channel was handy. Staff invitations already worked the right way — an
-        emailed link, a password only the invitee ever sees — and there was no
-        reason the owner of the clinic should be the one person onboarded worse
-        than their own receptionist.
-
-        password_hash stays null until they accept, so the account cannot be
-        signed into before then.
-      */
-      const existing = await c.query("select id from users where lower(email) = $1", [
-        d.ownerEmail.toLowerCase(),
-      ]);
-      if (existing.rowCount) {
-        ownerId = existing.rows[0].id;
-      } else {
-        const u = await c.query(
-          `insert into users (email, full_name) values ($1, $2) returning id`,
-          [d.ownerEmail, d.ownerName]
-        );
-        ownerId = u.rows[0].id;
-        ownerIsNew = true;
-      }
-      // The first member owns the clinic and always has full access. Their job
-      // title is a guess the clinic corrects in staff settings; ownership is not.
-      await c.query(
-        `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions)
-         values ($1, $2, 'other', true, '{"level":"full"}')`,
-        [clinicId, ownerId]
-      );
-
-      // Baseline per-clinic rows
-      await c.query(`insert into whatsapp_sessions (clinic_id) values ($1)`, [clinicId]);
-      await c.query(`insert into ai_agents (clinic_id, agent_name) values ($1, $2)`, [
-        clinicId,
-        d.nameAr || d.name,
-      ]);
-      await c.query(
-        `insert into booking_links (clinic_id, slug, name) values ($1, $2, 'Default')`,
-        [clinicId, d.slug]
-      );
-
-      // Copy agency defaults: automation recipes (disabled) and knowledge structure
-      await installRecipes(c, clinicId, d.specialty);
-      // The doctor and staff alerts this clinic will be able to edit from its
-      // own automations page. Seeded with exactly what the worker used to do.
-      await seedStaffAlerts(c, clinicId);
-      const kts = await c.query("select * from knowledge_templates order by sort");
-      for (const k of kts.rows) {
-        await c.query(
-          `insert into ai_knowledge_items (clinic_id, category, title, content, sort)
-           values ($1, $2, $3, $4, $5)`,
-          [clinicId, k.category, k.title, k.content, k.sort]
-        );
-      }
-
-      // Signing: the starting field definitions and signer roles, then a copy of
-      // the agency's consent-form library. Copies, not references — the clinic
-      // owns its forms from the first day and can rewrite any of them.
-      await c.query(`select seed_esign_defaults($1)`, [clinicId]);
-      // The two note categories every clinic starts with. Renameable and
-      // reorderable from the patient file; never deletable, because the notes
-      // written under them point here.
-      await c.query(`select seed_note_categories($1)`, [clinicId]);
-      const docTemplates = await c.query(
-        "select * from document_template_library where active order by sort"
-      );
-      for (const lt of docTemplates.rows) {
-        await c.query(
-          `insert into document_templates
-             (clinic_id, name, name_ar, category, body, body_ar, language, signer_config,
-              fields_schema, library_key, created_by)
-           values ($1, $2, $3, $4, $5, $6, 'both', $7, $8, $9, $10)`,
-          [
-            clinicId,
-            lt.name,
-            lt.name_ar || null,
-            lt.category,
-            lt.body,
-            lt.body_ar,
-            /*
-              Re-serialised, not passed through. pg hands jsonb back as parsed
-              JavaScript, and node-pg encodes a JS *array* as a Postgres array
-              literal — so `fields_schema: []` went out as `{}` and the insert
-              failed with "invalid input syntax for type json", taking the whole
-              clinic-creation transaction with it.
-            */
-            JSON.stringify(lt.signer_config ?? {}),
-            JSON.stringify(lt.fields_schema ?? []),
-            lt.key,
-            ownerId,
-          ]
-        );
-      }
+      const p = await provisionClinic(c, {
+        name: d.name,
+        nameAr: d.nameAr,
+        slug: d.slug,
+        phoneE164: phone,
+        plan: d.plan,
+        planPrice: d.planPrice,
+        features: d.features,
+        specialty: d.specialty,
+        ownerEmail: d.ownerEmail,
+        ownerName: d.ownerName,
+      });
+      clinicId = p.clinicId;
+      ownerId = p.ownerId;
+      ownerIsNew = p.ownerIsNew;
 
       await audit(c, {
         clinicId,
@@ -314,7 +144,7 @@ export async function createClinicAction(
         entityId: clinicId,
         detail: { name: d.name, slug: d.slug, features: toFeatureSetting(d.features) },
       });
-      return clinic.rows[0].slug as string;
+      return p.slug;
     });
   } catch (e) {
     if ((e as Error).message === "slug_taken") return { fieldErrors: { slug: "taken" } };

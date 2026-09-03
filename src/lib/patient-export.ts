@@ -25,6 +25,13 @@ export type ExportedClinic = {
   timezone: string;
   currency: string;
   locale: "ar" | "en";
+  /*
+    Carried so the printed record speaks the same language as the screen it was
+    printed from. Without it the PDF called them patients while the workspace
+    called them clinics — and the spreadsheet built from this very same batch
+    got it right, so one button produced two documents that disagreed.
+  */
+  vocabulary: "medical" | "agency";
 };
 
 /**
@@ -150,7 +157,7 @@ export async function loadPatientExportBatch(
   const clinicRow = (
     await c.query(
       `select name, name_ar, address, address_ar, phone_e164, logo_path, brand_color,
-              timezone, currency, default_locale
+              timezone, currency, default_locale, vocabulary
          from clinics where id = $1`,
       [clinicId]
     )
@@ -167,6 +174,7 @@ export async function loadPatientExportBatch(
     timezone: clinicRow.timezone,
     currency: clinicRow.currency,
     locale: isAr ? "ar" : "en",
+    vocabulary: clinicRow.vocabulary === "agency" ? "agency" : "medical",
   };
 
   const generatedAt = new Date().toISOString();

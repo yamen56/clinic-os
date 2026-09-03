@@ -7,6 +7,7 @@ import { patientFilterSql, type PatientFilters } from "@/lib/patients";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { dictFor } from "@/lib/i18n/client-dict";
+import { applyVocabulary } from "@/lib/i18n/vocab";
 import { PatientRecord, PrintStyles } from "../../patient-print/record";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -72,8 +73,11 @@ export default async function PatientsPrintPage({
   if (!data) notFound();
 
   const isAr = data.clinic.locale === "ar";
-  const t = dictFor(isAr ? "ar" : "en");
   const locale = isAr ? "ar" : "en";
+  // The workspace's own wording, not just its language. The spreadsheet built
+  // from this same batch already did this; the PDF did not, so one button
+  // produced two documents that disagreed about what a record is called.
+  const t = applyVocabulary(dictFor(locale), data.clinic.vocabulary, locale);
   const tz = data.clinic.timezone;
   const clinicName = (isAr ? data.clinic.nameAr : null) || data.clinic.name;
   const address = (isAr ? data.clinic.addressAr : null) || data.clinic.address;

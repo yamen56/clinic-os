@@ -11,7 +11,7 @@ try { process.loadEnvFile?.(); } catch {}
 import { Client } from "pg";
 import { en } from "../src/lib/i18n/en";
 import { ar } from "../src/lib/i18n/ar";
-import { applyVocabulary } from "../src/lib/i18n/vocab";
+import { applyVocabulary, AGENCY_PATCHES } from "../src/lib/i18n/vocab";
 
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
 let pass = 0;
@@ -41,6 +41,49 @@ async function main() {
     applyVocabulary(en, "medical", "en").nav.patients === "Patients");
   ok("and يقول المرضى in Arabic",
     applyVocabulary(ar, "medical", "ar").nav.patients === ar.nav.patients);
+
+  /*
+    The two assertions that replace reading the file.
+
+    The patch was twenty-eight entries when it was written and is several times
+    that now. At this size nobody can eyeball whether the English and Arabic
+    halves still carry the same leaves — and the failure that produces is an
+    English sentence sitting on a right-to-left screen, which anybody testing in
+    English will look straight past.
+  */
+  console.log("\n[the two halves stay in step]");
+  const leaves = (o: unknown, p: string[] = [], out: string[] = []): string[] => {
+    for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+      if (v && typeof v === "object" && !Array.isArray(v)) leaves(v, [...p, k], out);
+      else out.push([...p, k].join("."));
+    }
+    return out;
+  };
+  const enLeaves = leaves(AGENCY_PATCHES.en).sort();
+  const arLeaves = leaves(AGENCY_PATCHES.ar).sort();
+  const onlyEn = enLeaves.filter((k) => !arLeaves.includes(k));
+  const onlyAr = arLeaves.filter((k) => !enLeaves.includes(k));
+  ok("every English override has an Arabic twin", onlyEn.length === 0, onlyEn.join(", "));
+  ok("and every Arabic one has an English twin", onlyAr.length === 0, onlyAr.join(", "));
+
+  /*
+    An entry copied from the base in *both* languages reads as covered and
+    changes nothing — the worst kind of dead weight, because it is invisible in a
+    diff and looks like work already done.
+
+    Deliberately "in both", not "in either". Some words are already right in one
+    language and wrong in the other: Arabic's own `statusLead` is عميل محتمل,
+    which is exactly what a prospect is, while English's Lead is not. That leaf
+    still has to exist in the Arabic patch to satisfy the parity check above, and
+    it is doing real work in English — flagging it would push somebody to invent
+    a worse Arabic word for the sake of a green tick.
+  */
+  const at = (o: unknown, path: string) =>
+    path.split(".").reduce<unknown>((acc, k) => (acc as Record<string, unknown>)?.[k], o);
+  const dead = enLeaves.filter(
+    (k) => at(AGENCY_PATCHES.en, k) === at(en, k) && at(AGENCY_PATCHES.ar, k) === at(ar, k)
+  );
+  ok("no override merely repeats the base in both languages", dead.length === 0, dead.join(", "));
 
   console.log("\n[the agency workspace speaks differently]");
   const aEn = applyVocabulary(en, "agency", "en");

@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DateTime } from "luxon";
-import { en } from "@/lib/i18n/en";
-import { ar } from "@/lib/i18n/ar";
+import type { Dict } from "@/lib/i18n/en";
 import { PoweredBy, PrivacyLink, CLINICTI_PRIVACY_URL } from "@/components/powered-by";
 import { questionsForService, type PublicQuestion } from "@/lib/booking-intake";
 import {
@@ -18,9 +17,17 @@ import {
   Stethoscope,
   User,
   Check,
+  Video,
 } from "lucide-react";
 
-type Service = { id: string; name: string; nameAr: string | null; durationMin: number; price: number };
+type Service = {
+  id: string;
+  name: string;
+  nameAr: string | null;
+  durationMin: number;
+  price: number;
+  locationKind: "in_person" | "online";
+};
 type Doctor = { id: string; name: string; title: string | null; specialty: string | null };
 
 export type LinkCopy = {
@@ -47,6 +54,7 @@ export function BookingWizard({
   doctors,
   questions,
   copy,
+  words,
   maxDaysAhead,
   approvalMode,
   lockedDoctor,
@@ -64,17 +72,28 @@ export function BookingWizard({
     phone: string | null;
     tz: string;
     defaultLocale: "ar" | "en";
+    currency: string;
   };
   services: Service[];
   doctors: Doctor[];
   questions: PublicQuestion[];
   copy: LinkCopy;
+  /*
+    Both languages, resolved on the server through the workspace's vocabulary.
+
+    Handed down rather than imported. This page has a language toggle that
+    switches without a round trip, so one merged dictionary would break it — and
+    importing `en.ts` and `ar.ts` here shipped four thousand lines of dictionary
+    to a phone that needs fifty, while making the one screen a prospective
+    customer ever sees the one screen whose words could not be changed.
+  */
+  words: { en: Dict["book"]; ar: Dict["book"] };
   maxDaysAhead: number;
   approvalMode: "instant" | "approval";
   lockedDoctor: string | null;
 }) {
   const [locale, setLocale] = useState<"ar" | "en">(clinic.defaultLocale);
-  const t = (locale === "en" ? en : ar).book;
+  const t = locale === "en" ? words.en : words.ar;
   const dir = locale === "en" ? "ltr" : "rtl";
   const isAr = locale === "ar";
 
@@ -97,6 +116,8 @@ export function BookingWizard({
   const [badQuestion, setBadQuestion] = useState("");
   const [resendIn, setResendIn] = useState(0);
   const [doneStatus, setDoneStatus] = useState<"confirmed" | "pending_approval">("confirmed");
+  /** The room, as it was resolved at booking time. Null for anything in person. */
+  const [joinUrl, setJoinUrl] = useState<string | null>(null);
 
   const clinicName = isAr ? clinic.nameAr || clinic.name : clinic.name;
   const address = isAr ? clinic.addressAr || clinic.address : clinic.address;
@@ -253,6 +274,7 @@ export function BookingWizard({
       }
       if (d.skipVerify) {
         setDoneStatus(d.status);
+        setJoinUrl(d.meetingUrl ?? null);
         setStep("done");
       } else {
         setVerificationId(d.verificationId);
@@ -291,6 +313,7 @@ export function BookingWizard({
         return;
       }
       setDoneStatus(d.status);
+      setJoinUrl(d.meetingUrl ?? null);
       setStep("done");
     } catch {
       setError(t.genericError);
@@ -439,7 +462,14 @@ export function BookingWizard({
                       <div className="mt-0.5 flex items-center gap-2 text-[13px] text-ink-500 tnum">
                         <Clock className="h-3.5 w-3.5" />
                         {s.durationMin} {t.duration}
-                        {copy.showPrices && s.price > 0 && <span>· {s.price.toFixed(2)} JOD</span>}
+                        {/* The clinic's own currency. This printed a literal "JOD"
+                            regardless, which was wrong for every clinic that does
+                            not bill in dinars. */}
+                        {copy.showPrices && s.price > 0 && (
+                          <span>
+                            · {s.price.toFixed(2)} {clinic.currency}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <ChevronRight className="h-4.5 w-4.5 text-ink-300 rtl:rotate-180" />
@@ -481,7 +511,10 @@ export function BookingWizard({
                       className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
                       style={{ background: "var(--bk)" }}
                     >
-                      {d.name.replace(/^د\.\s*/, "").slice(0, 1)}
+                      {/* The Arabic "د." prefix would otherwise make every avatar
+                          read the same letter — but only a doctor carries it, and
+                          not every workspace books doctors. */}
+                      {d.name.replace(/^د\.\s*/, "").trim().slice(0, 1) || d.name.slice(0, 1)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="text-[15px] font-semibold">{d.name}</div>
@@ -725,15 +758,35 @@ export function BookingWizard({
                   {successNote}
                 </p>
               )}
+              {/*
+                An online meeting has a link and no address, so the join button
+                takes the place of the phone number — the two are alternatives,
+                not a row of options. The link is also in the WhatsApp message,
+                which is what the note above says and why this is not the only
+                copy of it.
+              */}
+              {joinUrl && (
+                <a
+                  href={joinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-5 text-[14px] font-semibold text-white"
+                  style={{ background: "var(--bk)" }}
+                >
+                  <Video className="h-4 w-4" />
+                  {t.joinMeeting}
+                </a>
+              )}
               <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                 <AddToCalendar
                   label={t.addToCalendar}
                   startISO={slot!.startISO}
                   minutes={service.durationMin}
                   title={`${isAr ? service.nameAr || service.name : service.name} — ${clinicName}`}
-                  location={address ?? ""}
+                  location={joinUrl || address || ""}
+                  url={joinUrl}
                 />
-                {clinic.phone && (
+                {!joinUrl && clinic.phone && (
                   <a
                     href={`tel:${clinic.phone}`}
                     className="inline-flex h-10 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-[13px] font-medium"
@@ -958,6 +1011,7 @@ function QuestionField({
  * fail on a phone with one bar of signal.
  */
 function AddToCalendar({
+  url,
   label,
   startISO,
   minutes,
@@ -969,6 +1023,8 @@ function AddToCalendar({
   minutes: number;
   title: string;
   location: string;
+  /** An online meeting's join link, so the invite is clickable. */
+  url?: string | null;
 }) {
   const href = useMemo(() => {
     const start = DateTime.fromISO(startISO).toUTC();
@@ -984,7 +1040,15 @@ function AddToCalendar({
       `DTSTART:${stamp(start)}`,
       `DTEND:${stamp(start.plus({ minutes }))}`,
       `SUMMARY:${esc(title)}`,
+      /*
+        LOCATION carries the join link for an online meeting, because that is the
+        field Google and Apple turn into a clickable join button. URL and
+        DESCRIPTION are set as well: between the three, every calendar client
+        worth having shows something you can press.
+      */
       location ? `LOCATION:${esc(location)}` : "",
+      url ? `URL:${esc(url)}` : "",
+      url ? `DESCRIPTION:${esc(url)}` : "",
       "BEGIN:VALARM",
       "TRIGGER:-PT2H",
       "ACTION:DISPLAY",
@@ -996,7 +1060,7 @@ function AddToCalendar({
       .filter(Boolean)
       .join("\r\n");
     return `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
-  }, [startISO, minutes, title, location]);
+  }, [startISO, minutes, title, location, url]);
 
   return (
     <a

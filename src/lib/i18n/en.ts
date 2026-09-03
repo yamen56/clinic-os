@@ -279,6 +279,9 @@ export const en = {
     outstanding: "Owed to the clinic",
     outstandingSub: "{n} unpaid",
     newPatientsMonth: "New patients this month",
+    /* Only the front page of a workspace that sells the product shows this, but
+       the number exists for every clinic — see `source = 'booking_link'`. */
+    demosMonth: "Booked online this month",
     vsLastMonth: "vs last month",
 
     /* --- charts --- */
@@ -728,6 +731,11 @@ export const en = {
     color: "Color",
     buffer: "Buffer after (minutes)",
     bookableOnline: "Bookable online",
+    locationKind: "Where it happens",
+    inPerson: "At the clinic",
+    online: "Online meeting",
+    onlineHint:
+      "The booking page shows a join link instead of the address. Set each person's meeting room on their staff record.",
     doctors: "Doctors who perform it",
     empty: "No services yet",
     emptyBody: "Add services like consultation, cleaning, or follow-up so they can be booked.",
@@ -785,6 +793,9 @@ export const en = {
     specialty: "Specialty",
     color: "Calendar color",
     reminderMinutes: "Remind before appointments (minutes)",
+    meetingUrl: "Meeting room link",
+    meetingUrlHint:
+      "Used for anything booked as an online meeting. The customer gets this link in their confirmation and their calendar invite.",
     accessTitle: "Access",
     accessSub: "What this person can open and do. The job above decides scheduling, not access.",
     fullAccess: "Full access",
@@ -946,6 +957,10 @@ export const en = {
   },
   notifications: {
     title: "Notifications",
+    /* Titles written by the server when a booking lands, in the clinic's own
+       language — these were hard-coded Arabic regardless of the workspace. */
+    bookingNew: "New booking: {name}",
+    bookingPending: "Booking request awaiting approval: {name}",
     markAllRead: "Mark all read",
     empty: "Nothing new",
     emptyBody: "Bookings, cancellations, AI handoffs, and daily summaries land here.",
@@ -1529,6 +1544,9 @@ export const en = {
     genericError: "Something went wrong. Please try again.",
     addToCalendar: "Add to calendar",
     callClinic: "Call the clinic",
+    /* Shown instead of the address and the phone number when the booking is
+       held online — see services.location_kind. */
+    joinMeeting: "Open the meeting link",
   },
   bookingSettings: {
     title: "Booking links",
