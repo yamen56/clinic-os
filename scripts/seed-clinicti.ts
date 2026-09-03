@@ -184,14 +184,21 @@ export async function seedClinicti(c: PoolClient): Promise<{ created: boolean; s
     tune, and a seed that reset them on every run would be a seed nobody dares
     execute.
   */
+  /*
+    `coalesce(...) = ''`, not `= ''`. These columns are nullable and a link
+    created by `provisionClinic` has never been written to, so they are NULL
+    rather than empty — a plain equality check quietly matched nothing and the
+    copy never landed. Found by running this against production and reading the
+    row back.
+  */
   await c.query(
     `update booking_links
-        set headline = case when headline = '' then $2 else headline end,
-            headline_ar = case when headline_ar = '' then $3 else headline_ar end,
-            intro = case when intro = '' then $4 else intro end,
-            intro_ar = case when intro_ar = '' then $5 else intro_ar end,
-            success_note = case when success_note = '' then $6 else success_note end,
-            success_note_ar = case when success_note_ar = '' then $7 else success_note_ar end,
+        set headline = case when coalesce(headline, '') = '' then $2 else headline end,
+            headline_ar = case when coalesce(headline_ar, '') = '' then $3 else headline_ar end,
+            intro = case when coalesce(intro, '') = '' then $4 else intro end,
+            intro_ar = case when coalesce(intro_ar, '') = '' then $5 else intro_ar end,
+            success_note = case when coalesce(success_note, '') = '' then $6 else success_note end,
+            success_note_ar = case when coalesce(success_note_ar, '') = '' then $7 else success_note_ar end,
             show_prices = false
       where clinic_id = $1`,
     [
@@ -212,6 +219,47 @@ export async function seedClinicti(c: PoolClient): Promise<{ created: boolean; s
        select $1, $2, $3, $4, $5, $6, $7, true, $8
         where not exists (select 1 from booking_questions where clinic_id = $1 and label = $2)`,
       [clinicId, q.label, q.labelAr, q.help, q.helpAr, q.fieldType, q.required, q.order]
+    );
+  }
+
+  /*
+    Somebody has to be bookable, or the demo link renders a page nobody can book.
+
+    `role = 'doctor'` is not a mistake here. Migration 0014 defines the column as
+    the job and defines `doctor` as the one job that has working hours, can be
+    booked and owns appointments — which is exactly what a person who runs demos
+    is. The value is never shown to anybody: every screen reads it through
+    `t.staff.roles[...]`, which this workspace's vocabulary renames. Relaxing the
+    CHECK to add a synonym would mean touching four SQL predicates in the slot
+    engine to gain a word nobody sees.
+
+    Only when the workspace has no bookable host at all — so a real team, set up
+    properly later, is never rearranged by re-running the seed.
+  */
+  const hosts = await c.query(
+    `select count(*)::int n from clinic_members where clinic_id = $1 and role = 'doctor' and active`,
+    [clinicId]
+  );
+  if (hosts.rows[0].n === 0) {
+    await c.query(
+      `update clinic_members
+          set role = 'doctor',
+              title = coalesce(nullif(title, ''), $2),
+              working_hours = case
+                when working_hours is null or working_hours = '{}'::jsonb then $3::jsonb
+                else working_hours end
+        where clinic_id = $1 and is_owner`,
+      [
+        clinicId,
+        "Account manager",
+        JSON.stringify({
+          sun: [["09:00", "17:00"]],
+          mon: [["09:00", "17:00"]],
+          tue: [["09:00", "17:00"]],
+          wed: [["09:00", "17:00"]],
+          thu: [["09:00", "17:00"]],
+        }),
+      ]
     );
   }
 
@@ -238,6 +286,26 @@ if (process.argv[1]?.includes("seed-clinicti")) {
             ? `[seed] created the ${r.slug} workspace`
             : `[seed] ${r.slug} already existed — topped up what was missing`
         );
+        /*
+          The one thing this cannot seed. An online meeting takes the host's
+          standing room, and there is no sensible default for somebody else's
+          Zoom link — so it is said out loud rather than left as a booking that
+          confirms and then tells the customer nothing about where to go.
+        */
+        const missing = await c.query(
+          `select u.full_name from clinic_members cm join users u on u.id = cm.user_id
+            where cm.clinic_id = (select id from clinics where slug = $1)
+              and cm.role = 'doctor' and cm.active
+              and coalesce(cm.meeting_url, '') = ''`,
+          [r.slug]
+        );
+        if (missing.rowCount) {
+          console.log(
+            `[seed] set a meeting room for ${missing.rows
+              .map((x) => x.full_name)
+              .join(", ")} in Settings → Staff, or online bookings arrive with no link.`
+          );
+        }
       } catch (e) {
         await c.query("rollback");
         throw e;
