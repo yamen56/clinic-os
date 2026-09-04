@@ -1,4 +1,5 @@
 import http from "node:http";
+import { backupEngineReady } from "../src/lib/backup";
 import { withSystem } from "./db";
 import { ensureSession, stopSession, sessions } from "./wa/session";
 import { recordMessage } from "./wa/inbound";
@@ -90,6 +91,13 @@ export function startHttpServer() {
               connected: s.connected,
             })),
             uptime: process.uptime(),
+            /*
+              Whether *this* process could take a backup, asked of the process
+              itself rather than assumed from the repository. It is here because
+              the answer was once no for five weeks and nothing on any screen
+              could have told you.
+            */
+            backupReady: backupEngineReady(),
           });
         }
 

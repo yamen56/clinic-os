@@ -14,7 +14,13 @@ import { internalSecret } from "@/lib/internal-secret";
 const WORKER_URL = process.env.WORKER_URL || "http://localhost:4020";
 const SECRET = () => internalSecret();
 
-async function workerHealth(): Promise<{ ok: boolean; sessions: { clinicId: string; connected: boolean }[]; uptime?: number }> {
+async function workerHealth(): Promise<{
+  ok: boolean;
+  sessions: { clinicId: string; connected: boolean }[];
+  uptime?: number;
+  /** Whether the worker can actually load the backup engine. Undefined = old build. */
+  backupReady?: boolean;
+}> {
   try {
     const res = await fetch(`${WORKER_URL}/health`, {
       headers: { "x-internal-secret": SECRET() },
@@ -99,8 +105,20 @@ export default async function MonitoringPage() {
     need the archive.
   */
   const backupAge = await backupAgeHours().catch(() => Infinity);
-  const backupLabel =
-    backupAge === Infinity ? "never" : backupAge < 48 ? `${Math.floor(backupAge)}h ago` : `${Math.floor(backupAge / 24)}d ago`;
+  /*
+    Two different questions, and the second is the one that went unanswered for
+    five weeks: how long since the last archive, and whether the worker could
+    even make one. A worker that cannot load the backup engine reports a stale
+    age *eventually*; it reports `backupReady: false` immediately.
+  */
+  const engineDown = health.ok && health.backupReady === false;
+  const backupLabel = engineDown
+    ? "engine down"
+    : backupAge === Infinity
+      ? "never"
+      : backupAge < 48
+        ? `${Math.floor(backupAge)}h ago`
+        : `${Math.floor(backupAge / 24)}d ago`;
 
   return (
     <>
@@ -126,7 +144,7 @@ export default async function MonitoringPage() {
             label: "Last backup",
             value: backupLabel,
             // A day and a half: past a missed nightly run, before a second one.
-            warn: backupAge >= 36,
+            warn: backupAge >= 36 || engineDown,
           },
         ].map((s, i) => (
           <Card key={i} className="p-4">

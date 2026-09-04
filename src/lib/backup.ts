@@ -56,6 +56,24 @@ function copyStreams(): CopyStreams {
   }
 }
 
+/**
+ * Whether this process could take a backup if asked, right now.
+ *
+ * Reported by the worker's /health so the answer is a measured fact rather than
+ * an inference from package.json. The failure it exists to catch is precisely
+ * the one that hid for five weeks: the module is present on every developer's
+ * machine and absent from the image that actually runs the job, and nothing
+ * finds that out until the small hours when a backup is attempted and lost.
+ */
+export function backupEngineReady(): boolean {
+  try {
+    copyStreams();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Marks the start of a table's data inside the archive. */
 const TABLE_MARKER = "-- @table ";
 
