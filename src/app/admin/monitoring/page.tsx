@@ -125,6 +125,20 @@ export default async function MonitoringPage() {
     age *eventually*; it reports `backupReady: false` immediately.
   */
   const engineDown = health.ok && health.backupReady === false;
+  const openAlerts = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select key, title, detail, opened_at, notifications
+           from ops_alerts order by opened_at`
+      )
+    ).rows as {
+      key: string;
+      title: string;
+      detail: string;
+      opened_at: string;
+      notifications: number;
+    }[]
+  ).catch(() => []);
   const load = publicLoad();
   const backupLabel = engineDown
     ? "engine down"
@@ -264,6 +278,42 @@ export default async function MonitoringPage() {
                   <span className="text-ink-400">· {j.attempts} attempts</span>
                 </div>
                 <div className="mt-0.5 truncate text-ink-500">{j.last_error}</div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/*
+        What the platform has already emailed somebody about.
+
+        Only rendered when something is open, because the value of this card is
+        that seeing it at all means something. An always-present "0 open alerts"
+        panel is another green box to stop noticing, which is the habit that let
+        the backups fail for five weeks.
+      */}
+      {openAlerts.length > 0 && (
+        <Card className="mt-4 border-danger/40">
+          <CardHeader
+            title={
+              <span className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-danger" />
+                Open alerts
+              </span>
+            }
+            sub="Already sent by email; listed here until the condition clears"
+          />
+          <ul className="divide-y divide-line">
+            {openAlerts.map((a) => (
+              <li key={a.key} className="px-5 py-2.5 text-[13px]">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-danger">{a.title}</span>
+                  <span className="shrink-0 text-ink-400">
+                    {fmtRelative(a.opened_at, locale)}
+                    {a.notifications > 1 ? ` · sent ${a.notifications}×` : ""}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-ink-500">{a.detail}</div>
               </li>
             ))}
           </ul>

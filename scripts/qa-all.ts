@@ -60,6 +60,7 @@ const SUITES = [
   ["access: what each member can reach", "scripts/qa-access.ts"],
   ["agency: modules, limited admins, deleting a clinic", "scripts/qa-agency-control.ts"],
   ["load: can one caller take the platform down", "scripts/qa-dos.ts"],
+  ["ops: does anybody find out when it breaks", "scripts/qa-ops-alert.ts"],
 ] as const;
 
 function run(script: string): Promise<{ ok: boolean; out: string }> {

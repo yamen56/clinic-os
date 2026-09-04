@@ -288,6 +288,75 @@ Cloudflare account rather than in this repository.
 
 ---
 
+## When something breaks, who finds out
+
+Every other notification path in this product points at a clinic. This one
+points at you.
+
+It exists because of a specific failure: the nightly backup stopped running and
+**five weeks passed with every screen green**, because the only report of it was
+a line in a log nobody tails. The monitoring page was the first answer and it is
+not sufficient — a dashboard that has been green for a month is a dashboard
+nobody opens.
+
+The worker checks every five minutes and emails when any of these is true:
+
+| Condition | Threshold |
+|---|---|
+| Backup engine will not load | immediately |
+| Newest backup is stale | 36 hours |
+| Background jobs failing | 5 in an hour |
+| Queue not draining | 20 jobs waiting over 15 minutes |
+| WhatsApp sends failing | 10 in an hour |
+| A clinic off WhatsApp | 30 minutes, alerted **per clinic** |
+| Web app unreachable or unhealthy | immediately |
+| A health check itself throwing | immediately |
+
+**Not being ignorable is the design goal.** An alerter that mails on every tick
+is filtered within a day, and a filtered alerter is worse than none — it looks
+like protection and delivers silence. So an alert opens **once** per condition
+(a six-hour outage is one email, not 360), re-notifies every six hours while it
+persists, and says so explicitly when it **clears**.
+
+Alerts go to `OPS_ALERT_EMAIL` if set, and otherwise to **every super-admin
+account**. That fallback is deliberate: an alerting system that quietly does
+nothing because a variable was never set is the exact failure it exists to
+prevent.
+
+### Proving it works
+
+```bash
+npm run ops:check    # who would be told, and what is wrong right now. Sends nothing.
+npm run ops:test     # sends one real message. Check the inbox, and check spam.
+```
+
+Run `ops:test` after any change to the mail setup. An alerter nobody has ever
+received a message from is a belief, not a safeguard — the same argument
+`backup:verify` makes, for the same reason.
+
+There is also a **weekly all-clear**. It is the check on the checker: everything
+above only ever speaks when something is wrong, so a crashed scheduler, an unset
+API key and a healthy platform all present as the same empty inbox. A periodic
+"nothing is wrong" is what makes silence mean something. If a week goes by with
+no all-clear, the monitoring itself is what is broken.
+
+### The bit this cannot do
+
+**Nothing here can tell you the worker is down**, because the worker is what
+sends the alerts. That loop has to be closed from outside: point a free uptime
+check (UptimeRobot, Better Stack) at `https://app.clinicti.app/api/health` every
+five minutes. That covers the web app; a second check on the worker's own health
+endpoint needs the internal secret as a header.
+
+`qa-ops-alert.ts` asserts that **every function in the scheduler is actually in
+the tick list**. That rule exists because the predecessor of this feature — an
+hourly `backupHealth()` that logged an alarm — was written, committed with a
+message saying it was registered, and never added to the array. It never ran
+once. A safeguard that exists in the source and does nothing at runtime is the
+same bug as no safeguard, and it has now happened twice in that one file.
+
+---
+
 ## Staying up under load
 
 The public surface — the booking link, the signing link, the invoice link, the

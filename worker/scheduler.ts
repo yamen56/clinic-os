@@ -12,6 +12,7 @@ import { deleteClinicFiles } from "../src/lib/storage";
 import { RESTORE_WINDOW_DAYS } from "../src/lib/clinic-lifecycle";
 import { licensed } from "./features";
 import { enqueueEinvoiceSubmit } from "../src/lib/einvoice/jobs";
+import { opsWatch } from "../src/lib/ops-alert";
 
 /**
  * Threads that arrived addressed by identity rather than number, every ten
@@ -330,26 +331,26 @@ async function dailyBackup() {
 }
 
 /**
- * Says out loud when there is no recent backup.
+ * Looks for anything wrong with the platform and emails whoever runs it.
  *
- * The reason the five-week outage went unnoticed is that failure was silent:
- * `copyStreams()` threw, the scheduler's catch logged one line among thousands,
- * and nothing anywhere said "this database is not backed up". A job that
- * protects you only if someone reads the logs is not protection.
+ * This replaces a `backupHealth()` that wrote "ALARM" to the log once an hour
+ * — and which, it turned out, was **never registered in the tick list below**,
+ * so it had not run once since it was written. That is worth recording rather
+ * than quietly deleting: the whole reason backups were lost for five weeks is a
+ * safeguard that existed in the source and did nothing at runtime, and the
+ * replacement for it reproduced the same bug in the same file.
  *
- * Once an hour, loudly, and it is also what the admin monitoring page reads.
+ * A log line was never going to be enough anyway. `src/lib/ops-alert.ts` sends
+ * mail, remembers what it has already said so a six-hour outage is not 360
+ * emails, and says so again when the problem clears.
+ *
+ * Every five minutes: it makes a handful of queries and one HTTP call, which is
+ * far too much to repeat every minute and far more often than any of these
+ * conditions actually change.
  */
-async function backupHealth() {
-  if (!usingObjectStore()) return;
-  const now = new Date();
-  if (now.getUTCMinutes() > 4) return;
-  const ageHours = await backupAgeHours();
-  if (ageHours < 30) return;
-  console.error(
-    ageHours === Infinity
-      ? "[backup] ALARM: this database has never been backed up"
-      : `[backup] ALARM: newest backup is ${Math.floor(ageHours)}h old`
-  );
+async function opsHealth() {
+  if (new Date().getUTCMinutes() % 5 !== 0) return;
+  await opsWatch();
 }
 
 /**
@@ -425,6 +426,7 @@ export function startScheduler() {
       sweepUnsignedDocuments,
       sendPendingDigest,
       dailyBackup,
+      opsHealth,
       purgeDeletedClinics,
       sweepLidNumbers,
       deliveryWatch,
