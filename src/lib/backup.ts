@@ -3,7 +3,7 @@ import { createGzip, gunzipSync } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { Readable, Writable } from "node:stream";
 import { createRequire } from "node:module";
-import { saveSystemStream, listSystemFiles, openFile, deleteFile } from "./storage";
+import { saveSystemStream, listSystemFiles, listSystemFileDetails, openFile, deleteFile } from "./storage";
 
 /**
  * Logical backups of the whole database.
@@ -206,19 +206,44 @@ async function prune(keepDaily: number, keepMonthly: number): Promise<void> {
 }
 
 /**
- * When the newest archive was taken, or null if there are none at all.
+ * The moment an archive was taken, read out of its own name.
  *
- * Read from the object name rather than from its upload time: the name is the
- * moment the dump began, which is what "how far back can we go" actually means.
+ * The name rather than the object's upload time, because the name is when the
+ * dump *began* — which is the answer to "how far back can we go", and the
+ * upload time is merely when it finished arriving.
  */
-export async function newestBackupAt(): Promise<Date | null> {
-  const all = await listSystemFiles("backups");
-  const last = all[all.length - 1];
-  if (!last) return null;
-  const m = /clinicos-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/.exec(last);
+export function backupTakenAt(key: string): Date | null {
+  const m = /clinicos-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/.exec(key);
   if (!m) return null;
   const [, y, mo, d, h, mi, s] = m;
   return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));
+}
+
+export type BackupEntry = {
+  /** Full storage key, which is what `readBackup` takes. */
+  key: string;
+  /** Just the file name, for showing to a person. */
+  name: string;
+  takenAt: Date | null;
+  bytes: number;
+};
+
+/** Every archive, oldest first, with its size — for the admin listing. */
+export async function listBackupDetails(): Promise<BackupEntry[]> {
+  const files = await listSystemFileDetails("backups");
+  return files.map((f) => ({
+    key: f.key,
+    name: f.key.split("/").pop() ?? f.key,
+    takenAt: backupTakenAt(f.key),
+    bytes: f.size,
+  }));
+}
+
+/** When the newest archive was taken, or null if there are none at all. */
+export async function newestBackupAt(): Promise<Date | null> {
+  const all = await listSystemFiles("backups");
+  const last = all[all.length - 1];
+  return last ? backupTakenAt(last) : null;
 }
 
 /** Hours since the last archive; Infinity when there has never been one. */

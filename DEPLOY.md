@@ -206,6 +206,82 @@ duplicate suppression, auto-pause on repeated errors — reduce the risk without
 removing it. Use a number the clinic can afford to lose, never the owner's
 personal one.
 
-**Backups.** `npm run qa:backup` exercises dump and restore, but check the
-retention on the Postgres service before real patient data lands. This is
-medical data.
+## Backups
+
+The database is Railway Postgres, so recovery is ours to arrange. A volume
+snapshot survives a dead disk; it does not survive a bad migration, a mistaken
+delete, or a bug that quietly corrupts a column, because those replicate into a
+snapshot as faithfully as anything else. The nightly **logical** backup is the
+only thing that does.
+
+The worker dumps every table at a quiet hour and writes a gzipped archive to
+object storage under `_system/backups/`. Retention is **14 nightly archives plus
+the first archive of each month for a year**. Nothing in the product downloads
+them: each file is every patient record in every clinic, and a button on an
+admin page would put the whole database one compromised session away from
+walking out. Retrieval is deliberate, and it happens with the commands below.
+
+### Is it working?
+
+Two questions, and they fail differently.
+
+- **/admin/monitoring** shows a *Last backup* tile. Red past 36 hours.
+- The same page lists the recent archives with their sizes. An archive that
+  suddenly weighs a fraction of the one before it is a dump that stopped
+  halfway, and no age check would notice.
+- The worker's `/health` reports `backupReady` — whether the backup engine
+  actually loads *in that process*. This exists because it was once `false` for
+  five weeks: `pg-copy-streams` was a devDependency and the worker image
+  installs with `npm ci --omit=dev`, so the job threw on every tick and logged
+  one line. `qa-backup.ts` now fails if anything the worker imports at runtime
+  is a devDependency. **Do not relax that check.**
+
+### The commands
+
+All of them read `.env.production.local`, so no password reaches a shell
+history or a process list.
+
+```bash
+npm run backup:list      # every archive, newest first, with size and age
+npm run backup:verify    # newest archive → throwaway local database → report → drop
+```
+
+`backup:verify` needs a local Postgres running (`npm run db`). It is the drill
+worth doing on a schedule: an untested backup is a belief, not a safeguard, and
+the day you find out which is always the worst available day. A good run ends
+`VERIFIED — this archive restores cleanly.` and prints row counts, an Arabic
+name, and zero broken keys.
+
+To check one specific archive rather than the newest:
+
+```bash
+npx tsx scripts/restore.ts --verify --archive clinicos-2026-09-04T19-11-31.sql.gz
+```
+
+### Putting one back
+
+Destructive: every table in the target is emptied and rewritten, and anything
+written since the archive was taken is gone.
+
+```bash
+npx tsx scripts/restore.ts --into-production \
+  --archive clinicos-2026-09-04T19-11-31.sql.gz \
+  --confirm railway
+```
+
+`--confirm` must be the target database's own name, typed out, or the command
+refuses. There is no defaulting to "the newest" here — which archive goes back
+is the whole decision, so it has to be named.
+
+Restore the **schema from the migrations**, never from the archive: the script
+migrates the target first, so a restored database is built exactly the way
+production was rather than inheriting whatever the dump happened to carry.
+
+### The gap that is left
+
+The archives sit in the same bucket as the patient files they protect, and
+uploaded files exist **only** there — the database backup stores paths, not
+bytes. Object storage survives hardware failure; it does not survive a deleted
+bucket or a leaked key. Enabling object versioning on the bucket, and putting
+the archives somewhere separate, is the remaining work and it lives in the
+Cloudflare account rather than in this repository.

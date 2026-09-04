@@ -27,7 +27,10 @@
     "icons": "tsx scripts/make-icons.ts",
     "test:search": "tsx scripts/test-search.ts",
     "deploy": "tsx scripts/deploy.ts",
-    "migrate:prod": "tsx scripts/migrate-prod.ts"
+    "migrate:prod": "tsx scripts/migrate-prod.ts",
+    "backup:list": "tsx scripts/restore.ts",
+    "backup:verify": "tsx scripts/restore.ts --verify",
+    "qa:backup": "tsx scripts/qa-backup.ts"
   },
   "type": "commonjs",
   "dependencies": {

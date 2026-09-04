@@ -3,7 +3,7 @@ import { withSystem } from "@/lib/db";
 import { getDict, getLocale } from "@/lib/i18n";
 import { fmtRelative } from "@/lib/dates";
 import { storageUsage } from "@/lib/storage";
-import { backupAgeHours } from "@/lib/backup";
+import { backupAgeHours, listBackupDetails } from "@/lib/backup";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
@@ -13,6 +13,17 @@ import { internalSecret } from "@/lib/internal-secret";
 
 const WORKER_URL = process.env.WORKER_URL || "http://localhost:4020";
 const SECRET = () => internalSecret();
+
+/**
+ * Where the archives actually live, said on the page.
+ *
+ * The bucket name, not the endpoint or any key — enough for whoever is holding
+ * the pager to know which door to open, and nothing that helps somebody who
+ * should not be opening it. Falls back to the local driver's wording in dev.
+ */
+const BUCKET_HINT = process.env.S3_BUCKET
+  ? `object storage: ${process.env.S3_BUCKET}/_system/backups/`
+  : "local disk: ./storage/_system/backups/";
 
 async function workerHealth(): Promise<{
   ok: boolean;
@@ -104,6 +115,7 @@ export default async function MonitoringPage() {
     difference between finding that out today and finding it out the morning you
     need the archive.
   */
+  const backups = (await listBackupDetails().catch(() => [])).slice(-10).reverse();
   const backupAge = await backupAgeHours().catch(() => Infinity);
   /*
     Two different questions, and the second is the one that went unanswered for
@@ -241,6 +253,52 @@ export default async function MonitoringPage() {
           </ul>
         </Card>
       )}
+
+      {/*
+        The archives themselves, not just how old the newest one is.
+
+        Deliberately a list and not a download. Every one of these files is
+        every patient record in every clinic, and a button here would make the
+        whole database one compromised admin session away from walking out of
+        the building. Seeing that last night's ran, and that it is a plausible
+        size, is what this page is for; fetching one is a deliberate act with
+        the storage credentials, written down in DEPLOY.md.
+      */}
+      <Card className="mt-4">
+        <CardHeader
+          title={
+            <span className="flex items-center gap-2">
+              <DatabaseBackup className="h-4 w-4 text-brand-600" />
+              Database backups
+            </span>
+          }
+          sub={`Nightly, kept 14 days plus one a month for a year · ${BUCKET_HINT}`}
+        />
+        {backups.length === 0 ? (
+          <p className="px-5 py-4 text-[13px] text-danger">
+            No archives at all. The database is not backed up.
+          </p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {backups.map((b) => (
+              <li key={b.key} className="flex items-center justify-between gap-3 px-5 py-2.5 text-[13px]">
+                <span className="truncate font-mono text-[12px]">{b.name}</span>
+                <span className="flex shrink-0 items-center gap-3 text-ink-500">
+                  {/*
+                    A size worth reading: an archive that suddenly weighs a
+                    fraction of the one before it is the shape of a dump that
+                    stopped halfway, and no age check would notice.
+                  */}
+                  <span className="tnum">{(b.bytes / 1048576).toFixed(2)} MB</span>
+                  <span className="tnum text-ink-400">
+                    {b.takenAt ? fmtRelative(b.takenAt.toISOString(), locale) : "—"}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {data.clinics.some((c) => Number(c.ai_tokens) > 0) && (
         <Card className="mt-4">

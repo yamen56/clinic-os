@@ -138,6 +138,42 @@ export async function listSystemFiles(folder: string): Promise<string[]> {
   return names.sort().map((n) => prefix + n);
 }
 
+/**
+ * The same listing, with sizes.
+ *
+ * Separate from `listSystemFiles` because most callers only want names and a
+ * size costs an extra field on every key. The admin backups card wants them:
+ * "there is an archive from last night" and "last night's archive is 8 bytes"
+ * are very different pieces of news, and only the second one is worth waking up
+ * for.
+ */
+export async function listSystemFileDetails(
+  folder: string
+): Promise<{ key: string; size: number }[]> {
+  const prefix = path.posix.join("_system", folder) + "/";
+  if (usingObjectStore()) {
+    const { mod, client, bucket } = await s3();
+    const out: { key: string; size: number }[] = [];
+    let token: string | undefined;
+    do {
+      const r = await client.send(
+        new mod.ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token })
+      );
+      for (const o of r.Contents ?? []) if (o.Key) out.push({ key: o.Key, size: o.Size ?? 0 });
+      token = r.IsTruncated ? r.NextContinuationToken : undefined;
+    } while (token);
+    return out.sort((a, b) => a.key.localeCompare(b.key));
+  }
+  const abs = path.join(ROOT, prefix);
+  const names = (await fs.promises.readdir(abs).catch(() => [] as string[])).sort();
+  return Promise.all(
+    names.map(async (n) => ({
+      key: prefix + n,
+      size: await fs.promises.stat(path.join(abs, n)).then((s) => s.size).catch(() => 0),
+    }))
+  );
+}
+
 export async function saveFile(
   clinicId: string,
   folder: string,

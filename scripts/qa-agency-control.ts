@@ -190,6 +190,22 @@ async function main() {
     await lp.waitForSelector("text=WhatsApp sessions", { timeout: 30000 });
     ok("the limited admin can still open what they were granted");
 
+    /*
+      The backup panel is on this page, and it is the only place anybody would
+      notice that the nightly job has stopped. It once stopped for five weeks
+      because nothing displayed it, so "does this actually render" is worth an
+      assertion rather than an assumption.
+
+      innerText, not the HTML: this app ships its whole dictionary into every
+      page, so a source check passes everywhere and proves nothing.
+    */
+    const monitoringText = await lp.locator("body").innerText();
+    if (!monitoringText.includes("Database backups"))
+      fail("the backups panel is missing from the monitoring page");
+    if (!/Last backup/.test(monitoringText))
+      fail("the last-backup tile is missing from the monitoring page");
+    ok("the monitoring page shows the backup age and the archives themselves");
+
     // Deletion is not in their set, so the danger zone must not be rendered.
     await lp.goto(`${BASE}/admin/clinics/${demo.slug}`);
     await lp.waitForLoadState("networkidle");
