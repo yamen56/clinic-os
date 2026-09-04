@@ -354,13 +354,40 @@ function safeLiteral(value: string): string {
   return `'${value}'`;
 }
 
-/** `begin` plus the four RLS settings, as one statement batch. */
+/**
+ * The longest any single statement may run before the database cancels it.
+ *
+ * There was no limit at all, and that is the difference between a slow request
+ * and an outage. A connection running a statement is a connection nobody else
+ * can have, `PG_POOL_MAX` is 12, and the public endpoints will start work for
+ * anyone who asks — so twelve expensive queries, whether from an attacker or
+ * from one accidental cartesian join, took every connection the process owned
+ * and held them until Postgres was done. Every other page then failed on
+ * "timeout exceeded when trying to connect", including the ones that were
+ * about to run in two milliseconds.
+ *
+ * Thirty seconds is not a performance budget — every screen's query measures
+ * under 2ms (`npm run bench`) — it is the point past which a statement is
+ * certainly wrong and cancelling it is strictly better than serving it. It also
+ * bounds the wait on `lockClinicSchedule`, where holding on for half a minute
+ * already means something has gone badly wrong upstream.
+ *
+ * Transaction-local (`set_config(..., true)`) and inlined into the existing
+ * `begin` batch, so it reverts with the transaction, costs no extra round trip,
+ * and travels through any pooler that would refuse a startup parameter.
+ */
+const STATEMENT_TIMEOUT_MS = Math.max(1000, Number(process.env.PG_STATEMENT_TIMEOUT_MS) || 30_000);
+
+/** `begin` plus the RLS settings and the statement timeout, as one batch. */
 function beginWithCtx(ctx: DbCtx): string {
   return (
     `begin; select set_config('app.user_id', ${safeLiteral(ctx.userId ?? "")}, true),` +
     ` set_config('app.clinic_id', ${safeLiteral(ctx.clinicId ?? "")}, true),` +
     ` set_config('app.role', ${safeLiteral(ctx.role ?? "")}, true),` +
-    ` set_config('app.is_admin', '${ctx.isAdmin ? "true" : "false"}', true)`
+    ` set_config('app.is_admin', '${ctx.isAdmin ? "true" : "false"}', true),` +
+    // A literal, not a parameter: this batch is multi-statement and so cannot
+    // use the extended protocol. It is a number this file computed, never input.
+    ` set_config('statement_timeout', '${STATEMENT_TIMEOUT_MS}', true)`
   );
 }
 

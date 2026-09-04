@@ -285,3 +285,71 @@ bytes. Object storage survives hardware failure; it does not survive a deleted
 bucket or a leaked key. Enabling object versioning on the bucket, and putting
 the archives somewhere separate, is the remaining work and it lives in the
 Cloudflare account rather than in this repository.
+
+---
+
+## Staying up under load
+
+The public surface — the booking link, the signing link, the invoice link, the
+logo endpoint — serves anyone who knows a URL and does real database work per
+request. Four layers keep one caller from taking the platform down with it, and
+they are deliberately at different depths, because each catches what the one
+above it cannot.
+
+| Layer | Where | Stops |
+|---|---|---|
+| Flood gate | `src/middleware.ts` → `lib/flood-gate.ts` | One machine hammering *any* public page, before routing |
+| Per-endpoint counters | `lib/booking-public.ts` → `rateLimit()` | One caller abusing one endpoint, with limits sized per endpoint |
+| Pool allowance | `lib/public-guard.ts` → `takePublicSlot()` | Anonymous work taking every database connection |
+| Statement timeout | `lib/db.ts` → `beginWithCtx` | Any single query pinning a connection indefinitely |
+
+**The pool allowance is the one that matters most**, and it is the least
+obvious. `PG_POOL_MAX` is 12 per web process. Twelve concurrent slot scans is
+not a large number of visitors, and while they run every logged-in doctor waits
+on a connection that is not coming — the clinic goes down because a booking page
+got popular. So anonymous work may hold at most a third of the pool and the rest
+is refused with a 503 in microseconds. **Shedding, not queueing**: a queue under
+sustained load is a slower way to fall over.
+
+`/admin/monitoring` carries a **Public load** tile: in-flight work against the
+allowance, plus how many requests have been shed since boot. Zero is the normal
+reading. Anything else means the public links are being hit harder than the pool
+can serve, which is what an attack looks like from inside. It counts one replica.
+
+```bash
+npx tsx scripts/qa-dos.ts     # 31 checks; needs the local stack
+```
+
+That suite proves the counting, the windowing, the body ceilings and — the part
+worth having — that a slow statement is genuinely cancelled by Postgres rather
+than merely configured. It also **fails if any route under `api/public/` stops
+counting its callers**, which is the check that would have caught the slot scan
+sitting unmetered next to its guarded sibling. Do not relax it.
+
+### What this does not do
+
+**It does not stop a distributed denial of service, and nothing in this
+repository can.** Every layer above runs *inside* the container, which means the
+traffic has already arrived, already cost bandwidth, and already occupied an
+event loop. Against a botnet the honest answer is that packets have to be
+dropped before they reach us, and that is a network decision:
+
+- `app.clinicti.app` is a **CNAME straight to Railway**, so the origin takes
+  every packet addressed to it. Putting the domain behind Cloudflare's proxy
+  (orange cloud) — not just using Cloudflare for R2 — moves the first line of
+  defence off the origin entirely and costs nothing on the free plan.
+- The counters are **in-process**. They reset on deploy and each replica keeps
+  its own, so with N replicas the effective limit is N times what is written
+  here. That is acceptable while the web service runs one replica; it stops
+  being acceptable the day it does not, and the fix then is a shared store, not
+  bigger numbers.
+- `FLOOD_MAX`, `FLOOD_WINDOW_MS`, `PUBLIC_DB_CONCURRENCY` and
+  `PG_STATEMENT_TIMEOUT_MS` are all environment variables, so tightening any of
+  them during an incident is a variable change rather than a deploy.
+
+One deliberate asymmetry: an **unidentifiable caller is never counted** by the
+flood gate. Our proxy always appends a forwarded address, so in production there
+is always a key — but if that ever stopped being true, folding everyone into one
+bucket would rate-limit the entire internet as a single visitor and take every
+public page dark, silently, at 300 requests a minute. That failure is worse than
+the flood, so it is not risked.

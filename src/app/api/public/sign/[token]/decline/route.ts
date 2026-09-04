@@ -7,6 +7,7 @@ import { consumeToken } from "@/lib/esign/tokens";
 import { notifyStaffOfSignerAction } from "@/lib/esign/delivery";
 import { emitDocumentTrigger } from "@/lib/esign/jobs";
 import { requestUserAgent } from "@/lib/esign/events";
+import { readJsonCapped } from "@/lib/public-guard";
 
 /**
  * Declining is a first-class outcome, not an error path.
@@ -22,7 +23,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ ok: false }, { status: 429 });
   }
 
-  const body = await req.json().catch(() => ({}) as { reason?: string });
+  const read = await readJsonCapped<{ reason?: string }>(req, 8 * 1024);
+  if (!read.ok) return read.res;
+  const body = read.body;
   const reason = typeof body.reason === "string" ? body.reason.slice(0, 500) : "";
   const userAgent = requestUserAgent(req);
 

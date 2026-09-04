@@ -7,6 +7,7 @@ import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { questionsForService, validateAnswers } from "@/lib/booking-intake";
 import { finalizeBooking } from "../finalize";
+import { readJsonCapped } from "@/lib/public-guard";
 
 /**
  * Step 1 of public booking: validate details, then either send a WhatsApp OTP
@@ -21,7 +22,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   const data = await loadPublicLink(bslug);
   if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  let body: {
+  // 64 KB: the intake answers are the only part with any size to them, and the
+  // largest sensible set of them is a few hundred bytes. Unbounded, this was a
+  // way to make the process buffer as much as an attacker cared to send.
+  const read = await readJsonCapped<{
     serviceId?: string;
     doctorId?: string | null;
     startISO?: string;
@@ -30,12 +34,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
     locale?: string;
     answers?: Record<string, unknown>;
     consent?: boolean;
-  };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "bad_json" }, { status: 400 });
-  }
+  }>(req, 64 * 1024);
+  if (!read.ok) return read.res;
+  const body = read.body;
   const { serviceId, doctorId, startISO, fullName } = body;
   if (!serviceId || !startISO || !fullName?.trim() || !body.phone) {
     return NextResponse.json({ error: "missing" }, { status: 400 });

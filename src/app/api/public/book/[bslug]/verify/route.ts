@@ -5,6 +5,7 @@ import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { finalizeBooking, type BookingPayload } from "../finalize";
+import { readJsonCapped } from "@/lib/public-guard";
 
 /** Step 2: check the WhatsApp OTP, then finalize the booking. */
 export async function POST(req: Request, ctx: { params: Promise<{ bslug: string }> }) {
@@ -16,12 +17,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   const data = await loadPublicLink(bslug);
   if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  let body: { verificationId?: string; code?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "bad_json" }, { status: 400 });
-  }
+  const read = await readJsonCapped<{ verificationId?: string; code?: string }>(req, 8 * 1024);
+  if (!read.ok) return read.res;
+  const body = read.body;
   if (!body.verificationId || !body.code) {
     return NextResponse.json({ error: "missing" }, { status: 400 });
   }

@@ -7,6 +7,7 @@ import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { clinicDisplayName, loadClinicDelivery } from "@/lib/esign/delivery";
 import { logDocEvent } from "@/lib/esign/events";
+import { readJsonCapped } from "@/lib/public-guard";
 
 /**
  * The optional WhatsApp code.
@@ -22,7 +23,14 @@ import { logDocEvent } from "@/lib/esign/events";
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
   const ip = clientIp(req);
-  const body = await req.json().catch(() => ({}) as { code?: string });
+  /*
+    Read before the limit, because which limit applies depends on what was
+    sent — so the read itself has to be the cheap part. 2 KB is a six-digit
+    code with room to spare, and it means the one thing that happens before
+    any counter is a bounded one.
+  */
+  const read = await readJsonCapped<{ code?: string }>(req, 2048);
+  const body = read.ok ? read.body : {};
   const isVerify = typeof body.code === "string" && body.code.trim().length > 0;
 
   if (!rateLimit(`sign-code:${ip}`, isVerify ? 20 : 4, 10 * 60_000)) {

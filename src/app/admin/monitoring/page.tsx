@@ -4,10 +4,11 @@ import { getDict, getLocale } from "@/lib/i18n";
 import { fmtRelative } from "@/lib/dates";
 import { storageUsage } from "@/lib/storage";
 import { backupAgeHours, listBackupDetails } from "@/lib/backup";
+import { publicLoad } from "@/lib/public-guard";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { Activity, HardDrive, MessageCircle, Sparkles, AlertTriangle, DatabaseBackup } from "lucide-react";
+import { Activity, HardDrive, MessageCircle, Sparkles, AlertTriangle, DatabaseBackup, ShieldAlert } from "lucide-react";
 
 import { internalSecret } from "@/lib/internal-secret";
 
@@ -124,6 +125,7 @@ export default async function MonitoringPage() {
     age *eventually*; it reports `backupReady: false` immediately.
   */
   const engineDown = health.ok && health.backupReady === false;
+  const load = publicLoad();
   const backupLabel = engineDown
     ? "engine down"
     : backupAge === Infinity
@@ -145,7 +147,7 @@ export default async function MonitoringPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-6">
         {[
           { icon: <Activity className="h-4 w-4" />, label: "Jobs pending", value: data.jobs.pending, warn: data.jobs.stale > 0 },
           { icon: <AlertTriangle className="h-4 w-4" />, label: "Jobs failed", value: data.jobs.failed, warn: data.jobs.failed > 0 },
@@ -157,6 +159,20 @@ export default async function MonitoringPage() {
             value: backupLabel,
             // A day and a half: past a missed nightly run, before a second one.
             warn: backupAge >= 36 || engineDown,
+          },
+          {
+            /*
+              Anonymous work in flight, against the share of the connection pool
+              it is allowed — see lib/public-guard. The number to read is the
+              second one: requests shed since boot. Zero is the normal state, so
+              anything else means the booking or signing links are being hit
+              harder than the pool can serve, which is what an attack looks like
+              from in here. It counts this replica only.
+            */
+            icon: <ShieldAlert className="h-4 w-4" />,
+            label: "Public load",
+            value: `${load.inFlight}/${load.max}${load.shed ? ` · ${load.shed} shed` : ""}`,
+            warn: load.shed > 0,
           },
         ].map((s, i) => (
           <Card key={i} className="p-4">

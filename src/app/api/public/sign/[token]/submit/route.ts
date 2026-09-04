@@ -8,6 +8,7 @@ import { afterSignature } from "@/lib/esign/flow";
 import { notifyStaffOfSignerAction } from "@/lib/esign/delivery";
 import { emitDocumentTrigger } from "@/lib/esign/jobs";
 import { requestUserAgent } from "@/lib/esign/events";
+import { readJsonCapped } from "@/lib/public-guard";
 
 /**
  * Records a remote signature.
@@ -25,18 +26,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
   }
 
-  let body: {
+  /*
+    4 MB, which is the sum of what the parts are allowed to be once decoded: a
+    signature PNG capped at 1.5 MB (`decodeSignaturePng`), an SVG path under
+    400 KB, and base64's third on top of both. Those caps run *after* the body
+    is in memory, so without a ceiling here they bounded what we stored and not
+    what we could be made to hold.
+  */
+  const read = await readJsonCapped<{
     png?: string;
     svg?: string | null;
     typedName?: string | null;
     consentConfirmed?: boolean;
     fieldAnswers?: Record<string, unknown>;
-  };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ ok: false, error: "bad_json" }, { status: 400 });
-  }
+  }>(req, 4 * 1024 * 1024);
+  if (!read.ok) return read.res;
+  const body = read.body;
   if (!body.png) return NextResponse.json({ ok: false, error: "bad_signature" }, { status: 400 });
 
   const userAgent = requestUserAgent(req);

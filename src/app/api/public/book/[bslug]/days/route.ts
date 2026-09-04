@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { DateTime } from "luxon";
 import { withSystem } from "@/lib/db";
 import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
+import { takePublicSlot, overloaded } from "@/lib/public-guard";
 import { computeDayCounts } from "@/lib/slots";
 
 /**
@@ -29,20 +30,28 @@ export async function GET(req: Request, ctx: { params: Promise<{ bslug: string }
     return NextResponse.json({ error: "bad_service" }, { status: 400 });
 
   const today = DateTime.now().setZone(data.clinic.timezone).startOf("day");
-  const counts = await withSystem((c) =>
-    computeDayCounts(c, {
-      clinicId: data.clinic.id,
-      tz: data.clinic.timezone,
-      clinicHours: data.clinic.working_hours,
-      blockedDates: data.clinic.blocked_dates,
-      serviceId,
-      doctorMemberId: doctorId || null,
-      minNoticeMin: data.link.min_notice_min,
-      granularityMin: data.link.slot_granularity_min,
-      linkDoctorId: data.link.doctor_member_id,
-      fromISO: today.toISODate()!,
-      days: Math.min(data.link.max_days_ahead, 60),
-    })
-  );
-  return NextResponse.json({ counts });
+  // Shares the pool allowance with the slot scan — see lib/public-guard. Both
+  // are anonymous database work, so both draw on the same fixed budget.
+  const lease = takePublicSlot();
+  if (!lease) return overloaded();
+  try {
+    const counts = await withSystem((c) =>
+      computeDayCounts(c, {
+        clinicId: data.clinic.id,
+        tz: data.clinic.timezone,
+        clinicHours: data.clinic.working_hours,
+        blockedDates: data.clinic.blocked_dates,
+        serviceId,
+        doctorMemberId: doctorId || null,
+        minNoticeMin: data.link.min_notice_min,
+        granularityMin: data.link.slot_granularity_min,
+        linkDoctorId: data.link.doctor_member_id,
+        fromISO: today.toISODate()!,
+        days: Math.min(data.link.max_days_ahead, 60),
+      })
+    );
+    return NextResponse.json({ counts });
+  } finally {
+    lease.release();
+  }
 }

@@ -5,6 +5,7 @@ import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import type { BookingPayload } from "../finalize";
+import { readJsonCapped } from "@/lib/public-guard";
 
 /**
  * Send the code again.
@@ -27,12 +28,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   const data = await loadPublicLink(bslug);
   if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  let body: { verificationId?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "bad_json" }, { status: 400 });
-  }
+  const read = await readJsonCapped<{ verificationId?: string }>(req, 4 * 1024);
+  if (!read.ok) return read.res;
+  const body = read.body;
   if (!body.verificationId) return NextResponse.json({ error: "missing" }, { status: 400 });
   if (!data.clinic.wa_connected) {
     return NextResponse.json({ error: "not_available" }, { status: 409 });
