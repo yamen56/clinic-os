@@ -860,6 +860,7 @@ export async function loadMergeTableAction(
   documentId: string
 ): Promise<{ error?: string; missing?: { key: string; label: string; fixHint: string | null }[] }> {
   const access = await requireClinic(slug);
+  if (!can(access, "documents")) return bad("forbidden");
   return inClinic(access, async (c) => {
     const doc = (
       await c.query(`select * from documents where id = $1 and clinic_id = $2`, [
@@ -901,6 +902,7 @@ export async function requestNewLinkAction(
   documentId: string
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "documents")) return bad("forbidden");
   return inClinic(access, async (c) => {
     await notifyClinicStaff(c, access.clinicId, {
       kind: "document_new_link",

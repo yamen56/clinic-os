@@ -186,10 +186,21 @@ async function main() {
 
     await pub.getByPlaceholder(/اسمك الكامل|Your full name/).fill("QA Intake Patient");
     await pub.getByPlaceholder("079 000 0000").fill("0790000199");
-    await pub.getByRole("button", { name: /متابعة|Continue/ }).click();
 
+    /*
+      No second Continue. Details and the clinic's own questions are one step
+      now, ending in "Send code" — this test was written when they were two and
+      had been waiting ever since for a button that is not built any more, which
+      is why the suite failed here on a page that works.
+
+      The assertions below are unchanged and still say what they always said:
+      the question reaches the patient, an unanswered required one holds the
+      submit shut, and answering it opens. On a merged step that is a stronger
+      statement than it was on a separate one, because the name, the number and
+      the answer now have to be right together before anything can be sent.
+    */
     await shows(pub, new RegExp(QUESTION), "the clinic's question never reached the patient");
-    ok("the patient is asked the clinic's question after their details");
+    ok("the patient is asked the clinic's question beside their details");
 
     // Required, so the submit button must still be refusing.
     const submit = pub.getByRole("button", { name: /إرسال الرمز|Send code/ });

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { can, requireClinic } from "@/lib/auth";
+import { AuthError, can, requireClinic } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { findOrCreatePatient } from "@/lib/patients";
@@ -21,6 +21,7 @@ export async function createPatientAction(
   data: { fullName: string; phone: string }
 ): Promise<{ id?: string; existing?: boolean; error?: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) return { error: "forbidden" };
   const name = data.fullName.trim();
   if (!name) return { error: "name_required" };
   if (data.phone.trim() && !normalizePhone(data.phone)) return { error: "invalid_phone" };
@@ -126,6 +127,7 @@ export async function openConversationAction(
 
 export async function addTagAction(slug: string, patientId: string, tag: string) {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) return;
   const clean = tag.trim().replace(/\s+/g, " ").slice(0, 40);
   if (!clean) return;
   await inClinic(access, async (c) => {
@@ -152,6 +154,7 @@ export async function addTagAction(slug: string, patientId: string, tag: string)
 
 export async function removeTagAction(slug: string, patientId: string, tag: string) {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) return;
   await inClinic(access, (c) =>
     c.query(`update patients set tags = array_remove(tags, $2) where id = $1 and clinic_id = $3`, [
       patientId,
@@ -171,6 +174,7 @@ export async function addNoteAction(
   appointmentId: string | null = null
 ): Promise<{ id: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) throw new AuthError("forbidden");
   return inClinic(access, async (c) => {
     /*
       The appointment has to be this patient's. It arrives from a form, and a
@@ -213,6 +217,7 @@ export async function setNoteAppointmentAction(
   appointmentId: string | null
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
     const ok = await setNoteAppointment(c, access.clinicId, noteId, appointmentId);
     if (!ok) return { error: "not_found" };
@@ -236,6 +241,7 @@ export async function noteHistoryAction(
   noteId: string
 ): Promise<{ id: string; body: string; author: string | null; created_at: string }[]> {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) return [];
   return inClinic(access, (c) =>
     loadNoteHistory(c, access.clinicId, noteId).then((rows) =>
       JSON.parse(JSON.stringify(rows))
@@ -253,6 +259,7 @@ export async function saveNoteCategoryAction(
   input: { id?: string; name: string; nameAr?: string; color?: string; active?: boolean }
 ): Promise<{ error?: string; id?: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) return { error: "forbidden" };
   const name = input.name.trim().slice(0, 60);
   if (!name) return { error: "invalid" };
   const color = /^#[0-9a-fA-F]{6}$/.test(input.color ?? "") ? input.color! : "#6989a6";
@@ -290,6 +297,7 @@ export async function saveNoteCategoryAction(
 
 export async function deletePatientFileAction(slug: string, fileId: string) {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) return;
   await inClinic(access, async (c) => {
     const r = await c.query(
       `delete from patient_files where id = $1 and clinic_id = $2 returning storage_path`,
@@ -313,6 +321,7 @@ export async function setPatientStatusAction(
   status: "lead" | "active" | "archived"
 ) {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) return;
   await inClinic(access, async (c) => {
     await c.query(`update patients set status = $2 where id = $1 and clinic_id = $3`, [
       patientId,
@@ -342,6 +351,7 @@ export async function mergePatientsAction(
   duplicateId: string
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "patients")) return { error: "forbidden" };
   if (keepId === duplicateId) return { error: "self" };
   return inClinic(access, async (c) => {
     const both = await c.query(

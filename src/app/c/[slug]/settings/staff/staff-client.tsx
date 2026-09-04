@@ -18,7 +18,6 @@ import {
   CAPABILITY_GROUPS,
   ROLE_DEFAULTS,
   accessLevelOf,
-  allCapabilities,
   capabilitiesFor,
   resolveCapabilities,
   type Capability,
@@ -96,6 +95,17 @@ export function StaffClient({
       color: "#0b1220",
     });
 
+  /*
+    Closing puts the form back to blank, whichever way it was closed. Leaving it
+    filled meant abandoning a half-typed invitation and finding it again next
+    time — with the access level still where the last attempt left it, so the
+    next person you added quietly inherited a decision made about somebody else.
+  */
+  const closeAdd = () => {
+    setAddOpen(false);
+    resetForm();
+  };
+
   /** Summary line for the list: "Full access" or how many of the sections. */
   const accessSummary = (m: Member) => {
     if (m.is_owner) return t.staff.fullAccess;
@@ -168,7 +178,7 @@ export function StaffClient({
       </Card>
 
       {/* Add staff */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title={t.staff.addStaff} wide>
+      <Modal open={addOpen} onClose={closeAdd} title={t.staff.addStaff} wide>
         <div className="grid gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t.staff.fullName} required>
@@ -221,15 +231,27 @@ export function StaffClient({
             />
           </Field>
 
+          {/*
+            Both callbacks update through the updater form, and on this element
+            in particular that is not style.
+
+            One click on "Limited access" calls `onLevel` and then `onCaps`.
+            Written as `setForm({ ...form, x })` the two calls close over the
+            same `form` — the render's value, not the pending one — so React
+            applied the level change and then overwrote it with a copy that
+            still said `full`. The screen snapped back to full access and the
+            level could not be changed at all. `setForm(f => ...)` gives the
+            second call the result of the first.
+          */}
           <AccessEditor
             level={form.access}
             caps={form.caps}
-            onLevel={(access) => setForm({ ...form, access })}
-            onCaps={(caps) => setForm({ ...form, caps })}
+            onLevel={(access) => setForm((f) => ({ ...f, access }))}
+            onCaps={(caps) => setForm((f) => ({ ...f, caps }))}
           />
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
+            <Button variant="outline" onClick={closeAdd}>
               {t.common.cancel}
             </Button>
             <Button
@@ -366,13 +388,18 @@ function AccessEditor({
             <button
               key={lv}
               type="button"
-              onClick={() => {
-                onLevel(lv);
-                // Switching to custom starts from everything, so the owner
-                // removes what they mean to remove rather than rebuilding the
-                // whole set from an empty list.
-                if (lv === "custom" && level === "full") onCaps(allCapabilities());
-              }}
+              /*
+                Only the level moves. Switching to custom used to overwrite the
+                ticks with *everything*, which was redundant in one caller and
+                wrong in the other: a member stored on full already resolves to
+                every capability, so the edit screen is showing all of them
+                anyway — while on the invite form the ticks are the ones the
+                chosen job implies, and replacing them handed a receptionist
+                the staff-settings and export boxes the moment somebody looked
+                at "Full access" and changed their mind. Nothing silently grants
+                more than the screen was showing.
+              */
+              onClick={() => onLevel(lv)}
               className={`touch-manipulation rounded-ctl border px-3 py-1.5 text-[13px] font-medium transition-colors duration-140 ease-out ${
                 level === lv
                   ? "border-brand-600 bg-brand-50 text-brand-800"

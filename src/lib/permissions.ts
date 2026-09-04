@@ -184,11 +184,26 @@ export function resolveCapabilities(
   return caps;
 }
 
-/** Serialises the settings-screen state back into the column. */
+/**
+ * Serialises the settings-screen state back into the column.
+ *
+ * Every capability is written, including the false ones. That is what lets the
+ * resolver tell "this owner said no" apart from "this row predates the setting"
+ * — the inheritance rules there read an absent key as a grant, so a row that
+ * listed only the ticked boxes would quietly re-grant what an owner unticked.
+ *
+ * `REQUIRES` is applied here as well as on the way out. The resolver is the
+ * enforcement — every read goes through it — but a row is also read by people,
+ * in the audit trail and in support, and one that claims a member may void a
+ * document they cannot open is a row that will eventually be believed.
+ */
 export function toAccessSetting(level: "full" | "custom", caps: CapabilityMap): AccessSetting {
   if (level === "full") return { level: "full", caps: {} };
   const out: Partial<Record<Capability, boolean>> = {};
   for (const c of CAPABILITIES) out[c] = caps[c] === true;
+  for (const [cap, needs] of Object.entries(REQUIRES) as [Capability, Capability][]) {
+    if (!out[needs]) out[cap] = false;
+  }
   return { level: "custom", caps: out };
 }
 

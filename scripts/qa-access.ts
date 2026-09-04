@@ -10,6 +10,8 @@
 import { chromium, type Page } from "playwright";
 import { Client } from "pg";
 import bcrypt from "bcryptjs";
+import fs from "node:fs";
+import path from "node:path";
 
 const BASE = "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -56,6 +58,67 @@ async function landsOn(page: Page, path: string, expected?: string): Promise<str
   }
   await page.waitForLoadState("networkidle");
   return new URL(page.url()).pathname;
+}
+
+/**
+ * Actions that establish membership and then check no capability, deliberately.
+ *
+ * Every one is gated on *who is asking* rather than on what they may open:
+ * signing and declining verify that the signer row names the caller, the
+ * signature/PIN pair write only that user's own credentials, releasing a lock
+ * touches only a lock they hold, and the notification preferences are their
+ * own. A capability check on these would be the wrong question.
+ */
+const IDENTITY_AUTHORISED = [
+  "signAsStaffAction",
+  "declineAsStaffAction",
+  "releaseInPersonAction",
+  "saveMySignatureAction",
+  "setKioskPinAction",
+  "verifyKioskUnlockAction",
+  "saveNotificationPrefsAction",
+];
+
+/** Reads every `"use server"` file under src and reports the unguarded actions. */
+function auditServerActions(): {
+  unexplained: { file: string; line: number; fn: string }[];
+  exceptionsSeen: number;
+} {
+  const unexplained: { file: string; line: number; fn: string }[] = [];
+  let exceptionsSeen = 0;
+
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".ts")) read(p);
+    }
+  };
+
+  const read = (p: string) => {
+    const s = fs.readFileSync(p, "utf8");
+    if (!s.startsWith('"use server"')) return;
+    const starts = [...s.matchAll(/export async function (\w+)\(/g)];
+    starts.forEach((m, i) => {
+      const body = s.slice(m.index!, i + 1 < starts.length ? starts[i + 1].index! : s.length);
+      // Clinic-scoped only. Admin and public actions answer to other rules.
+      if (!/requireClinic\(/.test(body)) return;
+      /*
+        `can(access, "…")` is the direct form; the rest are this codebase's
+        named wrappers around it — automations and the AI screen share
+        `canEdit`, campaigns uses `assertCanSend`.
+      */
+      if (/\bcan\(access,|canEdit\(|assertCan\w*\(|access\.isOwner/.test(body)) return;
+      if (IDENTITY_AUTHORISED.includes(m[1])) {
+        exceptionsSeen++;
+        return;
+      }
+      unexplained.push({ file: p, line: s.slice(0, m.index!).split("\n").length, fn: m[1] });
+    });
+  };
+
+  walk("src");
+  return { unexplained, exceptionsSeen };
 }
 
 async function main() {
@@ -328,6 +391,82 @@ async function main() {
     await page.locator("select[disabled]").first().isVisible()
   );
 
+  /* --------------------------------------- the access editor on the way in */
+  /*
+    The invite form, driven the way a person drives it. Everything below this
+    point was reported from production: choosing full access and then changing
+    your mind left the screen stuck on full, so a new member could only ever be
+    given everything.
+  */
+  await signIn(page, `owner-${slug}@test.local`);
+  await page.goto(`${BASE}/c/${slug}/settings/staff`);
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Add staff member" }).first().click();
+  await page.waitForSelector("text=Access", { timeout: 10000 });
+
+  // The capability list renders only on limited access, so its presence is the
+  // level — read the way the person on the screen reads it.
+  const onLimited = () => page.getByRole("switch", { name: "WhatsApp inbox" }).isVisible();
+  const level = page.locator("button", { hasText: /^(Full access|Limited access)$/ });
+
+  check("the invite form starts on limited access", await onLimited());
+
+  await level.filter({ hasText: "Full access" }).first().click();
+  await page.waitForTimeout(150);
+  check("choosing full access hides the list", !(await onLimited()));
+
+  await level.filter({ hasText: "Limited access" }).first().click();
+  await page.waitForTimeout(150);
+  check("and you can go back to limited access", await onLimited());
+
+  /*
+    Going full and back must not quietly widen the ticks. It used to replace
+    them with *every* capability, so an owner who glanced at full access and
+    changed their mind handed a new receptionist the staff screen.
+  */
+  /*
+    The switch is on screen — a receptionist's defaults include Settings, so its
+    actions are listed underneath. What matters is that it is still *off*: the
+    editor used to answer the round trip by ticking every capability there is.
+  */
+  check(
+    "the round trip does not tick what the job never had",
+    (await page
+      .getByRole("switch", { name: "Manage staff and their access" })
+      .first()
+      .getAttribute("aria-checked")) === "false"
+  );
+
+  /*
+    And the other end of the same question: an owner who unticks everything gets
+    a member with nothing. The server used to read an empty list as "no opinion"
+    and substitute the job's defaults.
+  */
+  for (const section of ["WhatsApp inbox", "Calendar", "Patients", "Documents", "Invoices", "Settings"]) {
+    const sw = page.getByRole("switch", { name: section }).first();
+    if ((await sw.count()) && (await sw.getAttribute("aria-checked")) === "true") await sw.click();
+  }
+  await page.getByLabel("Full name").first().fill("QA Nobody");
+  await page.getByLabel("Email").first().fill(`nobody-${slug}@test.local`);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.waitForTimeout(1500);
+
+  const nobody = await db.query(
+    `select m.permissions from clinic_members m join users u on u.id = m.user_id
+      where m.clinic_id = $1 and u.email = $2`,
+    [clinic.id, `nobody-${slug}@test.local`]
+  );
+  check("a member invited with nothing ticked is stored", nobody.rowCount === 1);
+  if (nobody.rowCount) {
+    const stored = nobody.rows[0].permissions as { level: string; caps: Record<string, boolean> };
+    check("stored as limited, not full", stored.level === "custom");
+    check(
+      "and with no capability granted",
+      Object.values(stored.caps ?? {}).every((v) => v === false),
+      JSON.stringify(stored.caps)
+    );
+  }
+
   /* ----------------------------------------- the model resolves as intended */
   const { resolveCapabilities } = await import("../src/lib/permissions");
   const rows = await db.query(
@@ -393,11 +532,50 @@ async function main() {
   check("and the screen calls that limited, not full", accessLevelOf({ automations: true }) === "custom");
   check("while an explicit full stays full", accessLevelOf({ level: "full" }) === "full");
 
+  /* ------------------------------- every action names what authorises it */
+  /*
+    A server action is a public endpoint. The nav hides what a member may not
+    reach and the page guards redirect them, but neither is standing between a
+    request and the database — only the check inside the action is, and an
+    action that calls `requireClinic` and stops there is protected by nothing
+    but clinic membership.
+
+    Read statically rather than by calling them: invoking one means recovering
+    a build-specific action id out of the client bundle, which would tie this
+    to Next's internals and rot. The question here is not whether one action
+    behaves, it is whether *any* action was added without an answer — so the
+    file is the right thing to read.
+  */
+  const actionAudit = auditServerActions();
+  check(
+    "every clinic server action checks a capability or is listed below",
+    actionAudit.unexplained.length === 0,
+    actionAudit.unexplained.map((a) => `${a.fn} (${a.file}:${a.line})`).join(", ")
+  );
+  /*
+    The exceptions, and each one is authorised by *identity* instead — a
+    stronger test than a capability, not a weaker one. Signing is bound to the
+    signer row naming you; the rest write your own signature, your own PIN,
+    your own notification settings, or release a lock you yourself hold.
+
+    Listed by name so the list cannot quietly grow: a new action that belongs
+    here is a decision somebody makes on purpose.
+  */
+  check(
+    "and the identity-authorised exceptions are the ones we expect",
+    actionAudit.exceptionsSeen === IDENTITY_AUTHORISED.length,
+    `${actionAudit.exceptionsSeen} of ${IDENTITY_AUTHORISED.length} still present`
+  );
+
   check("no page errors", errors.length === 0, errors.join(" | "));
 
   await browser.close();
   await db.query(`delete from clinics where id = $1`, [clinic.id]);
-  await db.query(`delete from users where id = any($1::uuid[])`, [[ownerId, docId, recId]]);
+  // The invited one has no id here — the form made it — so it goes by address.
+  await db.query(`delete from users where id = any($1::uuid[]) or email = $2`, [
+    [ownerId, docId, recId],
+    `nobody-${slug}@test.local`,
+  ]);
   await db.end();
 
   console.log(`\n  access: ${passed} passed, ${failures.length} failed`);

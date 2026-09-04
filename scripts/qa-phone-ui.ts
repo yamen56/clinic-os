@@ -150,9 +150,20 @@ async function main() {
   ).rows[0];
   await page.goto(`${BASE}/c/${slug}/conversations`);
   await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(1200);
 
+  /*
+    Wait for the thread, not for a stopwatch.
+
+    The inbox list is fetched by the client after hydration, so `networkidle`
+    lands before the row exists and the 1200ms that used to follow was a guess.
+    It was a bad one: the check failed on an idle, warm server three runs
+    running, and passed the moment anything slow — even a couple of debug reads
+    — happened to sit in front of it. That is a test reporting on its own timing
+    rather than on the product, which is worse than no test at all, because the
+    red is indistinguishable from a real one.
+  */
   const title = page.locator(".num").filter({ hasText: "+962" }).first();
+  await title.waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   check("a nameless thread is titled with the number", (await title.count()) > 0);
   if (await title.count()) {
     const g = await title.evaluate((node) => {

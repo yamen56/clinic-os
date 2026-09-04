@@ -12,6 +12,7 @@ export async function addQuickReplyAction(
   data: { title: string; body: string }
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "conversations")) return { error: "forbidden" };
   if (!data.title.trim() || !data.body.trim()) return { error: "invalid" };
   return inClinic(access, async (c) => {
     const r = await c.query(
@@ -26,6 +27,7 @@ export async function addQuickReplyAction(
 
 export async function deleteQuickReplyAction(slug: string, id: string) {
   const access = await requireClinic(slug);
+  if (!can(access, "conversations")) return;
   await inClinic(access, (c) =>
     c.query(`delete from quick_replies where id = $1 and clinic_id = $2`, [id, access.clinicId])
   );

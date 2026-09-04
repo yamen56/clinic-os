@@ -53,11 +53,17 @@ export async function addStaffAction(
   const parsed = addStaffSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
+  /*
+    `d.caps === undefined`, not `!d.caps.length`. The job's defaults are the
+    fallback for a caller that expressed no opinion at all; an owner who opened
+    the access editor and unticked every box expressed a very clear one, and
+    sent `[]`. Treating that as silence granted the new member the whole
+    receptionist set — conversations, calendar, patients, invoices, settings —
+    on a screen that had just been left showing nothing ticked.
+  */
   const permissions = toAccessSetting(
     d.access,
-    capabilitiesFor(
-      d.caps?.length ? (d.caps as Capability[]) : ROLE_DEFAULTS[d.role]
-    )
+    capabilitiesFor(d.caps ? (d.caps as Capability[]) : ROLE_DEFAULTS[d.role])
   );
 
   /*

@@ -214,10 +214,36 @@ async function main() {
     let body = await text(page);
 
     check("today counts the day's appointments", body.includes("مواعيد اليوم"), "");
+    /*
+      Counted from the database rather than hard-coded.
+
+      The number used to be a literal 2 — the three this fixture books today,
+      less the cancelled one. That held only in the middle of a month. The
+      "earlier this month" appointments below are built as `monthStart + d days`
+      for d=0..4 and clamped back into the past if they land in the future, so
+      during the first days of a month several of them come to rest on *today*
+      and join the count: 7 on the 1st, 4 on the 4th, 2 for the rest of the
+      month. The suite went red for the first week of every month and the answer
+      was always "not a regression, ignore it" — which is exactly the habit a
+      test suite must not teach.
+
+      Asking the database keeps the assertion pointed at what it was always
+      about: the tile counts today's appointments and leaves the cancelled one
+      out. Both halves are checked, so a tile that simply counted everything
+      would still fail.
+    */
+    const todays = await db.query(
+      `select count(*) filter (where status <> 'cancelled')::int as live,
+              count(*)::int as all_of_them
+         from appointments
+        where clinic_id = $1 and (starts_at at time zone $2)::date = (now() at time zone $2)::date`,
+      [clinicId, TZ]
+    );
+    const { live, all_of_them: booked } = todays.rows[0] as { live: number; all_of_them: number };
     check(
       "and excludes the cancelled one",
-      /مواعيد اليوم\s*2\b/.test(body) || body.includes(" 2 "),
-      body.slice(0, 80)
+      live < booked && new RegExp(`مواعيد اليوم\\s*${live}\\b`).test(body),
+      `tile should say ${live} of ${booked} booked — ${body.slice(0, 80)}`
     );
     check("the week's takings are shown", body.includes(ar.dashboard.revenueWeek), "");
     check(

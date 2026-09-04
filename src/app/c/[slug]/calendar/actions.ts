@@ -1,6 +1,6 @@
 "use server";
 
-import { requireClinic } from "@/lib/auth";
+import { can, requireClinic } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { emitTrigger } from "@/lib/triggers";
@@ -50,6 +50,7 @@ export async function createAppointmentAction(
   input: ApptInput
 ): Promise<{ id?: string; error?: string; conflictWith?: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "calendar")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
     let patientId = input.patientId;
     if (!patientId && input.newPatient) {
@@ -107,6 +108,7 @@ export async function updateAppointmentAction(
   input: Partial<Pick<ApptInput, "doctorMemberId" | "serviceId" | "startsAt" | "endsAt" | "notes">>
 ): Promise<{ ok?: boolean; error?: string; conflictWith?: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "calendar")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
     const cur = (
       await c.query(`select * from appointments where id = $1 and clinic_id = $2 for update`, [
@@ -157,6 +159,7 @@ export async function setAppointmentStatusAction(
   status: "pending_approval" | "scheduled" | "confirmed" | "completed" | "no_show" | "cancelled"
 ): Promise<{ ok?: boolean; error?: string }> {
   const access = await requireClinic(slug);
+  if (!can(access, "calendar")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
     const r = await c.query(
       `update appointments set status = $3 where id = $1 and clinic_id = $2
