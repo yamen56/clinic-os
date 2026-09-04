@@ -1,9 +1,9 @@
 import { Client } from "pg";
 import { createGzip, gunzipSync } from "node:zlib";
 import { pipeline } from "node:stream/promises";
-import { PassThrough, Readable, Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import { createRequire } from "node:module";
-import { saveSystemFile, listSystemFiles, openFile, deleteFile } from "./storage";
+import { saveSystemStream, listSystemFiles, openFile, deleteFile } from "./storage";
 
 /**
  * Logical backups of the whole database.
@@ -37,14 +37,22 @@ type CopyStreams = {
 };
 
 /**
- * `pg-copy-streams` is a devDependency — a backup runs in the worker, which
- * installs dev deps, but this keeps the failure legible if that ever changes.
+ * A production dependency, and it has to stay one.
+ *
+ * This used to say "a backup runs in the worker, which installs dev deps" and
+ * `pg-copy-streams` sat in devDependencies on that basis. `Dockerfile.worker`
+ * runs `npm ci --omit=dev`, so the require below threw on every tick from the
+ * day the feature shipped, the scheduler logged it and moved on, and the
+ * database went unbacked-up for five weeks without a single alarm. The comment
+ * was the bug: it described an arrangement nobody had checked.
  */
 function copyStreams(): CopyStreams {
   try {
     return require_("pg-copy-streams") as CopyStreams;
   } catch {
-    throw new Error("backups need pg-copy-streams (npm i pg-copy-streams)");
+    throw new Error(
+      "backups need pg-copy-streams as a *production* dependency — the worker image installs with --omit=dev"
+    );
   }
 }
 
@@ -80,7 +88,9 @@ export type BackupResult = { path: string; bytes: number; tables: number; rows: 
  * needs to know which schema version these rows belong to, and finding that out
  * afterwards is guesswork.
  */
-export async function backupDatabase(opts: { url?: string; keep?: number } = {}): Promise<BackupResult> {
+export async function backupDatabase(
+  opts: { url?: string; keep?: number; keepMonthly?: number } = {}
+): Promise<BackupResult> {
   const url = opts.url ?? process.env.DATABASE_SUPER_URL ?? process.env.DATABASE_URL;
   if (!url) throw new Error("no database URL for backup");
   const copy = copyStreams();
@@ -88,59 +98,115 @@ export async function backupDatabase(opts: { url?: string; keep?: number } = {})
   const c = connect(url);
   await c.connect();
 
-  const chunks: Buffer[] = [];
-  const gzip = createGzip({ level: 9 });
-  const sink = new PassThrough();
-  sink.on("data", (b: Buffer) => chunks.push(b));
-  const done = pipeline(gzip, sink);
+  const counts = { rows: 0, tables: 0 };
 
-  const write = (s: string) =>
-    new Promise<void>((resolve, reject) =>
-      gzip.write(s, (e) => (e ? reject(e) : resolve()))
-    );
+  /*
+    The archive as a generator rather than as a buffer.
 
-  let rows = 0;
-  const tables = await tablesOf(c);
-
-  await write(
-    `-- clinic-os logical backup\n-- created ${new Date().toISOString()}\n-- tables ${tables.length}\n`
-  );
-
-  for (const t of tables) {
-    const n = Number(
-      (await c.query<{ n: string }>(`select count(*)::text as n from "${t}"`)).rows[0].n
-    );
-    rows += n;
-    await write(`${TABLE_MARKER}${t} ${n}\n`);
-    if (n === 0) continue;
-    // node-pg's types do not describe the COPY submittable; see copy-database.ts.
-    const submit = c.query.bind(c) as unknown as (s: unknown) => Readable;
-    const reader = submit(copy.to(`copy "${t}" to stdout`));
-    for await (const chunk of reader) gzip.write(chunk as Buffer);
-    // COPY's own end-of-data marker, so a restore can stream straight into it.
-    await write("\\.\n");
+    Every byte used to be kept in `chunks` and then copied again by
+    `Buffer.concat`, so a backup needed roughly twice the compressed archive
+    resident at once — fine at today's 0.1 MB and fatal at a few hundred
+    clinics, where the job that protects the data would be the job that runs the
+    worker out of heap. Yielding lets `pipeline` apply backpressure: the dump
+    goes out to storage as fast as storage accepts it and no faster, and nothing
+    but the part in flight is ever held.
+  */
+  async function* archive(tables: string[]): AsyncGenerator<string | Buffer> {
+    yield `-- clinic-os logical backup\n-- created ${new Date().toISOString()}\n-- tables ${tables.length}\n`;
+    for (const t of tables) {
+      /*
+        An exact count, not an estimate from the planner: `restoreDatabase`
+        skips a section it is told holds zero rows, so a table under-counted to
+        0 would restore as empty and nothing would say so.
+      */
+      const n = Number(
+        (await c.query<{ n: string }>(`select count(*)::text as n from "${t}"`)).rows[0].n
+      );
+      counts.rows += n;
+      yield `${TABLE_MARKER}${t} ${n}\n`;
+      if (n === 0) continue;
+      // node-pg's types do not describe the COPY submittable; see copy-database.ts.
+      const submit = c.query.bind(c) as unknown as (s: unknown) => Readable;
+      const reader = submit(copy.to(`copy "${t}" to stdout`));
+      for await (const chunk of reader) yield chunk as Buffer;
+      // COPY's own end-of-data marker, so a restore can stream straight into it.
+      yield "\\.\n";
+    }
   }
 
-  gzip.end();
-  await done;
-  await c.end();
+  const tables = await tablesOf(c);
+  counts.tables = tables.length;
 
-  const data = Buffer.concat(chunks);
+  const gzip = createGzip({ level: 9 });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const saved = await saveSystemFile("backups", `clinicos-${stamp}.sql.gz`, data);
 
-  await prune(opts.keep ?? 14);
+  /*
+    Both halves started together: the uploader reads the compressed side while
+    the generator fills the other. Awaiting them in sequence would deadlock —
+    gzip's buffer fills, the generator blocks, and nothing is ever read.
+  */
+  const uploading = saveSystemStream("backups", `clinicos-${stamp}.sql.gz`, gzip);
+  // Kept from going unhandled if the pipeline below fails first.
+  uploading.catch(() => {});
+  let saved: { storagePath: string; sizeBytes: number };
+  try {
+    await pipeline(Readable.from(archive(tables)), gzip);
+    saved = await uploading;
+  } finally {
+    await c.end().catch(() => {});
+  }
 
-  return { path: saved.storagePath, bytes: saved.sizeBytes, tables: tables.length, rows };
+  await prune(opts.keep ?? 14, opts.keepMonthly ?? 12);
+
+  return { path: saved.storagePath, bytes: saved.sizeBytes, tables: counts.tables, rows: counts.rows };
 }
 
-/** Keeps the newest `keep` archives and removes the rest. */
-async function prune(keep: number): Promise<void> {
-  if (keep <= 0) return;
-  const all = await listSystemFiles("backups");
+/**
+ * Retention, in two tiers.
+ *
+ * A fortnight of nightly archives answers "somebody deleted the wrong thing on
+ * Tuesday". It does not answer the slower question — a column quietly corrupted
+ * by a bug that shipped in March and noticed in June — because by then every
+ * archive that predates the damage has been pruned. So the first archive of
+ * each month is also kept, for a year by default: twelve extra files, and the
+ * difference between a recoverable mistake and a permanent one.
+ */
+async function prune(keepDaily: number, keepMonthly: number): Promise<void> {
+  if (keepDaily <= 0) return;
   // Names are ISO-stamped, so lexical order is chronological.
-  const stale = all.slice(0, Math.max(0, all.length - keep));
-  for (const key of stale) await deleteFile(key).catch(() => {});
+  const all = await listSystemFiles("backups");
+  const keep = new Set(all.slice(-keepDaily));
+
+  const firstOfMonth = new Map<string, string>();
+  for (const key of all) {
+    const m = /clinicos-(\d{4}-\d{2})-/.exec(key);
+    if (m && !firstOfMonth.has(m[1])) firstOfMonth.set(m[1], key);
+  }
+  for (const key of [...firstOfMonth.values()].slice(-keepMonthly)) keep.add(key);
+
+  for (const key of all) if (!keep.has(key)) await deleteFile(key).catch(() => {});
+}
+
+/**
+ * When the newest archive was taken, or null if there are none at all.
+ *
+ * Read from the object name rather than from its upload time: the name is the
+ * moment the dump began, which is what "how far back can we go" actually means.
+ */
+export async function newestBackupAt(): Promise<Date | null> {
+  const all = await listSystemFiles("backups");
+  const last = all[all.length - 1];
+  if (!last) return null;
+  const m = /clinicos-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/.exec(last);
+  if (!m) return null;
+  const [, y, mo, d, h, mi, s] = m;
+  return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));
+}
+
+/** Hours since the last archive; Infinity when there has never been one. */
+export async function backupAgeHours(): Promise<number> {
+  const at = await newestBackupAt();
+  return at ? (Date.now() - at.getTime()) / 3_600_000 : Infinity;
 }
 
 /**

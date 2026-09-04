@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 import { withSystem } from "./db";
 import { startRun } from "./automations";
 import { sweepExpiredDocuments, sweepUnsignedDocuments, sendPendingDigest } from "./esign";
-import { backupDatabase } from "../src/lib/backup";
+import { backupDatabase, backupAgeHours } from "../src/lib/backup";
 import { usingObjectStore } from "../src/lib/storage";
 import { deliveryWatch } from "./delivery-watch";
 import { expirePastWaitlist, requeueStaleOffers } from "./waitlist";
@@ -295,13 +295,60 @@ async function unpaidInvoices() {
  */
 async function dailyBackup() {
   if (!usingObjectStore()) return;
-  const now = new Date();
-  // 03:00 UTC, and only once — the tick runs every minute.
-  if (now.getUTCHours() !== 3 || now.getUTCMinutes() !== 0) return;
+
+  /*
+    Driven by how old the newest archive is, not by the clock reading exactly
+    03:00.
+
+    The old test was `getUTCHours() === 3 && getUTCMinutes() === 0`, which
+    assumed the tick lands on every minute of the day. It does not: the loop
+    schedules the next run 60s *after* the previous one finishes, so the period
+    is 60s plus however long fourteen jobs took and the phase walks forward all
+    day. Minutes get skipped, and a skipped minute was a skipped day — with a
+    deploy, a slow tick or a restart anywhere near the hour costing another one.
+
+    Asking storage how old the last archive is makes the job idempotent instead
+    of instantaneous: it can be attempted on any tick, it will do nothing when a
+    recent archive exists, and a missed window is made up on the next tick
+    rather than next week.
+  */
+  const ageHours = await backupAgeHours();
+  const hour = new Date().getUTCHours();
+  // The quiet window, or — if a day has already been missed — whenever.
+  const due = ageHours >= 20 && (hour >= 3 && hour < 6);
+  const overdue = ageHours >= 36;
+  if (!due && !overdue) return;
+
   const started = Date.now();
-  const r = await backupDatabase({ keep: Number(process.env.BACKUP_KEEP || 14) });
+  const r = await backupDatabase({
+    keep: Number(process.env.BACKUP_KEEP || 14),
+    keepMonthly: Number(process.env.BACKUP_KEEP_MONTHLY || 12),
+  });
   console.log(
     `[backup] ${r.tables} tables, ${r.rows} rows, ${(r.bytes / 1048576).toFixed(1)} MB in ${Date.now() - started}ms -> ${r.path}`
+  );
+}
+
+/**
+ * Says out loud when there is no recent backup.
+ *
+ * The reason the five-week outage went unnoticed is that failure was silent:
+ * `copyStreams()` threw, the scheduler's catch logged one line among thousands,
+ * and nothing anywhere said "this database is not backed up". A job that
+ * protects you only if someone reads the logs is not protection.
+ *
+ * Once an hour, loudly, and it is also what the admin monitoring page reads.
+ */
+async function backupHealth() {
+  if (!usingObjectStore()) return;
+  const now = new Date();
+  if (now.getUTCMinutes() > 4) return;
+  const ageHours = await backupAgeHours();
+  if (ageHours < 30) return;
+  console.error(
+    ageHours === Infinity
+      ? "[backup] ALARM: this database has never been backed up"
+      : `[backup] ALARM: newest backup is ${Math.floor(ageHours)}h old`
   );
 }
 

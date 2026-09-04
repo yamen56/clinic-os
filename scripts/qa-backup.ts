@@ -7,7 +7,9 @@
  * not by row counts, which say nothing about whether jsonb or Arabic survived.
  */
 import { Client } from "pg";
-import { backupDatabase, restoreDatabase, readBackup, listBackups } from "../src/lib/backup";
+import { backupDatabase, restoreDatabase, readBackup, listBackups, backupAgeHours } from "../src/lib/backup";
+import fs from "node:fs";
+import path from "node:path";
 
 let passed = 0;
 const failures: string[] = [];
@@ -111,6 +113,72 @@ async function main() {
     await q(TARGET, `select full_name from patients where full_name ~ '[؀-ۿ]' limit 1`)
   ).rows[0];
   check("Arabic reads correctly out of the restored copy", !!sample?.full_name, sample?.full_name);
+
+  /* ------------------------------- the archive can be dated, and ages */
+  const age = await backupAgeHours();
+  check("the newest archive can be dated from its name", age < 1, `${age.toFixed(2)}h old`);
+
+  /* ------------------------------------------------- what the worker can load */
+  /*
+    The check that matters most in this file, and the one that was missing.
+
+    Everything above proves the backup works *here*, where `npm install` has put
+    devDependencies on disk. Production is not here: `Dockerfile.worker` runs
+    `npm ci --omit=dev`, and `pg-copy-streams` sat in devDependencies — so the
+    require threw on every tick, the scheduler logged one line, and the database
+    went five weeks with no backup at all while every green tick in this suite
+    said otherwise.
+
+    So the invariant is checked directly rather than assumed: nothing the worker
+    imports at runtime may live in devDependencies.
+  */
+  const pkg = JSON.parse(fs.readFileSync("package.json", "utf8")) as {
+    dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
+  };
+  const runtimeDeps = new Set(Object.keys(pkg.dependencies ?? {}));
+  const devOnly = new Set(Object.keys(pkg.devDependencies ?? {}));
+
+  const imported = new Set<string>();
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.tsx?$/.test(e.name)) collect(p);
+    }
+  };
+  const collect = (file: string) => {
+    const src = fs.readFileSync(file, "utf8");
+    // Static imports, dynamic imports, and the createRequire escape hatch.
+    const patterns = [
+      /^\s*import\s+(?!type\b)[^;]*?from\s*["']([^"']+)["']/gm,
+      /\bimport\(\s*["']([^"']+)["']\s*\)/g,
+      /\brequire_?\(\s*["']([^"']+)["']\s*\)/g,
+    ];
+    for (const re of patterns) {
+      for (const m of src.matchAll(re)) {
+        const spec = m[1];
+        if (spec.startsWith(".") || spec.startsWith("@/") || spec.startsWith("node:")) continue;
+        // "@scope/name" keeps two segments; "name/sub" keeps one.
+        const name = spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0];
+        imported.add(name);
+      }
+    }
+  };
+  walk("worker");
+  walk(path.join("src", "lib"));
+
+  const misfiled = [...imported].filter((n) => devOnly.has(n) && !runtimeDeps.has(n));
+  check(
+    "nothing the worker imports at runtime is a devDependency",
+    misfiled.length === 0,
+    misfiled.join(", ") || "none misfiled"
+  );
+  check(
+    "pg-copy-streams in particular, since the backup is the thing that needs it",
+    runtimeDeps.has("pg-copy-streams"),
+    runtimeDeps.has("pg-copy-streams") ? "in dependencies" : "MISSING from dependencies"
+  );
 
   const su2 = new Client({ connectionString: SUPER });
   await su2.connect();

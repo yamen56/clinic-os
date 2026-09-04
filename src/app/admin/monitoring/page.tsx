@@ -2,11 +2,12 @@ import { guardAdminCap } from "@/lib/guard";
 import { withSystem } from "@/lib/db";
 import { getDict, getLocale } from "@/lib/i18n";
 import { fmtRelative } from "@/lib/dates";
-import { storageUsageBytes } from "@/lib/storage";
+import { storageUsage } from "@/lib/storage";
+import { backupAgeHours } from "@/lib/backup";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { Activity, HardDrive, MessageCircle, Sparkles, AlertTriangle } from "lucide-react";
+import { Activity, HardDrive, MessageCircle, Sparkles, AlertTriangle, DatabaseBackup } from "lucide-react";
 
 import { internalSecret } from "@/lib/internal-secret";
 
@@ -84,7 +85,22 @@ export default async function MonitoringPage() {
     return { clinics, jobs, failedJobs, outbox };
   });
 
-  const storageMb = ((await storageUsageBytes()) / 1024 / 1024).toFixed(1);
+  const usage = await storageUsage();
+  const storageMb = (usage.truncated ? "≥" : "") + (usage.bytes / 1024 / 1024).toFixed(1);
+
+  /*
+    How long ago the database was last backed up, on the page somebody actually
+    looks at.
+
+    Worth a tile of its own because the failure this catches is invisible
+    everywhere else: backups stopped for five weeks and every screen in the
+    product carried on looking perfectly healthy. A number that goes red is the
+    difference between finding that out today and finding it out the morning you
+    need the archive.
+  */
+  const backupAge = await backupAgeHours().catch(() => Infinity);
+  const backupLabel =
+    backupAge === Infinity ? "never" : backupAge < 48 ? `${Math.floor(backupAge)}h ago` : `${Math.floor(backupAge / 24)}d ago`;
 
   return (
     <>
@@ -99,19 +115,28 @@ export default async function MonitoringPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
           { icon: <Activity className="h-4 w-4" />, label: "Jobs pending", value: data.jobs.pending, warn: data.jobs.stale > 0 },
           { icon: <AlertTriangle className="h-4 w-4" />, label: "Jobs failed", value: data.jobs.failed, warn: data.jobs.failed > 0 },
           { icon: <MessageCircle className="h-4 w-4" />, label: "Outbox queued", value: data.outbox.queued, warn: data.outbox.failed > 0 },
           { icon: <HardDrive className="h-4 w-4" />, label: "Storage (MB)", value: storageMb, warn: false },
+          {
+            icon: <DatabaseBackup className="h-4 w-4" />,
+            label: "Last backup",
+            value: backupLabel,
+            // A day and a half: past a missed nightly run, before a second one.
+            warn: backupAge >= 36,
+          },
         ].map((s, i) => (
           <Card key={i} className="p-4">
             <div className="flex items-center gap-1.5 text-[13px] text-ink-500">
               {s.icon}
               {s.label}
             </div>
-            <div className="mt-1 text-2xl font-semibold tnum">{s.value}</div>
+            <div className={`mt-1 text-2xl font-semibold tnum ${s.warn ? "text-danger" : ""}`}>
+              {s.value}
+            </div>
           </Card>
         ))}
       </div>

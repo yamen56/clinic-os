@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { Transform, type Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 /**
  * File storage: patient documents, clinic logos, WhatsApp media, invoice PDFs.
@@ -65,22 +67,54 @@ async function s3(): Promise<{ mod: S3Module; client: InstanceType<S3Module["S3C
  * every clinic, and filing it under one of them would make it look like theirs.
  * The name is used verbatim so a backup can be found by its date instead of
  * behind a random prefix.
+ *
+ * A stream rather than a Buffer, and that is the whole design. The only caller
+ * is the nightly database dump, which grows with the business: held in memory
+ * it would one day stop fitting in the worker's heap, and the job that crashed
+ * would be the one whose entire purpose is surviving a bad day. Multipart
+ * upload sends it in fixed-size parts, so a 40 GB archive costs the same memory
+ * as a 40 MB one.
+ *
+ * Bytes are counted as they pass rather than measured afterwards, because with
+ * a stream there is no object to measure until it has already been sent.
  */
-export async function saveSystemFile(
+export async function saveSystemStream(
   folder: string,
   fileName: string,
-  data: Buffer
+  body: Readable
 ): Promise<{ storagePath: string; sizeBytes: number }> {
   const key = path.posix.join("_system", folder, safeName(fileName));
+  let sizeBytes = 0;
+  const counted = body.pipe(
+    new Transform({
+      transform(chunk: Buffer, _enc, cb) {
+        sizeBytes += chunk.length;
+        cb(null, chunk);
+      },
+    })
+  );
+
   if (usingObjectStore()) {
-    const { mod, client, bucket } = await s3();
-    await client.send(new mod.PutObjectCommand({ Bucket: bucket, Key: key, Body: data }));
-    return { storagePath: key, sizeBytes: data.length };
+    const { client, bucket } = await s3();
+    const { Upload } = await import("@aws-sdk/lib-storage");
+    /*
+      8 MB parts, two in flight. R2 requires every part but the last to be the
+      same size, which lib-storage handles; the numbers are chosen so peak
+      memory is ~16 MB whatever the archive weighs.
+    */
+    await new Upload({
+      client,
+      params: { Bucket: bucket, Key: key, Body: counted },
+      partSize: 8 * 1024 * 1024,
+      queueSize: 2,
+    }).done();
+    return { storagePath: key, sizeBytes };
   }
+
   const abs = path.join(ROOT, key);
   await fs.promises.mkdir(path.dirname(abs), { recursive: true });
-  await fs.promises.writeFile(abs, data);
-  return { storagePath: key, sizeBytes: data.length };
+  await pipeline(counted, fs.createWriteStream(abs));
+  return { storagePath: key, sizeBytes };
 }
 
 /** Lists system files under a folder, newest name last. */
@@ -162,11 +196,25 @@ export async function deleteFile(storagePath: string): Promise<void> {
   await fs.promises.rm(abs, { force: true });
 }
 
-export async function storageUsageBytes(clinicId?: string): Promise<number> {
+/**
+ * How much a clinic — or the whole deployment — is storing.
+ *
+ * Bounded, and that is the point. A bucket listing returns 1000 keys per round
+ * trip, so this walks the entire store one page at a time: fine at a few
+ * hundred objects, and at a hundred thousand it is a hundred sequential calls
+ * on an admin page render, which is a timeout rather than a number. `maxPages`
+ * caps the work and `truncated` says so out loud, because a figure that
+ * silently stops counting is worse than one that admits it is a floor.
+ */
+export async function storageUsage(
+  clinicId?: string,
+  maxPages = 50
+): Promise<{ bytes: number; truncated: boolean }> {
   if (usingObjectStore()) {
     const { mod, client, bucket } = await s3();
-    let total = 0;
+    let bytes = 0;
     let token: string | undefined;
+    let pages = 0;
     do {
       const r = await client.send(
         new mod.ListObjectsV2Command({
@@ -175,12 +223,16 @@ export async function storageUsageBytes(clinicId?: string): Promise<number> {
           ContinuationToken: token,
         })
       );
-      for (const o of r.Contents ?? []) total += o.Size ?? 0;
+      for (const o of r.Contents ?? []) bytes += o.Size ?? 0;
       token = r.IsTruncated ? r.NextContinuationToken : undefined;
+      if (++pages >= maxPages && token) return { bytes, truncated: true };
     } while (token);
-    return total;
+    return { bytes, truncated: false };
   }
+  return { bytes: await localUsageBytes(clinicId), truncated: false };
+}
 
+async function localUsageBytes(clinicId?: string): Promise<number> {
   const dir = clinicId ? path.join(ROOT, clinicId) : ROOT;
   if (!fs.existsSync(dir)) return 0;
   let total = 0;
