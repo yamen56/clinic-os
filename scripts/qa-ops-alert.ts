@@ -76,6 +76,28 @@ async function main() {
   );
   check("opsHealth in particular is registered", registered.has("opsHealth"));
 
+  /*
+    The same rule applied to the check list inside ops-alert itself, which is an
+    array of functions with exactly the same hazard: a probe can be written,
+    reviewed and merged without ever being added to it, and nothing at all would
+    say so. `collectFindings` catches a probe that *throws*; it cannot notice one
+    that is never called.
+  */
+  const ops = fs.readFileSync(path.join("src", "lib", "ops-alert.ts"), "utf8");
+  const listed = /const checks: \(\(\) => Promise<Finding\[\]>\)\[\] = \[([\s\S]*?)\]/.exec(ops);
+  check("the check list was found", !!listed);
+  const inList = new Set(
+    (listed?.[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean)
+  );
+  const probes = [...ops.matchAll(/^async function (\w*Checks)\s*\(/gm)].map((m) => m[1]);
+  check("probes were found", probes.length >= 5, `${probes.length}`);
+  const unlisted = probes.filter((p) => !inList.has(p));
+  check(
+    "every probe is in the check list",
+    unlisted.length === 0,
+    unlisted.length ? `never called: ${unlisted.join(", ")}` : `${inList.size} listed`
+  );
+
   /* ================================================= open / renotify / resolve */
   console.log("\n[an alert opens once, not once a minute]");
   const first = await reconcile([finding(K1)]);

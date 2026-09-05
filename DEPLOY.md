@@ -206,6 +206,42 @@ duplicate suppression, auto-pause on repeated errors — reduce the risk without
 removing it. Use a number the clinic can afford to lose, never the owner's
 personal one.
 
+### What actually gets a number banned
+
+Not volume. **Reports and blocks from recipients** — and WhatsApp never tells
+Baileys about either, so the signal that decides the outcome is invisible from
+in here. Everything below is built around that gap.
+
+**A new number ramps.** Bulk sending from a freshly registered number is the
+classic ban pattern, and until `0044` nothing looked at age: a clinic could scan
+a QR on a new SIM and reach the full 300/day the same afternoon. The effective
+cap now starts at **20 on day one** and grows about a third each day — 20, 27,
+36, 49, 66, 89, 121, 163, 220, 297 — reaching a typical clinic's cap inside a
+fortnight and lifting entirely after three weeks.
+
+It is anchored to the **number**, not the clinic, because the number is what
+gets banned. Switching to a different number starts a fresh ramp; reconnecting
+the same one after an outage does not. It can only ever *lower* a clinic's
+configured cap, never raise it. Overflow is deferred to the next day's window,
+not dropped — a clinic on the ramp still sends everything, just later, and the
+log says `warm-up cap 20 reached` rather than a bare "deferred" that reads like
+a bug.
+
+**The "Cold" column on `/admin/monitoring`** is the closest thing to an early
+warning available: the share of 30-day outbound that went into conversations the
+patient has *never* replied in. Those are the people who report. Measured on
+real traffic on 2026-09-05 the platform sat at **11%**, almost entirely staff
+replying inside existing threads — a healthy shape. Half of everything going
+into silence is a different activity: an imported list being messaged, or a
+campaign to people who never opted in. That raises an alert, but only above 100
+messages in the window, because three unanswered out of four is 75% and means
+nothing.
+
+Where the risk actually concentrates, in order: **campaigns** (the blast guard
+exempts them by design — their only protection is pacing, not consent),
+**imported lists**, and **new numbers**. The first two are a product decision
+about consent, not a rail that can be tightened.
+
 ## Backups
 
 The database is Railway Postgres, so recovery is ours to arrange. A volume

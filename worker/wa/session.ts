@@ -26,6 +26,24 @@ export class WASession {
 
   constructor(public clinicId: string) {}
 
+  /**
+   * True when this clinic has not warmed up this particular number yet.
+   *
+   * `is distinct from` rather than `<>`, so a null on either side counts as a
+   * difference — the first connection after the warm-up columns were added has
+   * no anchor, and that is precisely the case that should start one.
+   */
+  private async isNewNumber(e164: string): Promise<boolean> {
+    return withSystem(async (c) => {
+      const r = await c.query(
+        `select 1 from whatsapp_sessions
+          where clinic_id = $1 and (warmup_number is distinct from $2 or warmup_started_at is null)`,
+        [this.clinicId, e164]
+      );
+      return r.rowCount === 1;
+    });
+  }
+
   private async setSession(patch: Record<string, unknown>) {
     const cols = Object.keys(patch);
     if (!cols.length) return;
@@ -70,11 +88,22 @@ export class WASession {
               this.retries = 0;
               const me = sock.user?.id ?? "";
               const phone = me.split(":")[0].split("@")[0];
+              /*
+                A number we have not seen on this clinic before starts its
+                warm-up ramp now. Compared against `warmup_number` rather than
+                against `phone_number`, because that column is cleared on logout
+                — reconnecting after one would otherwise look like a brand-new
+                number and throttle an established clinic back to twenty
+                messages a day. See lib/whatsapp-ramp.
+              */
+              const e164 = phone ? `+${phone}` : null;
+              const fresh = e164 ? await this.isNewNumber(e164) : false;
               await this.setSession({
                 status: "connected",
                 qr: null,
                 error: null,
-                phone_number: phone ? `+${phone}` : null,
+                ...(fresh ? { warmup_number: e164, warmup_started_at: new Date().toISOString() } : {}),
+                phone_number: e164,
                 display_name: sock.user?.name ?? null,
                 connected_at: new Date().toISOString(),
                 last_seen_at: new Date().toISOString(),

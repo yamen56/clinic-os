@@ -33,6 +33,7 @@ import { sendEmail, emailConfigured } from "@/lib/email";
 import { backupAgeHours, backupEngineReady } from "@/lib/backup";
 import { usingObjectStore } from "@/lib/storage";
 import { appUrl } from "@/lib/urls";
+import { silenceByClinic, concerning } from "@/lib/whatsapp-health";
 
 export type Finding = {
   /** Stable per condition, not per occurrence. Reusing it is what dedupes. */
@@ -93,6 +94,7 @@ export async function collectFindings(): Promise<Finding[]> {
     jobChecks,
     outboxChecks,
     whatsappChecks,
+    silenceChecks,
     webChecks,
   ];
   for (const check of checks) {
@@ -231,6 +233,33 @@ async function whatsappChecks(): Promise<Finding[]> {
     detail:
       `Session status is "${r.status}". The clinic is not sending or receiving messages. ` +
       `If it reads "logged_out" or "qr", somebody at the clinic has to rescan the code.`,
+  }));
+}
+
+/**
+ * A clinic messaging people who never write back.
+ *
+ * The closest thing to an early warning for a ban that this system can see.
+ * WhatsApp bans on reports and blocks, which Baileys is never told about, so
+ * the proxy is outbound going into threads that stay one-sided — the population
+ * that reports. See lib/whatsapp-health for why it is thirty days and why it is
+ * gated on volume.
+ *
+ * Worth an alert rather than only a dashboard column because the moment it
+ * moves is the moment somebody has started using campaigns on an imported list,
+ * and that is a conversation to have before the number is gone rather than
+ * after.
+ */
+async function silenceChecks(): Promise<Finding[]> {
+  const rows = await withSystem((c) => silenceByClinic(c, 30));
+  return concerning(rows).map((r) => ({
+    key: `whatsapp_cold:${r.clinicId}`,
+    title: `${r.name} is messaging people who never reply (${Math.round(r.ratio * 100)}%)`,
+    detail:
+      `${r.cold} of ${r.out} outbound messages in the last 30 days went into conversations the ` +
+      `patient has never written in. That is the population that reports a number, and reports ` +
+      `are what get it banned. Check whether a campaign or an import is sending to people who ` +
+      `never contacted the clinic.`,
   }));
 }
 

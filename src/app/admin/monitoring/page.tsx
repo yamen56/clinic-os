@@ -5,6 +5,8 @@ import { fmtRelative } from "@/lib/dates";
 import { storageUsage } from "@/lib/storage";
 import { backupAgeHours, listBackupDetails } from "@/lib/backup";
 import { publicLoad } from "@/lib/public-guard";
+import { effectiveDailyCap, warmupDay } from "@/lib/whatsapp-ramp";
+import { silenceByClinic, SILENCE_MIN_VOLUME, SILENCE_ALERT_RATIO } from "@/lib/whatsapp-health";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
@@ -57,7 +59,7 @@ export default async function MonitoringPage() {
       await c.query(
         `select cl.id, cl.name, cl.name_ar, cl.slug, cl.subscription_status,
                 ws.status as wa_status, ws.phone_number, ws.outbound_today, ws.consecutive_errors,
-                ws.paused_until, cl.daily_outbound_cap,
+                ws.paused_until, ws.warmup_started_at, cl.daily_outbound_cap,
                 (select count(*) from automation_runs r where r.clinic_id = cl.id and r.status = 'failed'
                    and r.started_at > now() - interval '7 days')::int as failed_runs,
                 (select count(*) from messages m where m.clinic_id = cl.id and m.status = 'failed'
@@ -100,7 +102,7 @@ export default async function MonitoringPage() {
       )
     ).rows[0];
 
-    return { clinics, jobs, failedJobs, outbox };
+    return { clinics, jobs, failedJobs, outbox, silence: await silenceByClinic(c, 30) };
   });
 
   const usage = await storageUsage();
@@ -210,6 +212,16 @@ export default async function MonitoringPage() {
                 <th className="px-5 py-2 text-start font-semibold">Clinic</th>
                 <th className="px-3 py-2 text-start font-semibold">WhatsApp</th>
                 <th className="px-3 py-2 text-end font-semibold">Sent today</th>
+                {/*
+                  The share of 30-day outbound that went into conversations the
+                  patient never replied in. The closest thing to a ban predictor
+                  available from in here — WhatsApp bans on reports, and the
+                  people who report are the people who never write back. Greyed
+                  under the volume floor, where the ratio is noise.
+                */}
+                <th className="px-3 py-2 text-end font-semibold" title="Outbound into threads that never got a reply, 30 days">
+                  Cold
+                </th>
                 <th className="px-3 py-2 text-end font-semibold">AI replies</th>
                 <th className="px-3 py-2 text-end font-semibold">AI tokens</th>
                 <th className="px-3 py-2 text-start font-semibold">Errors</th>
@@ -236,7 +248,36 @@ export default async function MonitoringPage() {
                     </td>
                     <td className="px-3 py-2.5 text-end tnum">
                       {cl.outbound_today ?? 0}
-                      <span className="text-ink-400">/{cl.daily_outbound_cap}</span>
+                      <span className="text-ink-400">/{effectiveDailyCap(cl.daily_outbound_cap, cl.warmup_started_at)}</span>
+                      {/* Says why the cap is low, so a warming number does not
+                          read as a misconfiguration. */}
+                      {warmupDay(cl.warmup_started_at) !== null && (
+                        <span className="ms-1 text-[11px] text-ink-400">
+                          day {warmupDay(cl.warmup_started_at)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-end tnum">
+                      {(() => {
+                        const s = data.silence.find((x) => x.clinicId === cl.id);
+                        if (!s || s.out === 0) return <span className="text-ink-400">—</span>;
+                        const pct = Math.round(s.ratio * 100);
+                        const quiet = s.out < SILENCE_MIN_VOLUME;
+                        return (
+                          <span
+                            className={
+                              quiet
+                                ? "text-ink-400"
+                                : s.ratio >= SILENCE_ALERT_RATIO
+                                  ? "text-danger"
+                                  : ""
+                            }
+                            title={`${s.cold} of ${s.out} outbound in 30 days`}
+                          >
+                            {pct}%
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-2.5 text-end tnum">{cl.ai_msgs}</td>
                     <td className="px-3 py-2.5 text-end tnum">{Number(cl.ai_tokens).toLocaleString("en-GB")}</td>

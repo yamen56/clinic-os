@@ -5,6 +5,7 @@ import { sessions } from "./wa/session";
 import { resolveSendAddress } from "./wa/resolve-address";
 import { readFileBuffer } from "../src/lib/storage";
 import { notifyUser } from "../src/lib/notify";
+import { effectiveDailyCap } from "../src/lib/whatsapp-ramp";
 import type { AnyMessageContent } from "@whiskeysockets/baileys";
 
 /**
@@ -84,7 +85,7 @@ export async function processOnce() {
             // to a clinic-local ISO day was never equal — which silently reset
             // the counter on every send and left the daily cap doing nothing.
             `select ws.paused_until, ws.consecutive_errors, ws.outbound_today,
-                    ws.outbound_date::text as outbound_date,
+                    ws.outbound_date::text as outbound_date, ws.warmup_started_at,
                     cl.daily_outbound_cap, cl.timezone, cl.message_window_start
              from whatsapp_sessions ws join clinics cl on cl.id = ws.clinic_id
              where ws.clinic_id = $1`,
@@ -130,8 +131,18 @@ export async function processOnce() {
         ).rows[0];
         if (!row) return null;
 
-        // Daily cap: push overflow to the next day's window
-        if (ses.outbound_today >= ses.daily_outbound_cap) {
+        /*
+          Daily cap: push overflow to the next day's window.
+
+          The number's own age can lower this. A newly linked number ramps from
+          twenty a day up to the clinic's configured cap over about a fortnight,
+          because bulk sending from a fresh registration is the pattern that
+          gets a number banned and nothing else here was looking at age. See
+          lib/whatsapp-ramp. Deferring rather than dropping means a clinic that
+          hits the ramp still sends everything, just later.
+        */
+        const cap = effectiveDailyCap(Number(ses.daily_outbound_cap), ses.warmup_started_at);
+        if (ses.outbound_today >= cap) {
           const nextWindow = DateTime.now()
             .setZone(ses.timezone)
             .plus({ days: 1 })
@@ -141,7 +152,10 @@ export async function processOnce() {
             `update messages set status = 'queued', scheduled_at = $2 where id = $1`,
             [row.id, nextWindow.toUTC().toISO()]
           );
-          console.log(`[outbound ${clinicId}] daily cap reached — deferred message`);
+          // Says which cap, because "deferred" on a brand-new number at twenty
+          // messages looks like a bug unless the ramp is named.
+          const why = cap < Number(ses.daily_outbound_cap) ? `warm-up cap ${cap}` : `daily cap ${cap}`;
+          console.log(`[outbound ${clinicId}] ${why} reached — deferred message`);
           return null;
         }
 
