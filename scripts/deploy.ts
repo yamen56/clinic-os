@@ -16,7 +16,7 @@
  *   npx tsx scripts/deploy.ts --worker
  *   npx tsx scripts/deploy.ts --status   # what is live right now
  */
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 
 process.loadEnvFile(".env.production.local");
 
@@ -130,6 +130,32 @@ async function main() {
       ? ["worker"]
       : ["web", "worker"];
   const targets = SERVICES.filter((s) => s.id && only.includes(s.key));
+
+  /*
+    Pre-flight, and it is not optional.
+
+    The worker runs a subset of this repository — see Dockerfile.worker — so an
+    import that will crash the container resolves perfectly on this machine and
+    in every test. That is not a hypothetical: it crash-looped production for a
+    day on 2026-09-05, and the run before it stopped backups for five weeks.
+
+    A check somebody has to remember to run is not a guarantee, so it runs here,
+    where it cannot be skipped and where the cost of being wrong is highest. It
+    takes about a second and needs no database.
+  */
+  if (targets.some((t) => t.key === "worker")) {
+    const probe = spawnSync("npx", ["tsx", "scripts/qa-worker-image.ts"], {
+      encoding: "utf8",
+      shell: true,
+    });
+    if (probe.status !== 0) {
+      console.error("\nRefusing to deploy: the worker image would be missing files it imports.\n");
+      console.error(probe.stdout ?? "");
+      console.error(probe.stderr ?? "");
+      process.exit(1);
+    }
+    console.log("\n✓ worker image check passed");
+  }
 
   console.log("\nbefore:\n");
   await status();

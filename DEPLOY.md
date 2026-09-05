@@ -486,8 +486,40 @@ Two rules close the two halves, and neither may be relaxed:
 
 `qa-worker-image.ts` walks the real import graph from the entry points named in
 the Dockerfile's own `CMD`, so it cannot drift from how the container actually
-starts. **If you add an import to anything under `worker/` or `src/lib/`, that
-check is what tells you whether it will survive the deploy.**
+starts. It also catches files opened by **path at runtime** rather than
+imported — `src/emails/render.ts` reads its templates that way, and copying the
+module without them would load fine and fail at the first send.
+
+**You do not have to remember to run it.** `npm run deploy` runs it as a
+pre-flight whenever the worker is a target and refuses to contact Railway if it
+fails. Deploying the bug that caused the outage is now impossible:
+
+```
+Refusing to deploy: the worker image would be missing files it imports.
+  FAIL every file the worker imports is in its image
+       — src/emails/render.ts (via "@/emails/render" from src/lib/email.ts)
+```
+
+### Four layers, and what each one catches
+
+| | Catches | When |
+|---|---|---|
+| `qa-worker-image.ts` (pre-flight) | Missing files the worker imports or opens | Before the deploy starts |
+| `qa-backup.ts` | Worker imports that are devDependencies | In `npm run qa` |
+| Deploy health probe | Anything else that stops the process booting | Within 90s of deploy |
+| `unhandledRejection` handler | A stray promise killing the process later | At runtime, logged not fatal |
+
+The last one matters for a process like this. Node terminates on an unhandled
+rejection by default, which would drop **every clinic's WhatsApp socket** over
+one un-awaited promise — a reconnect storm and a QR rescan caused by a log line.
+The worker now logs and keeps serving. An uncaught *exception* still exits,
+because that means state nobody reasoned about, but it says so first.
+
+**What none of this covers:** the container is never actually built and booted
+locally — there is no Docker on the development machine — so a failure that
+needs the real image to reproduce would still reach production. The 90-second
+health probe is the net under that, and the external uptime check below is the
+net under *that*.
 
 ### The bit this cannot do
 

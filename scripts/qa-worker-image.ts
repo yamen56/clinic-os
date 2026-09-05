@@ -96,6 +96,30 @@ function resolveLocal(fromFile: string, spec: string): string | null {
   return null;
 }
 
+/**
+ * Repo-relative paths a file opens at **runtime** rather than importing.
+ *
+ * The import graph is not the whole dependency graph. `src/emails/render.ts`
+ * reads its templates with
+ * `readFileSync(join(process.cwd(), "src/emails/templates", …))` — no import,
+ * so the walk above cannot see it. Copying `render.ts` without its templates
+ * would load perfectly and then throw the first time an email was sent, which
+ * is a worse version of the bug this file exists to prevent: later, and only
+ * under load.
+ *
+ * A literal beginning with one of the repo's own top-level directories is
+ * treated as a path requirement. Over-matching is safe here — a false positive
+ * names a directory that is almost certainly copied already — and under-matching
+ * is what costs an outage.
+ */
+function runtimePathsIn(src: string): string[] {
+  const out: string[] = [];
+  const rx = /["'`]((?:src|worker|migrations|scripts|public)\/[A-Za-z0-9._/-]*)["'`]/g;
+  let m: RegExpExecArray | null;
+  while ((m = rx.exec(src))) out.push(m[1]);
+  return out;
+}
+
 /** Every `import`/`export ... from` and `await import()` specifier in a file. */
 function specifiersIn(src: string): string[] {
   const out: string[] = [];
@@ -146,6 +170,11 @@ function main() {
       if (!target) continue;
       if (!isCopied(target, copied)) missing.push({ file: target, spec, from: file });
       queue.push(target);
+    }
+    // Files opened by path at runtime, which no import graph can reveal.
+    for (const p of runtimePathsIn(src)) {
+      if (!fs.existsSync(p)) continue; // not a real path — a message, a URL fragment
+      if (!isCopied(p, copied)) missing.push({ file: p, spec: `runtime path "${p}"`, from: file });
     }
   }
 
