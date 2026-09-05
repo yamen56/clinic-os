@@ -372,6 +372,40 @@ async function opsHealth() {
  * scans that nobody can attribute or find. The other order costs at worst a
  * retry an hour later: the clinic is still deleted, still due, still here.
  */
+/**
+ * Deletes sessions that can no longer authorise anything.
+ *
+ * A row survives being unusable: expiry and the idle window both stop a session
+ * working without removing it, so the table only ever grows — 271 rows for 215
+ * live sessions within days of the idle window shipping. That is not a
+ * performance problem at this size, and it is still a table of credentials kept
+ * long after they mean anything, which is the sort of thing that only ever
+ * looks worse in a breach report.
+ *
+ * Written because migration 0043's index comment claimed this sweep existed
+ * when it did not. A comment describing a job nobody wrote is the same failure
+ * as the one that hid the broken backup for five weeks; the honest fix is to
+ * make the comment true rather than to soften it.
+ *
+ * Once an hour, capped, and by age alone so it uses `sessions_last_seen_idx`.
+ */
+async function sweepDeadSessions() {
+  if (new Date().getUTCMinutes() !== 22) return;
+  const gone = await withSystem(async (c) => {
+    const r = await c.query(
+      `delete from sessions
+        where id in (
+          select id from sessions
+           where expires_at < now() - interval '1 day'
+              or last_seen_at < now() - interval '30 days'
+           limit 5000
+        )`
+    );
+    return r.rowCount ?? 0;
+  });
+  if (gone) console.log(`[sessions] swept ${gone} dead session(s)`);
+}
+
 async function purgeDeletedClinics() {
   const now = new Date();
   if (now.getUTCMinutes() !== 7) return;
@@ -427,6 +461,7 @@ export function startScheduler() {
       sendPendingDigest,
       dailyBackup,
       opsHealth,
+      sweepDeadSessions,
       purgeDeletedClinics,
       sweepLidNumbers,
       deliveryWatch,
