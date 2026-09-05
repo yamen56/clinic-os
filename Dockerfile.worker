@@ -24,6 +24,13 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY tsconfig*.json ./
 COPY worker ./worker
 COPY src/lib ./src/lib
+# src/lib/email.ts re-exports `renderEmail` from here, so importing it for
+# `sendEmail` alone still resolves this path at load time. The worker started
+# needing it when platform alerts began going out by email, and the missing
+# directory crash-looped the container on boot — see qa-worker-image.ts, which
+# now walks the worker's real import graph and fails if anything it reaches is
+# not one of the paths copied above.
+COPY src/emails ./src/emails
 COPY migrations ./migrations
 COPY scripts/migrate.ts scripts/lib-migrate.ts ./scripts/
 
