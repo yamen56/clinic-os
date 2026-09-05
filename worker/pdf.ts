@@ -10,6 +10,78 @@ declare global {
   var __cosBrowser: Promise<Browser> | undefined;
   // eslint-disable-next-line no-var
   var __cosBrowserIdleTimer: NodeJS.Timeout | undefined;
+  /** Renders served by the current browser; see MAX_RENDERS_PER_BROWSER. */
+  // eslint-disable-next-line no-var
+  var __cosBrowserRenders: number | undefined;
+}
+
+/**
+ * How many renders one browser may serve before it is replaced.
+ *
+ * A long-lived Chromium degrades. Observed repeatedly on this worker: after a
+ * few hours of use every render starts failing with `browser.newPage: Target
+ * crashed`, invoicing and both signing suites go red together, and a fresh
+ * `chromium.launch()` in a throwaway script works perfectly — so it is the
+ * instance, not the code.
+ *
+ * The idle shutdown below already covers a quiet worker. This covers a busy
+ * one, which is the case that actually broke: renders keep arriving, the idle
+ * timer never fires, and the same process holds the same browser for days.
+ *
+ * Two hundred is well past a clinic's daily volume and well short of where the
+ * degradation has been seen, so in normal use this never fires and in abnormal
+ * use it fires before anybody notices.
+ */
+const MAX_RENDERS_PER_BROWSER = Number(process.env.PDF_MAX_RENDERS || 200);
+
+/**
+ * Failures that mean "this browser is finished", as opposed to "this page did
+ * not work".
+ *
+ * The distinction matters because the response differs: a crashed target is
+ * worth retrying once on a new browser, and a 30-second navigation timeout is
+ * not — retrying that just makes the caller wait sixty seconds for the same
+ * answer.
+ */
+export function isBrowserDead(e: unknown): boolean {
+  const msg = String((e as Error)?.message ?? "");
+  return /Target crashed|Target closed|Browser has been closed|browser has disconnected|Protocol error|Connection closed/i.test(
+    msg
+  );
+}
+
+/** Drops the shared browser so the next caller launches a new one. */
+function discardBrowser(reason: string): void {
+  const pending = globalThis.__cosBrowser;
+  globalThis.__cosBrowser = undefined;
+  globalThis.__cosBrowserRenders = 0;
+  if (globalThis.__cosBrowserIdleTimer) {
+    clearTimeout(globalThis.__cosBrowserIdleTimer);
+    globalThis.__cosBrowserIdleTimer = undefined;
+  }
+  console.log(`[pdf] replacing chromium (${reason})`);
+  // Closing is best-effort and deliberately not awaited: a browser that has
+  // already crashed may never answer, and the caller is waiting on a render.
+  void pending?.then((b) => (b.isConnected() ? b.close() : undefined)).catch(() => {});
+}
+
+/**
+ * Runs a render, and if the browser dies under it, runs it once more on a fresh
+ * one.
+ *
+ * `isConnected()` in `getBrowser` is not enough on its own: the failure seen in
+ * practice is a browser that is still connected and can no longer open a page.
+ * That check waves it straight through, and every subsequent render fails the
+ * same way until the process restarts.
+ */
+export async function withFreshRetry<T>(what: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    if (!isBrowserDead(e)) throw e;
+    discardBrowser(`${what}: ${String((e as Error).message).slice(0, 80)}`);
+    return run();
+  }
 }
 
 /**
@@ -65,32 +137,43 @@ async function getBrowser(): Promise<Browser> {
     clearTimeout(globalThis.__cosBrowserIdleTimer);
     globalThis.__cosBrowserIdleTimer = undefined;
   }
+  // Retired on count before it can degrade, rather than after it has.
+  if ((globalThis.__cosBrowserRenders ?? 0) >= MAX_RENDERS_PER_BROWSER) {
+    discardBrowser(`${globalThis.__cosBrowserRenders} renders`);
+  }
   if (!globalThis.__cosBrowser) {
     globalThis.__cosBrowser = launch();
+    globalThis.__cosBrowserRenders = 0;
   }
   const browser = await globalThis.__cosBrowser;
   if (!browser.isConnected()) {
     globalThis.__cosBrowser = launch();
+    globalThis.__cosBrowserRenders = 0;
     return globalThis.__cosBrowser;
   }
+  globalThis.__cosBrowserRenders = (globalThis.__cosBrowserRenders ?? 0) + 1;
   return browser;
 }
 
-export async function renderUrlToPdf(url: string): Promise<Buffer> {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  try {
-    await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "0", bottom: "0", left: "0", right: "0" },
-    });
-    return Buffer.from(pdf);
-  } finally {
-    await page.close();
-    touchBrowser();
-  }
+export function renderUrlToPdf(url: string): Promise<Buffer> {
+  return withFreshRetry("render", async () => {
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+    try {
+      await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+      const pdf = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        margin: { top: "0", bottom: "0", left: "0", right: "0" },
+      });
+      return Buffer.from(pdf);
+    } finally {
+      // Best-effort: closing a page on a crashed browser throws, and that must
+      // not replace the real error with a confusing one from the cleanup.
+      await page.close().catch(() => {});
+      touchBrowser();
+    }
+  });
 }
 
 /**
@@ -105,20 +188,22 @@ export async function renderUrlToPdf(url: string): Promise<Buffer> {
  * pdf-lib directly — is what keeps Arabic readable: pdf-lib writes glyphs in
  * logical order with no shaping, which produces disconnected, reversed text.
  */
-export async function renderPageOverlays(url: string): Promise<string[]> {
-  const browser = await getBrowser();
-  const page = await browser.newPage({ deviceScaleFactor: 2 });
-  try {
-    await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-    const elements = await page.locator(".ov-page").all();
-    const shots: string[] = [];
-    for (const el of elements) {
-      const buf = await el.screenshot({ omitBackground: true, type: "png" });
-      shots.push(Buffer.from(buf).toString("base64"));
+export function renderPageOverlays(url: string): Promise<string[]> {
+  return withFreshRetry("overlays", async () => {
+    const browser = await getBrowser();
+    const page = await browser.newPage({ deviceScaleFactor: 2 });
+    try {
+      await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+      const elements = await page.locator(".ov-page").all();
+      const shots: string[] = [];
+      for (const el of elements) {
+        const buf = await el.screenshot({ omitBackground: true, type: "png" });
+        shots.push(Buffer.from(buf).toString("base64"));
+      }
+      return shots;
+    } finally {
+      await page.close().catch(() => {});
+      touchBrowser();
     }
-    return shots;
-  } finally {
-    await page.close();
-    touchBrowser();
-  }
+  });
 }
