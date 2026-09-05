@@ -11,6 +11,11 @@
  *   npx tsx scripts/logs.ts --limit 500
  *   npx tsx scripts/logs.ts --filter error
  */
+// No static imports here, so mark it a module explicitly — otherwise TypeScript
+// treats the file as a global script and its `main` collides with every other
+// import-less script in tsconfig.node.json.
+export {};
+
 process.loadEnvFile(".env.production.local");
 
 const API = "https://backboard.railway.com/graphql/v2";

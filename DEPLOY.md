@@ -36,6 +36,28 @@ than it sounds: Railway's deploy mutation rebuilds whatever commit the service
 is *pinned* to unless told otherwise, so a push plus a naive redeploy reports
 SUCCESS while shipping nothing. See `scripts/deploy.ts`.
 
+### SUCCESS does not mean it is running
+
+Railway reports SUCCESS when the image builds and the container starts. It says
+nothing about whether the process stayed up. A container that boots, throws and
+gets restarted shows SUCCESS forever while doing nothing at all.
+
+That happened on **2026-09-05**: the worker threw `MODULE_NOT_FOUND` on boot and
+crash-looped for a day with every clinic's WhatsApp socket inside it, while
+`deploy --status` read SUCCESS on both services the whole time. So the deploy
+now finishes by asking the service itself — `/health` on the worker,
+`/api/health` on the web app — and fails if nothing answers within 90 seconds.
+Same principle as `backupReady`: ask the process, never infer from the platform.
+
+```bash
+npm run logs                 # worker runtime logs — the only place a crash loop shows
+npm run logs -- --web
+npm run logs -- --limit 500 --filter error
+```
+
+`deploy --status` answers "did the build succeed". `npm run logs` answers "is it
+alive". They are different questions and the second one is the one that bites.
+
 ```bash
 npm run deploy --status   # what is actually live
 npm run deploy -- --web   # one service only
@@ -439,6 +461,33 @@ above only ever speaks when something is wrong, so a crashed scheduler, an unset
 API key and a healthy platform all present as the same empty inbox. A periodic
 "nothing is wrong" is what makes silence mean something. If a week goes by with
 no all-clear, the monitoring itself is what is broken.
+
+### The worker runs different code from your laptop
+
+`Dockerfile.worker` copies a **subset** of the repository — `worker`, `src/lib`,
+`src/emails`, `migrations` and two scripts. Everything else in `src/` is absent
+at runtime. Locally the whole repository is on disk, so an import that will
+crash the container resolves perfectly on a developer machine and in every test.
+
+This has now caused two production incidents from the same root:
+
+- `pg-copy-streams` was a **devDependency**, and the image installs with
+  `npm ci --omit=dev`. Backups threw on every tick for five weeks.
+- `src/emails/` was **not copied**, and `src/lib/email.ts` re-exports from it.
+  The worker crash-looped for a day when platform alerting began importing
+  `sendEmail`.
+
+Two rules close the two halves, and neither may be relaxed:
+
+| Check | Asserts |
+|---|---|
+| `qa-backup.ts` | Nothing the worker imports is a devDependency |
+| `qa-worker-image.ts` | Nothing the worker imports lives outside the copied paths |
+
+`qa-worker-image.ts` walks the real import graph from the entry points named in
+the Dockerfile's own `CMD`, so it cannot drift from how the container actually
+starts. **If you add an import to anything under `worker/` or `src/lib/`, that
+check is what tells you whether it will survive the deploy.**
 
 ### The bit this cannot do
 

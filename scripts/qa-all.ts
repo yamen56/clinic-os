@@ -63,6 +63,7 @@ const SUITES = [
   ["ops: does anybody find out when it breaks", "scripts/qa-ops-alert.ts"],
   ["sessions: idle timeout and the password again", "scripts/qa-session-hardening.ts"],
   ["whatsapp: a new number warms up", "scripts/qa-whatsapp-warmup.ts"],
+  ["image: the worker can find everything it imports", "scripts/qa-worker-image.ts"],
 ] as const;
 
 function run(script: string): Promise<{ ok: boolean; out: string }> {

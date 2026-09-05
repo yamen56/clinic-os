@@ -158,7 +158,69 @@ async function main() {
     console.error(`FAILED: ${bad.join(", ")}`);
     process.exit(1);
   }
+
+  /*
+    SUCCESS means the image built and the container started. It does not mean
+    the process is still running.
+
+    On 2026-09-05 the worker threw MODULE_NOT_FOUND on boot, Railway restarted
+    it, and it threw again — a crash loop that reported SUCCESS here for a day
+    while every clinic's WhatsApp socket was down. The deploy said it had
+    shipped, and it had; the thing it shipped was dead.
+
+    So the last word belongs to the service itself. This is the same argument as
+    `backupReady` on the health endpoint: ask the process, do not infer from the
+    platform.
+  */
+  const alive = await Promise.all(targets.map((s) => confirmAlive(s.key, s.label)));
+  if (alive.some((a) => !a)) {
+    console.error(
+      "\nThe deploy succeeded and the service is not answering. Check `npx tsx scripts/logs.ts`.\n"
+    );
+    process.exit(1);
+  }
   console.log(`✓ ${sha.slice(0, 7)} is live on ${started.length} service(s)\n`);
+}
+
+/**
+ * Polls a service's health endpoint until it answers, or gives up.
+ *
+ * Ninety seconds because a container has to boot, run migrations and open its
+ * port; a minute is normally plenty and the extra thirty seconds costs nothing
+ * on a good deploy. A crash loop never answers at all, which is the case worth
+ * catching.
+ */
+async function confirmAlive(key: string, label: string): Promise<boolean> {
+  const url =
+    key === "worker"
+      ? `${process.env.WORKER_URL ?? ""}/health`
+      : `${process.env.APP_URL ?? ""}/api/health`;
+  if (!url.startsWith("http")) {
+    console.log(`  ${label}: no URL configured — cannot confirm it is running`);
+    return true;
+  }
+  const headers =
+    key === "worker" && process.env.INTERNAL_API_SECRET
+      ? { "x-internal-secret": process.env.INTERNAL_API_SECRET }
+      : undefined;
+
+  const deadline = Date.now() + 90_000;
+  let last = "";
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+      if (r.ok) {
+        console.log(`  ${label}: answering (${r.status})`);
+        return true;
+      }
+      last = `HTTP ${r.status}`;
+    } catch (e) {
+      last = (e as Error).message.slice(0, 60);
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  console.error(`  ${label}: NOT answering after 90s — ${last}`);
+  return false;
 }
 
 main().catch((e) => {

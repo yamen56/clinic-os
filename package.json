@@ -32,7 +32,8 @@
     "backup:verify": "tsx scripts/restore.ts --verify",
     "qa:backup": "tsx scripts/qa-backup.ts",
     "ops:test": "tsx scripts/ops-test-alert.ts",
-    "ops:check": "tsx scripts/ops-test-alert.ts --check"
+    "ops:check": "tsx scripts/ops-test-alert.ts --check",
+    "logs": "tsx scripts/logs.ts"
   },
   "type": "commonjs",
   "dependencies": {
