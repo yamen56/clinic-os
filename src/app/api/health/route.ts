@@ -35,8 +35,14 @@ export const revalidate = 0;
 /** A stuck check is a failed check — a probe must never hang the monitor. */
 const TIMEOUT_MS = 5000;
 
-/** Nothing to do for minutes at a time is normal; half an hour of silence is not. */
-const WORKER_SILENT_AFTER_MS = 30 * 60 * 1000;
+/**
+ * How stale the worker's heartbeat may get before it counts as down.
+ *
+ * `worker_status.updated_at` is rewritten every 60 seconds by the process
+ * itself (worker/status.ts), so five minutes is five missed beats — a restart
+ * and a slow boot both fit comfortably inside it, and nothing healthy does not.
+ */
+const WORKER_SILENT_AFTER_MS = 5 * 60 * 1000;
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -62,15 +68,26 @@ export async function GET() {
     try {
       const t0 = Date.now();
       /*
-        The worker's heartbeat is the most recent job it finished. Reading it in
-        the same round trip as the liveness check keeps this endpoint to one
-        query, which matters when a monitor calls it every minute forever.
+        The worker's own heartbeat, not its workload.
+
+        This used to read the most recent finished job, and that is only a
+        liveness signal on a platform busy enough to always have one. This one
+        is not: real traffic is a few dozen jobs a *month*, so the query
+        returned null and the endpoint reported `worker: {ok: null}` — which the
+        code below reads, correctly, as "a fresh deployment". During the
+        day-long crash loop on 2026-09-05 that was the answer the whole time,
+        and it was indistinguishable from a healthy quiet worker.
+
+        `worker_status.updated_at` is written every 60 seconds by the process
+        itself and stops the instant it dies, whether or not it had anything to
+        do. Still one round trip, which matters when a monitor calls this
+        forever.
       */
       const r = await withTimeout(
         client.query(
           `select 1 as up,
-                  extract(epoch from (now() - max(updated_at))) * 1000 as idle_ms
-             from jobs where status in ('done', 'failed')`
+                  extract(epoch from (now() - updated_at)) * 1000 as idle_ms
+             from worker_status where id = true`
         ),
         TIMEOUT_MS
       );
@@ -82,7 +99,9 @@ export async function GET() {
         workerIdleMs = Math.round(Number(idle));
         workerOk = workerIdleMs < WORKER_SILENT_AFTER_MS;
       } else {
-        // No job has ever run. A fresh deployment, not a broken worker.
+        // No row at all: this worker has never started since the table existed.
+        // Unknown rather than false, so a brand-new environment does not page
+        // somebody — but it is not `true` either.
         workerOk = null;
       }
     } catch (e) {

@@ -521,13 +521,44 @@ needs the real image to reproduce would still reach production. The 90-second
 health probe is the net under that, and the external uptime check below is the
 net under *that*.
 
-### The bit this cannot do
+### The watcher outside the building
 
-**Nothing here can tell you the worker is down**, because the worker is what
-sends the alerts. That loop has to be closed from outside: point a free uptime
-check (UptimeRobot, Better Stack) at `https://app.clinicti.app/api/health` every
-five minutes. That covers the web app; a second check on the worker's own health
-endpoint needs the internal secret as a header.
+**Nothing inside the platform can tell you the worker is down**, because the
+worker is what sends the alerts. That loop is closed by
+`.github/workflows/uptime.yml`: a scheduled job on GitHub's infrastructure,
+which survives the whole of Railway being down, polling
+`https://app.clinicti.app/api/health` every five minutes. When it fails, the
+workflow fails and GitHub emails the repository owner.
+
+It needs **no credential and no secret**. `/api/health` is unauthenticated by
+design and carries nothing worth reading — no counts, no names, no hostnames.
+
+The logic is `scripts/uptime-probe.mjs` rather than inline YAML, so it can be
+run on a laptop:
+
+```bash
+node scripts/uptime-probe.mjs                                  # production
+node scripts/uptime-probe.mjs http://localhost:3000/api/health # locally
+```
+
+That mattered immediately. The first version exited **127 on success** — a
+libuv assertion from calling `process.exit()` with `AbortSignal.timeout`'s timer
+still live — which would have failed the workflow every five minutes on a
+perfectly healthy platform until somebody muted it. A monitor whose logic has
+never been executed is the same mistake as a backup nobody has restored.
+
+**`worker.ok` had to be fixed to mean anything.** It used to be derived from the
+most recent *finished job*, which is only a liveness signal on a platform busy
+enough to always have one. This one is not — real traffic is a few dozen jobs a
+month — so it returned `null`, and `null` reads as "a fresh deployment". Through
+the entire day-long crash loop the endpoint reported `worker: {ok: null}`, which
+is exactly what a healthy quiet worker looks like. It now reads
+`worker_status.updated_at`, which the process rewrites every 60 seconds whether
+or not it has anything to do, and goes false after five missed beats.
+
+Three retries twenty seconds apart before failing, because one failed request is
+somebody else's network as often as it is an outage, and an alarm that cries
+wolf gets muted.
 
 `qa-ops-alert.ts` asserts that **every function in the scheduler is actually in
 the tick list**. That rule exists because the predecessor of this feature — an

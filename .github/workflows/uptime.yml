@@ -1,0 +1,47 @@
+# Somebody outside the building, checking the lights are on.
+#
+# Every other alarm in this system runs *inside* the platform it watches. The
+# worker emails when the database or the web app is unwell — and nothing at all
+# reports the worker, because the worker is what sends the email. On 2026-09-05
+# it crash-looped for a day and the first anyone knew was a message from
+# Railway.
+#
+# This runs on GitHub's infrastructure, so it survives the whole of Railway
+# being down, and it needs no credential: `/api/health` is deliberately
+# unauthenticated and deliberately carries nothing worth reading — no counts, no
+# names, no hostnames. When it fails, the workflow fails, and GitHub emails the
+# repository owner.
+#
+# The logic lives in scripts/uptime-probe.mjs rather than inline here, so it can
+# be run on a laptop. A monitor whose logic has never been executed is the same
+# mistake as a backup nobody has restored.
+#
+# Run it by hand any time from the Actions tab.
+
+name: uptime
+
+on:
+  schedule:
+    # Every five minutes — GitHub's minimum, and free on a public repository.
+    # Scheduled runs are delayed when GitHub is busy, so read this as "within
+    # about ten minutes", never as a stopwatch.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# A run already in flight is more current than a queued one; never pile up.
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+# Nothing here reads or writes the repository.
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Is the platform serving, and is the worker alive?
+        run: node scripts/uptime-probe.mjs
