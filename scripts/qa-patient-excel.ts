@@ -132,6 +132,15 @@ async function main() {
       await page.fill('input[name="password"]', "password123");
       await page.click('button[type="submit"]');
       await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 120_000 });
+      /*
+        Taking the whole list also asks for the password again — see
+        migrations/0043. Folded into signing in rather than sprinkled at each
+        call site, because `signIn` clears cookies and every context in this
+        file that reaches the export needs it. Harmless for the receptionist
+        below: confirming a password does not grant a capability, so they are
+        still refused for the reason the suite is checking.
+      */
+      await page.request.post(`${BASE}/api/me/reauth`, { data: { password: "password123" } });
     };
 
     await signIn(`owner-${slug}@test.local`);

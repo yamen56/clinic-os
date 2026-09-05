@@ -326,7 +326,20 @@ async function main() {
     );
     check("staff may still export one file", staffOne.status() === 200, String(staffOne.status()));
     const staffAll = await staffPage.request.get(`${BASE}/api/c/${slug}/patients/export-all`);
+    /*
+      Refused for lacking the capability, and it matters that it says so.
+
+      Bulk export now also asks for the password again, which is a second 403 on
+      the same URL — so checking the status alone would pass even if staff had
+      been given the capability by mistake and were only being stopped by a
+      prompt they could answer. The reason is the assertion.
+    */
     check("but not every file", staffAll.status() === 403, String(staffAll.status()));
+    check(
+      "and because they may not, not merely because of a password prompt",
+      ((await staffAll.json().catch(() => ({}))) as { error?: string }).error === "forbidden",
+      ""
+    );
 
     await staffPage.goto(`${BASE}/c/${slug}/patients`);
     await staffPage.waitForLoadState("networkidle");
@@ -340,6 +353,24 @@ async function main() {
 
     /* ============================================ the document */
     console.log("\n[the whole-clinic document]");
+    /*
+      Taking every record asks for the password again, on top of the capability
+      — see migrations/0043 and qa-session-hardening. A signed-in owner is not
+      enough, deliberately, so the suite does what the person does: confirms
+      once, and the ten-minute window covers the exports below.
+    */
+    const gated = await page.request.get(`${BASE}/api/c/${slug}/patients/export-all`);
+    check(
+      "an owner is asked for their password first",
+      gated.status() === 403 &&
+        ((await gated.json().catch(() => ({}))) as { error?: string }).error === "reauth_required",
+      String(gated.status())
+    );
+    const confirmed = await page.request.post(`${BASE}/api/me/reauth`, {
+      data: { password: "password123" },
+    });
+    check("confirming it is accepted", confirmed.status() === 200, String(confirmed.status()));
+
     const all = await page.request.get(`${BASE}/api/c/${slug}/patients/export-all`);
     check("the owner gets every record", all.status() === 200, String(all.status()));
     const allBody = await all.body();

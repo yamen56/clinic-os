@@ -9,7 +9,7 @@ import { MAX_EXPORT_RECORDS, loadPatientExportBatch } from "@/lib/patient-export
 import { buildPatientWorkbook, MAX_SHEET_RECORDS } from "@/lib/patient-sheet";
 import { dictForClinic } from "@/lib/i18n";
 import { patientFilterSql, type PatientFilters } from "@/lib/patients";
-import { can } from "@/lib/auth";
+import { can, hasRecentAuth } from "@/lib/auth";
 
 /**
  * Never cached, not even privately.
@@ -67,6 +67,23 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   */
   if (!can(access, "patients.export") && !access.session.user.isSuperAdmin) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  /*
+    And then the password, again, on top of the capability.
+
+    Everything else in the product is one patient at a time, which is the job
+    and leaves a trail shaped like the job. This hands over the entire record
+    set in a single file — the one request where a session found unattended, or
+    a cookie lifted from a machine, is the whole clinic rather than one screen.
+    Ten minutes of grace, so producing both formats does not ask twice.
+
+    A 403 the client knows how to recover from, not a redirect: the caller is a
+    fetch behind a download button, and it retries this exact URL once the
+    password has been given. See `ReauthPrompt`.
+  */
+  if (!(await hasRecentAuth(access.session.sessionId))) {
+    return NextResponse.json({ error: "reauth_required" }, { status: 403 });
   }
 
   const url = new URL(req.url);

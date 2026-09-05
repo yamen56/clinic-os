@@ -61,6 +61,7 @@ const SUITES = [
   ["agency: modules, limited admins, deleting a clinic", "scripts/qa-agency-control.ts"],
   ["load: can one caller take the platform down", "scripts/qa-dos.ts"],
   ["ops: does anybody find out when it breaks", "scripts/qa-ops-alert.ts"],
+  ["sessions: idle timeout and the password again", "scripts/qa-session-hardening.ts"],
 ] as const;
 
 function run(script: string): Promise<{ ok: boolean; out: string }> {

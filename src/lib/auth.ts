@@ -21,6 +21,42 @@ const COOKIE = "cos_session";
 const SESSION_DAYS = 30;
 
 /**
+ * How long a session may sit unused before it stops working.
+ *
+ * The absolute thirty days caps how long a stolen cookie can *ever* be worth
+ * something. This caps how long an *unattended* one is, which is the shape
+ * nearly every real credential theft takes — a lost laptop, a shared machine
+ * nobody signed out of, a token copied and kept for later. Thirty days of that
+ * is a long time to hold a clinic's patient records.
+ *
+ * Seven days is chosen against the job rather than against a standard: anybody
+ * who uses this product as part of their work touches it within a week, and
+ * anybody who does not is barely inconvenienced by signing in again. Shorter
+ * would start logging out the part-time doctor who works Saturdays, and a
+ * security control that trains people to resent it is one they route around.
+ */
+const SESSION_IDLE_DAYS = Math.max(1, Number(process.env.SESSION_IDLE_DAYS) || 7);
+
+/**
+ * How stale `last_seen_at` may get before a request bothers to refresh it.
+ *
+ * Writing it on every request would add a row update to every page view and
+ * every poll, on the hottest path in the application, to record something that
+ * only matters at day resolution. Fifteen minutes makes the write rare enough
+ * to be free and still keeps the idle window accurate to well within an hour.
+ */
+const TOUCH_AFTER_MINUTES = 15;
+
+/**
+ * How recently the password must have been given for a dangerous action.
+ *
+ * Long enough to do the thing you sat down to do — export the list, then export
+ * it again in the other format — and short enough that a machine left unlocked
+ * over lunch is not still authorised for it.
+ */
+const REAUTH_WINDOW_MINUTES = Math.max(1, Number(process.env.REAUTH_WINDOW_MINUTES) || 10);
+
+/**
  * The clinic fields every workspace screen needs. Carried on the session so
  * that resolving access does not cost a second query — the timezone and
  * currency alone were being re-fetched on most pages.
@@ -134,6 +170,57 @@ export async function destroySession() {
   await clearSessionCookie();
 }
 
+/**
+ * Being signed in is not always a strong enough claim.
+ *
+ * A session proves somebody signed in on this device at some point in the last
+ * week. For most of the product that is the right question. For "hand me every
+ * patient record in this clinic as one file", or "destroy this tenant", it is
+ * not: those are the actions where an unlocked laptop, a borrowed machine or a
+ * stolen cookie turns into the whole database, and they are rare enough that
+ * asking for the password again costs the real user almost nothing.
+ *
+ * Deliberately a separate query rather than a column on the cached session.
+ * This is read on a handful of endpoints; putting it in `getSession` would add
+ * it to the hot path of every page render to serve the rarest case.
+ */
+export async function hasRecentAuth(sessionId: string): Promise<boolean> {
+  return withSystem(async (c) => {
+    const r = await c.query(
+      `select 1 from sessions
+        where id = $1 and reauth_at is not null
+          and reauth_at > now() - interval '${REAUTH_WINDOW_MINUTES} minutes'`,
+      [sessionId]
+    );
+    return r.rowCount === 1;
+  });
+}
+
+/** Records that the password was just given again. */
+export async function markReauthenticated(sessionId: string): Promise<void> {
+  await withSystem((c) =>
+    c.query(`update sessions set reauth_at = now() where id = $1`, [sessionId])
+  );
+}
+
+/**
+ * Checks a password against the signed-in user's own hash.
+ *
+ * Reads the hash fresh rather than trusting anything on the session, and treats
+ * an account with no password — an invitation that was never accepted, or a
+ * Google-only sign-in — as a refusal. `verifyPassword` already returns false
+ * for a null hash; this is where that matters most, because the caller is about
+ * to be handed the entire patient list.
+ */
+export async function passwordMatchesUser(userId: string, password: string): Promise<boolean> {
+  if (!password) return false;
+  const hash = await withSystem(async (c) => {
+    const r = await c.query(`select password_hash from users where id = $1`, [userId]);
+    return (r.rows[0]?.password_hash as string | null) ?? null;
+  });
+  return verifyPassword(password, hash);
+}
+
 /** The clinic columns a membership carries, as a json object. Shared with `requireClinic`. */
 const CLINIC_JSON = `json_build_object(
   'id', cl.id, 'name', cl.name, 'nameAr', cl.name_ar, 'slug', cl.slug,
@@ -176,9 +263,29 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
   if (!token) return null;
   const th = safeLiteral(hashToken(token));
 
+  /*
+    The idle refresh rides along as a data-modifying CTE rather than a second
+    query. Postgres runs every part of a statement against the same snapshot, so
+    the select below cannot see this update — which is exactly what is wanted:
+    the freshness test reads the value as it was on arrival, and the write only
+    moves it forward for next time.
+
+    Both conditions on the update matter. `last_seen_at > now() - idle` stops a
+    session that has *already* gone stale from being resurrected by the very
+    request that should be refused. The `< now() - touch` clause is what keeps
+    this from writing a row on every page view.
+  */
   const rows = await readOneShot<SessionRow>(
     { isAdmin: true },
-    `select s.id as session_id, s.impersonated_by,
+    `with touched as (
+       update sessions set last_seen_at = now()
+        where token_hash = ${th}
+          and expires_at > now()
+          and last_seen_at > now() - interval '${SESSION_IDLE_DAYS} days'
+          and last_seen_at < now() - interval '${TOUCH_AFTER_MINUTES} minutes'
+       returning id
+     )
+     select s.id as session_id, s.impersonated_by,
             u.id, u.email, u.full_name, u.phone_e164, u.is_super_admin, u.admin_permissions,
             u.locale, u.settings,
             coalesce((
@@ -191,7 +298,9 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
               where cm.user_id = u.id and cm.active
             ), '[]'::json) as memberships
      from sessions s join users u on u.id = s.user_id
-     where s.token_hash = ${th} and s.expires_at > now()`
+     where s.token_hash = ${th}
+       and s.expires_at > now()
+       and s.last_seen_at > now() - interval '${SESSION_IDLE_DAYS} days'`
   );
   if (rows.length === 0) return null;
   const row = rows[0];

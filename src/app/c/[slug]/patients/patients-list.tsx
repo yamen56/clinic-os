@@ -12,6 +12,7 @@ import { SearchInput, Select, Field, Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
+import { ReauthPrompt } from "@/components/reauth-prompt";
 import { useToast } from "@/components/ui/toast";
 import { createPatientAction } from "./actions";
 import { Users, Plus, Upload, Download, BellOff, Sheet } from "lucide-react";
@@ -70,6 +71,8 @@ export function PatientsList({
     file is coming.
   */
   const [exporting, setExporting] = useState<"pdf" | "xlsx" | null>(null);
+  /** Which export is waiting on the password, if any. See ReauthPrompt. */
+  const [reauthFor, setReauthFor] = useState<"pdf" | "xlsx" | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const apply = (next: typeof f) => {
@@ -131,6 +134,16 @@ export function PatientsList({
           count?: number;
           max?: number;
         };
+        /*
+          The server decides that the password is needed, not this button.
+          Remember which format was asked for so that confirming resumes the
+          same export rather than dropping the person back on the list to
+          start again.
+        */
+        if (body.error === "reauth_required") {
+          setReauthFor(format);
+          return;
+        }
         if (body.error === "too_many") {
           toast(
             t.patients.exportAllTooMany
@@ -357,6 +370,17 @@ export function PatientsList({
           </div>
         </div>
       </Modal>
+
+      <ReauthPrompt
+        open={reauthFor !== null}
+        onClose={() => setReauthFor(null)}
+        onVerified={() => {
+          const format = reauthFor;
+          setReauthFor(null);
+          if (format) void exportAll(format);
+        }}
+        t={t}
+      />
     </>
   );
 }

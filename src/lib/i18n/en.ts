@@ -59,6 +59,19 @@ export const en = {
     inactive: "Inactive",
   },
   auth: {
+    /*
+      Asked before the few actions that hand over more than one screen's worth
+      of records. The wording explains *why* rather than just demanding — a
+      prompt that appears without a reason reads as a bug, and the honest reason
+      is short enough to say.
+    */
+    reauthTitle: "Confirm it is you",
+    reauthBody:
+      "This exports every patient record in the clinic as one file. Enter your password to continue.",
+    reauthPassword: "Your password",
+    reauthConfirm: "Confirm",
+    reauthWrong: "That password is not correct.",
+    reauthTooMany: "Too many attempts. Wait about 15 minutes and try again.",
     signIn: "Sign in",
     signOut: "Sign out",
     emailPlaceholder: "you@clinic.com",

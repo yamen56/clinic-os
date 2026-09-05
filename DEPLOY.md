@@ -288,6 +288,70 @@ Cloudflare account rather than in this repository.
 
 ---
 
+## How long a session is worth something
+
+Two limits, and they answer different questions.
+
+| Limit | Default | What it caps |
+|---|---|---|
+| Absolute expiry | 30 days from sign-in | How long a stolen cookie can **ever** work |
+| Idle window (`SESSION_IDLE_DAYS`) | 7 days since last use | How long an **unattended** one works |
+
+The second is the one that matters in practice. Almost every real credential
+theft is unattended by definition — a lost laptop, a shared machine nobody
+signed out of, a token copied and kept. Thirty days of that is a long time to
+hold a clinic's patient records, and nothing about the account's behaviour used
+to shorten it.
+
+`last_seen_at` is refreshed lazily: at most once every 15 minutes, folded into
+the session lookup as a data-modifying CTE so it costs no extra round trip on
+the hottest path in the application. Two conditions guard that update and both
+are load-bearing — the second one especially:
+
+```sql
+and last_seen_at > now() - interval '<idle> days'   -- do not revive the dead
+and last_seen_at < now() - interval '15 minutes'    -- do not write every request
+```
+
+Without the first, a request that is correctly *refused* still stamps the row,
+and the session comes back to life one rejected request at a time. That is
+covered by `qa-session-hardening.ts`, which asserts the refusal does not touch
+`last_seen_at` **and** that a second attempt is still refused.
+
+### Asking for the password again
+
+Being signed in means somebody authenticated on this device within the idle
+window. For the whole product except a handful of actions, that is the right
+question. It is not the right question for *"hand me every patient record in
+this clinic as one file"* — there, a legitimate owner and an unattended laptop
+look identical.
+
+So `/api/c/<slug>/patients/export-all` answers `403 {"error":"reauth_required"}`
+unless the password has been given in the last `REAUTH_WINDOW_MINUTES`. The
+client POSTs it to `/api/me/reauth` and retries the same URL.
+
+**The server drives this, not the button.** A new dangerous endpoint is
+protected the moment it returns that code — nobody has to remember to add a
+prompt to the screen in front of it, and the prompt can never be the *only*
+thing in the way. Failed attempts are written to `audit_log` as
+`auth.reauth.failed`: a run of those means somebody holds a live session and
+does not know the password, which leaves no other trace because the session
+itself stays perfectly valid throughout.
+
+The capability check runs **first**, so a receptionist without `patients.export`
+is refused with `forbidden` and never sees a password prompt. Order matters:
+otherwise a prompt they could answer would be all that stood in the way.
+
+### Deploying it
+
+Migration `0043` backfills `last_seen_at = now()` rather than from `created_at`.
+Backfilling literally would sign out every active user the moment it deployed —
+a self-inflicted outage during working hours, to enforce a policy retroactively
+against people who have done nothing wrong. The policy applies from the deploy
+forward.
+
+---
+
 ## When something breaks, who finds out
 
 Every other notification path in this product points at a clinic. This one

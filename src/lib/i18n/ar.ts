@@ -61,6 +61,13 @@ export const ar: Dict = {
     inactive: "غير نشط",
   },
   auth: {
+    reauthTitle: "تأكيد هويتك",
+    reauthBody:
+      "سيتم تصدير كل سجلات المرضى في العيادة في ملف واحد. أدخل كلمة المرور للمتابعة.",
+    reauthPassword: "كلمة المرور",
+    reauthConfirm: "تأكيد",
+    reauthWrong: "كلمة المرور غير صحيحة.",
+    reauthTooMany: "محاولات كثيرة. انتظر ١٥ دقيقة تقريباً ثم حاول مجدداً.",
     signIn: "تسجيل الدخول",
     signOut: "تسجيل الخروج",
     emailPlaceholder: "you@clinic.com",
