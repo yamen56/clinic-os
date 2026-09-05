@@ -95,6 +95,7 @@ export async function collectFindings(): Promise<Finding[]> {
     outboxChecks,
     whatsappChecks,
     silenceChecks,
+    storageChecks,
     webChecks,
   ];
   for (const check of checks) {
@@ -260,6 +261,45 @@ async function silenceChecks(): Promise<Finding[]> {
       `patient has never written in. That is the population that reports a number, and reports ` +
       `are what get it banned. Check whether a campaign or an import is sending to people who ` +
       `never contacted the clinic.`,
+  }));
+}
+
+/**
+ * A table growing towards being a problem, while there is still time.
+ *
+ * Measured on 2026-09-06: `whatsapp_auth_state` was 23 MB of a 43 MB database —
+ * more than half of everything — for **two** connected clinics. It is Signal
+ * protocol material that Baileys writes as it goes: pre-keys, sender keys, LID
+ * mappings. Nothing here is a bug and none of it can safely be deleted from
+ * outside, because guessing wrong means a clinic rescanning a QR code.
+ *
+ * What it *is* is a number that scales with clinics and never comes down, and
+ * it lands in the nightly archive along with everything else — so the first
+ * symptom would be a backup that stopped finishing, discovered on the day it
+ * was needed.
+ *
+ * Reported rather than acted on. The right response is a judgement call about
+ * Baileys and retention, and this exists so that call happens on a Tuesday
+ * rather than during an incident.
+ */
+async function storageChecks(): Promise<Finding[]> {
+  const rows = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select relname as name, pg_total_relation_size(relid) as bytes
+           from pg_stat_user_tables
+          where pg_total_relation_size(relid) > $1
+          order by bytes desc limit 5`,
+        [Number(process.env.TABLE_ALERT_BYTES || 2_000_000_000)]
+      )
+    ).rows
+  );
+  return rows.map((r) => ({
+    key: `table_large:${r.name}`,
+    title: `The ${r.name} table has reached ${(Number(r.bytes) / 1_073_741_824).toFixed(1)} GB`,
+    detail:
+      "Every nightly backup copies it, so this shows up as a slower dump long before it shows " +
+      "up as anything else. Check what is accumulating and whether any of it can be retired.",
   }));
 }
 

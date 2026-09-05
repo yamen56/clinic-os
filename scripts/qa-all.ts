@@ -64,6 +64,7 @@ const SUITES = [
   ["sessions: idle timeout and the password again", "scripts/qa-session-hardening.ts"],
   ["whatsapp: a new number warms up", "scripts/qa-whatsapp-warmup.ts"],
   ["image: the worker can find everything it imports", "scripts/qa-worker-image.ts"],
+  ["whatsapp: session keys survive storage", "scripts/qa-wa-auth-state.ts"],
 ] as const;
 
 function run(script: string): Promise<{ ok: boolean; out: string }> {
