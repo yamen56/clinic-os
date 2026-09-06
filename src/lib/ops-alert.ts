@@ -400,7 +400,19 @@ async function deliver(subject: string, title: string, blocks: string[]): Promis
  * without reading an inbox.
  */
 export async function reconcile(
-  findings: Finding[]
+  findings: Finding[],
+  /**
+   * Which alerts this caller is answerable for.
+   *
+   * Resolution works by absence — anything open and no longer reported is
+   * cleared — which is only correct when the caller looked for *everything*.
+   * A second watcher that checks one condition would otherwise resolve every
+   * alert it does not know about, silently, and the inbox would say the
+   * platform recovered.
+   *
+   * Omitted means "I checked everything", which is the worker's full pass.
+   */
+  owns?: (key: string) => boolean
 ): Promise<{ opened: string[]; renotified: string[]; resolved: string[] }> {
   const open = await withSystem(async (c) =>
     (await c.query(`select key, title, last_notified, notifications from ops_alerts`)).rows
@@ -415,14 +427,23 @@ export async function reconcile(
   for (const f of findings) {
     const existing = openByKey.get(f.key);
     if (!existing) {
-      await withSystem((c) =>
+      /*
+        The insert decides whether this is new, not the read above.
+
+        Two watchers can both see no row and both conclude they opened it,
+        which is two emails for one problem — and with the web app now watching
+        the worker there really are two. `returning` reports only the row this
+        statement actually created, so the loser of the race stays quiet.
+      */
+      const created = await withSystem((c) =>
         c.query(
           `insert into ops_alerts (key, title, detail) values ($1, $2, $3)
-           on conflict (key) do nothing`,
+           on conflict (key) do nothing
+           returning key`,
           [f.key, f.title, f.detail]
         )
       );
-      opened.push(f.key);
+      if (created.rowCount) opened.push(f.key);
       continue;
     }
     const age = Date.now() - new Date(existing.last_notified).getTime();
@@ -441,6 +462,8 @@ export async function reconcile(
 
   for (const row of open) {
     if (nowKeys.has(row.key)) continue;
+    // Never clear somebody else's alert just because this pass did not look for it.
+    if (owns && !owns(row.key)) continue;
     await withSystem((c) => c.query(`delete from ops_alerts where key = $1`, [row.key]));
     resolved.push(row.key);
   }
@@ -532,6 +555,66 @@ export async function heartbeat(openCount: number): Promise<boolean> {
  * this file and it is the best available: the alternative is that the single
  * most serious failure is the one condition that cannot raise an alert.
  */
+/**
+ * The web app keeping an eye on the worker.
+ *
+ * Everything else in this file runs *in* the worker, so the one failure it can
+ * never report is its own. On 2026-09-05 it crash-looped for a day and the
+ * first anyone knew came from Railway.
+ *
+ * GitHub Actions closes that loop from outside, and measurement says it closes
+ * it slowly: its five-minute schedule actually delivered two runs four and a half
+ * hours apart, because scheduled workflows on a free public repository are
+ * throttled hard. That is a fine backstop for "everything is down" and far too
+ * slow for "the worker died at 3am".
+ *
+ * So the two services watch each other. The worker checks the web app
+ * (`webChecks`); this checks the worker, from the web container, every few
+ * minutes. Between them the only unreported failure is both dying at once —
+ * which is what the slow external watcher is for.
+ *
+ * Scoped to its own key. `reconcile` clears anything open that a pass did not
+ * report, and this pass looks at exactly one thing.
+ */
+const WORKER_KEY = "worker_down";
+
+export async function watchdogPass(): Promise<Finding[]> {
+  const row = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select extract(epoch from (now() - updated_at)) * 1000 as idle_ms from worker_status where id = true`
+      )
+    ).rows[0]
+  );
+  // No row at all means this environment has never run a worker — a fresh
+  // deployment, not a dead one. Saying nothing is the honest answer.
+  if (!row?.idle_ms) return [];
+  const idleMs = Number(row.idle_ms);
+  if (idleMs < WORKER_SILENT_MS) return [];
+  return [
+    {
+      key: WORKER_KEY,
+      title: `The worker has been silent for ${Math.round(idleMs / 60_000)} minutes`,
+      detail:
+        "It rewrites its heartbeat every 60 seconds whether or not it has work, so this means " +
+        "the process is not running. WhatsApp is down for every clinic, reminders are not going " +
+        "out and nothing is being rendered. Check `npm run logs` — a crash loop leaves no trace " +
+        "in the deploy status.",
+    },
+  ];
+}
+
+/** Five missed beats, matching /api/health so the two never disagree. */
+const WORKER_SILENT_MS = 5 * 60_000;
+
+export async function runWatchdog(): Promise<void> {
+  try {
+    await reconcile(await watchdogPass(), (key) => key === WORKER_KEY);
+  } catch (e) {
+    console.error("[ops watchdog]", (e as Error).message);
+  }
+}
+
 let dbDownSince = 0;
 export async function opsWatch(): Promise<void> {
   try {

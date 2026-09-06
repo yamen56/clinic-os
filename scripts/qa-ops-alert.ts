@@ -136,6 +136,49 @@ async function main() {
   check("exactly one remains", stillOpen.rowCount === 1 && stillOpen.rows[0].key === K2);
   await reconcile([]);
 
+  /* ================================================= the watchdog on the worker */
+  console.log("\n[the web app watching the worker]");
+  const { watchdogPass } = await import("../src/lib/ops-alert");
+
+  const saved = (await db.query(`select updated_at from worker_status where id = true`)).rows[0];
+  await db.query(
+    `insert into worker_status (id, ai_ready, whatsapp_ready, version, updated_at)
+     values (true, false, false, 'qa', now())
+     on conflict (id) do update set updated_at = now()`
+  );
+  check("a beating heart raises nothing", (await watchdogPass()).length === 0);
+
+  await db.query(`update worker_status set updated_at = now() - interval '20 minutes' where id = true`);
+  const dead = await watchdogPass();
+  check("a silent worker is reported", dead.length === 1 && dead[0].key === "worker_down", dead[0]?.title ?? "");
+
+  /*
+    The scoping that makes two watchers safe. `reconcile` clears anything open
+    it was not told about, so a pass that only looks at the worker must not
+    resolve the backup alarm — it never looked.
+  */
+  await db.query(
+    `insert into ops_alerts (key, title, detail) values ('qa_test_other', 'Something else', 'x')
+     on conflict (key) do nothing`
+  );
+  await reconcile(dead, (k) => k === "worker_down");
+  const survived = await db.query(`select 1 from ops_alerts where key = 'qa_test_other'`);
+  check("a scoped pass leaves other alerts alone", survived.rowCount === 1);
+  const openedWorker = await db.query(`select 1 from ops_alerts where key = 'worker_down'`);
+  check("and opens its own", openedWorker.rowCount === 1);
+
+  /*
+    The worker's own pass is unscoped on purpose: it running at all is proof it
+    is not down, so it is entitled to clear this.
+  */
+  await reconcile([]);
+  const clearedWorker = await db.query(`select 1 from ops_alerts where key = 'worker_down'`);
+  check("a full pass by the worker clears it", clearedWorker.rowCount === 0);
+
+  if (saved?.updated_at) {
+    await db.query(`update worker_status set updated_at = $1 where id = true`, [saved.updated_at]);
+  }
+
   /* ================================================= the checker's own health */
   console.log("\n[a broken probe reports itself instead of hiding]");
   const findings = await collectFindings();
