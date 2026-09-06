@@ -114,9 +114,68 @@ function resolveLocal(fromFile: string, spec: string): string | null {
  */
 function runtimePathsIn(src: string): string[] {
   const out: string[] = [];
+  /*
+    Comments first, and this is not tidiness.
+
+    The rule blocks a deploy, so a false positive is not a harmless extra
+    warning — it stops a release. It did: a comment in ops-alert.ts explaining
+    why `src/middleware.ts` forces an Edge build was read as a file the worker
+    opens at runtime, and the gate refused to ship. Prose about the codebase is
+    not a dependency of it.
+  */
+  const code = stripComments(src);
   const rx = /["'`]((?:src|worker|migrations|scripts|public)\/[A-Za-z0-9._/-]*)["'`]/g;
   let m: RegExpExecArray | null;
-  while ((m = rx.exec(src))) out.push(m[1]);
+  while ((m = rx.exec(code))) out.push(m[1]);
+  return out;
+}
+
+/**
+ * Removes `//` and block comments, leaving string literals intact.
+ *
+ * Character by character rather than by regex, because the two constructs
+ * nest both ways round: `"http://x"` is a string containing what looks like a
+ * comment, and a comment can contain what looks like a string. Anything less
+ * careful trades one false positive for another.
+ */
+function stripComments(src: string): string {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    const next = src[i + 1];
+    if (ch === "/" && next === "/") {
+      while (i < src.length && src[i] !== "\n") i++;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      i += 2;
+      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i++;
+      i += 2;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      const quote = ch;
+      out += ch;
+      i++;
+      while (i < src.length) {
+        if (src[i] === "\\") {
+          out += src[i] + (src[i + 1] ?? "");
+          i += 2;
+          continue;
+        }
+        out += src[i];
+        if (src[i] === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    out += ch;
+    i++;
+  }
   return out;
 }
 
