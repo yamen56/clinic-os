@@ -615,6 +615,38 @@ export async function runWatchdog(): Promise<void> {
   }
 }
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __cosWatchdog: NodeJS.Timeout | undefined;
+}
+
+/**
+ * Starts the watchdog timer in the web process, once.
+ *
+ * Armed from `/api/health` rather than from `instrumentation.ts`, and that is a
+ * scar rather than a preference. Next compiles instrumentation for **every**
+ * runtime, and `src/middleware.ts` means there is an Edge build; the Edge
+ * compiler follows the imports behind a `NEXT_RUNTIME` check — which is
+ * evaluated far too late to help — straight into `pg`, and the build dies on
+ * `Can't resolve 'fs'`. Putting the dynamic import behind a second module did
+ * not help either; the tracer walks that too.
+ *
+ * A route handler runs on Node and already imports `pg`, so there is nothing to
+ * confuse. The arming path is well travelled: the worker polls this endpoint
+ * every five minutes and the external probe polls it too. Once the interval
+ * exists it runs on its own, so the worker dying afterwards is exactly the case
+ * it still covers.
+ */
+export function ensureWatchdog(): void {
+  if (globalThis.__cosWatchdog) return;
+  const everyMs = Math.max(60_000, Number(process.env.WATCHDOG_INTERVAL_MS) || 5 * 60_000);
+  const timer = setInterval(() => void runWatchdog(), everyMs);
+  // Must never hold the process open on the watchdog's account.
+  timer.unref?.();
+  globalThis.__cosWatchdog = timer;
+  console.log(`[web] worker watchdog armed, every ${Math.round(everyMs / 1000)}s`);
+}
+
 let dbDownSince = 0;
 export async function opsWatch(): Promise<void> {
   try {

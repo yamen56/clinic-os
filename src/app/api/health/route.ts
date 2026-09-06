@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { activeRoute, connectAsRequest } from "@/lib/db";
+import { ensureWatchdog } from "@/lib/ops-alert";
 
 /**
  * Whether the platform is actually working, for an uptime monitor to poll.
@@ -52,6 +53,16 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 export async function GET() {
+  /*
+    Arms the web process's watchdog on the worker, once.
+
+    It lives here because this endpoint runs on Node and is polled regularly —
+    by the worker every five minutes, and by the external probe. See
+    `ensureWatchdog` for why it is not in `instrumentation.ts`, which cannot
+    reach `pg` without breaking the Edge build.
+  */
+  ensureWatchdog();
+
   const started = Date.now();
   let dbOk = false;
   let dbMs: number | null = null;
