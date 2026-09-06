@@ -225,14 +225,40 @@ export async function resolvePendingLids(clinicId: string, sock: unknown): Promi
   }
   if (!pairs?.length) return 0;
 
-  // `learnLidMapping` owns the actual upgrade, including refusing to merge a
-  // number that already has a thread of its own.
-  const before = pairs.length;
+  /*
+    Report what changed, not what was asked.
+
+    This returned `pairs.length` — how many addresses Baileys was able to look
+    up — and the caller logs that as "resolved N identity thread(s)". Those are
+    different numbers, and on this data they differ by everything:
+    `learnLidMapping` refuses to merge a LID onto a number that already has a
+    thread of its own, so seventy threads were being looked up every ten minutes,
+    upgraded none of the time, and announced as resolved on each pass since
+    3 August.
+
+    Counting the rows that actually stopped being LID-addressed costs two cheap
+    queries on a ten-minute job and makes the log mean something — including
+    going quiet, which is the correct output when nothing moved.
+  */
+  const stillLid = () =>
+    withSystem(async (c) =>
+      Number(
+        (
+          await c.query(
+            `select count(*)::int n from conversations
+              where clinic_id = $1 and identifier_kind = 'lid'`,
+            [clinicId]
+          )
+        ).rows[0].n
+      )
+    );
+
+  const before = await stillLid();
   await learnLidMapping(
     clinicId,
     pairs.filter((p) => p.pn && p.lid).map((p) => ({ lid: p.lid, jid: p.pn }))
   );
-  return before;
+  return Math.max(0, before - (await stillLid()));
 }
 
 /** Contact syncs carry both forms of the same person often enough to be worth reading. */

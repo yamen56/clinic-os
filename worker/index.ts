@@ -93,12 +93,52 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
-process.on("SIGINT", async () => {
-  console.log("[worker] shutting down");
-  for (const [, s] of sessions) await s.stop().catch(() => {});
-  await pool.end().catch(() => {});
+/**
+ * Putting the WhatsApp sockets down before the container goes.
+ *
+ * This used to listen for `SIGINT` only — which is Ctrl+C, and is not what
+ * stops a container. Docker and Railway send **SIGTERM**, so on every deploy
+ * and every restart the graceful path was skipped entirely and the process was
+ * killed with its sockets still open. WhatsApp then saw the *new* container
+ * connect while the old registration was still live, and answered with
+ * `connectionReplaced` — the `closed (code 440)` in the logs after each deploy.
+ *
+ * Closing them properly is worth doing for its own sake: an unofficial client
+ * that repeatedly vanishes and reappears is the behaviour that gets a number
+ * looked at, and this happened on every single release.
+ *
+ * **Bounded, because a shutdown that hangs is a shutdown that gets SIGKILLed.**
+ * The grace period is short — ten seconds by default — so sessions are stopped
+ * in parallel against a deadline, and the process leaves on time regardless. A
+ * socket closed slightly rudely is better than every socket closed rudely.
+ */
+const SHUTDOWN_BUDGET_MS = Number(process.env.SHUTDOWN_BUDGET_MS || 6000);
+let shuttingDown = false;
+
+async function shutdown(signal: string) {
+  // A second signal must not start a second teardown over the top of the first.
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[worker] ${signal} — closing ${sessions.size} session(s)`);
+
+  const done = Promise.all([...sessions.values()].map((s) => s.stop().catch(() => {})))
+    .then(() => pool.end().catch(() => {}))
+    .then(() => "clean" as const);
+  /*
+    Not unref'd, unlike every other timer here. This one is supposed to hold the
+    loop open for its few seconds — unref'd, Node could reach an idle event loop
+    and exit before the race settles, skipping the line that says how the
+    shutdown went. That line is the only evidence this ran at all.
+  */
+  const timeout = new Promise<"timeout">((r) => setTimeout(() => r("timeout"), SHUTDOWN_BUDGET_MS));
+
+  const how = await Promise.race([done, timeout]);
+  console.log(`[worker] shutdown ${how}`);
   process.exit(0);
-});
+}
+
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
 
 main().catch((e) => {
   console.error("[worker] fatal", e);
