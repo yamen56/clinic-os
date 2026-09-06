@@ -39,4 +39,17 @@ EXPOSE 4020
 # Apply pending migrations, then start. Safe on every deploy: the migration
 # runner is idempotent and skips anything already applied.
 # tsx runs the TypeScript directly, so there is no build artifact to drift.
-CMD ["sh", "-c", "npx tsx scripts/migrate.ts && npx tsx worker/index.ts"]
+#
+# `exec node`, not `npx tsx`, and this is the whole point of the line.
+#
+# `sh -c` is PID 1, and a shell does not forward signals to its children. So
+# when Railway sent SIGTERM to stop the container, the worker never saw it: the
+# graceful shutdown was skipped, Railway waited out the grace period and
+# SIGKILLed, and for that whole minute the outgoing container kept its WhatsApp
+# sockets open and fought the incoming one for the same credentials — the
+# "closed (code 440), retry in 5s" loop after every single deploy. `npx` is a
+# second process in the way for the same reason.
+#
+# `exec` replaces the shell with node, so node is PID 1 and receives the signal
+# directly. The migration still runs first and exits before the exec.
+CMD ["sh", "-c", "npx tsx scripts/migrate.ts && exec node --import tsx worker/index.ts"]
