@@ -14,6 +14,8 @@ import {
   safeNextPath,
 } from "@/lib/auth";
 import { LOCALE_COOKIE, type Locale } from "@/lib/i18n";
+import { landingPathIn, resolveCapabilities, type MemberRole } from "@/lib/permissions";
+import { maskByFeatures, resolveFeatures } from "@/lib/features";
 
 export type LoginState = { error?: string; to?: string };
 
@@ -73,20 +75,55 @@ export async function loginAction(
   await setSessionCookie(token);
   (await cookies()).set(LOCALE_COOKIE, user.locale, { maxAge: 365 * 86400, path: "/" });
 
-  const clinicSlugs = await withSystem(async (c) => {
+  /*
+    The access comes back with the slug, not just the slug.
+
+    Signing in used to send a single-clinic member to `/c/<slug>` and let that
+    page sort it out, which was correct while the dashboard was a screen nobody
+    could lose. Now that it can be taken away, that costs the member a visible
+    bounce on the one screen where the app makes its first impression — the
+    guard runs below a `loading.tsx`, so the redirect happens client-side after
+    the shell has already painted. Resolving the destination here removes the
+    hop entirely, and costs nothing: it is the same query with three more
+    columns.
+  */
+  const memberships = await withSystem(async (c) => {
     await audit(c, { userId: user.id, action: "auth.login" });
     const r = await c.query(
-      `select cl.slug from clinic_members cm
+      `select cl.slug, cl.features, cm.role, cm.is_owner, cm.permissions
+       from clinic_members cm
        join clinics cl on cl.id = cm.clinic_id
        where cm.user_id = $1 and cm.active
        order by cl.name`,
       [user.id]
     );
-    return r.rows.map((x) => x.slug as string);
+    return r.rows as {
+      slug: string;
+      features: Record<string, unknown> | null;
+      role: MemberRole;
+      is_owner: boolean;
+      permissions: Record<string, unknown> | null;
+    }[];
   });
+  const clinicSlugs = memberships.map((m) => m.slug);
 
   const wanted = safeNextPath(String(formData.get("next") ?? ""));
-  return { to: wanted ?? landingPathFor({ isSuperAdmin: user.is_super_admin, clinicSlugs }) };
+  if (wanted) return { to: wanted };
+
+  const home = landingPathFor({ isSuperAdmin: user.is_super_admin, clinicSlugs });
+  /*
+    Only the single-clinic case needs refining. `/` and `/admin` are not a
+    workspace, and the clinic picker is the right answer for somebody who has
+    more than one.
+  */
+  const only = memberships.length === 1 && !user.is_super_admin ? memberships[0] : null;
+  if (!only) return { to: home };
+
+  const caps = maskByFeatures(
+    resolveCapabilities(only.permissions, { isOwner: !!only.is_owner, role: only.role }),
+    resolveFeatures(only.features)
+  );
+  return { to: landingPathIn(only.slug, caps) };
 }
 
 export async function logoutAction() {

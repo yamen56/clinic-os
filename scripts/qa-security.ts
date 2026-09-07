@@ -18,9 +18,27 @@
  * Needs the demo seed (`npm run seed`) and a server on APP_URL.
  */
 import { chromium, type Page } from "playwright";
+import { Client } from "pg";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const SLUG = process.env.DEMO_SLUG || "rima-dental";
+const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
+
+/**
+ * A superuser connection, for the one block that has to change a member's
+ * access to test it. Superuser rather than the app role because the point is to
+ * set up a fixture, not to exercise RLS — everything that exercises RLS in this
+ * file goes through the browser.
+ */
+async function withDb<T>(fn: (c: Client) => Promise<T>): Promise<T> {
+  const c = new Client({ connectionString: PG });
+  await c.connect();
+  try {
+    return await fn(c);
+  } finally {
+    await c.end();
+  }
+}
 
 /*
   The three seeded people, chosen because their access differs in the way the
@@ -46,7 +64,8 @@ function ok(cond: boolean, label: string) {
   }
 }
 
-async function login(page: Page, email: string, password: string) {
+/** Signs in, and reports where the session actually came to rest. */
+async function login(page: Page, email: string, password: string): Promise<string> {
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="password"]', password);
@@ -55,6 +74,15 @@ async function login(page: Page, email: string, password: string) {
   // load, so waiting on the URL is what "signed in" means here.
   await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 30_000 });
   await page.waitForLoadState("networkidle");
+  /*
+    Then settle. The action resolves the destination itself, so there should be
+    nothing left to do — but a guard below a `loading.tsx` redirects on the
+    client after the shell has painted, and reading the URL before that would
+    report the hop rather than the destination.
+  */
+  const first = new URL(page.url()).pathname;
+  await page.waitForURL((u) => new URL(u).pathname !== first, { timeout: 2500 }).catch(() => {});
+  return new URL(page.url()).pathname;
 }
 
 /** Status of an API call carrying this session's cookies. */
@@ -250,6 +278,67 @@ async function main() {
       "signing links never leak in a Referer"
     );
     await page.close();
+  }
+
+  // ------------------------------------ the dashboard, and the loop it can make
+  /*
+    The only block here that writes to the database, and it puts the row back
+    afterwards. It has to: every other capability can be proved with the seeded
+    people, but the dashboard's interesting case is the one nobody is seeded
+    into — a member who does not have it.
+
+    What is actually under test is not the hiding. It is that the app still has
+    somewhere to send that person. The dashboard was the destination every guard
+    in the workspace redirected to, so making it optional created the chance of
+    a redirect that points at a page which redirects back. `landingPathIn` is
+    what resolves it, and this is the assertion that keeps it honest.
+  */
+  {
+    const doctorPerms = { level: "custom", caps: { calendar: true, patients: true, documents: true } };
+    const setPerms = (perms: unknown) =>
+      withDb((c) =>
+        c.query(
+          `update clinic_members cm set permissions = $2
+           from users u where u.id = cm.user_id and u.email = $1`,
+          [DOCTOR.email, JSON.stringify(perms)]
+        )
+      );
+
+    try {
+      await setPerms({ level: "custom", caps: { ...doctorPerms.caps, dashboard: false } });
+      const page = await browser.newPage();
+      const landed = await login(page, DOCTOR.email, DOCTOR.password);
+
+      console.log("\n[dashboard] can be taken away without stranding anyone");
+      ok(landed !== `/c/${SLUG}`, `login skips the dashboard (went to ${landed})`);
+      ok((await land(page, `/c/${SLUG}`)) !== `/c/${SLUG}`, "the dashboard URL forwards on");
+      ok(
+        !(await page.$$eval("nav a[href]", (as) =>
+          as.map((a) => new URL((a as HTMLAnchorElement).href).pathname)
+        )).includes(`/c/${SLUG}`),
+        "dashboard is gone from the nav"
+      );
+      // The one that would spin: a forbidden page redirects to the dashboard,
+      // which this member also cannot open.
+      const bounced = await land(page, `/c/${SLUG}/settings`);
+      ok(
+        bounced !== `/c/${SLUG}` && bounced !== `/c/${SLUG}/settings`,
+        `a forbidden page forwards past the dashboard (went to ${bounced})`
+      );
+      await page.close();
+
+      // Nothing at all: must terminate somewhere, and profile is the only
+      // screen in a workspace with no capability in front of it.
+      await setPerms({ level: "custom", caps: { dashboard: false } });
+      const bare = await browser.newPage();
+      ok(
+        (await login(bare, DOCTOR.email, DOCTOR.password)) === `/c/${SLUG}/profile`,
+        "a member with no sections lands on their profile rather than looping"
+      );
+      await bare.close();
+    } finally {
+      await setPerms(doctorPerms);
+    }
   }
 
   await browser.close();

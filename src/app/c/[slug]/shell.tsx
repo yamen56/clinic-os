@@ -108,9 +108,13 @@ export function Shell({
   /*
     The nav is the capability set, rendered. Nothing here reads a job title —
     a doctor who has been granted the inbox sees the inbox, and a receptionist
-    whose owner took invoices away does not see invoices. The dashboard is the
-    one entry everybody keeps: it is where the guards send anyone who reaches a
-    screen they are not allowed, so it can never be hidden.
+    whose owner took invoices away does not see invoices.
+
+    The dashboard used to be the exception, kept for everybody because it was
+    where the guards sent anyone who reached a screen they were not allowed. It
+    is a capability like the rest now; what replaced the exception is
+    `landingPathIn`, which works out a destination from the access rather than
+    assuming one. See lib/permissions.
   */
   /*
     Order is the clinic's, not ours. The first four also become the phone's
@@ -119,7 +123,7 @@ export function Shell({
     literal about rather than tidy.
   */
   const items: { key: NavKey; href: string; show: boolean; badge?: number }[] = [
-    { key: "dashboard", href: base, show: true },
+    { key: "dashboard", href: base, show: caps.dashboard },
     { key: "patients", href: `${base}/patients`, show: caps.patients },
     { key: "calendar", href: `${base}/calendar`, show: caps.calendar },
     { key: "invoices", href: `${base}/invoices`, show: caps.invoices },
@@ -429,18 +433,25 @@ export function Shell({
               </Link>
             );
           })}
-          {mobileMore.length > 0 && (
-            <button
-              onClick={() => setMoreOpen((v) => !v)}
-              aria-expanded={moreOpen}
-              className={`flex touch-manipulation flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors duration-140 ease-out ${
-                moreOpen ? "text-brand-700" : "text-ink-500"
-              }`}
-            >
-              <MoreHorizontal className="h-5 w-5" />
-              {t.nav.more}
-            </button>
-          )}
+          {/*
+            Always rendered, never conditional on the overflow being non-empty.
+            The sheet is not only the nav's spill-over — it is the account, the
+            notifications, the signature, the language and the sign-out button,
+            and on a phone it is the only route to any of them. Gating it on
+            `mobileMore.length` meant a member with exactly four sections could
+            not sign out, which was reachable before and is ordinary now that
+            the dashboard can be taken away.
+          */}
+          <button
+            onClick={() => setMoreOpen((v) => !v)}
+            aria-expanded={moreOpen}
+            className={`flex touch-manipulation flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors duration-140 ease-out ${
+              moreOpen ? "text-brand-700" : "text-ink-500"
+            }`}
+          >
+            <MoreHorizontal className="h-5 w-5" />
+            {t.nav.more}
+          </button>
         </div>
       </nav>
     </div>
