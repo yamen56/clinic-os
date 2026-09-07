@@ -4,6 +4,7 @@ import { ServiceWorkerRegistrar } from "@/components/pwa";
 import { Shell } from "./shell";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/client";
+import { chartColorsFor } from "@/lib/brand-chart";
 
 export default async function ClinicLayout({
   children,
@@ -58,8 +59,33 @@ export default async function ClinicLayout({
   const locale = await getLocale();
   const dict = await dictForClinic(clinic.vocabulary);
 
+  /*
+    The clinic's own colour for its charts.
+
+    Overriding the two tokens here rather than inside a chart component means
+    every bar, track and sparkline in the workspace follows without any of them
+    knowing a clinic exists — and the admin panel, which is outside this layout,
+    keeps the default. `display: contents` so the wrapper carries the variables
+    without adding a box to the layout.
+
+    Derived, never used raw: brand colours in this database run from a near-black
+    navy to a bright yellow, and both are unreadable as a bar on white. See
+    lib/brand-chart for how the hue is kept and the lightness and chroma are
+    snapped back into the validated band.
+  */
+  const chartVars = chartColorsFor(clinic.brandColor);
+
   return (
     <I18nProvider dict={dict} locale={locale}>
+    <div
+      style={
+        {
+          display: "contents",
+          "--color-chart": chartVars.chart,
+          "--color-chart-soft": chartVars.soft,
+        } as React.CSSProperties
+      }
+    >
     <Shell
       clinic={{
         id: clinic.id,
@@ -92,6 +118,7 @@ export default async function ClinicLayout({
       <ServiceWorkerRegistrar />
       {children}
     </Shell>
+    </div>
     </I18nProvider>
   );
 }

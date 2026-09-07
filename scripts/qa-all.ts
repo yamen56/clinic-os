@@ -65,6 +65,7 @@ const SUITES = [
   ["whatsapp: a new number warms up", "scripts/qa-whatsapp-warmup.ts"],
   ["image: the worker can find everything it imports", "scripts/qa-worker-image.ts"],
   ["whatsapp: session keys survive storage", "scripts/qa-wa-auth-state.ts"],
+  ["charts: every clinic in its own colour", "scripts/qa-brand-chart.ts"],
 ] as const;
 
 function run(script: string): Promise<{ ok: boolean; out: string }> {
