@@ -834,6 +834,7 @@ export const en = {
     useClinicHours: "Uses clinic hours",
   },
   caps: {
+    dashboard: "Dashboard",
     conversations: "WhatsApp inbox",
     calendar: "Calendar",
     patients: "Patients",

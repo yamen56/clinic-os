@@ -813,6 +813,7 @@ export const ar: Dict = {
     useClinicHours: "يتبع ساعات العيادة",
   },
   caps: {
+    dashboard: "الرئيسية",
     conversations: "محادثات واتساب",
     calendar: "التقويم",
     patients: "المرضى",

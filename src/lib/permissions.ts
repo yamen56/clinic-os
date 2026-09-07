@@ -18,6 +18,7 @@
  */
 
 export const CAPABILITIES = [
+  "dashboard",
   "conversations",
   "calendar",
   "patients",
@@ -66,8 +67,9 @@ const REQUIRES: Partial<Record<Capability, Capability>> = {
 
 /** The starting point when an owner switches a member to custom access. */
 export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
-  doctor: ["calendar", "patients", "documents"],
+  doctor: ["dashboard", "calendar", "patients", "documents"],
   receptionist: [
+    "dashboard",
     "conversations",
     "calendar",
     "patients",
@@ -82,7 +84,7 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
     "invoices.analytics",
     "settings",
   ],
-  other: ["calendar", "patients"],
+  other: ["dashboard", "calendar", "patients"],
 };
 
 function empty(): CapabilityMap {
@@ -178,6 +180,22 @@ export function resolveCapabilities(
   */
   if (!("patients.import" in ticked) && caps.patients) caps["patients.import"] = true;
 
+  /*
+    The dashboard inherits from nothing, and that is the difference between this
+    rule and the three above it.
+
+    Those replaced a capability that used to be implied by a *wider* one, so the
+    silence inherits from that wider grant. The dashboard was implied by nothing
+    at all — it was simply the screen every member of every clinic could open,
+    and the guards deliberately sent people there when they hit something they
+    could not. So a stored map that does not mention it is not ambiguous: it was
+    written when the answer was unconditionally yes.
+
+    An explicit false is honoured, which is the whole point of the feature. Only
+    the absence grants.
+  */
+  if (!("dashboard" in ticked)) caps.dashboard = true;
+
   for (const [cap, needs] of Object.entries(REQUIRES) as [Capability, Capability][]) {
     if (!caps[needs]) caps[cap] = false;
   }
@@ -219,8 +237,49 @@ export function accessLevelOf(raw: Record<string, unknown> | null | undefined): 
   return (raw as { level?: string } | null)?.level === "full" ? "full" : "custom";
 }
 
+/**
+ * The order the workspace falls back through when the dashboard is not an
+ * option.
+
+ * Until the dashboard became a capability, "where do I send someone who cannot
+ * open this page" had one answer, and every guard in the app hard-coded it. Now
+ * it has to be computed, and the order below is simply the nav's own order, so
+ * a member who loses the front page lands on the screen that would have been
+ * their next tab rather than somewhere arbitrary.
+ *
+ * `waitlist` is absent on purpose even though `calendar` grants it: it is a
+ * worklist inside the calendar, not a place to start the day.
+ */
+const LANDING_ORDER: [Capability, string][] = [
+  ["patients", "patients"],
+  ["calendar", "calendar"],
+  ["conversations", "conversations"],
+  ["documents", "documents"],
+  ["invoices", "invoices"],
+  ["campaigns", "campaigns"],
+  ["automations", "automations"],
+  ["ai", "ai"],
+  ["settings", "settings"],
+];
+
+/**
+ * The first section this access can actually open, as a path under the clinic.
+ *
+ * Falls back to `profile`, which is nobody's idea of a home page and is the
+ * right answer anyway: it is the only screen inside a workspace with no
+ * capability in front of it, so it is the one place a redirect can always
+ * terminate. A member who lands there has been given no sections at all, which
+ * is a misconfiguration to see rather than a loop to sit in.
+ */
+export function landingPathIn(slug: string, caps: CapabilityMap): string {
+  if (caps.dashboard) return `/c/${slug}`;
+  for (const [cap, path] of LANDING_ORDER) if (caps[cap]) return `/c/${slug}/${path}`;
+  return `/c/${slug}/profile`;
+}
+
 /** Grouping for the settings screen, so actions sit under the section they belong to. */
 export const CAPABILITY_GROUPS: { section: Capability; actions: Capability[] }[] = [
+  { section: "dashboard", actions: [] },
   { section: "conversations", actions: [] },
   { section: "calendar", actions: [] },
   { section: "patients", actions: ["patients.import", "patients.export"] },

@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { can } from "@/lib/auth";
+import { landingPathIn } from "@/lib/permissions";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtTime, fmtMoney } from "@/lib/dates";
@@ -26,6 +28,14 @@ type Tile = { key: string; label: string; value: string; foot?: React.ReactNode;
 export default async function DashboardPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const a = await guardClinic(slug);
+  /*
+    Not `guardCap`, which would send anyone without the capability straight back
+    here and spin. This is the page every other guard redirects *to*, so it is
+    the one that has to work out where else somebody can go — and once it does,
+    the fifteen bare redirects to the clinic root scattered through the
+    workspace keep working untouched: they land here, and here forwards them on.
+  */
+  if (!can(a, "dashboard")) redirect(landingPathIn(slug, a.caps));
   const t = await dictForClinic(a.clinic.vocabulary);
   const locale = await getLocale();
 

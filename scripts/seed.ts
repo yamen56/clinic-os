@@ -483,6 +483,9 @@ async function main() {
   // ---- Appointments: last 3 weeks + next 2 weeks
   const statuses = ["completed", "completed", "completed", "no_show", "cancelled"];
   let apptCount = 0;
+  /** What each doctor already has, so overlaps are caught without a query. */
+  const booked = new Map<string, { start: number; end: number }[]>();
+  const pendingAppts: (string | number)[][] = [];
   for (let d = -P.historyDays; d <= P.aheadDays; d++) {
     const day = now.plus({ days: d }).startOf("day");
     if (day.weekday === 5) continue; // Friday closed
@@ -506,32 +509,65 @@ async function main() {
       // Round-robin across the whole team; a three-doctor practice should look
       // like one on the calendar rather than like two people working very hard.
       const doctor = doctorMemberIds[(k + Math.abs(d)) % doctorMemberIds.length];
-      const clash = await c.query(
-        `select 1 from appointments
-         where clinic_id = $1 and doctor_member_id = $2
-           and status in ('pending_approval', 'scheduled', 'confirmed', 'completed', 'no_show')
-           and starts_at < $4 and ends_at > $3
-         limit 1`,
-        [clinicId, doctor, start.toUTC().toISO(), end.toUTC().toISO()]
-      );
-      if (clash.rowCount) continue;
 
-      await c.query(
-        `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          clinicId,
-          patientIds[(k * 5 + Math.abs(d) * 3) % patientIds.length],
-          doctor,
-          svc.id,
-          start.toUTC().toISO(),
-          end.toUTC().toISO(),
-          status,
-          ["staff", "booking_link", "ai_agent"][(k + Math.abs(d)) % 3],
-        ]
-      );
+      /*
+        Checked in memory, not with a query per appointment.
+
+        The clinic is deleted and rebuilt at the top of this script, so every
+        appointment that could possibly clash is one this same loop just made —
+        which makes the local check exactly equivalent to the round trip it
+        replaces, and eight hundred round trips cheaper. That mattered: against
+        the production database the query-per-appointment version was slow
+        enough for the connection to be reset half way through, leaving a
+        half-built demo behind.
+      */
+      const startMs = start.toMillis();
+      const endMs = end.toMillis();
+      const taken = booked.get(doctor) ?? [];
+      if (taken.some((b) => b.start < endMs && b.end > startMs)) continue;
+      /*
+        A cancelled appointment does not hold its slot — the query this replaced
+        listed the blocking statuses explicitly and left `cancelled` out, and
+        dropping that detail quietly cost seventeen appointments on the first
+        run of the rewrite.
+      */
+      if (status !== "cancelled") {
+        taken.push({ start: startMs, end: endMs });
+        booked.set(doctor, taken);
+      }
+
+      pendingAppts.push([
+        clinicId,
+        patientIds[(k * 5 + Math.abs(d) * 3) % patientIds.length],
+        doctor,
+        svc.id,
+        start.toUTC().toISO()!,
+        end.toUTC().toISO()!,
+        status,
+        ["staff", "booking_link", "ai_agent"][(k + Math.abs(d)) % 3],
+      ]);
       apptCount++;
     }
+  }
+
+  /*
+    One statement per few hundred rows instead of one per row. Same rows, and
+    the difference between a seed that finishes over a home connection and one
+    that does not.
+  */
+  for (let i = 0; i < pendingAppts.length; i += 200) {
+    const chunk = pendingAppts.slice(i, i + 200);
+    const values = chunk
+      .map((_, n) => {
+        const b = n * 8;
+        return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5}::timestamptz,$${b + 6}::timestamptz,$${b + 7},$${b + 8})`;
+      })
+      .join(",");
+    await c.query(
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source)
+       values ${values}`,
+      chunk.flat()
+    );
   }
 
   // ---- Invoices + payments for completed visits
