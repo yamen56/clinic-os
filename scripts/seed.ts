@@ -3,6 +3,7 @@
  * development and sales demos. Idempotent — safe to run repeatedly.
  */
 import { Client } from "pg";
+import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { DateTime } from "luxon";
 import { seedAgencyDefaults } from "./seed-recipes";
@@ -193,6 +194,34 @@ const LAST = ["العمري", "الخطيب", "حداد", "الزعبي", "ال�
 
 function pick<T>(a: T[], i: number): T {
   return a[i % a.length];
+}
+
+/**
+ * Many rows, few statements.
+ *
+ * Eight months of billing is about fifteen hundred rows across invoices, their
+ * lines and their payments. One insert each is fifteen hundred sequential round
+ * trips, and against a database on the other side of a home connection that is
+ * where this script kept dying half way through — leaving a demo clinic with
+ * appointments and no invoices, which is worse than no demo clinic.
+ *
+ * `cols` is the number of parameters each row contributes; `row` builds one
+ * tuple's placeholders from the offset it starts at. Chunked at 200 rows
+ * because Postgres caps a statement at 65535 parameters and there is no reason
+ * to go near it.
+ */
+async function insertChunked(
+  c: Client,
+  head: string,
+  row: (base: number) => string,
+  rows: (string | number)[][],
+  cols: number
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += 200) {
+    const chunk = rows.slice(i, i + 200);
+    const values = chunk.map((_, n) => row(n * cols)).join(",");
+    await c.query(`${head} values ${values}`, chunk.flat());
+  }
 }
 
 async function main() {
@@ -578,6 +607,9 @@ async function main() {
     [clinicId]
   );
   let seq = 0;
+  const invoiceRows: (string | number)[][] = [];
+  const itemRows: (string | number)[][] = [];
+  const paymentRows: (string | number)[][] = [];
   for (const [i, ap] of completed.rows.entries()) {
     seq++;
     const year = DateTime.fromJSDate(new Date(ap.starts_at)).setZone(tz).year;
@@ -590,40 +622,62 @@ async function main() {
     const status = i % 6 === 0 ? "sent" : i % 11 === 0 ? "partially_paid" : "paid";
     const paid = status === "paid" ? total : status === "partially_paid" ? Math.round(total / 2) : 0;
 
-    const inv = await c.query(
-      `insert into invoices (clinic_id, patient_id, appointment_id, seq, number, status, subtotal,
-                             discount_amount, tax_rate, tax_amount, total, amount_paid, sent_at, created_at, created_by,
-                             issue_date)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, $11, $12, $12, $13,
-               (($12::timestamptz at time zone $14))::date) returning id`,
-      [
-        clinicId, ap.patient_id, ap.id, seq, number, status, subtotal, discount, taxRate,
-        total, paid, ap.starts_at, ownerId, tz,
-      ]
-    );
+    /*
+      The id is generated here rather than read back from the insert.
+
+      Three round trips per invoice — insert, item, payment — is fourteen
+      hundred sequential trips for eight months of billing, and against a remote
+      database that is where this script kept dying. Knowing the id up front
+      lets the invoice, its line and its payment all be batched independently,
+      because none of them has to wait to learn what the others got.
+    */
+    const invId = randomUUID();
+    invoiceRows.push([
+      invId, clinicId, ap.patient_id, ap.id, seq, number, status, subtotal, discount,
+      taxRate, total, paid, ap.starts_at, ownerId, tz,
+    ]);
     /*
       The discount goes on the line, not just in the header. Tax and discount are
       per line now, and a fixture whose header says 5 while its only line says 0
       is an invoice that does not foot — exactly the thing the e-invoice checks
       reject, discovered in QA rather than at a tax authority.
     */
-    await c.query(
-      `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount,
-                                  discount_amount, tax_category, tax_rate, tax_amount, sort)
-       values ($1, $2, $3, $4, 1, $5, $5, $6, 'O', 0, 0, 0)`,
-      [clinicId, inv.rows[0].id, ap.service_id, ap.name_ar || ap.name, price, discount]
-    );
+    itemRows.push([clinicId, invId, ap.service_id, ap.name_ar || ap.name, price, discount]);
     if (paid > 0) {
-      await c.query(
-        `insert into payments (clinic_id, invoice_id, patient_id, amount, method, paid_at, recorded_by)
-         values ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          clinicId, inv.rows[0].id, ap.patient_id, paid,
-          ["cash", "cliq", "card", "transfer"][i % 4], ap.starts_at, recId,
-        ]
-      );
+      paymentRows.push([
+        clinicId, invId, ap.patient_id, paid,
+        ["cash", "cliq", "card", "transfer"][i % 4], ap.starts_at, recId,
+      ]);
     }
   }
+
+  await insertChunked(
+    c,
+    `insert into invoices (id, clinic_id, patient_id, appointment_id, seq, number, status, subtotal,
+                           discount_amount, tax_rate, tax_amount, total, amount_paid, sent_at, created_at,
+                           created_by, issue_date)`,
+    (b) =>
+      `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},0,` +
+      `$${b + 11},$${b + 12},$${b + 13}::timestamptz,$${b + 13}::timestamptz,$${b + 14},` +
+      `(($${b + 13}::timestamptz at time zone $${b + 15}))::date)`,
+    invoiceRows,
+    15
+  );
+  await insertChunked(
+    c,
+    `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount,
+                                discount_amount, tax_category, tax_rate, tax_amount, sort)`,
+    (b) => `($${b + 1},$${b + 2},$${b + 3},$${b + 4},1,$${b + 5},$${b + 5},$${b + 6},'O',0,0,0)`,
+    itemRows,
+    6
+  );
+  await insertChunked(
+    c,
+    `insert into payments (clinic_id, invoice_id, patient_id, amount, method, paid_at, recorded_by)`,
+    (b) => `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6}::timestamptz,$${b + 7})`,
+    paymentRows,
+    7
+  );
   await c.query(`update clinics set invoice_counter = $2 where id = $1`, [clinicId, seq]);
 
   // ---- Conversations with realistic WhatsApp threads
