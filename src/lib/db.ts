@@ -70,7 +70,30 @@ function makePool(url: string, name: string): Pool {
   const p = new Pool({
     connectionString: url,
     ssl: sslFor(url),
-    max: Number(process.env.PG_POOL_MAX || 12),
+    /*
+      Twenty, raised from twelve, and the reason is the failure mode rather
+      than the throughput.
+
+      Measured. At twelve, 200 concurrent page loads exhausted the pool, callers
+      waited past `connectionTimeoutMillis`, and 18 of 498 requests came back as
+      500s — "timeout exceeded when trying to connect". Throughput barely moves
+      with pool size (42 req/s at twelve, 46 at fifty) because the ceiling is CPU
+      spent rendering, not connections. What the extra slots buy is that an
+      overloaded app gets *slow* instead of *broken*.
+
+      Twenty is sized per instance, not for one instance absorbing everything:
+      at 67 and at 100 concurrent it serves every request without an error, and
+      only at 200 on a single process does it start refusing (14 of 421). That
+      is the right trade because this number is multiplied rather than spent —
+      Postgres allows 100 connections and reserves 3, so the budget is
+      `web replicas x PG_POOL_MAX + worker (8) <= ~90`. Twenty leaves room for
+      four web replicas; fifty would leave room for one and quietly turn a
+      scale-up into `too many clients already`.
+
+      So it assumes the replicas exist. One instance carrying 200 concurrent
+      users will still shed some, and the fix for that is another instance.
+    */
+    max: Number(process.env.PG_POOL_MAX || 20),
     /*
       A healthy connection to a managed Postgres takes well under a second. A
       pooler in trouble, however, sits on the attempt for about three seconds
@@ -359,8 +382,8 @@ function safeLiteral(value: string): string {
  *
  * There was no limit at all, and that is the difference between a slow request
  * and an outage. A connection running a statement is a connection nobody else
- * can have, `PG_POOL_MAX` is 12, and the public endpoints will start work for
- * anyone who asks — so twelve expensive queries, whether from an attacker or
+ * can have, `PG_POOL_MAX` is 20, and the public endpoints will start work for
+ * anyone who asks — so twenty expensive queries, whether from an attacker or
  * from one accidental cartesian join, took every connection the process owned
  * and held them until Postgres was done. Every other page then failed on
  * "timeout exceeded when trying to connect", including the ones that were

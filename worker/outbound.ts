@@ -73,10 +73,45 @@ export async function processOnce() {
     );
   }
   const connected = [...sessions.entries()].filter(([, s]) => s.connected);
-  await Promise.all(
-    connected.map(async ([clinicId, session]) => {
-      if ((nextSendAt.get(clinicId) ?? 0) > Date.now()) return;
+  if (connected.length === 0) return;
 
+  // The per-clinic delay is in memory, so filtering on it costs nothing and
+  // shrinks the question asked of the database below.
+  const ready = connected.filter(([id]) => (nextSendAt.get(id) ?? 0) <= Date.now());
+  if (ready.length === 0) return;
+
+  /*
+    Ask once who has work, rather than asking every clinic separately.
+
+    This loop runs every 1.5 seconds and used to open a transaction per
+    connected clinic — begin, set_config, read the session and clinic settings,
+    try to claim a message, commit — whether or not there was anything to send.
+    With two clinics connected that is invisible. At two hundred it is roughly
+    six hundred statements a second, essentially all of them discovering that
+    the queue is empty, and it grows with every clinic that signs up rather than
+    with anything a clinic actually does.
+
+    One query answers it for everybody. `messages_outbox_idx` is a partial index
+    on exactly this predicate, so the scan touches only rows that are genuinely
+    queued — a set that is small precisely when the old version was busiest.
+
+    The daily-counter rollover that used to happen in the skipped transactions
+    is not lost, only deferred: it runs inside the same transaction that claims
+    a message, which is the only moment its value is read.
+  */
+  const due = await withSystem((c) =>
+    c.query<{ clinic_id: string }>(
+      `select distinct clinic_id from messages
+        where status = 'queued' and scheduled_at <= now()`
+    )
+  );
+  if (due.rowCount === 0) return;
+  const hasWork = new Set(due.rows.map((r) => r.clinic_id));
+
+  const work = ready.filter(([clinicId]) => hasWork.has(clinicId));
+
+  await Promise.all(
+    work.map(async ([clinicId, session]) => {
       const claimed = await withSystem(async (c) => {
         const ses = (
           await c.query(
