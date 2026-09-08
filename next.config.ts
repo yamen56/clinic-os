@@ -18,16 +18,44 @@ import type { NextConfig } from "next";
  * through middleware. That is a worthwhile next step and a much riskier change
  * than this one; the layers that do not depend on it are here now.
  */
-function csp(): string {
+/**
+ * The one path allowed to talk to Meta.
+ *
+ * `/book/clinicti` is the agency workspace's own booking link — the page that
+ * sells this software, where the visitor is a prospect and the form collects a
+ * name and an email for a demo. Every other `/book/*` link belongs to a real
+ * clinic, and there the visitor is a patient choosing a specialty: health data,
+ * sensitive under Jordan's PDPL, and the reason this is a single exact path and
+ * not `/book/:path*`.
+ *
+ * It must stay in step with the `vocabulary === "agency"` condition in
+ * app/book/[bslug]/page.tsx. They are deliberately two separate fences —
+ * qa-security asserts both, because either one alone is a line somebody could
+ * change without seeing what it was holding.
+ */
+const PIXEL_PATH = "/book/clinicti";
+
+/**
+ * @param pixel  Whether this page may load the Meta pixel. Grants three
+ *               origins and nothing else: the script, its image beacon, and the
+ *               endpoint it posts events to. `connect-src` is the one that
+ *               matters — anywhere else in this app it stays `'self'`, because a
+ *               destination the browser will post to is an exfiltration route
+ *               for any XSS that ever lands in the workspace.
+ */
+function csp(pixel = false): string {
   const dev = process.env.NODE_ENV !== "production";
+  const fbScript = pixel ? " https://connect.facebook.net" : "";
+  const fbImg = pixel ? " https://www.facebook.com" : "";
+  const fbConnect = pixel ? " https://www.facebook.com https://connect.facebook.net" : "";
   return [
     "default-src 'self'",
     // 'unsafe-eval' is React Refresh's, and only in development.
-    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}${fbScript}`,
     // Tailwind's utilities are a stylesheet, but brand colour arrives as an
     // inline `style` attribute on the workspace shell.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    `img-src 'self' data: blob:${fbImg}`,
     "font-src 'self'",
     "media-src 'self' blob:",
     // The signing page previews the consent PDF in an <object>, and the PDF
@@ -36,7 +64,7 @@ function csp(): string {
     "object-src 'self'",
     "frame-src 'self' blob:",
     // SSE, the autosave endpoints, and nothing else.
-    `connect-src 'self'${dev ? " ws: wss:" : ""}`,
+    `connect-src 'self'${dev ? " ws: wss:" : ""}${fbConnect}`,
     "worker-src 'self' blob:",
     // No page here is ever meant to be embedded. Clickjacking a workspace means
     // clickjacking "delete this patient".
@@ -49,8 +77,8 @@ function csp(): string {
   ].join("; ");
 }
 
-const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp() },
+const securityHeaders = (pixel = false) => [
+  { key: "Content-Security-Policy", value: csp(pixel) },
   // Older browsers ignore frame-ancestors; this is the same instruction again.
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -112,7 +140,20 @@ const nextConfig: NextConfig = {
 
   async headers() {
     return [
-      { source: "/:path*", headers: securityHeaders },
+      /*
+        Two rules, and they must not both match.
+
+        Next applies *every* matching rule, so a broad `/:path*` plus an override
+        for one page emits two `Content-Security-Policy` headers, and a browser
+        given two enforces the intersection of both — which would leave the pixel
+        blocked while looking, in the config, as though it had been allowed. The
+        negative lookahead is what keeps exactly one of these two answering for
+        any given request. qa-security checks the root, a medical booking page
+        and this one, because that is the failure this shape is guarding against
+        and it is invisible until something is served.
+      */
+      { source: `/:path((?!${PIXEL_PATH.slice(1)}).*)`, headers: securityHeaders() },
+      { source: PIXEL_PATH, headers: securityHeaders(true) },
       /*
         The token pages, tightened one notch further.
         `no-referrer` because the URL itself is the secret: a patient who taps

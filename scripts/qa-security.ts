@@ -281,6 +281,114 @@ async function main() {
     await page.close();
   }
 
+  // ------------------------------------------------- the Meta pixel, fenced in
+  /*
+    One page on this domain loads a third-party tag, and the rest must not.
+
+    `app.clinicti.app` serves the workspace where patient records live, so a
+    `connect-src` reaching Meta is an exfiltration route for any XSS that ever
+    lands. The pixel is therefore confined twice — by `vocabulary === "agency"`
+    in app/book/[bslug]/page.tsx, and by an exact path in next.config — and both
+    are asserted here because either one alone is a line somebody could edit
+    without seeing what it was holding.
+
+    The CSP shape is the subtle half. Next applies *every* matching header rule,
+    so a broad rule plus a per-page override emits two `Content-Security-Policy`
+    headers and the browser enforces the intersection — the pixel blocked while
+    the config reads as though it were allowed. Counting the headers is the only
+    way that failure is visible.
+  */
+  {
+    console.log("\n[pixel] tracking is confined to the page that sells software");
+
+    /*
+      The real row, not a fixture.
+
+      next.config names `/book/clinicti` as a literal, so this assertion is also
+      the guard on that coupling: rename the booking link or change the
+      workspace's vocabulary and this fails, which is exactly the moment
+      somebody needs to be told the CSP path no longer matches the page.
+    */
+    const agency = await withDb(async (c) =>
+      (
+        await c.query(
+          `select bl.slug from booking_links bl join clinics cl on cl.id = bl.clinic_id
+            where bl.slug = 'clinicti' and bl.active
+              and cl.vocabulary = 'agency' and cl.deleted_at is null`
+        )
+      ).rows[0]
+    );
+
+    const medical = await withDb(async (c) =>
+      (
+        await c.query(
+          `select bl.slug from booking_links bl join clinics cl on cl.id = bl.clinic_id
+            where bl.active and cl.vocabulary <> 'agency' and cl.deleted_at is null
+              and bl.slug <> 'clinicti' limit 1`
+        )
+      ).rows[0]
+    );
+
+    ok(!!agency, "/book/clinicti is still the agency link next.config names");
+
+    if (!medical) {
+      ok(false, "a clinic booking link exists to check the pixel stays off");
+    } else {
+      {
+        const page = await browser.newPage();
+
+        const agencyRes = await page.goto(`${BASE}/book/clinicti`, {
+          waitUntil: "domcontentloaded",
+        });
+        const agencyCsp = agencyRes?.headers()["content-security-policy"] ?? "";
+        const agencyHtml = await page.content();
+        ok(agencyHtml.includes("1371362911862828"), "the pixel renders on the demo booking page");
+        ok(
+          /connect-src[^;]*connect\.facebook\.net/.test(agencyCsp),
+          "and the CSP there lets it reach Meta"
+        );
+
+        const medicalRes = await page.goto(`${BASE}/book/${medical.slug}`, {
+          waitUntil: "domcontentloaded",
+        });
+        const medicalCsp = medicalRes?.headers()["content-security-policy"] ?? "";
+        const medicalHtml = await page.content();
+        ok(
+          !/facebook|fbq|1371362911862828/i.test(medicalHtml),
+          "no pixel on a clinic's booking page"
+        );
+        ok(
+          /connect-src 'self'/.test(medicalCsp) && !/facebook/.test(medicalCsp),
+          "and a patient page cannot reach Meta at all"
+        );
+
+        /*
+          Exactly one policy per response. Two would mean the browser enforces
+          the intersection, which silently breaks the page it was meant to
+          enable — and reads as correct in the config.
+        */
+        /*
+          Counted by directive, not by header entry: `fetch` folds repeated
+          headers into one comma-joined value, so two policies arrive looking
+          like one long string and only the repeated `default-src` gives them
+          away. Zero catches the opposite mistake — a lookahead that stops
+          matching and leaves a page with no policy at all.
+        */
+        const policies = async (path: string) => {
+          const r = await fetch(`${BASE}${path}`, { redirect: "manual" });
+          const v = r.headers.get("content-security-policy") ?? "";
+          return (v.match(/default-src/g) ?? []).length;
+        };
+        ok((await policies("/book/clinicti")) === 1, "exactly one policy on the pixel page");
+        ok((await policies(`/book/${medical.slug}`)) === 1, "exactly one on a clinic page");
+        ok((await policies("/login")) === 1, "exactly one everywhere else");
+        ok((await policies("/")) === 1, "and the root still has one");
+
+        await page.close();
+      }
+    }
+  }
+
   // ------------------------------------ the dashboard, and the loop it can make
   /*
     The only block here that writes to the database, and it puts the row back

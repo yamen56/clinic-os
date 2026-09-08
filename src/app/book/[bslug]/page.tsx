@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { loadPublicLink, type PublicLink } from "@/lib/booking-public";
 import { appUrl } from "@/lib/urls";
 import { BookingWizard } from "./booking-wizard";
+import { MetaPixel, CLINICTI_META_PIXEL_ID } from "@/components/meta-pixel";
 import { CalendarX } from "lucide-react";
 import { en } from "@/lib/i18n/en";
 import { ar } from "@/lib/i18n/ar";
@@ -173,6 +174,20 @@ export default async function PublicBookingPage({
     ar: applyVocabulary(ar, data.clinic.vocabulary, "ar").book,
   };
 
+  /*
+    Tracking, and only on the page that sells software.
+
+    `agency` is the same flag that decides whether this page claims to be a
+    `MedicalClinic` above, and it is the right line to reuse: a workspace that is
+    not a medical business is one whose booking form collects a name and an email
+    for a demo, not a symptom and a specialty. Every other booking link here
+    belongs to a real clinic, where the visitor is a patient and the page they
+    are on is itself health data — sensitive under Jordan's PDPL, and not ours to
+    hand to Meta. See components/meta-pixel for the second fence, in the CSP.
+  */
+  const pixelId =
+    data.clinic.vocabulary === "agency" ? (process.env.META_PIXEL_ID || CLINICTI_META_PIXEL_ID).trim() : "";
+
   return (
     <>
       <script
@@ -180,6 +195,7 @@ export default async function PublicBookingPage({
         // Server-rendered from our own query, never from user input rendered as markup.
         dangerouslySetInnerHTML={{ __html: JSON.stringify(clinicJsonLd(data, bslug, appUrl())) }}
       />
+      {pixelId && <MetaPixel id={pixelId} />}
     <BookingWizard
       bslug={bslug}
       clinic={{
