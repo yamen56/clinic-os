@@ -130,8 +130,8 @@ export default async function MonitoringPage() {
   const openAlerts = await withSystem(async (c) =>
     (
       await c.query(
-        `select key, title, detail, opened_at, notifications
-           from ops_alerts order by opened_at`
+        `select key, title, detail, opened_at, notifications, severity
+           from ops_alerts order by (severity = 'urgent') desc, opened_at`
       )
     ).rows as {
       key: string;
@@ -139,6 +139,7 @@ export default async function MonitoringPage() {
       detail: string;
       opened_at: string;
       notifications: number;
+      severity: string;
     }[]
   ).catch(() => []);
   const load = publicLoad();
@@ -334,29 +335,60 @@ export default async function MonitoringPage() {
         the backups fail for five weeks.
       */}
       {openAlerts.length > 0 && (
-        <Card className="mt-4 border-danger/40">
+        <Card
+          className={`mt-4 ${
+            openAlerts.some((a) => a.severity === "urgent") ? "border-danger/40" : ""
+          }`}
+        >
           <CardHeader
             title={
               <span className="flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-danger" />
+                <ShieldAlert
+                  className={`h-4 w-4 ${
+                    openAlerts.some((a) => a.severity === "urgent")
+                      ? "text-danger"
+                      : "text-ink-400"
+                  }`}
+                />
                 Open alerts
               </span>
             }
-            sub="Already sent by email; listed here until the condition clears"
+            sub="Open conditions; the urgent ones have also been emailed"
           />
           <ul className="divide-y divide-line">
-            {openAlerts.map((a) => (
-              <li key={a.key} className="px-5 py-2.5 text-[13px]">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-danger">{a.title}</span>
-                  <span className="shrink-0 text-ink-400">
-                    {fmtRelative(a.opened_at, locale)}
-                    {a.notifications > 1 ? ` · sent ${a.notifications}×` : ""}
-                  </span>
-                </div>
-                <div className="mt-0.5 text-ink-500">{a.detail}</div>
-              </li>
-            ))}
+            {openAlerts.map((a) => {
+              /*
+                Notices are the reason this list is worth opening now.
+
+                Since severity was introduced they are the conditions that
+                deliberately never send mail — a WhatsApp session flapping, a
+                table growing — so this page is the only place they appear at
+                all. Showing them in the same red as a dead worker would undo
+                the distinction on the screen it was made for.
+              */
+              const urgent = a.severity === "urgent";
+              return (
+                <li key={a.key} className="px-5 py-2.5 text-[13px]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span
+                      className={`font-medium ${urgent ? "text-danger" : "text-ink-700"}`}
+                    >
+                      {!urgent && (
+                        <span className="mr-1.5 rounded bg-ink-100 px-1.5 py-0.5 text-[11px] font-normal text-ink-500">
+                          not emailed
+                        </span>
+                      )}
+                      {a.title}
+                    </span>
+                    <span className="shrink-0 text-ink-400">
+                      {fmtRelative(a.opened_at, locale)}
+                      {a.notifications > 1 ? ` · sent ${a.notifications}×` : ""}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-ink-500">{a.detail}</div>
+                </li>
+              );
+            })}
           </ul>
         </Card>
       )}

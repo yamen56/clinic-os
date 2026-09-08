@@ -1,0 +1,28 @@
+-- Which alerts are allowed to interrupt a person.
+--
+-- 0042 built this alerter on the premise that not being ignorable is the design
+-- goal. It was right about the mechanism -- open once, re-notify slowly, say so
+-- when it clears -- and wrong about one input: every condition it can detect was
+-- treated as equally worth an email, and one of those conditions flaps.
+--
+-- Measured 6-8 September 2026: seventeen emails in fifty-five hours, every one
+-- of them the same condition. Two clinics whose WhatsApp session dropped and
+-- reconnected on its own, over and over, each email reading
+-- `Session status is "disconnected"`. Not one of them needed a human, and every
+-- one resolved without anybody touching it. That is exactly the "filtered within
+-- a day" failure 0042's own comment warns about, arriving by the route it did
+-- not anticipate: not too many emails per problem, but a problem that should
+-- never have been an email at all.
+--
+-- So a finding now declares whether it needs a person. `urgent` reaches the
+-- inbox; `notice` is recorded, listed on /admin/monitoring, and stays there.
+-- Both are still deduplicated by key, both still resolve, and a notice that
+-- persists long enough to stop being plausible escalates to urgent on its own.
+-- The only difference is the inbox.
+--
+-- Existing rows default to `notice` deliberately. Everything open at the moment
+-- this runs is the WhatsApp flap the change exists to silence, and defaulting
+-- them to `urgent` would send one final round of precisely the mail being fixed
+-- -- once on the next resolve, which is the emptiest email of the lot.
+
+alter table ops_alerts add column if not exists severity text not null default 'notice';

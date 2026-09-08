@@ -38,8 +38,17 @@ function check(name: string, ok: boolean, detail = "") {
 const K1 = "qa_test_alpha";
 const K2 = "qa_test_beta";
 
-function finding(key: string, title = "test condition"): Finding {
-  return { key, title, detail: "raised by qa-ops-alert" };
+/*
+  Urgent by default so that the mechanical assertions below — opens once,
+  re-notifies slowly, resolves — keep testing what they were written to test.
+  Severity decides delivery, not bookkeeping, and the two are worth separating.
+*/
+function finding(
+  key: string,
+  title = "test condition",
+  severity: Finding["severity"] = "urgent"
+): Finding {
+  return { key, title, detail: "raised by qa-ops-alert", severity };
 }
 
 async function main() {
@@ -89,7 +98,16 @@ async function main() {
   const inList = new Set(
     (listed?.[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean)
   );
-  const probes = [...ops.matchAll(/^async function (\w*Checks)\s*\(/gm)].map((m) => m[1]);
+  /*
+    `export` is optional in this pattern and that is load-bearing. `whatsappChecks`
+    is exported so qa can drive it directly, and a regex anchored on a bare
+    `async function` would have stopped matching it — quietly dropping the one
+    probe most worth watching out of the very check that exists to notice a probe
+    going missing. Exporting a function must not be able to reduce coverage.
+  */
+  const probes = [...ops.matchAll(/^(?:export )?async function (\w*Checks)\s*\(/gm)].map(
+    (m) => m[1]
+  );
   check("probes were found", probes.length >= 5, `${probes.length}`);
   const unlisted = probes.filter((p) => !inList.has(p));
   check(
@@ -135,6 +153,136 @@ async function main() {
   const stillOpen = await db.query(`select key from ops_alerts where key like 'qa_test_%'`);
   check("exactly one remains", stillOpen.rowCount === 1 && stillOpen.rows[0].key === K2);
   await reconcile([]);
+
+  /* ================================================= severity decides delivery */
+  /*
+    The rule that exists because of 6-8 September 2026: seventeen emails in
+    fifty-five hours, every one a WhatsApp session reconnecting by itself. The
+    dedupe was working; the condition was never worth sending. So a `notice` is
+    recorded and shown on /admin/monitoring and never mailed, and the assertions
+    below are about the *inbox*, not the table — `reconcile` reports which keys
+    it actually delivered, so this can be tested without reading email.
+  */
+  console.log("\n[a notice is recorded, not sent]");
+  const quietOpen = await reconcile([finding(K1, "a quiet condition", "notice")]);
+  check("a notice still opens a row", quietOpen.opened.includes(K1));
+  check("but nothing is emailed", quietOpen.emailed.length === 0, quietOpen.emailed.join(", "));
+  const noticeRow = await db.query(`select severity from ops_alerts where key = $1`, [K1]);
+  check("and the row records why", noticeRow.rows[0]?.severity === "notice");
+
+  await db.query(
+    `update ops_alerts set last_notified = now() - interval '7 hours' where key = $1`,
+    [K1]
+  );
+  const quietAgain = await reconcile([finding(K1, "a quiet condition", "notice")]);
+  check("a persisting notice is not nagged about", quietAgain.emailed.length === 0);
+
+  console.log("\n[but a notice that gets worse speaks up]");
+  /*
+    The trap this closes: the notice already holds the key, so the outage it
+    turns into would find a row open and say nothing at all. That is worse than
+    the noise it replaced — a genuine failure, silent, because a milder version
+    of itself got there first.
+  */
+  const escalated = await reconcile([finding(K1, "now serious", "urgent")]);
+  check("escalation is emailed", escalated.emailed.includes(K1), escalated.emailed.join(", "));
+  check("without opening a second row", escalated.opened.length === 0);
+  const escRow = await db.query(`select severity from ops_alerts where key = $1`, [K1]);
+  check("and the row is upgraded", escRow.rows[0]?.severity === "urgent");
+
+  console.log("\n[clearing follows the same rule]");
+  const clearedUrgent = await reconcile([]);
+  check("an urgent alert reports that it cleared", clearedUrgent.emailed.includes(K1));
+
+  await reconcile([finding(K2, "a quiet condition", "notice")]);
+  const clearedNotice = await reconcile([]);
+  check("a notice resolves", clearedNotice.resolved.includes(K2));
+  check(
+    "silently — nobody was told it started",
+    clearedNotice.emailed.length === 0,
+    clearedNotice.emailed.join(", ")
+  );
+
+  /* ================================================= the condition that caused all this */
+  /*
+    The classification, driven through a real session row.
+
+    One status column, two genuinely different situations, and conflating them
+    is what produced seventeen emails: `logged_out` needs somebody to scan a
+    code and will never recover alone, while `disconnected` is Baileys doing
+    what Baileys does all day. The old check gave both the same thirty-minute
+    fuse.
+  */
+  console.log("\n[a flapping session is not an emergency; an unscanned code is]");
+  const { whatsappChecks } = await import("../src/lib/ops-alert");
+  const waSaved = (
+    await db.query(
+      `select clinic_id, status, desired, connected_at from whatsapp_sessions
+        where clinic_id in (
+          select id from clinics
+           where deleted_at is null and subscription_status <> 'suspended')
+        limit 1`
+    )
+  ).rows[0];
+  if (!waSaved) {
+    check("a session row exists to test with", false, "no usable whatsapp_sessions row");
+  } else {
+    /*
+      Ages are set through `connected_at`, and it has to be that column.
+
+      A `before update` trigger rewrites `updated_at := now()` on every write to
+      this table, so a fixture cannot age a row that way at all — an earlier
+      draft of this test tried, and every case came back "absent" because the
+      row was always zero seconds old. That is not a testing inconvenience: it
+      is the reason `whatsappChecks` cannot use `updated_at` either, since a
+      down session rewrites it every sixty seconds from the reconnect loop.
+    */
+    const downFor = async (status: string, hours: number) => {
+      await db.query(
+        `update whatsapp_sessions set desired = true, status = $2,
+                connected_at = now() - ($3 || ' hours')::interval
+          where clinic_id = $1`,
+        [waSaved.clinic_id, status, String(hours)]
+      );
+      return (await whatsappChecks()).find(
+        (f) => f.key === `whatsapp_down:${waSaved.clinic_id}`
+      );
+    };
+    try {
+      check("a 10-minute drop is not reported at all", !(await downFor("disconnected", 1 / 6)));
+      const eight = await downFor("disconnected", 8);
+      check("an 8-hour drop is recorded", eight?.severity === "notice", eight?.severity ?? "absent");
+      const aDay = await downFor("disconnected", 30);
+      check(
+        "a 30-hour drop is no longer 'reconnecting'",
+        aDay?.severity === "urgent",
+        aDay?.severity ?? "absent"
+      );
+      check("a code shown minutes ago waits out the fuse", !(await downFor("qr", 1 / 6)));
+      const qr = await downFor("qr", 3);
+      check("a code left unscanned is urgent", qr?.severity === "urgent", qr?.severity ?? "absent");
+      const out = await downFor("logged_out", 3);
+      check("and so is a logged-out session", out?.severity === "urgent", out?.severity ?? "absent");
+
+      // Never connected: asked for, never finished. Onboarding, not an outage.
+      await db.query(
+        `update whatsapp_sessions set connected_at = null where clinic_id = $1`,
+        [waSaved.clinic_id]
+      );
+      const never = (await whatsappChecks()).find(
+        (f) => f.key === `whatsapp_down:${waSaved.clinic_id}`
+      );
+      check("a session that never connected is not an outage", !never, never?.severity ?? "absent");
+    } finally {
+      // Restore before anything else can fail: leaving `desired` true here
+      // would have a dev worker try to open a socket for this clinic.
+      await db.query(
+        `update whatsapp_sessions set status = $2, desired = $3, connected_at = $4
+          where clinic_id = $1`,
+        [waSaved.clinic_id, waSaved.status, waSaved.desired, waSaved.connected_at]
+      );
+    }
+  }
 
   /* ================================================= the watchdog on the worker */
   console.log("\n[the web app watching the worker]");

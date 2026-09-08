@@ -19,6 +19,12 @@
  *
  *   - an alert opens **once** per condition, keyed by the condition and not the
  *     occurrence, so a problem lasting six hours is one email and not 360;
+ *   - only conditions that actually need a person are sent at all. This was the
+ *     missing half and it cost the design its credibility for a while: between
+ *     6 and 8 September 2026 the alerter sent seventeen emails in fifty-five
+ *     hours, every one of them a WhatsApp session that dropped and reconnected
+ *     by itself, none of them actionable. Dedupe was working perfectly; the
+ *     problem was a condition that should never have been mail. See `Severity`;
  *   - it re-notifies on a slow cadence while it persists, so being ignored is
  *     itself escalated;
  *   - it says so explicitly when it **clears**, because "did that fix it?" is
@@ -35,11 +41,38 @@ import { usingObjectStore } from "@/lib/storage";
 import { appUrl } from "@/lib/urls";
 import { silenceByClinic, concerning } from "@/lib/whatsapp-health";
 
+/**
+ * Whether a condition is worth interrupting somebody for.
+ *
+ * The distinction this file was missing. Everything above is written around
+ * "not being ignorable", and the way an alerter actually becomes ignorable is
+ * not sending too many emails about one problem — the dedupe already handles
+ * that — but sending any email at all about something that never needed a
+ * person. Seventeen in fifty-five hours, all of them a WhatsApp session
+ * reconnecting by itself, is enough to teach anybody to filter the sender, and
+ * once that rule exists the backup alarm is gone too.
+ *
+ * `urgent` means somebody has to do something now, and it goes to the inbox.
+ * `notice` means it is true, it is worth seeing, and it can wait for whenever
+ * the monitoring page is next open.
+ */
+export type Severity = "urgent" | "notice";
+
 export type Finding = {
   /** Stable per condition, not per occurrence. Reusing it is what dedupes. */
   key: string;
   title: string;
   detail: string;
+  /**
+   * Required, and required on purpose.
+   *
+   * A default would be wrong in both directions: defaulting to `urgent` means a
+   * check added later quietly re-noises the inbox, and defaulting to `notice`
+   * means one added later is quietly never delivered. Neither failure announces
+   * itself. Making it mandatory costs one line per check and forces the
+   * question at the only moment anybody has the context to answer it.
+   */
+  severity: Severity;
 };
 
 /**
@@ -104,6 +137,10 @@ export async function collectFindings(): Promise<Finding[]> {
     } catch (e) {
       found.push({
         key: `probe_failed:${check.name}`,
+        // Urgent whatever it was probing for: a check that throws is reporting
+        // nothing, so the condition it covers is now unmonitored rather than
+        // absent, and that is indistinguishable from healthy until it is not.
+        severity: "urgent",
         title: `The "${check.name}" health check is itself failing`,
         detail: (e as Error).message.slice(0, 300),
       });
@@ -119,6 +156,7 @@ async function backupChecks(): Promise<Finding[]> {
   if (!backupEngineReady()) {
     out.push({
       key: "backup_engine",
+      severity: "urgent",
       title: "The backup engine will not load in this process",
       detail:
         "backupEngineReady() is false, so the nightly job throws on every tick and no archive " +
@@ -130,6 +168,7 @@ async function backupChecks(): Promise<Finding[]> {
   if (age >= 36) {
     out.push({
       key: "backup_stale",
+      severity: "urgent",
       title:
         age === Infinity
           ? "This database has never been backed up"
@@ -157,6 +196,7 @@ async function jobChecks(): Promise<Finding[]> {
   if (Number(row.failed) >= 5) {
     out.push({
       key: "jobs_failing",
+      severity: "urgent",
       title: `${row.failed} background jobs failed in the last hour`,
       detail:
         "AI replies, PDF renders and document filing all run through this queue. " +
@@ -171,6 +211,7 @@ async function jobChecks(): Promise<Finding[]> {
   if (Number(row.stale) >= 20) {
     out.push({
       key: "jobs_stale",
+      severity: "urgent",
       title: `${row.stale} jobs have been waiting more than 15 minutes`,
       detail:
         "The queue is not draining. Either the worker is not processing, or the slow lane is " +
@@ -195,6 +236,9 @@ async function outboxChecks(): Promise<Finding[]> {
   return [
     {
       key: "outbox_failing",
+      // Ten in an hour is not a flaky send, it is a number in trouble — and the
+      // window in which anything can be done about that is short.
+      severity: "urgent",
       title: `${failed} WhatsApp messages failed to send in the last hour`,
       detail:
         "Reminders and confirmations are not reaching patients. Check the affected clinic's " +
@@ -210,31 +254,98 @@ async function outboxChecks(): Promise<Finding[]> {
  * on the first clinic and then stay open, hiding every clinic that dropped
  * afterwards behind an alert that had already been sent.
  *
- * Thirty minutes, because Baileys reconnects on its own routinely and alerting
- * on every blip is how an operator learns to ignore the sender.
+ * The thirty-minute rule this replaces was the single source of every alert
+ * email this platform has ever sent in anger, and none of them were actionable.
+ * The mistake was treating one status column as one condition when it is two:
+ *
+ *   - `logged_out` and `qr` **cannot** recover without a person. The session is
+ *     gone, Baileys will not get it back, and somebody at the clinic has to scan
+ *     a code. Every hour after that is a clinic silently not receiving patient
+ *     messages, so a short fuse and an email is right.
+ *
+ *   - `disconnected` and `connecting` are Baileys being Baileys. It drops and
+ *     reconnects by itself several times a day, and did so on every one of the
+ *     seventeen occasions it was reported between 6 and 8 September 2026 — each
+ *     time clearing within the hour, unaided.
+ *
+ * So a transient drop is recorded and not sent. What makes that safe rather than
+ * merely quiet is the escalation: a socket still "reconnecting" a full day later
+ * is not reconnecting, whatever the column says, and at that point it becomes an
+ * email regardless of status. The quiet window is the difference between a blip
+ * and an outage, which is the judgement the old check never made.
  */
-async function whatsappChecks(): Promise<Finding[]> {
+/**
+ * Ages are measured from `connected_at` — the last time a socket was actually
+ * open — and never from `updated_at`, which cannot work and would have made
+ * every threshold below unreachable.
+ *
+ * A `before update` trigger sets `updated_at := now()` on every write to the
+ * row, and a session that is down writes constantly: the reconnect loop backs
+ * off to a sixty-second ceiling and calls `setSession({status: "connecting"})`
+ * on every attempt, and a displayed QR code rotates every twenty seconds and
+ * writes on each rotation. So `updated_at` on a broken session is never more
+ * than a minute old, and "down for six hours" measured against it is a
+ * condition that can never be true. The old thirty-minute rule only ever fired
+ * at all because two of the five statuses happen to go quiet after they are
+ * written.
+ *
+ * `connected_at` is written in exactly one place — the `connection === "open"`
+ * handler — and cleared in one, an explicit logout, which also drops `desired`
+ * and so leaves the row outside this check entirely.
+ */
+/** `qr` / `logged_out`: will not recover without a person, so the fuse is short. */
+const WA_NEEDS_A_PERSON_HOURS = 1;
+/** `disconnected` / `connecting`: below this it is noise, not news. */
+const WA_TRANSIENT_HOURS = 6;
+/** Above this, "still reconnecting" has stopped being a credible explanation. */
+const WA_ESCALATE_HOURS = 24;
+
+// Exported for qa-ops-alert, which drives a real session row through each
+// status and age. Going via `collectFindings` would work and would also make
+// five HTTP calls to the web app per case; the classification is the part worth
+// testing, and it is worth testing directly.
+export async function whatsappChecks(): Promise<Finding[]> {
   const rows = await withSystem(async (c) =>
     (
       await c.query(
-        `select ws.clinic_id, ws.status, cl.name, cl.slug
+        `select ws.clinic_id, ws.status, cl.name, cl.slug,
+                extract(epoch from (now() - ws.connected_at)) / 3600 as hours
            from whatsapp_sessions ws
            join clinics cl on cl.id = ws.clinic_id
           where ws.desired
             and ws.status <> 'connected'
-            and ws.updated_at < now() - interval '30 minutes'
+            -- Never connected is an onboarding state, not an outage: the clinic
+            -- has asked for WhatsApp and not finished setting it up, and there
+            -- is no "down since" to measure. That is a conversation with them,
+            -- not an alarm about the platform.
+            and ws.connected_at is not null
             and cl.deleted_at is null
             and cl.subscription_status <> 'suspended'`
       )
     ).rows
   );
-  return rows.map((r) => ({
-    key: `whatsapp_down:${r.clinic_id}`,
-    title: `${r.name} has been disconnected from WhatsApp for over 30 minutes`,
-    detail:
-      `Session status is "${r.status}". The clinic is not sending or receiving messages. ` +
-      `If it reads "logged_out" or "qr", somebody at the clinic has to rescan the code.`,
-  }));
+  const out: Finding[] = [];
+  for (const r of rows) {
+    const hours = Number(r.hours);
+    const stuck = r.status === "logged_out" || r.status === "qr";
+    if (stuck && hours < WA_NEEDS_A_PERSON_HOURS) continue;
+    if (!stuck && hours < WA_TRANSIENT_HOURS) continue;
+    out.push({
+      key: `whatsapp_down:${r.clinic_id}`,
+      severity: stuck || hours >= WA_ESCALATE_HOURS ? "urgent" : "notice",
+      title: stuck
+        ? `${r.name} is logged out of WhatsApp and needs the code rescanned`
+        : `${r.name} has been disconnected from WhatsApp for ${Math.floor(hours)} hours`,
+      detail: stuck
+        ? `Session status is "${r.status}". This will not recover on its own — somebody at the ` +
+          `clinic has to open the WhatsApp settings for /c/${r.slug} and scan the code. Until ` +
+          `they do, the clinic is neither sending nor receiving.`
+        : `Session status is "${r.status}". Baileys drops and reconnects by itself several times ` +
+          `a day, so this is recorded rather than sent; it becomes an email at ` +
+          `${WA_ESCALATE_HOURS} hours, by which point it is not reconnecting.`,
+    });
+  }
+  return out;
 }
 
 /**
@@ -255,6 +366,9 @@ async function silenceChecks(): Promise<Finding[]> {
   const rows = await withSystem((c) => silenceByClinic(c, 30));
   return concerning(rows).map((r) => ({
     key: `whatsapp_cold:${r.clinicId}`,
+    // A thirty-day trend, and the comment above already says the response is a
+    // conversation on a Tuesday. Nothing about it is improved by arriving at 3am.
+    severity: "notice" as const,
     title: `${r.name} is messaging people who never reply (${Math.round(r.ratio * 100)}%)`,
     detail:
       `${r.cold} of ${r.out} outbound messages in the last 30 days went into conversations the ` +
@@ -296,6 +410,9 @@ async function storageChecks(): Promise<Finding[]> {
   );
   return rows.map((r) => ({
     key: `table_large:${r.name}`,
+    // "Reported rather than acted on", per the comment above — a table crossing
+    // a threshold it took months to reach is the definition of not urgent.
+    severity: "notice" as const,
     title: `The ${r.name} table has reached ${(Number(r.bytes) / 1_073_741_824).toFixed(1)} GB`,
     detail:
       "Every nightly backup copies it, so this shows up as a slower dump long before it shows " +
@@ -325,6 +442,7 @@ async function webChecks(): Promise<Finding[]> {
       return [
         {
           key: "web_unhealthy",
+          severity: "urgent",
           title: "The web app is answering but reports itself unhealthy",
           detail: `GET ${base}/api/health returned ${JSON.stringify(body).slice(0, 200)}`,
         },
@@ -333,6 +451,7 @@ async function webChecks(): Promise<Finding[]> {
     return [
       {
         key: "web_unhealthy",
+        severity: "urgent",
         title: `The web app returned HTTP ${res.status}`,
         detail: `GET ${base}/api/health — patients and staff cannot use the product.`,
       },
@@ -341,6 +460,7 @@ async function webChecks(): Promise<Finding[]> {
     return [
       {
         key: "web_unhealthy",
+        severity: "urgent",
         title: "The web app is unreachable from the worker",
         detail: `GET ${base}/api/health failed: ${(e as Error).message.slice(0, 200)}`,
       },
@@ -413,9 +533,16 @@ export async function reconcile(
    * Omitted means "I checked everything", which is the worker's full pass.
    */
   owns?: (key: string) => boolean
-): Promise<{ opened: string[]; renotified: string[]; resolved: string[] }> {
+): Promise<{
+  opened: string[];
+  renotified: string[];
+  resolved: string[];
+  /** Of the above, the keys that actually caused an email. */
+  emailed: string[];
+}> {
   const open = await withSystem(async (c) =>
-    (await c.query(`select key, title, last_notified, notifications from ops_alerts`)).rows
+    (await c.query(`select key, title, severity, last_notified, notifications from ops_alerts`))
+      .rows
   );
   const openByKey = new Map(open.map((r) => [r.key as string, r]));
   const nowKeys = new Set(findings.map((f) => f.key));
@@ -423,6 +550,13 @@ export async function reconcile(
   const opened: string[] = [];
   const renotified: string[] = [];
   const resolved: string[] = [];
+  /*
+    What is written down, versus what is sent. Every finding lands in
+    `ops_alerts` and shows up on /admin/monitoring whatever its severity; only
+    these three lists reach an inbox.
+  */
+  const announce: Finding[] = [];
+  const persisting: Finding[] = [];
 
   for (const f of findings) {
     const existing = openByKey.get(f.key);
@@ -437,26 +571,59 @@ export async function reconcile(
       */
       const created = await withSystem((c) =>
         c.query(
-          `insert into ops_alerts (key, title, detail) values ($1, $2, $3)
+          `insert into ops_alerts (key, title, detail, severity) values ($1, $2, $3, $4)
            on conflict (key) do nothing
            returning key`,
-          [f.key, f.title, f.detail]
+          [f.key, f.title, f.detail, f.severity]
         )
       );
-      if (created.rowCount) opened.push(f.key);
+      if (created.rowCount) {
+        opened.push(f.key);
+        if (f.severity === "urgent") announce.push(f);
+      }
       continue;
     }
+    /*
+      A condition that has got worse speaks up even though its row is already
+      open — this is the WhatsApp escalation arriving, a drop that was recorded
+      quietly six hours ago and has now lasted a day. Without this the severity
+      split would be a trap: the notice claims the key first, and the outage it
+      turns into never gets announced because something is already "open".
+    */
+    const escalated = existing.severity !== "urgent" && f.severity === "urgent";
     const age = Date.now() - new Date(existing.last_notified).getTime();
-    if (age >= RENOTIFY_MS) {
+    if (escalated || age >= RENOTIFY_MS) {
       await withSystem((c) =>
         c.query(
           `update ops_alerts set last_notified = now(), notifications = notifications + 1,
-                                 title = $2, detail = $3
+                                 title = $2, detail = $3, severity = $4
             where key = $1`,
-          [f.key, f.title, f.detail]
+          [f.key, f.title, f.detail, f.severity]
         )
       );
       renotified.push(f.key);
+      // An escalation is news, not a reminder, so it reads as one.
+      if (f.severity === "urgent") (escalated ? announce : persisting).push(f);
+      continue;
+    }
+    /*
+      Nothing to send, but the row still has to describe what is true now.
+
+      Titles move while a condition persists — the hour count in a WhatsApp
+      drop climbs every pass — and severity can fall, when a session comes back
+      as `disconnected` after having been `logged_out`. Leaving a stale
+      `urgent` on the row would mean the eventual resolve sends a clearance
+      email for something that stopped being urgent hours earlier.
+    */
+    if (existing.severity !== f.severity || existing.title !== f.title) {
+      await withSystem((c) =>
+        c.query(`update ops_alerts set title = $2, detail = $3, severity = $4 where key = $1`, [
+          f.key,
+          f.title,
+          f.detail,
+          f.severity,
+        ])
+      );
     }
   }
 
@@ -474,32 +641,48 @@ export async function reconcile(
     emails about it is the beginning of the filter rule that makes all of this
     pointless.
   */
-  const newOnes = findings.filter((f) => opened.includes(f.key));
-  if (newOnes.length) {
+  if (announce.length) {
     await deliver(
-      newOnes.length === 1 ? `Clinicti: ${newOnes[0].title}` : `Clinicti: ${newOnes.length} problems`,
-      newOnes.length === 1 ? newOnes[0].title : `${newOnes.length} things need attention`,
-      newOnes.flatMap((f) => (newOnes.length === 1 ? [f.detail] : [`${f.title} — ${f.detail}`]))
+      announce.length === 1
+        ? `Clinicti: ${announce[0].title}`
+        : `Clinicti: ${announce.length} problems`,
+      announce.length === 1 ? announce[0].title : `${announce.length} things need attention`,
+      announce.flatMap((f) => (announce.length === 1 ? [f.detail] : [`${f.title} — ${f.detail}`]))
     );
   }
-  const again = findings.filter((f) => renotified.includes(f.key));
-  if (again.length) {
+  if (persisting.length) {
     await deliver(
-      `Clinicti: still unresolved (${again.length})`,
+      `Clinicti: still unresolved (${persisting.length})`,
       "These were reported earlier and are still true",
-      again.map((f) => `${f.title} — ${f.detail}`)
+      persisting.map((f) => `${f.title} — ${f.detail}`)
     );
   }
-  if (resolved.length) {
-    const titles = resolved.map((k) => openByKey.get(k)?.title ?? k);
+  /*
+    Only clear what was announced in the first place.
+
+    "Did that fix it?" is a real question and worth an email, but it is only a
+    question you have about something that woke you up. A clearance for an alert
+    that was never sent is an email reporting the end of a situation the reader
+    was never told had started — which was half of the seventeen.
+  */
+  const cleared = resolved.filter((k) => openByKey.get(k)?.severity === "urgent");
+  if (cleared.length) {
+    const titles = cleared.map((k) => openByKey.get(k)?.title ?? k);
     await deliver(
-      resolved.length === 1 ? `Clinicti: resolved — ${titles[0]}` : `Clinicti: ${resolved.length} resolved`,
+      cleared.length === 1
+        ? `Clinicti: resolved — ${titles[0]}`
+        : `Clinicti: ${cleared.length} resolved`,
       "Cleared",
       titles.map((t) => `No longer true: ${t}`)
     );
   }
 
-  return { opened, renotified, resolved };
+  return {
+    opened,
+    renotified,
+    resolved,
+    emailed: [...announce.map((f) => f.key), ...persisting.map((f) => f.key), ...cleared],
+  };
 }
 
 /**
@@ -594,6 +777,7 @@ export async function watchdogPass(): Promise<Finding[]> {
   return [
     {
       key: WORKER_KEY,
+      severity: "urgent",
       title: `The worker has been silent for ${Math.round(idleMs / 60_000)} minutes`,
       detail:
         "It rewrites its heartbeat every 60 seconds whether or not it has work, so this means " +
