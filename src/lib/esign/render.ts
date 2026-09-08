@@ -80,7 +80,35 @@ export function sanitizeHtml(input: string): string {
   html = html.replace(/<!--[\s\S]*?-->/g, "");
   html = html.replace(VOID_CONTENT, "");
 
-  return html.replace(/<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g, (_m, rawName: string, rawAttrs: string) => {
+  /*
+    Two alternatives, and the second one is the important half.
+
+    The first is a well-formed tag, which the allowlist below rewrites. The
+    second is a bare `<`, and it exists because of what used to happen when the
+    first did not match: the input was returned *verbatim*. Markup with an
+    unbalanced quote — `<a href="x onclick="alert(1)">` — matches neither the
+    tag shape nor anything else, so it passed through untouched and reached the
+    DOM without ever meeting the allowlist. So did `<img>`, which is not an
+    allowed tag at all.
+
+    Measured, that class turned out to be inert: the same unbalanced quote that
+    defeats the regex also swallows the handler into the preceding attribute's
+    value, so the browser parses `onclick=` as part of the href and nothing
+    runs. Fifteen variants, zero executed. But that is HTML parsing being
+    charitable, not a guarantee — it differs between engines and is free to
+    change — and "safe because the browser mangles it" is not a property worth
+    depending on in the one function standing between a consent form and a
+    patient's session.
+
+    So anything that is not a recognised tag becomes `&lt;` and is displayed as
+    text. Escaping rather than deleting, because a consent form legitimately
+    contains "&lt;" in prose — "age &lt; 18" must survive as words, and deleting
+    to the next `>` would eat the sentence.
+  */
+  return html.replace(/<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>|</g, (_m, rawName: string, rawAttrs: string) => {
+    // The bare-`<` branch: no tag was captured, so this is not markup we
+    // recognise. Neutralise it instead of trusting it.
+    if (rawName === undefined) return "&lt;";
     const name = rawName.toLowerCase();
     if (!ALLOWED_TAGS.has(name)) return "";
     const isClosing = _m.startsWith("</");

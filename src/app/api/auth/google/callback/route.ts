@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimit, clientIp } from "@/lib/booking-public";
 import { cookies, headers } from "next/headers";
 import { withSystem } from "@/lib/db";
 import { audit } from "@/lib/audit";
@@ -21,6 +22,16 @@ const fail = (reason: string) => NextResponse.redirect(`${appUrl()}/login?error=
  */
 export async function GET(req: Request) {
   if (!googleConfigured()) return fail("google_off");
+
+  /*
+    Limited as well as the start route, and for a different reason: this is the
+    end that spends a token exchange at Google on every call. The state cookie
+    already makes a forged callback useless, but "useless" still costs us the
+    round trip, and the check that rejects it happens after it.
+  */
+  if (!rateLimit(`oauth-callback:${clientIp(req)}`, 20, 10 * 60_000)) {
+    return fail("rate_limited");
+  }
 
   const url = new URL(req.url);
   const jar = await cookies();

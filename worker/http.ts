@@ -155,7 +155,15 @@ export function startHttpServer() {
 
         send(404, { error: "not_found" });
       } catch (e) {
-        send(500, { error: (e as Error).message });
+        /*
+          Logged here, not returned. The caller is our own web app and is
+          holding the shared secret, so this is not the open internet — but the
+          messages that reach this line are database errors and filesystem
+          paths, and there is no reason for any of it to travel back over HTTP
+          when the thing that needs to read it is the worker's own log.
+        */
+        console.error("[worker] request failed:", (e as Error).stack ?? e);
+        send(500, { error: "internal_error" });
       }
     })();
   });

@@ -155,6 +155,39 @@ export async function backupDatabase(
   const tables = await tablesOf(c);
   counts.tables = tables.length;
 
+  /*
+    Refuse to write a backup that contains nothing.
+
+    The URL above prefers DATABASE_SUPER_URL and falls back to DATABASE_URL,
+    and that fallback is the hazard: the app role is subject to row-level
+    security, and this code sets no RLS context, so every tenant-scoped table
+    would answer `select count(*)` with 0. The archive would be well-formed,
+    the upload would succeed, the log would read "56 tables, 0 rows", and the
+    only thing standing between this clinic and losing its patients would be a
+    file full of headers.
+
+    A live database is never legitimately empty, so there is no reading of zero
+    that is worth writing to storage. Failing here is loud, reaches the alerting
+    in lib/ops-alert, and — unlike the silent version — is true.
+  */
+  const visible = Number(
+    (
+      await c.query<{ n: string }>(
+        `select coalesce(sum(n), 0)::text as n from (
+           select (select count(*) from clinics) as n
+           union all select (select count(*) from users)
+         ) s`
+      )
+    ).rows[0].n
+  );
+  if (visible === 0) {
+    throw new Error(
+      "backup aborted: this connection can see no clinics and no users. " +
+        "That is what row-level security looks like from the app role — check " +
+        "DATABASE_SUPER_URL is set for the worker, rather than trusting the fallback."
+    );
+  }
+
   const gzip = createGzip({ level: 9 });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 

@@ -19,6 +19,7 @@
  */
 import { chromium, type Page } from "playwright";
 import { Client } from "pg";
+import { sanitizeHtml } from "../src/lib/esign/render";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const SLUG = process.env.DEMO_SLUG || "rima-dental";
@@ -339,6 +340,88 @@ async function main() {
     } finally {
       await setPerms(doctorPerms);
     }
+  }
+
+  // ------------------------------------------- the document HTML sanitiser
+  /*
+    Consent documents are rich text, stored as HTML, and rendered with
+    `dangerouslySetInnerHTML` — to staff, and to patients on the signing page.
+    It is the one place in the app where markup somebody else wrote becomes
+    markup the browser executes, so `sanitizeHtml` is the guard that matters
+    most and the one hardest to review by reading.
+
+    Chromium is the oracle rather than a regex over the output: these are
+    parser-mismatch bugs, where the sanitiser and the browser disagree about
+    what a string means, and only one of them gets to be right. Each payload is
+    sanitised, injected, and the DOM is asked whether an element, a live
+    handler, or a dangerous URL survived — asked of the DOM, because
+    `onclick=` also appears inside attribute values and inside escaped text,
+    and a test that calls those handlers is a test nobody trusts twice.
+  */
+  {
+    const payloads: [string, string][] = [
+      ["plain script", `<script>window.__x=1</script>`],
+      ["img onerror", `<img src=x onerror="window.__x=1">`],
+      ["svg onload", `<svg onload="window.__x=1"></svg>`],
+      ["nested script split", `<scr<script>ipt>window.__x=1</script>`],
+      ["mXSS noscript", `<noscript><p title="</noscript><img src=x onerror=window.__x=1>"></noscript>`],
+      ["javascript href", `<a href="javascript:window.__x=1">x</a>`],
+      ["js href entity tab", `<a href="jav&#x09;ascript:window.__x=1">x</a>`],
+      ["data href", `<a href="data:text/html,<script>parent.__x=1</script>">x</a>`],
+      ["style url()", `<div style="background:url(javascript:window.__x=1)">x</div>`],
+      ["template content", `<template><img src=x onerror=window.__x=1></template>`],
+      ["details ontoggle", `<details open ontoggle="window.__x=1"></details>`],
+      ["meta refresh", `<meta http-equiv="refresh" content="0;url=javascript:window.__x=1">`],
+      /*
+        The regression this block was written for. An unbalanced quote matches
+        neither the tag shape nor anything else, and the sanitiser used to
+        return such input verbatim — straight past the allowlist. It parsed
+        inert, because the same broken quote swallows the handler into the href,
+        but that is the browser being charitable rather than a guarantee.
+      */
+      ["unbalanced quote", `<a href="x onclick="window.__x=1">x</a>`],
+      ["unbalanced quote img", `<img src="x onerror="window.__x=1">`],
+    ];
+
+    const page = await browser.newPage();
+    await page.goto("about:blank");
+    console.log("\n[sanitizer] document HTML cannot become document behaviour");
+
+    for (const [label, raw] of payloads) {
+      const verdict = await page.evaluate(async (html) => {
+        (window as any).__x = 0;
+        const host = document.createElement("div");
+        document.body.innerHTML = "";
+        document.body.appendChild(host);
+        host.innerHTML = html;
+        await new Promise((r) => setTimeout(r, 50));
+        const nodes = [...host.querySelectorAll("*")];
+        return {
+          executed: (window as any).__x === 1,
+          handler: nodes.some((n) =>
+            ["onclick", "onmouseover", "onerror", "onload", "onfocus", "ontoggle"].some(
+              (h) => typeof (n as any)[h] === "function"
+            )
+          ),
+          element: nodes.some((n) =>
+            ["SCRIPT", "IFRAME", "OBJECT", "EMBED", "SVG", "IMG", "FORM", "META", "BASE"].includes(
+              n.tagName.toUpperCase()
+            )
+          ),
+          badUrl: nodes.some((n) =>
+            ["href", "src", "action", "data"].some((a) =>
+              /^\s*(javascript|vbscript|data:text\/html)/i.test(n.getAttribute(a) ?? "")
+            )
+          ),
+        };
+      }, sanitizeHtml(raw));
+
+      ok(
+        !verdict.executed && !verdict.handler && !verdict.element && !verdict.badUrl,
+        `neutralised: ${label}`
+      );
+    }
+    await page.close();
   }
 
   await browser.close();

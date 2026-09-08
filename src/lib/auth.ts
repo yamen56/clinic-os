@@ -116,7 +116,25 @@ export type SessionInfo = {
 };
 
 export function hashPassword(pw: string): string {
-  return bcrypt.hashSync(pw, 10);
+  /*
+    Cost 12, measured at ~300ms to hash and ~290ms to verify on this machine
+    against ~70ms at cost 10.
+
+    That quarter-second buys nothing against online guessing — `auth-throttle`
+    already stops that at ten failures — so it is worth paying only for the
+    threat it actually addresses, which is someone holding a copy of the table.
+    The database is hosted outside Jordan on a third party, so "the hashes are
+    stolen" is a scenario to price in rather than dismiss, and each step up the
+    cost doubles what that offline work costs them.
+
+    A clinic signs in a handful of times a day, so the human cost is a login
+    that is slower than a keystroke and faster than the page it lands on.
+
+    Existing hashes are unaffected and stay at their stored cost — bcrypt reads
+    it back out of the hash — so this strengthens accounts only as their
+    passwords are next set. It is not retroactive.
+  */
+  return bcrypt.hashSync(pw, 12);
 }
 
 /**
