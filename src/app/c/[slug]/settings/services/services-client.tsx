@@ -189,7 +189,9 @@ export function ServicesClient({
                 <Input dir="rtl" value={draft.nameAr} onChange={(e) => setDraft({ ...draft, nameAr: e.target.value })} />
               </Field>
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            {/* Same three-across squeeze as the booking link editor: the price
+                label carries the currency in it, so it is the first to collide. */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label={t.services.duration}>
                 <NumberInput
                   dir="ltr" min={5} step={5}

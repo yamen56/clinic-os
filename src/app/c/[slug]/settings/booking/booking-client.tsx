@@ -221,20 +221,35 @@ export function BookingLinksClient({
         />
         <ul className="divide-y divide-line">
           {links.map((l) => (
-            <li key={l.id} className={`flex flex-wrap items-center gap-3 px-5 py-3 ${l.active ? "" : "opacity-50"}`}>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{l.name}</span>
+            <li
+              key={l.id}
+              className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 ${l.active ? "" : "opacity-50"}`}
+            >
+              {/*
+                `basis-full` until there is room, which is what stops this row
+                overlapping itself on a phone.
+
+                `flex-1` alone let the name and the four controls compete for one
+                line: the inner name row could not shrink — no `min-w-0`, no wrap
+                — so the badge spilled over the buttons and the `/book/<slug>`
+                line ran underneath them. Giving the text block the whole width
+                below `sm` puts the controls on their own line instead of on top
+                of the text.
+              */}
+              <div className="min-w-0 flex-1 basis-full sm:basis-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 break-words text-sm font-medium">{l.name}</span>
                   <Badge status={l.approval_mode === "instant" ? "confirmed" : "pending"}>
                     {l.approval_mode === "instant" ? tb.instant : tb.manual}
                   </Badge>
                   {!l.active && <Badge status="cancelled">{t.common.inactive}</Badge>}
                 </div>
-                <div className="mt-0.5 text-[13px] text-ink-500" dir="ltr">
+                {/* A slug is one unbroken token, so it needs somewhere to break. */}
+                <div className="mt-0.5 break-all text-[13px] text-ink-500" dir="ltr">
                   /book/{l.slug}
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <Button
                   variant="outline"
                   size="sm"
@@ -408,7 +423,14 @@ export function BookingLinksClient({
                 />
               </Field>
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            {/*
+              One column until there is room for three. These three labels are
+              the longest in the dialog — "Minimum notice (minutes)", "الحجز حتى
+              (أيام مقدماً)" — and at a third of a 320px phone each one wrapped
+              across three lines and ran into the field below it. Every other row
+              in this editor was already `sm:`-gated; this one was the outlier.
+            */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label={tb.minNotice}>
                 <NumberInput dir="ltr" min={0} value={editing.min_notice_min ?? 120}
                   onChange={(v) => setEditing({ ...editing, min_notice_min: v })} />

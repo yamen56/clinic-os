@@ -8,6 +8,7 @@ import { PhotoPicker } from "@/components/photo-picker";
 import { LanguageToggle } from "@/components/language-toggle";
 import { InstallApp } from "@/components/pwa";
 import { logoutAction } from "@/app/login/actions";
+import { DeleteAccount } from "./delete-account";
 import { CLINICTI_PRIVACY_URL, CLINICTI_TERMS_URL } from "@/components/powered-by";
 import { CAPABILITY_GROUPS, accessLevelOf, resolveCapabilities } from "@/lib/permissions";
 import { PenTool, Bell, LogOut, ChevronLeft, Building2, Lock } from "lucide-react";
@@ -191,6 +192,17 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
             {t.auth.signOut}
           </button>
         </form>
+
+        {/*
+          The right of erasure, as a control rather than a support request.
+          Below sign-out on purpose — see components in ./delete-account for why
+          it is quieter than the button above it despite being the graver one.
+        */}
+        <DeleteAccount
+          slug={slug}
+          email={me?.email ?? access.session.user.email}
+          isOwner={access.isOwner}
+        />
       </div>
     </>
   );

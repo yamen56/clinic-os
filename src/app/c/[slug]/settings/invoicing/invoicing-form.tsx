@@ -35,7 +35,9 @@ export function InvoicingForm({
           <Input dir="ltr" defaultValue={clinic.invoice_prefix} disabled={ro}
             onChange={(e) => patch({ invoice_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) })} />
         </Field>
-        <div className="grid grid-cols-2 gap-4">
+        {/* Both of these carry a hint under the label, which is what makes half
+            a phone too narrow for them. */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* A default, not the invoice's rate. Tax lives on the line now, so
               this is what a new line starts at — and 0 starts it outside the
               scope of tax, which is what a clinic that is not registered wants. */}

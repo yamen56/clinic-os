@@ -281,6 +281,40 @@ async function main() {
     await page.close();
   }
 
+  // ------------------------------------------------ an owner cannot erase itself
+  /*
+    The one failure in the self-delete flow that cannot be undone.
+
+    A member deleting their own account is recoverable in the sense that matters
+    — the clinic still has its records and its owner. An *owner* deleting theirs
+    is not: `clinic_members.user_id` cascades, so the membership that grants the
+    only full access to a workspace full of patient records would go with the
+    login, leaving nobody able to reach it, grant access, or close it. The server
+    refuses it and the dialog says so; this checks the dialog, because the button
+    being reachable is what decides whether anybody ever reaches the server.
+  */
+  {
+    console.log("\n[account] an owner is told why they cannot delete theirs");
+    const page = await browser.newPage();
+    await login(page, OWNER.email, OWNER.password);
+    await page.goto(`${BASE}/c/${SLUG}/profile`, { waitUntil: "domcontentloaded" });
+
+    const open = page.locator("button").filter({ hasText: /حذف الحساب|Delete account/i }).first();
+    ok((await open.count()) > 0, "the control is offered rather than hidden");
+    await open.click();
+    await page.waitForTimeout(600);
+
+    const confirm = page
+      .locator("button")
+      .filter({ hasText: /حذف حسابي|Delete my account/i });
+    ok((await confirm.count()) === 0, "but an owner is given no way to confirm it");
+    ok(
+      await page.locator("text=/الملكية|ownership/i").first().isVisible(),
+      "and is told to transfer ownership instead"
+    );
+    await page.close();
+  }
+
   // ------------------------------------------------- the Meta pixel, fenced in
   /*
     One page on this domain loads a third-party tag, and the rest must not.
