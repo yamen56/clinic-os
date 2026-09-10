@@ -44,6 +44,45 @@ import Script from "next/script";
  */
 export const CLINICTI_META_PIXEL_ID = "1371362911862828";
 
+declare global {
+  interface Window {
+    /** Defined synchronously by the bootstrap below, long before the remote
+     *  script arrives — early calls are queued rather than lost. */
+    fbq?: (...args: unknown[]) => void;
+  }
+}
+
+/**
+ * Appointments already reported, so one booking is one conversion.
+ *
+ * Module scope rather than component state on purpose. The requirement is once
+ * per *booking*, not once per mount, and a ref inside the wizard would fire
+ * again if the component remounted while the same confirmation was on screen.
+ * Keyed by the appointment id the API returns, so a second genuine booking in
+ * the same session — a different id — still reports.
+ */
+const reported = new Set<string>();
+
+/**
+ * A completed booking, reported to Meta.
+ *
+ * Called from the two places a booking actually exists: after `/start` returns
+ * with `skipVerify`, and after `/verify` accepts the code. Both have already
+ * written the appointment row. Deliberately not called from a `useEffect` on
+ * the "done" step — that fires on every render of that step and again on a back
+ * navigation into it, and neither is a new lead.
+ *
+ * Silent where there is no pixel, which is everywhere except the agency booking
+ * page: `fbq` is undefined on the seven clinic links, and the CSP would refuse
+ * the request even if it were not. See the fences documented above.
+ */
+export function trackSchedule(appointmentId: string, bookingType?: string | null): void {
+  if (!appointmentId || reported.has(appointmentId)) return;
+  if (typeof window === "undefined" || typeof window.fbq !== "function") return;
+  reported.add(appointmentId);
+  window.fbq("track", "Schedule", bookingType ? { content_name: bookingType } : {});
+}
+
 export function MetaPixel({ id }: { id: string }) {
   /*
     The id is interpolated into inline script, so it is checked rather than

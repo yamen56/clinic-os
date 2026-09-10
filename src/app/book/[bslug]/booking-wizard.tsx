@@ -5,6 +5,7 @@ import { DateTime } from "luxon";
 import type { Dict } from "@/lib/i18n/en";
 import { PoweredBy, PrivacyLink, CLINICTI_PRIVACY_URL } from "@/components/powered-by";
 import { questionsForService, type PublicQuestion } from "@/lib/booking-intake";
+import { trackSchedule } from "@/components/meta-pixel";
 import {
   CalendarCheck2,
   CalendarPlus,
@@ -273,6 +274,8 @@ export function BookingWizard({
         return;
       }
       if (d.skipVerify) {
+        // The appointment row exists by the time `/start` answers this way.
+        trackSchedule(d.appointmentId, service.name);
         setDoneStatus(d.status);
         setJoinUrl(d.meetingUrl ?? null);
         setStep("done");
@@ -312,6 +315,9 @@ export function BookingWizard({
         }
         return;
       }
+      // Same point on the other route in: the code was accepted, so the
+      // appointment has been written.
+      trackSchedule(d.appointmentId, service?.name);
       setDoneStatus(d.status);
       setJoinUrl(d.meetingUrl ?? null);
       setStep("done");
