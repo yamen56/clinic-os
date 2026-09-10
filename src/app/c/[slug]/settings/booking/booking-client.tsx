@@ -449,9 +449,22 @@ export function BookingLinksClient({
               in this editor was already `sm:`-gated; this one was the outlier.
             */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Field label={tb.minNotice}>
-                <NumberInput dir="ltr" min={0} value={editing.min_notice_min ?? 120}
-                  onChange={(v) => setEditing({ ...editing, min_notice_min: v })} />
+              {/*
+                Entered in hours, stored in minutes.
+
+                Nobody thinks about booking notice in minutes — it is "two
+                hours" or "a day", and 120 in a box labelled minutes is a small
+                arithmetic problem every time the page is opened. The column
+                stays `min_notice_min` because the slot engine works in minutes
+                and a migration here would buy nothing.
+
+                Halves are allowed so the existing 90s and 30s survive a round
+                trip; `Math.round` on the way back keeps the stored value a
+                whole number of minutes.
+              */}
+              <Field label={tb.minNotice} hint={tb.minNoticeHint}>
+                <NumberInput dir="ltr" min={0} step={0.5} value={(editing.min_notice_min ?? 120) / 60}
+                  onChange={(v) => setEditing({ ...editing, min_notice_min: Math.round(v * 60) })} />
               </Field>
               <Field label={tb.maxDays}>
                 <NumberInput dir="ltr" min={1} value={editing.max_days_ahead ?? 30}
