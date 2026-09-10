@@ -9,6 +9,7 @@ import { LanguageToggle } from "@/components/language-toggle";
 import { InstallApp } from "@/components/pwa";
 import { logoutAction } from "@/app/login/actions";
 import { DeleteAccount } from "./delete-account";
+import { NameEditor } from "./name-editor";
 import { CLINICTI_PRIVACY_URL, CLINICTI_TERMS_URL } from "@/components/powered-by";
 import { CAPABILITY_GROUPS, accessLevelOf, resolveCapabilities } from "@/lib/permissions";
 import { PenTool, Bell, LogOut, ChevronLeft, Building2, Lock } from "lucide-react";
@@ -90,11 +91,11 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
             ) : null}
 
             <div className="grid gap-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[17px] font-semibold">
-                  {me?.title ? `${me.title} ` : ""}
-                  {me?.full_name ?? access.session.user.fullName}
-                </span>
+              <NameEditor
+                slug={slug}
+                name={me?.full_name ?? access.session.user.fullName}
+                title={me?.title ?? null}
+              >
                 <Badge status={access.role === "doctor" ? "confirmed" : "neutral"}>
                   {t.staff.roles[access.role]}
                 </Badge>
@@ -104,7 +105,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
                     {t.staff.owner}
                   </Badge>
                 )}
-              </div>
+              </NameEditor>
               <span className="num text-[13px] text-ink-500">{me?.email}</span>
               {me?.specialty && <span className="text-[13px] text-ink-500">{me.specialty}</span>}
             </div>

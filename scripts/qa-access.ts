@@ -68,6 +68,12 @@ async function landsOn(page: Page, path: string, expected?: string): Promise<str
  * signature/PIN pair write only that user's own credentials, releasing a lock
  * touches only a lock they hold, and the notification preferences are their
  * own. A capability check on these would be the wrong question.
+ *
+ * The last two are the same argument about the account itself. Erasing it and
+ * renaming it both write one row — the caller's own — and `users_access` says so
+ * independently of the code: `with check (id = app_user_id())`. There is no
+ * capability that would make either of them somebody else's to do, and inventing
+ * one would mean a clinic could stop a person changing their own name.
  */
 const IDENTITY_AUTHORISED = [
   "signAsStaffAction",
@@ -77,6 +83,8 @@ const IDENTITY_AUTHORISED = [
   "setKioskPinAction",
   "verifyKioskUnlockAction",
   "saveNotificationPrefsAction",
+  "deleteMyAccountAction",
+  "updateMyNameAction",
 ];
 
 /** Reads every `"use server"` file under src and reports the unguarded actions. */

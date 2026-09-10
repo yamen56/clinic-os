@@ -41,6 +41,8 @@ type Member = {
   full_name: string;
   email: string;
   has_photo: boolean;
+  /** They also work at another clinic here, so their name is theirs to change. */
+  shared_account: boolean;
 };
 
 const ROLES: MemberRole[] = ["doctor", "receptionist", "other"];
@@ -473,6 +475,8 @@ function EditMember({
   // refuses both, and a form that lets you set something it will reject is
   // worse than one that says why.
   const accessLocked = member.is_owner || isSelf;
+  // Your own name is always yours to change, even from this screen.
+  const nameLocked = member.shared_account && !isSelf;
 
   return (
     <div className="grid gap-4">
@@ -483,6 +487,21 @@ function EditMember({
         hasPhoto={member.has_photo}
         color={m.color}
       />
+      {/*
+        The name, on its own row above the rest, because it is the field this
+        screen was missing: it was typed once on the invitation and then fixed
+        for good, and it is what appears on the calendar, on notes and on signed
+        documents. Locked only when the account is shared with another clinic —
+        see the guard in updateMemberAction for why that is not ours to rewrite.
+      */}
+      <Field label={t.staff.fullName} hint={nameLocked ? t.staff.nameShared : undefined}>
+        <Input
+          value={m.full_name}
+          maxLength={80}
+          disabled={nameLocked}
+          onChange={(e) => setM({ ...m, full_name: e.target.value })}
+        />
+      </Field>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label={t.staff.role}>
           <Select
@@ -593,9 +612,11 @@ function EditMember({
         )}
         <Button
           loading={pending}
+          disabled={!nameLocked && m.full_name.trim().length < 2}
           onClick={() =>
             start(async () => {
               const r = await updateMemberAction(slug, m.id, {
+                fullName: nameLocked ? undefined : m.full_name,
                 role: isSelf ? undefined : m.role,
                 title: m.title ?? "",
                 specialty: m.specialty ?? "",
@@ -608,7 +629,14 @@ function EditMember({
                 workingHours: ownHours ? m.working_hours : null,
               });
               if (r.error) {
-                toast(t.common.genericError, "error");
+                toast(
+                  r.error === "name_shared"
+                    ? t.staff.nameShared
+                    : r.error === "invalid_name"
+                      ? t.profile.nameTooShort
+                      : t.common.genericError,
+                  "error"
+                );
                 return;
               }
               toast(t.common.saved);

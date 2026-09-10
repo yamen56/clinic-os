@@ -254,6 +254,8 @@ export async function updateMemberAction(
   slug: string,
   memberId: string,
   patch: {
+    /** Changes `users.full_name` — see the guard below for whose name this is. */
+    fullName?: string;
     role?: string;
     title?: string;
     specialty?: string;
@@ -271,11 +273,13 @@ export async function updateMemberAction(
 
   return inClinic(access, async (c) => {
     const target = (
-      await c.query(`select is_owner from clinic_members where id = $1 and clinic_id = $2`, [
-        memberId,
-        access.clinicId,
-      ])
-    ).rows[0] as { is_owner: boolean } | undefined;
+      await c.query(
+        `select cm.is_owner, cm.user_id, u.full_name
+           from clinic_members cm join users u on u.id = cm.user_id
+          where cm.id = $1 and cm.clinic_id = $2`,
+        [memberId, access.clinicId]
+      )
+    ).rows[0] as { is_owner: boolean; user_id: string; full_name: string } | undefined;
     if (!target) return { error: "not_found" };
 
     /*
@@ -296,6 +300,47 @@ export async function updateMemberAction(
     const isSelf = memberId === access.memberId;
     if (isSelf && (patch.role !== undefined || patch.access !== undefined || patch.active === false)) {
       return { error: "forbidden_self" };
+    }
+
+    /*
+      Renaming, and the one rule that makes it safe.
+
+      The name is on `users`, not on the membership, and a `users` row can be
+      shared: the same person may work at two clinics on this platform, and both
+      see the same `full_name`. So letting any staff manager rewrite it would let
+      clinic A change what clinic B calls its own doctor — a genuine cross-tenant
+      write, on a field that ends up on consultation notes and signed documents.
+
+      The rule is therefore: you may rename anyone whose account exists only in
+      your clinic, and you may always rename yourself. Somebody who works in two
+      places changes their own name from their account page, where they are the
+      only one who can. That covers what this is actually for — the typo in a
+      colleague's name that was previously permanent — and refuses the one case
+      that is not ours to decide.
+
+      Checked before any write, so a refusal never lands half a save.
+    */
+    const wantsName = patch.fullName !== undefined;
+    const newName = wantsName
+      ? patch.fullName!.replace(/\s+/g, " ").trim().slice(0, 80)
+      : null;
+    if (wantsName) {
+      if ((newName as string).length < 2) return { error: "invalid_name" };
+      if (!isSelf && newName !== target.full_name) {
+        /*
+          System connection: RLS on `clinic_members` hides rows belonging to
+          other clinics, which is exactly the set this needs to count. Under
+          `inClinic` the query would return nothing and the guard would pass for
+          everybody — silently, which is the worst way for a guard to fail.
+        */
+        const shared = await withSystem((sc) =>
+          sc.query(`select 1 from clinic_members where user_id = $1 and clinic_id <> $2 limit 1`, [
+            target.user_id,
+            access.clinicId,
+          ])
+        );
+        if (shared.rowCount) return { error: "name_shared" };
+      }
     }
 
     const sets: string[] = [];
@@ -340,12 +385,26 @@ export async function updateMemberAction(
     }
     if (patch.workingHours !== undefined)
       push("working_hours", patch.workingHours ? JSON.stringify(patch.workingHours) : null);
-    if (!sets.length) return {};
-    const r = await c.query(
-      `update clinic_members set ${sets.join(", ")} where id = $1 and clinic_id = $2`,
-      vals
-    );
-    if (!r.rowCount) return { error: "not_found" };
+    const renaming = newName !== null && newName !== target.full_name;
+    if (!sets.length && !renaming) return {};
+    if (sets.length) {
+      const r = await c.query(
+        `update clinic_members set ${sets.join(", ")} where id = $1 and clinic_id = $2`,
+        vals
+      );
+      if (!r.rowCount) return { error: "not_found" };
+    }
+    /*
+      Also a system connection. `users_access` lets a row write only itself
+      (`with check (id = app_user_id())`), so a clinic-scoped connection can read
+      a colleague's name and not change it. Authorisation for this happened
+      above — the caller holds `settings.staff`, and the account is theirs alone.
+    */
+    if (renaming) {
+      await withSystem((sc) =>
+        sc.query(`update users set full_name = $2 where id = $1`, [target.user_id, newName])
+      );
+    }
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,
@@ -353,7 +412,11 @@ export async function updateMemberAction(
       action: "staff.update",
       entity: "clinic_member",
       entityId: memberId,
-      detail: { fields: Object.keys(patch) },
+      // Both names when it is a rename: a document signed last month says one
+      // and the account now says another, and this row is what reconciles them.
+      detail: renaming
+        ? { fields: Object.keys(patch), name: { from: target.full_name, to: newName } }
+        : { fields: Object.keys(patch) },
     });
     revalidatePath(`/c/${slug}/settings/staff`);
     return {};

@@ -768,7 +768,10 @@ export const en = {
   },
   profile: {
     title: "My account",
-    sub: "Your photo, your signature and how the platform reaches you.",
+    sub: "Your name, your photo, your signature and how the platform reaches you.",
+    editName: "Change your name",
+    nameHint: "The name that appears on your appointments, your notes and the documents you sign.",
+    nameTooShort: "Please write your full name.",
   },
   tags: {
     title: "Patient tags",
@@ -814,6 +817,8 @@ export const en = {
     },
     owner: "Owner",
     fullName: "Full name",
+    nameShared:
+      "This person also works at another clinic here, so only they can change their own name — from their own account page.",
     title2: "Title",
     specialty: "Specialty",
     color: "Calendar color",
