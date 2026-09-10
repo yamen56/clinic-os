@@ -1570,6 +1570,11 @@ export const ar: Dict = {
     showPricesHint: "أطفئه إذا كان السعر يُحدد لكل حالة.",
     allowAnyDoctor: "السماح بخيار «أول طبيب متاح»",
     allowAnyDoctorHint: "إطفاؤه يُلزم المريض باختيار طبيب.",
+    skipServiceStep: "تخطّي خطوة اختيار الخدمة",
+    skipServiceStepHint:
+      "تفتح الصفحة على التاريخ مباشرة بدل السؤال عن الخدمة. يعمل فقط عندما يقدّم هذا الرابط خدمة واحدة.",
+    skipServiceStepInactive:
+      "هذا الرابط يقدّم {n} خدمات، لذا ما زالت الخطوة تظهر. حدّده بخدمة واحدة ليصبح فعّالاً.",
     requireConsent: "طلب الموافقة قبل الحجز",
     requireConsentHint: "مربع اختيار يوافق عليه المريض، بصياغتك.",
     consentText: "نص الموافقة",

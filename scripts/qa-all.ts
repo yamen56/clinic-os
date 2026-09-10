@@ -36,6 +36,7 @@ const SUITES = [
   ["concurrency: one slot, one appointment", "scripts/qa-booking-race.ts"],
   ["booking: the clinic's own questions", "scripts/qa-booking-intake.ts"],
   ["booking: settings and the public page, in a browser", "scripts/qa-booking-ui.ts"],
+  ["booking: a link that is about one service", "scripts/qa-booking-single-service.ts"],
   ["notes: versions, categories, voice", "scripts/qa-notes.ts"],
   ["notes: the tab and the merged booking step", "scripts/qa-notes-ui.ts"],
   ["notes: filed against a visit", "scripts/qa-notes-visits.ts"],

@@ -17,7 +17,7 @@ export default async function BookingSettingsPage({
         `select id, name, slug, doctor_member_id, service_ids, min_notice_min, max_days_ahead,
                 slot_granularity_min, approval_mode, active, headline, headline_ar, intro, intro_ar,
                 success_note, success_note_ar, show_prices, allow_any_doctor,
-                consent_text, consent_text_ar, require_consent
+                consent_text, consent_text_ar, require_consent, skip_service_step
          from booking_links where clinic_id = $1 order by created_at`,
         [access.clinicId]
       )
@@ -31,7 +31,15 @@ export default async function BookingSettingsPage({
     ).rows;
     const services = (
       await c.query(
-        `select id, name, name_ar from services where clinic_id = $1 and active order by sort, name`,
+        /*
+          `bookable_online` comes along so the screen can say truthfully whether
+          the single-service setting will do anything. The public page resolves
+          a link to `active and bookable_online`, and a toggle that quietly does
+          nothing because the one service it points at is not bookable online is
+          worse than no toggle.
+        */
+        `select id, name, name_ar, bookable_online from services
+          where clinic_id = $1 and active order by sort, name`,
         [access.clinicId]
       )
     ).rows;

@@ -42,6 +42,7 @@ const linkSchema = z.object({
   consentText: optional(1000),
   consentTextAr: optional(1000),
   requireConsent: z.boolean().default(false),
+  skipServiceStep: z.boolean().default(false),
 });
 
 export async function saveBookingLinkAction(
@@ -71,7 +72,7 @@ export async function saveBookingLinkAction(
       d.name, d.slug, d.doctorMemberId, d.serviceIds, d.minNoticeMin, d.maxDaysAhead,
       d.slotGranularityMin, d.approvalMode, d.active, d.headline, d.headlineAr, d.intro,
       d.introAr, d.successNote, d.successNoteAr, d.showPrices, d.allowAnyDoctor,
-      d.consentText, d.consentTextAr, d.requireConsent,
+      d.consentText, d.consentTextAr, d.requireConsent, d.skipServiceStep,
     ];
 
     if (d.id) {
@@ -80,7 +81,8 @@ export async function saveBookingLinkAction(
            min_notice_min = $7, max_days_ahead = $8, slot_granularity_min = $9, approval_mode = $10,
            active = $11, headline = $12, headline_ar = $13, intro = $14, intro_ar = $15,
            success_note = $16, success_note_ar = $17, show_prices = $18, allow_any_doctor = $19,
-           consent_text = $20, consent_text_ar = $21, require_consent = $22
+           consent_text = $20, consent_text_ar = $21, require_consent = $22,
+           skip_service_step = $23
          where id = $1 and clinic_id = $2`,
         [d.id, access.clinicId, ...shared]
       );
@@ -90,8 +92,9 @@ export async function saveBookingLinkAction(
         `insert into booking_links (clinic_id, name, slug, doctor_member_id, service_ids,
            min_notice_min, max_days_ahead, slot_granularity_min, approval_mode, active,
            headline, headline_ar, intro, intro_ar, success_note, success_note_ar,
-           show_prices, allow_any_doctor, consent_text, consent_text_ar, require_consent)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+           show_prices, allow_any_doctor, consent_text, consent_text_ar, require_consent,
+           skip_service_step)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
         [access.clinicId, ...shared]
       );
     }

@@ -14,15 +14,31 @@ const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544
  * broken. Skips index 0 (today), which the minimum-notice window can empty out.
  */
 async function pickOpenDay(page: Page): Promise<number> {
+  /*
+    Every click gets its own short deadline.
+
+    A day with nothing on it ends up `disabled`, and Playwright's click waits
+    for an element to become *enabled* — so clicking one did not fail fast, it
+    hung for the full thirty seconds and killed the suite before a single
+    assertion ran. This file was therefore unrunnable on any day whose next few
+    chips are a weekend: the same shape as the qa-dashboard-on-the-1st trap, a
+    date-dependent fixture bug that reads as a regression in the product.
+
+    Filtering on `:not([disabled])` is not enough on its own. The strip renders
+    enabled and the counts arrive afterwards, so the locator can resolve a chip
+    a moment before React greys it out — the selector was right and the element
+    still went disabled under it. A short timeout is what actually makes the
+    loop move on.
+  */
   const chips = page.locator("button:has(span.tnum)");
   const total = await chips.count();
   for (let i = 1; i < Math.min(total, 10); i++) {
-    await chips.nth(i).click();
     try {
+      await chips.nth(i).click({ timeout: 3000 });
       await page.waitForSelector("button.tnum", { timeout: 4000 });
       return i;
     } catch {
-      // Closed day or fully booked — try the next one.
+      // Closed, full, or greyed out as the counts landed — try the next one.
     }
   }
   throw new Error("no day in the booking strip offered any slots");
@@ -125,6 +141,13 @@ async function main() {
   await page.click("text=كشفية");
   await page.waitForSelector("text=اختر الوقت");
   // The same day as booking 1, so "the taken slot is gone" is a real comparison.
+  /*
+    The same locator `pickOpenDay` counted with — the whole strip.
+
+    `openDay` is an index into that list, so this has to select from the same
+    one or it lands on a different date, and the "taken slot disappeared"
+    assertion below only means anything when both bookings are on the same day.
+  */
   await page.locator("button:has(span.tnum)").nth(openDay).click();
   await page.waitForSelector("button.tnum", { timeout: 15000 });
   // the first slot should now be a DIFFERENT time (previous one taken)

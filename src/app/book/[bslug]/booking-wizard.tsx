@@ -59,6 +59,7 @@ export function BookingWizard({
   maxDaysAhead,
   approvalMode,
   lockedDoctor,
+  skipServiceStep,
 }: {
   bslug: string;
   clinic: {
@@ -92,6 +93,15 @@ export function BookingWizard({
   maxDaysAhead: number;
   approvalMode: "instant" | "approval";
   lockedDoctor: string | null;
+  /**
+   * Hide "choose a service" and book the only one there is.
+   *
+   * Arrives already resolved: the server sets it only when the link genuinely
+   * comes down to a single service, so this component never has to decide which
+   * one was meant. Turning the setting on for a link offering three does
+   * nothing, which is the safe direction.
+   */
+  skipServiceStep: boolean;
 }) {
   const [locale, setLocale] = useState<"ar" | "en">(clinic.defaultLocale);
   const t = locale === "en" ? words.en : words.ar;
@@ -99,8 +109,22 @@ export function BookingWizard({
   const isAr = locale === "ar";
 
   type Step = "service" | "doctor" | "time" | "details" | "verify" | "done";
-  const [step, setStep] = useState<Step>("service");
-  const [service, setService] = useState<Service | null>(null);
+
+  /*
+    Whether this link asks the patient what they are booking.
+
+    `skipServiceStep` arrives already resolved — the server only sets it when
+    the link really does come down to one service, so there is no case here
+    where the step is hidden and `services[0]` is the wrong answer or missing.
+    See loadPublicLink and the page.
+  */
+  const showServiceStep = !skipServiceStep;
+  const firstStep: Step = showServiceStep ? "service" : doctors.length > 1 && !lockedDoctor ? "doctor" : "time";
+
+  const [step, setStep] = useState<Step>(firstStep);
+  // Pre-chosen when the step is gone, so every downstream screen — the slot
+  // scan, the price, the summary — has the service it expects.
+  const [service, setService] = useState<Service | null>(showServiceStep ? null : (services[0] ?? null));
   const [doctorId, setDoctorId] = useState<string | null>(lockedDoctor);
   const [date, setDate] = useState(() => DateTime.now().setZone(clinic.tz).toISODate()!);
   const [dayCounts, setDayCounts] = useState<Record<string, number> | null>(null);
@@ -357,21 +381,37 @@ export function BookingWizard({
   const slotLocal = slot ? DateTime.fromISO(slot.startISO).setZone(clinic.tz).setLocale(fmtLocale) : null;
   const chosenDoctor = doctors.find((d) => d.id === (slot?.doctorMemberId ?? doctorId));
   const showDoctorStep = doctors.length > 1 && !lockedDoctor;
-  const backFromTime = () => setStep(showDoctorStep ? "doctor" : "service");
+  const backFromTime = () => setStep(showDoctorStep ? "doctor" : firstStep);
 
-  const totalSteps = 4;
-  const stepIndex = {
-    service: 0,
-    doctor: 1,
-    time: 2,
-    details: 3,
-    verify: 3,
-    done: totalSteps,
-  }[step];
+  /*
+    The steps this particular link actually has, in order.
+
+    Derived rather than counted, because two of the four are conditional: the
+    doctor step collapses when there is nobody to choose between, and the
+    service step when the clinic has said this link is about one thing. A fixed
+    `totalSteps = 4` drew four dots either way and lit them from a hard-coded
+    index — so a link that skips the first step would open with the progress bar
+    already part-filled, which reads as a page that lost your place rather than
+    one with fewer questions.
+
+    `verify` shares a dot with `details`: it is the same answer being confirmed,
+    not a further thing to decide.
+  */
+  const flow: Step[] = [
+    ...(showServiceStep ? (["service"] as const) : []),
+    ...(showDoctorStep ? (["doctor"] as const) : []),
+    "time",
+    "details",
+  ];
+  const totalSteps = flow.length;
+  const stepIndex =
+    step === "done" ? totalSteps : Math.max(0, flow.indexOf(step === "verify" ? "details" : step));
 
   const reset = () => {
-    setStep("service");
-    setService(null);
+    setStep(firstStep);
+    // Booking again on a single-service link starts from the same service, not
+    // from a choice the page no longer offers.
+    setService(showServiceStep ? null : (services[0] ?? null));
     setSlot(null);
     setAnswers({});
     setConsent(false);
@@ -530,7 +570,10 @@ export function BookingWizard({
                   </button>
                 ))}
               </div>
-              <BackBtn onClick={() => setStep("service")} label={t.back} />
+              {/* Nothing behind this one when the service step is gone — a Back
+                  that returns to a screen the link does not have is worse than
+                  no Back at all. */}
+              {showServiceStep && <BackBtn onClick={() => setStep("service")} label={t.back} />}
             </section>
           )}
 
@@ -604,7 +647,10 @@ export function BookingWizard({
               )}
               {error && <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
               <div className="mt-5 flex items-center justify-between">
-                <BackBtn onClick={backFromTime} label={t.back} />
+                {/* A link with one service and one doctor opens here, so there
+                    is nowhere back to. The empty span holds the row's
+                    justify-between apart, or Next slides left on its own. */}
+                {step === firstStep ? <span /> : <BackBtn onClick={backFromTime} label={t.back} />}
                 <PrimaryBtn disabled={!slot} onClick={() => { setError(""); setStep("details"); }} label={t.next} />
               </div>
             </section>

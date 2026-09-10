@@ -244,6 +244,16 @@ export default async function PublicBookingPage({
       maxDaysAhead={data.link.max_days_ahead}
       approvalMode={data.link.approval_mode}
       lockedDoctor={data.link.doctor_member_id}
+      /*
+        Resolved here, not in the browser, and only when it is actually true.
+
+        `service_ids` may be empty ("everything bookable"), and a service can be
+        deactivated long after this link was configured — so how many services a
+        link comes down to is a question about the services table, answered at
+        load time. Sending the raw setting would let the page hide the step on a
+        link offering three and then have to guess which one the patient wanted.
+      */
+      skipServiceStep={data.link.skip_service_step && data.services.length === 1}
     />
     </>
   );

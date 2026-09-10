@@ -1604,6 +1604,15 @@ export const en = {
     showPricesHint: "Off if you quote per case rather than per service.",
     allowAnyDoctor: 'Allow "first available doctor"',
     allowAnyDoctorHint: "Off forces the patient to pick a doctor.",
+    skipServiceStep: "Skip the service step",
+    /*
+      Says what it does and what it needs, because the setting is inert on a
+      link offering several services and there is nowhere else to learn that.
+    */
+    skipServiceStepHint:
+      "Opens the page on the date instead of asking what to book. Only applies when this link offers exactly one service.",
+    skipServiceStepInactive:
+      "This link offers {n} services, so the step is still shown. Restrict it to one for this to take effect.",
     requireConsent: "Require agreement before booking",
     requireConsentHint: "A tick-box the patient must accept, in your words.",
     consentText: "Agreement text",

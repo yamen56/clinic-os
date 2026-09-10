@@ -53,6 +53,8 @@ type LinkRow = {
   consent_text: string | null;
   consent_text_ar: string | null;
   require_consent: boolean;
+  /** Hide "choose a service" when this link comes down to exactly one. */
+  skip_service_step: boolean;
 };
 
 type QuestionRow = {
@@ -93,7 +95,7 @@ export function BookingLinksClient({
   canEdit: boolean;
   links: LinkRow[];
   doctors: { id: string; name: string }[];
-  services: { id: string; name: string; name_ar: string | null }[];
+  services: { id: string; name: string; name_ar: string | null; bookable_online: boolean }[];
   questions: QuestionRow[];
   patientFields: PatientField[];
 }) {
@@ -111,6 +113,21 @@ export function BookingLinksClient({
   const tb = t.bookingSettings;
   const serviceName = (s: { name: string; name_ar: string | null }) =>
     locale === "ar" ? s.name_ar || s.name : s.name;
+
+  /*
+    How many services the link being edited actually comes down to.
+
+    The same rule `loadPublicLink` applies, so the screen and the page cannot
+    disagree: the link's own selection if it has one, otherwise every service
+    that is bookable online. Written here rather than assumed from
+    `service_ids.length`, because an empty array means "all of them" and a
+    picked service that is not bookable online never reaches the public page.
+  */
+  const bookable = services.filter((s) => s.bookable_online);
+  const picked = editing?.service_ids ?? [];
+  const effectiveServiceCount = picked.length
+    ? bookable.filter((s) => picked.includes(s.id)).length
+    : bookable.length;
 
   const save = () =>
     start(async () => {
@@ -137,6 +154,7 @@ export function BookingLinksClient({
         consentText: editing.consent_text ?? "",
         consentTextAr: editing.consent_text_ar ?? "",
         requireConsent: editing.require_consent ?? false,
+        skipServiceStep: editing.skip_service_step ?? false,
       });
       if (r.error) {
         toast(
@@ -495,6 +513,32 @@ export function BookingLinksClient({
                 </div>
               </Field>
             )}
+
+            {/*
+              Sits under the service picker because it is a statement about that
+              picker: it only does anything once the link comes down to one
+              service, and this is where that is decided.
+            */}
+            <div className="grid gap-3">
+              <ToggleRow
+                label={tb.skipServiceStep}
+                hint={tb.skipServiceStepHint}
+                checked={!!editing.skip_service_step}
+                onChange={(v) => setEditing({ ...editing, skip_service_step: v })}
+              />
+              {/*
+                Says so when it is switched on and inert, rather than leaving the
+                clinic to discover on the public page that nothing changed. The
+                count is worked out exactly as the booking page works it out —
+                the link's own selection if it has one, otherwise everything
+                bookable online.
+              */}
+              {editing.skip_service_step && effectiveServiceCount !== 1 && (
+                <p className="text-[13px] text-warning">
+                  {tb.skipServiceStepInactive.replace("{n}", String(effectiveServiceCount))}
+                </p>
+              )}
+            </div>
 
             <SectionRule label={tb.pageCopy} hint={tb.pageCopyHint} />
             <div className="grid gap-4 sm:grid-cols-2">

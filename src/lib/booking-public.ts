@@ -28,6 +28,8 @@ export type PublicLink = {
     consent_text: string | null;
     consent_text_ar: string | null;
     require_consent: boolean;
+    /** Opt-in: hide the service step when the link resolves to exactly one. */
+    skip_service_step: boolean;
   };
   clinic: {
     id: string;
@@ -145,6 +147,7 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
         consent_text: link.consent_text,
         consent_text_ar: link.consent_text_ar,
         require_consent: link.require_consent,
+        skip_service_step: link.skip_service_step ?? false,
       },
       clinic,
       services,
