@@ -19,6 +19,7 @@ import {
   User,
   Check,
   Video,
+  LayoutGrid,
 } from "lucide-react";
 
 type Service = {
@@ -28,8 +29,11 @@ type Service = {
   durationMin: number;
   price: number;
   locationKind: "in_person" | "online";
+  /** Null for a service the clinic has not filed under a section. */
+  sectionId: string | null;
 };
 type Doctor = { id: string; name: string; title: string | null; specialty: string | null };
+type Section = { id: string | null; name: string; nameAr: string | null; count: number };
 
 export type LinkCopy = {
   headline: string | null;
@@ -52,6 +56,7 @@ export function BookingWizard({
   bslug,
   clinic,
   services,
+  sections,
   doctors,
   questions,
   copy,
@@ -77,6 +82,8 @@ export function BookingWizard({
     currency: string;
   };
   services: Service[];
+  /** The sections this link offers, already narrowed to what it can book. */
+  sections: Section[];
   doctors: Doctor[];
   questions: PublicQuestion[];
   copy: LinkCopy;
@@ -108,7 +115,7 @@ export function BookingWizard({
   const dir = locale === "en" ? "ltr" : "rtl";
   const isAr = locale === "ar";
 
-  type Step = "service" | "doctor" | "time" | "details" | "verify" | "done";
+  type Step = "section" | "service" | "doctor" | "time" | "details" | "verify" | "done";
 
   /*
     Whether this link asks the patient what they are booking.
@@ -119,12 +126,28 @@ export function BookingWizard({
     See loadPublicLink and the page.
   */
   const showServiceStep = !skipServiceStep;
-  const firstStep: Step = showServiceStep ? "service" : doctors.length > 1 && !lockedDoctor ? "doctor" : "time";
+  /*
+    And whether it asks which part of the clinic first.
+
+    Same self-collapsing rule as the doctor step: a screen offering one choice
+    is not a question. One section, or none, and the patient goes straight to
+    the services — which is every clinic that has not set sections up, so this
+    changes nothing for them.
+  */
+  const showSectionStep = showServiceStep && sections.length > 1;
+  const firstStep: Step = showSectionStep
+    ? "section"
+    : showServiceStep
+      ? "service"
+      : doctors.length > 1 && !lockedDoctor
+        ? "doctor"
+        : "time";
 
   const [step, setStep] = useState<Step>(firstStep);
   // Pre-chosen when the step is gone, so every downstream screen — the slot
   // scan, the price, the summary — has the service it expects.
   const [service, setService] = useState<Service | null>(showServiceStep ? null : (services[0] ?? null));
+  const [sectionId, setSectionId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(lockedDoctor);
   const [date, setDate] = useState(() => DateTime.now().setZone(clinic.tz).toISODate()!);
   const [dayCounts, setDayCounts] = useState<Record<string, number> | null>(null);
@@ -381,7 +404,15 @@ export function BookingWizard({
   const slotLocal = slot ? DateTime.fromISO(slot.startISO).setZone(clinic.tz).setLocale(fmtLocale) : null;
   const chosenDoctor = doctors.find((d) => d.id === (slot?.doctorMemberId ?? doctorId));
   const showDoctorStep = doctors.length > 1 && !lockedDoctor;
-  const backFromTime = () => setStep(showDoctorStep ? "doctor" : firstStep);
+  /* Back goes to the previous step that exists — not to `firstStep`, which
+     since the section step was added is no longer the same thing. */
+  const backFromTime = () =>
+    setStep(showDoctorStep ? "doctor" : showServiceStep ? "service" : firstStep);
+
+  /** Only the services in the chosen section, when the patient chose one. */
+  const shownServices = showSectionStep
+    ? services.filter((s) => s.sectionId === sectionId)
+    : services;
 
   /*
     The steps this particular link actually has, in order.
@@ -398,6 +429,7 @@ export function BookingWizard({
     not a further thing to decide.
   */
   const flow: Step[] = [
+    ...(showSectionStep ? (["section"] as const) : []),
     ...(showServiceStep ? (["service"] as const) : []),
     ...(showDoctorStep ? (["doctor"] as const) : []),
     "time",
@@ -412,6 +444,7 @@ export function BookingWizard({
     // Booking again on a single-service link starts from the same service, not
     // from a choice the page no longer offers.
     setService(showServiceStep ? null : (services[0] ?? null));
+    setSectionId(null);
     setSlot(null);
     setAnswers({});
     setConsent(false);
@@ -480,10 +513,52 @@ export function BookingWizard({
         )}
 
         <div className="flex-1">
+          {/* STEP: section */}
+          {step === "section" && (
+            <section className="animate-fade-up">
+              {(headline || intro) && (
+                <div className="mb-5">
+                  {headline && <h2 className="text-[17px] font-bold tracking-tight">{headline}</h2>}
+                  {intro && <p className="mt-1 whitespace-pre-line text-[14px] leading-6 text-ink-500">{intro}</p>}
+                </div>
+              )}
+              <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold">
+                <LayoutGrid className="h-4.5 w-4.5" style={{ color: "var(--bk)" }} />
+                {t.chooseSection}
+              </h2>
+              <div className="grid gap-2.5">
+                {sections.map((sec) => (
+                  <button
+                    key={sec.id ?? "__unfiled"}
+                    onClick={() => {
+                      setSectionId(sec.id);
+                      setStep("service");
+                    }}
+                    className="flex items-center gap-3 rounded-card border border-line bg-surface p-4 text-start shadow-card transition-all hover:shadow-pop"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-semibold">
+                        {/* An unfiled group has no name of its own — it is
+                            whatever the clinic has not filed yet. */}
+                        {sec.id === null ? t.otherSection : isAr ? sec.nameAr || sec.name : sec.name}
+                      </div>
+                      <div className="mt-0.5 text-[13px] text-ink-500 tnum">
+                        {sec.count === 1
+                          ? t.oneService
+                          : t.servicesCount.replace("{n}", String(sec.count))}
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4.5 w-4.5 text-ink-300 rtl:rotate-180" />
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* STEP: service */}
           {step === "service" && (
             <section className="animate-fade-up">
-              {(headline || intro) && (
+              {(headline || intro) && !showSectionStep && (
                 <div className="mb-5">
                   {headline && <h2 className="text-[17px] font-bold tracking-tight">{headline}</h2>}
                   {intro && <p className="mt-1 whitespace-pre-line text-[14px] leading-6 text-ink-500">{intro}</p>}
@@ -494,7 +569,7 @@ export function BookingWizard({
                 {t.chooseService}
               </h2>
               <div className="grid gap-2.5">
-                {services.map((s) => (
+                {shownServices.map((s) => (
                   <button
                     key={s.id}
                     onClick={() => {
@@ -522,6 +597,8 @@ export function BookingWizard({
                   </button>
                 ))}
               </div>
+              {/* Only when there is a section screen behind this one. */}
+              {showSectionStep && <BackBtn onClick={() => setStep("section")} label={t.back} />}
             </section>
           )}
 

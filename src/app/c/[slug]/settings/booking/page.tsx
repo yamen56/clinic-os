@@ -38,8 +38,15 @@ export default async function BookingSettingsPage({
           nothing because the one service it points at is not bookable online is
           worse than no toggle.
         */
-        `select id, name, name_ar, bookable_online from services
+        `select id, name, name_ar, bookable_online, section_id from services
           where clinic_id = $1 and active order by sort, name`,
+        [access.clinicId]
+      )
+    ).rows;
+    const sections = (
+      await c.query(
+        `select id, name, name_ar from service_sections
+          where clinic_id = $1 order by sort, name`,
         [access.clinicId]
       )
     ).rows;
@@ -60,7 +67,7 @@ export default async function BookingSettingsPage({
         [access.clinicId]
       )
     ).rows;
-    return { links, doctors, services, questions, patientFields };
+    return { links, doctors, services, sections, questions, patientFields };
   });
 
   return (
@@ -70,6 +77,7 @@ export default async function BookingSettingsPage({
       links={JSON.parse(JSON.stringify(data.links))}
       doctors={JSON.parse(JSON.stringify(data.doctors))}
       services={JSON.parse(JSON.stringify(data.services))}
+      sections={JSON.parse(JSON.stringify(data.sections))}
       questions={JSON.parse(JSON.stringify(data.questions))}
       patientFields={JSON.parse(JSON.stringify(data.patientFields))}
     />

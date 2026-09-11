@@ -17,7 +17,7 @@ import {
 } from "./actions";
 import { RequiredDocuments } from "@/components/esign/required-documents";
 import { AppointmentNotes } from "@/components/appointment-notes";
-import type { Appt, Doctor, Service } from "./calendar-client";
+import type { Appt, Doctor, Section, Service } from "./calendar-client";
 import { X, UserPlus, ClipboardList } from "lucide-react";
 
 export type PanelState =
@@ -42,6 +42,7 @@ export function AppointmentPanel({
   onChanged,
   doctors,
   services,
+  sections,
   canSendDocuments,
 }: {
   slug: string;
@@ -51,6 +52,7 @@ export function AppointmentPanel({
   onChanged: () => void;
   doctors: Doctor[];
   services: Service[];
+  sections: Section[];
   canSendDocuments: boolean;
 }) {
   const { t, locale } = useI18n();
@@ -231,11 +233,37 @@ export function AppointmentPanel({
                   }}
                 >
                   <option value="">{t.calendar.noService}</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {locale === "ar" ? s.name_ar || s.name : s.name}
-                    </option>
-                  ))}
+                  {/* Grouped by section when the clinic has them, flat when it
+                      does not — a single <optgroup> around every option is a
+                      heading that separates nothing. */}
+                  {sections.length === 0
+                    ? services.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {locale === "ar" ? s.name_ar || s.name : s.name}
+                        </option>
+                      ))
+                    : [
+                        ...sections.map((sec) => ({
+                          key: sec.id,
+                          label: locale === "ar" ? sec.name_ar || sec.name : sec.name,
+                          items: services.filter((s) => s.section_id === sec.id),
+                        })),
+                        {
+                          key: "__unfiled",
+                          label: t.sections.unfiled,
+                          items: services.filter((s) => !s.section_id),
+                        },
+                      ]
+                        .filter((g) => g.items.length > 0)
+                        .map((g) => (
+                          <optgroup key={g.key} label={g.label}>
+                            {g.items.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {locale === "ar" ? s.name_ar || s.name : s.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
                 </Select>
               </Field>
               <Field label={t.calendar.doctor}>

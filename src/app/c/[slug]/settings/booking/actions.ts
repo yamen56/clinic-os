@@ -43,6 +43,9 @@ const linkSchema = z.object({
   consentTextAr: optional(1000),
   requireConsent: z.boolean().default(false),
   skipServiceStep: z.boolean().default(false),
+  /* Restrict to one section, picking up its future services too. An
+     alternative to `serviceIds`, never a layer on top of it — see below. */
+  sectionId: z.string().uuid().nullable().default(null),
 });
 
 export async function saveBookingLinkAction(
@@ -68,11 +71,34 @@ export async function saveBookingLinkAction(
     );
     if (dup.rowCount) return { error: "slug_taken" };
 
+    /*
+      The section has to be this clinic's. Checked here rather than left to the
+      foreign key: FK checks run as the table owner and bypass row-level
+      security, so a forged id from another clinic would satisfy the constraint
+      and quietly restrict the link to a section nobody here can see.
+    */
+    if (d.sectionId) {
+      const owned = await c.query(
+        `select 1 from service_sections where id = $1 and clinic_id = $2`,
+        [d.sectionId, access.clinicId]
+      );
+      if (!owned.rowCount) return { error: "invalid" };
+    }
+
+    /*
+      One restriction or the other, never both. A link carrying a section and a
+      service list would mean the intersection, which is not a thing the editor
+      can express and not a thing anyone would predict from looking at it — so
+      whichever the clinic set wins, and the other is cleared on the way in.
+    */
+    const sectionId = d.sectionId;
+    const serviceIds = sectionId ? [] : d.serviceIds;
+
     const shared = [
-      d.name, d.slug, d.doctorMemberId, d.serviceIds, d.minNoticeMin, d.maxDaysAhead,
+      d.name, d.slug, d.doctorMemberId, serviceIds, d.minNoticeMin, d.maxDaysAhead,
       d.slotGranularityMin, d.approvalMode, d.active, d.headline, d.headlineAr, d.intro,
       d.introAr, d.successNote, d.successNoteAr, d.showPrices, d.allowAnyDoctor,
-      d.consentText, d.consentTextAr, d.requireConsent, d.skipServiceStep,
+      d.consentText, d.consentTextAr, d.requireConsent, d.skipServiceStep, sectionId,
     ];
 
     if (d.id) {
@@ -82,7 +108,7 @@ export async function saveBookingLinkAction(
            active = $11, headline = $12, headline_ar = $13, intro = $14, intro_ar = $15,
            success_note = $16, success_note_ar = $17, show_prices = $18, allow_any_doctor = $19,
            consent_text = $20, consent_text_ar = $21, require_consent = $22,
-           skip_service_step = $23
+           skip_service_step = $23, section_id = $24
          where id = $1 and clinic_id = $2`,
         [d.id, access.clinicId, ...shared]
       );
@@ -93,8 +119,8 @@ export async function saveBookingLinkAction(
            min_notice_min, max_days_ahead, slot_granularity_min, approval_mode, active,
            headline, headline_ar, intro, intro_ar, success_note, success_note_ar,
            show_prices, allow_any_doctor, consent_text, consent_text_ar, require_consent,
-           skip_service_step)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
+           skip_service_step, section_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
         [access.clinicId, ...shared]
       );
     }

@@ -13,12 +13,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   if (!from || !to) return NextResponse.json({ error: "missing_range" }, { status: 400 });
 
   const data = await inClinic(access, async (c) => {
-    const [appts, doctors, services, clinic] = await Promise.all([
+    const [appts, doctors, services, sections, clinic] = await Promise.all([
       c.query(
         `select a.id, a.patient_id, a.doctor_member_id, a.service_id, a.starts_at, a.ends_at,
                 a.status, a.source, a.notes, a.intake_answers,
                 p.full_name as patient_name, p.phone_e164 as patient_phone,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
+                s.section_id as service_section_id,
                 cm.color as doctor_color, u.full_name as doctor_name
          from appointments a
          join patients p on p.id = a.patient_id
@@ -37,8 +38,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
         [access.clinicId]
       ),
       c.query(
-        `select id, name, name_ar, duration_min, price, color, buffer_after_min, bookable_online, active
-         from services where clinic_id = $1 and active order by sort, name`,
+        `select s.id, s.name, s.name_ar, s.duration_min, s.price, s.color, s.buffer_after_min,
+                s.bookable_online, s.active, s.section_id
+         from services s
+         left join service_sections sec on sec.id = s.section_id
+         where s.clinic_id = $1 and s.active
+         order by (s.section_id is null), sec.sort, sec.name, s.sort, s.name`,
+        [access.clinicId]
+      ),
+      c.query(
+        `select id, name, name_ar from service_sections where clinic_id = $1 order by sort, name`,
         [access.clinicId]
       ),
       c.query(`select working_hours, blocked_dates, timezone from clinics where id = $1`, [
@@ -49,6 +58,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       appointments: appts.rows,
       doctors: doctors.rows,
       services: services.rows,
+      sections: sections.rows,
       clinicHours: clinic.rows[0].working_hours,
       blockedDates: clinic.rows[0].blocked_dates,
       tz: clinic.rows[0].timezone,

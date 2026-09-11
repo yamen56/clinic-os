@@ -30,6 +30,8 @@ export type PublicLink = {
     require_consent: boolean;
     /** Opt-in: hide the service step when the link resolves to exactly one. */
     skip_service_step: boolean;
+    /** Restrict to one section, picking up its future services. */
+    section_id: string | null;
   };
   clinic: {
     id: string;
@@ -66,7 +68,17 @@ export type PublicLink = {
     color: string;
     /** 'online' swaps the address and the call button for a join link. */
     location_kind: "in_person" | "online";
+    section_id: string | null;
   }[];
+  /**
+   * The sections this link actually offers, in the clinic's order.
+   *
+   * Derived from the services above rather than queried, so a section whose
+   * every service is hidden, deactivated or outside this link never shows up
+   * as a card that leads to an empty screen. A trailing `id: null` entry
+   * appears only when some offered service is unfiled.
+   */
+  sections: { id: string | null; name: string; name_ar: string | null }[];
   doctors: { id: string; name: string; title: string | null; specialty: string | null }[];
   /** Everything the page renders. The mapping onto the patient file stays server-side. */
   questions: PublicQuestion[];
@@ -99,19 +111,41 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       )
     ).rows[0];
 
-    const serviceFilter = (link.service_ids ?? []).length
-      ? `and s.id = any($2::uuid[])`
-      : "";
+    /*
+      Two ways to narrow a link, and they are alternatives — the editor writes
+      one and clears the other. Both are applied anyway: an older row that
+      somehow carries both gets the intersection, which is the safe direction.
+    */
     const params: unknown[] = [link.clinic_id];
-    if (serviceFilter) params.push(link.service_ids);
+    const serviceFilter = (link.service_ids ?? []).length
+      ? `and s.id = any($${params.push(link.service_ids)}::uuid[])`
+      : "";
+    const sectionFilter = link.section_id
+      ? `and s.section_id = $${params.push(link.section_id)}::uuid`
+      : "";
     const services = (
       await c.query(
-        `select s.id, s.name, s.name_ar, s.duration_min, s.price, s.color, s.location_kind
-         from services s where s.clinic_id = $1 and s.active and s.bookable_online ${serviceFilter}
-         order by s.sort, s.name`,
+        `select s.id, s.name, s.name_ar, s.duration_min, s.price, s.color, s.location_kind,
+                s.section_id, sec.name as section_name, sec.name_ar as section_name_ar
+         from services s
+         left join service_sections sec on sec.id = s.section_id
+         where s.clinic_id = $1 and s.active and s.bookable_online ${serviceFilter} ${sectionFilter}
+         order by (s.section_id is null), sec.sort, sec.name, s.sort, s.name`,
         params
       )
     ).rows;
+
+    // Distinct sections, in the order the services already arrived in.
+    const sections: PublicLink["sections"] = [];
+    for (const s of services) {
+      if (!sections.some((x) => x.id === s.section_id)) {
+        sections.push({
+          id: s.section_id,
+          name: s.section_name ?? "",
+          name_ar: s.section_name_ar ?? null,
+        });
+      }
+    }
 
     const doctors = (
       await c.query(
@@ -148,9 +182,11 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
         consent_text_ar: link.consent_text_ar,
         require_consent: link.require_consent,
         skip_service_step: link.skip_service_step ?? false,
+        section_id: link.section_id ?? null,
       },
       clinic,
       services,
+      sections,
       doctors,
       questions: rawQuestions.map(toPublicQuestion),
       rawQuestions,

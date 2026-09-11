@@ -220,6 +220,13 @@ export default async function PublicBookingPage({
         durationMin: s.duration_min,
         price: Number(s.price),
         locationKind: s.location_kind,
+        sectionId: s.section_id,
+      }))}
+      sections={data.sections.map((sec) => ({
+        id: sec.id,
+        name: sec.name,
+        nameAr: sec.name_ar,
+        count: data.services.filter((s) => s.section_id === sec.id).length,
       }))}
       doctors={data.doctors.map((d) => ({
         id: d.id,

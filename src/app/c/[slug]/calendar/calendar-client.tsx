@@ -32,6 +32,7 @@ export type Appt = {
   service_name: string | null;
   service_name_ar: string | null;
   service_color: string | null;
+  service_section_id: string | null;
   doctor_color: string | null;
   doctor_name: string | null;
 };
@@ -53,7 +54,10 @@ export type Service = {
   price: string;
   color: string;
   buffer_after_min: number;
+  section_id: string | null;
 };
+
+export type Section = { id: string; name: string; name_ar: string | null };
 
 const START_MIN = 7 * 60;
 const END_MIN = 22 * 60;
@@ -91,11 +95,13 @@ export function CalendarClient({
   const [anchor, setAnchor] = useState(() => DateTime.now().setZone(tz).toISODate()!);
   const [doctorFilter, setDoctorFilter] = useState<string>(isDoctor ? (selfMemberId ?? "") : "");
   const [serviceFilter, setServiceFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
   const [colorBy, setColorBy] = useState<"service" | "doctor">("service");
   const [data, setData] = useState<{
     appointments: Appt[];
     doctors: Doctor[];
     services: Service[];
+    sections: Section[];
     clinicHours: WeeklyHours;
     blockedDates: string[];
   } | null>(null);
@@ -140,9 +146,18 @@ export function CalendarClient({
     return data.appointments.filter(
       (a) =>
         (!doctorFilter || a.doctor_member_id === doctorFilter) &&
+        (!sectionFilter || a.service_section_id === sectionFilter) &&
         (!serviceFilter || a.service_id === serviceFilter)
     );
-  }, [data, doctorFilter, serviceFilter]);
+  }, [data, doctorFilter, sectionFilter, serviceFilter]);
+
+  /* The service dropdown narrows to the chosen section, so the two filters
+     cannot be set to a pair that matches nothing. */
+  const filterServices = useMemo(
+    () =>
+      !data ? [] : sectionFilter ? data.services.filter((s) => s.section_id === sectionFilter) : data.services,
+    [data, sectionFilter]
+  );
 
   const colorOf = (a: Appt) =>
     colorBy === "doctor"
@@ -253,10 +268,28 @@ export function CalendarClient({
               ))}
             </Select>
           )}
+          {data && data.sections.length > 0 && (
+            <Select
+              value={sectionFilter}
+              onChange={(e) => {
+                setSectionFilter(e.target.value);
+                // The service it named may not be in the new section.
+                setServiceFilter("");
+              }}
+              className="!h-8 !w-auto text-[13px]"
+            >
+              <option value="">{t.calendar.allSections}</option>
+              {data.sections.map((sec) => (
+                <option key={sec.id} value={sec.id}>
+                  {locale === "ar" ? sec.name_ar || sec.name : sec.name}
+                </option>
+              ))}
+            </Select>
+          )}
           {data && data.services.length > 0 && (
             <Select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className="!h-8 !w-auto text-[13px]">
               <option value="">{t.calendar.allServices}</option>
-              {data.services.map((s) => (
+              {filterServices.map((s) => (
                 <option key={s.id} value={s.id}>
                   {locale === "ar" ? s.name_ar || s.name : s.name}
                 </option>
@@ -319,6 +352,7 @@ export function CalendarClient({
         }}
         doctors={data?.doctors ?? []}
         services={data?.services ?? []}
+        sections={data?.sections ?? []}
         canSendDocuments={!isDoctor}
       />
     </div>

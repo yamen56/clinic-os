@@ -196,7 +196,36 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         ).rows
       : [];
 
-    return { appts, stats, series, doctors, services };
+    /*
+      The same money, rolled up to the part of the clinic that earned it.
+
+      Both name columns travel rather than being collapsed with `coalesce` the
+      way the services query above does it — that picks Arabic for an English
+      reader, which is a bug in the older query, not a pattern to copy.
+
+      Skipped entirely when the clinic has no sections, so the dashboard does
+      not grow a card of one unnamed row for everybody who never uses them.
+    */
+    const sections =
+      showRevenue && (await c.query(`select 1 from service_sections where clinic_id = $1 limit 1`, [a.clinicId])).rowCount
+        ? (
+            await c.query(
+              `select sec.id, sec.name, sec.name_ar, sum(ii.amount)::float8 as amount
+                 from invoice_items ii
+                 join invoices i on i.id = ii.invoice_id
+                 left join services s on s.id = ii.service_id
+                 left join service_sections sec on sec.id = s.section_id
+                where ii.clinic_id = $1 and i.status <> 'void'
+                  and i.created_at >= $2 and i.created_at < $3
+                group by sec.id, sec.name, sec.name_ar
+                order by 4 desc
+                limit 6`,
+              [a.clinicId, month.start, month.end]
+            )
+          ).rows
+        : [];
+
+    return { appts, stats, series, doctors, services, sections };
   });
 
   const revThis = Number(data.stats.rev_this);
@@ -324,6 +353,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
     sub: String(d.day),
   }));
   const maxService = Math.max(1, ...data.services.map((s) => Number(s.amount)));
+  const maxSection = Math.max(1, ...data.sections.map((s) => Number(s.amount)));
   const maxDoctor = Math.max(1, ...data.doctors.map((d) => Number(d.completed)));
 
   return (
@@ -482,6 +512,29 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           </div>
         </Card>
       </div>
+
+      {data.sections.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader title={t.dashboard.topSections} sub={t.dashboard.topServicesSub} />
+          <ul className="grid gap-3 px-5 py-4">
+            {data.sections.map((s, i) => (
+              <li key={i}>
+                <div className="flex min-w-0 items-baseline justify-between gap-3">
+                  <span className="min-w-0 truncate text-sm">
+                    {(locale === "ar" ? s.name_ar || s.name : s.name) || t.dashboard.unassigned}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tnum">
+                    {fmtMoney(Number(s.amount), a.clinic.currency, locale)}
+                  </span>
+                </div>
+                <div className="mt-1.5">
+                  <RowBar value={Number(s.amount)} max={maxSection} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {showRevenue && (

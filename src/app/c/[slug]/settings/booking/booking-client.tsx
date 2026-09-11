@@ -37,6 +37,7 @@ type LinkRow = {
   slug: string;
   doctor_member_id: string | null;
   service_ids: string[];
+  section_id: string | null;
   min_notice_min: number;
   max_days_ahead: number;
   slot_granularity_min: number;
@@ -88,6 +89,7 @@ export function BookingLinksClient({
   links,
   doctors,
   services,
+  sections,
   questions,
   patientFields,
 }: {
@@ -95,7 +97,14 @@ export function BookingLinksClient({
   canEdit: boolean;
   links: LinkRow[];
   doctors: { id: string; name: string }[];
-  services: { id: string; name: string; name_ar: string | null; bookable_online: boolean }[];
+  services: {
+    id: string;
+    name: string;
+    name_ar: string | null;
+    bookable_online: boolean;
+    section_id: string | null;
+  }[];
+  sections: { id: string; name: string; name_ar: string | null }[];
   questions: QuestionRow[];
   patientFields: PatientField[];
 }) {
@@ -125,9 +134,19 @@ export function BookingLinksClient({
   */
   const bookable = services.filter((s) => s.bookable_online);
   const picked = editing?.service_ids ?? [];
-  const effectiveServiceCount = picked.length
-    ? bookable.filter((s) => picked.includes(s.id)).length
-    : bookable.length;
+  const effectiveServiceCount = editing?.section_id
+    ? bookable.filter((s) => s.section_id === editing.section_id).length
+    : picked.length
+      ? bookable.filter((s) => picked.includes(s.id)).length
+      : bookable.length;
+
+  /* Which of the three restrictions this link is on. Derived from the row
+     rather than held separately, so it cannot drift from what will be saved. */
+  const restrictMode: "all" | "section" | "services" = editing?.section_id
+    ? "section"
+    : picked.length
+      ? "services"
+      : "all";
 
   const save = () =>
     start(async () => {
@@ -138,6 +157,7 @@ export function BookingLinksClient({
         slug: editing.slug ?? "",
         doctorMemberId: editing.doctor_member_id ?? null,
         serviceIds: editing.service_ids ?? [],
+        sectionId: editing.section_id ?? null,
         minNoticeMin: editing.min_notice_min ?? 120,
         maxDaysAhead: editing.max_days_ahead ?? 30,
         slotGranularityMin: editing.slot_granularity_min ?? 30,
@@ -501,29 +521,81 @@ export function BookingLinksClient({
             </div>
             {services.length > 0 && (
               <Field label={tb.restrictServices} hint={t.common.optional}>
-                <div className="flex flex-wrap gap-2">
-                  {services.map((s) => {
-                    const on = (editing.service_ids ?? []).includes(s.id);
-                    return (
+                {/*
+                  Three ways to answer, and only one can be true at a time. A
+                  section is the durable answer — it keeps meaning "the
+                  dentistry page" when a dental service is added next month,
+                  where a hand-picked list silently goes stale. Picking one mode
+                  clears the other's value, so what is on screen is what the
+                  action will store.
+                */}
+                {sections.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["all", tb.restrictAll],
+                        ["section", tb.restrictSection],
+                        ["services", tb.restrictPick],
+                      ] as const
+                    ).map(([mode, label]) => (
                       <button
-                        key={s.id}
+                        key={mode}
                         onClick={() =>
                           setEditing({
                             ...editing,
-                            service_ids: on
-                              ? (editing.service_ids ?? []).filter((x) => x !== s.id)
-                              : [...(editing.service_ids ?? []), s.id],
+                            section_id: mode === "section" ? (sections[0]?.id ?? null) : null,
+                            service_ids: mode === "services" ? (editing.service_ids ?? []) : [],
                           })
                         }
                         className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                          on ? "border-brand-500 bg-brand-50 text-brand-800" : "border-line-strong text-ink-500"
+                          restrictMode === mode
+                            ? "border-brand-500 bg-brand-50 text-brand-800"
+                            : "border-line-strong text-ink-500 hover:bg-sunken"
                         }`}
                       >
-                        {serviceName(s)}
+                        {label}
                       </button>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                )}
+
+                {restrictMode === "section" ? (
+                  <Select
+                    value={editing.section_id ?? ""}
+                    onChange={(e) => setEditing({ ...editing, section_id: e.target.value || null })}
+                  >
+                    {sections.map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {serviceName(sec)}
+                      </option>
+                    ))}
+                  </Select>
+                ) : restrictMode === "all" && sections.length > 0 ? null : (
+                  <div className="flex flex-wrap gap-2">
+                    {services.map((s) => {
+                      const on = (editing.service_ids ?? []).includes(s.id);
+                      return (
+                        <button
+                          key={s.id}
+                          onClick={() =>
+                            setEditing({
+                              ...editing,
+                              section_id: null,
+                              service_ids: on
+                                ? (editing.service_ids ?? []).filter((x) => x !== s.id)
+                                : [...(editing.service_ids ?? []), s.id],
+                            })
+                          }
+                          className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                            on ? "border-brand-500 bg-brand-50 text-brand-800" : "border-line-strong text-ink-500"
+                          }`}
+                        >
+                          {serviceName(s)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </Field>
             )}
 
