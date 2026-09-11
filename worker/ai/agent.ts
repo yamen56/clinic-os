@@ -263,7 +263,7 @@ export async function respondToConversation(conversationId: string): Promise<voi
         ).rows[0];
         const link = (
           await c.query(
-            `select min_notice_min, slot_granularity_min, max_days_ahead, doctor_member_id
+            `select min_notice_min, slot_granularity_min, max_days_ahead, doctor_member_ids
              from booking_links where clinic_id = $1 and active order by created_at limit 1`,
             [cfg.clinicId]
           )
@@ -287,7 +287,7 @@ export async function respondToConversation(conversationId: string): Promise<voi
           dateISO: day.toISODate()!,
           minNoticeMin: link?.min_notice_min ?? 120,
           granularityMin: link?.slot_granularity_min ?? 30,
-          linkDoctorId: link?.doctor_member_id ?? null,
+          linkDoctorIds: link?.doctor_member_ids ?? [],
         });
 
         if (!slots.length) {
@@ -358,7 +358,7 @@ export async function respondToConversation(conversationId: string): Promise<voi
           dateISO: start.setZone(clinic.timezone).toISODate()!,
           minNoticeMin: 0,
           granularityMin: 15,
-          linkDoctorId: null,
+          linkDoctorIds: [],
         });
         const match = free.find((s) => s.startISO === start.toUTC().toISO());
         if (!match) {

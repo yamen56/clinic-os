@@ -32,7 +32,14 @@ type Service = {
   /** Null for a service the clinic has not filed under a section. */
   sectionId: string | null;
 };
-type Doctor = { id: string; name: string; title: string | null; specialty: string | null };
+type Doctor = {
+  id: string;
+  name: string;
+  title: string | null;
+  specialty: string | null;
+  /** Whether there is a face to show instead of an initial. */
+  hasPhoto: boolean;
+};
 type Section = { id: string | null; name: string; nameAr: string | null; count: number };
 
 export type LinkCopy = {
@@ -630,15 +637,7 @@ export function BookingWizard({
                     }}
                     className="flex items-center gap-3 rounded-card border border-line bg-surface p-4 text-start shadow-card transition-all hover:shadow-pop"
                   >
-                    <span
-                      className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
-                      style={{ background: "var(--bk)" }}
-                    >
-                      {/* The Arabic "د." prefix would otherwise make every avatar
-                          read the same letter — but only a doctor carries it, and
-                          not every workspace books doctors. */}
-                      {d.name.replace(/^د\.\s*/, "").trim().slice(0, 1) || d.name.slice(0, 1)}
-                    </span>
+                    <DoctorFace bslug={bslug} doctor={d} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[15px] font-semibold">{d.name}</div>
                       {d.specialty && <div className="text-[13px] text-ink-500">{d.specialty}</div>}
@@ -1247,6 +1246,51 @@ function SummaryCard({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The doctor's own face, falling back to their initial.
+ *
+ * The initial was all this ever showed, which on a page choosing between two
+ * colleagues is the least useful thing about them — and the photo the clinic
+ * already uploaded was sitting behind a route that requires a session.
+ *
+ * `hasPhoto` comes from the server, so the common cases never flicker. The
+ * `failed` state is for the ones it cannot predict: a file deleted out of
+ * storage between page load and render, or an image that will not decode.
+ * Without it a broken photo leaves a blank circle where a name should be.
+ */
+function DoctorFace({ bslug, doctor }: { bslug: string; doctor: Doctor }) {
+  const [failed, setFailed] = useState(false);
+  // The Arabic "د." prefix would otherwise make every avatar read the same
+  // letter — but only a doctor carries it, and not every workspace books
+  // doctors.
+  const initial =
+    doctor.name.replace(/^د\.\s*/, "").trim().slice(0, 1) || doctor.name.slice(0, 1);
+
+  if (doctor.hasPhoto && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={`/api/public/book/${bslug}/doctor-photo/${doctor.id}`}
+        alt=""
+        width={40}
+        height={40}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-10 w-10 shrink-0 rounded-full object-cover"
+        style={{ background: "var(--color-sunken)" }}
+      />
+    );
+  }
+  return (
+    <span
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+      style={{ background: "var(--bk)" }}
+    >
+      {initial}
+    </span>
   );
 }
 

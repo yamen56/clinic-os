@@ -233,6 +233,7 @@ export default async function PublicBookingPage({
         name: d.name,
         title: d.title,
         specialty: d.specialty,
+        hasPhoto: d.has_photo,
       }))}
       questions={data.questions}
       copy={{
@@ -250,7 +251,12 @@ export default async function PublicBookingPage({
       }}
       maxDaysAhead={data.link.max_days_ahead}
       approvalMode={data.link.approval_mode}
-      lockedDoctor={data.link.doctor_member_id}
+      /*
+        Locked only when the link comes down to one doctor. Naming two is a
+        narrower choice, not the absence of one — the step stays, showing just
+        those two.
+      */
+      lockedDoctor={data.link.doctor_member_ids.length === 1 ? data.link.doctor_member_ids[0] : null}
       /*
         Resolved here, not in the browser, and only when it is actually true.
 

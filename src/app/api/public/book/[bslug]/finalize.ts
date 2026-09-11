@@ -51,8 +51,16 @@ export async function finalizeBooking(
     if (!start.isValid || start < DateTime.now()) return { error: "slot_taken" };
     const end = start.plus({ minutes: service.duration_min });
 
-    // Resolve doctor: requested, link-locked, or first free among candidates
-    let doctorId = p.doctorId ?? data.link.doctor_member_id;
+    /*
+      Resolve doctor: requested, link-locked, or first free among candidates.
+
+      A link naming several doctors locks nothing — it narrows `data.doctors`,
+      and the loop below picks whoever is free among them, which is what "any
+      of these two" has to mean. Only a link naming exactly one still decides
+      on the patient's behalf.
+    */
+    let doctorId =
+      p.doctorId ?? (data.link.doctor_member_ids.length === 1 ? data.link.doctor_member_ids[0] : null);
     const candidates: (string | null)[] = doctorId
       ? [doctorId]
       : data.doctors.length

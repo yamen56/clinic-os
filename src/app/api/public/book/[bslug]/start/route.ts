@@ -44,6 +44,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   if (!data.services.some((s) => s.id === serviceId)) {
     return NextResponse.json({ error: "bad_service" }, { status: 400 });
   }
+  /*
+    And the doctor, against the same list the page was allowed to draw.
+
+    The service was already checked here; the doctor was not, so a link
+    restricted to one doctor could be booked with any other member of the
+    clinic by sending a different id — the restriction was enforced only by the
+    page that renders it. Same principle as the intake answers below: the form
+    is public, so what the browser sent proves nothing.
+  */
+  if (doctorId && !data.doctors.some((d) => d.id === doctorId)) {
+    return NextResponse.json({ error: "bad_doctor" }, { status: 400 });
+  }
   const phone = normalizePhone(body.phone);
   if (!phone) return NextResponse.json({ error: "invalid_phone" }, { status: 422 });
 

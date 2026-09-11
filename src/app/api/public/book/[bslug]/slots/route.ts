@@ -55,7 +55,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ bslug: string }
         dateISO: date,
         minNoticeMin: data.link.min_notice_min,
         granularityMin: data.link.slot_granularity_min,
-        linkDoctorId: data.link.doctor_member_id,
+        linkDoctorIds: data.link.doctor_member_ids,
       })
     );
     return NextResponse.json({ slots });

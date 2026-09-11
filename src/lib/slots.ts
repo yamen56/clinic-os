@@ -24,7 +24,7 @@ export type AvailabilityOpts = {
   doctorMemberId: string | null; // null = any doctor
   minNoticeMin: number;
   granularityMin: number;
-  linkDoctorId: string | null; // link restriction
+  linkDoctorIds: string[]; // link restriction; empty = every doctor
 };
 
 /**
@@ -53,12 +53,20 @@ async function loadInputs(
 
   // Candidate doctors: explicit > link restriction > doctors assigned to the service > any active doctor
   let doctors: { id: string; working_hours: WeeklyHours | null }[];
-  const explicit = opts.doctorMemberId ?? opts.linkDoctorId;
-  if (explicit) {
+  /*
+    The patient's own pick, else whoever the link names. A link naming several
+    is the same restriction as a link naming one, only wider — so both take the
+    same branch, and as before the restriction stands in for the service's own
+    doctor assignment rather than being intersected with it.
+  */
+  const restricted = opts.doctorMemberId ? [opts.doctorMemberId] : opts.linkDoctorIds;
+  if (restricted.length) {
     doctors = (
       await c.query(
-        `select id, working_hours from clinic_members where id = $1 and clinic_id = $2 and role = 'doctor' and active`,
-        [explicit, clinicId]
+        `select id, working_hours from clinic_members
+          where id = any($1::uuid[]) and clinic_id = $2 and role = 'doctor' and active
+          order by created_at`,
+        [restricted, clinicId]
       )
     ).rows;
   } else {

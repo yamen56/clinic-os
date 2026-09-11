@@ -23,7 +23,8 @@ const linkSchema = z.object({
     .min(2)
     .max(60)
     .regex(/^[a-z0-9][a-z0-9-]*$/),
-  doctorMemberId: z.string().uuid().nullable().default(null),
+  /* The doctors this link offers. Empty = every active doctor. */
+  doctorMemberIds: z.array(z.string().uuid()).default([]),
   serviceIds: z.array(z.string().uuid()).default([]),
   minNoticeMin: z.coerce.number().int().min(0).max(10080),
   maxDaysAhead: z.coerce.number().int().min(1).max(365),
@@ -94,11 +95,36 @@ export async function saveBookingLinkAction(
     const sectionId = d.sectionId;
     const serviceIds = sectionId ? [] : d.serviceIds;
 
+    /*
+      Every named doctor has to be a doctor here. Same reason as the section
+      above: the foreign key runs as the table owner and does not see RLS, so
+      an id from another clinic would be stored happily and then quietly match
+      nothing on the public page.
+    */
+    const doctorIds = [...new Set(d.doctorMemberIds)];
+    if (doctorIds.length) {
+      const owned = await c.query(
+        `select count(*)::int as n from clinic_members
+          where id = any($1::uuid[]) and clinic_id = $2 and role = 'doctor'`,
+        [doctorIds, access.clinicId]
+      );
+      if (owned.rows[0].n !== doctorIds.length) return { error: "invalid" };
+    }
+    /*
+      The old single column is written alongside the array for one release.
+      Containers roll one at a time, and the one still serving the public page
+      mid-deploy reads `doctor_member_id` — so it keeps seeing the right answer
+      whenever there is a single right answer, and "everyone" otherwise, which
+      is the safe way to be wrong. See migration 0048.
+    */
+    const legacyDoctorId = doctorIds.length === 1 ? doctorIds[0] : null;
+
     const shared = [
-      d.name, d.slug, d.doctorMemberId, serviceIds, d.minNoticeMin, d.maxDaysAhead,
+      d.name, d.slug, legacyDoctorId, serviceIds, d.minNoticeMin, d.maxDaysAhead,
       d.slotGranularityMin, d.approvalMode, d.active, d.headline, d.headlineAr, d.intro,
       d.introAr, d.successNote, d.successNoteAr, d.showPrices, d.allowAnyDoctor,
       d.consentText, d.consentTextAr, d.requireConsent, d.skipServiceStep, sectionId,
+      doctorIds,
     ];
 
     if (d.id) {
@@ -108,7 +134,7 @@ export async function saveBookingLinkAction(
            active = $11, headline = $12, headline_ar = $13, intro = $14, intro_ar = $15,
            success_note = $16, success_note_ar = $17, show_prices = $18, allow_any_doctor = $19,
            consent_text = $20, consent_text_ar = $21, require_consent = $22,
-           skip_service_step = $23, section_id = $24
+           skip_service_step = $23, section_id = $24, doctor_member_ids = $25
          where id = $1 and clinic_id = $2`,
         [d.id, access.clinicId, ...shared]
       );
@@ -119,8 +145,8 @@ export async function saveBookingLinkAction(
            min_notice_min, max_days_ahead, slot_granularity_min, approval_mode, active,
            headline, headline_ar, intro, intro_ar, success_note, success_note_ar,
            show_prices, allow_any_doctor, consent_text, consent_text_ar, require_consent,
-           skip_service_step, section_id)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+           skip_service_step, section_id, doctor_member_ids)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
         [access.clinicId, ...shared]
       );
     }

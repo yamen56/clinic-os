@@ -11,7 +11,8 @@ export type PublicLink = {
   link: {
     id: string;
     slug: string;
-    doctor_member_id: string | null;
+    /** The doctors this link offers. Empty = every active doctor. */
+    doctor_member_ids: string[];
     service_ids: string[];
     min_notice_min: number;
     max_days_ahead: number;
@@ -79,7 +80,14 @@ export type PublicLink = {
    * appears only when some offered service is unfiled.
    */
   sections: { id: string | null; name: string; name_ar: string | null }[];
-  doctors: { id: string; name: string; title: string | null; specialty: string | null }[];
+  doctors: {
+    id: string;
+    name: string;
+    title: string | null;
+    specialty: string | null;
+    /** Whether there is a face to show instead of an initial. */
+    has_photo: boolean;
+  }[];
   /** Everything the page renders. The mapping onto the patient file stays server-side. */
   questions: PublicQuestion[];
   /** The same rows with their mapping, for the code that writes the answers away. */
@@ -147,14 +155,24 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       }
     }
 
+    /*
+      Whoever the link names, or everyone when it names nobody — the same
+      "empty means all" rule `service_ids` has always used, so a link that
+      never restricted doctors keeps offering the whole clinic.
+
+      `avatar_path` is reduced to a boolean here on purpose: the path is a
+      storage key, and this object is serialised into a public page.
+    */
+    const doctorIds: string[] = link.doctor_member_ids ?? [];
     const doctors = (
       await c.query(
-        `select cm.id, u.full_name as name, cm.title, cm.specialty
+        `select cm.id, u.full_name as name, cm.title, cm.specialty,
+                (u.avatar_path is not null) as has_photo
          from clinic_members cm join users u on u.id = cm.user_id
          where cm.clinic_id = $1 and cm.role = 'doctor' and cm.active
-           and ($2::uuid is null or cm.id = $2)
+           and (cardinality($2::uuid[]) = 0 or cm.id = any($2::uuid[]))
          order by u.full_name`,
-        [link.clinic_id, link.doctor_member_id]
+        [link.clinic_id, doctorIds]
       )
     ).rows;
 
@@ -164,7 +182,7 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       link: {
         id: link.id,
         slug: link.slug,
-        doctor_member_id: link.doctor_member_id,
+        doctor_member_ids: doctorIds,
         service_ids: link.service_ids ?? [],
         min_notice_min: link.min_notice_min,
         max_days_ahead: link.max_days_ahead,

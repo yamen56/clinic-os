@@ -14,7 +14,7 @@ export default async function BookingSettingsPage({
   const data = await inClinic(access, async (c) => {
     const links = (
       await c.query(
-        `select id, name, slug, doctor_member_id, service_ids, min_notice_min, max_days_ahead,
+        `select id, name, slug, doctor_member_ids, service_ids, section_id, min_notice_min, max_days_ahead,
                 slot_granularity_min, approval_mode, active, headline, headline_ar, intro, intro_ar,
                 success_note, success_note_ar, show_prices, allow_any_doctor,
                 consent_text, consent_text_ar, require_consent, skip_service_step

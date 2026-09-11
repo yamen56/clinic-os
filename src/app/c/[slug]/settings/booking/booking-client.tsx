@@ -35,7 +35,7 @@ type LinkRow = {
   id: string;
   name: string;
   slug: string;
-  doctor_member_id: string | null;
+  doctor_member_ids: string[];
   service_ids: string[];
   section_id: string | null;
   min_notice_min: number;
@@ -155,7 +155,7 @@ export function BookingLinksClient({
         id: editing.id,
         name: editing.name ?? "Default",
         slug: editing.slug ?? "",
-        doctorMemberId: editing.doctor_member_id ?? null,
+        doctorMemberIds: editing.doctor_member_ids ?? [],
         serviceIds: editing.service_ids ?? [],
         sectionId: editing.section_id ?? null,
         minNoticeMin: editing.min_notice_min ?? 120,
@@ -250,7 +250,7 @@ export function BookingLinksClient({
           sub={tb.sub}
           action={
             canEdit && (
-              <Button size="sm" onClick={() => setEditing({ min_notice_min: 120, max_days_ahead: 30, slot_granularity_min: 30, approval_mode: "instant", active: true, service_ids: [], show_prices: true, allow_any_doctor: true, require_consent: false })}>
+              <Button size="sm" onClick={() => setEditing({ min_notice_min: 120, max_days_ahead: 30, slot_granularity_min: 30, approval_mode: "instant", active: true, service_ids: [], doctor_member_ids: [], show_prices: true, allow_any_doctor: true, require_consent: false })}>
                 <Plus className="h-4 w-4" />
                 {tb.addLink}
               </Button>
@@ -505,20 +505,46 @@ export function BookingLinksClient({
                   <option value="approval">{tb.manual}</option>
                 </Select>
               </Field>
-              {doctors.length > 0 && (
-                <Field label={tb.restrictDoctor}>
-                  <Select
-                    value={editing.doctor_member_id ?? ""}
-                    onChange={(e) => setEditing({ ...editing, doctor_member_id: e.target.value || null })}
-                  >
-                    <option value="">{t.common.all}</option>
-                    {doctors.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
             </div>
+            {doctors.length > 0 && (
+              <Field label={tb.restrictDoctor} hint={t.common.optional}>
+                {/*
+                  A set, not a choice. A clinic with three dentists and two
+                  paediatricians wants a link for each pair, which a single
+                  select could not say at all — it could only offer one doctor
+                  or the whole clinic. Nothing ticked still means everyone, the
+                  same rule the service chips below use.
+                */}
+                <div className="flex flex-wrap gap-2">
+                  {doctors.map((d) => {
+                    const on = (editing.doctor_member_ids ?? []).includes(d.id);
+                    return (
+                      <button
+                        key={d.id}
+                        onClick={() =>
+                          setEditing({
+                            ...editing,
+                            doctor_member_ids: on
+                              ? (editing.doctor_member_ids ?? []).filter((x) => x !== d.id)
+                              : [...(editing.doctor_member_ids ?? []), d.id],
+                          })
+                        }
+                        className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                          on
+                            ? "border-brand-500 bg-brand-50 text-brand-800"
+                            : "border-line-strong text-ink-500 hover:bg-sunken"
+                        }`}
+                      >
+                        {d.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-[13px] text-ink-500">
+                  {(editing.doctor_member_ids ?? []).length === 0 ? tb.allDoctorsHint : tb.someDoctorsHint}
+                </p>
+              </Field>
+            )}
             {services.length > 0 && (
               <Field label={tb.restrictServices} hint={t.common.optional}>
                 {/*
