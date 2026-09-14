@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { redirect } from "next/navigation";
 import { Plus, ReceiptText, Download } from "lucide-react";
 import { can } from "@/lib/auth";
+import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 
 const invStatus: Record<string, StatusKey> = {
   draft: "neutral",
@@ -44,7 +45,14 @@ export default async function InvoicesPage({
     the same rule the dashboard already follows, and the reason a hidden section
     there cannot leak through a page that everybody can open.
   */
-  const showTotals = can(access, "invoices.analytics");
+  /*
+    And a member whose list is filtered to their own work gets no clinic totals
+    on top of it, whatever else they hold. A screen that filters the rows and
+    then sums every row in the clinic above them is not a narrower view of the
+    clinic, it is two different answers stacked — and the larger one is the
+    number being withheld.
+  */
+  const showTotals = can(access, "invoices.analytics") && !ownInvoicesOnly(access);
 
   const data = await inClinic(access, async (c) => {
     const today = dayRangeUtc(tz);
@@ -57,6 +65,13 @@ export default async function InvoicesPage({
       whether or not they may see money. So it is asked for either way, and the
       four sums are only added to the statement when they will be shown.
     */
+    /*
+      The chip counts what this member can actually open. Dead in the totals
+      branch — a filtered member never reaches it, see `showTotals` — and
+      written generally anyway, because the next person to move one of these
+      branches should not have to notice that.
+    */
+    const chipScope = invoiceScopeSql(access, "i", showTotals ? 8 : 2);
     const [stats] = (
       await c.query(
         showTotals
@@ -65,11 +80,11 @@ export default async function InvoicesPage({
                (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $4 and paid_at < $5) as week,
                (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $6 and paid_at < $7) as month,
                (select coalesce(sum(total - amount_paid), 0) from invoices where clinic_id = $1 and status in ('sent', 'partially_paid')) as outstanding,
-               (select count(*) from invoices where clinic_id = $1 and status = 'partially_paid')::int as partial_count`
-          : `select (select count(*) from invoices where clinic_id = $1 and status = 'partially_paid')::int as partial_count`,
+               (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'partially_paid'${chipScope.sql})::int as partial_count`
+          : `select (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'partially_paid'${chipScope.sql})::int as partial_count`,
         showTotals
-          ? [access.clinicId, today.start, today.end, week.start, week.end, month.start, month.end]
-          : [access.clinicId]
+          ? [access.clinicId, today.start, today.end, week.start, week.end, month.start, month.end, ...chipScope.params]
+          : [access.clinicId, ...chipScope.params]
       )
     ).rows;
 
@@ -85,17 +100,21 @@ export default async function InvoicesPage({
       if (sp.status === "unpaid") conds.push(`i.status in ('sent', 'partially_paid')`);
       else if (sp.status === "partial") conds.push(`i.status = 'partially_paid'`);
       else if (sp.status === "paid") conds.push(`i.status = 'paid'`);
+      const scope = invoiceScopeSql(access, "i", 2);
       invoices = (
         await c.query(
           `select i.id, i.number, i.title, i.status, i.total, i.amount_paid, i.created_at, i.sent_at,
                   p.full_name as patient_name
            from invoices i join patients p on p.id = i.patient_id
-           where ${conds.join(" and ")}
+           where ${conds.join(" and ")}${scope.sql}
            order by i.created_at desc limit 100`,
-          [access.clinicId]
+          [access.clinicId, ...scope.params]
         )
       ).rows;
     } else {
+      // Payments hang off invoices, so the same filter reaches them through the
+      // join rather than needing one of its own.
+      const scope = invoiceScopeSql(access, "i", 2);
       payments = (
         await c.query(
           `select pay.id, pay.amount, pay.method, pay.reference, pay.paid_at,
@@ -105,9 +124,9 @@ export default async function InvoicesPage({
            join invoices i on i.id = pay.invoice_id
            join patients p on p.id = pay.patient_id
            left join users u on u.id = pay.recorded_by
-           where pay.clinic_id = $1
+           where pay.clinic_id = $1${scope.sql}
            order by pay.paid_at desc limit 100`,
-          [access.clinicId]
+          [access.clinicId, ...scope.params]
         )
       ).rows;
     }
@@ -161,49 +180,39 @@ export default async function InvoicesPage({
         </div>
       )}
 
-      <div className="mb-4 flex gap-1 border-b border-line">
-        {[
-          { key: "invoices", label: t.invoices.title, href: base },
-          { key: "payments", label: t.invoices.payments, href: `${base}?tab=payments` },
-        ].map((x) => (
-          <Link
-            key={x.key}
-            href={x.href}
-            className={`relative px-3.5 py-2.5 text-sm font-medium ${
-              tab === x.key ? "text-brand-700" : "text-ink-500 hover:text-ink-900"
-            }`}
-          >
-            {x.label}
-            {tab === x.key && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-brand-600" />}
-          </Link>
-        ))}
-        {tab === "invoices" && (
-          <div className="ms-auto flex flex-wrap items-center gap-1 self-center">
-            {(
-              [
-                ["", t.invoices.allFilter, 0],
-                ["unpaid", t.invoices.unpaidFilter, 0],
-                ["partial", t.invoices.partlyPaidFilter, Number(data.stats.partial_count)],
-                ["paid", t.invoices.paidFilter, 0],
-              ] as [string, string, number][]
-            ).map(([key, label, count]) => {
-              const on = (sp.status ?? "") === key;
-              return (
-                <Link
-                  key={key || "all"}
-                  href={key ? `${base}?status=${key}` : base}
-                  className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-140 ease-out ${
-                    on ? "bg-st-pending-soft text-st-pending" : "bg-ink-900/4 text-ink-500 hover:text-ink-700"
-                  }`}
-                >
-                  {label}
-                  {count > 0 && <span className="ms-1.5 tnum">{count}</span>}
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {/*
+        Invoices and Payments used to be a strip of their own here. They are
+        tabs of the Finance section now, drawn once above this page — two
+        identical strips stacked, with the word "Invoices" in both, was three
+        rows of chrome before the first invoice. What is left is the filter,
+        which belongs to this list and not to the section.
+      */}
+      {tab === "invoices" && (
+        <div className="mb-4 flex flex-wrap items-center gap-1">
+          {(
+            [
+              ["", t.invoices.allFilter, 0],
+              ["unpaid", t.invoices.unpaidFilter, 0],
+              ["partial", t.invoices.partlyPaidFilter, Number(data.stats.partial_count)],
+              ["paid", t.invoices.paidFilter, 0],
+            ] as [string, string, number][]
+          ).map(([key, label, count]) => {
+            const on = (sp.status ?? "") === key;
+            return (
+              <Link
+                key={key || "all"}
+                href={key ? `${base}?status=${key}` : base}
+                className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-140 ease-out ${
+                  on ? "bg-st-pending-soft text-st-pending" : "bg-ink-900/4 text-ink-500 hover:text-ink-700"
+                }`}
+              >
+                {label}
+                {count > 0 && <span className="ms-1.5 tnum">{count}</span>}
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       {tab === "invoices" ? (
         data.invoices.length === 0 ? (

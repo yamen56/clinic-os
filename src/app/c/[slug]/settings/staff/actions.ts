@@ -295,15 +295,28 @@ export async function updateMemberAction(
       be delegated, and a delegated staff manager who could deactivate the owner
       or strip their access would own the clinic in every way that matters.
 
-      And nobody edits their own role or access. Not because self-promotion is
-      the danger — an owner already has everything — but because the mistake it
+      And nobody edits their own access. Not because self-promotion is the
+      danger — an owner already has everything — but because the mistake it
       prevents is real: a delegated manager quietly removing their own last
       capability, or an owner locking themselves out of the screen they need to
       undo it. Titles, colours and hours are still their own to change.
+
+      Their own *job* is the exception, and only for whoever owns the clinic.
+      The job is not an access set — the nav renders from capabilities and never
+      reads it — so changing it locks nobody out of anything, and a clinic is
+      provisioned with its owner filed as "other" because the form that created
+      them never asked. That left the commonest case on this platform, a
+      dentist who owns the practice, unable to be booked or given hours by the
+      only person who could fix it. A delegated manager still cannot: making
+      yourself a doctor puts you on the clinic's public booking page, which is
+      a promotion however it is spelled.
     */
     if (target.is_owner && !access.isOwner) return { error: "forbidden" };
     const isSelf = memberId === access.memberId;
-    if (isSelf && (patch.role !== undefined || patch.access !== undefined || patch.active === false)) {
+    if (isSelf && (patch.access !== undefined || patch.active === false)) {
+      return { error: "forbidden_self" };
+    }
+    if (isSelf && patch.role !== undefined && !access.isOwner) {
       return { error: "forbidden_self" };
     }
 

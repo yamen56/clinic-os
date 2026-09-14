@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
-import { can } from "@/lib/auth";
+import { can, hasFullControl } from "@/lib/auth";
 import { monthDateRange, monthRangeUtc } from "@/lib/dates";
 import {
   clinicHasCommission,
@@ -20,9 +20,11 @@ import { EarningsClient } from "./earnings-client";
  * What a doctor has earned, and what the clinic owes.
  *
  * One route serving two readers rather than two nav items. A doctor with
- * `earnings` sees their own figures and nobody else's; somebody with
- * `invoices.analytics` also gets the payout table for every doctor. Most owners
- * hold both and see one page with both halves.
+ * `earnings` sees their own figures and nobody else's; the clinic's own half —
+ * what it kept, and what every doctor is owed — belongs to whoever holds the
+ * clinic rather than to whoever was granted a capability. An admin who is also
+ * a doctor holds both and sees one page with both halves, which is the case
+ * this arrangement exists for.
  */
 export default async function EarningsPage({
   params,
@@ -43,11 +45,21 @@ export default async function EarningsPage({
     gate and this URL can be typed.
   */
   const mine = can(access, "earnings");
-  const all = can(access, "invoices.analytics");
+  /*
+    The clinic's half is not grantable. `invoices.analytics` opens the takings —
+    the dashboard tile, the invoice totals — and an owner hands that to a
+    practice manager deliberately. What the clinic kept after every cost, and
+    what each colleague is paid, is a different secret: a doctor reading the
+    payout table learns what the person at the next chair earns. So the
+    capability is necessary and ownership is what makes it sufficient. The AND
+    matters in the other direction too — a clinic whose invoicing the agency
+    de-licensed must lose this screen even for its owner.
+  */
+  const clinicWide = can(access, "invoices.analytics") && hasFullControl(access);
   const hasOwn =
     mine &&
     (await inClinic(access, (c) => memberHasEarnings(c, access.clinicId, access.memberId)));
-  if (!hasOwn && !all) redirect(`/c/${slug}`);
+  if (!hasOwn && !clinicWide) redirect(`/c/${slug}`);
 
   // Clamped: this is a URL, and a two-thousand-month offset is a date library
   // exception rather than an empty page.
@@ -92,8 +104,8 @@ export default async function EarningsPage({
     const detail: EarningsLine[] =
       hasOwn && access.memberId ? await earningsDetailForDoctor(c, scope, access.memberId) : [];
 
-    const team = all && hasCommission ? await earningsByDoctor(c, scope) : [];
-    const flagged = all && hasCommission ? await voidedButPaid(c, scope) : [];
+    const team = clinicWide && hasCommission ? await earningsByDoctor(c, scope) : [];
+    const flagged = clinicWide && hasCommission ? await voidedButPaid(c, scope) : [];
 
     /*
       The profit chain. Expenses are only subtracted for somebody who may see
@@ -102,7 +114,7 @@ export default async function EarningsPage({
       the spending sees the chain stop at the doctors' shares rather than a
       "kept" figure that is silently missing a number.
     */
-    const net = all
+    const net = clinicWide
       ? await clinicProfit(c, {
           clinicId: access.clinicId,
           from: scope.from,
@@ -111,7 +123,7 @@ export default async function EarningsPage({
           toDate,
         })
       : null;
-    const showSpend = all && can(access, "expenses");
+    const showSpend = clinicWide && can(access, "expenses");
 
     // Names for the payout table, and the viewer's own rate. Only the rate of
     // the person reading is selected — `members_access` would happily return
@@ -154,7 +166,7 @@ export default async function EarningsPage({
       showSpend={data.showSpend}
       flagged={data.flagged}
       names={data.names}
-      showTeam={all}
+      showTeam={clinicWide}
     />
   );
 }

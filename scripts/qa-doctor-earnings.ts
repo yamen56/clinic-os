@@ -386,7 +386,9 @@ async function main() {
   await page.goto(`${BASE}/c/${tag}`);
   await page.waitForLoadState("networkidle");
   const noneNav = (await page.locator("aside nav a").allTextContents()).join(", ");
-  check("a doctor with no share sees no Earnings item", !noneNav.includes("Earnings"), noneNav);
+  // Earnings is a tab of the Finance section now, and it is the only tab this
+  // doctor could have — so no share means no section in the sidebar at all.
+  check("a doctor with no share sees no money section", !noneNav.includes("Finance"), noneNav);
   check("and their dashboard still renders", noneNav.includes("Dashboard"), noneNav);
 
   await page.goto(`${BASE}/c/${tag}/earnings`);
@@ -403,7 +405,7 @@ async function main() {
   await page.goto(`${BASE}/c/${tag}`);
   await page.waitForLoadState("networkidle");
   const aNav = (await page.locator("aside nav a").allTextContents()).join(", ");
-  check("a doctor with a share does see it", aNav.includes("Earnings"), aNav);
+  check("a doctor with a share does see it", aNav.includes("Finance"), aNav);
 
   /*
     And it survives the arrangement ending. Clearing the percentage stops new
@@ -414,7 +416,7 @@ async function main() {
   await page.goto(`${BASE}/c/${tag}`);
   await page.waitForLoadState("networkidle");
   const endedNav = (await page.locator("aside nav a").allTextContents()).join(", ");
-  check("clearing the share keeps what they already earned reachable", endedNav.includes("Earnings"), endedNav);
+  check("clearing the share keeps what they already earned reachable", endedNav.includes("Finance"), endedNav);
   await page.goto(`${BASE}/c/${tag}/earnings`);
   await page.waitForLoadState("networkidle");
   const endedText = await mainText();

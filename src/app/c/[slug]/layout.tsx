@@ -1,4 +1,5 @@
 import { guardClinic } from "@/lib/guard";
+import { hasFullControl } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { ServiceWorkerRegistrar } from "@/components/pwa";
 import { Shell } from "./shell";
@@ -127,6 +128,7 @@ export default async function ClinicLayout({
       unreadCount={chrome.unread}
       pendingDocuments={chrome.pending_documents}
       hasEarnings={!!chrome.has_earnings}
+      fullControl={hasFullControl(access)}
       announcements={chrome.announcements.filter((a) => !dismissed.includes(a.id))}
     >
       {/*

@@ -9,6 +9,7 @@ import { ClinicAdminPanel } from "./clinic-admin-panel";
 import { OwnerInvite } from "./owner-invite";
 import { DangerZone } from "./danger-zone";
 import { FEATURES, resolveFeatures } from "@/lib/features";
+import type { MemberRole } from "@/lib/permissions";
 import { asSpecialty } from "@/lib/specialties";
 import { CheckCircle2, Circle } from "lucide-react";
 
@@ -198,7 +199,10 @@ export default async function AdminClinicDetail({
                     <Badge status="pending">{t.admin.ownerInvitePending}</Badge>
                   )}
                   <Badge status={m.is_owner ? "brand" : "neutral"}>
-                    {m.is_owner ? `${m.role} · owner` : m.role}
+                    {/* The job and the flag are two different facts, which is
+                        the whole point of this pair of columns — an admin is
+                        also a doctor or a receptionist. */}
+                    {m.is_owner ? `${t.staff.roles[m.role as MemberRole]} · ${t.staff.owner}` : t.staff.roles[m.role as MemberRole]}
                   </Badge>
                 </span>
               </li>

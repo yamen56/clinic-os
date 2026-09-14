@@ -48,6 +48,7 @@ const SUITES = [
   ["earnings: what the clinic owes the doctor", "scripts/qa-doctor-earnings.ts"],
   ["receipts: proof of payment, once it is paid", "scripts/qa-receipts.ts"],
   ["expenses: what the clinic spends, and what it kept", "scripts/qa-expenses.ts"],
+  ["finance: one money section, and who sees what in it", "scripts/qa-finance.ts"],
   // Shipped with 0047 and never registered, so it has never run in CI.
   ["sections: the part of the clinic a service belongs to", "scripts/qa-service-sections.ts"],
   ["photos: staff pictures & who may set them", "scripts/qa-photos.ts"],

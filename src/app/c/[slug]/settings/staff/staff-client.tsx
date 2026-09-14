@@ -427,8 +427,16 @@ function AccessEditor({
 
       {level === "custom" ? (
         <ul className="grid gap-0.5 p-2">
-          {CAPABILITY_GROUPS.map((g) => (
+          {CAPABILITY_GROUPS.map((g, i) => (
             <li key={g.section}>
+              {/* Sections that are one place in the nav get a heading saying so,
+                  so the list reads the way the sidebar does. Still three
+                  separate switches — they are three separate permissions. */}
+              {g.group && g.group !== CAPABILITY_GROUPS[i - 1]?.group && (
+                <div className="mt-3 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400 first:mt-0">
+                  {(t.nav as Record<string, string>)[g.group]}
+                </div>
+              )}
               <label className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-sunken">
                 <span className="text-[13px] font-medium">{t.caps[g.section]}</span>
                 <Toggle
@@ -516,10 +524,12 @@ function EditMember({
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label={t.staff.role}>
+        <Field label={t.staff.role} hint={isSelf ? t.staff.roleHint : undefined}>
+          {/* Your own job is yours to set only if you own the clinic — see the
+              guard in updateMemberAction. */}
           <Select
             value={m.role}
-            disabled={isSelf}
+            disabled={isSelf && !viewerIsOwner}
             onChange={(e) => setM({ ...m, role: e.target.value as MemberRole })}
           >
             {ROLES.map((r) => (
@@ -663,7 +673,10 @@ function EditMember({
             start(async () => {
               const r = await updateMemberAction(slug, m.id, {
                 fullName: nameLocked ? undefined : m.full_name,
-                role: isSelf ? undefined : m.role,
+                // Left absent when the field was not editable, so a save cannot
+                // set something the form never offered. Whoever owns the clinic
+                // may set their own job; nobody else may.
+                role: isSelf && !viewerIsOwner ? undefined : m.role,
                 title: m.title ?? "",
                 specialty: m.specialty ?? "",
                 color: m.color,

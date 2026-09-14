@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
+import { mayTouchInvoice, ownInvoicesOnly } from "@/lib/invoice-scope";
 import {
   nextInvoiceNumber,
   nextReceiptNumber,
@@ -182,6 +183,7 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
 
   // Generate the PDF outside the DB transaction (Chromium visits the public page)
   const pre = await inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
     const inv = (
       await c.query(
         `select i.id, i.number, i.total, i.currency, i.public_token, i.pdf_path,
@@ -307,6 +309,7 @@ export async function recordPaymentAction(
   if (!(amount > 0)) return { error: "invalid" };
 
   return inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, data.invoiceId))) return { error: "not_found" };
     const inv = (
       await c.query(
         `select id, patient_id, total, amount_paid, status from invoices
@@ -366,6 +369,7 @@ export async function setInvoiceInsuranceAction(
   if (data.claimStatus && !STATUSES.includes(data.claimStatus)) return { error: "bad_status" };
 
   return inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
     const inv = (
       await c.query(`select total from invoices where id = $1 and clinic_id = $2`, [
         invoiceId,
@@ -491,6 +495,7 @@ export async function issueReceiptAction(
   if (!can(access, "invoices")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
     const r = await ensureReceipt(c, access.clinicId, invoiceId);
     if ("error" in r) return { error: r.error };
     await audit(c, {
@@ -516,6 +521,7 @@ export async function sendReceiptAction(
   if (!can(access, "invoices")) return { error: "forbidden" };
 
   const pre = await inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" as const };
     const r = await ensureReceipt(c, access.clinicId, invoiceId);
     if ("error" in r) return r;
     const row = (
@@ -623,6 +629,22 @@ export async function setInvoiceDoctorsAction(
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "invoices")) return { error: "forbidden" };
+  /*
+    Not for a doctor whose own view is filtered, and this is the one refusal in
+    the file that is about the caller rather than the invoice.
+
+    Attribution is what the filter reads. Left on `invoices` alone, a doctor
+    granted the till could point any line in the clinic at themselves and get
+    three things at once: the invoice appears in their list, the commission
+    moves to them and is re-frozen at their own rate, and the colleague who
+    actually did the work is overwritten — `invoice_item_id` is the primary key
+    here, so there is no history to notice it by. Deciding who gets paid is not
+    a billing action wearing a different hat.
+
+    Reception keeps it: correcting who did the work is a desk job, and they
+    have no share to move it to.
+  */
+  if (ownInvoicesOnly(access)) return { error: "forbidden" };
   if (!Array.isArray(lines) || lines.length > 200) return { error: "invalid" };
 
   return inClinic(access, async (c) => {
@@ -709,6 +731,7 @@ export async function voidInvoiceAction(
   const why = String(reason).slice(0, 300);
 
   return inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
     const inv = (
       await c.query(
         `select * from invoices where id = $1 and clinic_id = $2 and status <> 'void' for update`,
@@ -817,6 +840,7 @@ export async function setInvoiceTitleAction(
   const value = String(title ?? "").trim().slice(0, 120);
 
   return inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
     const r = await c.query(
       `update invoices set title = $3 where id = $1 and clinic_id = $2 and status <> 'void'
        returning number`,
@@ -860,6 +884,7 @@ export async function setInvoiceFilingAction(
   if (!can(access, "invoices")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
     const inv = (
       await c.query(
         `select id, status, einvoice_status from invoices
@@ -912,7 +937,11 @@ export async function retryEinvoiceAction(
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "invoices")) return { error: "forbidden" };
-  const ok = await inClinic(access, (c) => requeueEinvoiceSubmit(c, access.clinicId, invoiceId));
+  const ok = await inClinic(access, async (c) =>
+    (await mayTouchInvoice(c, access, invoiceId))
+      ? requeueEinvoiceSubmit(c, access.clinicId, invoiceId)
+      : false
+  );
   revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
   return ok ? {} : { error: "not_retryable" };
 }

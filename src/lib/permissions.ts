@@ -334,16 +334,31 @@ export function landingPathIn(slug: string, caps: CapabilityMap): string {
   return `/c/${slug}/profile`;
 }
 
-/** Grouping for the settings screen, so actions sit under the section they belong to. */
-export const CAPABILITY_GROUPS: { section: Capability; actions: Capability[] }[] = [
+/**
+ * Grouping for the settings screen, so actions sit under the section they belong
+ * to — and, where several sections are one place in the nav, under a heading
+ * that says so.
+ *
+ * Invoices, Earnings and Expenses stay three separate permissions even though
+ * they are now three tabs of one screen. Merging them would undo the reason
+ * both of the newer two are top-level: the person who does the buying is not
+ * the person who does the billing, and a doctor who may see what they earned
+ * has no business in either. `group` is a label, not a gate.
+ */
+export const CAPABILITY_GROUPS: {
+  section: Capability;
+  actions: Capability[];
+  /** A key in the `nav` dictionary. Sections sharing one get a heading. */
+  group?: string;
+}[] = [
   { section: "dashboard", actions: [] },
   { section: "conversations", actions: [] },
   { section: "calendar", actions: [] },
   { section: "patients", actions: ["patients.import", "patients.export"] },
   { section: "documents", actions: ["documents.manage", "documents.void"] },
-  { section: "invoices", actions: ["invoices.analytics"] },
-  { section: "earnings", actions: [] },
-  { section: "expenses", actions: [] },
+  { section: "invoices", actions: ["invoices.analytics"], group: "finance" },
+  { section: "earnings", actions: [], group: "finance" },
+  { section: "expenses", actions: [], group: "finance" },
   { section: "campaigns", actions: [] },
   { section: "automations", actions: [] },
   { section: "ai", actions: [] },

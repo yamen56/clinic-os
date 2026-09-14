@@ -293,7 +293,9 @@ async function main() {
   await page.goto(`${BASE}/c/${slug}`);
   await page.waitForLoadState("networkidle");
   const docNav = (await page.locator("aside nav a").allTextContents()).join(", ");
-  check("a doctor sees no Expenses item", !docNav.includes("Expenses"), docNav);
+  // The nav says Finance now, and this doctor has no share and no expenses —
+  // so there is no money section for them at all, which is the stronger claim.
+  check("a doctor sees no money section", !docNav.includes("Finance"), docNav);
 
   const landed = await page.goto(`${BASE}/c/${slug}/expenses`).then(async () => {
     await page.waitForURL((u) => u.pathname === `/c/${slug}`, { timeout: 15000 }).catch(() => {});
@@ -350,15 +352,25 @@ async function main() {
   const modalText = (await page.locator("body").innerText()).replace(/s+/g, " ");
   check("the file is held before there is a row", modalText.includes("bill.png"), modalText.slice(0, 100));
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await page.waitForTimeout(2500);
 
-  const attached = (
-    await db.query(
-      `select receipt_path, receipt_name, receipt_mime from expenses
-        where clinic_id = $1 and vendor = 'New supplier'`,
-      [clinic.id]
-    )
-  ).rows[0];
+  /*
+    Polled rather than slept against. The row is written by the action and the
+    file is sent afterwards, in a second request — and on a cold dev server that
+    route can take five seconds to compile, which a fixed wait reads as a
+    missing receipt. That false failure has cost two sessions now.
+  */
+  let attached: { receipt_path?: string; receipt_name?: string; receipt_mime?: string } | undefined;
+  for (let i = 0; i < 30; i++) {
+    attached = (
+      await db.query(
+        `select receipt_path, receipt_name, receipt_mime from expenses
+          where clinic_id = $1 and vendor = 'New supplier'`,
+        [clinic.id]
+      )
+    ).rows[0];
+    if (attached?.receipt_path) break;
+    await page.waitForTimeout(500);
+  }
   check("a new expense can carry its bill", !!attached?.receipt_path, String(attached?.receipt_path));
   check("keeping the file's own name", attached?.receipt_name === "bill.png", String(attached?.receipt_name));
   check("and its declared type", attached?.receipt_mime === "image/png", String(attached?.receipt_mime));

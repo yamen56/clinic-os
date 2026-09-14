@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { inkOn } from "@/lib/contrast";
 
 export function Skeleton({ className = "" }: { className?: string }) {
@@ -136,6 +137,52 @@ export function Tabs({
             <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand-600" />
           )}
         </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The same strip as `Tabs`, but each tab is a link.
+ *
+ * `Tabs` holds its selection in `useState`, which is right when every view is
+ * already in the page and wrong when each one is its own route: the URL has to
+ * carry which tab you are on, or a refresh loses it and a link to a tab cannot
+ * be sent to anybody. This existed twice already, hand-rolled and subtly
+ * different, on the settings nav and above the invoice list — so it lives here
+ * now and the caller decides only what is active.
+ */
+export function LinkTabs({
+  tabs,
+  onSelect,
+}: {
+  tabs: { key: string; href: string; label: React.ReactNode; active: boolean; count?: number }[];
+  /** Fired on press, before navigation — for an optimistic highlight. */
+  onSelect?: (key: string) => void;
+}) {
+  // One tab is not a choice, and a strip you cannot leave is furniture.
+  if (tabs.length < 2) return null;
+  return (
+    <div className="mb-4 flex gap-1 overflow-x-auto border-b border-line" role="tablist">
+      {tabs.map((t) => (
+        <Link
+          key={t.key}
+          href={t.href}
+          role="tab"
+          aria-selected={t.active}
+          onClick={() => onSelect?.(t.key)}
+          className={`relative flex h-10 shrink-0 touch-manipulation items-center whitespace-nowrap px-3.5 text-sm font-semibold transition-colors duration-140 ease-out ${
+            t.active ? "text-ink-900" : "text-ink-500 hover:text-ink-700"
+          }`}
+        >
+          {t.label}
+          {typeof t.count === "number" && t.count > 0 && (
+            <span className="ms-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 tnum">
+              {t.count}
+            </span>
+          )}
+          {t.active && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-brand-600" />}
+        </Link>
       ))}
     </div>
   );

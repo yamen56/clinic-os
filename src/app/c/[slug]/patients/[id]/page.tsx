@@ -4,6 +4,7 @@ import { inClinic } from "@/lib/clinic-api";
 import { loadDocumentList } from "@/lib/esign/queries";
 import { PatientProfile } from "./profile-client";
 import { can } from "@/lib/auth";
+import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { countryFromClinic } from "@/lib/phone";
 
 export default async function PatientProfilePage({
@@ -13,6 +14,17 @@ export default async function PatientProfilePage({
 }) {
   const { slug, id } = await params;
   const access = await guardCap(slug, "patients");
+  /*
+    The patient's own invoices, filtered the same way the invoice list is.
+
+    This is the least comfortable place the filter lands, and it is here on
+    purpose: without it the file would list an invoice that redirects when you
+    click it, because `/invoices/[id]` is filtered. The cost is real — a doctor
+    no longer sees that their patient still owes for a colleague's work — and if
+    that turns out to matter more at the desk than the filter does, these are
+    the two queries to unscope.
+  */
+  const invScope = invoiceScopeSql(access, "i", 3);
 
   const data = await inClinic(access, async (c) => {
     const p = (
@@ -60,9 +72,10 @@ export default async function PatientProfilePage({
           [id, access.clinicId]
         ),
         c.query(
-          `select id, number, status, total, amount_paid, created_at
-           from invoices where patient_id = $1 and clinic_id = $2 order by created_at desc limit 50`,
-          [id, access.clinicId]
+          `select i.id, i.number, i.status, i.total, i.amount_paid, i.created_at
+           from invoices i where i.patient_id = $1 and i.clinic_id = $2${invScope.sql}
+           order by i.created_at desc limit 50`,
+          [id, access.clinicId, ...invScope.params]
         ),
         c.query(
           `select cv.id,
@@ -93,9 +106,9 @@ export default async function PatientProfilePage({
           [access.clinicId, id]
         ),
         c.query(
-          `select coalesce(sum(total - amount_paid), 0) as due from invoices
-           where patient_id = $1 and clinic_id = $2 and status in ('sent', 'partially_paid')`,
-          [id, access.clinicId]
+          `select coalesce(sum(i.total - i.amount_paid), 0) as due from invoices i
+           where i.patient_id = $1 and i.clinic_id = $2 and i.status in ('sent', 'partially_paid')${invScope.sql}`,
+          [id, access.clinicId, ...invScope.params]
         ),
         loadDocumentList(c, access.clinicId, { patientId: id }),
         c.query(

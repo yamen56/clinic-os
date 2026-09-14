@@ -68,7 +68,13 @@ one column carried both, which made "let this doctor see the inbox" unrepresenta
   - **Only a doctor is bookable** and can have per-member working hours. `other` is the
     escape hatch for a nurse, accountant or manager.
 - `is_owner`: grants full access permanently; owners are who the worker notifies for
-  anything needing "the person in charge".
+  anything needing "the person in charge". Shown as **Clinic admin** / **مدير العيادة**.
+- **The clinic admin can be a doctor**, and usually is — one dentist who owns the practice
+  is the commonest shape in this market. A clinic is provisioned with its admin filed as
+  `other` (the creation form never asks), and the admin changes it themselves on the staff
+  screen. Nobody else may change their own job: making yourself a doctor puts you on the
+  public booking page. Access and deactivation stay self-locked for everybody, admin
+  included.
 
 ### Capabilities (`src/lib/permissions.ts`)
 
@@ -97,7 +103,7 @@ Role defaults when switching a member to custom:
 
 | Job | Default capabilities |
 |---|---|
-| doctor | calendar, patients, documents |
+| doctor | dashboard, calendar, patients, documents, earnings |
 | receptionist | conversations, calendar, patients, documents, documents.manage, invoices, settings |
 | other | calendar, patients |
 
@@ -1093,10 +1099,14 @@ three query builders, no second copy:
   flagged on the payout report. The clinic's own "after doctor commission" figure excludes
   them from both sides.
 
-**Screens** — `/c/{slug}/earnings`, one route for two readers. `earnings` (a top-level
-capability, on by default for the doctor job) shows a doctor their own figures, their rate,
-and the invoices behind them. `invoices.analytics` adds the by-doctor payout table, the
-collected / doctors' share / after-commission figures, and the voided-but-paid flags.
+**Screens** — the Earnings tab of the Finance section, one route for two readers.
+`earnings` (a top-level capability, on by default for the doctor job) shows a doctor their
+own figures, their rate, and the invoices behind them. The clinic's half — the by-doctor
+payout table, the collected / doctors' share / kept chain, and the voided-but-paid flags —
+needs `invoices.analytics` **and** `hasFullControl(access)`: an owner, or somebody the
+owner put on `full` access. It is the one thing in the product that is deliberately not
+grantable. A doctor handed every capability an owner can tick still does not see what a
+colleague earns (decision 86).
 
 The capability is necessary and not sufficient: the screen appears only for a member the
 clinic has actually agreed a share with, or who has earnings on record from one that has
@@ -1111,6 +1121,18 @@ a member granted Invoices can raise, settle and chase them, and see what one pat
 without seeing what the practice takes. An owner grants it deliberately, per person. `full`
 access still includes it. The queries do not run at all for a member without it, so the
 figures never reach their browser.
+
+**A doctor's invoices are their own.** A doctor who is granted Invoices, and who is not the
+admin or on full access, sees only invoices carrying their name on a line
+(`invoice_line_doctors`) — in the list, the payments tab, the detail page, the PDF route,
+the dashboard's unpaid count and the patient file's invoice tab and balance. Ten server
+actions that take an invoice id call `mayTouchInvoice` for the same reason: hiding a row
+while leaving `voidInvoiceAction` reachable by id is a wager, not a permission. They get no
+clinic totals either, whatever else they hold — a screen that filters the rows and sums
+every row in the clinic above them is two different answers stacked. **Reception is never
+filtered**: settling at the desk for whoever is in the chair is the job.
+Attribution itself (`setInvoiceDoctorsAction`) is refused to a filtered doctor — it decides
+who gets paid, and it is the predicate the filter reads (decision 88).
 
 ### Money views
 
@@ -1215,7 +1237,8 @@ included in `full`. Granted per person by an owner.
 
 ### What the clinic kept
 
-On `/c/{slug}/earnings`, gated on `invoices.analytics`, the chain rather than one composite:
+On the Earnings tab, gated on `invoices.analytics` **and** full control, the chain rather
+than one composite:
 
 ```
 Collected            8,400        what the patients paid, tax included
@@ -1580,12 +1603,19 @@ Every table with `updated_at` gets a `touch_updated_at` trigger automatically.
 ### Clinic workspace — `/c/{slug}`
 
 `/` dashboard · `/conversations` · `/calendar` · `/patients` · `/patients/{id}` ·
-`/campaigns` · `/campaigns/{id}` · `/invoices` · `/invoices/new` · `/invoices/{id}` ·
+`/campaigns` · `/campaigns/{id}` ·
 `/documents` · `/documents/{id}` · `/waitlist` · `/patients/import` · `/automations` ·
-`/automations/{id}` · `/ai` ·
+`/automations/{id}` · `/ai` · `/profile` ·
 `/notifications` · `/signature` ·
-`/settings` (+ `/booking`, `/documents`, `/documents/{id}`, `/fields`, `/hours`,
-`/invoicing`, `/services`, `/staff`, `/whatsapp`)
+`/settings` (+ `/booking`, `/documents`, `/documents/{id}`, `/einvoicing`, `/fields`,
+`/hours`, `/insurers`, `/invoicing`, `/services`, `/staff`, `/tags`, `/whatsapp`)
+
+**Finance** — one nav entry, four tabs, and the URLs are unchanged from when they were three
+separate sections. The folders live under the route group `(finance)`, which is
+parentheses-named and so contributes nothing to the path (decision 85):
+
+`/invoices` · `/invoices?tab=payments` · `/invoices/new` · `/invoices/{id}` · `/earnings` ·
+`/expenses`
 
 ### Agency admin — `/admin`
 
@@ -1638,7 +1668,7 @@ Real browser (Playwright) against the running app, asserting against the databas
 9. PWA & notifications · 10. admin & demo data
 
 Plus focused suites: `qa-access`, `qa-automation-coverage`, `qa-backup`, `qa-booking-race`,
-`qa-doctor-earnings`, `qa-receipts`, `qa-expenses`, `qa-service-sections`,
+`qa-doctor-earnings`, `qa-receipts`, `qa-expenses`, `qa-finance`, `qa-service-sections`,
 `qa-brand-credit`, `qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`,
 `qa-esign-browser`, `qa-first-message`, `qa-import-digest`, `qa-mobile`, `qa-mobile-width`,
 `qa-einvoicing`, `qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.

@@ -10,6 +10,7 @@ import { logoutAction } from "@/app/login/actions";
 import { exitImpersonationAction } from "@/app/admin/actions";
 import { Avatar } from "@/components/ui/misc";
 import { clinicLogoUrl } from "@/lib/clinic-logo";
+import { FINANCE_PREFIXES, firstFinanceHref } from "@/lib/finance";
 import { BrandLockup } from "@/components/brand-mark";
 import type { CapabilityMap, MemberRole } from "@/lib/permissions";
 import {
@@ -18,13 +19,11 @@ import {
   CalendarDays,
   Users,
   Megaphone,
-  Receipt,
   FileSignature,
   Workflow,
   Sparkles,
   Hourglass,
   Wallet,
-  Banknote,
   Settings,
   MoreHorizontal,
   Bell,
@@ -41,12 +40,12 @@ type NavKey =
   | "conversations"
   | "calendar"
   | "waitlist"
-  | "earnings"
-  | "expenses"
+  /* Invoices, Earnings and Expenses, which are one subject and are now one
+     entry with tabs inside it. See lib/finance. */
+  | "finance"
   | "patients"
   | "campaigns"
   | "documents"
-  | "invoices"
   | "automations"
   | "aiAgent"
   | "settings";
@@ -56,12 +55,10 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   conversations: MessageCircle,
   calendar: CalendarDays,
   waitlist: Hourglass,
-  earnings: Wallet,
-  expenses: Banknote,
+  finance: Wallet,
   patients: Users,
   campaigns: Megaphone,
   documents: FileSignature,
-  invoices: Receipt,
   automations: Workflow,
   aiAgent: Sparkles,
   settings: Settings,
@@ -80,6 +77,7 @@ export function Shell({
   unreadCount,
   pendingDocuments,
   hasEarnings,
+  fullControl,
   announcements,
   children,
 }: {
@@ -104,6 +102,8 @@ export function Shell({
   pendingDocuments: number;
   /** This person has a share agreed, or money already earned under one. */
   hasEarnings: boolean;
+  /** `hasFullControl(access)` — an owner, or somebody on `full` access. */
+  fullControl: boolean;
   announcements: { id: string; title: string; body: string }[];
   children: React.ReactNode;
 }) {
@@ -131,38 +131,41 @@ export function Shell({
     receptionist can reach with one thumb — which is why it is worth being
     literal about rather than tidy.
   */
+  /*
+    Where the money section sits, and it is not the same answer for everybody.
+
+    One entry now covers Invoices, Payments, Earnings and Expenses, and it
+    points at whichever of them this member can actually open — so the href is
+    per-person and `isActive` cannot be derived from it (see below).
+
+    Its *position* is per-person too, which looks fussy and is not. The first
+    four visible items become the phone's bottom bar. For reception and whoever
+    runs the clinic this is a daily screen and belongs in the thumb bar, where
+    Invoices already was. For a doctor it is a monthly errand — checking what
+    they earned — and the four that matter to them are Dashboard, Patients,
+    Calendar, Documents. Merging three entries into one would have quietly
+    pushed Documents out of a doctor's reach, which is the exact trade the two
+    comments that used to live here were written to prevent.
+  */
+  const financeHome = firstFinanceHref(clinic.slug, {
+    caps,
+    hasEarnings,
+    fullControl,
+  });
+  const finance: { key: NavKey; href: string; show: boolean; badge?: number } = {
+    key: "finance",
+    href: financeHome ?? `${base}/invoices`,
+    show: !!financeHome,
+  };
+
   const items: { key: NavKey; href: string; show: boolean; badge?: number }[] = [
     { key: "dashboard", href: base, show: caps.dashboard },
     { key: "patients", href: `${base}/patients`, show: caps.patients },
     { key: "calendar", href: `${base}/calendar`, show: caps.calendar },
-    { key: "invoices", href: `${base}/invoices`, show: caps.invoices },
+    ...(caps.invoices ? [finance] : []),
     { key: "documents", href: `${base}/documents`, show: caps.documents, badge: pendingDocuments },
     { key: "waitlist", href: `${base}/waitlist`, show: caps.calendar },
-    /*
-      After the waitlist, rather than beside Invoices where it belongs by
-      subject. The first four visible items become the phone's bottom bar, and a
-      doctor's four are Dashboard, Patients, Calendar, Documents — putting this
-      any earlier would push Documents out of their thumb's reach, for a screen
-      opened once a month.
-    */
-    {
-      key: "earnings",
-      href: `${base}/earnings`,
-      /*
-        Only for somebody who has something of their own on it. The capability
-        alone is not enough: every doctor holds `earnings` by default, and a
-        clinic that has agreed no share with them has nothing to show — an empty
-        screen about money is worse than no screen, and it advertises an
-        arrangement the clinic may not have made.
-
-        `invoices.analytics` is the other door, for the owner reading the payout
-        report across everybody.
-      */
-      show: (caps.earnings && hasEarnings) || caps["invoices.analytics"],
-    },
-    // Beside Earnings, and after the thumb bar for the same reason: money out is
-    // a monthly errand, not a daily one.
-    { key: "expenses", href: `${base}/expenses`, show: caps.expenses },
+    ...(caps.invoices ? [] : [finance]),
     { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
     { key: "automations", href: `${base}/automations`, show: caps.automations },
@@ -173,8 +176,18 @@ export function Shell({
   const mobileMain = visible.slice(0, 4);
   const mobileMore = visible.slice(4);
 
-  const isActive = (href: string) =>
-    href === base ? pathname === base : pathname.startsWith(href);
+  /*
+    Derived from the section, not from the link. Finance points wherever this
+    member's first tab is, so a doctor whose entry points at Earnings is still
+    inside the section when they are on Expenses — matching on their own href
+    would leave the entry unlit on two of its own tabs.
+  */
+  const isActive = (item: { key: NavKey; href: string }) => {
+    if (item.key === "finance") {
+      return FINANCE_PREFIXES.some((p) => pathname.startsWith(`${base}${p}`));
+    }
+    return item.href === base ? pathname === base : pathname.startsWith(item.href);
+  };
 
   // Navigating away closes the sheet. The links close it themselves, but the
   // back button and in-page redirects don't go through them, and a sheet left
@@ -211,7 +224,7 @@ export function Shell({
         <nav className="flex-1 overflow-y-auto px-3 py-2">
           {visible.map(({ key, href, badge }) => {
             const Icon = icons[key];
-            const active = isActive(href);
+            const active = isActive({ key, href });
             return (
               <Link
                 key={key}
@@ -449,7 +462,7 @@ export function Shell({
         <div className="grid auto-cols-fr grid-flow-col">
           {mobileMain.map(({ key, href, badge }) => {
             const Icon = icons[key];
-            const active = isActive(href);
+            const active = isActive({ key, href });
             return (
               <Link
                 key={key}

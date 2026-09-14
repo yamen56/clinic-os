@@ -243,7 +243,7 @@ async function main() {
   const ownerNav = await navLabels();
   check(
     "owner sees every section",
-    ["Conversations", "Calendar", "Patients", "Documents", "Invoices", "Settings"].every((l) =>
+    ["Conversations", "Calendar", "Patients", "Documents", "Finance", "Settings"].every((l) =>
       ownerNav.some((n) => n.includes(l))
     ),
     ownerNav.join(", ")
@@ -261,8 +261,14 @@ async function main() {
     docNav.join(", ")
   );
   check(
-    "a doctor granted invoices sees invoices",
-    docNav.some((n) => n.includes("Invoices")),
+    "a doctor granted invoices sees the money section",
+    docNav.some((n) => n.includes("Finance")),
+    docNav.join(", ")
+  );
+  // One entry, not three. Invoices, Earnings and Expenses are tabs inside it.
+  check(
+    "and it is one nav entry, not three",
+    docNav.filter((n) => /Finance|Invoices|Earnings|Expenses/.test(n)).length === 1,
     docNav.join(", ")
   );
   check("settings stays hidden", !docNav.some((n) => n.includes("Settings")), docNav.join(", "));
@@ -392,7 +398,7 @@ async function main() {
   await page.waitForSelector("[role='dialog'], .fixed", { timeout: 10000 });
   check(
     "they cannot edit their own access",
-    (await page.locator("text=You can't change your own job or access").count()) > 0
+    (await page.locator("text=You can't change your own access").count()) > 0
   );
   check(
     "and their own job select is disabled",

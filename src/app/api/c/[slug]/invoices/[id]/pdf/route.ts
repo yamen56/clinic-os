@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
+import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { renderUrlToPdf } from "@/lib/pdf";
 import { saveFile, readFileBuffer } from "@/lib/storage";
 import { enqueueEinvoiceSubmit } from "@/lib/einvoice/jobs";
@@ -11,10 +12,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
   if (!g.ok) return g.res;
 
   const inv = await inClinic(g.access, async (c) => {
+    // Same filter as the screen. A PDF route that answers for any id in the
+    // clinic would make the list's filter decorative.
+    const scope = invoiceScopeSql(g.access, "i", 3);
     const r = await c.query(
-      `select id, number, public_token, pdf_path, updated_at, einvoice_status, einvoice_qr
-         from invoices where id = $1 and clinic_id = $2`,
-      [id, g.access.clinicId]
+      `select i.id, i.number, i.public_token, i.pdf_path, i.updated_at, i.einvoice_status, i.einvoice_qr
+         from invoices i where i.id = $1 and i.clinic_id = $2${scope.sql}`,
+      [id, g.access.clinicId, ...scope.params]
     );
     const row = r.rows[0];
     if (!row) return null;

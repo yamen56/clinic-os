@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { withSystem, readOneShot, safeLiteral } from "./db";
 import {
+  accessLevelOf,
   allCapabilities,
   resolveCapabilities,
   type Capability,
@@ -91,6 +92,13 @@ export type Membership = ClinicProfile & {
   clinicSlug: string;
   /** The job, not the access set. See lib/permissions. */
   role: MemberRole;
+  /**
+   * Whether the access set is the "everything" level rather than a list of
+   * ticks. Distinct from `caps`, which cannot tell the two apart once resolved:
+   * a member with every box ticked and a member on `full` both read as all-true,
+   * and only one of them was handed the clinic.
+   */
+  accessLevel: "full" | "custom";
   isOwner: boolean;
   caps: CapabilityMap;
 };
@@ -353,6 +361,7 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
       clinicSlug: m.clinic.slug,
       role: m.role,
       isOwner: !!m.isOwner,
+      accessLevel: accessLevelOf(m.permissions),
       /*
         Two gates, in this order. The member's own permissions resolve first and
         are stored untouched, then the clinic's licence masks whatever it does
@@ -437,6 +446,8 @@ export type ClinicAccess = {
   clinic: ClinicProfile;
   /** The job title. Gates read `caps`, never this. */
   role: MemberRole;
+  /** See `Membership.accessLevel`. Read it through `hasFullControl`. */
+  accessLevel: "full" | "custom";
   isOwner: boolean;
   memberId: string | null;
   caps: CapabilityMap;
@@ -452,6 +463,22 @@ export type ClinicAccess = {
  */
 export function can(access: ClinicAccess, cap: Capability): boolean {
   return access.caps[cap] === true;
+}
+
+/**
+ * Whether this member holds the clinic rather than a set of permissions.
+ *
+ * True for an owner, and for anybody the owner put on `full` access. Not a
+ * capability and deliberately not grantable: a few figures — what the clinic
+ * kept after everything, and what every colleague is paid — are the owner's own
+ * business, and "grant this one person the payroll" is not a request the product
+ * should be able to satisfy without also handing over the clinic.
+ *
+ * Always AND it with the relevant capability rather than using it alone, so a
+ * module the agency has de-licensed stays de-licensed for the owner too.
+ */
+export function hasFullControl(access: ClinicAccess): boolean {
+  return access.isOwner || access.accessLevel === "full";
 }
 
 /** Access check for a clinic workspace. Super admins get owner-level access (impersonation is audited separately). */
@@ -475,6 +502,7 @@ export async function requireClinic(slug: string): Promise<ClinicAccess> {
       clinic: m,
       role: m.role,
       isOwner: m.isOwner,
+      accessLevel: m.accessLevel,
       memberId: m.memberId,
       caps: m.caps,
       isImpersonating: !!s.impersonatedBy,
@@ -499,6 +527,7 @@ export async function requireClinic(slug: string): Promise<ClinicAccess> {
       clinic: { ...clinic, features },
       role: "other",
       isOwner: true,
+      accessLevel: "full",
       memberId: null,
       /*
         Masked like anybody else's. Support mode exists to see what the clinic

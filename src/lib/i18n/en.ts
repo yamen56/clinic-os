@@ -140,6 +140,9 @@ export const en = {
     conversations: "Conversations",
     calendar: "Calendar",
     waitlist: "Waitlist",
+    /* The section. Invoices, Payments, Earnings and Expenses are its tabs and
+       keep their own labels below. */
+    finance: "Finance",
     earnings: "Earnings",
     expenses: "Expenses",
     patients: "Patients",
@@ -311,7 +314,7 @@ export const en = {
     sub: "What has been collected this month, and your share of it.",
     noneTitle: "No revenue sharing set up",
     noneBody:
-      "When the clinic agrees a percentage with a doctor, the owner sets it on the staff screen and this page starts filling in.",
+      "When the clinic agrees a percentage with a doctor, the clinic admin sets it on the staff screen and this page starts filling in.",
     myShare: "You earned",
     myRate: "Your rate",
     exTaxNote:
@@ -423,14 +426,14 @@ export const en = {
     clinicName: "Clinic name",
     clinicNameAr: "Clinic name (Arabic)",
     slug: "URL slug",
-    ownerName: "Owner name",
-    ownerEmail: "Owner email",
+    ownerName: "Admin name",
+    ownerEmail: "Admin email",
     ownerInviteHint:
-      "The owner gets an email invitation and chooses their own password. You never see or set it.",
+      "The clinic admin gets an email invitation and chooses their own password. You never see or set it.",
     ownerInvitePending: "invitation pending",
     resendInvite: "Resend invitation",
     inviteSent: "Invitation sent.",
-    inviteLinkCopy: "Invitation link — send it to the owner directly if the email does not arrive:",
+    inviteLinkCopy: "Invitation link — send it to the clinic admin directly if the email does not arrive:",
     plan: "Plan",
     planPrice: "Monthly price",
     createClinic: "Create clinic",
@@ -452,7 +455,7 @@ export const en = {
     /* --- what a clinic is licensed for --- */
     features: "Modules",
     featuresSub:
-      "What this clinic gets. Anything switched off disappears from their workspace entirely — for the owner too, not just their staff.",
+      "What this clinic gets. Anything switched off disappears from their workspace entirely — for the clinic admin too, not just their staff.",
     featuresHint:
       "Switching a module off hides it; nothing is deleted. Turn it back on and their automations, campaigns and documents are exactly where they left them.",
     featuresOf: "{n} of {total} modules",
@@ -930,7 +933,7 @@ export const en = {
       receptionist: "Receptionist",
       other: "Other",
     },
-    owner: "Owner",
+    owner: "Clinic admin",
     fullName: "Full name",
     nameShared:
       "This person also works at another clinic here, so only they can change their own name — from their own account page.",
@@ -953,9 +956,9 @@ export const en = {
     partialAccessLabel: "Limited access",
     partialAccess: "Limited access · {n} of {total} sections",
     ownerAccessLocked:
-      "The clinic owner always has full access. That can't be limited here — otherwise a clinic could lock itself out of its own account.",
+      "The clinic admin always has full access. That can't be limited here — otherwise a clinic could lock itself out of its own account.",
     selfAccessLocked:
-      "You can't change your own job or access. Ask another owner if it needs to change.",
+      "You can't change your own access — that's what stops somebody removing the one permission they'd need to put it back.",
     deactivate: "Deactivate",
     reactivate: "Reactivate",
     emailTaken: "This email already has an account — they were added to your clinic.",
@@ -1390,7 +1393,7 @@ export const en = {
       unread_digest: "How many conversations are still waiting for a reply.",
     },
     recipients: "Goes to",
-    alertRoles: { owner: "Owner", doctor: "Doctors", receptionist: "Reception" },
+    alertRoles: { owner: "Clinic admin", doctor: "Doctors", receptionist: "Reception" },
     doctorOfAppointment: "The appointment's doctor",
     leadTime: "Lead time",
     ownSetting: "Each person's own setting",
@@ -1943,7 +1946,7 @@ export const en = {
     integrity: "Integrity",
     hash: "Document fingerprint",
     hashOk: "Content matches its fingerprint",
-    hashBad: "Content no longer matches its fingerprint — signing is blocked and the owner was told",
+    hashBad: "Content no longer matches its fingerprint — signing is blocked and the clinic admin was told",
     frozenAt: "Frozen when it was sent",
     notFrozen: "Not frozen yet — still a draft",
     events: {
@@ -1990,7 +1993,7 @@ export const en = {
       patient: "Patient",
       guardian: "Guardian",
       doctor: "Doctor",
-      clinic_owner: "Clinic owner",
+      clinic_owner: "Clinic admin",
       clinic_representative: "Clinic representative",
       witness: "Witness",
     },
@@ -2020,7 +2023,7 @@ export const en = {
       no_phone: "That signer has no WhatsApp number.",
       wa_disconnected: "WhatsApp isn't connected.",
       locked: "Someone else has this document open on a device.",
-      hash_mismatch: "This document failed its integrity check. The clinic owner has been told.",
+      hash_mismatch: "This document failed its integrity check. The clinic admin has been told.",
       not_your_turn: "It isn't this signer's turn yet.",
       already_signed: "That signature is already on the document.",
       consent_required: "The signer has to confirm they read it.",

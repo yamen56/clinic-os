@@ -3,6 +3,7 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { InvoiceDetailClient } from "./invoice-detail-client";
 import { can } from "@/lib/auth";
+import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 
 export default async function InvoiceDetailPage({
@@ -15,6 +16,15 @@ export default async function InvoiceDetailPage({
   if (!can(access, "invoices")) redirect(`/c/${slug}`);
 
   const data = await inClinic(access, async (c) => {
+    /*
+      Applied to the lookup rather than checked after it, and that distinction
+      matters here more than anywhere else in the filter: this row is `i.*`, so
+      it carries `public_token` and `receipt_token`, and it is handed whole to a
+      client component. Fetching first and refusing afterwards would already
+      have put a permanent unauthenticated link to somebody else's invoice in
+      the page payload.
+    */
+    const scope = invoiceScopeSql(access, "i", 3);
     const inv = (
       await c.query(
         `select i.*, p.full_name as patient_name, p.phone_e164 as patient_phone,
@@ -30,8 +40,8 @@ export default async function InvoiceDetailPage({
          left join invoices orig on orig.id = i.credit_note_of
          left join invoices fix on fix.credit_note_of = i.id
          left join whatsapp_sessions ws on ws.clinic_id = i.clinic_id
-         where i.id = $1 and i.clinic_id = $2`,
-        [id, access.clinicId]
+         where i.id = $1 and i.clinic_id = $2${scope.sql}`,
+        [id, access.clinicId, ...scope.params]
       )
     ).rows[0];
     if (!inv) return null;

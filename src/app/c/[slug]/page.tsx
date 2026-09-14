@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { can } from "@/lib/auth";
+import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { landingPathIn } from "@/lib/permissions";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
@@ -55,7 +56,18 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
     figure and chart below follows the second. Without this the front page would
     quietly hand back exactly the totals the invoice list was told to hide.
   */
-  const showRevenue = can(a, "invoices.analytics");
+  const showRevenue = can(a, "invoices.analytics") && !ownInvoicesOnly(a);
+  /*
+    The unpaid count is not one of the takings — it is how many pieces of paper
+    are outstanding, and somebody who works the list needs it whether or not
+    they may see money. So it survives without `invoices.analytics` and is
+    filtered instead, to the same set of invoices its link opens.
+
+    The index follows the two shapes of the statement below: seven parameters
+    when the takings are selected, three when they are not. Dead in the first
+    (a filtered member never has `showRevenue`) and correct in both.
+  */
+  const unpaidScope = invoiceScopeSql(a, "i", showRevenue ? 8 : 4);
   /** Clinicti's own workspace — see clinics.vocabulary and i18n/vocab.ts. */
   const isAgency = a.clinic.vocabulary === "agency";
   const showInbox = can(a, "conversations");
@@ -114,7 +126,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           }
           (select count(*) from appointments where clinic_id=$1 and starts_at >= $2 and starts_at < $3 and status='no_show')::int as noshow,
           (select count(*) from appointments where clinic_id=$1 and starts_at >= $2 and starts_at < $3 and status in ('completed','no_show'))::int as finished,
-          (select count(*) from invoices where clinic_id=$1 and status in ('sent','partially_paid'))::int as unpaid,
+          (select count(*) from invoices i where i.clinic_id=$1 and i.status in ('sent','partially_paid')${unpaidScope.sql})::int as unpaid,
           -- The money owed, not just how many pieces of paper it is spread across.
           -- Same rule as the takings above: a sum of what the clinic is owed is
           -- a clinic-wide figure, so it is not computed for somebody without it.
@@ -136,8 +148,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         // Only what the statement actually mentions: an unreferenced parameter
         // is a bind error, not a harmless extra.
         showRevenue
-          ? [a.clinicId, month.start, month.end, thisWeek.start, thisWeek.end, lastWeek.start, lastWeek.end]
-          : [a.clinicId, month.start, month.end]
+          ? [a.clinicId, month.start, month.end, thisWeek.start, thisWeek.end, lastWeek.start, lastWeek.end, ...unpaidScope.params]
+          : [a.clinicId, month.start, month.end, ...unpaidScope.params]
       )
     ).rows;
 
