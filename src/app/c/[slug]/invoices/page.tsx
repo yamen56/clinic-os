@@ -122,12 +122,17 @@ export default async function InvoicesPage({
         title={t.invoices.title}
         action={
           <div className="flex gap-2">
-            <a href={`/api/c/${slug}/payments/export`} download>
-              <Button variant="outline">
-                <Download className="h-4 w-4" />
-                {t.invoices.exportCsv}
-              </Button>
-            </a>
+            {/* Behind the same capability as the totals it sits above. The
+                route refuses it either way now; this stops offering a button
+                that answers 403. */}
+            {showTotals && (
+              <a href={`/api/c/${slug}/payments/export`} download>
+                <Button variant="outline">
+                  <Download className="h-4 w-4" />
+                  {t.invoices.exportCsv}
+                </Button>
+              </a>
+            )}
             <Link href={`${base}/new`}>
               <Button>
                 <Plus className="h-4 w-4" />

@@ -13,6 +13,7 @@ import { RESTORE_WINDOW_DAYS } from "../src/lib/clinic-lifecycle";
 import { licensed } from "./features";
 import { enqueueEinvoiceSubmit } from "../src/lib/einvoice/jobs";
 import { opsWatch } from "../src/lib/ops-alert";
+import { postRecurringExpenses } from "./expenses";
 
 /**
  * Threads that arrived addressed by identity rather than number, every ten
@@ -447,6 +448,7 @@ async function purgeDeletedClinics() {
   }
 }
 
+
 export function startScheduler() {
   const tick = async () => {
     for (const fn of [
@@ -467,6 +469,9 @@ export function startScheduler() {
       deliveryWatch,
       requeueStaleOffers,
       expirePastWaitlist,
+      // Registering it here is the ship step: a job written and never added to
+      // this array went unnoticed for five weeks once already.
+      postRecurringExpenses,
     ]) {
       try {
         await fn();

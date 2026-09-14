@@ -24,6 +24,7 @@ import {
   Sparkles,
   Hourglass,
   Wallet,
+  Banknote,
   Settings,
   MoreHorizontal,
   Bell,
@@ -41,6 +42,7 @@ type NavKey =
   | "calendar"
   | "waitlist"
   | "earnings"
+  | "expenses"
   | "patients"
   | "campaigns"
   | "documents"
@@ -55,6 +57,7 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   calendar: CalendarDays,
   waitlist: Hourglass,
   earnings: Wallet,
+  expenses: Banknote,
   patients: Users,
   campaigns: Megaphone,
   documents: FileSignature,
@@ -157,6 +160,9 @@ export function Shell({
       */
       show: (caps.earnings && hasEarnings) || caps["invoices.analytics"],
     },
+    // Beside Earnings, and after the thumb bar for the same reason: money out is
+    // a monthly errand, not a daily one.
+    { key: "expenses", href: `${base}/expenses`, show: caps.expenses },
     { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
     { key: "automations", href: `${base}/automations`, show: caps.automations },

@@ -156,6 +156,31 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
       [clinic, patient, `RLS-${tag}-1`]
     )
   ).id;
+  /*
+    What the clinic spends. All three need a row of their own or the isolation
+    assertion is vacuous — "clinic A sees no clinic B rows" passes trivially
+    against an empty table, which is how invoice_line_doctors and
+    service_sections went untested until somebody looked.
+  */
+  const expenseCategory = (
+    await q(
+      `insert into expense_categories (clinic_id, name) values ($1, 'Rent') returning id`,
+      [clinic]
+    )
+  ).id;
+  const expenseSchedule = (
+    await q(
+      `insert into expense_schedules (clinic_id, category_id, amount, day_of_month)
+       values ($1, $2, 400, 1) returning id`,
+      [clinic, expenseCategory]
+    )
+  ).id;
+  await q(
+    `insert into expenses (clinic_id, category_id, schedule_id, amount, spent_on)
+     values ($1, $2, $3, 400, current_date) returning id`,
+    [clinic, expenseCategory, expenseSchedule]
+  );
+
   const invoiceItem = (
     await q(`insert into invoice_items (clinic_id, invoice_id, description) values ($1, $2, 'item') returning id`, [clinic, invoice])
   ).id;

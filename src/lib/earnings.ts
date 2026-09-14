@@ -61,7 +61,15 @@ import type { PoolClient } from "pg";
  * rows at all, so it cannot reach this query — but a predicate is checkable and
  * an absent join is not.
  */
-const LEDGER_SQL = `
+/**
+ * The running total, on its own, because two things need it.
+ *
+ * Factored out of `LEDGER_SQL` so the tax figure can reuse the identical
+ * allocation without also joining `invoice_items` — tax is a header column
+ * already summed from the lines, so pulling the lines back in to read it would
+ * multiply every payment row by its line count for nothing.
+ */
+const LEDGER_CTE = `
   with touched as (
     select distinct p.invoice_id
       from payments p
@@ -78,6 +86,10 @@ const LEDGER_SQL = `
                  order by p.paid_at, p.id
                  rows between unbounded preceding and current row)
   )
+`;
+
+/** The per-line, per-payment rows. Reads `ledger`, so it needs `LEDGER_CTE` above it. */
+const LEDGER_ROWS = `
   select l.payment_id,
          l.paid_at,
          l.invoice_id,
@@ -100,6 +112,9 @@ const LEDGER_SQL = `
      and i.total > 0
      and i.credit_note_of is null
 `;
+
+/** The two together — what every caller but `clinicNetRevenue` wants. */
+const LEDGER_SQL = `${LEDGER_CTE}${LEDGER_ROWS}`;
 
 export type EarningsScope = {
   clinicId: string;
@@ -270,25 +285,56 @@ export async function voidedButPaid(
 export async function clinicNetRevenue(
   c: PoolClient,
   scope: Omit<EarningsScope, "includeVoided">
-): Promise<{ gross: number; commission: number; afterCommission: number }> {
+): Promise<{ gross: number; tax: number; commission: number; afterCommission: number }> {
   const params = [scope.clinicId, scope.from, scope.to];
   const r = await c.query(
-    `with earned as (
+    /*
+      The CTE is hoisted to the top level here rather than used through
+      `LEDGER_SQL`, so that `earned` and `taxed` can both read `ledger`. Inside a
+      subquery it would be visible to neither.
+    */
+    `${LEDGER_CTE},
+     earned as (
        select payment_id, sum(earned) as earned
-         from (${LEDGER_SQL} and i.status <> 'void') e
+         from (${LEDGER_ROWS} and i.status <> 'void') e
         group by payment_id
+     ),
+     /*
+       Sales tax inside the money actually collected.
+
+       The same cumulative-difference allocation as the commission, so it
+       telescopes and a settled invoice yields exactly its own \`tax_amount\`.
+       Joined to \`invoices\` only — \`tax_amount\` is a header column summed from
+       the lines, and reaching through \`invoice_items\` to rebuild it would
+       multiply each payment row by its line count.
+
+       Zero for most clinics: below the JOD 30,000 services threshold every line
+       is issued outside the scope of tax, so this costs an unregistered clinic
+       nothing and is load-bearing for a registered one.
+     */
+     taxed as (
+       select l.payment_id,
+              round(i.tax_amount * l.cum  / i.total, 2)
+                - round(i.tax_amount * l.prev / i.total, 2) as tax
+         from ledger l
+         join invoices i on i.id = l.invoice_id
+        where l.paid_at >= $2 and l.paid_at < $3
+          and i.total > 0 and i.credit_note_of is null and i.status <> 'void'
      )
      select coalesce(sum(p.amount), 0)   as gross,
+            coalesce(sum(t.tax), 0)      as tax,
             coalesce(sum(e.earned), 0)   as commission
        from payments p
        join invoices i on i.id = p.invoice_id and i.status <> 'void'
        left join earned e on e.payment_id = p.id
+       left join taxed t on t.payment_id = p.id
       where p.clinic_id = $1 and p.paid_at >= $2 and p.paid_at < $3`,
     params
   );
   const gross = Number(r.rows[0].gross);
+  const tax = Number(r.rows[0].tax);
   const commission = Number(r.rows[0].commission);
-  return { gross, commission, afterCommission: round2(gross - commission) };
+  return { gross, tax, commission, afterCommission: round2(gross - commission) };
 }
 
 /**

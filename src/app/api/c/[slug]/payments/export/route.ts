@@ -5,7 +5,14 @@ import { DateTime } from "luxon";
 /** Payments as CSV (Excel-friendly UTF-8 BOM). */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const g = await apiClinic(slug, "invoices");
+  /*
+    `invoices.analytics`, not `invoices`. This file is every payment the clinic
+    has ever taken — the same number as the tiles on the invoices page, in a
+    different shape — and it was guarded one rung lower than they are. A
+    receptionist who had just been stopped from seeing the week's takings could
+    still download them from the button sitting directly above the hidden tiles.
+  */
+  const g = await apiClinic(slug, "invoices.analytics");
   if (!g.ok) return g.res;
   const url = new URL(req.url);
   const from = url.searchParams.get("from");

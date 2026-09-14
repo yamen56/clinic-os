@@ -2,10 +2,9 @@ import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { can } from "@/lib/auth";
-import { monthRangeUtc } from "@/lib/dates";
+import { monthDateRange, monthRangeUtc } from "@/lib/dates";
 import {
   clinicHasCommission,
-  clinicNetRevenue,
   earningsByDoctor,
   earningsDetailForDoctor,
   earningsForDoctor,
@@ -14,6 +13,7 @@ import {
   type DoctorEarnings,
   type EarningsLine,
 } from "@/lib/earnings";
+import { clinicProfit } from "@/lib/expenses";
 import { EarningsClient } from "./earnings-client";
 
 /**
@@ -53,6 +53,9 @@ export default async function EarningsPage({
   // exception rather than an empty page.
   const offset = Math.min(0, Math.max(-60, Number(sp.m) || 0));
   const { start, end } = monthRangeUtc(access.clinic.timezone, offset);
+  // The same month as calendar dates, for the expenses side — `spent_on` is a
+  // `date` and comparing it against a UTC instant moves a day across the border.
+  const { from: fromDate, to: toDate } = monthDateRange(access.clinic.timezone, offset);
   const scope = {
     clinicId: access.clinicId,
     from: new Date(start),
@@ -69,7 +72,14 @@ export default async function EarningsPage({
       history — the thing they came to look at.
     */
     const hasCommission = hasOwn || (await clinicHasCommission(c, access.clinicId));
-    if (!hasCommission) return { hasCommission, self: null, detail: [], team: [], net: null, flagged: [], names: {} };
+    /*
+      No early return any more, and the reason is the person it used to shut
+      out. This screen now carries what the clinic kept, not only what it owes
+      its doctors — so a solo owner who splits revenue with nobody, the very
+      person most interested in the profit line, was being handed an empty state
+      saying revenue sharing was not set up. `hasCommission` governs the doctor
+      halves and nothing else.
+    */
 
     /*
       `access.memberId` is null while a super admin is impersonating. A naive
@@ -82,11 +92,26 @@ export default async function EarningsPage({
     const detail: EarningsLine[] =
       hasOwn && access.memberId ? await earningsDetailForDoctor(c, scope, access.memberId) : [];
 
-    const team = all ? await earningsByDoctor(c, scope) : [];
+    const team = all && hasCommission ? await earningsByDoctor(c, scope) : [];
+    const flagged = all && hasCommission ? await voidedButPaid(c, scope) : [];
+
+    /*
+      The profit chain. Expenses are only subtracted for somebody who may see
+      them — `invoices.analytics` is the takings and `expenses` is the spending,
+      and they are separate grants on purpose. A member with the takings but not
+      the spending sees the chain stop at the doctors' shares rather than a
+      "kept" figure that is silently missing a number.
+    */
     const net = all
-      ? await clinicNetRevenue(c, { clinicId: access.clinicId, from: scope.from, to: scope.to })
+      ? await clinicProfit(c, {
+          clinicId: access.clinicId,
+          from: scope.from,
+          to: scope.to,
+          fromDate,
+          toDate,
+        })
       : null;
-    const flagged = all ? await voidedButPaid(c, scope) : [];
+    const showSpend = all && can(access, "expenses");
 
     // Names for the payout table, and the viewer's own rate. Only the rate of
     // the person reading is selected — `members_access` would happily return
@@ -101,7 +126,7 @@ export default async function EarningsPage({
       );
       for (const row of r.rows) names[row.id as string] = row.full_name as string;
     }
-    return { hasCommission, self, detail, team, net, flagged, names };
+    return { hasCommission, self, detail, team, net, flagged, names, showSpend };
   });
 
   const myRate = await inClinic(access, async (c) => {
@@ -126,6 +151,7 @@ export default async function EarningsPage({
       detail={data.detail}
       team={data.team}
       net={data.net}
+      showSpend={data.showSpend}
       flagged={data.flagged}
       names={data.names}
       showTeam={all}

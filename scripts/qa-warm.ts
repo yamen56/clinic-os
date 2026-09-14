@@ -22,6 +22,7 @@ const ROUTES = [
   "/invoices",
   "/invoices/new",
   "/earnings",
+  "/expenses",
   "/waitlist",
   "/documents",
   "/automations",

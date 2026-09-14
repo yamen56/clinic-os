@@ -75,7 +75,7 @@ one column carried both, which made "let this doctor see the inbox" unrepresenta
 ```
 dashboard · conversations · calendar · patients · patients.import · patients.export
 documents · documents.manage · documents.void · invoices · invoices.analytics
-earnings · campaigns · automations · ai · settings · settings.clinic · settings.staff
+earnings · expenses · campaigns · automations · ai · settings · settings.clinic · settings.staff
 ```
 
 Two access levels:
@@ -1181,6 +1181,56 @@ endpoint is never in a test's reach, because filing an invoice is recorded and i
 
 ---
 
+### Expenses (`/c/{slug}/expenses`)
+
+What the clinic pays out — the other half of the money, and the thing that turns "collected"
+into "kept". Attached to nothing but the clinic: not a doctor, not a patient, not a service
+section. A purchase the clinic made is not a deduction from anybody's pay.
+
+- `expenses`: amount (`> 0`, the direction is the table not a sign), `spent_on` (a **date**,
+  so every reader uses `fmtDateOnly`), vendor, note, method (cash · CliQ · card · transfer ·
+  **cheque**, which the patient-side methods do not have), an optional receipt, and
+  `category_id`/`schedule_id` both `on delete set null`.
+- `expense_categories`: seeded per clinic — Rent · Salaries · Supplies · Lab · Utilities ·
+  Marketing · Other — renameable, recolourable, hideable and deletable. Deleting one drops
+  its spend into the uncategorised group; it never destroys it.
+- `expense_schedules`: the recurrence **rule**, a separate table so a template can never land
+  in a total. `day_of_month` 1–31, clamped to the month's last day, so "the 31st" means the
+  28th in February rather than never firing.
+
+**Repeating bills** are posted by `postRecurringExpenses` (`worker/expenses.ts`, registered in
+the scheduler's tick array). Driven by a compare-and-swap on `last_posted_on` rather than by
+the clock — see decision 76 for why an exact-hour gate would skip a month. It fires on
+`day >= the due day`, never backfills, and a rule created after its day has passed starts next
+month so it cannot duplicate a bill already entered by hand.
+
+**Receipt**: one photo or PDF per expense, ≤ 10 MB, served back through `fileResponseHeaders`
+so anything off the inline allowlist is an attachment rather than a scripting document.
+**CSV export** at `/api/c/{slug}/expenses/export`, with every free-text column escaped.
+
+**Access**: the `expenses` capability — top-level, in no role's defaults, never inherited,
+included in `full`. Granted per person by an owner.
+
+### What the clinic kept
+
+On `/c/{slug}/earnings`, gated on `invoices.analytics`, the chain rather than one composite:
+
+```
+Collected            8,400        what the patients paid, tax included
+Sales tax           −1,159        only rendered when the clinic charges any
+Doctors' share      −2,100
+Expenses            −3,050        only for a reader who also holds `expenses`
+──────────────────────────
+Clinic kept          2,091        may be negative, and is coloured when it is
+```
+
+Tax comes out because otherwise the sign can be wrong (decision 78). Expenses are counted as
+paid, tax included, with no input tax reclaimed — exact for an unregistered clinic,
+deliberately conservative for a registered one. The money-in side is scoped by UTC instants
+and the money-out side by calendar dates; `clinicProfit` is the only place they meet.
+
+---
+
 ## 16. Insurance & claims
 
 *"Reception's question at the desk is 'how much does this person pay right now'."*
@@ -1502,7 +1552,8 @@ E.164 normalisation is **the single source of patient identity**.
 **Messaging** — `conversations`, `messages`, `quick_replies`, `whatsapp_sessions`,
 `whatsapp_auth_state`, `campaigns`, `campaign_recipients`
 
-**Money** — `invoices`, `invoice_items`, `invoice_line_doctors`, `payments`, `insurers`
+**Money** — `invoices`, `invoice_items`, `invoice_line_doctors`, `payments`, `insurers`,
+`expenses`, `expense_categories`, `expense_schedules`
 
 **Automation** — `automations`, `automation_steps`, `automation_runs`,
 `automation_run_logs`, `tasks`, `recipe_templates`
@@ -1585,7 +1636,7 @@ Real browser (Playwright) against the running app, asserting against the databas
 9. PWA & notifications · 10. admin & demo data
 
 Plus focused suites: `qa-access`, `qa-automation-coverage`, `qa-backup`, `qa-booking-race`,
-`qa-doctor-earnings`, `qa-receipts`, `qa-service-sections`,
+`qa-doctor-earnings`, `qa-receipts`, `qa-expenses`, `qa-service-sections`,
 `qa-brand-credit`, `qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`,
 `qa-esign-browser`, `qa-first-message`, `qa-import-digest`, `qa-mobile`, `qa-mobile-width`,
 `qa-einvoicing`, `qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.

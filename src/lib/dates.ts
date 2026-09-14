@@ -29,6 +29,24 @@ export function monthRangeUtc(tz: string, offsetMonths = 0): { start: string; en
   return { start: start.toUTC().toISO()!, end: start.plus({ months: 1 }).toUTC().toISO()! };
 }
 
+/**
+ * The same month, as plain calendar dates rather than instants.
+ *
+ * `monthRangeUtc` is right for a `timestamptz` column and wrong for a `date`
+ * one. For Asia/Amman it returns `…-08-31T21:00:00Z` as the start of September,
+ * and comparing a `date` against that casts under the session's TimeZone —
+ * which nothing here sets — quietly pulling the 31st of August into September's
+ * total. Anything filtering `expenses.spent_on` or `invoices.issue_date` wants
+ * these two strings instead, half-open like every other range in this file.
+ */
+export function monthDateRange(
+  tz: string,
+  offsetMonths = 0
+): { from: string; to: string } {
+  const start = DateTime.now().setZone(tz).startOf("month").plus({ months: offsetMonths });
+  return { from: start.toISODate()!, to: start.plus({ months: 1 }).toISODate()! };
+}
+
 /** The month's own name, for a screen that lets somebody step back through them. */
 export function monthLabel(tz: string, offsetMonths: number, locale: string): string {
   return DateTime.now()

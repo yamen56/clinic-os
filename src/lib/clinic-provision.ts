@@ -267,6 +267,13 @@ export async function provisionClinic(
   // from the patient file; never deletable, because the notes written under them
   // point here.
   await c.query(`select seed_note_categories($1)`, [clinicId]);
+  /*
+    And the expense categories, for the same reason as the note ones: a screen
+    that opens with "create a category first" is a screen nobody uses twice.
+    Renameable, recolourable and deletable — deleting one drops its spend into
+    the uncategorised group rather than destroying it.
+  */
+  await c.query(`select seed_expense_categories($1)`, [clinicId]);
   const docTemplates = await c.query(
     "select * from document_template_library where active order by sort"
   );

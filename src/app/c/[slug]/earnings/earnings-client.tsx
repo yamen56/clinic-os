@@ -22,6 +22,7 @@ export function EarningsClient({
   detail,
   team,
   net,
+  showSpend,
   flagged,
   names,
   showTeam,
@@ -35,7 +36,16 @@ export function EarningsClient({
   self: DoctorEarnings | null;
   detail: EarningsLine[];
   team: DoctorEarnings[];
-  net: { gross: number; commission: number; afterCommission: number } | null;
+  net: {
+    collected: number;
+    tax: number;
+    commission: number;
+    expenses: number;
+    kept: number;
+    afterCommission: number;
+  } | null;
+  /** Whether this reader may also see what the clinic spent. */
+  showSpend: boolean;
   flagged: Flagged[];
   names: Record<string, string>;
   showTeam: boolean;
@@ -44,7 +54,13 @@ export function EarningsClient({
   const router = useRouter();
   const money = (n: number) => fmtMoney(n, currency, locale);
 
-  if (!hasCommission) {
+  /*
+    Empty only when there is genuinely nothing on the page. `hasCommission`
+    alone was the test, which meant a solo owner who splits revenue with nobody
+    — the reader most interested in the profit chain below — was told revenue
+    sharing was not set up and shown nothing else.
+  */
+  if (!self && !net) {
     return (
       <>
         <PageHeader title={t.nav.earnings} />
@@ -162,16 +178,50 @@ export function EarningsClient({
 
         {showTeam && net && (
           <Card className="p-5">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Figure label={t.earnings.collected} value={money(net.gross)} />
-              <Figure label={t.earnings.doctorsShare} value={money(net.commission)} />
+            <CardHeader title={t.earnings.whatTheClinicKept} />
+            {/*
+              A chain rather than three headline figures, because every line is
+              a number the owner recognises and the last one is only believable
+              if the subtractions above it are visible.
+            */}
+            <ul className="mt-4 grid gap-2">
+              <Line label={t.earnings.collected} value={money(net.collected)} />
               {/*
-                "After doctor commission", never "net revenue": what was
-                collected is tax-inclusive and the commission is computed
-                ex-tax, so the difference is not net of anything tidy.
+                Sales tax, shown only when there is any. Most clinics here are
+                under the registration threshold and issue everything outside
+                the scope of tax, so a permanent 0.00 row would be noise for
+                them — and leaving it out entirely would overstate profit for
+                the few who do charge it. Same rule as the tax column on the
+                patient's own invoice.
               */}
-              <Figure label={t.earnings.afterCommission} value={money(net.afterCommission)} strong />
-            </div>
+              {net.tax > 0 && <Line label={t.earnings.salesTax} value={`− ${money(net.tax)}`} />}
+              {net.commission > 0 && (
+                <Line label={t.earnings.doctorsShare} value={`− ${money(net.commission)}`} />
+              )}
+              {showSpend && <Line label={t.earnings.expenses} value={`− ${money(net.expenses)}`} />}
+              <li className="mt-1 flex items-center justify-between gap-3 border-t border-line pt-3">
+                <span className="text-[13px] font-semibold">
+                  {showSpend ? t.earnings.kept : t.earnings.afterCommission}
+                </span>
+                {/*
+                  A loss is an ordinary month — the first one of any clinic, and
+                  any month somebody buys a chair — so it is coloured rather
+                  than left looking like a number that went wrong. `dir="ltr"`
+                  keeps the minus beside its digits in an RTL page.
+                */}
+                <span
+                  dir="ltr"
+                  className={`text-lg font-bold tabular-nums ${
+                    (showSpend ? net.kept : net.afterCommission) < 0 ? "text-danger" : "text-ink-900"
+                  }`}
+                >
+                  {money(showSpend ? net.kept : net.afterCommission)}
+                </span>
+              </li>
+            </ul>
+            <p className="mt-3 border-t border-line pt-3 text-[12px] leading-relaxed text-ink-500">
+              {showSpend ? t.earnings.keptNote : t.earnings.afterCommissionNote}
+            </p>
           </Card>
         )}
 
@@ -239,6 +289,16 @@ export function EarningsClient({
         )}
       </div>
     </>
+  );
+}
+
+/** One subtraction in the profit chain. */
+function Line({ label, value }: { label: string; value: string }) {
+  return (
+    <li className="flex items-center justify-between gap-3">
+      <span className="text-[13px] text-ink-500">{label}</span>
+      <span dir="ltr" className="text-[13px] tabular-nums">{value}</span>
+    </li>
   );
 }
 

@@ -71,7 +71,7 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
     denies what is named here, so a clinic whose invoicing was switched off kept
     the revenue tiles on its dashboard. Every capability the module owns goes in.
   */
-  invoices: ["invoices", "invoices.analytics", "earnings"],
+  invoices: ["invoices", "invoices.analytics", "earnings", "expenses"],
   campaigns: ["campaigns"],
   automations: ["automations"],
   ai: ["ai"],

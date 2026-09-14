@@ -40,6 +40,17 @@ export const CAPABILITIES = [
     `invoices.analytics`; this one is strictly "mine".
   */
   "earnings",
+  /*
+    What the clinic spends, and what it therefore actually kept.
+
+    Top-level for the same reason `earnings` is, and for one of its own: the
+    person who does the buying is not necessarily the person who does the
+    billing, so this has to be grantable without also handing over Invoices. It
+    is emphatically not `invoices.expenses` — that would require `invoices`, and
+    a receptionist granted the takings would silently also get the salary bill,
+    which is the most sensitive number in the business.
+  */
+  "expenses",
   "campaigns",
   "automations",
   "ai",
@@ -301,6 +312,7 @@ const LANDING_ORDER: [Capability, string][] = [
   ["conversations", "conversations"],
   ["documents", "documents"],
   ["invoices", "invoices"],
+  ["expenses", "expenses"],
   ["campaigns", "campaigns"],
   ["automations", "automations"],
   ["ai", "ai"],
@@ -331,6 +343,7 @@ export const CAPABILITY_GROUPS: { section: Capability; actions: Capability[] }[]
   { section: "documents", actions: ["documents.manage", "documents.void"] },
   { section: "invoices", actions: ["invoices.analytics"] },
   { section: "earnings", actions: [] },
+  { section: "expenses", actions: [] },
   { section: "campaigns", actions: [] },
   { section: "automations", actions: [] },
   { section: "ai", actions: [] },
