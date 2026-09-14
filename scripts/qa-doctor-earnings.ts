@@ -371,6 +371,60 @@ async function main() {
     String(written[0]?.commission_percent)
   );
 
+  /*
+    Who the Earnings screen exists for.
+
+    Holding the capability is not the test — every doctor holds it. What decides
+    it is whether the clinic agreed a share with *this* person, so a doctor at a
+    clinic that pays somebody else a percentage gets no nav item and no page,
+    rather than an empty screen implying an arrangement nobody made.
+  */
+  const drNone = await mkDoctor("Dr None", null);
+  await signIn(emailOf("Dr None"));
+  await page.goto(`${BASE}/c/${tag}`);
+  await page.waitForLoadState("networkidle");
+  const noneNav = (await page.locator("aside nav a").allTextContents()).join(", ");
+  check("a doctor with no share sees no Earnings item", !noneNav.includes("Earnings"), noneNav);
+  check("and their dashboard still renders", noneNav.includes("Dashboard"), noneNav);
+
+  await page.goto(`${BASE}/c/${tag}/earnings`);
+  await page.waitForURL((u) => u.pathname === `/c/${tag}`, { timeout: 15000 }).catch(() => {});
+  await page.waitForLoadState("networkidle");
+  check(
+    "and typing the URL sends them away",
+    new URL(page.url()).pathname === `/c/${tag}`,
+    new URL(page.url()).pathname
+  );
+
+  // And the doctor who does have one still does.
+  await signIn(emailOf("Dr A"));
+  await page.goto(`${BASE}/c/${tag}`);
+  await page.waitForLoadState("networkidle");
+  const aNav = (await page.locator("aside nav a").allTextContents()).join(", ");
+  check("a doctor with a share does see it", aNav.includes("Earnings"), aNav);
+
+  /*
+    And it survives the arrangement ending. Clearing the percentage stops new
+    work accruing; it does not take away the record of what they were already
+    owed, which is when somebody is most likely to go looking.
+  */
+  await db.query(`update clinic_members set commission_percent = null where id = $1`, [drA]);
+  await page.goto(`${BASE}/c/${tag}`);
+  await page.waitForLoadState("networkidle");
+  const endedNav = (await page.locator("aside nav a").allTextContents()).join(", ");
+  check("clearing the share keeps what they already earned reachable", endedNav.includes("Earnings"), endedNav);
+  await page.goto(`${BASE}/c/${tag}/earnings`);
+  await page.waitForLoadState("networkidle");
+  const endedText = await mainText();
+  check("and it still shows the figure", endedText.includes("60.00"), endedText.slice(0, 120));
+  await db.query(`update clinic_members set commission_percent = 40 where id = $1`, [drA]);
+
+  // Nobody on the desk sees the clinic's takings just for having Invoices.
+  check(
+    "a doctor never sees the clinic's revenue tile",
+    (await page.getByText("Revenue this week", { exact: false }).count()) === 0
+  );
+
   // The one thing that must never be true.
   await page.goto(`${BASE}/inv/${token}`);
   await page.waitForLoadState("networkidle");

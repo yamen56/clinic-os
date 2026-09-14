@@ -93,9 +93,19 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
     "documents",
     "documents.manage",
     "invoices",
-    // The desk takes the money, so it starts able to see the day's takings.
-    // An owner who does not want that unticks one box.
-    "invoices.analytics",
+    /*
+      `invoices.analytics` is deliberately *not* here any more.
+
+      The desk takes the money, so it starts able to raise invoices, settle them
+      and see what a patient owes — all of which it needs. What it no longer
+      starts with is the clinic's own takings: the day's total, the week against
+      last week, the sum outstanding. That is the owner's number, and "an owner
+      who does not want that unticks one box" turned out to be the wrong default,
+      because nobody unticks a box they never knew was ticked.
+
+      Still grantable. An owner who wants their practice manager to see the
+      takings ticks it, once, for that person.
+    */
     "settings",
   ],
   other: ["dashboard", "calendar", "patients"],
@@ -153,15 +163,20 @@ export function resolveCapabilities(
     */
     if (!("ai" in ticked) && caps.automations) caps.ai = true;
     /*
-      The same silence, for the same reason. `invoices.analytics` was split out
-      of `invoices` after these rows were written: a map saved before the split
-      says only that this member has Invoices, which at the time included the
-      revenue tiles at the top of the list. Reading that silence as a denial
-      would take those away from every existing member on deploy — a change
-      nobody asked for, arriving as a bug report. An explicit false still
-      denies; only the absence inherits.
+      `invoices.analytics` used to inherit from `invoices` here, on the same
+      reasoning as the `ai` rule above: the split came after these rows were
+      written, so silence meant "they had it before".
+
+      **Removed deliberately, and it is the one rule that has been reversed.**
+      The inheritance was doing exactly what it was built to do and the effect
+      was still wrong: a receptionist granted Invoices — to raise and settle
+      them, which is the job — silently also received the clinic's takings.
+      Nobody ticked it and so nobody thought to untick it, and a clinic found
+      its staff looking at the week's revenue.
+
+      An owner who wants somebody to see the takings ticks the box. Silence now
+      means no, which is the answer that cannot surprise anyone.
     */
-    if (!("invoices.analytics" in ticked) && caps.invoices) caps["invoices.analytics"] = true;
     /*
       `earnings` has no rule here, deliberately, and the absence is the decision.
 

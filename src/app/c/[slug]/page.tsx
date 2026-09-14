@@ -92,24 +92,52 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       await c.query(
         `select
           (select coalesce(sum(unread_count),0) from conversations where clinic_id=$1)::int as unread,
-          (select coalesce(sum(amount),0) from payments where clinic_id=$1 and paid_at >= $2 and paid_at < $3) as rev_this,
-          (select coalesce(sum(amount),0) from payments where clinic_id=$1 and paid_at >= $4 and paid_at < $5) as rev_last,
-          (select count(*) from appointments where clinic_id=$1 and starts_at >= $6 and starts_at < $7 and status='no_show')::int as noshow,
-          (select count(*) from appointments where clinic_id=$1 and starts_at >= $6 and starts_at < $7 and status in ('completed','no_show'))::int as finished,
+          ${
+            /*
+              Not computed at all for somebody who may not see it. The tiles were
+              already hidden, but the figures still travelled to their browser in
+              the page payload — and "the number is in the page, just not drawn"
+              is not what you tell an owner who asked that their staff not know
+              what the practice takes.
+
+              The month range is $2/$3 because it is always used; the two week
+              ranges are $4–$7 and are bound only when they are referenced.
+              Postgres rejects a statement that is handed a parameter it never
+              mentions ("bind message supplies 7 parameters, but prepared
+              statement requires 3"), so leaving them bound to keep the numbering
+              tidy took the whole dashboard down for everybody without revenue.
+            */
+            showRevenue
+              ? `(select coalesce(sum(amount),0) from payments where clinic_id=$1 and paid_at >= $4 and paid_at < $5) as rev_this,
+          (select coalesce(sum(amount),0) from payments where clinic_id=$1 and paid_at >= $6 and paid_at < $7) as rev_last,`
+              : `0::numeric as rev_this, 0::numeric as rev_last,`
+          }
+          (select count(*) from appointments where clinic_id=$1 and starts_at >= $2 and starts_at < $3 and status='no_show')::int as noshow,
+          (select count(*) from appointments where clinic_id=$1 and starts_at >= $2 and starts_at < $3 and status in ('completed','no_show'))::int as finished,
           (select count(*) from invoices where clinic_id=$1 and status in ('sent','partially_paid'))::int as unpaid,
           -- The money owed, not just how many pieces of paper it is spread across.
-          (select coalesce(sum(total - amount_paid),0) from invoices where clinic_id=$1 and status in ('sent','partially_paid')) as owed,
-          (select count(*) from patients where clinic_id=$1 and merged_into is null and created_at >= $6 and created_at < $7)::int as new_patients,
+          -- Same rule as the takings above: a sum of what the clinic is owed is
+          -- a clinic-wide figure, so it is not computed for somebody without it.
+          ${
+            showRevenue
+              ? `(select coalesce(sum(total - amount_paid),0) from invoices where clinic_id=$1 and status in ('sent','partially_paid')) as owed,`
+              : `0::numeric as owed,`
+          }
+          (select count(*) from patients where clinic_id=$1 and merged_into is null and created_at >= $2 and created_at < $3)::int as new_patients,
           /*
             Bookings that came through the public link this month. Every clinic
             has this number; only the workspace selling software puts it on the
             front page, where "how many demos did we book" is the question the
             morning actually starts with.
           */
-          (select count(*) from appointments where clinic_id=$1 and source='booking_link' and starts_at >= $6 and starts_at < $7)::int as self_booked,
+          (select count(*) from appointments where clinic_id=$1 and source='booking_link' and starts_at >= $2 and starts_at < $3)::int as self_booked,
           (select count(*) from patients where clinic_id=$1 and merged_into is null and status='lead')::int as leads,
           (select count(*) from appointments where clinic_id=$1 and status in ('scheduled','pending_approval') and starts_at > now())::int as unconfirmed`,
-        [a.clinicId, thisWeek.start, thisWeek.end, lastWeek.start, lastWeek.end, month.start, month.end]
+        // Only what the statement actually mentions: an unreferenced parameter
+        // is a bind error, not a harmless extra.
+        showRevenue
+          ? [a.clinicId, month.start, month.end, thisWeek.start, thisWeek.end, lastWeek.start, lastWeek.end]
+          : [a.clinicId, month.start, month.end]
       )
     ).rows;
 

@@ -291,6 +291,36 @@ export async function clinicNetRevenue(
   return { gross, commission, afterCommission: round2(gross - commission) };
 }
 
+/**
+ * Does *this member* have anything of their own to look at?
+ *
+ * A share agreed with them now, or money already earned under one that has
+ * since ended — either makes the screen theirs. Clearing somebody's percentage
+ * stops new work accruing; it does not take away the record of what they were
+ * already owed, which is usually the moment they most want to check it.
+ *
+ * This is the gate on the personal half of the screen, and it is deliberately
+ * about the member rather than the clinic: a doctor at a clinic that pays
+ * somebody else a share has nothing of their own here and should not be shown
+ * a page implying otherwise.
+ */
+export async function memberHasEarnings(
+  c: PoolClient,
+  clinicId: string,
+  memberId: string | null
+): Promise<boolean> {
+  if (!memberId) return false;
+  const r = await c.query(
+    `select
+       exists(select 1 from clinic_members
+               where id = $2 and clinic_id = $1 and commission_percent is not null)
+       or exists(select 1 from invoice_line_doctors
+                  where clinic_id = $1 and doctor_member_id = $2) as has`,
+    [clinicId, memberId]
+  );
+  return r.rows[0]?.has === true;
+}
+
 /** Does this clinic split revenue with anybody? Decides whether any of it renders. */
 export async function clinicHasCommission(c: PoolClient, clinicId: string): Promise<boolean> {
   const r = await c.query(

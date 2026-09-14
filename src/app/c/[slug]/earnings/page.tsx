@@ -9,6 +9,7 @@ import {
   earningsByDoctor,
   earningsDetailForDoctor,
   earningsForDoctor,
+  memberHasEarnings,
   voidedButPaid,
   type DoctorEarnings,
   type EarningsLine,
@@ -34,9 +35,19 @@ export default async function EarningsPage({
   const sp = await searchParams;
   const access = await guardClinic(slug);
 
+  /*
+    The capability is necessary and not sufficient. Every doctor holds
+    `earnings`, so what decides whether this screen exists for them is whether
+    the clinic actually agreed a share with *them* — checked against the
+    database here, not inferred from the nav, because hiding a link is not a
+    gate and this URL can be typed.
+  */
   const mine = can(access, "earnings");
   const all = can(access, "invoices.analytics");
-  if (!mine && !all) redirect(`/c/${slug}`);
+  const hasOwn =
+    mine &&
+    (await inClinic(access, (c) => memberHasEarnings(c, access.clinicId, access.memberId)));
+  if (!hasOwn && !all) redirect(`/c/${slug}`);
 
   // Clamped: this is a URL, and a two-thousand-month offset is a date library
   // exception rather than an empty page.
@@ -50,7 +61,14 @@ export default async function EarningsPage({
   };
 
   const data = await inClinic(access, async (c) => {
-    const hasCommission = await clinicHasCommission(c, access.clinicId);
+    /*
+      `hasOwn` first, and not merely as an optimisation: a doctor whose share
+      was ended still has earnings on record, and by then the clinic may have no
+      live percentage with anybody. Asking only whether the *clinic* currently
+      splits revenue would answer "not set up" and hide that doctor's own
+      history — the thing they came to look at.
+    */
+    const hasCommission = hasOwn || (await clinicHasCommission(c, access.clinicId));
     if (!hasCommission) return { hasCommission, self: null, detail: [], team: [], net: null, flagged: [], names: {} };
 
     /*
@@ -60,9 +78,9 @@ export default async function EarningsPage({
       rendered, and support sees the team half instead.
     */
     const self: DoctorEarnings | null =
-      mine && access.memberId ? await earningsForDoctor(c, scope, access.memberId) : null;
+      hasOwn && access.memberId ? await earningsForDoctor(c, scope, access.memberId) : null;
     const detail: EarningsLine[] =
-      mine && access.memberId ? await earningsDetailForDoctor(c, scope, access.memberId) : [];
+      hasOwn && access.memberId ? await earningsDetailForDoctor(c, scope, access.memberId) : [];
 
     const team = all ? await earningsByDoctor(c, scope) : [];
     const net = all
@@ -87,7 +105,7 @@ export default async function EarningsPage({
   });
 
   const myRate = await inClinic(access, async (c) => {
-    if (!mine || !access.memberId) return null;
+    if (!hasOwn || !access.memberId) return null;
     const r = await c.query(
       `select commission_percent from clinic_members where id = $1 and clinic_id = $2`,
       [access.memberId, access.clinicId]

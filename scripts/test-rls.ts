@@ -81,8 +81,20 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     `insert into patient_files (clinic_id, patient_id, file_name, mime_type, storage_path) values ($1, $2, 'f.png', 'image/png', 'x') returning id`,
     [clinic, patient]
   );
+  /*
+    A section, and a service filed under it. Both tables need a row of their
+    own here or the isolation assertion below is vacuous — "clinic A sees no
+    clinic B rows" passes trivially when the table is empty, which is how
+    `service_sections` went untested from 0047 until now.
+  */
+  const section = (
+    await q(`insert into service_sections (clinic_id, name) values ($1, 'Dentistry') returning id`, [clinic])
+  ).id;
   const service = (
-    await q(`insert into services (clinic_id, name) values ($1, 'Cleaning') returning id`, [clinic])
+    await q(`insert into services (clinic_id, name, section_id) values ($1, 'Cleaning', $2) returning id`, [
+      clinic,
+      section,
+    ])
   ).id;
   await q(`insert into service_doctors (service_id, member_id, clinic_id) values ($1, $2, $3) returning service_id`, [service, member, clinic]);
   const appointment = (
@@ -144,7 +156,16 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
       [clinic, patient, `RLS-${tag}-1`]
     )
   ).id;
-  await q(`insert into invoice_items (clinic_id, invoice_id, description) values ($1, $2, 'item') returning id`, [clinic, invoice]);
+  const invoiceItem = (
+    await q(`insert into invoice_items (clinic_id, invoice_id, description) values ($1, $2, 'item') returning id`, [clinic, invoice])
+  ).id;
+  // Who earned the line, and at what rate — the doctor's share of this clinic's
+  // money, which is exactly the kind of row that must never cross a tenant.
+  await q(
+    `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent)
+     values ($1, $2, $3, 40) returning invoice_item_id`,
+    [invoiceItem, clinic, member]
+  );
   await q(
     `insert into invoice_einvoice_events (clinic_id, invoice_id, kind) values ($1, $2, 'queued') returning id`,
     [clinic, invoice]

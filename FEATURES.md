@@ -1098,6 +1098,20 @@ capability, on by default for the doctor job) shows a doctor their own figures, 
 and the invoices behind them. `invoices.analytics` adds the by-doctor payout table, the
 collected / doctors' share / after-commission figures, and the voided-but-paid flags.
 
+The capability is necessary and not sufficient: the screen appears only for a member the
+clinic has actually agreed a share with, or who has earnings on record from one that has
+since ended. A doctor with no arrangement gets no nav item and no page — enforced in the
+page itself, not merely hidden in the nav.
+
+**Who sees the clinic's takings.** `invoices.analytics` gates every clinic-wide money
+figure: the dashboard's revenue tile, its 14-day chart and its "what earns" breakdowns, and
+the Today / This week / This month / Outstanding tiles on the invoices list. It is **off by
+default for every job**, including reception, and it **never inherits** from `invoices` — so
+a member granted Invoices can raise, settle and chase them, and see what one patient owes,
+without seeing what the practice takes. An owner grants it deliberately, per person. `full`
+access still includes it. The queries do not run at all for a member without it, so the
+figures never reach their browser.
+
 ### Money views
 
 Invoices list filters (All / Unpaid / Partly paid / Paid) plus Today, This week, This month

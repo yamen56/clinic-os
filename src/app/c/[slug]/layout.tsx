@@ -25,18 +25,39 @@ export default async function ClinicLayout({
          (select count(*)::int from documents
            where clinic_id = $1 and status in ('sent', 'partially_signed')) as pending_documents,
          (select avatar_path is not null from users where id = $2) as has_photo,
+         /*
+           Whether this person has anything of their own on the Earnings screen:
+           a share agreed with them now, or money already earned under one that
+           has since ended. Either way it is theirs to look at; neither means
+           they see anybody else's.
+
+           A doctor with no arrangement gets no nav item and no page, rather
+           than a screen explaining that the feature is not set up — which is
+           the clinic's business and not a thing to advertise to staff.
+
+           $3 is null while a super admin is impersonating, so both halves are
+           false and support reaches the screen through invoices.analytics
+           instead, which is the right door for it.
+         */
+         (
+           exists(select 1 from clinic_members
+                   where id = $3 and clinic_id = $1 and commission_percent is not null)
+           or exists(select 1 from invoice_line_doctors
+                      where clinic_id = $1 and doctor_member_id = $3)
+         ) as has_earnings,
          coalesce((
            select json_agg(json_build_object('id', a.id, 'title', a.title, 'body', a.body))
            from (
              select id, title, body from announcements where active order by created_at desc limit 3
            ) a
          ), '[]'::json) as announcements`,
-      [access.clinicId, access.session.user.id]
+      [access.clinicId, access.session.user.id, access.memberId]
     );
     return r.rows[0] as {
       unread: number;
       pending_documents: number;
       has_photo: boolean;
+      has_earnings: boolean;
       announcements: { id: string; title: string; body: string }[];
     };
   });
@@ -105,6 +126,7 @@ export default async function ClinicLayout({
       isImpersonating={access.isImpersonating}
       unreadCount={chrome.unread}
       pendingDocuments={chrome.pending_documents}
+      hasEarnings={!!chrome.has_earnings}
       announcements={chrome.announcements.filter((a) => !dismissed.includes(a.id))}
     >
       {/*

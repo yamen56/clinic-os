@@ -76,6 +76,7 @@ export function Shell({
   isImpersonating,
   unreadCount,
   pendingDocuments,
+  hasEarnings,
   announcements,
   children,
 }: {
@@ -98,6 +99,8 @@ export function Shell({
   isImpersonating: boolean;
   unreadCount: number;
   pendingDocuments: number;
+  /** This person has a share agreed, or money already earned under one. */
+  hasEarnings: boolean;
   announcements: { id: string; title: string; body: string }[];
   children: React.ReactNode;
 }) {
@@ -139,7 +142,21 @@ export function Shell({
       any earlier would push Documents out of their thumb's reach, for a screen
       opened once a month.
     */
-    { key: "earnings", href: `${base}/earnings`, show: caps.earnings || caps["invoices.analytics"] },
+    {
+      key: "earnings",
+      href: `${base}/earnings`,
+      /*
+        Only for somebody who has something of their own on it. The capability
+        alone is not enough: every doctor holds `earnings` by default, and a
+        clinic that has agreed no share with them has nothing to show — an empty
+        screen about money is worse than no screen, and it advertises an
+        arrangement the clinic may not have made.
+
+        `invoices.analytics` is the other door, for the owner reading the payout
+        report across everybody.
+      */
+      show: (caps.earnings && hasEarnings) || caps["invoices.analytics"],
+    },
     { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
     { key: "automations", href: `${base}/automations`, show: caps.automations },

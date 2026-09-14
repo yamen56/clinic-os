@@ -505,17 +505,39 @@ async function main() {
   check("an action cannot outlive its section", !inconsistent["documents.void"]);
 
   /*
-    The split that shipped after these rows were written. A stored map saying
-    only `invoices: true` was written when that included the revenue totals, so
-    it has to keep including them — the alternative is every existing member
-    losing the tiles on deploy, which is a change nobody asked for arriving as a
-    bug report.
+    Invoices no longer carries the clinic's takings with it, and this is the
+    assertion that was reversed to make that true.
+
+    It used to require the opposite: a stored map saying only `invoices: true`
+    predated the split, so it had to keep the revenue tiles or every existing
+    member would lose them on deploy. That reasoning was sound and the result
+    was still wrong — a receptionist granted Invoices so they could take money
+    at the desk silently also received the week's revenue, and nobody unticks a
+    box they never knew was ticked. Granting it is now something somebody has to
+    do on purpose.
   */
   const beforeSplit = resolveCapabilities(
     { level: "custom", caps: { invoices: true } },
     { isOwner: false, role: "receptionist" }
   );
-  check("a map written before the split keeps the totals", beforeSplit["invoices.analytics"]);
+  check("invoices alone does not hand over the clinic's takings", !beforeSplit["invoices.analytics"]);
+  check("and still grants the invoices screen itself", beforeSplit.invoices);
+  const explicitlyGranted = resolveCapabilities(
+    { level: "custom", caps: { invoices: true, "invoices.analytics": true } },
+    { isOwner: false, role: "receptionist" }
+  );
+  check("an owner can still grant it deliberately", explicitlyGranted["invoices.analytics"]);
+  /*
+    Full access is untouched on purpose: it means everything, the owner chose it
+    for that person, and taking the takings out of it would be a different
+    promise from the one the screen makes.
+  */
+  const fullAccess = resolveCapabilities({ level: "full" }, { isOwner: false, role: "doctor" });
+  check("full access still includes them", fullAccess["invoices.analytics"]);
+  // And the desk no longer starts with them.
+  const deskDefaults = resolveCapabilities(null, { isOwner: false, role: "receptionist" });
+  check("a receptionist does not start with the takings", !deskDefaults["invoices.analytics"]);
+  check("but does start with invoices", deskDefaults.invoices);
   const explicitlyDenied = resolveCapabilities(
     { level: "custom", caps: { invoices: true, "invoices.analytics": false } },
     { isOwner: false, role: "receptionist" }
