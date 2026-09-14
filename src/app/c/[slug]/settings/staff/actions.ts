@@ -264,6 +264,11 @@ export async function updateMemberAction(
     reminderMinutes?: number;
     /** This person's standing meeting room, used by services held online. */
     meetingUrl?: string;
+    /**
+     * What this doctor earns of what they bill. `null` clears the arrangement,
+     * which is not the same as setting it to 0. Owner-only — see the guard.
+     */
+    commissionPercent?: number | null;
     access?: { level: "full" | "custom"; caps: string[] };
     workingHours?: Record<string, [string, string][]> | null;
   }
@@ -368,6 +373,23 @@ export async function updateMemberAction(
       const ok = raw === "" || /^https?:\/\/\S+$/i.test(raw);
       if (!ok) return { error: "bad_meeting_url" };
       push("meeting_url", raw || null);
+    }
+    if (patch.commissionPercent !== undefined) {
+      /*
+        What the clinic pays a doctor is the owner's business and nobody else's.
+        `settings.staff` is grantable, so the delegated manager who may fix a
+        colleague's title may not set or change their pay — and since the screen
+        is not the only way to reach this action, the rule lives here rather
+        than only in the markup.
+
+        Null clears the arrangement. 0 is an arrangement worth nothing, and the
+        two are stored differently on purpose.
+      */
+      if (!access.isOwner) return { error: "forbidden" };
+      const v = patch.commissionPercent;
+      if (v === null) push("commission_percent", null);
+      else if (Number.isFinite(v) && v >= 0 && v <= 100) push("commission_percent", v);
+      else return { error: "invalid_commission" };
     }
     if (patch.access !== undefined) {
       /*

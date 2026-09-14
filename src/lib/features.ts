@@ -65,7 +65,13 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
   calendar: ["calendar"],
   patients: ["patients"],
   documents: ["documents", "documents.manage", "documents.void"],
-  invoices: ["invoices"],
+  /*
+    `invoices.analytics` and `earnings` were both missing from this list at
+    different times, and the effect is the same each way: `maskByFeatures` only
+    denies what is named here, so a clinic whose invoicing was switched off kept
+    the revenue tiles on its dashboard. Every capability the module owns goes in.
+  */
+  invoices: ["invoices", "invoices.analytics", "earnings"],
   campaigns: ["campaigns"],
   automations: ["automations"],
   ai: ["ai"],

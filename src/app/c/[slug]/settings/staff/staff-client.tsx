@@ -43,6 +43,16 @@ type Member = {
   has_photo: boolean;
   /** They also work at another clinic here, so their name is theirs to change. */
   shared_account: boolean;
+  /**
+   * What this doctor earns of what they bill. Null means no arrangement, which
+   * is not the same as zero.
+   *
+   * Always null for anybody but the clinic owner — the server does not select
+   * it otherwise, so a delegated staff manager's browser never receives a
+   * colleague's pay. RLS cannot help here: `members_access` admits every member
+   * of a clinic to every member row.
+   */
+  commission_percent: string | null;
 };
 
 const ROLES: MemberRole[] = ["doctor", "receptionist", "other"];
@@ -335,6 +345,7 @@ export function StaffClient({
             slug={slug}
             member={editing}
             isSelf={editing.id === selfId}
+            viewerIsOwner={viewerIsOwner}
             onDone={() => {
               setEditing(null);
               router.refresh();
@@ -452,11 +463,13 @@ function EditMember({
   slug,
   member,
   isSelf,
+  viewerIsOwner,
   onDone,
 }: {
   slug: string;
   member: Member;
   isSelf: boolean;
+  viewerIsOwner: boolean;
   onDone: () => void;
 }) {
   const { t } = useI18n();
@@ -564,6 +577,39 @@ function EditMember({
         </Field>
       )}
 
+      {/*
+        What the clinic pays this doctor, and the one field on this screen that
+        only the owner sees. `settings.staff` is grantable — a receptionist can
+        be given the staff screen without being given everyone's pay, and the
+        server does not send the number to anybody else in the first place.
+
+        Empty is not zero. Leaving it blank means there is no revenue-sharing
+        arrangement and the doctor gets no earnings screen; typing 0 means there
+        is one and it currently pays nothing.
+      */}
+      {m.role === "doctor" && viewerIsOwner && (
+        <Field label={t.staff.commission} hint={t.staff.commissionHint}>
+          {/*
+            A plain Input, not NumberInput: that one settles an emptied box to
+            its minimum, which would quietly turn "no arrangement" into "0%" —
+            the one distinction this field exists to keep.
+          */}
+          <Input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={100}
+            step={0.5}
+            dir="ltr"
+            placeholder={t.staff.commissionNone}
+            value={m.commission_percent ?? ""}
+            onChange={(e) =>
+              setM({ ...m, commission_percent: e.target.value === "" ? null : e.target.value })
+            }
+          />
+        </Field>
+      )}
+
       {accessLocked ? (
         <p className="rounded-lg border border-line bg-sunken px-4 py-3 text-[12px] leading-relaxed text-ink-500">
           {member.is_owner ? t.staff.ownerAccessLocked : t.staff.selfAccessLocked}
@@ -623,6 +669,18 @@ function EditMember({
                 color: m.color,
                 reminderMinutes: m.reminder_minutes,
                 meetingUrl: m.meeting_url ?? "",
+                /*
+                  Sent only by an owner editing a doctor, and left absent
+                  otherwise so a save from any other screen state cannot clear a
+                  rate it was never shown. The server refuses it from anybody
+                  else regardless.
+                */
+                commissionPercent:
+                  viewerIsOwner && m.role === "doctor"
+                    ? m.commission_percent === null || m.commission_percent === ""
+                      ? null
+                      : Number(m.commission_percent)
+                    : undefined,
                 access: accessLocked
                   ? undefined
                   : { level, caps: CAPABILITIES.filter((c) => caps[c]) },

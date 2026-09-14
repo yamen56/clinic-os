@@ -23,6 +23,7 @@ import {
   Workflow,
   Sparkles,
   Hourglass,
+  Wallet,
   Settings,
   MoreHorizontal,
   Bell,
@@ -39,6 +40,7 @@ type NavKey =
   | "conversations"
   | "calendar"
   | "waitlist"
+  | "earnings"
   | "patients"
   | "campaigns"
   | "documents"
@@ -52,6 +54,7 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   conversations: MessageCircle,
   calendar: CalendarDays,
   waitlist: Hourglass,
+  earnings: Wallet,
   patients: Users,
   campaigns: Megaphone,
   documents: FileSignature,
@@ -129,6 +132,14 @@ export function Shell({
     { key: "invoices", href: `${base}/invoices`, show: caps.invoices },
     { key: "documents", href: `${base}/documents`, show: caps.documents, badge: pendingDocuments },
     { key: "waitlist", href: `${base}/waitlist`, show: caps.calendar },
+    /*
+      After the waitlist, rather than beside Invoices where it belongs by
+      subject. The first four visible items become the phone's bottom bar, and a
+      doctor's four are Dashboard, Patients, Calendar, Documents — putting this
+      any earlier would push Documents out of their thumb's reach, for a screen
+      opened once a month.
+    */
+    { key: "earnings", href: `${base}/earnings`, show: caps.earnings || caps["invoices.analytics"] },
     { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
     { key: "automations", href: `${base}/automations`, show: caps.automations },

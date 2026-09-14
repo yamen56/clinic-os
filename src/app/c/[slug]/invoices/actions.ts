@@ -6,12 +6,14 @@ import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import {
   nextInvoiceNumber,
+  nextReceiptNumber,
   computeInvoice,
   refreshInvoiceStatus,
   round2,
   TAX_CATEGORIES,
   type InvoiceItemInput,
 } from "@/lib/invoices";
+import type { PoolClient } from "pg";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { emitTrigger } from "@/lib/triggers";
@@ -35,6 +37,13 @@ const createSchema = z.object({
         discountAmount: z.coerce.number().min(0).default(0),
         taxCategory: z.enum(TAX_CATEGORIES).default("S"),
         taxRate: z.coerce.number().min(0).max(100).default(0),
+        /*
+          Whose work this line was. The rate is deliberately *not* here: the
+          browser says who, the server says at what percentage, and a client
+          that could name its own commission would be a client that could pay
+          its doctor anything.
+        */
+        doctorMemberId: z.string().uuid().nullable().optional(),
       })
     )
     .min(1),
@@ -104,21 +113,54 @@ export async function createInvoiceAction(
       ]
     );
     const invoiceId = inv.rows[0].id as string;
+    /*
+      The rates, read once and from the database rather than from the request.
+
+      Scoped to this clinic and to members who are actually doctors — foreign
+      key validation runs as the table owner and so bypasses RLS, which means a
+      forged uuid from another clinic would satisfy the constraint. The same
+      check `sectionBelongs` exists for, for the same reason.
+
+      A member with no `commission_percent` has no arrangement, so no row is
+      written and the line simply has no doctor attached. That is what keeps
+      this whole feature inert for a clinic that does not split revenue.
+    */
+    const wanted = [...new Set(d.items.map((it) => it.doctorMemberId).filter(Boolean))] as string[];
+    const rates = new Map<string, number>();
+    if (wanted.length) {
+      const r = await c.query(
+        `select id, commission_percent from clinic_members
+          where clinic_id = $1 and role = 'doctor' and id = any($2::uuid[])
+            and commission_percent is not null`,
+        [access.clinicId, wanted]
+      );
+      for (const row of r.rows) rates.set(row.id as string, Number(row.commission_percent));
+    }
+
     let sort = 0;
     for (const [i, it] of d.items.entries()) {
       // Straight from computeInvoice, so what is stored on the line is exactly
       // what the header was summed from — nothing recalculated a second way.
       const line = totals.lines[i];
-      await c.query(
+      const item = await c.query(
         `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount,
                                     discount_amount, tax_category, tax_rate, tax_amount, sort)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         returning id`,
         [
           access.clinicId, invoiceId, it.serviceId ?? null, it.description,
           it.qty, it.unitPrice, line.amount,
           line.discount, line.taxCategory, line.taxRate, line.tax, sort++,
         ]
       );
+      const rate = it.doctorMemberId ? rates.get(it.doctorMemberId) : undefined;
+      if (it.doctorMemberId && rate !== undefined) {
+        await c.query(
+          `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent)
+           values ($1, $2, $3, $4)`,
+          [item.rows[0].id, access.clinicId, it.doctorMemberId, rate]
+        );
+      }
     }
     await audit(c, {
       clinicId: access.clinicId,
@@ -389,6 +431,274 @@ export async function setInvoiceInsuranceAction(
  * row, so a refund is a separate thing this product still does not do; saying so
  * plainly is better than a half-reversal that makes the balance lie.
  */
+/**
+ * A receipt for a settled invoice.
+ *
+ * Offered only once the invoice is paid in full, which is the clinic's choice
+ * and not an accident of the schema: a part-paid invoice produces no document
+ * here, and the balance is what the invoice itself already shows.
+ *
+ * Two things this must never do, both of which would be easy to add by copying
+ * `sendInvoiceAction` a line too far:
+ *
+ *   - **It is never filed with JoFotara.** The e-invoice is the invoice. A
+ *     receipt acknowledges money against a document ISTD already holds, and
+ *     filing it would report the same sale twice.
+ *   - **It never emits `invoice_sent`.** That trigger hangs chasing automations
+ *     off it, and chasing somebody for money they have already paid is the exact
+ *     phone call this feature exists to prevent.
+ *
+ * The number is allocated once, lazily, and reused on every re-send — a patient
+ * who is sent their receipt twice has one receipt, not two.
+ */
+async function ensureReceipt(
+  c: PoolClient,
+  clinicId: string,
+  invoiceId: string
+): Promise<{ number: string; token: string } | { error: string }> {
+  const inv = (
+    await c.query(
+      `select id, status, receipt_number, receipt_token from invoices
+        where id = $1 and clinic_id = $2 for update`,
+      [invoiceId, clinicId]
+    )
+  ).rows[0];
+  if (!inv) return { error: "not_found" };
+  if (inv.status !== "paid") return { error: "not_settled" };
+
+  if (inv.receipt_number && inv.receipt_token) {
+    return { number: inv.receipt_number as string, token: inv.receipt_token as string };
+  }
+  const { seq, number } = await nextReceiptNumber(c, clinicId);
+  const r = await c.query(
+    `update invoices
+        set receipt_seq = $3, receipt_number = $4,
+            receipt_token = coalesce(receipt_token, encode(gen_random_bytes(16), 'hex')),
+            receipt_issued_at = coalesce(receipt_issued_at, now())
+      where id = $1 and clinic_id = $2
+      returning receipt_token`,
+    [invoiceId, clinicId, seq, number]
+  );
+  return { number, token: r.rows[0].receipt_token as string };
+}
+
+/** Raises the receipt without sending it — the clinic that prints and hands it over. */
+export async function issueReceiptAction(
+  slug: string,
+  invoiceId: string
+): Promise<{ error?: string; token?: string; number?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices")) return { error: "forbidden" };
+
+  return inClinic(access, async (c) => {
+    const r = await ensureReceipt(c, access.clinicId, invoiceId);
+    if ("error" in r) return { error: r.error };
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "receipt.issue",
+      entity: "invoice",
+      entityId: invoiceId,
+      detail: { receipt: r.number },
+    });
+    revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
+    return { token: r.token, number: r.number };
+  });
+}
+
+/** Sends it on WhatsApp, as a PDF, the same way an invoice goes out. */
+export async function sendReceiptAction(
+  slug: string,
+  invoiceId: string
+): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices")) return { error: "forbidden" };
+
+  const pre = await inClinic(access, async (c) => {
+    const r = await ensureReceipt(c, access.clinicId, invoiceId);
+    if ("error" in r) return r;
+    const row = (
+      await c.query(
+        // Aliased: spreading this over the receipt's own fields would otherwise
+        // have the invoice's number quietly overwrite the receipt's.
+        `select i.amount_paid, i.currency, i.number as invoice_number,
+                p.phone_e164, cl.name, cl.name_ar, cl.default_locale,
+                coalesce(ws.status = 'connected', false) as wa_connected
+           from invoices i
+           join patients p on p.id = i.patient_id
+           join clinics cl on cl.id = i.clinic_id
+           left join whatsapp_sessions ws on ws.clinic_id = i.clinic_id
+          where i.id = $1 and i.clinic_id = $2`,
+        [invoiceId, access.clinicId]
+      )
+    ).rows[0];
+    return { ...r, ...row };
+  });
+  if ("error" in pre) return { error: pre.error as string };
+  if (!pre.phone_e164) return { error: "no_phone" };
+  if (!pre.wa_connected) return { error: "wa_disconnected" };
+
+  // Rendered outside the transaction, as the invoice is: Chromium visits the
+  // public page over HTTP and holding a connection open for it is how a slow
+  // render becomes a database problem.
+  let pdfPath: string | null = null;
+  try {
+    const base = process.env.APP_URL || "http://localhost:3000";
+    const pdf = await renderUrlToPdf(`${base}/rcp/${pre.token}?print=1`);
+    const saved = await saveFile(access.clinicId, "receipts", `${pre.number}.pdf`, pdf);
+    pdfPath = saved.storagePath;
+  } catch (e) {
+    console.error("receipt pdf failed", e);
+    return { error: "pdf_failed" };
+  }
+
+  return inClinic(access, async (c) => {
+    const base = process.env.APP_URL || "http://localhost:3000";
+    const isAr = pre.default_locale !== "en";
+    const body = (
+      await systemMessage(c, {
+        clinicId: access.clinicId,
+        key: "receipt_sent",
+        lang: isAr ? "ar" : "en",
+        vars: {
+          "clinic.name": isAr ? pre.name_ar || pre.name : pre.name,
+          "receipt.number": pre.number,
+          "invoice.number": pre.invoice_number,
+          "receipt.total": `${Number(pre.amount_paid).toFixed(2)} ${pre.currency}`,
+          "receipt.link": `${base}/rcp/${pre.token}`,
+        },
+      })
+    ).body;
+
+    await queueWhatsAppMessage(c, {
+      clinicId: access.clinicId,
+      phoneE164: pre.phone_e164,
+      senderKind: "staff",
+      senderUserId: access.session.user.id,
+      body,
+      msgType: "document",
+      mediaPath: pdfPath,
+      mediaName: `${pre.number}.pdf`,
+      mediaMime: "application/pdf",
+    });
+    await c.query(
+      `update invoices set receipt_pdf_path = $3, receipt_sent_at = now()
+        where id = $1 and clinic_id = $2`,
+      [invoiceId, access.clinicId, pdfPath]
+    );
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "receipt.send",
+      entity: "invoice",
+      entityId: invoiceId,
+      detail: { receipt: pre.number },
+    });
+    revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
+    return {};
+  });
+}
+
+/**
+ * Who earned which line, after the invoice was raised.
+ *
+ * A raised invoice is immutable, and this does not dent that: it touches no
+ * figure the patient was shown and nothing a tax authority holds. Attribution
+ * is in the same category as the insurance block above — information about the
+ * invoice that arrives after it, rather than part of the bill. It is also why
+ * it lives in `invoice_line_doctors` rather than on `invoice_items`, so that
+ * "nothing updates a line after issue" stays literally true.
+ *
+ * The rate is re-frozen from the member's rate *now*, not carried over from
+ * whoever was on the line before. Moving a line from a doctor on 20% to one on
+ * 30% and keeping the 20 would pay the second doctor at the first one's rate,
+ * which is the bug this is most likely to be used to fix.
+ */
+export async function setInvoiceDoctorsAction(
+  slug: string,
+  invoiceId: string,
+  lines: { itemId: string; doctorMemberId: string | null }[]
+): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices")) return { error: "forbidden" };
+  if (!Array.isArray(lines) || lines.length > 200) return { error: "invalid" };
+
+  return inClinic(access, async (c) => {
+    const inv = (
+      await c.query(
+        `select id, number, status from invoices where id = $1 and clinic_id = $2`,
+        [invoiceId, access.clinicId]
+      )
+    ).rows[0];
+    if (!inv) return { error: "not_found" };
+    if (inv.status === "void") return { error: "void" };
+
+    // Both sides checked against this clinic rather than trusted: the lines
+    // must belong to this invoice, and the doctors to this clinic.
+    const ownItems = new Set(
+      (
+        await c.query(`select id from invoice_items where invoice_id = $1 and clinic_id = $2`, [
+          invoiceId,
+          access.clinicId,
+        ])
+      ).rows.map((r) => r.id as string)
+    );
+    const wanted = [...new Set(lines.map((l) => l.doctorMemberId).filter(Boolean))] as string[];
+    const rates = new Map<string, number>();
+    if (wanted.length) {
+      const r = await c.query(
+        `select id, commission_percent from clinic_members
+          where clinic_id = $1 and role = 'doctor' and id = any($2::uuid[])
+            and commission_percent is not null`,
+        [access.clinicId, wanted]
+      );
+      for (const row of r.rows) rates.set(row.id as string, Number(row.commission_percent));
+    }
+
+    const changed: { itemId: string; doctorMemberId: string | null; rate: number | null }[] = [];
+    for (const l of lines) {
+      if (!ownItems.has(l.itemId)) continue;
+      const rate = l.doctorMemberId ? rates.get(l.doctorMemberId) : undefined;
+      if (!l.doctorMemberId || rate === undefined) {
+        await c.query(`delete from invoice_line_doctors where invoice_item_id = $1 and clinic_id = $2`, [
+          l.itemId,
+          access.clinicId,
+        ]);
+        changed.push({ itemId: l.itemId, doctorMemberId: null, rate: null });
+        continue;
+      }
+      await c.query(
+        `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent)
+         values ($1, $2, $3, $4)
+         on conflict (invoice_item_id) do update
+           set doctor_member_id = excluded.doctor_member_id,
+               commission_percent = excluded.commission_percent`,
+        [l.itemId, access.clinicId, l.doctorMemberId, rate]
+      );
+      changed.push({ itemId: l.itemId, doctorMemberId: l.doctorMemberId, rate });
+    }
+
+    /*
+      Audited in full, including the rate, because `invoice_line_doctors` keeps
+      no history of its own and this is money owed to a person. The audit log is
+      the only place that can answer "it used to say Dr A".
+    */
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "invoice.attribute",
+      entity: "invoice",
+      entityId: invoiceId,
+      detail: { number: inv.number, lines: changed },
+    });
+    revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
+    return {};
+  });
+}
+
 export async function voidInvoiceAction(
   slug: string,
   invoiceId: string,
@@ -454,6 +764,22 @@ export async function voidInvoiceAction(
          select clinic_id, $2, service_id, description, qty, unit_price, amount,
                 discount_amount, tax_category, tax_rate, tax_amount, sort
            from invoice_items where invoice_id = $1`,
+        [invoiceId, creditNoteId]
+      );
+      /*
+        The attribution is mirrored too, because the lines are mirrored and a
+        record of who did the work is history rather than money. It changes no
+        figure: a credit note carries no payment rows, so nothing can be earned
+        against it, and the earnings query excludes `credit_note_of` besides.
+        `sort` is the join, being unique within an invoice by construction.
+      */
+      await c.query(
+        `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent)
+         select ni.id, ni.clinic_id, d.doctor_member_id, d.commission_percent
+           from invoice_items ni
+           join invoice_items oi on oi.invoice_id = $1 and oi.sort = ni.sort
+           join invoice_line_doctors d on d.invoice_item_id = oi.id
+          where ni.invoice_id = $2`,
         [invoiceId, creditNoteId]
       );
       await enqueueEinvoiceSubmit(c, access.clinicId, creditNoteId, "credit_note");

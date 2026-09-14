@@ -45,6 +45,10 @@ const SUITES = [
   ["signing: both journeys in the browser", "scripts/qa-esign-browser.ts"],
   ["documents: tabs, signed copies, imports", "scripts/qa-documents.ts"],
   ["payments: part-paid invoices", "scripts/qa-payments.ts"],
+  ["earnings: what the clinic owes the doctor", "scripts/qa-doctor-earnings.ts"],
+  ["receipts: proof of payment, once it is paid", "scripts/qa-receipts.ts"],
+  // Shipped with 0047 and never registered, so it has never run in CI.
+  ["sections: the part of the clinic a service belongs to", "scripts/qa-service-sections.ts"],
   ["photos: staff pictures & who may set them", "scripts/qa-photos.ts"],
   ["branding: the clinic logo where it belongs", "scripts/qa-clinic-logo.ts"],
   ["tablet: iPad layouts", "scripts/qa-tablet.ts"],

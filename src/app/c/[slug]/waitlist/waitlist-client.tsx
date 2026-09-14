@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
+import { ServiceSelect } from "@/components/ui/service-picker";
+import type { SectionRow, ServiceRow } from "@/lib/services";
 import { addToWaitlistAction, setWaitlistStatusAction } from "./actions";
 import { createPatientAction } from "../patients/actions";
 import { Hourglass, Plus, X, Search } from "lucide-react";
@@ -38,7 +40,8 @@ export function WaitlistClient(props: {
   tz: string;
   entries: Entry[];
   doctors: { id: string; name: string }[];
-  services: { id: string; name: string }[];
+  services: ServiceRow[];
+  sections: SectionRow[];
   hasBookingLink: boolean;
 }) {
   const { slug, tz } = props;
@@ -146,6 +149,7 @@ export function WaitlistClient(props: {
         slug={slug}
         doctors={props.doctors}
         services={props.services}
+        sections={props.sections}
         onAdded={() => {
           setOpen(false);
           router.refresh();
@@ -164,7 +168,8 @@ function AddModal(props: {
   onClose: () => void;
   slug: string;
   doctors: { id: string; name: string }[];
-  services: { id: string; name: string }[];
+  services: ServiceRow[];
+  sections: SectionRow[];
   onAdded: () => void;
   pending: boolean;
   start: (fn: () => Promise<void>) => void;
@@ -288,12 +293,16 @@ function AddModal(props: {
             </Select>
           </Field>
           <Field label={t.waitlist.service}>
-            <Select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-              <option value="">{t.waitlist.anyService}</option>
-              {props.services.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </Select>
+            {/* Grouped by section, and in the clinic's own language: this list
+                used to select `name` alone, so an Arabic workspace read its
+                services in English here and nowhere else. */}
+            <ServiceSelect
+              services={props.services}
+              sections={props.sections}
+              value={serviceId}
+              onChange={setServiceId}
+              emptyLabel={t.waitlist.anyService}
+            />
           </Field>
         </div>
         <Field label={t.waitlist.until} hint={t.waitlist.untilHint}>

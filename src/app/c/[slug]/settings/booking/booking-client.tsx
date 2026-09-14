@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { QUESTION_TYPES, type QuestionType } from "@/lib/booking-intake";
+import { ServiceChips } from "@/components/ui/service-picker";
 import {
   saveBookingLinkAction,
   deleteBookingLinkAction,
@@ -597,30 +598,23 @@ export function BookingLinksClient({
                     ))}
                   </Select>
                 ) : restrictMode === "all" && sections.length > 0 ? null : (
-                  <div className="flex flex-wrap gap-2">
-                    {services.map((s) => {
-                      const on = (editing.service_ids ?? []).includes(s.id);
-                      return (
-                        <button
-                          key={s.id}
-                          onClick={() =>
-                            setEditing({
-                              ...editing,
-                              section_id: null,
-                              service_ids: on
-                                ? (editing.service_ids ?? []).filter((x) => x !== s.id)
-                                : [...(editing.service_ids ?? []), s.id],
-                            })
-                          }
-                          className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                            on ? "border-brand-500 bg-brand-50 text-brand-800" : "border-line-strong text-ink-500"
-                          }`}
-                        >
-                          {serviceName(s)}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <ServiceChips
+                    services={services}
+                    sections={sections}
+                    selected={editing.service_ids ?? []}
+                    onToggle={(id) =>
+                      setEditing({
+                        ...editing,
+                        // Picking services clears the section: the two are
+                        // alternatives, and a link carrying both would describe
+                        // itself two ways that disagree.
+                        section_id: null,
+                        service_ids: (editing.service_ids ?? []).includes(id)
+                          ? (editing.service_ids ?? []).filter((x) => x !== id)
+                          : [...(editing.service_ids ?? []), id],
+                      })
+                    }
+                  />
                 )}
               </Field>
             )}
@@ -814,29 +808,19 @@ export function BookingLinksClient({
             )}
 
             <Field label={tb.onlyForServices} hint={tb.onlyForServicesHint}>
-              <div className="flex flex-wrap gap-2">
-                {services.map((s) => {
-                  const on = (question.service_ids ?? []).includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() =>
-                        setQuestion({
-                          ...question,
-                          service_ids: on
-                            ? (question.service_ids ?? []).filter((x) => x !== s.id)
-                            : [...(question.service_ids ?? []), s.id],
-                        })
-                      }
-                      className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                        on ? "border-brand-500 bg-brand-50 text-brand-800" : "border-line-strong text-ink-500"
-                      }`}
-                    >
-                      {serviceName(s)}
-                    </button>
-                  );
-                })}
-              </div>
+              <ServiceChips
+                services={services}
+                sections={sections}
+                selected={question.service_ids ?? []}
+                onToggle={(id) =>
+                  setQuestion({
+                    ...question,
+                    service_ids: (question.service_ids ?? []).includes(id)
+                      ? (question.service_ids ?? []).filter((x) => x !== id)
+                      : [...(question.service_ids ?? []), id],
+                  })
+                }
+              />
             </Field>
 
             <Field label={tb.savesTo} hint={tb.savesToHint}>

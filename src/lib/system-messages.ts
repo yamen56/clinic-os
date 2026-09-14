@@ -28,7 +28,8 @@ export type SystemMessageKey =
   | "document_signed_copy"
   | "signing_otp"
   | "invoice_sent"
-  | "invoice_receipt";
+  | "invoice_receipt"
+  | "receipt_sent";
 
 export type SystemMessageGroup = "booking" | "waitlist" | "documents" | "billing";
 
@@ -195,6 +196,21 @@ export const SYSTEM_MESSAGES: SystemMessageDef[] = [
     vars: ["clinic.name", "invoice.number", "invoice.paid", "invoice.link"],
     ar: "إيصال الدفع من {{clinic.name}}\nرقم {{invoice.number}} — مدفوع {{invoice.paid}}\n{{invoice.link}}",
     en: "Payment receipt from {{clinic.name}}\n{{invoice.number}} — paid {{invoice.paid}}\n{{invoice.link}}",
+  },
+  /*
+    The receipt proper, which is a different message from `invoice_receipt`
+    above: that one goes out when a *settled invoice* is re-sent, and the
+    document attached to it is the invoice with a PAID stamp. This one carries
+    the receipt — its own number, its own page — and names the invoice it
+    settles rather than restating it.
+  */
+  {
+    key: "receipt_sent",
+    group: "billing",
+    canDisable: false,
+    vars: ["clinic.name", "receipt.number", "invoice.number", "receipt.total", "receipt.link"],
+    ar: "إيصال من {{clinic.name}}\nرقم {{receipt.number}} عن الفاتورة {{invoice.number}}\nاستلمنا {{receipt.total}} — شكرًا لك.\n{{receipt.link}}",
+    en: "Receipt from {{clinic.name}}\n{{receipt.number}} for invoice {{invoice.number}}\nWe received {{receipt.total}} — thank you.\n{{receipt.link}}",
   },
 ];
 

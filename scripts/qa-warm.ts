@@ -20,6 +20,9 @@ const ROUTES = [
   "/calendar",
   "/patients",
   "/invoices",
+  "/invoices/new",
+  "/earnings",
+  "/waitlist",
   "/documents",
   "/automations",
   "/campaigns",
@@ -45,7 +48,7 @@ const ROUTES = [
   token still compiles the route, which is the whole point — the signing suite
   budgets its first journey at 15s and was spending 20 of them on the compiler.
 */
-const PUBLIC_ROUTES = ["/sign/warmup", "/inv/warmup", "/doc-print/warmup", "/invite/warmup"];
+const PUBLIC_ROUTES = ["/sign/warmup", "/inv/warmup", "/rcp/warmup", "/doc-print/warmup", "/invite/warmup"];
 
 async function main() {
   const db = new Client({ connectionString: PG });

@@ -67,6 +67,32 @@ export async function nextInvoiceNumber(
 }
 
 /**
+ * The same atomic sequence, for receipts.
+ *
+ * Its own counter rather than the invoice's. A receipt is not filed with
+ * anybody and settles nothing on its own, so putting it in the invoice sequence
+ * would burn numbers a tax authority expects to be invoices — and in a clinic
+ * that files with JoFotara, a gap in that series is a question to answer.
+ */
+export async function nextReceiptNumber(
+  c: PoolClient,
+  clinicId: string
+): Promise<{ seq: number; number: string }> {
+  const r = await c.query(
+    `update clinics set receipt_counter = receipt_counter + 1
+     where id = $1
+     returning receipt_counter, receipt_prefix, timezone`,
+    [clinicId]
+  );
+  const { receipt_counter, receipt_prefix, timezone } = r.rows[0];
+  const year = DateTime.now().setZone(timezone).year;
+  return {
+    seq: receipt_counter,
+    number: `${receipt_prefix}-${year}-${String(receipt_counter).padStart(4, "0")}`,
+  };
+}
+
+/**
  * Folds an invoice up from its lines.
  *
  * Every header figure is the **sum of the stored line figures**, not a separate

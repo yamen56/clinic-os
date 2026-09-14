@@ -73,8 +73,9 @@ one column carried both, which made "let this doctor see the inbox" unrepresenta
 ### Capabilities (`src/lib/permissions.ts`)
 
 ```
-conversations · calendar · patients · documents · documents.manage · documents.void
-invoices · campaigns · automations · settings · settings.clinic · settings.staff
+dashboard · conversations · calendar · patients · patients.import · patients.export
+documents · documents.manage · documents.void · invoices · invoices.analytics
+earnings · campaigns · automations · ai · settings · settings.clinic · settings.staff
 ```
 
 Two access levels:
@@ -364,6 +365,13 @@ patient being pestered about every slot that opens in the same hour — `last_of
 
 - `service_doctors` maps which doctors perform which service. If a service has no mapping,
   every active doctor is a candidate.
+- `section_id` files a service under a `service_sections` row (migration `0047`). Null means
+  unfiled, and a clinic with no sections renders exactly as it did before they existed.
+  Every picker in the app goes through `loadServicesWithSections`
+  ([src/lib/services.ts](src/lib/services.ts)) and the three shared components in
+  [src/components/ui/service-picker.tsx](src/components/ui/service-picker.tsx) — the invoice
+  builder, the calendar, the appointment panel, the waitlist, the booking link and question
+  pickers, document templates, and the public booking page.
 - Services can require consent forms (`service_documents`, see §12).
 
 ---
@@ -1029,10 +1037,18 @@ patient two pieces of paper.
   paid-at, recorded-by. Overpayment is rejected. Status recalculates to partially paid / paid.
 - **Void**: stays in records, no longer counts toward balances.
 - **PDF download** and **patient view**.
-- **Receipt**: there is no separate receipt entity. A paid invoice re-sent on WhatsApp goes
-  out worded as a payment receipt, and `/inv/{token}` stamps **PAID / مدفوعة** — the same
-  document, in the state it is now in. Re-sending a paid invoice must not start a chase for
-  money already collected, so the unpaid-invoice automation ignores it.
+- **Receipt**: a real one, `/rcp/{token}`, offered once the invoice is **paid in full**. It
+  is a different document rather than the invoice restamped — it describes how the money
+  arrived (each payment, its method, its reference), names the invoice it settles instead of
+  restating it, and says plainly that it is not the tax document. Its own number series
+  (`receipt_prefix`, default `RCP`, and `receipt_counter` on `clinics`), because a courtesy
+  document must never consume a number ISTD expects to be an invoice. It is **never filed**
+  and never emits `invoice_sent`.
+  Re-sending the invoice itself stays available and still goes out worded as a payment
+  receipt with `/inv/{token}` stamped **PAID / مدفوعة**; on a settled invoice it becomes the
+  secondary action. Re-sending a paid invoice must not start a chase for money already
+  collected, so the unpaid-invoice automation ignores it.
+  A partial payment produces no receipt — the invoice already shows the balance.
 - **Export CSV** of payments.
 
 ### Public invoice page
@@ -1047,6 +1063,40 @@ The invoice **is** a real page, rendered to PDF by **Playwright Chromium in the 
 (`POST /render-pdf`). This was the only approach that gave correct Arabic shaping and RTL
 table layout without hand-managing font subsets, and headless Chromium doesn't fit in a
 serverless function.
+
+### The doctor's share
+
+A clinic can agree a percentage with a doctor, and the system then works out what it owes.
+
+- `clinic_members.commission_percent` — nullable, and **null is not zero**: null means there
+  is no arrangement, zero means there is one worth nothing. **Only the owner** can see or set
+  it. RLS gives no protection here (`members_access` admits any member to every member row),
+  so confidentiality is application-layer: the staff query selects the column only for an
+  owner, and the server refuses the write from anyone else.
+- `invoice_line_doctors` — whose work a line was, plus the rate **frozen at billing**. Its
+  own table so `invoice_items` stays the immutable tax document (§ the UBL is built from it).
+  Attribution stays correctable afterwards via `setInvoiceDoctorsAction`, which re-freezes
+  from the member's current rate and touches no figure.
+- **The patient never sees any of it.** Not on `/inv/{token}`, not on `/rcp/{token}`, not in
+  the UBL.
+
+**The arithmetic** ([src/lib/earnings.ts](src/lib/earnings.ts)) — one exported SQL fragment,
+three query builders, no second copy:
+
+- A doctor earns **as the patient pays**, on the **ex-tax net**. At 16% tax, a patient
+  handing over 100 earns a doctor on 10% exactly 8.62 — so every screen says *excluding tax*.
+- Each payment earns the **difference between two rounded cumulative entitlements**, not its
+  own independently rounded share. Summing per-payment rounding drifts: 2.53 against a true
+  2.63 on a 15.00 line at 17.5% over twenty-three instalments. The differenced form
+  telescopes, so a settled invoice always pays exactly `round(net × rate/100, 2)`.
+- Voided invoices that were paid **still owe the doctor** (no refund was made) and are
+  flagged on the payout report. The clinic's own "after doctor commission" figure excludes
+  them from both sides.
+
+**Screens** — `/c/{slug}/earnings`, one route for two readers. `earnings` (a top-level
+capability, on by default for the doctor job) shows a doctor their own figures, their rate,
+and the invoices behind them. `invoices.analytics` adds the by-doctor payout table, the
+collected / doctors' share / after-commission figures, and the voided-but-paid flags.
 
 ### Money views
 
@@ -1147,8 +1197,8 @@ before the visit rather than after the claim.
 ## 17. Dashboard
 
 **Nav order** (sidebar, and the first four become the phone's bottom bar):
-Dashboard · Patients · Calendar · Invoices · Documents · Waitlist · Conversations ·
-Campaigns · Automations · AI agent · Settings. The order is the clinic's working day, not
+Dashboard · Patients · Calendar · Invoices · Documents · Waitlist · Earnings ·
+Conversations · Campaigns · Automations · AI agent · Settings. The order is the clinic's working day, not
 the order the features were built — it decides what a receptionist reaches with one thumb.
 Each item is filtered by the member's capabilities.
 
@@ -1430,15 +1480,15 @@ E.164 normalisation is **the single source of patient identity**.
 **Patients** — `patients`, `patient_notes`, `patient_files`, `custom_field_defs` (legacy),
 `patient_field_definitions`, `import_batches`
 
-**Scheduling** — `services`, `service_doctors`, `appointments`, `booking_links`,
-`booking_verifications`, `booking_questions`, `waitlist_entries`
+**Scheduling** — `services`, `service_sections`, `service_doctors`, `appointments`,
+`booking_links`, `booking_verifications`, `booking_questions`, `waitlist_entries`
 
 **Notes** — `patient_notes`, `patient_note_versions`, `note_categories`
 
 **Messaging** — `conversations`, `messages`, `quick_replies`, `whatsapp_sessions`,
 `whatsapp_auth_state`, `campaigns`, `campaign_recipients`
 
-**Money** — `invoices`, `invoice_items`, `payments`, `insurers`
+**Money** — `invoices`, `invoice_items`, `invoice_line_doctors`, `payments`, `insurers`
 
 **Automation** — `automations`, `automation_steps`, `automation_runs`,
 `automation_run_logs`, `tasks`, `recipe_templates`
@@ -1521,6 +1571,7 @@ Real browser (Playwright) against the running app, asserting against the databas
 9. PWA & notifications · 10. admin & demo data
 
 Plus focused suites: `qa-access`, `qa-automation-coverage`, `qa-backup`, `qa-booking-race`,
+`qa-doctor-earnings`, `qa-receipts`, `qa-service-sections`,
 `qa-brand-credit`, `qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`,
 `qa-esign-browser`, `qa-first-message`, `qa-import-digest`, `qa-mobile`, `qa-mobile-width`,
 `qa-einvoicing`, `qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.

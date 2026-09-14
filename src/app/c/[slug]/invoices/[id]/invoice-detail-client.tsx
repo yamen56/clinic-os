@@ -20,9 +20,11 @@ import {
   retryEinvoiceAction,
   setInvoiceTitleAction,
   setInvoiceFilingAction,
+  sendReceiptAction,
 } from "../actions";
 import {
   MessageCircle,
+  ReceiptText,
   FileDown,
   ExternalLink,
   BadgeDollarSign,
@@ -125,6 +127,7 @@ export function InvoiceDetailClient({
   const [savingClaim, startClaim] = useTransition();
   const [pending, start] = useTransition();
   const [sendPending, startSend] = useTransition();
+  const [receiptPending, startReceipt] = useTransition();
   const [retrying, startRetry] = useTransition();
   const [voidReason, setVoidReason] = useState("");
   const [title, setTitle] = useState(inv.title ?? "");
@@ -160,6 +163,30 @@ export function InvoiceDetailClient({
       router.refresh();
     });
   };
+
+  /*
+    The receipt. No e-invoice guards here, deliberately: a receipt is never
+    filed with ISTD, so there is no stamp to wait for and nothing to refuse.
+  */
+  const sendReceipt = () =>
+    startReceipt(async () => {
+      const r = await sendReceiptAction(slug, inv.id);
+      if (r.error) {
+        toast(
+          r.error === "no_phone"
+            ? t.invoices.noPhone
+            : r.error === "wa_disconnected"
+              ? t.invoices.waDisconnected
+              : r.error === "not_settled"
+                ? t.invoices.receiptNeedsFullPayment
+                : t.common.genericError,
+          "error"
+        );
+        return;
+      }
+      toast(t.invoices.receiptSent);
+      router.refresh();
+    });
 
   const send = () =>
     startSend(async () => {
@@ -255,10 +282,27 @@ export function InvoiceDetailClient({
               moment it became worth sending meant there was no way to give it to
               them. Only a voided invoice has nothing worth sending.
             */}
+            {/*
+              Once it is settled, the receipt leads and the invoice becomes the
+              secondary send. A patient who has paid is asking for proof of
+              payment, and the receipt is the document that actually is one —
+              the invoice, even stamped PAID, still reads as a demand.
+            */}
+            {inv.status === "paid" && (
+              <Button size="sm" onClick={sendReceipt} loading={receiptPending}>
+                <ReceiptText className="h-4 w-4" />
+                {t.invoices.sendReceipt}
+              </Button>
+            )}
             {inv.status !== "void" && (
-              <Button size="sm" onClick={send} loading={sendPending}>
+              <Button
+                size="sm"
+                variant={inv.status === "paid" ? "soft" : "primary"}
+                onClick={send}
+                loading={sendPending}
+              >
                 <MessageCircle className="h-4 w-4" />
-                {t.invoices.sendWhatsapp}
+                {inv.status === "paid" ? t.invoices.resendInvoice : t.invoices.sendWhatsapp}
               </Button>
             )}
             {inv.status !== "void" && inv.status !== "paid" && (

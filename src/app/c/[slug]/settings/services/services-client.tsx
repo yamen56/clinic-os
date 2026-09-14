@@ -49,6 +49,7 @@ type Section = {
   name: string;
   name_ar: string | null;
   color: string;
+  active: boolean;
   service_count: number;
 };
 
@@ -66,7 +67,7 @@ type Draft = {
   doctorIds: string[];
 };
 
-type SectionDraft = { id?: string; name: string; nameAr: string; color: string };
+type SectionDraft = { id?: string; name: string; nameAr: string; color: string; active: boolean };
 
 const empty: Draft = {
   name: "",
@@ -81,7 +82,7 @@ const empty: Draft = {
   doctorIds: [],
 };
 
-const emptySection: SectionDraft = { name: "", nameAr: "", color: "#6989a6" };
+const emptySection: SectionDraft = { name: "", nameAr: "", color: "#6989a6", active: true };
 
 export function ServicesClient({
   slug,
@@ -284,6 +285,7 @@ export function ServicesClient({
                           name: sec.name,
                           nameAr: sec.name_ar ?? "",
                           color: sec.color,
+                          active: sec.active,
                         })
                       }
                     >
@@ -527,6 +529,21 @@ export function ServicesClient({
                 className="h-9 w-14 cursor-pointer rounded-md border border-line-strong"
               />
             </Field>
+            {/*
+              Hiding, not deleting. A section switched off disappears from every
+              picker and from the booking page, and its services fall back to
+              the unfiled group rather than vanishing with it — the same thing
+              deleting does, except this is reversible and keeps the filing.
+            */}
+            <label className="flex items-center gap-2.5">
+              <Toggle
+                checked={sectionDraft.active}
+                onChange={(v) => setSectionDraft({ ...sectionDraft, active: v })}
+              />
+              <span className="text-[13px] font-medium">
+                {sectionDraft.active ? t.sections.shown : t.sections.hidden}
+              </span>
+            </label>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setSectionDraft(null)}>
                 {t.common.cancel}

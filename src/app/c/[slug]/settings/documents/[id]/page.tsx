@@ -4,6 +4,7 @@ import { inClinic } from "@/lib/clinic-api";
 import { loadFieldDefinitions } from "@/lib/esign/fields";
 import { TemplateEditor } from "./template-editor";
 import { can } from "@/lib/auth";
+import { loadServicesWithSections } from "@/lib/services";
 
 export default async function TemplateEditorPage({
   params,
@@ -15,21 +16,18 @@ export default async function TemplateEditorPage({
   const isNew = id === "new";
 
   const data = await inClinic(access, async (c) => {
-    const [defs, roles, services] = await Promise.all([
+    const [defs, roles] = await Promise.all([
       loadFieldDefinitions(c, access.clinicId),
       c.query(
         `select key, label, label_ar, is_staff from signer_roles
          where clinic_id = $1 order by display_order, label`,
         [access.clinicId]
       ),
-      c.query(
-        `select id, name, name_ar from services where clinic_id = $1 and active order by sort, name`,
-        [access.clinicId]
-      ),
     ]);
+    const { services, sections } = await loadServicesWithSections(c, access.clinicId);
 
     if (isNew) {
-      return { defs, roles: roles.rows, services: services.rows, template: null, versions: [], fields: [] };
+      return { defs, roles: roles.rows, services, sections, template: null, versions: [], fields: [] };
     }
 
     const template = (
@@ -71,7 +69,8 @@ export default async function TemplateEditorPage({
     return {
       defs,
       roles: roles.rows,
-      services: services.rows,
+      services,
+      sections,
       template: {
         ...template,
         serviceIds: attached.rows.map((r) => r.service_id as string),
@@ -91,6 +90,7 @@ export default async function TemplateEditorPage({
       defs={JSON.parse(JSON.stringify(data.defs))}
       roles={JSON.parse(JSON.stringify(data.roles))}
       services={JSON.parse(JSON.stringify(data.services))}
+      sections={JSON.parse(JSON.stringify(data.sections))}
       template={data.template ? JSON.parse(JSON.stringify(data.template)) : null}
       versions={JSON.parse(JSON.stringify(data.versions))}
       placedFields={JSON.parse(JSON.stringify(data.fields))}

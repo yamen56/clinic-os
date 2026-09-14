@@ -24,9 +24,19 @@ export function weekRangeUtc(tz: string, offsetWeeks = 0): { start: string; end:
   return { start: start.toUTC().toISO()!, end: start.plus({ weeks: 1 }).toUTC().toISO()! };
 }
 
-export function monthRangeUtc(tz: string): { start: string; end: string } {
-  const start = DateTime.now().setZone(tz).startOf("month");
+export function monthRangeUtc(tz: string, offsetMonths = 0): { start: string; end: string } {
+  const start = DateTime.now().setZone(tz).startOf("month").plus({ months: offsetMonths });
   return { start: start.toUTC().toISO()!, end: start.plus({ months: 1 }).toUTC().toISO()! };
+}
+
+/** The month's own name, for a screen that lets somebody step back through them. */
+export function monthLabel(tz: string, offsetMonths: number, locale: string): string {
+  return DateTime.now()
+    .setZone(tz)
+    .startOf("month")
+    .plus({ months: offsetMonths })
+    .setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB")
+    .toFormat("LLLL yyyy");
 }
 
 const numLocale = (locale: string) => (locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB");

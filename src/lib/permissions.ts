@@ -29,6 +29,17 @@ export const CAPABILITIES = [
   "documents.void",
   "invoices",
   "invoices.analytics",
+  /*
+    A doctor's own earnings, and nobody else's.
+
+    Top-level rather than `invoices.earnings`, which would have been the tidier
+    name and does not work: a dotted capability needs a `REQUIRES` parent, the
+    parent would be `invoices`, and a doctor does not have `invoices` — by
+    design, and the resolver would strip this from the only role meant to hold
+    it. The all-doctors payout report is a different screen gated on
+    `invoices.analytics`; this one is strictly "mine".
+  */
+  "earnings",
   "campaigns",
   "automations",
   "ai",
@@ -67,7 +78,10 @@ const REQUIRES: Partial<Record<Capability, Capability>> = {
 
 /** The starting point when an owner switches a member to custom access. */
 export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
-  doctor: ["dashboard", "calendar", "patients", "documents"],
+  // A doctor on a revenue share can see what they have earned, and nothing else
+  // about the clinic's money. The screen is empty and harmless for a doctor who
+  // has no arrangement, so it costs nothing to start on.
+  doctor: ["dashboard", "calendar", "patients", "documents", "earnings"],
   receptionist: [
     "dashboard",
     "conversations",
@@ -148,6 +162,22 @@ export function resolveCapabilities(
       denies; only the absence inherits.
     */
     if (!("invoices.analytics" in ticked) && caps.invoices) caps["invoices.analytics"] = true;
+    /*
+      `earnings` has no rule here, deliberately, and the absence is the decision.
+
+      The three rules above all replace a capability that a *wider* grant used to
+      imply, so silence inherits from that wider grant. `earnings` replaces
+      nothing — before it there was no way for a doctor to see what they had
+      earned, because there was nothing to earn. So a stored map that does not
+      mention it is not ambiguous the way those were; it was written when the
+      answer was no, and it stays no.
+
+      That follows `patients.export` rather than `dashboard`, for the reason
+      stated there: a capability that did not exist yesterday must never resolve
+      to more access than the rule it replaced. A doctor on `full` picks it up
+      automatically; one on a hand-ticked map needs an owner to tick it, which is
+      the direction that cannot surprise anybody.
+    */
   } else {
     /*
       No level recorded: a row written before this model existed, or one whose
@@ -285,6 +315,7 @@ export const CAPABILITY_GROUPS: { section: Capability; actions: Capability[] }[]
   { section: "patients", actions: ["patients.import", "patients.export"] },
   { section: "documents", actions: ["documents.manage", "documents.void"] },
   { section: "invoices", actions: ["invoices.analytics"] },
+  { section: "earnings", actions: [] },
   { section: "campaigns", actions: [] },
   { section: "automations", actions: [] },
   { section: "ai", actions: [] },

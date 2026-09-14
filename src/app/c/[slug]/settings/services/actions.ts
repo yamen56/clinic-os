@@ -32,6 +32,14 @@ const sectionSchema = z.object({
   name: z.string().min(1).max(60),
   nameAr: z.string().max(60).optional().default(""),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  /*
+    Hidden rather than deleted. Deleting a section drops its services into the
+    unfiled group, which is right for one the clinic has genuinely stopped
+    running; hiding is for the one it wants off the pickers for a month with its
+    filing intact. The column shipped with 0047 and nothing read or wrote it
+    until now, which made it a switch that looked like it worked.
+  */
+  active: z.boolean().optional().default(true),
 });
 
 /**
@@ -165,9 +173,9 @@ export async function saveSectionAction(slug: string, data: unknown): Promise<{ 
     let sectionId = d.id;
     if (sectionId) {
       const r = await c.query(
-        `update service_sections set name = $3, name_ar = $4, color = $5
+        `update service_sections set name = $3, name_ar = $4, color = $5, active = $6
           where id = $1 and clinic_id = $2`,
-        [sectionId, access.clinicId, name, d.nameAr.trim() || null, d.color]
+        [sectionId, access.clinicId, name, d.nameAr.trim() || null, d.color, d.active]
       );
       if (!r.rowCount) return { error: "not_found" };
     } else {

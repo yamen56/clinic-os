@@ -12,7 +12,14 @@ export default async function StaffSettingsPage({ params }: { params: Promise<{ 
 
   const members = await inClinic(access, async (c) => {
     const r = await c.query(
+      /*
+        `commission_percent` is selected only for the owner, and the column list
+        is the whole of that protection: `members_access` lets any member of a
+        clinic read any member row, so RLS will not keep a doctor's pay from a
+        delegated staff manager. Not sending it is what does.
+      */
       `select cm.id, cm.user_id, cm.role, cm.is_owner, cm.title, cm.specialty, cm.color, cm.active,
+              ${access.isOwner ? "cm.commission_percent" : "null::numeric as commission_percent"},
               cm.reminder_minutes, cm.meeting_url, cm.permissions, cm.working_hours, u.full_name, u.email,
               (u.avatar_path is not null) as has_photo
        from clinic_members cm join users u on u.id = cm.user_id

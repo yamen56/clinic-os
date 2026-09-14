@@ -13,6 +13,8 @@ import { Tabs } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { RichText, insertTokenAtCaret } from "@/components/esign/rich-text";
+import { ServiceChips } from "@/components/ui/service-picker";
+import type { SectionRow, ServiceRow } from "@/lib/services";
 import { saveTemplateAction } from "../actions";
 import { ArrowLeft, Plus, Trash2, Eye, Braces, ChevronUp, ChevronDown } from "lucide-react";
 
@@ -23,7 +25,7 @@ type Def = {
   scope: "patient" | "context";
 };
 type Role = { key: string; label: string; label_ar: string | null; is_staff: boolean };
-type Service = { id: string; name: string; name_ar: string | null };
+
 type ExtraField = {
   key: string;
   label: string;
@@ -60,6 +62,7 @@ export function TemplateEditor({
   defs,
   roles,
   services,
+  sections,
   template,
   versions,
   placedFields,
@@ -69,7 +72,8 @@ export function TemplateEditor({
   /** Arrived from "import a file" — open the picker rather than a blank page. */
   defs: Def[];
   roles: Role[];
-  services: Service[];
+  services: ServiceRow[];
+  sections: SectionRow[];
   template: Record<string, unknown> | null;
   versions: { version: number; name: string; created_at: string; author: string | null }[];
   placedFields: PlacedField[];
@@ -586,27 +590,18 @@ export function TemplateEditor({
             <p className="mt-0.5 text-[13px] text-ink-500">{t.docTemplates.attachedServicesSub}</p>
           </div>
           <div className="grid gap-2 p-5">
-            <div className="flex flex-wrap gap-1.5">
-              {services.map((s) => {
-                const on = serviceIds.includes(s.id);
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() =>
-                      setServiceIds(on ? serviceIds.filter((x) => x !== s.id) : [...serviceIds, s.id])
-                    }
-                    className={`rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                      on
-                        ? "border-brand-500 bg-brand-50 text-brand-800"
-                        : "border-line text-ink-700 hover:bg-sunken"
-                    }`}
-                  >
-                    {locale === "ar" ? s.name_ar || s.name : s.name}
-                  </button>
-                );
-              })}
-            </div>
+            <ServiceChips
+              services={services}
+              sections={sections}
+              selected={serviceIds}
+              onToggle={(id) =>
+                setServiceIds(
+                  serviceIds.includes(id)
+                    ? serviceIds.filter((x) => x !== id)
+                    : [...serviceIds, id]
+                )
+              }
+            />
             {serviceIds.length > 0 && (
               <label className="mt-2 flex items-center justify-between gap-3">
                 <span className="text-[13px] font-medium">{t.docTemplates.autoSend}</span>

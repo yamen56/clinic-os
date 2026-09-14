@@ -32,7 +32,7 @@ export default async function ServicesSettingsPage({
     ).rows;
     const sections = (
       await c.query(
-        `select sec.id, sec.name, sec.name_ar, sec.color,
+        `select sec.id, sec.name, sec.name_ar, sec.color, sec.active,
                 count(s.id)::int as service_count
            from service_sections sec
            left join services s on s.section_id = sec.id

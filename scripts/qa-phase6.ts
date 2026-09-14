@@ -54,7 +54,10 @@ async function main() {
   await page.fill('input[placeholder="Search by name or phone…"]', "هالة");
   await page.waitForSelector("text=هالة عبدالله", { timeout: 10000 });
   await page.click("button:has-text('هالة عبدالله')");
-  await page.click("button:has-text('+ Filling')");
+  // The add-a-line menu, not the old row of six chips: every service is
+  // reachable now, grouped by section, and the row carries its price rather
+  // than a leading "+".
+  await page.getByRole("button", { name: /Filling/ }).first().click();
   await page.click("text=Custom item");
   await page.locator('input[placeholder="Item"]').last().fill("أشعة بانوراما");
   /*

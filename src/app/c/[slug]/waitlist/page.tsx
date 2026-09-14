@@ -3,6 +3,7 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { can } from "@/lib/auth";
 import { WaitlistClient } from "./waitlist-client";
+import { loadServicesWithSections } from "@/lib/services";
 
 export default async function WaitlistPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -35,19 +36,14 @@ export default async function WaitlistPage({ params }: { params: Promise<{ slug:
         [access.clinicId]
       )
     ).rows;
-    const services = (
-      await c.query(
-        `select id, name from services where clinic_id = $1 and active order by name`,
-        [access.clinicId]
-      )
-    ).rows;
+    const { services, sections } = await loadServicesWithSections(c, access.clinicId);
     // Whether online booking exists at all decides if offers can be sent, and
     // saying so up front beats a waitlist that silently never messages anybody.
     const link = await c.query(
       `select 1 from booking_links where clinic_id = $1 and active limit 1`,
       [access.clinicId]
     );
-    return { entries, doctors, services, hasBookingLink: !!link.rowCount };
+    return { entries, doctors, services, sections, hasBookingLink: !!link.rowCount };
   });
 
   return (

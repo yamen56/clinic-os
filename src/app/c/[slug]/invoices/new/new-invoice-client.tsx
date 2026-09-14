@@ -11,10 +11,11 @@ import { Field, Input, NumberInput, Select, Textarea, Toggle } from "@/component
 import { Avatar } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { computeInvoice, taxBreakdown, TAX_CATEGORIES, type TaxCategory } from "@/lib/invoices";
+import { serviceLabel, type SectionRow, type ServiceRow } from "@/lib/services";
+import { ServiceAddMenu } from "@/components/ui/service-picker";
 import { createInvoiceAction } from "../actions";
-import { Plus, Trash2, X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 
-type Service = { id: string; name: string; name_ar: string | null; price: string };
 type Item = {
   serviceId: string | null;
   description: string;
@@ -23,7 +24,10 @@ type Item = {
   discountAmount: number;
   taxCategory: TaxCategory;
   taxRate: number;
+  /** Whose work this line was. Null when the clinic splits no revenue. */
+  doctorMemberId: string | null;
 };
+type Doctor = { id: string; full_name: string };
 
 export function NewInvoiceClient({
   slug,
@@ -31,19 +35,30 @@ export function NewInvoiceClient({
   defaultTaxRate,
   taxLabel,
   services,
+  sections,
+  doctors,
   initialPatient,
   appointmentId,
   appointmentServiceId,
+  appointmentDoctorId,
   einvoice,
 }: {
   slug: string;
   currency: string;
   defaultTaxRate: number;
   taxLabel: string;
-  services: Service[];
+  services: ServiceRow[];
+  sections: SectionRow[];
+  /**
+   * Doctors the clinic has a revenue share with. Empty for every clinic that
+   * does not split revenue, and the whole doctor block is hidden when it is —
+   * the same way sections stay invisible until somebody makes one.
+   */
+  doctors: Doctor[];
   initialPatient: { id: string; name: string } | null;
   appointmentId: string | null;
   appointmentServiceId: string | null;
+  appointmentDoctorId: string | null;
   /**
    * Null for every clinic that does not file with JoFotara, which is most of
    * them — the switch is not rendered at all rather than rendered and disabled.
@@ -56,12 +71,27 @@ export function NewInvoiceClient({
   const router = useRouter();
   const [patient, setPatient] = useState(initialPatient);
   /*
+    The doctor a new line starts on: whoever the visit was with. An invoice
+    raised from an appointment already knows who saw the patient, and asking
+    reception to say so again is how attribution ends up empty on most invoices.
+  */
+  const startingDoctor = doctors.some((d) => d.id === appointmentDoctorId)
+    ? appointmentDoctorId
+    : null;
+  const [invoiceDoctor, setInvoiceDoctor] = useState<string | null>(startingDoctor);
+
+  /*
     A clinic that charges no sales tax should never have to think about it, so a
     new line inherits the clinic's setting: a rate means standard-rated, no rate
     means outside the scope of tax. Only the mixed invoice — an exempt
     consultation beside a taxable procedure — costs anybody a click.
   */
-  const newLine = (serviceId: string | null, description: string, unitPrice: number): Item => ({
+  const newLine = (
+    serviceId: string | null,
+    description: string,
+    unitPrice: number,
+    doctorMemberId: string | null = invoiceDoctor
+  ): Item => ({
     serviceId,
     description,
     qty: 1,
@@ -69,12 +99,24 @@ export function NewInvoiceClient({
     discountAmount: 0,
     taxCategory: defaultTaxRate > 0 ? "S" : "O",
     taxRate: defaultTaxRate,
+    doctorMemberId,
   });
 
   const [items, setItems] = useState<Item[]>(() => {
     const svc = services.find((s) => s.id === appointmentServiceId);
     return svc
-      ? [newLine(svc.id, (locale === "ar" ? svc.name_ar : null) || svc.name, Number(svc.price))]
+      ? [
+          {
+            serviceId: svc.id,
+            description: serviceLabel(svc, locale),
+            qty: 1,
+            unitPrice: Number(svc.price),
+            discountAmount: 0,
+            taxCategory: (defaultTaxRate > 0 ? "S" : "O") as TaxCategory,
+            taxRate: defaultTaxRate,
+            doctorMemberId: startingDoctor,
+          },
+        ]
       : [];
   });
   const [notes, setNotes] = useState("");
@@ -92,8 +134,6 @@ export function NewInvoiceClient({
 
   const setItem = (i: number, patch: Partial<Item>) =>
     setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
-
-  const svcName = (s: Service) => (locale === "ar" ? s.name_ar || s.name : s.name);
 
   const submit = () =>
     start(async () => {
@@ -158,26 +198,52 @@ export function NewInvoiceClient({
           </Card>
 
           <Card className="p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="mb-3 grid gap-3">
               <h3 className="text-[15px] font-semibold">{t.invoices.item}</h3>
-              <div className="flex flex-wrap gap-2">
-                {services.slice(0, 6).map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setItems((xs) => [...xs, newLine(s.id, svcName(s), Number(s.price))])}
-                    className="rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-[12px] font-medium text-brand-700 hover:bg-brand-100"
+              {/*
+                Every service, grouped by section and searchable — not the first
+                six. The old row of chips was capped at six with no way past it,
+                so on a clinic with more services the seventh could only be typed
+                by hand, which drops `service_id` and takes that money out of the
+                revenue-by-service and revenue-by-section charts.
+              */}
+              <ServiceAddMenu
+                services={services}
+                sections={sections}
+                currency={currency}
+                onPick={(s) =>
+                  setItems((xs) => [...xs, newLine(s.id, serviceLabel(s, locale), Number(s.price))])
+                }
+                onCustom={() => setItems((xs) => [...xs, newLine(null, "", 0)])}
+              />
+              {/*
+                Who the clinic owes for this visit. One control for the whole
+                invoice, because an invoice is usually one doctor's work; the
+                per-line override sits on each row below for the visit that was
+                not. Hidden entirely when no doctor has an arrangement.
+
+                The percentage is never shown here and never sent: this picker
+                says who, and the server decides what that is worth.
+              */}
+              {doctors.length > 0 && (
+                <Field label={t.invoices.doctor} hint={t.invoices.doctorHint}>
+                  <Select
+                    value={invoiceDoctor ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value || null;
+                      setInvoiceDoctor(v);
+                      setItems((xs) => xs.map((x) => ({ ...x, doctorMemberId: v })));
+                    }}
                   >
-                    + {svcName(s)}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setItems((xs) => [...xs, newLine(null, "", 0)])}
-                  className="flex items-center gap-1 rounded-full border border-dashed border-line-strong px-3 py-1 text-[12px] font-medium text-ink-500 hover:border-brand-400"
-                >
-                  <Plus className="h-3 w-3" />
-                  {t.invoices.freeItem}
-                </button>
-              </div>
+                    <option value="">{t.invoices.noDoctor}</option>
+                    {doctors.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.full_name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
             </div>
             {items.length === 0 ? (
               <p className="rounded-lg border border-dashed border-line-strong py-8 text-center text-sm text-ink-400">
@@ -272,6 +338,33 @@ export function NewInvoiceClient({
                               value={it.taxRate}
                               onChange={(taxRate) => setItem(i, { taxRate })}
                             />
+                          </label>
+                        )}
+                        {/*
+                          The override, for the visit two doctors worked on. It
+                          sits in the quiet row beside the other two per-line
+                          exceptions, because that is what it is: the control
+                          above sets every line, and almost every invoice leaves
+                          this alone.
+                        */}
+                        {doctors.length > 1 && (
+                          <label className="flex items-center gap-1.5">
+                            <span className="whitespace-nowrap">{t.invoices.doctor}</span>
+                            <Select
+                              className="!h-8 !w-auto !text-[13px]"
+                              aria-label={t.invoices.doctor}
+                              value={it.doctorMemberId ?? ""}
+                              onChange={(e) =>
+                                setItem(i, { doctorMemberId: e.target.value || null })
+                              }
+                            >
+                              <option value="">{t.invoices.noDoctor}</option>
+                              {doctors.map((d) => (
+                                <option key={d.id} value={d.id}>
+                                  {d.full_name}
+                                </option>
+                              ))}
+                            </Select>
                           </label>
                         )}
                       </div>
