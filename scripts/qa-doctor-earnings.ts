@@ -30,6 +30,8 @@ import {
   voidedButPaid,
 } from "../src/lib/earnings";
 import { computeInvoice, nextInvoiceNumber, refreshInvoiceStatus, round2 } from "../src/lib/invoices";
+import { sendDigest } from "../worker/notifications";
+import { DateTime } from "luxon";
 
 const BASE = "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -423,6 +425,90 @@ async function main() {
   check(
     "a doctor never sees the clinic's revenue tile",
     (await page.getByText("Revenue this week", { exact: false }).count()) === 0
+  );
+
+  /*
+    The clinic's takings must not reach a doctor's browser at all — not merely
+    go undrawn. The dashboard's fourteen-day chart is hidden behind the
+    capability, but the query behind it used to run for everybody, so the daily
+    figures travelled in the page payload where anyone could read them.
+
+    Asserted against the whole document rather than `innerText`, because what
+    is being tested is precisely the part that is never rendered.
+  */
+  await signIn(emailOf("Dr A"));
+  await page.goto(`${BASE}/c/${tag}`);
+  await page.waitForLoadState("networkidle");
+  const dashboardPayload = await page.content();
+  check(
+    "the clinic's takings are not in a doctor's dashboard payload",
+    !dashboardPayload.includes(String(totals.total)),
+    `looking for ${totals.total}`
+  );
+
+  /*
+    And the same number must not arrive by notification, which is the one
+    surface outside every gate the app has — it survives on a lock screen. The
+    day-end digest picks its audience by job, and a job is not an access set.
+  */
+  const alert = {
+    id: "00000000-0000-0000-0000-000000000001",
+    clinic_id: clinic.id as string,
+    kind: "day_end",
+    roles: ["doctor", "receptionist", "owner"],
+    at_hour: 20,
+    threshold: 0,
+    slug: tag,
+    timezone: "Asia/Amman",
+    currency: "JOD",
+  };
+  /*
+    Dated to the day the instalments actually landed, not today. The digest
+    reports one day and says nothing at all about an empty one — pointing it at
+    a day with no money in it would prove only that it stays quiet.
+  */
+  const payDay = DateTime.fromJSDate(new Date(base)).setZone("Asia/Amman").startOf("day");
+  /*
+    One completed appointment on that day, so the doctor is in the audience at
+    all. Without it they are correctly sent nothing — a recipient who may not
+    see the money and has no appointments to hear about has no summary — and the
+    test would be asserting about an absence for the wrong reason.
+  */
+  await db.query(
+    `insert into appointments (clinic_id, patient_id, doctor_member_id, starts_at, ends_at, status)
+     values ($1, $2, $3, $4, $4::timestamptz + interval '30 min', 'completed')`,
+    [clinic.id, patient.id, drA, payDay.plus({ hours: 10 }).toUTC().toISO()]
+  );
+  await sendDigest(c, alert, payDay);
+  const digests = (
+    await db.query(
+      `select u.full_name, n.body from notifications n
+         join users u on u.id = n.user_id
+        where n.clinic_id = $1 and n.kind = 'day_end'`,
+      [clinic.id]
+    )
+  ).rows;
+  const drADigest = digests.find((d) => d.full_name === "Dr A");
+  const ownerDigest = digests.find((d) => d.full_name === "QA Owner");
+  /*
+    Tested on the currency code rather than a number: the money is the only
+    part of this body that carries one, and "does the string contain JOD" needs
+    no escaping to be right.
+  */
+  check(
+    "a doctor's day-end summary carries no money",
+    !!drADigest && !drADigest.body.includes("JOD"),
+    String(drADigest?.body)
+  );
+  check(
+    "but still tells them about the day",
+    !!drADigest && drADigest.body.includes("1"),
+    String(drADigest?.body)
+  );
+  check(
+    "the owner's does carry it",
+    !!ownerDigest && ownerDigest.body.includes("JOD"),
+    String(ownerDigest?.body)
   );
 
   // The one thing that must never be true.

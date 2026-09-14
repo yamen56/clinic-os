@@ -263,7 +263,6 @@ export const en = {
       "Rent, salaries, supplies, lab bills — what the clinic pays out. Once it is here, the profit figure on the Earnings screen takes it off what was collected.",
     amount: "Amount",
     vendor: "Paid to",
-    vendorPlaceholder: "Amman Dental Lab",
     receipt: "Receipt",
     receiptHint: "A photo or PDF of the bill.",
     attachReceipt: "Attach",

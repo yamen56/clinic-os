@@ -17,7 +17,18 @@ export async function staffInRoles(
   return (await staffMembersInRoles(c, clinicId, roles)).map((m) => m.userId);
 }
 
-export type StaffMember = { memberId: string; userId: string; role: string; isOwner: boolean };
+export type StaffMember = {
+  memberId: string;
+  userId: string;
+  role: string;
+  isOwner: boolean;
+  /**
+   * Carried so a caller can resolve what this person may actually see.
+   * A notification is a screen the clinic does not control the gating of —
+   * whatever goes in the body has already left the building.
+   */
+  permissions: Record<string, unknown> | null;
+};
 
 /**
  * The same audience, with the membership kept.
@@ -34,7 +45,7 @@ export async function staffMembersInRoles(
   const wantsOwner = roles.includes("owner");
   const jobs = roles.filter((r) => r !== "owner");
   const r = await c.query(
-    `select id, user_id, role, is_owner from clinic_members
+    `select id, user_id, role, is_owner, permissions from clinic_members
       where clinic_id = $1 and active and (($2 and is_owner) or role = any($3))`,
     [clinicId, wantsOwner, jobs]
   );
@@ -43,6 +54,7 @@ export async function staffMembersInRoles(
     userId: x.user_id as string,
     role: x.role as string,
     isOwner: x.is_owner as boolean,
+    permissions: (x.permissions ?? null) as Record<string, unknown> | null,
   }));
 }
 

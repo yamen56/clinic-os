@@ -1204,7 +1204,9 @@ the clock — see decision 76 for why an exact-hour gate would skip a month. It 
 `day >= the due day`, never backfills, and a rule created after its day has passed starts next
 month so it cannot duplicate a bill already entered by hand.
 
-**Receipt**: one photo or PDF per expense, ≤ 10 MB, served back through `fileResponseHeaders`
+**Receipt**: one photo or PDF per expense, attachable while the expense is still being
+typed — the file is held and sent as soon as the row has an id. ≤ 10 MB, served back through
+`fileResponseHeaders`
 so anything off the inline allowlist is an attachment rather than a scripting document.
 **CSV export** at `/api/c/{slug}/expenses/export`, with every free-text column escaped.
 

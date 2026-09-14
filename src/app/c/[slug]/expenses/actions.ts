@@ -62,7 +62,16 @@ async function categoryBelongs(
   return !!r.rowCount;
 }
 
-export async function saveExpenseAction(slug: string, data: unknown): Promise<{ error?: string }> {
+/**
+ * Returns the id so the caller can attach a receipt to an expense it has just
+ * created. The upload is addressed by id and the row has to exist first, which
+ * is also the order it happens at a desk: write down what you paid, then pin the
+ * bill to it.
+ */
+export async function saveExpenseAction(
+  slug: string,
+  data: unknown
+): Promise<{ error?: string; id?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "expenses")) return { error: "forbidden" };
   const parsed = expenseSchema.safeParse(data);
@@ -110,7 +119,7 @@ export async function saveExpenseAction(slug: string, data: unknown): Promise<{ 
       detail: { amount: d.amount, vendor: d.vendor.trim(), spentOn: d.spentOn },
     });
     revalidatePath(`/c/${slug}/expenses`);
-    return {};
+    return { id };
   });
 }
 

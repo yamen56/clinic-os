@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import { withSystem } from "./db";
 import { pushToUser, pushConfigured } from "../src/lib/push";
 import { notifyUser, staffInRoles, staffMembersInRoles } from "../src/lib/notify";
+import { resolveCapabilities, type MemberRole } from "../src/lib/permissions";
 
 /**
  * Notification delivery + the scheduled digests.
@@ -307,12 +308,35 @@ export async function sendDigest(
     // A day with nothing in it is not news, and an empty summary every
     // evening is how a clinic learns to ignore the whole channel.
     if (!stats.completed && !stats.no_show && Number(stats.revenue) <= 0) return;
-    for (const uid of await staffInRoles(c, alert.clinic_id, roles)) {
-      await notifyUser(c, uid, {
+    /*
+      The day's takings go only to somebody who may see the day's takings.
+
+      This alert picks its audience by job — doctor, receptionist, owner — and
+      a job is not an access set. A doctor with the day-end alert switched on
+      was being sent the clinic's revenue on their phone, which is the one
+      number the owner had just finished taking off their screens. A
+      notification is also the worst place to leak it: it survives on a lock
+      screen, outside every gate the app has.
+
+      Everybody still gets the summary; only the money is conditional. A
+      recipient who may not see it and has no appointments to report is sent
+      nothing at all rather than an empty line.
+    */
+    for (const m of await staffMembersInRoles(c, alert.clinic_id, roles)) {
+      const caps = resolveCapabilities(m.permissions, {
+        isOwner: m.isOwner,
+        role: m.role as MemberRole,
+      });
+      const maySeeMoney = caps["invoices.analytics"] === true;
+      if (!maySeeMoney && !stats.completed && !stats.no_show) continue;
+      const money = maySeeMoney
+        ? ` · ${Number(stats.revenue).toFixed(2)} ${alert.currency}`
+        : "";
+      await notifyUser(c, m.userId, {
         clinicId: alert.clinic_id,
         kind: "day_end",
         title: "ملخص اليوم",
-        body: `${stats.completed} موعد مكتمل · ${stats.no_show} لم يحضر · ${Number(stats.revenue).toFixed(2)} ${alert.currency}`,
+        body: `${stats.completed} موعد مكتمل · ${stats.no_show} لم يحضر${money}`,
         url: `/c/${alert.slug}`,
         dedupeKey: `day_end:${alert.id}:${today}`,
       });

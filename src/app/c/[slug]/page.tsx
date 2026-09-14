@@ -157,15 +157,30 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
              interval '1 day')::date as day
          )
          select to_char(d.day, 'YYYY-MM-DD') as day,
-                coalesce(p.amount, 0)::float8 as revenue,
+                ${
+                  /*
+                    Not selected for somebody who may not see it. The chart was
+                    already hidden, but fourteen days of the clinic's daily
+                    takings still travelled to every member's browser in the
+                    page payload — including a doctor's, which is exactly the
+                    number the owner asked to keep off their screens.
+                  */
+                  showRevenue
+                    ? "coalesce(p.amount, 0)::float8 as revenue,"
+                    : "0::float8 as revenue,"
+                }
                 coalesce(ap.n, 0)::int as appointments
            from days d
-           left join (
+           ${
+             showRevenue
+               ? `left join (
              select (paid_at at time zone $2)::date as day, sum(amount) as amount
                from payments
               where clinic_id = $1 and paid_at >= now() - interval '15 days'
               group by 1
-           ) p on p.day = d.day
+           ) p on p.day = d.day`
+               : ""
+           }
            left join (
              select (starts_at at time zone $2)::date as day, count(*) as n
                from appointments

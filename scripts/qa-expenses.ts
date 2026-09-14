@@ -320,6 +320,54 @@ async function main() {
   );
   check("the payments export refuses them too", paymentsStatus === 403, String(paymentsStatus));
 
+  /*
+    Adding an expense and its bill in one pass. The upload is addressed by id
+    so it cannot happen until the row exists, but that is the app's problem
+    rather than the clinic's: the file is held and sent when Save returns one.
+  */
+  await signIn(emailOf("owner"));
+  await page.goto(`${BASE}/c/${slug}/expenses`);
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Add expense", exact: true }).first().click();
+  // Not `exact`: Field appends a required marker and a hint to the label, so
+  // the accessible name is never just the word.
+  await page.getByLabel(/Amount/).first().fill("77.25");
+  await page.getByLabel(/Paid to/).first().fill("New supplier");
+  // A one-pixel PNG is a real image with a real mime, which is what the
+  // download path branches on.
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: "bill.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64"
+    ),
+  });
+  /*
+    Read from body, not main: a Modal is portaled outside the main landmark, so
+    the main-scoped reader every other assertion here uses cannot see it.
+  */
+  const modalText = (await page.locator("body").innerText()).replace(/s+/g, " ");
+  check("the file is held before there is a row", modalText.includes("bill.png"), modalText.slice(0, 100));
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.waitForTimeout(2500);
+
+  const attached = (
+    await db.query(
+      `select receipt_path, receipt_name, receipt_mime from expenses
+        where clinic_id = $1 and vendor = 'New supplier'`,
+      [clinic.id]
+    )
+  ).rows[0];
+  check("a new expense can carry its bill", !!attached?.receipt_path, String(attached?.receipt_path));
+  check("keeping the file's own name", attached?.receipt_name === "bill.png", String(attached?.receipt_name));
+  check("and its declared type", attached?.receipt_mime === "image/png", String(attached?.receipt_mime));
+  check(
+    "stored under the clinic, so deleting the clinic sweeps it",
+    String(attached?.receipt_path).startsWith(`${clinic.id}/expenses/`),
+    String(attached?.receipt_path)
+  );
+
   check("no client-side errors", errors.length === 0, errors.slice(0, 2).join("; "));
   await browser.close();
 

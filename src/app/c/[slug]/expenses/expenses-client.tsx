@@ -121,6 +121,13 @@ export function ExpensesClient({
   const [schedDraft, setSchedDraft] = useState<SchedDraft | null>(null);
   const [deleteSchedId, setDeleteSchedId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  /*
+    A receipt picked while adding, before there is anything to attach it to.
+    Held here and uploaded the moment the row has an id, so somebody entering
+    an expense with the bill in their hand does it in one pass rather than
+    saving, reopening and attaching.
+  */
+  const [pendingReceipt, setPendingReceipt] = useState<File | null>(null);
 
   const money = (n: number | string) => fmtMoney(n, currency, locale);
   const label = (x: { name: string | null; name_ar?: string | null; nameAr?: string | null }) => {
@@ -144,6 +151,25 @@ export function ExpensesClient({
     return parts;
   }, [timezone]);
   const defaultDate = offset === 0 ? todayLocal : monthFrom;
+
+  /** Returns false on a failure it has already reported. */
+  const uploadReceipt = async (expenseId: string, file: File) => {
+    const fd = new FormData();
+    fd.set("file", file);
+    const res = await fetch(`/api/c/${slug}/expenses/${expenseId}/receipt`, {
+      method: "POST",
+      body: fd,
+    });
+    if (res.status === 413) {
+      toast(t.expenses.receiptTooLarge, "error");
+      return false;
+    }
+    if (!res.ok) {
+      toast(t.common.genericError, "error");
+      return false;
+    }
+    return true;
+  };
 
   const emptyDraft = (): Draft => ({
     categoryId: categories.find((c) => c.active)?.id ?? null,
@@ -483,7 +509,10 @@ export function ExpensesClient({
       {/* ---------------------------------------------------------- expense */}
       <Modal
         open={!!draft}
-        onClose={() => setDraft(null)}
+        onClose={() => {
+          setDraft(null);
+          setPendingReceipt(null);
+        }}
         title={draft?.id ? t.common.edit : t.expenses.add}
       >
         {draft && (
@@ -541,18 +570,16 @@ export function ExpensesClient({
               <Input
                 value={draft.vendor}
                 maxLength={120}
-                placeholder={t.expenses.vendorPlaceholder}
                 onChange={(e) => setDraft({ ...draft, vendor: e.target.value })}
               />
             </Field>
             {/*
-              Only once the row exists: the upload is addressed by id, and a
-              receipt with nothing to attach to has nowhere to go. Typing the
-              expense first and attaching second is also the order it happens
-              at a desk.
+              Available while adding as well as editing. The upload itself is
+              addressed by id and so has to wait for the row, but that is a
+              mechanical detail and not something to make somebody live with:
+              a file chosen now is held and sent the moment Save returns one.
             */}
-            {draft.id && (
-              <Field label={t.expenses.receipt} hint={t.expenses.receiptHint}>
+            <Field label={t.expenses.receipt} hint={t.expenses.receiptHint}>
                 <div className="flex flex-wrap items-center gap-2">
                   {draft.hasReceipt && (
                     <a
@@ -573,23 +600,16 @@ export function ExpensesClient({
                         const f = e.target.files?.[0];
                         // Cleared so picking the same file again still fires.
                         e.target.value = "";
-                        if (!f || !draft.id) return;
+                        if (!f) return;
+                        // Nothing to attach to yet: hold it for Save.
+                        if (!draft.id) {
+                          setPendingReceipt(f);
+                          return;
+                        }
                         setUploading(true);
-                        const fd = new FormData();
-                        fd.set("file", f);
-                        const res = await fetch(
-                          `/api/c/${slug}/expenses/${draft.id}/receipt`,
-                          { method: "POST", body: fd }
-                        );
+                        const ok = await uploadReceipt(draft.id, f);
                         setUploading(false);
-                        if (res.status === 413) {
-                          toast(t.expenses.receiptTooLarge, "error");
-                          return;
-                        }
-                        if (!res.ok) {
-                          toast(t.common.genericError, "error");
-                          return;
-                        }
+                        if (!ok) return;
                         toast(t.common.saved);
                         setDraft({ ...draft, hasReceipt: true });
                         router.refresh();
@@ -599,14 +619,15 @@ export function ExpensesClient({
                       <Paperclip className="h-3.5 w-3.5" />
                       {uploading
                         ? t.common.saving
-                        : draft.hasReceipt
-                          ? t.expenses.replaceReceipt
-                          : t.expenses.attachReceipt}
+                        : pendingReceipt
+                          ? pendingReceipt.name
+                          : draft.hasReceipt
+                            ? t.expenses.replaceReceipt
+                            : t.expenses.attachReceipt}
                     </span>
                   </label>
                 </div>
-              </Field>
-            )}
+            </Field>
             <Field label={t.expenses.note} hint={t.common.optional}>
               <Textarea
                 value={draft.note}
@@ -615,26 +636,47 @@ export function ExpensesClient({
               />
             </Field>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setDraft(null)}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDraft(null);
+                  setPendingReceipt(null);
+                }}
+              >
                 {t.common.cancel}
               </Button>
               <Button
                 loading={pending}
                 disabled={!draft.amount || !draft.spentOn}
                 onClick={() =>
-                  run(
-                    () =>
-                      saveExpenseAction(slug, {
-                        id: draft.id,
-                        categoryId: draft.categoryId,
-                        amount: draft.amount,
-                        vendor: draft.vendor,
-                        note: draft.note,
-                        spentOn: draft.spentOn,
-                        method: draft.method,
-                      }),
-                    () => setDraft(null)
-                  )
+                  start(async () => {
+                    const r = await saveExpenseAction(slug, {
+                      id: draft.id,
+                      categoryId: draft.categoryId,
+                      amount: draft.amount,
+                      vendor: draft.vendor,
+                      note: draft.note,
+                      spentOn: draft.spentOn,
+                      method: draft.method,
+                    });
+                    if (r.error) {
+                      toast(t.common.genericError, "error");
+                      return;
+                    }
+                    /*
+                      The bill, now that there is a row to pin it to. A failure
+                      here has already been reported and leaves the expense
+                      saved — losing what somebody typed because a photo would
+                      not upload would be the worse trade.
+                    */
+                    if (pendingReceipt && r.id) {
+                      await uploadReceipt(r.id, pendingReceipt);
+                    }
+                    toast(t.common.saved);
+                    setPendingReceipt(null);
+                    setDraft(null);
+                    router.refresh();
+                  })
                 }
               >
                 {t.common.save}
@@ -773,7 +815,6 @@ export function ExpensesClient({
               <Input
                 value={schedDraft.vendor}
                 maxLength={120}
-                placeholder={t.expenses.vendorPlaceholder}
                 onChange={(e) => setSchedDraft({ ...schedDraft, vendor: e.target.value })}
               />
             </Field>
