@@ -1670,8 +1670,19 @@ Real browser (Playwright) against the running app, asserting against the databas
 Plus focused suites: `qa-access`, `qa-automation-coverage`, `qa-backup`, `qa-booking-race`,
 `qa-doctor-earnings`, `qa-receipts`, `qa-expenses`, `qa-finance`, `qa-service-sections`,
 `qa-brand-credit`, `qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`,
-`qa-esign-browser`, `qa-first-message`, `qa-import-digest`, `qa-mobile`, `qa-mobile-width`,
+`qa-esign-browser`, `qa-finance`, `qa-first-message`, `qa-import-digest`, `qa-mobile`,
+`qa-mobile-width`, `qa-tablet`,
 `qa-einvoicing`, `qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.
+
+`qa-mobile-width` and `qa-tablet` walk **one shared route list** (`scripts/lib-layout.ts`)
+and ask two questions of every screen: does the document scroll sideways, and does anything
+sit outside the box that holds it. The second is not implied by the first — when an
+ancestor clips, an element overflows it by two hundred pixels while the page width stays
+perfect. Containers that scroll on purpose are skipped.
+
+The layout rule those suites enforce: **a card takes the width it is given.** `Card` carries
+`min-w-0`, headers wrap, long tokens break, and anything that genuinely cannot shrink — a
+table of invoice lines — gets its own `overflow-x: auto` (decisions 92–95).
 
 Run `qa-warm` first. A cold `next dev` compiles routes on first hit, and the resulting
 timeouts look exactly like a dozen regressions.

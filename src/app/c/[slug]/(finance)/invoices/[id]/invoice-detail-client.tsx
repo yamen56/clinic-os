@@ -411,37 +411,43 @@ export function InvoiceDetailClient({
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader title={t.invoices.item} />
-          <table className="w-full text-sm">
-            <tbody>
-              {items.map((it, i) => (
-                <tr key={i} className="border-b border-line last:border-0">
-                  <td className="px-5 py-2.5">{it.description}</td>
-                  <td className="w-16 px-2 py-2.5 text-center tnum">{Number(it.qty)}</td>
-                  <td className="w-28 px-2 py-2.5 text-end tnum">
-                    {fmtMoney(Number(it.unit_price), inv.currency, locale)}
-                  </td>
-                  {/* Only says something when there is something to say — a line
-                      with no discount and the clinic's usual tax stays quiet. */}
-                  <td className="w-28 px-2 py-2.5 text-end text-[12px] text-ink-500 tnum">
-                    {Number(it.discount_amount) > 0 &&
-                      `−${fmtMoney(Number(it.discount_amount), inv.currency, locale)} `}
-                    {Number(it.tax_amount) > 0
-                      ? `${Number(it.tax_rate)}%`
-                      : it.tax_category !== "S"
-                        ? t.invoices.taxCategories[it.tax_category as "S" | "Z" | "E" | "O"]
-                        : ""}
-                  </td>
-                  <td className="w-32 px-5 py-2.5 text-end font-medium tnum">
-                    {fmtMoney(
-                      Number(it.amount) - Number(it.discount_amount) + Number(it.tax_amount),
-                      inv.currency,
-                      locale
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* A table cannot shrink below the min-content of its columns, so on a
+              narrow phone it set the width of the card and the page scrolled
+              sideways. Its own scroller is the fix — the same rule the document
+              body already follows. */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <tbody>
+                {items.map((it, i) => (
+                  <tr key={i} className="border-b border-line last:border-0">
+                    <td className="px-5 py-2.5">{it.description}</td>
+                    <td className="w-16 px-2 py-2.5 text-center tnum">{Number(it.qty)}</td>
+                    <td className="w-28 px-2 py-2.5 text-end tnum">
+                      {fmtMoney(Number(it.unit_price), inv.currency, locale)}
+                    </td>
+                    {/* Only says something when there is something to say — a line
+                        with no discount and the clinic's usual tax stays quiet. */}
+                    <td className="w-28 px-2 py-2.5 text-end text-[12px] text-ink-500 tnum">
+                      {Number(it.discount_amount) > 0 &&
+                        `−${fmtMoney(Number(it.discount_amount), inv.currency, locale)} `}
+                      {Number(it.tax_amount) > 0
+                        ? `${Number(it.tax_rate)}%`
+                        : it.tax_category !== "S"
+                          ? t.invoices.taxCategories[it.tax_category as "S" | "Z" | "E" | "O"]
+                          : ""}
+                    </td>
+                    <td className="w-32 px-5 py-2.5 text-end font-medium tnum">
+                      {fmtMoney(
+                        Number(it.amount) - Number(it.discount_amount) + Number(it.tax_amount),
+                        inv.currency,
+                        locale
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div className="flex justify-end px-5 py-4">
             <div className="w-60 space-y-1.5 text-sm">
               <div className="flex justify-between text-ink-500">

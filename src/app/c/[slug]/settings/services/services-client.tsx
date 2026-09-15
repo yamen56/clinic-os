@@ -159,11 +159,14 @@ export function ServicesClient({
   const serviceRow = (s: Service) => (
     <li
       key={s.id}
-      className={`spine flex items-center gap-3 px-5 py-3 ${s.active ? "" : "opacity-50"}`}
+      /* Wraps on a narrow screen: the name, its badges and the row's controls
+         together cannot fit 320px, and an unwrappable row sets the width of the
+         card around it. */
+      className={`spine flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 ${s.active ? "" : "opacity-50"}`}
       style={{ "--spine-color": s.color } as React.CSSProperties}
     >
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium">{label(s)}</span>
           {!s.active && <Badge status="cancelled">{t.services.inactive}</Badge>}
           {s.bookable_online && <Badge status="brand">{t.services.bookableOnline}</Badge>}
@@ -246,7 +249,7 @@ export function ServicesClient({
             {sections.map((sec, i) => (
               <li
                 key={sec.id}
-                className="spine flex items-center gap-3 px-5 py-3"
+                className="spine flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3"
                 style={{ "--spine-color": sec.color } as React.CSSProperties}
               >
                 <div className="min-w-0 flex-1">

@@ -126,7 +126,9 @@ export function ClinicProfileForm({
           <Input dir="ltr" defaultValue={clinic.google_maps_url ?? ""} disabled={ro} placeholder="https://maps.app.goo.gl/…" onChange={(e) => patch({ google_maps_url: e.target.value })} />
         </Field>
         <Field label={t.settings.branding}>
-          <div className="flex items-center gap-3">
+          {/* Wraps: the swatch, the hex, the preview and the upload button come to
+              more than this half-width column holds on a tablet. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <input
               type="color"
               value={color}

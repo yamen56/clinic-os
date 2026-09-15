@@ -132,7 +132,10 @@ export function SignatureSettings({
 
       <Card>
         <div className="border-b border-line px-5 py-4">
-          <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+          {/* Wraps, so the badge drops below the heading rather than widening
+              it — a heading row that cannot break is how a card ends up wider
+              than the phone holding it. */}
+          <h2 className="flex flex-wrap items-center gap-2 text-[15px] font-semibold">
             <Lock className="h-4 w-4 text-ink-400" />
             {t.mySignature.pin}
             {hasPin ? (
@@ -141,7 +144,10 @@ export function SignatureSettings({
               <Badge status="neutral">{t.mySignature.pinNone}</Badge>
             )}
           </h2>
-          <p className="mt-0.5 text-[13px] text-ink-500">{t.mySignature.pinSub}</p>
+          <p className="mt-0.5 text-[13px] text-ink-500">
+            {t.mySignature.pinSub}
+            {!hasPin && ` ${t.mySignature.pinNoneHint}`}
+          </p>
         </div>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <Field label={hasPin ? t.mySignature.changePin : t.mySignature.setPin} hint={t.mySignature.pinDigits}>

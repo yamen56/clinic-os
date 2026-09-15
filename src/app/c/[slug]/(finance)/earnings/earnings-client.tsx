@@ -91,7 +91,7 @@ export function EarningsClient({
             >
               <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </button>
-            <span className="min-w-36 text-center text-[13px] font-medium tabular-nums">
+            <span className="min-w-28 text-center text-[13px] font-medium tabular-nums sm:min-w-36">
               {monthLabel(timezone, offset, locale)}
             </span>
             <button

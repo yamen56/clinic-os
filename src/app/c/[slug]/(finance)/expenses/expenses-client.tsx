@@ -203,41 +203,50 @@ export function ExpensesClient({
       <PageHeader
         title={t.nav.expenses}
         sub={t.expenses.sub}
+        /*
+          Three separate children, not one row.
+
+          `PageHeader` wraps its action area precisely so a header with several
+          controls can break onto a second line on a phone. Handing it a single
+          flex `div` defeated that: the whole group became one unbreakable item
+          516px wide inside a 358px column, so the page itself scrolled sideways
+          at 390px and "Add expense" was off the screen entirely. The stepper
+          stays one unit — a month name with its arrows on different lines is
+          worse than a wrap — and the two buttons are free to drop below it.
+        */
         action={
-          <div className="flex items-center gap-1">
-            <button
-              aria-label={t.earnings.previousMonth}
-              onClick={() => router.push(`/c/${slug}/expenses?m=${offset - 1}`)}
-              className="rounded-lg border border-line p-1.5 text-ink-500 hover:border-brand-400"
-            >
-              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
-            </button>
-            <span className="min-w-36 text-center text-[13px] font-medium tabular-nums">
-              {monthLabel(timezone, offset, locale)}
-            </span>
-            <button
-              aria-label={t.earnings.nextMonth}
-              disabled={offset >= 0}
-              onClick={() => router.push(`/c/${slug}/expenses?m=${offset + 1}`)}
-              className="rounded-lg border border-line p-1.5 text-ink-500 hover:border-brand-400 disabled:opacity-40"
-            >
-              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
-            </button>
-            <a
-              href={`/api/c/${slug}/expenses/export?from=${monthFrom}&to=${monthTo}`}
-              download
-              className="ms-2"
-            >
+          <>
+            <div className="flex items-center gap-1">
+              <button
+                aria-label={t.earnings.previousMonth}
+                onClick={() => router.push(`/c/${slug}/expenses?m=${offset - 1}`)}
+                className="rounded-lg border border-line p-1.5 text-ink-500 hover:border-brand-400"
+              >
+                <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+              </button>
+              <span className="min-w-28 text-center text-[13px] font-medium tabular-nums sm:min-w-36">
+                {monthLabel(timezone, offset, locale)}
+              </span>
+              <button
+                aria-label={t.earnings.nextMonth}
+                disabled={offset >= 0}
+                onClick={() => router.push(`/c/${slug}/expenses?m=${offset + 1}`)}
+                className="rounded-lg border border-line p-1.5 text-ink-500 hover:border-brand-400 disabled:opacity-40"
+              >
+                <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+              </button>
+            </div>
+            <a href={`/api/c/${slug}/expenses/export?from=${monthFrom}&to=${monthTo}`} download>
               <Button variant="outline" size="sm">
                 <Download className="h-4 w-4" />
                 {t.invoices.exportCsv}
               </Button>
             </a>
-            <Button size="sm" className="ms-1" onClick={() => setDraft(emptyDraft())}>
+            <Button size="sm" onClick={() => setDraft(emptyDraft())}>
               <Plus className="h-4 w-4" />
               {t.expenses.add}
             </Button>
-          </div>
+          </>
         }
       />
 

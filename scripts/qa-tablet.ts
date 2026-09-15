@@ -12,6 +12,7 @@
 import { chromium, devices, type Page, type Browser } from "playwright";
 import { Client } from "pg";
 import bcrypt from "bcryptjs";
+import { describeSpills, spills, workspacePages } from "./lib-layout";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -119,10 +120,27 @@ async function main() {
     console.log(`\n  — ${vp.name} (${vp.width}×${vp.height}) —`);
 
     /* ------------------------------------------- nothing may scroll sideways */
-    for (const path of [`/c/${slug}`, `/c/${slug}/conversations`, `/c/${slug}/patients`, `/c/${slug}/calendar`]) {
+    /*
+      Every section, not the four this suite started with — and the same list
+      the phone suite walks, from `lib-layout`, so the two cannot drift apart
+      again. The narrowest tablet carries the full sweep; the wider ones only
+      re-check the four screens whose three-pane layout is what this suite was
+      written for, because twenty-eight pages across four viewports is ten
+      minutes nobody will wait for.
+    */
+    const full = vp.width <= 800;
+    const paths = full
+      ? workspacePages({ slug, patientId: patient.id }).map(([, p]) => p)
+      : [`/c/${slug}`, `/c/${slug}/conversations`, `/c/${slug}/patients`, `/c/${slug}/calendar`];
+    for (const path of paths) {
       await go(page, path);
+      const label = path.replace(`/c/${slug}`, "") || "/";
       const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-      check(`${path.replace(`/c/${slug}`, "") || "/"} does not scroll sideways`, over <= 1, `${over}px`);
+      check(`${label} does not scroll sideways`, over <= 1, `${over}px`);
+      // And nothing sitting outside the box that holds it — the failure a page
+      // of exactly the right width can still be hiding.
+      const spilled = await spills(page);
+      check(`${label} keeps everything inside its container`, spilled.length === 0, describeSpills(spilled));
     }
 
     /* ------------------------------- the conversation itself has room to read */

@@ -2135,7 +2135,11 @@ export const en = {
     pin: "Device PIN",
     pinSub: "Unlocks the clinic signing view after you've handed a tablet to a patient.",
     pinSet: "PIN set",
-    pinNone: "No PIN — you'll be asked for your password instead",
+    pinNone: "No PIN",
+    /* The half of that sentence that is an explanation. It used to live inside
+       the badge, where it was a 319px pill that pushed the whole page sideways
+       on a phone — a badge is a label, not a place to say things. */
+    pinNoneHint: "Without one you'll be asked for your password instead.",
     changePin: "Change PIN",
     setPin: "Set a PIN",
     pinDigits: "Four to eight digits",
@@ -2234,7 +2238,10 @@ export const en = {
     keyHint: "Lowercase letters, numbers and underscores. Can't be changed later.",
     label: "Label (English)",
     labelAr: "Label (Arabic)",
-    isStaff: "Signs inside the workspace",
+    /* A badge, so a label rather than a phrase — "Signs inside the workspace"
+       was a 179px pill in a 150px column. What it meant is in isStaffHint,
+       which is where an explanation belongs. */
+    isStaff: "Staff",
     isStaffHint:
       "Staff roles apply a saved signature with one tap. Everyone else gets a link or the clinic device.",
     builtIn: "Built in",

@@ -102,14 +102,17 @@ export function FieldsClient({
           {d.is_required && <span className="text-[11px] text-danger">*</span>}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px] text-ink-400">
+          {/* `max-w-full` and a breakable token: `{{patient.national_id}}` is
+             183px in a mono face and the column beside the row controls is 168px
+             on a phone, so without these the chip simply hangs outside it. */}
           <button
             onClick={() => copyToken(d.key)}
-            className="mono inline-flex items-center gap-1 rounded bg-sunken px-1.5 py-0.5 transition-colors hover:text-brand-700"
+            className="mono inline-flex max-w-full items-center gap-1 rounded bg-sunken px-1.5 py-0.5 text-start transition-colors hover:text-brand-700"
             dir="ltr"
             title={t.fields.keyHint}
           >
-            {`{{${d.key}}}`}
-            <Copy className="h-3 w-3" />
+            <span className="min-w-0 break-all">{`{{${d.key}}}`}</span>
+            <Copy className="h-3 w-3 shrink-0" />
           </button>
           <span>{(t.fields.types as Record<string, string>)[d.field_type] ?? d.field_type}</span>
           {usage[d.key] > 0 && <span>{t.fields.inUse.replace("{n}", String(usage[d.key]))}</span>}

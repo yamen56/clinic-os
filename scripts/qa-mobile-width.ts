@@ -14,6 +14,7 @@
  */
 import { chromium, type Page } from "playwright";
 import { Client } from "pg";
+import { describeSpills, spills, workspacePages } from "./lib-layout";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -87,6 +88,25 @@ async function checkPage(page: Page, label: string, url: string) {
       console.log(`      ${w.tag}  w=${w.width} right=${w.right}  class="${w.cls}"  “${w.text}”`);
     }
   }
+
+  /*
+    And the second question, which the first cannot answer: is anything sitting
+    outside the box that holds it? When an ancestor clips, an element overflows
+    it by two hundred pixels and the page width stays perfect — which is how the
+    payments list squeezed a patient's name to nothing while this suite was
+    green.
+  */
+  const spilled = await spills(page);
+  if (spilled.length === 0) {
+    passed++;
+    console.log(`  ✓ ${label} — nothing outside its container`);
+  } else {
+    failures.push(`${label} — ${spilled.length} spilling :: ${describeSpills(spilled)}`);
+    console.log(`  ✗ ${label} — ${spilled.length} element(s) outside their container`);
+    for (const sp of spilled.slice(0, 4)) {
+      console.log(`      +${sp.over}px  <${sp.tag} class="${sp.cls}">  ${sp.width}>${sp.parentWidth}  “${sp.text}”`);
+    }
+  }
 }
 
 async function main() {
@@ -152,35 +172,20 @@ async function main() {
   await page.waitForURL(`**/c/${clinic.slug}**`, { timeout: 60000 });
 
   const s = `${BASE}/c/${clinic.slug}`;
-  const pages: [string, string][] = [
-    ["dashboard", s],
-    ["patients list", `${s}/patients`],
-    ["calendar", `${s}/calendar`],
-    ["conversations", `${s}/conversations`],
-    ["invoices", `${s}/invoices`],
-    ["documents", `${s}/documents`],
-    ["automations", `${s}/automations`],
-    ["campaigns", `${s}/campaigns`],
-    ["reports", `${s}/reports`],
-    ["settings · clinic", `${s}/settings`],
-    ["settings · staff", `${s}/settings/staff`],
-    ["settings · services", `${s}/settings/services`],
-    ["settings · hours", `${s}/settings/hours`],
-    ["settings · whatsapp", `${s}/settings/whatsapp`],
-    ["settings · tags", `${s}/settings/tags`],
-    ["settings · booking", `${s}/settings/booking`],
-    ["settings · fields", `${s}/settings/fields`],
-    ["settings · templates", `${s}/settings/templates`],
-    ["settings · insurers", `${s}/settings/insurers`],
-    ["waitlist", `${s}/waitlist`],
-    ["patient import", `${s}/patients/import`],
-    ["profile", `${s}/profile`],
-  ];
-  if (patient) pages.push(["patient profile", `${s}/patients/${patient.id}`]);
-  if (invoice) pages.push(["invoice detail", `${s}/invoices/${invoice.id}`]);
-  // Named for what it is testing, so a failure says which content broke it.
-  if (doc) pages.push(["document detail (oversized image + wide table)", `${s}/documents/${doc.id}`]);
-  if (automation) pages.push(["automation builder", `${s}/automations/${automation.id}`]);
+  /*
+    From `lib-layout`, shared with the tablet suite. The list that used to live
+    here had drifted: it still named `/reports` and `/settings/templates`, which
+    have not existed for months, so two of these rows were measuring a 404 page
+    — and a 404 page never overflows. Meanwhile the whole finance section was in
+    neither suite.
+  */
+  const pages: [string, string][] = workspacePages({
+    slug: clinic.slug,
+    patientId: patient?.id,
+    invoiceId: invoice?.id,
+    documentId: doc?.id,
+    automationId: automation?.id,
+  }).map(([label, path]) => [label, `${BASE}${path}`]);
   /*
     The one page here that is not part of the workspace, and the one most
     certain to be opened on a phone: patients reach it from a WhatsApp message.

@@ -139,8 +139,11 @@ export default async function InvoicesPage({
     <>
       <PageHeader
         title={t.invoices.title}
+        /* Separate children rather than one row, so `PageHeader` can break
+           between them on a narrow phone — together they are 301px and the
+           column is 288px. */
         action={
-          <div className="flex gap-2">
+          <>
             {/* Behind the same capability as the totals it sits above. The
                 route refuses it either way now; this stops offering a button
                 that answers 403. */}
@@ -158,7 +161,7 @@ export default async function InvoicesPage({
                 {t.invoices.newInvoice}
               </Button>
             </Link>
-          </div>
+          </>
         }
       />
 
@@ -317,17 +320,27 @@ export default async function InvoicesPage({
               const stillDue = Number(p.total) - Number(p.amount_paid);
               const open = String(p.invoice_status) !== "paid" && stillDue > 0;
               return (
-              <li key={String(p.id)} className="flex items-center gap-4 px-5 py-3">
+              /*
+                Wraps on a phone, for the reason the invoice row above already
+                does. Unwrapped, the fixed columns — amount, method badge,
+                invoice number — came to more than 390px between them, so the
+                patient's name was squeezed to nothing and the note beside it
+                ran outside a truncating box where it could not be read at all.
+              */
+              <li key={String(p.id)} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 sm:flex-nowrap sm:gap-4 sm:px-5">
                 <span className="w-24 shrink-0 text-sm font-semibold tnum">
                   {fmtMoney(Number(p.amount), access.clinic.currency, locale)}
                 </span>
                 <Badge status="brand">
                   {(t.invoices.methods as Record<string, string>)[String(p.method)] ?? String(p.method)}
                 </Badge>
-                <span className="min-w-0 flex-1 truncate text-sm">
-                  {String(p.patient_name)}
+                {/* The note wraps under the name rather than truncating with it:
+                    at tablet width this column is about ninety pixels, and
+                    "Settled th…" tells reception nothing. */}
+                <span className="flex min-w-0 flex-1 basis-full flex-wrap items-baseline gap-x-2 sm:basis-auto">
+                  <span className="truncate text-sm">{String(p.patient_name)}</span>
                   <span
-                    className={`ms-2 text-[12px] ${open ? "text-st-pending" : "text-ink-400"}`}
+                    className={`text-[12px] ${open ? "text-st-pending" : "text-ink-400"}`}
                   >
                     {open
                       ? t.invoices.leftBalance.replace(
@@ -337,7 +350,11 @@ export default async function InvoicesPage({
                       : t.invoices.settled}
                   </span>
                 </span>
-                <Link href={`${base}/${p.invoice_id}`} className="text-[13px] text-brand-700 tnum" dir="ltr">
+                <Link
+                  href={`${base}/${p.invoice_id}`}
+                  className="shrink-0 text-[13px] text-brand-700 tnum"
+                  dir="ltr"
+                >
                   {String(p.number)}
                 </Link>
                 <span className="hidden text-[13px] text-ink-400 sm:block">

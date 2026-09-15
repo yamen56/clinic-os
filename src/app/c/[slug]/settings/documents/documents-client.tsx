@@ -211,7 +211,7 @@ export function DocumentSettingsClient({
         </div>
         <ul className="divide-y divide-line">
           {roles.map((r) => (
-            <li key={r.id} className="flex items-center gap-3 px-5 py-2.5">
+            <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">
@@ -220,7 +220,9 @@ export function DocumentSettingsClient({
                   {r.is_system && <Badge status="neutral">{t.signerRoles.builtIn}</Badge>}
                   {r.is_staff && <Badge status="brand">{t.signerRoles.isStaff}</Badge>}
                 </div>
-                <code className="mono text-[12px] text-ink-400" dir="ltr">
+                {/* Breakable: `clinic_representative` is 189px in a mono face
+                   and this column is 150px on the narrowest phone. */}
+                <code className="mono block break-all text-[12px] text-ink-400" dir="ltr">
                   {r.key}
                 </code>
               </div>
