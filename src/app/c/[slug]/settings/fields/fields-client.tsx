@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
+import { Field, Input, Select, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -16,7 +16,17 @@ import {
   moveFieldDefAction,
   toggleFieldHiddenAction,
 } from "./actions";
-import { ListPlus, Pencil, Trash2, ChevronUp, ChevronDown, Copy, EyeOff } from "lucide-react";
+import {
+  ListPlus,
+  Pencil,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  Copy,
+  EyeOff,
+  Plus,
+  X,
+} from "lucide-react";
 
 type Def = {
   id: string;
@@ -245,7 +255,23 @@ export function FieldsClient({
                 <Select
                   value={editing.field_type ?? "text"}
                   disabled={editing.is_system}
-                  onChange={(e) => setEditing({ ...editing, field_type: e.target.value })}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      field_type: e.target.value,
+                      /*
+                        A choice list opens with one empty row rather than with
+                        nothing, so the first thing on screen is somewhere to
+                        type. An empty editor with only an "add" button makes
+                        the reader do a step the form could have done for them,
+                        and blank rows are dropped on save anyway.
+                      */
+                      options:
+                        e.target.value === "select" && !(editing.options ?? []).length
+                          ? [""]
+                          : editing.options,
+                    })
+                  }
                 >
                   {(
                     ["text", "longtext", "number", "date", "phone", "email", "select", "checkbox"] as const
@@ -258,12 +284,10 @@ export function FieldsClient({
               </Field>
             )}
             {editing.field_type === "select" && (
-              <Field label={t.fields.options}>
-                <Textarea
-                  value={(editing.options ?? []).join("\n")}
-                  onChange={(e) => setEditing({ ...editing, options: e.target.value.split("\n") })}
-                />
-              </Field>
+              <OptionsEditor
+                options={editing.options ?? []}
+                onChange={(options) => setEditing({ ...editing, options })}
+              />
             )}
             {editing.scope !== "context" && (
               <div className="grid gap-3">
@@ -322,6 +346,181 @@ export function FieldsClient({
           })
         }
       />
+    </div>
+  );
+}
+
+/**
+ * The choices behind a "choice list" field.
+ *
+ * This was one textarea, one choice per line, and the instruction was in the
+ * label. Everything wrong with that is invisible until somebody uses it: there
+ * is no sign the newlines are load-bearing until a clinic types "Private, Cash,
+ * Insured" on one line and gets a dropdown with a single entry in it; you cannot
+ * reorder without cut and paste; a duplicate is silent; and nothing on screen
+ * resembles the dropdown it is going to produce.
+ *
+ * A row per choice fixes all four by looking like the answer. The one thing it
+ * loses — pasting a list in from somewhere else — is given back by the paste
+ * handler below, which is the only reason the textarea was ever nicer.
+ */
+function OptionsEditor({
+  options,
+  onChange,
+}: {
+  options: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const { t } = useI18n();
+  const refs = useRef<(HTMLInputElement | null)[]>([]);
+  /*
+    Which row to put the cursor in once React has drawn it. A ref call at the
+    call site cannot do this: the input added by `addAt` does not exist yet at
+    the moment the row is added, so the focus has to wait for the render.
+  */
+  const [focusAt, setFocusAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (focusAt === null) return;
+    refs.current[focusAt]?.focus();
+    setFocusAt(null);
+  }, [focusAt]);
+
+  const set = (next: string[], focus?: number) => {
+    onChange(next);
+    if (focus !== undefined) setFocusAt(focus);
+  };
+  const addAt = (i: number) => set([...options.slice(0, i), "", ...options.slice(i)], i);
+  const remove = (i: number) =>
+    set(
+      options.filter((_, k) => k !== i),
+      Math.max(0, i - 1)
+    );
+  const move = (i: number, by: -1 | 1) => {
+    const j = i + by;
+    if (j < 0 || j >= options.length) return;
+    const next = [...options];
+    [next[i], next[j]] = [next[j], next[i]];
+    set(next, j);
+  };
+
+  /*
+    The list this field already has, as text, is how most of these arrive — out
+    of a spreadsheet column or an old form. A multi-line paste therefore becomes
+    one row per line rather than one row containing newlines, which is what the
+    browser would otherwise do and what nobody means. A single-line paste falls
+    through to the browser untouched, so pasting one word into one box still
+    behaves like pasting one word into one box.
+  */
+  const paste = (i: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+    const lines = e.clipboardData
+      .getData("text")
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (lines.length < 2) return;
+    e.preventDefault();
+    const next = [...options];
+    next.splice(i, 1, ...lines);
+    set(next, i + lines.length - 1);
+  };
+
+  const key = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      // Enter means "and the next one", the way it does in every list editor
+      // people already use. Prevented because the modal has a default button.
+      e.preventDefault();
+      addAt(i + 1);
+    } else if (e.key === "Backspace" && options[i] === "" && options.length > 1) {
+      e.preventDefault();
+      remove(i);
+    }
+  };
+
+  // A choice that repeats one above it. Flagged rather than blocked: it is
+  // nearly always a typo mid-edit, and a form that refuses to hold what you
+  // typed while you fix it is worse than one that tells you.
+  const duplicate = (v: string, i: number) => {
+    const s = v.trim().toLocaleLowerCase();
+    return !!s && options.some((o, k) => k < i && o.trim().toLocaleLowerCase() === s);
+  };
+
+  /*
+    Not wrapped in `Field`. That renders a <label> around its children, which is
+    right for the one control it was built for and wrong here: a label owns a
+    single control, so wrapping six of them associates the caption with the first
+    choice and leaves the rest unlabelled. The caption below is plain markup in
+    Field's own styling, and each row carries its own `aria-label`.
+  */
+  return (
+    <div className="block">
+      <span className="mb-1.5 flex items-baseline gap-1 text-[13px] font-semibold text-ink-900">
+        {t.fields.options}
+      </span>
+      <div className="grid gap-2">
+        {options.map((o, i) => {
+          const dup = duplicate(o, i);
+          return (
+            <div key={i} className="flex items-center gap-2">
+              {/* The position, so the row reads as "third in the dropdown"
+                  rather than as a free-floating text box. `tnum` keeps the
+                  column from shifting when the list passes nine. */}
+              <span className="w-5 shrink-0 text-center text-[12px] text-ink-400 tnum">{i + 1}</span>
+              <Input
+                ref={(el) => {
+                  refs.current[i] = el;
+                }}
+                value={o}
+                className={dup ? "border-danger" : ""}
+                placeholder={t.fields.optionPlaceholder}
+                onChange={(e) => set(options.map((x, k) => (k === i ? e.target.value : x)))}
+                onKeyDown={(e) => key(i, e)}
+                onPaste={(e) => paste(i, e)}
+                aria-label={`${t.fields.options} ${i + 1}`}
+              />
+              <div className="flex shrink-0 flex-col">
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => move(i, -1)}
+                  aria-label={t.fields.moveUp}
+                  className="text-ink-300 transition-colors hover:text-ink-700 disabled:opacity-30"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={i === options.length - 1}
+                  onClick={() => move(i, 1)}
+                  aria-label={t.fields.moveDown}
+                  className="text-ink-300 transition-colors hover:text-ink-700 disabled:opacity-30"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                disabled={options.length === 1}
+                onClick={() => remove(i)}
+                aria-label={t.fields.removeOption}
+                className="shrink-0 rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-400"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          );
+        })}
+        <div>
+          <Button variant="outline" size="sm" onClick={() => addAt(options.length)}>
+            <Plus className="h-4 w-4" />
+            {t.fields.addOption}
+          </Button>
+        </div>
+      </div>
+      {options.some((o, i) => duplicate(o, i)) ? (
+        <span className="mt-1 block text-xs text-danger">{t.fields.optionDuplicate}</span>
+      ) : (
+        <span className="mt-1 block text-xs text-ink-500">{t.fields.optionsHint}</span>
+      )}
     </div>
   );
 }

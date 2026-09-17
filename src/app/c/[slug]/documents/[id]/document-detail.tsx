@@ -1294,7 +1294,7 @@ function SignerEditor({
                   <Input
                     dir="ltr"
                     value={s.phone_e164 ?? ""}
-                    placeholder="0790744070"
+                    placeholder="xxxxxxxxxx"
                     onChange={(e) =>
                       setRows(rows.map((x, idx) => (idx === i ? { ...x, phone_e164: e.target.value } : x)))
                     }

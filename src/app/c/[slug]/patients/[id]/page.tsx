@@ -26,6 +26,25 @@ export default async function PatientProfilePage({
   */
   const invScope = invoiceScopeSql(access, "i", 3);
 
+  /*
+    The sections of the app this member is allowed into, decided once here and
+    obeyed twice: the queries below skip what they may not see, and the client
+    hides the tab and the button that would have led there.
+
+    Both halves matter, and the query half matters more. Hiding a tab while
+    still shipping the rows means the patient's invoice totals are sitting in
+    the page payload of somebody who was deliberately denied Invoices, which is
+    the same leak with a nicer paint job.
+  */
+  const caps = {
+    conversations: can(access, "conversations"),
+    calendar: can(access, "calendar"),
+    documents: can(access, "documents"),
+    invoices: can(access, "invoices"),
+    exportPatient: can(access, "patients.export"),
+  };
+  const none = { rows: [] as Record<string, unknown>[] };
+
   const data = await inClinic(access, async (c) => {
     const p = (
       await c.query(`select * from patients where id = $1 and clinic_id = $2`, [id, access.clinicId])
@@ -61,32 +80,38 @@ export default async function PatientProfilePage({
            from patient_files where patient_id = $1 and clinic_id = $2 order by created_at desc`,
           [id, access.clinicId]
         ),
-        c.query(
-          `select a.id, a.starts_at, a.ends_at, a.status, a.source, s.name as service_name, s.name_ar as service_name_ar,
-                  u.full_name as doctor_name
-           from appointments a
-           left join services s on s.id = a.service_id
-           left join clinic_members m on m.id = a.doctor_member_id
-           left join users u on u.id = m.user_id
-           where a.patient_id = $1 and a.clinic_id = $2 order by a.starts_at desc limit 50`,
-          [id, access.clinicId]
-        ),
-        c.query(
-          `select i.id, i.number, i.status, i.total, i.amount_paid, i.created_at
-           from invoices i where i.patient_id = $1 and i.clinic_id = $2${invScope.sql}
-           order by i.created_at desc limit 50`,
-          [id, access.clinicId, ...invScope.params]
-        ),
-        c.query(
-          `select cv.id,
-                  (select json_agg(x) from (
-                     select m.id, m.direction, m.sender_kind, m.body, m.msg_type, m.created_at
-                     from messages m where m.conversation_id = cv.id order by m.created_at desc limit 30
-                  ) x) as msgs
-           from conversations cv where cv.patient_id = $1 and cv.clinic_id = $2
-           order by cv.last_message_at desc nulls last limit 1`,
-          [id, access.clinicId]
-        ),
+        caps.calendar
+          ? c.query(
+              `select a.id, a.starts_at, a.ends_at, a.status, a.source, s.name as service_name, s.name_ar as service_name_ar,
+                      u.full_name as doctor_name
+               from appointments a
+               left join services s on s.id = a.service_id
+               left join clinic_members m on m.id = a.doctor_member_id
+               left join users u on u.id = m.user_id
+               where a.patient_id = $1 and a.clinic_id = $2 order by a.starts_at desc limit 50`,
+              [id, access.clinicId]
+            )
+          : none,
+        caps.invoices
+          ? c.query(
+              `select i.id, i.number, i.status, i.total, i.amount_paid, i.created_at
+               from invoices i where i.patient_id = $1 and i.clinic_id = $2${invScope.sql}
+               order by i.created_at desc limit 50`,
+              [id, access.clinicId, ...invScope.params]
+            )
+          : none,
+        caps.conversations
+          ? c.query(
+              `select cv.id,
+                      (select json_agg(x) from (
+                         select m.id, m.direction, m.sender_kind, m.body, m.msg_type, m.created_at
+                         from messages m where m.conversation_id = cv.id order by m.created_at desc limit 30
+                      ) x) as msgs
+               from conversations cv where cv.patient_id = $1 and cv.clinic_id = $2
+               order by cv.last_message_at desc nulls last limit 1`,
+              [id, access.clinicId]
+            )
+          : none,
         // The clinic's own field definitions drive this form, the template
         // variable picker and the document preview from one place, so a field
         // renamed in settings is renamed here without a second thought.
@@ -105,17 +130,21 @@ export default async function PatientProfilePage({
            order by al.created_at desc limit 15`,
           [access.clinicId, id]
         ),
-        c.query(
-          `select coalesce(sum(i.total - i.amount_paid), 0) as due from invoices i
-           where i.patient_id = $1 and i.clinic_id = $2 and i.status in ('sent', 'partially_paid')${invScope.sql}`,
-          [id, access.clinicId, ...invScope.params]
-        ),
-        loadDocumentList(c, access.clinicId, { patientId: id }),
-        c.query(
-          `select id, name, name_ar, category, language from document_templates
-           where clinic_id = $1 and is_active order by category, name`,
-          [access.clinicId]
-        ),
+        caps.invoices
+          ? c.query(
+              `select coalesce(sum(i.total - i.amount_paid), 0) as due from invoices i
+               where i.patient_id = $1 and i.clinic_id = $2 and i.status in ('sent', 'partially_paid')${invScope.sql}`,
+              [id, access.clinicId, ...invScope.params]
+            )
+          : { rows: [{ due: 0 }] },
+        caps.documents ? loadDocumentList(c, access.clinicId, { patientId: id }) : [],
+        caps.documents
+          ? c.query(
+              `select id, name, name_ar, category, language from document_templates
+               where clinic_id = $1 and is_active order by category, name`,
+              [access.clinicId]
+            )
+          : none,
         // The clinic's tag vocabulary, so this file suggests the labels the
         // clinic already uses instead of inviting a third spelling of "سكري",
         // and so a tag wears the colour it was given in settings.
@@ -178,6 +207,7 @@ export default async function PatientProfilePage({
       insurers={JSON.parse(JSON.stringify(d.insurers))}
       noteCategories={JSON.parse(JSON.stringify(d.noteCategories))}
       canSendDocuments={can(access, "documents.manage")}
+      caps={caps}
       country={countryFromClinic(access.clinic)}
     />
   );

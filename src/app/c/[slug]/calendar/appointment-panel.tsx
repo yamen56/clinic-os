@@ -205,7 +205,7 @@ export function AppointmentPanel({
                   />
                   <Input
                     dir="ltr"
-                    placeholder="0790744070"
+                    placeholder="xxxxxxxxxx"
                     value={newPatient.phone}
                     onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
                   />

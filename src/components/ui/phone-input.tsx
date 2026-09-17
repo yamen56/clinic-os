@@ -80,7 +80,7 @@ export function PhoneInput({
         autoFocus={autoFocus}
         disabled={disabled}
         value={national}
-        placeholder={placeholder ?? (country === "JO" ? "0790744070" : "")}
+        placeholder={placeholder ?? (country === "JO" ? "xxxxxxxxxx" : "")}
         onChange={(e) => {
           setNational(e.target.value);
           emit(country, e.target.value);

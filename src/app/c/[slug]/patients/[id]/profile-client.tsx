@@ -169,6 +169,22 @@ export function PatientProfile(props: {
   documents: DocumentListRow[];
   docTemplates: PickableTemplate[];
   canSendDocuments: boolean;
+  /*
+    The sections this member may open, so the file offers no way into one they
+    cannot. A tab, a button or a figure that leads somewhere forbidden is worse
+    than no tab at all: it reads as a fault in the product rather than as a
+    decision somebody made, and the person hits a redirect with no explanation.
+
+    The server has already withheld the rows behind each of these — see the note
+    on `caps` in page.tsx. This half is only about what the screen shows.
+  */
+  caps: {
+    conversations: boolean;
+    calendar: boolean;
+    documents: boolean;
+    invoices: boolean;
+    exportPatient: boolean;
+  };
   /** The clinic's country, so a new number defaults to the right dialling code. */
   country: CountryCode;
   /** The clinic's tag vocabulary — suggestions, and the colour each tag wears. */
@@ -176,7 +192,7 @@ export function PatientProfile(props: {
   /** Active insurance companies. Empty for a clinic that only takes cash. */
   insurers: { id: string; name: string }[];
 }) {
-  const { slug, tz, currency } = props;
+  const { slug, tz, currency, caps } = props;
   const { t, locale } = useI18n();
   const router = useRouter();
   const { toast } = useToast();
@@ -242,17 +258,36 @@ export function PatientProfile(props: {
     (a) => new Date(a.starts_at) > new Date() && !["cancelled", "no_show"].includes(a.status)
   );
 
+  /*
+    Overview, Notes and Files are the patient record itself and have no section
+    of their own to be denied. The other four are windows onto sections that a
+    member may not hold, so each one asks first. `filter(Boolean)` rather than
+    four ternaries inside the array, so the order above still reads as the order
+    on screen.
+  */
   const tabs = [
     { key: "overview", label: t.patients.tabs.overview },
     { key: "notes", label: t.patients.tabs.notes, count: props.notes.length },
-    { key: "appointments", label: t.patients.tabs.appointments, count: props.appointments.length },
+    caps.calendar && {
+      key: "appointments",
+      label: t.patients.tabs.appointments,
+      count: props.appointments.length,
+    },
     { key: "files", label: t.patients.tabs.files, count: props.files.length },
     // Between Files and Invoices, as specified: a signed form belongs with the
     // patient's other paperwork, not filed away under billing.
-    { key: "documents", label: t.patients.tabs.documents, count: props.documents.length },
-    { key: "invoices", label: t.patients.tabs.invoices, count: props.invoices.length },
-    { key: "conversation", label: t.patients.tabs.conversation },
-  ];
+    caps.documents && {
+      key: "documents",
+      label: t.patients.tabs.documents,
+      count: props.documents.length,
+    },
+    caps.invoices && {
+      key: "invoices",
+      label: t.patients.tabs.invoices,
+      count: props.invoices.length,
+    },
+    caps.conversations && { key: "conversation", label: t.patients.tabs.conversation },
+  ].filter(Boolean) as { key: string; label: string; count?: number }[];
 
   return (
     <>
@@ -311,7 +346,9 @@ export function PatientProfile(props: {
           long-standing overflow impossible to miss.
         */}
         <div className="flex flex-wrap items-center gap-2">
-          {p.phone_e164 && (
+          {/* Sending through the platform is the Conversations section; the
+              wa.me link and the tel: link beside it are not, and stay. */}
+          {p.phone_e164 && caps.conversations && (
             <Button variant="soft" size="sm" onClick={openThread} disabled={opening}>
               <MessageCircle className="h-4 w-4" />
               {t.patients.message}
@@ -334,18 +371,22 @@ export function PatientProfile(props: {
               </Button>
             </a>
           )}
-          <Link href={`/c/${slug}/calendar?patient=${p.id}`}>
-            <Button variant="outline" size="sm">
-              <CalendarPlus className="h-4 w-4" />
-              {t.patients.bookAppointment}
-            </Button>
-          </Link>
-          <Link href={`/c/${slug}/invoices/new?patient=${p.id}`}>
-            <Button variant="outline" size="sm">
-              <ReceiptText className="h-4 w-4" />
-              {t.patients.createInvoice}
-            </Button>
-          </Link>
+          {caps.calendar && (
+            <Link href={`/c/${slug}/calendar?patient=${p.id}`}>
+              <Button variant="outline" size="sm">
+                <CalendarPlus className="h-4 w-4" />
+                {t.patients.bookAppointment}
+              </Button>
+            </Link>
+          )}
+          {caps.invoices && (
+            <Link href={`/c/${slug}/invoices/new?patient=${p.id}`}>
+              <Button variant="outline" size="sm">
+                <ReceiptText className="h-4 w-4" />
+                {t.patients.createInvoice}
+              </Button>
+            </Link>
+          )}
           <div className="relative">
             <Button variant="ghost" size="icon" onClick={() => setMenuOpen((v) => !v)} aria-label={t.common.actions}>
               <MoreVertical className="h-4.5 w-4.5" />
@@ -369,14 +410,16 @@ export function PatientProfile(props: {
                   every other file, and a slow render shows the browser's own
                   progress rather than a button that looks stuck.
                 */}
-                <a
-                  href={`/api/c/${slug}/patients/${p.id}/export`}
-                  onClick={() => setMenuOpen(false)}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink-900/4"
-                >
-                  <Download className="h-4 w-4 text-ink-400" />
-                  {t.patients.exportFile}
-                </a>
+                {caps.exportPatient && (
+                  <a
+                    href={`/api/c/${slug}/patients/${p.id}/export`}
+                    onClick={() => setMenuOpen(false)}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink-900/4"
+                  >
+                    <Download className="h-4 w-4 text-ink-400" />
+                    {t.patients.exportFile}
+                  </a>
+                )}
                 <button
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger-soft"
                   onClick={() => {
@@ -565,13 +608,22 @@ export function PatientProfile(props: {
                 it is not a fact about the patient — it is an instruction about
                 how the clinic behaves towards them, and it belongs beside the
                 other things this column says about their standing.
+
+                The switch reads "messages are on", not "muted", so it sits
+                coloured for the overwhelming majority of patients and turning it
+                off is what greys it out. Stored the other way round —
+                `automation_opt_out` — because the *row* has to default to
+                sending, and a column that defaults to false is the only way to
+                get that from a plain `add column`. So the inversion lives here,
+                on the one control, rather than in the schema and every query
+                that reads it.
               */}
               <Card className="p-5">
                 <div className="flex items-start gap-3">
                   <Toggle
-                    checked={p.automation_opt_out}
+                    checked={!p.automation_opt_out}
                     label={t.patients.automations.title}
-                    onChange={(v) => set({ automation_opt_out: v })}
+                    onChange={(v) => set({ automation_opt_out: !v })}
                   />
                   <div className="min-w-0 flex-1">
                     <h3 className="text-[13px] font-semibold text-ink-500">
@@ -585,28 +637,36 @@ export function PatientProfile(props: {
                   </div>
                 </div>
               </Card>
-              <Card className="p-5">
-                <h3 className="text-[13px] font-semibold text-ink-500">{t.patients.overview.balanceDue}</h3>
-                <div className={`mt-1 text-2xl font-semibold tnum ${props.balanceDue > 0 ? "text-st-pending" : ""}`}>
-                  {fmtMoney(props.balanceDue, currency, locale)}
-                </div>
-              </Card>
-              <Card className="p-5">
-                <h3 className="text-[13px] font-semibold text-ink-500">{t.patients.overview.upcoming}</h3>
-                {upcoming ? (
-                  <div className="spine mt-2 ps-3" style={{ "--spine-color": "var(--color-st-confirmed)" } as React.CSSProperties}>
-                    <div className="text-sm font-medium">
-                      {(locale === "ar" ? upcoming.service_name_ar : null) || upcoming.service_name || "—"}
-                    </div>
-                    <div className="text-[13px] text-ink-500">
-                      {fmtDateTime(upcoming.starts_at, tz, locale)}
-                      {upcoming.doctor_name ? ` · ${upcoming.doctor_name}` : ""}
-                    </div>
+              {/* What the patient owes is an Invoices figure, and the whole
+                  reason a clinic withholds that section is so that it is not on
+                  screen. A zero here would be worse than nothing: it is wrong,
+                  and it reads as fact. */}
+              {caps.invoices && (
+                <Card className="p-5">
+                  <h3 className="text-[13px] font-semibold text-ink-500">{t.patients.overview.balanceDue}</h3>
+                  <div className={`mt-1 text-2xl font-semibold tnum ${props.balanceDue > 0 ? "text-st-pending" : ""}`}>
+                    {fmtMoney(props.balanceDue, currency, locale)}
                   </div>
-                ) : (
-                  <p className="mt-1 text-sm text-ink-400">{t.patients.overview.noUpcoming}</p>
-                )}
-              </Card>
+                </Card>
+              )}
+              {caps.calendar && (
+                <Card className="p-5">
+                  <h3 className="text-[13px] font-semibold text-ink-500">{t.patients.overview.upcoming}</h3>
+                  {upcoming ? (
+                    <div className="spine mt-2 ps-3" style={{ "--spine-color": "var(--color-st-confirmed)" } as React.CSSProperties}>
+                      <div className="text-sm font-medium">
+                        {(locale === "ar" ? upcoming.service_name_ar : null) || upcoming.service_name || "—"}
+                      </div>
+                      <div className="text-[13px] text-ink-500">
+                        {fmtDateTime(upcoming.starts_at, tz, locale)}
+                        {upcoming.doctor_name ? ` · ${upcoming.doctor_name}` : ""}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-sm text-ink-400">{t.patients.overview.noUpcoming}</p>
+                  )}
+                </Card>
+              )}
               <Card className="p-5">
                 <h3 className="mb-2 text-[13px] font-semibold text-ink-500">
                   {t.patients.overview.recentActivity}

@@ -74,7 +74,7 @@ export function NewClinicForm() {
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={t.common.phone}>
-          <Input name="phone" dir="ltr" placeholder="0790744070" />
+          <Input name="phone" dir="ltr" placeholder="xxxxxxxxxx" />
         </Field>
         <Field label={t.admin.planPrice}>
           <Input name="planPrice" dir="ltr" type="number" min={0} step="0.01" defaultValue={0} />

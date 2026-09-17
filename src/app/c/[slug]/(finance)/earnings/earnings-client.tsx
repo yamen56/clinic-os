@@ -26,6 +26,7 @@ export function EarningsClient({
   flagged,
   names,
   showTeam,
+  canOpenInvoices,
 }: {
   slug: string;
   currency: string;
@@ -49,6 +50,16 @@ export function EarningsClient({
   flagged: Flagged[];
   names: Record<string, string>;
   showTeam: boolean;
+  /*
+    Whether the invoice numbers below are worth linking.
+
+    A doctor on the default permissions holds `earnings` and not `invoices` —
+    that split is the whole reason this screen exists. Linking regardless sent
+    them to an invoice page that redirects them back to the dashboard, so the
+    number read as broken rather than as deliberately withheld. Off, it stays a
+    number, which is all it was needed for.
+  */
+  canOpenInvoices: boolean;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -148,12 +159,16 @@ export function EarningsClient({
                     {detail.map((l) => (
                       <tr key={l.invoiceId} className="border-b border-line last:border-0">
                         <td className="px-5 py-2.5">
-                          <Link
-                            href={`/c/${slug}/invoices/${l.invoiceId}`}
-                            className="font-medium text-brand-700 hover:underline"
-                          >
-                            {l.number}
-                          </Link>
+                          {canOpenInvoices ? (
+                            <Link
+                              href={`/c/${slug}/invoices/${l.invoiceId}`}
+                              className="font-medium text-brand-700 hover:underline"
+                            >
+                              {l.number}
+                            </Link>
+                          ) : (
+                            <span className="font-medium">{l.number}</span>
+                          )}
                           {l.status === "void" && (
                             <span className="ms-2 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500">
                               {t.invoices.statuses.void}
@@ -277,9 +292,13 @@ export function EarningsClient({
             <ul className="grid gap-1.5">
               {flagged.map((f) => (
                 <li key={`${f.invoiceId}-${f.doctorMemberId}`} className="flex items-center justify-between gap-3 text-[13px]">
-                  <Link href={`/c/${slug}/invoices/${f.invoiceId}`} className="text-brand-700 hover:underline">
-                    {f.number}
-                  </Link>
+                  {canOpenInvoices ? (
+                    <Link href={`/c/${slug}/invoices/${f.invoiceId}`} className="text-brand-700 hover:underline">
+                      {f.number}
+                    </Link>
+                  ) : (
+                    <span>{f.number}</span>
+                  )}
                   <span className="text-ink-500">{names[f.doctorMemberId] ?? "—"}</span>
                   <span className="tabular-nums font-medium">{money(f.earned)}</span>
                 </li>

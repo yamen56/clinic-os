@@ -167,6 +167,7 @@ export default async function EarningsPage({
       flagged={data.flagged}
       names={data.names}
       showTeam={clinicWide}
+      canOpenInvoices={can(access, "invoices")}
     />
   );
 }

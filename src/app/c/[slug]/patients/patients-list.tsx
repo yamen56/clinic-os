@@ -357,7 +357,7 @@ export function PatientsList({
           <Field label={t.patients.fullName} required>
             <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           </Field>
-          <Field label={t.patients.phone} hint="0790744070" error={err || undefined}>
+          <Field label={t.patients.phone} hint="xxxxxxxxxx" error={err || undefined}>
             <Input dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+962…" />
           </Field>
           <div className="flex justify-end gap-2">

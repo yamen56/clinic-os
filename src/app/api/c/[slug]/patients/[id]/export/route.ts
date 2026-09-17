@@ -21,10 +21,17 @@ import { fileResponseHeaders } from "@/lib/download";
  *
  * Audited, deliberately and always. This is a medical record leaving the
  * building; who took it and when is part of the record itself.
+ *
+ * Gated on `patients.export`, not `patients`, and the distinction is the whole
+ * point of that capability: opening a file at the desk is the job, and walking
+ * out with it as a PDF is the thing an owner may want to withhold. The
+ * export-all route next door has always read it this way; this one used to
+ * settle for `patients`, which meant the menu item could be hidden while the URL
+ * behind it still answered.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
-  const g = await apiClinic(slug, "patients");
+  const g = await apiClinic(slug, "patients.export");
   if (!g.ok) return g.res;
   const { access } = g;
 
