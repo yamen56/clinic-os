@@ -232,6 +232,101 @@ async function main() {
   ]);
   check("a paused rule posts nothing", afterPause.rows[0].n === 1, `${afterPause.rows[0].n} rows`);
 
+  /* ---- the month is what decides, not the day -------------------------- */
+  /*
+    A repeating bill belongs to the month it falls in. Rent due on the 25th is
+    this month's rent from the 1st, and rent due on the 3rd is still this
+    month's rent when the rule is written on the 20th. Both used to record
+    nothing: the poster waited for the due day, and a new rule was created with
+    the current month already marked as handled.
+
+    Everything here is torn down at the end of the block, so the month's total
+    is back to 600 + 1200 for the profit assertions that follow.
+  */
+  const dim = local.daysInMonth!;
+  const mkSched = async (day: number, amount: number, vendor: string) =>
+    (
+      await db.query(
+        `insert into expense_schedules
+           (clinic_id, category_id, amount, vendor, method, day_of_month, active, last_posted_on)
+         values ($1, $2, $3, $4, 'transfer', $5, true, null) returning id`,
+        [clinic.id, rentCat.id, amount, vendor, day]
+      )
+    ).rows[0].id as string;
+
+  // Measured as a delta, not against a literal: this block sits after the
+  // manual expenses, the boundary-date row and the rent rule, and a hardcoded
+  // figure here would have to be re-derived every time one of those changes.
+  const beforeSchedules = await clinicExpenses(c, scope);
+  const passedDay = Math.max(1, local.day - 1);
+  const behind = await mkSched(passedDay, 310, "Bill whose day has passed");
+  const futureDay = Math.min(dim, local.day + 1);
+  const ahead = futureDay > local.day ? await mkSched(futureDay, 320, "Bill due later this month") : null;
+
+  await postRecurringExpenses();
+
+  const behindRow = (
+    await db.query(
+      `select spent_on::text as spent_on, amount from expenses where schedule_id = $1`,
+      [behind]
+    )
+  ).rows[0];
+  check(
+    "a bill whose day has already passed still counts this month",
+    !!behindRow && behindRow.spent_on === local.set({ day: passedDay }).toISODate(),
+    behindRow?.spent_on ?? "no row"
+  );
+
+  if (ahead) {
+    const aheadRow = (
+      await db.query(
+        `select spent_on::text as spent_on from expenses where schedule_id = $1`,
+        [ahead]
+      )
+    ).rows[0];
+    check(
+      "and one due later this month is recorded before its day arrives",
+      !!aheadRow && aheadRow.spent_on === local.set({ day: futureDay }).toISODate(),
+      aheadRow?.spent_on ?? "no row"
+    );
+  } else {
+    // Only on the last day of a month is there no later day to test with.
+    console.log("  --   (no later day in this month to test with)");
+  }
+
+  /*
+    Moving the day after it has posted must not bill the month twice. The claim
+    compares months rather than dates for exactly this: as dates, a new due day
+    later in the same month is greater than `last_posted_on`, and the old
+    comparison let it through.
+  */
+  await db.query(`update expense_schedules set day_of_month = $2 where id = $1`, [
+    behind,
+    Math.min(dim, passedDay + 1),
+  ]);
+  await postRecurringExpenses();
+  const twice = await db.query(`select count(*)::int n from expenses where schedule_id = $1`, [
+    behind,
+  ]);
+  check(
+    "moving the day within the month does not bill it twice",
+    twice.rows[0].n === 1,
+    `${twice.rows[0].n} rows`
+  );
+
+  const withSchedules = await clinicExpenses(c, scope);
+  check(
+    "and the month's total carries them",
+    withSchedules === beforeSchedules + 310 + (ahead ? 320 : 0),
+    `${withSchedules} from ${beforeSchedules}`
+  );
+
+  // Back to where the profit assertions below expect to find it.
+  for (const id of [behind, ahead].filter(Boolean) as string[]) {
+    await db.query(`delete from expenses where schedule_id = $1`, [id]);
+    await db.query(`delete from expense_schedules where id = $1`, [id]);
+  }
+
   // ---- the profit chain --------------------------------------------------
   /*
     No invoices in this fixture, so nothing was collected: the month is a pure
@@ -378,6 +473,72 @@ async function main() {
     "stored under the clinic, so deleting the clinic sweeps it",
     String(attached?.receipt_path).startsWith(`${clinic.id}/expenses/`),
     String(attached?.receipt_path)
+  );
+
+  /*
+    The reported case, end to end: a repeating bill described *after* its day
+    has gone by. It used to record nothing for six weeks — the rule was created
+    with the current month already marked as handled — so an owner entered a 200
+    rent and the month's expenses went on saying they had spent nothing.
+
+    Driven through the form rather than the table, because the suppression lived
+    in the server action rather than in the poster.
+  */
+  await page.goto(`${BASE}/c/${slug}/expenses`);
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Add a repeating bill", exact: true }).first().click();
+  const schedModal = page.getByRole("dialog");
+  await schedModal.waitFor({ state: "visible", timeout: 10000 });
+  await schedModal.getByLabel(/Amount/).first().fill("200");
+  await schedModal.getByLabel(/Day of the month/).first().fill(String(Math.max(1, local.day - 1)));
+  await schedModal.getByLabel(/Paid to/).first().fill("Landlord after the fact");
+  await schedModal.getByRole("button", { name: "Save", exact: true }).first().click();
+  await page.waitForTimeout(2500);
+
+  const madeToday = (
+    await db.query(
+      `select id, last_posted_on from expense_schedules
+        where clinic_id = $1 and vendor = 'Landlord after the fact'`,
+      [clinic.id]
+    )
+  ).rows[0];
+  check(
+    "a rule created after its day is not marked as already handled",
+    !!madeToday && madeToday.last_posted_on === null,
+    String(madeToday?.last_posted_on)
+  );
+
+  await postRecurringExpenses();
+  const nowPosted = (
+    await db.query(
+      `select count(*)::int n, coalesce(sum(amount),0)::numeric total
+         from expenses where schedule_id = $1`,
+      [madeToday?.id]
+    )
+  ).rows[0];
+  check(
+    "and it lands in this month rather than next",
+    nowPosted.n === 1 && Number(nowPosted.total) === 200,
+    `${nowPosted.n} rows, ${nowPosted.total}`
+  );
+
+  /*
+    Read back rather than hardcoded: this runs after the manual expenses, the
+    rent rule and the attached bill, and a literal here would have to be
+    re-derived every time one of those changes.
+  */
+  const monthNow = await clinicExpenses(c, scope);
+  const shown = monthNow.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+  const withBill = await mainText();
+  check(
+    "so the month's total on screen counts it",
+    withBill.includes(shown),
+    `want ${shown} — ${withBill.slice(0, 100)}`
   );
 
   check("no client-side errors", errors.length === 0, errors.slice(0, 2).join("; "));

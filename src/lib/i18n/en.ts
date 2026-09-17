@@ -303,7 +303,7 @@ export const en = {
     running: "Running",
     paused: "Paused",
     repeatingNote:
-      "The first entry lands next month. If the day has already passed this month, nothing is recorded now — so a bill you have already entered by hand is not duplicated.",
+      "Counted in the month it falls in, whatever day it lands on — so a bill due on the 25th is part of this month's expenses from the start of the month. The first one is recorded for this month, so check you have not already entered it by hand.",
     confirmDeleteBody: "This expense will be removed and the month's total will change.",
     confirmDeleteCategoryBody:
       "Expenses filed under it stay, and become uncategorised.",

@@ -12,6 +12,13 @@ import { licensed } from "./features";
 /**
  * Repeating bills — rent, salaries, subscriptions.
  *
+ * **A repeating bill belongs to the month it falls in, not to the day.** Rent
+ * due on the 25th is September's rent from the 1st of September; whether the
+ * clinic pays it on the 18th, the 25th or late makes no difference to which
+ * month it is a cost of. So the month's occurrence is written as soon as the
+ * month is current, and `spent_on` is the due date — the row is dated when the
+ * bill is for, and counted in the month that date falls in.
+ *
  * Driven by stored state rather than by the clock, which is the one thing that
  * matters here. Every other daily job in this file gates on an exact hour with
  * two minutes of slack, and that is right for a reminder: a missed one is stale
@@ -27,8 +34,12 @@ import { licensed } from "./features";
  *   - two workers race, and the `update` returns a row to exactly one of them
  *     (a deploy always overlaps two, so this is the normal case, not the edge);
  *   - a crash between the update and the insert rolls back both;
- *   - a worker down across the due date still catches up, because `due <= today`
- *     stays true tomorrow.
+ *   - a worker down for a week still catches up, because "this month has not
+ *     been posted" stays true tomorrow.
+ *
+ * The claim compares **months**, not dates. Comparing dates meant that moving a
+ * rule from the 13th to the 28th after it had already posted made the new due
+ * date later than `last_posted_on`, and the same month was billed twice.
  *
  * It does **not** backfill. Only the current month's occurrence is considered,
  * so a worker down for three months wakes up and posts one rent, not three.
@@ -60,7 +71,9 @@ export async function postRecurringExpenses() {
       */
       const day = Math.min(Number(s.day_of_month), local.daysInMonth ?? 28);
       const due = local.set({ day }).toISODate();
-      if (!due || local.toISODate()! < due) continue;
+      // No wait for the due day to arrive: the bill is this month's either way,
+      // and an owner reading the month's costs on the 2nd should see the rent.
+      if (!due) continue;
 
       /*
         The whole concurrency story, in one statement. Only the worker whose
@@ -71,7 +84,8 @@ export async function postRecurringExpenses() {
         `update expense_schedules
             set last_posted_on = $2::date
           where id = $1 and active
-            and (last_posted_on is null or last_posted_on < $2::date)
+            and (last_posted_on is null
+                 or date_trunc('month', last_posted_on) < date_trunc('month', $2::date))
           returning id`,
         [s.id, due]
       );

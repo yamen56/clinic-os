@@ -1222,9 +1222,15 @@ section. A purchase the clinic made is not a deduction from anybody's pay.
 
 **Repeating bills** are posted by `postRecurringExpenses` (`worker/expenses.ts`, registered in
 the scheduler's tick array). Driven by a compare-and-swap on `last_posted_on` rather than by
-the clock — see decision 76 for why an exact-hour gate would skip a month. It fires on
-`day >= the due day`, never backfills, and a rule created after its day has passed starts next
-month so it cannot duplicate a bill already entered by hand.
+the clock — see decision 76 for why an exact-hour gate would skip a month.
+
+**A bill belongs to the month it falls in, not to the day** (decisions 96–98). The month's
+occurrence is written as soon as the month is current, so rent due on the 25th is part of
+that month's expenses from the 1st, and a rule described after its day has gone by still
+records that month. `spent_on` is the due date, so the row is dated for the day the bill is
+for. The claim compares months rather than dates, so moving a rule's day mid-month cannot
+bill it twice. It never backfills: only the current month's occurrence is considered, so a
+worker down for three months posts one rent, not three.
 
 **Receipt**: one photo or PDF per expense, attachable while the expense is still being
 typed — the file is held and sent as soon as the row has an id. ≤ 10 MB, served back through
@@ -1249,10 +1255,16 @@ Expenses            −3,050        only for a reader who also holds `expenses`
 Clinic kept          2,091        may be negative, and is coloured when it is
 ```
 
-Tax comes out because otherwise the sign can be wrong (decision 78). Expenses are counted as
-paid, tax included, with no input tax reclaimed — exact for an unregistered clinic,
-deliberately conservative for a registered one. The money-in side is scoped by UTC instants
-and the money-out side by calendar dates; `clinicProfit` is the only place they meet.
+Tax comes out because otherwise the sign can be wrong (decision 78). Expenses are counted
+tax included, with no input tax reclaimed — exact for an unregistered clinic, deliberately
+conservative for a registered one. The money-in side is scoped by UTC instants and the
+money-out side by calendar dates; `clinicProfit` is the only place they meet.
+
+One-off expenses count when they happen; **repeating bills count from the start of the month
+they fall in**, which makes this figure an accrual on the money-out side against takings
+measured on the day they arrived (decision 98). Deliberate: the question asked of this screen
+is what the month costs, and a rent that appeared on the 25th would otherwise make every
+month look profitable for three weeks.
 
 ---
 

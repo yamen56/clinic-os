@@ -249,17 +249,21 @@ export async function saveExpenseScheduleAction(
       if (!r.rowCount) return { error: "not_found" };
     } else {
       /*
-        `last_posted_on` starts at today, which reads as "this month is already
-        handled". A rule created on the 14th for "the 1st" would otherwise post
-        immediately — a rent the clinic has almost certainly already entered by
-        hand, appearing the moment they finish describing it. The editor says
-        when it next posts, so the wait is visible rather than surprising.
+        `last_posted_on` starts null, so the current month posts on the next
+        tick.
+
+        It used to start at today, which read as "this month is already handled"
+        and existed to avoid duplicating a bill the clinic had already entered
+        by hand. The cost of that was worse than the thing it prevented: a rule
+        described on the 14th for "the 13th" silently did nothing for six weeks,
+        and the month's expenses did not include a bill the owner had just told
+        the system about. A duplicate is visible and one tap to delete; a
+        missing rent is neither.
       */
       const r = await c.query(
         `insert into expense_schedules
            (clinic_id, category_id, amount, vendor, note, method, day_of_month, active, last_posted_on, created_by)
-         values ($1, $2, $3, $4, $5, $6, $7, $8,
-                 ((now() at time zone (select timezone from clinics where id = $1)))::date, $9)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, null, $9)
          returning id`,
         [access.clinicId, d.categoryId, d.amount, d.vendor.trim(), d.note.trim(), d.method, d.dayOfMonth, d.active, access.session.user.id]
       );
