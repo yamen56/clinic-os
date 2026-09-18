@@ -424,7 +424,7 @@ async function main() {
       ok("name, phone and the clinic's questions are all on one step");
 
       // And there is no longer a "Continue" that leads to a second question step.
-      const send = pub.getByRole("button", { name: /إرسال الرمز|Send code/ });
+      const send = pub.getByRole("button", { name: /إرسال الرمز|تأكيد الحجز|Send code|Confirm booking/ });
       assert(await send.count(), "the details step does not submit directly");
 
       // Name and phone filled, question still blank: the step must stay shut.

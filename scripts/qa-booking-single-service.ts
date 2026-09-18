@@ -186,7 +186,7 @@ async function main() {
         await page.getByRole("button", { name: /متابعة|Next/ }).first().click();
         await page.fill('input[autocomplete="name"]', "مريم القيسي");
         await page.fill('input[autocomplete="tel"]', "0790001234");
-        await page.getByRole("button", { name: /إرسال الرمز|Send code/ }).first().click();
+        await page.getByRole("button", { name: /إرسال الرمز|تأكيد الحجز|Send code|Confirm booking/ }).first().click();
         await page.waitForTimeout(3500);
 
         const appt = (

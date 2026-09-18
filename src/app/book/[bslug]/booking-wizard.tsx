@@ -72,6 +72,7 @@ export function BookingWizard({
   approvalMode,
   lockedDoctor,
   skipServiceStep,
+  verifyByOtp,
 }: {
   bslug: string;
   clinic: {
@@ -116,6 +117,21 @@ export function BookingWizard({
    * nothing, which is the safe direction.
    */
   skipServiceStep: boolean;
+  /**
+   * Whether a WhatsApp code stands between this form and the appointment.
+   *
+   * Resolved on the server from both halves of the question — the link's
+   * setting and whether the clinic's WhatsApp is actually connected — because
+   * the answer decides what this screen promises: a button that says "Send
+   * code" and a line that says a code is coming are wrong on a page that books
+   * immediately, and were already wrong for a clinic whose WhatsApp was down.
+   *
+   * It labels, it does not decide. `/start` reads the link's own row and can
+   * disagree if WhatsApp drops or reconnects between this render and the tap;
+   * both directions are handled, and a browser claiming no code is needed is
+   * never believed.
+   */
+  verifyByOtp: boolean;
 }) {
   const [locale, setLocale] = useState<"ar" | "en">(clinic.defaultLocale);
   const t = locale === "en" ? words.en : words.ar;
@@ -771,7 +787,7 @@ export function BookingWizard({
                   />
                   <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-ink-500">
                     <MessageCircle className="h-3.5 w-3.5" />
-                    {t.phoneHint}
+                    {verifyByOtp ? t.phoneHint : t.phoneHintNoCode}
                   </p>
                 </div>
               </div>
@@ -780,7 +796,7 @@ export function BookingWizard({
                 <>
                   <div className="mt-6 mb-3 flex items-center gap-2 border-t border-line pt-5">
                     <ClipboardList className="h-4 w-4" style={{ color: "var(--bk)" }} />
-                    <span className="text-[13px] text-ink-500">{t.fewMoreHint}</span>
+                    <span className="text-[13px] font-semibold text-ink-900">{t.fewMore}</span>
                   </div>
                   <div className="grid gap-4">
                     {activeQuestions.map((q) => (
@@ -820,7 +836,7 @@ export function BookingWizard({
                   disabled={!detailsValid || !questionsValid || busy}
                   busy={busy}
                   onClick={submit}
-                  label={t.sendCode}
+                  label={verifyByOtp ? t.sendCode : t.verifyAndBook}
                 />
               </div>
               <PrivacyNote t={t} />

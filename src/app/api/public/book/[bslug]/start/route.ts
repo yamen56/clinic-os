@@ -96,9 +96,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
     answers: checked.answers,
   };
 
-  // Clinic WhatsApp offline → book unverified rather than losing the patient
-  if (!data.clinic.wa_connected) {
-    const result = await finalizeBooking(data, phone, payload, false);
+  /*
+    Two ways a booking skips the code, and they are not the same event.
+
+    The clinic turned verification off for this link — a decision about a page
+    they hand out at the desk or run in an ad, made knowing the number is then
+    whatever was typed. Or the clinic's WhatsApp is disconnected, in which case
+    no code *can* be sent and refusing the booking would lose a patient over a
+    fault they did not cause.
+
+    Which one it was is carried into the appointment's note rather than dropped,
+    because only one of them is worth a member of staff looking into.
+
+    The link setting is read here rather than trusted from the browser: the page
+    labels its own button from the same setting, but a public form proves
+    nothing, and a posted flag asking to skip verification is exactly the thing
+    an attacker would send.
+  */
+  const phoneCheck = !data.clinic.wa_connected
+    ? "wa_offline"
+    : !data.link.require_otp
+      ? "otp_off"
+      : null;
+  if (phoneCheck) {
+    const result = await finalizeBooking(data, phone, payload, phoneCheck);
     if ("error" in result) return NextResponse.json(result, { status: 409 });
     return NextResponse.json({ skipVerify: true, ...result });
   }

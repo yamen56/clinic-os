@@ -267,6 +267,14 @@ export default async function PublicBookingPage({
         link offering three and then have to guess which one the patient wanted.
       */
       skipServiceStep={data.link.skip_service_step && data.services.length === 1}
+      /*
+        Both halves, resolved here. The link may ask for a code and the clinic's
+        WhatsApp may be unable to send one — in which case `/start` books
+        immediately, as it always has, and the page should not have promised a
+        code it was never going to get. This is only what the screen says; the
+        route decides, from the link's own row.
+      */
+      verifyByOtp={data.link.require_otp && data.clinic.wa_connected}
     />
     </>
   );

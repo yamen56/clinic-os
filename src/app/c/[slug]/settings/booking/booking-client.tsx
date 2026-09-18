@@ -57,6 +57,8 @@ type LinkRow = {
   require_consent: boolean;
   /** Hide "choose a service" when this link comes down to exactly one. */
   skip_service_step: boolean;
+  /** Ask for a WhatsApp code before booking. On unless the clinic turns it off. */
+  require_otp: boolean;
 };
 
 type QuestionRow = {
@@ -176,6 +178,9 @@ export function BookingLinksClient({
         consentTextAr: editing.consent_text_ar ?? "",
         requireConsent: editing.require_consent ?? false,
         skipServiceStep: editing.skip_service_step ?? false,
+        // `?? true` on the way out as well as in the schema: a row read before
+        // this column existed must not be saved back as "verification off".
+        requireOtp: editing.require_otp ?? true,
       });
       if (r.error) {
         toast(
@@ -698,6 +703,26 @@ export function BookingLinksClient({
                 </Field>
               </div>
             )}
+
+            {/*
+              Its own block rather than another row in the group above, because
+              it is the only setting here that removes a check rather than
+              changing what the page shows — and the sentence underneath is what
+              makes it a decision instead of a switch.
+
+              `!== false` so a link saved before this column existed reads as on.
+            */}
+            <div className="grid gap-3">
+              <ToggleRow
+                label={tb.requireOtp}
+                hint={tb.requireOtpHint}
+                checked={editing.require_otp !== false}
+                onChange={(v) => setEditing({ ...editing, require_otp: v })}
+              />
+              {editing.require_otp === false && (
+                <p className="text-[13px] text-warning">{tb.requireOtpOffWarning}</p>
+              )}
+            </div>
 
             <label className="flex items-center gap-2.5">
               <Toggle checked={editing.active ?? true} onChange={(v) => setEditing({ ...editing, active: v })} />

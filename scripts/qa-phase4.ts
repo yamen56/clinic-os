@@ -116,7 +116,13 @@ async function main() {
   await page.click("text=متابعة");
   await page.fill('input[placeholder="اسمك الكامل"]', "رنا الشريف");
   await page.fill('input[inputmode="tel"]', "0781234567");
-  await page.click("text=إرسال الرمز");
+  /*
+    The submit button is named for what it is about to do, and that now depends
+    on whether a code is coming: this clinic's WhatsApp is offline, so the page
+    correctly offers to book rather than promising a code it cannot send. Both
+    wordings are accepted because this test is about the flow, not the label.
+  */
+  await page.getByRole("button", { name: /إرسال الرمز|تأكيد الحجز/ }).first().click();
   await page.waitForSelector("text=تم تأكيد الحجز", { timeout: 15000 });
   console.log(`✓ offline booking confirmed instantly (slot ${firstSlotText?.trim()})`);
 
@@ -159,7 +165,8 @@ async function main() {
   await page.click("text=متابعة");
   await page.fill('input[placeholder="اسمك الكامل"]', "خالد النجار");
   await page.fill('input[inputmode="tel"]', "0791112223");
-  await page.click("text=إرسال الرمز");
+  // WhatsApp is connected by this point, so here it really does say "send code".
+  await page.getByRole("button", { name: /إرسال الرمز|تأكيد الحجز/ }).first().click();
   await page.waitForSelector("text=أدخل الرمز", { timeout: 15000 });
   console.log("✓ OTP step shown");
 

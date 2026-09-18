@@ -31,6 +31,14 @@ export type PublicLink = {
     require_consent: boolean;
     /** Opt-in: hide the service step when the link resolves to exactly one. */
     skip_service_step: boolean;
+    /**
+     * Whether this link asks for a WhatsApp code before it books.
+     *
+     * On by default and for every existing link. Off is a decision the clinic
+     * makes about one link — a front-desk page, a demo page — knowing the number
+     * on the booking is then whatever was typed.
+     */
+    require_otp: boolean;
     /** Restrict to one section, picking up its future services. */
     section_id: string | null;
   };
@@ -201,6 +209,21 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
         require_consent: link.require_consent,
         skip_service_step: link.skip_service_step ?? false,
         section_id: link.section_id ?? null,
+        /*
+          `?? true`, and it matters more than the other fallbacks on this list.
+
+          The query is `select bl.*`, but this object is built field by field and
+          then cast `as PublicLink` — so a column that is not named here is
+          silently absent, and the cast stops the compiler from saying so. For
+          `require_otp` that absence reads as `undefined`, which `/start` would
+          take as "this link does not verify": every booking page on the platform
+          would have stopped asking for a code, quietly, with the types green.
+
+          So the fallback is the safe direction rather than the tidy one. The
+          column is NOT NULL DEFAULT true, so this can only fire if the field
+          goes missing again.
+        */
+        require_otp: link.require_otp ?? true,
       },
       clinic,
       services,

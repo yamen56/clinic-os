@@ -202,8 +202,15 @@ async function main() {
     await shows(pub, new RegExp(QUESTION), "the clinic's question never reached the patient");
     ok("the patient is asked the clinic's question beside their details");
 
-    // Required, so the submit button must still be refusing.
-    const submit = pub.getByRole("button", { name: /إرسال الرمز|Send code/ });
+    /*
+      Required, so the submit button must still be refusing.
+
+      Matched on either wording: the button is named for what it is about to do,
+      and a link that does not ask for a WhatsApp code — or a clinic whose
+      WhatsApp cannot send one — books straight from here instead. What is being
+      asserted is that the button is shut, not what it is called.
+    */
+    const submit = pub.getByRole("button", { name: /إرسال الرمز|تأكيد الحجز|Send code|Confirm booking/ });
     assert(await submit.isDisabled(), "a required question did not block the submit button");
     ok("an unanswered required question blocks the booking on the page too");
 

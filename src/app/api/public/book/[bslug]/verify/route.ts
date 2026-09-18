@@ -72,7 +72,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
     return NextResponse.json(check, { status });
   }
 
-  const result = await finalizeBooking(data, check.phone, check.payload, true);
+  const result = await finalizeBooking(data, check.phone, check.payload, "verified");
   if ("error" in result) return NextResponse.json(result, { status: 409 });
   return NextResponse.json(result);
 }

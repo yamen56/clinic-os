@@ -22,6 +22,23 @@ export type BookingPayload = {
 };
 
 /**
+ * How the number on this booking came to be trusted, or not.
+ *
+ * Two different things now produce an unverified number, and collapsing them
+ * into one boolean would put the wrong explanation in front of staff. Turning
+ * the code off is a decision the clinic made about this link; WhatsApp being
+ * disconnected is a fault that happened to this booking. Whoever opens the
+ * appointment needs to know which, because only one of them is worth chasing.
+ */
+export type PhoneCheck = "verified" | "otp_off" | "wa_offline";
+
+/** What an unverified booking says on its file, in the clinic's own diary. */
+const UNVERIFIED_NOTE: Record<Exclude<PhoneCheck, "verified">, string> = {
+  wa_offline: "Booked while WhatsApp was offline — number not verified.",
+  otp_off: "Booked without a code — this link does not ask for WhatsApp verification.",
+};
+
+/**
  * Creates the patient (identity rule) + appointment, queues the WhatsApp
  * confirmation, and notifies staff. Used by both the OTP and offline paths.
  */
@@ -29,7 +46,7 @@ export async function finalizeBooking(
   data: PublicLink,
   phone: string,
   p: BookingPayload,
-  verified: boolean
+  phoneCheck: PhoneCheck
 ): Promise<
   | { error?: string }
   | { appointmentId: string; startISO: string; status: string; meetingUrl: string | null }
@@ -137,7 +154,7 @@ export async function finalizeBooking(
         start.toUTC().toISO(),
         end.toUTC().toISO(),
         status,
-        verified ? "" : "Booked while WhatsApp was offline — number not verified.",
+        phoneCheck === "verified" ? "" : UNVERIFIED_NOTE[phoneCheck],
         // Stringified, or a JS array reaches jsonb as a Postgres array literal.
         JSON.stringify(answers),
         meetingUrl,

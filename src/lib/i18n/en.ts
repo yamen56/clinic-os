@@ -1681,6 +1681,9 @@ export const en = {
     fullName: "Your full name",
     phone: "WhatsApp number",
     phoneHint: "We'll send a confirmation code to this number on WhatsApp.",
+    /* The same line for a link that does not ask for a code. The number still
+       matters — it is where the confirmation and the reminder go. */
+    phoneHintNoCode: "We'll send your booking confirmation to this number on WhatsApp.",
     sendCode: "Send code",
     enterCode: "Enter the code we sent on WhatsApp",
     codePlaceholder: "6-digit code",
@@ -1708,8 +1711,7 @@ export const en = {
     afternoon: "Afternoon",
     evening: "Evening",
     nextAvailable: "Next available:",
-    fewMore: "A few questions",
-    fewMoreHint: "The clinic asks these so your visit is ready before you arrive.",
+    fewMore: "Additional questions",
     optional: "(optional)",
     choose: "Choose…",
     answerRequired: "Please answer the highlighted question.",
@@ -1773,6 +1775,10 @@ export const en = {
       "This link offers {n} services, so the step is still shown. Restrict it to one for this to take effect.",
     requireConsent: "Require agreement before booking",
     requireConsentHint: "A tick-box the patient must accept, in your words.",
+    requireOtp: "Verify the number on WhatsApp",
+    requireOtpHint: "Sends a six-digit code and waits for it before the appointment is made.",
+    requireOtpOffWarning:
+      "Without it, anyone can book using any number — and a number typed wrongly gets no confirmation and no reminder. These bookings are marked unverified on the appointment. Turn it off for a link you hand out in person, not one you advertise.",
     consentText: "Agreement text",
     consentTextAr: "Agreement text (Arabic)",
     consentTextRequired: "Write the agreement text patients must accept.",
