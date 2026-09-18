@@ -30,7 +30,13 @@ const extraFieldSchema = z.object({
     .string()
     .trim()
     .regex(/^[a-z][a-z0-9_]{0,38}$/),
-  label: z.string().trim().min(1).max(120),
+  /*
+    Either label alone is enough — a question is asked in whichever language
+    the signer reads, and both screens fall back to the other one. What is not
+    allowed is neither, which is checked below so it can be reported as itself
+    rather than as a failure of the whole template.
+  */
+  label: z.string().trim().max(120).default(""),
   label_ar: z.string().trim().max(120).default(""),
   type: z.enum(["text", "number", "date", "select", "checkbox", "longtext"]).default("text"),
   required: z.boolean().default(false),
@@ -82,12 +88,20 @@ export async function saveTemplateAction(
   const access = await requireClinic(slug);
   if (!can(access, "settings")) return { error: "forbidden" };
   const parsed = templateSchema.safeParse(input);
-  if (!parsed.success) return { error: "invalid" };
+  if (!parsed.success) {
+    console.error(
+      "[template save] rejected:",
+      parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")
+    );
+    return { error: "invalid" };
+  }
   const d = parsed.data;
 
   // An uploaded template carries a file instead of a body.
   if (d.source === "template" && !d.body.trim() && !d.bodyAr.trim()) return { error: "bodyRequired" };
   if (!d.signerConfig.signers.length) return { error: "signerRequired" };
+  // Named, so the editor can point at the question rather than shrug.
+  if (d.fieldsSchema.some((f) => !f.label && !f.label_ar)) return { error: "fieldLabelRequired" };
 
   // Sanitize on the way in, not just on the way out: the stored body is what a
   // later version diff and the frozen snapshot are both built from.

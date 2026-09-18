@@ -38,6 +38,17 @@ type ExtraField = {
 type SignerCfg = { role_key: string; required: boolean; order: number };
 
 /**
+ * The next free question key. Counting the questions was not enough: delete
+ * the first of two and the next one added is `q2` again, and two questions
+ * sharing a key share one answer — the second silently overwrites the first,
+ * on a screen that never shows the key at all.
+ */
+function nextQuestionKey(taken: { key: string }[]): string {
+  const used = new Set(taken.map((f) => f.key));
+  for (let n = taken.length + 1; ; n++) if (!used.has(`q${n}`)) return `q${n}`;
+}
+
+/**
  * A signature box placed on an uploaded PDF, in page fractions rather than
  * pixels. Declared here rather than imported: the placer that created these
  * is gone, but existing templates still carry boxes and this editor still has
@@ -163,6 +174,17 @@ export function TemplateEditor({
       }
       if (!signers.length) {
         toast(t.docTemplates.errors.signerRequired, "error");
+        return;
+      }
+      /*
+        A question added and left blank used to fail on the server as a plain
+        "invalid", which the editor could only show as "something went wrong" —
+        and the whole template was lost, with nothing pointing at the empty
+        question that caused it. Caught here instead, and the question is named.
+      */
+      const blank = extras.findIndex((f) => !f.label.trim() && !f.label_ar.trim());
+      if (blank >= 0) {
+        toast(t.docTemplates.errors.fieldLabelRequired.replace("{n}", String(blank + 1)), "error");
         return;
       }
       const r = await saveTemplateAction(slug, {
@@ -509,7 +531,7 @@ export function TemplateEditor({
               setExtras([
                 ...extras,
                 {
-                  key: `q${extras.length + 1}`,
+                  key: nextQuestionKey(extras),
                   label: "",
                   label_ar: "",
                   type: "text",

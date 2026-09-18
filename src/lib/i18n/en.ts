@@ -2237,6 +2237,7 @@ export const en = {
       nameRequired: "Give the template a name.",
       bodyRequired: "Write the document text in at least one language.",
       signerRequired: "Choose at least one signer.",
+      fieldLabelRequired: "Question {n} has no wording. Write it in at least one language, or remove it.",
       badPdf: "That file isn't a PDF we can read.",
       tooLarge: "The file is larger than 15 MB.",
     },

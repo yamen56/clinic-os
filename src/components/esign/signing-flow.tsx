@@ -357,7 +357,7 @@ export function SigningFlow({
               {view.extraQuestions.map((q) => (
                 <label key={q.key} className="block">
                   <span className="mb-1.5 flex items-baseline gap-1 text-[13px] font-semibold">
-                    {locale === "ar" ? q.label_ar || q.label : q.label}
+                    {locale === "ar" ? q.label_ar || q.label : q.label || q.label_ar}
                     {q.required && <span className="text-danger">*</span>}
                   </span>
                   {q.type === "select" ? (

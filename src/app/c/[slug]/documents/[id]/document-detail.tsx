@@ -846,7 +846,7 @@ export function DocumentDetailClient({
             .map((q) => (
               <Field
                 key={q.key}
-                label={locale === "ar" ? q.label_ar || q.label : q.label}
+                label={locale === "ar" ? q.label_ar || q.label : q.label || q.label_ar}
                 required={q.required}
               >
                 {q.type === "select" ? (
