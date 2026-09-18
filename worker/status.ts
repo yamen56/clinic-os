@@ -1,5 +1,4 @@
 import { withSystem } from "./db";
-import { sessions } from "./wa/session";
 
 /**
  * The worker publishing what it can do.
@@ -19,7 +18,21 @@ const REFRESH_MS = 60_000;
 
 async function publish(): Promise<void> {
   const aiReady = !!process.env.ANTHROPIC_API_KEY;
-  const whatsappReady = sessions.size > 0;
+  /*
+    Asked of the fleet, not of this process.
+
+    `sessions.size > 0` was the same question while one worker held every
+    clinic. Once they are divided by lease, a worker carrying none of them —
+    perfectly normal for a replica that has just started, or one that only
+    drains jobs — would publish "WhatsApp not ready" over the top of a
+    colleague that is running twenty clinics, and the settings screen would
+    tell those clinics their messaging is down.
+  */
+  const whatsappReady = (
+    await withSystem((c) =>
+      c.query(`select exists (select 1 from whatsapp_sessions where status = 'connected') as up`)
+    )
+  ).rows[0].up as boolean;
   // Upsert, because the row is deliberately not seeded — see the migration.
   await withSystem((c) =>
     c.query(

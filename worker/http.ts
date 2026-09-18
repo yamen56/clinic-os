@@ -1,7 +1,8 @@
 import http from "node:http";
 import { backupEngineReady } from "../src/lib/backup";
 import { withSystem } from "./db";
-import { ensureSession, stopSession, sessions } from "./wa/session";
+import { stopSession, sessions } from "./wa/session";
+import { WORKER_ID, liveSessions } from "./wa/leases";
 import { recordMessage } from "./wa/inbound";
 import { renderUrlToPdf, renderPageOverlays } from "./pdf";
 import { normalizePhone } from "../src/lib/phone";
@@ -64,19 +65,55 @@ export function startHttpServer() {
         if (req.method === "POST" && parts[0] === "sessions" && parts.length === 3) {
           const clinicId = parts[1];
           if (parts[2] === "connect") {
+            /*
+              Recorded, not performed.
+
+              This used to stop and start the socket right here, which was
+              correct while one process owned every clinic. With several, the
+              platform picks whichever worker answers and the socket usually
+              lives in a different one — so the request writes what was asked
+              and the owner acts on it within a reconcile tick (see
+              migration 0054). The QR still reaches the browser the way it
+              always has, through `whatsapp_sessions.qr` and its notify
+              trigger, so nothing about the screen changes.
+            */
             await withSystem((c) =>
               c.query(
-                `insert into whatsapp_sessions (clinic_id, desired, status)
-                 values ($1, true, 'connecting')
-                 on conflict (clinic_id) do update set desired = true, status = 'connecting', error = null`,
+                `insert into whatsapp_sessions (clinic_id, desired, status, restart_seq)
+                 values ($1, true, 'connecting', 1)
+                 on conflict (clinic_id) do update
+                   set desired = true, status = 'connecting', error = null,
+                       logout_requested = false,
+                       restart_seq = whatsapp_sessions.restart_seq + 1`,
                 [clinicId]
               )
             );
-            await stopSession(clinicId);
-            await ensureSession(clinicId);
+            /*
+              Deliberately not restarting here even when this process does own
+              the clinic. One path for every case is worth more than the three
+              seconds it saves: the owner's reconcile compares `restart_seq`
+              against what it last acted on, so a restart performed here would
+              be performed a second time on the next tick — two reconnects and
+              two QR codes for one click.
+            */
             return send(200, { ok: true });
           }
           if (parts[2] === "disconnect") {
+            /*
+              Logging out unlinks the device on the clinic's phone, and that
+              needs the live socket. When it is not here, the flag asks the
+              worker that has it to do the real thing; `stopSession` below
+              still clears the auth state either way, so the session cannot
+              come back regardless of whether any worker is holding it.
+            */
+            if (!sessions.has(clinicId)) {
+              await withSystem((c) =>
+                c.query(
+                  `update whatsapp_sessions set logout_requested = true where clinic_id = $1`,
+                  [clinicId]
+                )
+              );
+            }
             await stopSession(clinicId, { logout: true });
             return send(200, { ok: true });
           }
@@ -84,12 +121,29 @@ export function startHttpServer() {
 
         // GET /health — session overview for admin monitoring
         if (req.method === "GET" && parts[0] === "health") {
+          /*
+            Read from the leases rather than from this process's own map.
+
+            Monitoring asks "does a worker really hold this clinic's socket",
+            and compares the answer against the status column to spot a
+            session that is wedged. Answered from local memory, that question
+            silently changes meaning the moment a second worker exists: every
+            clinic owned by the other replica reads as absent, which looks
+            exactly like a healthy clinic nobody is running. Each worker
+            publishes its sockets onto its lease rows, so this endpoint can
+            answer for all of them whichever one is asked.
+          */
+          const all = await liveSessions();
           return send(200, {
             ok: true,
-            sessions: [...sessions.entries()].map(([id, s]) => ({
-              clinicId: id,
+            sessions: all.map((s) => ({
+              clinicId: s.clinicId,
               connected: s.connected,
+              workerId: s.ownerId,
             })),
+            workerId: WORKER_ID,
+            /** This process's share, so an unbalanced fleet is visible. */
+            ownedHere: sessions.size,
             uptime: process.uptime(),
             /*
               Whether *this* process could take a backup, asked of the process

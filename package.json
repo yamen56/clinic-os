@@ -31,6 +31,7 @@
     "backup:list": "tsx scripts/restore.ts",
     "backup:verify": "tsx scripts/restore.ts --verify",
     "qa:backup": "tsx scripts/qa-backup.ts",
+    "qa:leases": "tsx scripts/qa-wa-leases.ts",
     "ops:test": "tsx scripts/ops-test-alert.ts",
     "ops:check": "tsx scripts/ops-test-alert.ts --check",
     "logs": "tsx scripts/logs.ts"

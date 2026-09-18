@@ -5,8 +5,17 @@
  */
 import "./env"; // must precede every other import — see worker/env.ts
 
-import { withSystem, pool } from "./db";
-import { ensureSession, sessions } from "./wa/session";
+import { pool } from "./db";
+import { ensureSession, stopSession, sessions } from "./wa/session";
+import {
+  WORKER_ID,
+  claimSessions,
+  clearLogoutRequest,
+  releaseAllLeases,
+  releaseLease,
+  renewAndRead,
+  sessionBudget,
+} from "./wa/leases";
 import { startOutboundLoop } from "./outbound";
 import { startHttpServer } from "./http";
 import { startJobLoop } from "./jobs";
@@ -17,36 +26,128 @@ import { registerEsignJobs } from "./esign";
 import { registerEinvoiceJobs } from "./einvoice";
 import { startStatusHeartbeat } from "./status";
 
-async function resumeDesiredSessions() {
-  const rows = await withSystem(async (c) => {
-    /*
-      Joined to clinics so a deleted one is skipped. Deleting a clinic clears
-      `desired` in the same transaction, but this loop runs every fifteen
-      seconds against whatever the column says — and a session that reconnected
-      from a stale row would put a closed clinic's number back online, sending
-      on behalf of people who can no longer sign in to see it.
-    */
-    const r = await c.query(
-      `select ws.clinic_id from whatsapp_sessions ws
-         join clinics cl on cl.id = ws.clinic_id
-        where ws.desired and cl.deleted_at is null`
-    );
-    return r.rows as { clinic_id: string }[];
-  });
-  for (const row of rows) {
-    if (!sessions.has(row.clinic_id)) {
-      console.log(`[worker] resuming session ${row.clinic_id}`);
-      void ensureSession(row.clinic_id);
+/**
+ * The last restart this worker acted on, per clinic.
+ *
+ * `POST /sessions/:id/connect` cannot restart the socket itself any more — it
+ * may well have landed on a worker that does not own the clinic — so it bumps
+ * `restart_seq` and the owner notices here. Holding the applied value in
+ * memory rather than writing it back keeps the request path to a single write
+ * and means a worker that takes over a clinic starts it fresh, which is the
+ * same thing a restart would have produced.
+ */
+const appliedRestart = new Map<string, string>();
+
+/**
+ * Bring this process's live sockets in line with what the database says it
+ * owns: renew the leases it holds, drop what it should not be running, start
+ * what it should, and take on more if it has room.
+ *
+ * This replaces `resumeDesiredSessions`, which connected every clinic marked
+ * desired. That was correct for exactly one worker and catastrophic for two —
+ * both would connect every number and trade `connectionReplaced` forever. See
+ * migration 0054.
+ */
+let reconciling = false;
+
+async function reconcileSessions() {
+  // Ticks are close together and a slow database must not stack them up.
+  if (reconciling || shuttingDown) return;
+  reconciling = true;
+  try {
+    const local = [...sessions.entries()].map(([clinicId, s]) => ({
+      clinicId,
+      connected: s.connected,
+    }));
+    const rows = await renewAndRead(local);
+    const byId = new Map(rows.map((r) => [r.clinicId, r]));
+
+    // What this process is running but should not be.
+    for (const { clinicId } of local) {
+      const row = byId.get(clinicId);
+      if (!row || !row.wanted) {
+        /*
+          Disconnected by the clinic, or the clinic is gone. `logout_requested`
+          means the request reached a worker that did not hold this socket, so
+          the unlink WhatsApp needs is still owed and this process is the one
+          that can make it.
+        */
+        console.log(`[worker] stopping session ${clinicId} (no longer wanted)`);
+        await stopSession(clinicId, { logout: row?.logoutRequested });
+        if (row?.logoutRequested) await clearLogoutRequest(clinicId).catch(() => {});
+        appliedRestart.delete(clinicId);
+        await releaseLease(clinicId).catch(() => {});
+        continue;
+      }
+      if (row.ownerId !== WORKER_ID) {
+        /*
+          Another worker holds the lease, which means this one stalled long
+          enough to be declared dead. Two live sockets on one number is the
+          exact failure the lease exists to prevent, and the other worker is
+          the one WhatsApp now considers current — so this side yields.
+        */
+        console.log(`[worker] yielding session ${clinicId} to ${row.ownerId}`);
+        await stopSession(clinicId);
+        appliedRestart.delete(clinicId);
+        continue;
+      }
+      if (appliedRestart.get(clinicId) !== row.restartSeq) {
+        console.log(`[worker] restarting session ${clinicId}`);
+        await stopSession(clinicId);
+        appliedRestart.set(clinicId, row.restartSeq);
+        void ensureSession(clinicId);
+      }
     }
+
+    // What it owns and is not running — after a claim, or after a crash.
+    for (const row of rows) {
+      if (!row.wanted || row.ownerId !== WORKER_ID || sessions.has(row.clinicId)) continue;
+      console.log(`[worker] resuming session ${row.clinicId}`);
+      appliedRestart.set(row.clinicId, row.restartSeq);
+      void ensureSession(row.clinicId);
+    }
+
+    // Clinics nobody is running. Taking them is what makes a second worker
+    // useful, and what picks up a dead one's clinics.
+    const unowned = rows.filter((r) => r.wanted && r.ownerId === null);
+    if (unowned.length) {
+      const taken = await claimSessions(Math.min(unowned.length, sessionBudget(sessions.size)));
+      for (const clinicId of taken) {
+        if (sessions.has(clinicId)) continue;
+        console.log(`[worker] claimed session ${clinicId}`);
+        appliedRestart.set(clinicId, byId.get(clinicId)?.restartSeq ?? "0");
+        void ensureSession(clinicId);
+      }
+    }
+  } finally {
+    reconciling = false;
   }
 }
 
+/**
+ * Fast, because a receptionist is watching for a QR code.
+ *
+ * The old loop ran every fifteen seconds and could afford to: the worker that
+ * received the connect request was the worker that acted on it, so the poll
+ * only ever caught up after a restart. Now the request is a row and the owner
+ * finds it here, so this interval *is* the response time of the connect
+ * button. One small query every three seconds buys that back.
+ */
+const RECONCILE_MS = Number(process.env.WA_RECONCILE_MS || 3000);
+
 async function main() {
-  console.log("[worker] starting");
+  console.log(`[worker] starting (id ${WORKER_ID})`);
   startHttpServer();
-  await resumeDesiredSessions();
-  // Catch sessions marked desired while the worker was down (or by another instance)
-  setInterval(() => void resumeDesiredSessions().catch(() => {}), 15000);
+  await reconcileSessions().catch((e) =>
+    console.error("[worker] reconcile failed:", (e as Error).message)
+  );
+  setInterval(
+    () =>
+      void reconcileSessions().catch((e) =>
+        console.error("[worker] reconcile failed:", (e as Error).message)
+      ),
+    RECONCILE_MS
+  );
   registerEsignJobs();
   registerEinvoiceJobs();
   startOutboundLoop();
@@ -122,6 +223,14 @@ async function shutdown(signal: string) {
   console.log(`[worker] ${signal} — closing ${sessions.size} session(s)`);
 
   const done = Promise.all([...sessions.values()].map((s) => s.stop().catch(() => {})))
+    /*
+      Hand the clinics back before the connection closes. Without this they
+      stay unclaimable for the whole lease window — forty-five seconds of
+      nobody's WhatsApp, at the one moment the replacement container is already
+      up and asking for work. The sockets are down by now either way, so this
+      only shortens the gap; if it fails, the stale-lease path still recovers.
+    */
+    .then(() => releaseAllLeases().catch(() => {}))
     .then(() => pool.end().catch(() => {}))
     .then(() => "clean" as const);
   /*

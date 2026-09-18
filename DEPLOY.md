@@ -198,19 +198,56 @@ volume to justify it — not as a prerequisite for shipping.
 
 **Realtime.** Live inbox and calendar updates use Server-Sent Events backed by
 Postgres `LISTEN`. One connection per web process, not per stream:
-`src/lib/realtime-server.ts` holds a single `LISTEN` and fans out through an
-EventEmitter capped at 500 listeners, so the ceiling is ~500 concurrent open
-tabs per replica, not a database limit. Streams end and re-open every 60s
+`src/lib/realtime-server.ts` holds a single `LISTEN` and hands each event only
+to the tabs of the clinic it belongs to. Streams end and re-open every 60s
 (`maxDuration`), which costs one auth query per tab per minute.
 
-**Where it stops scaling.** Measured 2026-08-27, in the order the limits bite:
+This used to be one `EventEmitter` with every tab on it, each handler
+discarding what was not its clinic's, and a `setMaxListeners(500)` that read
+like a ceiling. It never was one — Node's limit is a warning threshold, and tab
+501 worked while printing a line about a possible memory leak. The real cost
+was the fan-out: one clinic's message woke every tab in the country, so a busy
+inbox got more expensive as *other* clinics signed up. Now delivery is a map
+lookup, and the ceiling is memory and open sockets per replica — thousands.
+
+**Where it stops scaling.** Measured 2026-08-27, revised 2026-09-19, in the
+order the limits bite:
 
 | Limit | Roughly | Why |
 |---|---|---|
-| WhatsApp sessions | 60–100 clinics | One Baileys socket per clinic, all in a single worker process (`resumeDesiredSessions`). Unmeasured — estimate only. |
-| Slow-lane jobs | ~14,000/day | One AI reply, filing or PDF at a time. `WORKER_SLOW_LANES` raises it. |
-| Postgres connections | ~7 web replicas | `max_connections` 100, pool `PG_POOL_MAX` 12 per process. Add PgBouncer past that. |
+| WhatsApp sessions | 60–100 clinics **per worker** | One Baileys socket per clinic. Leases (0054) divide the clinics between workers, so the platform limit is this times the worker count. The per-worker figure is still unmeasured — an estimate about one process's memory. |
+| Slow-lane jobs | ~14,000/day per worker | One AI reply, filing or PDF at a time. `WORKER_SLOW_LANES` raises it, and so does another worker. |
+| Postgres connections | ~4 web replicas | `max_connections` 100 less 3 reserved, `PG_POOL_MAX` 20 plus one `LISTEN` per web process, 8 for each worker. Past that, move the request path to the transaction pooler — every RLS context is already transaction-local `set_config` and the schedule lock is `pg_advisory_xact_lock`, so it is compatible; only the `LISTEN` client must stay on the session pooler. |
 | Per-clinic data | ~30 MB | A busy multi-year practice: 5k patients, 25k appointments, 40k messages. Every screen's query is under 2ms at that size (`npm run bench`). |
+
+### Running more than one worker
+
+Everything in the worker except the WhatsApp sockets was already safe to run in
+several processes: jobs, outbound and campaigns claim with `for update skip
+locked`, and every scheduler enqueue is `on conflict (dedupe_key) do nothing`.
+The sockets were the exception, because each worker connected every clinic
+marked `desired` and the two then knocked each other off WhatsApp forever.
+
+A clinic's socket now belongs to whichever worker holds its lease
+(`wa_session_leases`, migration 0054). To scale out:
+
+1. Set **`WA_MAX_SESSIONS_PER_WORKER`** on the worker service — say 40 — and
+   raise the replica count. Without it each worker takes everything it finds,
+   which is correct but leaves the first one carrying the lot.
+2. Nothing else changes. `POST /sessions/:id/connect` records the request and
+   the owning worker acts on it within `WA_RECONCILE_MS` (3s); QR codes reach
+   the browser through the database as they always have.
+3. `/health` answers for the whole fleet, not the replica that took the call —
+   each worker publishes its live sockets onto its own lease rows.
+
+A worker that dies has its clinics picked up by the others about 45 seconds
+later (`WA_LEASE_TTL_SECONDS`); a graceful shutdown hands them back at once.
+`npm run qa:leases` is the suite that proves two workers never run the same
+socket — run it after touching any of this.
+
+Worth knowing before scaling the **web** service: the rate limiters in
+`lib/booking-public.ts` are in-process, so N replicas means N times the written
+allowance. That wants a shared counter before the replica count goes up.
 
 `shared_buffers` is 128 MB and the whole database is far smaller, so raising it
 is premature. The trigger to watch is the cache hit ratio — currently 100%:

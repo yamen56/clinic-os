@@ -73,6 +73,7 @@ const SUITES = [
   ["whatsapp: a new number warms up", "scripts/qa-whatsapp-warmup.ts"],
   ["image: the worker can find everything it imports", "scripts/qa-worker-image.ts"],
   ["whatsapp: session keys survive storage", "scripts/qa-wa-auth-state.ts"],
+  ["whatsapp: two workers never share a socket", "scripts/qa-wa-leases.ts"],
   ["charts: every clinic in its own colour", "scripts/qa-brand-chart.ts"],
 ] as const;
 

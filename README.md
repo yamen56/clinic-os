@@ -81,6 +81,7 @@ Copy `.env.example` to `.env`. Everything except the two marked optional has a w
 | `ANTHROPIC_MODEL` | Fallback model when a clinic hasn't picked one (per-clinic setting wins). |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web push credentials. Generate with `npx web-push generate-vapid-keys`. |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Same public key, exposed to the browser to subscribe. Must match `VAPID_PUBLIC_KEY`. |
+| `WA_MAX_SESSIONS_PER_WORKER` | *Optional.* How many clinics' WhatsApp sockets one worker will carry. Unset means no limit, which is right until there is a second worker — see "Running more than one worker" in `DEPLOY.md`. |
 
 ---
 
