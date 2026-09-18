@@ -662,6 +662,10 @@ export const en = {
       emptyBody: "Notes are saved as you type, and every version is kept.",
       noneInFilter: "No notes in this category",
       newCategory: "New category",
+      manageCategories: "Manage categories",
+      categoryDeleted: "Category deleted",
+      categoryDeleteHint:
+        "The notes filed under it are kept — they stay in the patient's record without a category.",
       aboutVisit: "About a visit",
       aboutVisitHint: "Files this note under one appointment, so it can be found from that visit.",
       noVisit: "Not about a specific visit",
@@ -979,6 +983,7 @@ export const en = {
     patients: "Patients",
     "patients.import": "Import a patient list",
     "patients.export": "Export the whole patient list",
+    "patients.categories": "Add and delete note categories",
     documents: "Documents",
     "documents.manage": "Create, send and edit documents",
     "documents.void": "Void a signed document",

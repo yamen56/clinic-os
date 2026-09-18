@@ -24,6 +24,21 @@ export const CAPABILITIES = [
   "patients",
   "patients.import",
   "patients.export",
+  /*
+    Who may change the note categories themselves — add one, or delete one.
+
+    Carved out of `patients`, which is where it used to live: anyone who could
+    open a patient file could invent a category, and deleting one was not
+    possible at all. Both are edits to a vocabulary the whole clinic files
+    against, not to one patient's record, so they belong to whoever decides how
+    the clinic keeps its notes rather than to everyone who writes them.
+
+    Silence in a stored map means no, the same reading `invoices.analytics` was
+    changed to: a member granted Patients — to write notes, which is the job —
+    should not also quietly be able to delete the category forty notes sit
+    under. An owner ticks this for the person who curates the list.
+  */
+  "patients.categories",
   "documents",
   "documents.manage",
   "documents.void",
@@ -80,6 +95,7 @@ export type AccessSetting = {
 const REQUIRES: Partial<Record<Capability, Capability>> = {
   "patients.import": "patients",
   "patients.export": "patients",
+  "patients.categories": "patients",
   "documents.manage": "documents",
   "documents.void": "documents",
   "invoices.analytics": "invoices",
@@ -354,7 +370,7 @@ export const CAPABILITY_GROUPS: {
   { section: "dashboard", actions: [] },
   { section: "conversations", actions: [] },
   { section: "calendar", actions: [] },
-  { section: "patients", actions: ["patients.import", "patients.export"] },
+  { section: "patients", actions: ["patients.import", "patients.export", "patients.categories"] },
   { section: "documents", actions: ["documents.manage", "documents.void"] },
   { section: "invoices", actions: ["invoices.analytics"], group: "finance" },
   { section: "earnings", actions: [], group: "finance" },

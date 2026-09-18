@@ -639,6 +639,10 @@ export const ar: Dict = {
       emptyBody: "تُحفظ الملاحظات أثناء الكتابة، ويُحتفظ بكل نسخة منها.",
       noneInFilter: "لا توجد ملاحظات في هذا التصنيف",
       newCategory: "تصنيف جديد",
+      manageCategories: "إدارة التصنيفات",
+      categoryDeleted: "تم حذف التصنيف",
+      categoryDeleteHint:
+        "الملاحظات المدرجة تحته تبقى كما هي — تظل في ملف المريض بدون تصنيف.",
       aboutVisit: "تخص زيارة",
       aboutVisitHint: "تُحفظ الملاحظة تحت موعد محدد، فتظهر عند فتح تلك الزيارة.",
       noVisit: "لا تخص زيارة محددة",
@@ -954,6 +958,7 @@ export const ar: Dict = {
     patients: "المرضى",
     "patients.import": "استيراد قائمة مرضى",
     "patients.export": "تصدير قائمة المرضى كاملة",
+    "patients.categories": "إضافة وحذف فئات الملاحظات",
     documents: "المستندات",
     "documents.manage": "إنشاء المستندات وإرسالها وتعديلها",
     "documents.void": "إلغاء مستند موقّع",

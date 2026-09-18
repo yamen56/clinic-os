@@ -42,6 +42,7 @@ export default async function PatientProfilePage({
     documents: can(access, "documents"),
     invoices: can(access, "invoices"),
     exportPatient: can(access, "patients.export"),
+    manageCategories: can(access, "patients.categories"),
   };
   const none = { rows: [] as Record<string, unknown>[] };
 

@@ -25,6 +25,7 @@ import {
   noteHistoryAction,
   setNoteAppointmentAction,
   saveNoteCategoryAction,
+  deleteNoteCategoryAction,
   deletePatientFileAction,
   setPatientStatusAction,
   mergePatientsAction,
@@ -60,6 +61,7 @@ import {
   Pencil,
   Download,
   BellOff,
+  Settings2,
 } from "lucide-react";
 
 export type NoteRow = {
@@ -184,6 +186,8 @@ export function PatientProfile(props: {
     documents: boolean;
     invoices: boolean;
     exportPatient: boolean;
+    /** Add or delete a note category — the clinic's list, not this patient's. */
+    manageCategories: boolean;
   };
   /** The clinic's country, so a new number defaults to the right dialling code. */
   country: CountryCode;
@@ -705,6 +709,7 @@ export function PatientProfile(props: {
             */
             visits={props.appointments}
             tz={tz}
+            canManageCategories={caps.manageCategories}
           />
         )}
         {tab === "appointments" && (
@@ -1284,6 +1289,7 @@ function NotesTab({
   categories,
   visits,
   tz,
+  canManageCategories,
 }: {
   slug: string;
   patientId: string;
@@ -1291,6 +1297,8 @@ function NotesTab({
   categories: NoteCategoryRow[];
   visits: NoteVisit[];
   tz: string;
+  /** Whether this member may change the clinic's list, not just file against it. */
+  canManageCategories: boolean;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -1302,6 +1310,8 @@ function NotesTab({
   const [newCat, setNewCat] = useState(false);
   const [catName, setCatName] = useState("");
   const [visitId, setVisitId] = useState<string | null>(null);
+  const [manageCats, setManageCats] = useState(false);
+  const [deleteCat, setDeleteCat] = useState<NoteCategoryRow | null>(null);
 
   const active = categories.filter((c) => c.active);
   const [categoryId, setCategoryId] = useState<string | null>(
@@ -1381,6 +1391,21 @@ function NotesTab({
       router.refresh();
     });
 
+  const removeCategory = (cat: NoteCategoryRow) =>
+    start(async () => {
+      const r = await deleteNoteCategoryAction(slug, cat.id);
+      if (r.error) {
+        toast(t.common.genericError, "error");
+        return;
+      }
+      // The composer may have been pointing at the category that just went.
+      setCategoryId((cur) => (cur === cat.id ? null : cur));
+      setFilter((cur) => (cur === cat.id ? null : cur));
+      setDeleteCat(null);
+      toast(t.patients.notes.categoryDeleted);
+      router.refresh();
+    });
+
   return (
     <div className="grid gap-4">
       {/* ------------------------------------------------------- composer */}
@@ -1400,17 +1425,33 @@ function NotesTab({
                 {catName_(c)}
               </button>
             ))}
-            <button
-              onClick={() => setNewCat(true)}
-              aria-label={t.patients.notes.newCategory}
-              className="rounded-full px-2 py-1 text-xs text-ink-400 transition-colors hover:text-ink-700"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+            {/* The clinic's list is not everyone's to change — see
+                `patients.categories` in lib/permissions.ts. Without it the
+                chips still pick a category; they just cannot add or remove one. */}
+            {canManageCategories && (
+              <>
+                <button
+                  onClick={() => setNewCat(true)}
+                  aria-label={t.patients.notes.newCategory}
+                  className="rounded-full px-2 py-1 text-xs text-ink-400 transition-colors hover:text-ink-700"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+                {categories.length > 0 && (
+                  <button
+                    onClick={() => setManageCats(true)}
+                    aria-label={t.patients.notes.manageCategories}
+                    className="rounded-full px-2 py-1 text-xs text-ink-400 transition-colors hover:text-ink-700"
+                  >
+                    <Settings2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
 
-        {newCat && (
+        {newCat && canManageCategories && (
           <div className="mb-2 flex items-center gap-2">
             <Input
               autoFocus
@@ -1535,6 +1576,48 @@ function NotesTab({
           />
         ))
       )}
+
+      {/* --------------------------------------------- manage the category list */}
+      <Modal
+        open={manageCats}
+        onClose={() => setManageCats(false)}
+        title={t.patients.notes.manageCategories}
+      >
+        <ul className="divide-y divide-line">
+          {categories.map((c) => (
+            <li key={c.id} className="flex items-center gap-3 py-2.5">
+              <span
+                className="h-3 w-3 shrink-0 rounded-full"
+                style={{ background: c.color }}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{catName_(c)}</span>
+              {!c.active && <Badge status="cancelled">{t.common.inactive}</Badge>}
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t.common.delete}
+                onClick={() => setDeleteCat(c)}
+              >
+                <Trash2 className="h-4 w-4 text-danger" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-[13px] text-ink-500">{t.patients.notes.categoryDeleteHint}</p>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!deleteCat}
+        onClose={() => setDeleteCat(null)}
+        title={t.common.confirmDeleteTitle}
+        /* Says what happens to the notes. Deleting a category next to a count
+           of forty looks like it takes them with it. It does not. */
+        body={t.patients.notes.categoryDeleteHint}
+        confirmLabel={t.common.delete}
+        cancelLabel={t.common.cancel}
+        onConfirm={() => deleteCat && removeCategory(deleteCat)}
+      />
     </div>
   );
 }

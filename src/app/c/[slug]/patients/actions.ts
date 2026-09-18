@@ -253,13 +253,17 @@ export async function noteHistoryAction(
  * Categories are clinic-defined, and managed from the patient file rather than
  * a settings screen — the moment you want a new one is the moment you are
  * writing a note that does not fit the existing ones.
+ *
+ * Gated on `patients.categories` rather than `patients`, because this edits the
+ * list the whole clinic files against and not one patient's record. Writing a
+ * note stays on `patients`; inventing or removing a category does not.
  */
 export async function saveNoteCategoryAction(
   slug: string,
   input: { id?: string; name: string; nameAr?: string; color?: string; active?: boolean }
 ): Promise<{ error?: string; id?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "patients")) return { error: "forbidden" };
+  if (!can(access, "patients.categories")) return { error: "forbidden" };
   const name = input.name.trim().slice(0, 60);
   if (!name) return { error: "invalid" };
   const color = /^#[0-9a-fA-F]{6}$/.test(input.color ?? "") ? input.color! : "#6989a6";
@@ -284,6 +288,66 @@ export async function saveNoteCategoryAction(
     );
     revalidatePath(`/c/${slug}/patients`);
     return { id: r.rows[0].id as string };
+  });
+}
+
+/**
+ * Remove a category from the clinic's list.
+ *
+ * The notes filed under it are kept. `patient_notes.category_id` and the
+ * version history behind it are both `on delete set null` (migration 0037), so
+ * they become unfiled rather than disappearing — which is the only acceptable
+ * behaviour for a clinical record, and the reason this can exist at all.
+ *
+ * The seeded categories go too. `is_system` was introduced to keep 'Clinical'
+ * and 'Administrative' from being deleted, on the reasoning that every note
+ * written before that migration pointed at one of them — but that is exactly
+ * what the `set null` handles, and a list where two of the rows have no delete
+ * button reads as broken rather than as protected. The flag stays on the row as
+ * a record of where it came from; it no longer decides this.
+ */
+export async function deleteNoteCategoryAction(
+  slug: string,
+  id: string
+): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "patients.categories")) return { error: "forbidden" };
+
+  return inClinic(access, async (c) => {
+    const row = (
+      await c.query(`select name from note_categories where id = $1 and clinic_id = $2`, [
+        id,
+        access.clinicId,
+      ])
+    ).rows[0] as { name: string } | undefined;
+    if (!row) return { error: "not_found" };
+
+    // How many notes are about to become unfiled, recorded before the delete
+    // makes it unanswerable. This is shared vocabulary, so the log is the only
+    // way to find out afterwards who removed it and what it cost.
+    const affected = (
+      await c.query(
+        `select count(*)::int as n from patient_notes where clinic_id = $1 and category_id = $2`,
+        [access.clinicId, id]
+      )
+    ).rows[0].n as number;
+
+    await c.query(`delete from note_categories where id = $1 and clinic_id = $2`, [
+      id,
+      access.clinicId,
+    ]);
+
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "note_category.delete",
+      entity: "note_category",
+      entityId: id,
+      detail: { name: row.name, notesUnfiled: affected },
+    });
+    revalidatePath(`/c/${slug}/patients`);
+    return {};
   });
 }
 
