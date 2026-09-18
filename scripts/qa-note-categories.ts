@@ -49,11 +49,24 @@ async function login(page: Page, email: string) {
   // redirects straight back into the first one's workspace and the form the
   // fill is waiting for never renders.
   await page.context().clearCookies();
-  await page.goto(`${BASE}/login`);
+  await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="password"]', PASSWORD);
-  await page.click('button[type="submit"]');
-  await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 120000 });
+  /*
+    Submit, and submit again if the first press lands before the form is
+    listening. This dev server is shared — another session compiles against it
+    — so the gap between paint and hydrate is occasionally seconds rather than
+    milliseconds, and a click into that gap is silently dropped.
+  */
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.click('button[type="submit"]');
+    try {
+      await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 45000 });
+      return;
+    } catch {
+      if (attempt === 2) throw new Error(`login did not navigate for ${email}`);
+    }
+  }
 }
 
 async function main() {
@@ -152,12 +165,12 @@ async function main() {
       const plainView = await visible();
       check("they still see the notes", plainView.includes("Follow-up in two weeks"));
       check("and the category chips", plainView.includes("متابعة"), plainView.slice(0, 70));
+      /*
+        One control gates both now — adding and deleting are the same job, so
+        they sit behind the same panel. Its absence is the whole gate.
+      */
       check(
-        "but no way to add one",
-        (await page.getByRole("button", { name: /تصنيف جديد|New category/ }).count()) === 0
-      );
-      check(
-        "and no way to manage the list",
+        "but no way into the panel",
         (await page.getByRole("button", { name: /إدارة التصنيفات|Manage categories/ }).count()) === 0
       );
 
@@ -194,12 +207,13 @@ async function main() {
       console.log("\n[the member who curates the list]");
       await login(page, curatorEmail);
       await openNotes();
-      check(
-        "sees the add control",
-        (await page.getByRole("button", { name: /تصنيف جديد|New category/ }).count()) > 0
-      );
       const manage = page.getByRole("button", { name: /إدارة التصنيفات|Manage categories/ });
-      check("and the manage control", (await manage.count()) > 0);
+      check("sees the panel control", (await manage.count()) > 0);
+      /* And only that one — the old loose `+` beside it is gone. */
+      check(
+        "and it is the only one",
+        (await page.getByRole("button", { name: /إدارة التصنيفات|Manage categories/ }).count()) === 1
+      );
 
       await manage.first().click();
       await page.waitForTimeout(600);
@@ -211,6 +225,35 @@ async function main() {
         rather than as protected, and the notes are safe either way.
       */
       check("the seeded ones included", modal.includes("إداري"), "إداري");
+
+      /* ================================= adding, from the same panel */
+      console.log("\n[adding without leaving it]");
+      /*
+        The point of this change: adding used to be a `+` in the chip row and
+        deleting a panel somewhere else. Both are edits to the same list, so
+        both are here — and the panel stays open afterwards, because a clinic
+        setting its list up adds several in a row.
+      */
+      const addField = page.getByPlaceholder(/تصنيف جديد|New category/);
+      check("the panel has the add field too", (await addField.count()) > 0);
+      await addField.first().fill("Imaging");
+      await page.getByRole("button", { name: /^\s*(إضافة|Add)\s*$/ }).first().click();
+      await page.waitForTimeout(2500);
+
+      const added = (
+        await db.query(`select 1 from note_categories where clinic_id = $1 and name = 'Imaging'`, [
+          clinic.id,
+        ])
+      ).rowCount;
+      check("the category is created", added === 1);
+      check(
+        "and the panel is still open",
+        (await page.locator("body").innerText()).includes("إدارة التصنيفات")
+      );
+      check(
+        "with the new one now listed in it",
+        (await page.locator("body").innerText()).includes("Imaging")
+      );
 
       /* ================================= the delete itself */
       console.log("\n[deleting one]");

@@ -1307,7 +1307,6 @@ function NotesTab({
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
-  const [newCat, setNewCat] = useState(false);
   const [catName, setCatName] = useState("");
   const [visitId, setVisitId] = useState<string | null>(null);
   const [manageCats, setManageCats] = useState(false);
@@ -1385,9 +1384,10 @@ function NotesTab({
         toast(t.common.genericError, "error");
         return;
       }
+      // The panel stays open: a clinic setting its list up adds several in a
+      // row, and closing after each one would make that four round trips.
       setCategoryId(r.id);
       setCatName("");
-      setNewCat(false);
       router.refresh();
     });
 
@@ -1425,56 +1425,27 @@ function NotesTab({
                 {catName_(c)}
               </button>
             ))}
-            {/* The clinic's list is not everyone's to change — see
-                `patients.categories` in lib/permissions.ts. Without it the
-                chips still pick a category; they just cannot add or remove one. */}
+            {/*
+              One control, not two. Adding and deleting are the same job —
+              editing the clinic's list — so they live together behind this,
+              rather than as a `+` here and a delete somewhere else.
+
+              The list is not everyone's to change; see `patients.categories`
+              in lib/permissions.ts. Without it the chips still pick a category,
+              they just cannot reshape the list. Shown even with no categories
+              yet, because that is when adding the first one matters most.
+            */}
             {canManageCategories && (
-              <>
-                <button
-                  onClick={() => setNewCat(true)}
-                  aria-label={t.patients.notes.newCategory}
-                  className="rounded-full px-2 py-1 text-xs text-ink-400 transition-colors hover:text-ink-700"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-                {categories.length > 0 && (
-                  <button
-                    onClick={() => setManageCats(true)}
-                    aria-label={t.patients.notes.manageCategories}
-                    className="rounded-full px-2 py-1 text-xs text-ink-400 transition-colors hover:text-ink-700"
-                  >
-                    <Settings2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </>
+              <button
+                onClick={() => setManageCats(true)}
+                aria-label={t.patients.notes.manageCategories}
+                className="rounded-full px-2 py-1 text-xs text-ink-400 transition-colors hover:text-ink-700"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+              </button>
             )}
           </div>
         </div>
-
-        {newCat && canManageCategories && (
-          <div className="mb-2 flex items-center gap-2">
-            <Input
-              autoFocus
-              value={catName}
-              onChange={(e) => setCatName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addCategory()}
-              placeholder={t.patients.notes.newCategory}
-              className="!h-8 max-w-56"
-            />
-            <Button size="sm" onClick={addCategory} loading={pending} disabled={!catName.trim()}>
-              {t.common.save}
-            </Button>
-            <button
-              onClick={() => {
-                setNewCat(false);
-                setCatName("");
-              }}
-              className="text-[13px] text-ink-500"
-            >
-              {t.common.cancel}
-            </button>
-          </div>
-        )}
 
         <Textarea
           value={draft}
@@ -1583,27 +1554,50 @@ function NotesTab({
         onClose={() => setManageCats(false)}
         title={t.patients.notes.manageCategories}
       >
-        <ul className="divide-y divide-line">
-          {categories.map((c) => (
-            <li key={c.id} className="flex items-center gap-3 py-2.5">
-              <span
-                className="h-3 w-3 shrink-0 rounded-full"
-                style={{ background: c.color }}
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{catName_(c)}</span>
-              {!c.active && <Badge status="cancelled">{t.common.inactive}</Badge>}
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t.common.delete}
-                onClick={() => setDeleteCat(c)}
-              >
-                <Trash2 className="h-4 w-4 text-danger" />
-              </Button>
-            </li>
-          ))}
-        </ul>
+        {categories.length > 0 && (
+          <ul className="divide-y divide-line">
+            {categories.map((c) => (
+              <li key={c.id} className="flex items-center gap-3 py-2.5">
+                <span
+                  className="h-3 w-3 shrink-0 rounded-full"
+                  style={{ background: c.color }}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{catName_(c)}</span>
+                {!c.active && <Badge status="cancelled">{t.common.inactive}</Badge>}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t.common.delete}
+                  onClick={() => setDeleteCat(c)}
+                >
+                  <Trash2 className="h-4 w-4 text-danger" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/*
+          Adding sits under the list it adds to, so the whole list is one
+          screen: what exists, what can go, and what can be added next. Enter
+          submits, because this is a single field and reaching for the button
+          is the slower way to do the obvious thing.
+        */}
+        <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+          <Input
+            value={catName}
+            onChange={(e) => setCatName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && catName.trim() && addCategory()}
+            placeholder={t.patients.notes.newCategory}
+            className="!h-9 flex-1"
+          />
+          <Button size="sm" onClick={addCategory} loading={pending} disabled={!catName.trim()}>
+            <Plus className="h-4 w-4" />
+            {t.common.add}
+          </Button>
+        </div>
+
         <p className="mt-3 text-[13px] text-ink-500">{t.patients.notes.categoryDeleteHint}</p>
       </Modal>
 
