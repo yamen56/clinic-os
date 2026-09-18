@@ -181,7 +181,36 @@ export function ExpensesClient({
     hasReceipt: false,
   });
 
-  const run = (fn: () => Promise<{ error?: string }>, ok: () => void) =>
+  /*
+    Close first, write second.
+
+    The dialog used to stay open until the server came back, which on a phone on
+    clinic wifi reads as a Save button that did nothing — so people press it
+    again. Nothing here needs the server's permission to close: the form is
+    already valid by the time the button is enabled, and the writes that can
+    fail do so for reasons a person cannot fix by looking at the dialog. So the
+    click is answered at once and `undo` puts the draft back on the rare failure,
+    with the toast saying why.
+
+    `fn` captures the draft from this render, not from state, so clearing it
+    above does not empty what gets sent.
+  */
+  const run = (
+    fn: () => Promise<{ error?: string }>,
+    done: () => void,
+    undo?: () => void
+  ) => {
+    /*
+      Outside `start`, and that is the whole fix rather than a detail.
+
+      `useTransition` marks everything inside its callback as non-urgent, so a
+      `setState` in there does not paint until the transition settles — which
+      here means after the write *and* the refresh that follows it. Closing the
+      dialog from inside was therefore never going to be immediate no matter
+      where in the callback it sat. The close is an urgent update; the write is
+      the transition.
+    */
+    done();
     start(async () => {
       const r = await fn();
       if (r.error) {
@@ -189,12 +218,13 @@ export function ExpensesClient({
           r.error === "duplicate" ? t.expenses.duplicateCategory : t.common.genericError,
           "error"
         );
+        undo?.();
         return;
       }
       toast(t.common.saved);
-      ok();
       router.refresh();
     });
+  };
 
   const maxCategory = Math.max(1, ...byCategory.map((b) => b.total));
 
@@ -745,7 +775,11 @@ export function ExpensesClient({
                 loading={pending}
                 disabled={!catDraft.name.trim()}
                 onClick={() =>
-                  run(() => saveExpenseCategoryAction(slug, catDraft), () => setCatDraft(null))
+                  run(
+                    () => saveExpenseCategoryAction(slug, catDraft),
+                    () => setCatDraft(null),
+                    () => setCatDraft(catDraft)
+                  )
                 }
               >
                 {t.common.save}
@@ -847,7 +881,8 @@ export function ExpensesClient({
                 onClick={() =>
                   run(
                     () => saveExpenseScheduleAction(slug, schedDraft),
-                    () => setSchedDraft(null)
+                    () => setSchedDraft(null),
+                    () => setSchedDraft(schedDraft)
                   )
                 }
               >

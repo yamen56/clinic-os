@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { withSystem } from "./db";
 import { licensed } from "./features";
+import { postScheduleMonth } from "../src/lib/expenses";
 
 /*
   Its own module rather than one more function in the scheduler, and not only
@@ -65,46 +66,19 @@ export async function postRecurringExpenses() {
       if (!local.isValid) continue;
 
       /*
-        This month's occurrence, clamped to the month's own length — so a rule
-        that says "the 31st" means the 28th in February rather than never firing,
-        which is what somebody choosing 31 meant by it.
+        The writing itself lives in `src/lib/expenses` because the expenses
+        screen calls it too — a rule saved by hand posts its month there and
+        then, instead of the owner watching an unchanged total for up to a
+        minute. One copy, because the half that drifted would be this one.
       */
-      const day = Math.min(Number(s.day_of_month), local.daysInMonth ?? 28);
-      const due = local.set({ day }).toISODate();
-      // No wait for the due day to arrive: the bill is this month's either way,
-      // and an owner reading the month's costs on the 2nd should see the rent.
-      if (!due) continue;
-
-      /*
-        The whole concurrency story, in one statement. Only the worker whose
-        update actually moves the row gets to insert, and the insert rides in
-        the same transaction.
-      */
-      const claimed = await c.query(
-        `update expense_schedules
-            set last_posted_on = $2::date
-          where id = $1 and active
-            and (last_posted_on is null
-                 or date_trunc('month', last_posted_on) < date_trunc('month', $2::date))
-          returning id`,
-        [s.id, due]
-      );
-      if (!claimed.rowCount) continue;
-
-      /*
-        A frozen copy, not a live reference: what the rule says today is what
-        this month cost, and editing it next week is a statement about next
-        month. `spent_on` is the due date rather than today, so a post that
-        lands two days late is still dated correctly.
-      */
-      await c.query(
-        `insert into expenses
-           (clinic_id, category_id, schedule_id, amount, vendor, note, spent_on, method)
-         values ($1, $2, $3, $4, $5, $6, $7::date, $8)
-         on conflict do nothing`,
-        [s.clinic_id, s.category_id, s.id, s.amount, s.vendor, s.note, due, s.method]
-      );
-      console.log(`[expenses] posted ${s.vendor || "recurring"} for ${s.clinic_id} on ${due}`);
+      const posted = await postScheduleMonth(c, s, {
+        day: local.day,
+        daysInMonth: local.daysInMonth ?? 28,
+        iso: (d) => local.set({ day: d }).toISODate()!,
+      });
+      if (posted) {
+        console.log(`[expenses] posted ${s.vendor || "recurring"} for ${s.clinic_id}`);
+      }
     }
   });
 }

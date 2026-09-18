@@ -202,3 +202,79 @@ function toISODate(v: unknown): string {
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
+
+/** One repeating bill, as both the worker and the expenses screen need it. */
+export type ScheduleRow = {
+  id: string;
+  clinic_id: string;
+  category_id: string | null;
+  amount: string | number;
+  vendor: string | null;
+  note: string | null;
+  method: string;
+  day_of_month: number;
+};
+
+/**
+ * Write this month's occurrence of a repeating bill, if it is not written yet.
+ *
+ * Shared, and that is the point. The worker calls it once a minute for every
+ * clinic; the expenses screen calls it for the one rule somebody has just
+ * saved, so the bill is in the month's total by the time the page comes back
+ * rather than up to a minute later. Two copies of this would drift, and the
+ * half that drifted would be the one nobody watches.
+ *
+ * Idempotent by construction: the claim moves `last_posted_on` and only the
+ * caller whose update actually moved it goes on to insert, both in whatever
+ * transaction the caller is already in. So the screen and the worker racing on
+ * the same rule at the same moment produce one row, not two — which is the
+ * normal case now, not the edge.
+ *
+ * Returns whether this call was the one that wrote it.
+ */
+export async function postScheduleMonth(
+  c: PoolClient,
+  s: ScheduleRow,
+  /** Luxon-style zone name; the clinic's own, because the month is theirs. */
+  local: { day: number; daysInMonth: number; iso: (day: number) => string }
+): Promise<boolean> {
+  /*
+    This month's occurrence, clamped to the month's own length — so a rule that
+    says "the 31st" means the 28th in February rather than never firing, which
+    is what somebody choosing 31 meant by it.
+  */
+  const day = Math.min(Number(s.day_of_month), local.daysInMonth);
+  const due = local.iso(day);
+  if (!due) return false;
+
+  /*
+    Months, not dates. As dates, moving a rule from the 13th to the 28th after
+    it had already posted made the new due date later than `last_posted_on`,
+    and the same month was billed twice.
+  */
+  const claimed = await c.query(
+    `update expense_schedules
+        set last_posted_on = $2::date
+      where id = $1 and active
+        and (last_posted_on is null
+             or date_trunc('month', last_posted_on) < date_trunc('month', $2::date))
+      returning id`,
+    [s.id, due]
+  );
+  if (!claimed.rowCount) return false;
+
+  /*
+    A frozen copy, not a live reference: what the rule says today is what this
+    month cost, and editing it next week is a statement about next month.
+    `spent_on` is the due date, so a row posted early or late is still dated for
+    the day the bill is for.
+  */
+  await c.query(
+    `insert into expenses
+       (clinic_id, category_id, schedule_id, amount, vendor, note, spent_on, method)
+     values ($1, $2, $3, $4, $5, $6, $7::date, $8)
+     on conflict do nothing`,
+    [s.clinic_id, s.category_id, s.id, s.amount, s.vendor ?? "", s.note ?? "", due, s.method]
+  );
+  return true;
+}

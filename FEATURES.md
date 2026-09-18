@@ -1220,8 +1220,11 @@ section. A purchase the clinic made is not a deduction from anybody's pay.
   in a total. `day_of_month` 1–31, clamped to the month's last day, so "the 31st" means the
   28th in February rather than never firing.
 
-**Repeating bills** are posted by `postRecurringExpenses` (`worker/expenses.ts`, registered in
-the scheduler's tick array). Driven by a compare-and-swap on `last_posted_on` rather than by
+**Repeating bills** are posted by `postScheduleMonth` (`src/lib/expenses.ts`), called two ways:
+by `postRecurringExpenses` (`worker/expenses.ts`, registered in the scheduler's tick array) for
+every clinic once a minute, and by the save on the expenses screen for the rule just entered —
+so its bill is in the month's total when the page comes back rather than up to a minute later.
+The claim on `last_posted_on` makes the two safe to race. Driven by stored state rather than by
 the clock — see decision 76 for why an exact-hour gate would skip a month.
 
 **A bill belongs to the month it falls in, not to the day** (decisions 96–98). The month's

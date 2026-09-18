@@ -5,6 +5,8 @@ import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { deleteFile } from "@/lib/storage";
+import { postScheduleMonth } from "@/lib/expenses";
+import { DateTime } from "luxon";
 import { z } from "zod";
 import type { PoolClient } from "pg";
 
@@ -268,6 +270,44 @@ export async function saveExpenseScheduleAction(
         [access.clinicId, d.categoryId, d.amount, d.vendor.trim(), d.note.trim(), d.method, d.dayOfMonth, d.active, access.session.user.id]
       );
       id = r.rows[0].id as string;
+    }
+
+    /*
+      This month's occurrence, written now rather than on the worker's next
+      tick.
+
+      The bill belongs to this month the moment the rule exists, and waiting up
+      to a minute for a background pass to agree is a screen that looks like it
+      did not save. The same function the worker calls, in this request's own
+      transaction: the claim on `last_posted_on` means whichever of the two gets
+      there first writes the row and the other does nothing, so the two racing
+      is ordinary rather than a problem.
+
+      Only while the rule is running. A paused one is a statement about not
+      being billed.
+    */
+    if (d.active) {
+      const local = DateTime.now().setZone(access.clinic.timezone);
+      if (local.isValid) {
+        await postScheduleMonth(
+          c,
+          {
+            id: id!,
+            clinic_id: access.clinicId,
+            category_id: d.categoryId,
+            amount: d.amount,
+            vendor: d.vendor.trim(),
+            note: d.note.trim(),
+            method: d.method,
+            day_of_month: d.dayOfMonth,
+          },
+          {
+            day: local.day,
+            daysInMonth: local.daysInMonth ?? 28,
+            iso: (day) => local.set({ day }).toISODate()!,
+          }
+        );
+      }
     }
 
     await audit(c, {

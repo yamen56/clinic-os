@@ -492,7 +492,18 @@ async function main() {
   await schedModal.getByLabel(/Amount/).first().fill("200");
   await schedModal.getByLabel(/Day of the month/).first().fill(String(Math.max(1, local.day - 1)));
   await schedModal.getByLabel(/Paid to/).first().fill("Landlord after the fact");
+  /*
+    Timed, because the complaint was that saving felt slow rather than that it
+    failed. The dialog holds no server state — the form is valid before Save is
+    enabled — so closing it is a local decision and must not wait on a round
+    trip. A second is far longer than that takes and far shorter than a slow
+    write, so this catches the close moving back behind the await.
+  */
+  const clickedAt = Date.now();
   await schedModal.getByRole("button", { name: "Save", exact: true }).first().click();
+  await schedModal.waitFor({ state: "hidden", timeout: 5000 });
+  const closedIn = Date.now() - clickedAt;
+  check("the dialog answers the click rather than the server", closedIn < 1000, `${closedIn}ms`);
   await page.waitForTimeout(2500);
 
   const madeToday = (
@@ -502,14 +513,15 @@ async function main() {
       [clinic.id]
     )
   ).rows[0];
-  check(
-    "a rule created after its day is not marked as already handled",
-    !!madeToday && madeToday.last_posted_on === null,
-    String(madeToday?.last_posted_on)
-  );
+  check("the rule itself is saved", !!madeToday, String(madeToday?.id));
 
-  await postRecurringExpenses();
-  const nowPosted = (
+  /*
+    Written by the save, not by the worker — no `postRecurringExpenses()` here
+    on purpose. Waiting for the next tick meant up to a minute of the month's
+    total not moving after somebody had just entered a bill, which reads as a
+    Save that failed.
+  */
+  const onSave = (
     await db.query(
       `select count(*)::int n, coalesce(sum(amount),0)::numeric total
          from expenses where schedule_id = $1`,
@@ -517,9 +529,21 @@ async function main() {
     )
   ).rows[0];
   check(
-    "and it lands in this month rather than next",
-    nowPosted.n === 1 && Number(nowPosted.total) === 200,
-    `${nowPosted.n} rows, ${nowPosted.total}`
+    "and its bill for this month is written by the save itself",
+    onSave.n === 1 && Number(onSave.total) === 200,
+    `${onSave.n} rows, ${onSave.total}`
+  );
+
+  // And the worker coming along afterwards does not write a second one.
+  await postRecurringExpenses();
+  const afterTick = await db.query(
+    `select count(*)::int n from expenses where schedule_id = $1`,
+    [madeToday?.id]
+  );
+  check(
+    "and the worker's next pass does not double it",
+    afterTick.rows[0].n === 1,
+    `${afterTick.rows[0].n} rows`
   );
 
   /*
