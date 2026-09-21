@@ -671,3 +671,75 @@ is always a key — but if that ever stopped being true, folding everyone into o
 bucket would rate-limit the entire internet as a single visitor and take every
 public page dark, silently, at 300 requests a minute. That failure is worse than
 the flood, so it is not risked.
+
+## Signing in with Apple
+
+Both third-party sign-ins are optional and independent. A provider whose
+variables are missing has its button removed from the login page rather than
+rendered into a redirect loop, so the app runs perfectly well with neither — and
+`qa-apple-signin` asserts the password form is still there whatever the providers
+are doing.
+
+Apple's becomes non-optional the day Clinicti goes to the App Store. **Review
+guideline 4.8** obliges any app offering a third-party sign-in to offer Apple's
+as well, and Clinicti offers Google's. Set this up before the first submission,
+not after the first rejection.
+
+### What to create, at developer.apple.com
+
+Four values, all four required, or the button does not appear.
+
+1. **Identifiers ▸ Services IDs ▸ +** — create one (e.g. `app.clinicti.signin`).
+   This is `APPLE_CLIENT_ID`. It is *not* the bundle identifier: a native app and
+   this web flow are two separate clients, and only a Services ID can carry a web
+   Return URL. Enable "Sign in with Apple" on it, press Configure, and set:
+   - Domains: `app.clinicti.app`
+   - Return URLs: `https://app.clinicti.app/api/auth/apple/callback`
+
+   The Return URL must match `${APP_URL}` exactly, scheme and all. Apple compares
+   it as a string.
+
+2. **Keys ▸ + ▸ Sign in with Apple** — create a key, attach it to the primary App
+   ID, download the `.p8`. Its id is `APPLE_KEY_ID`; the file's contents are
+   `APPLE_PRIVATE_KEY`. **Apple lets you download it once.** Railway cannot hold a
+   literal newline, so paste it with `\n` escapes — both forms parse.
+
+3. **`APPLE_TEAM_ID`** — ten characters, top right of the developer portal.
+
+Set all four on the **web** service only. The worker never touches auth.
+
+### It cannot be tested against localhost
+
+Apple rejects an `http://` Return URL, and the handshake cookie is
+`SameSite=None`, which browsers require to be `Secure`. Both are deliberate: the
+callback is a cross-site POST, and a `Lax` cookie is withheld on exactly that
+request, so a cookie written the way the Google one is would make every genuine
+sign-in fail as a state mismatch. Test on the deployed app, or through a tunnel
+with a real certificate.
+
+`npm run qa` covers everything that does not need a real Apple ID — every refusal
+the callback owes, the 303 the POST must be answered with, and the ES256 client
+secret, which is signed against a throwaway key so the encoding is proved without
+an account.
+
+### Tell people to share their address
+
+Apple offers "Hide My Email", which hands us a `@privaterelay.appleid.com`
+forwarder. Clinicti matches a first-time sign-in against the address an
+invitation was sent to, so a relay address matches nothing and the login page
+says to choose "Share My Email" instead. Somebody who has already signed in once
+is unaffected — after that the match is on Apple's own identifier, and they can
+hide the address freely.
+
+### Still to do before submitting
+
+Guideline 4.8 is the part that needed code. Two neighbours do not:
+
+- **Account deletion.** Guideline 5.1.1(v) requires an in-app route to delete the
+  account for any app that creates one. Clinicti does not let anyone create one —
+  staff arrive by invitation and are removed by their clinic — which is the
+  argument to make in the review notes rather than something to assume will pass
+  unremarked.
+- **A privacy nutrition label** covering what the clinic's staff app collects.
+  `https://privacy.clinicti.app` is the policy; the label is filled in separately,
+  in App Store Connect.
