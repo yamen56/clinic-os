@@ -13,7 +13,8 @@ export default async function AdminTeamPage() {
       // password_hash null means the invitation is still outstanding — the
       // account exists but cannot be signed into, exactly as for clinic staff.
       `select u.id, u.full_name, u.email, u.admin_permissions,
-              (u.password_hash is null and u.google_sub is null) as invite_pending,
+              (u.password_hash is null and u.google_sub is null
+                 and u.apple_sub is null) as invite_pending,
               u.created_at,
               (select count(*)::int from clinic_members cm where cm.user_id = u.id) as clinic_count,
               (select max(s2.created_at) from sessions s2 where s2.user_id = u.id) as last_session

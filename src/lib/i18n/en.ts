@@ -90,6 +90,20 @@ export const en = {
     googleUnverified: "That Google address hasn't been verified with Google yet.",
     googleCancelled: "Sign-in was cancelled.",
     googleFailed: "Couldn't sign in with Google. Try again, or use your password.",
+    signInApple: "Continue with Apple",
+    /*
+      Its own message, not "not registered". A relay address is a fixable
+      mistake — the person has an invitation, they just hid the address it was
+      sent to — and sending them off to ask for another one would be wrong.
+    */
+    applePrivateEmail:
+      "Choose “Share My Email” when signing in with Apple, so we can match your invitation.",
+    appleNoAccount: "That Apple ID isn't registered. Ask your clinic to invite you first.",
+    appleUnverified: "That Apple address hasn't been verified with Apple yet.",
+    appleCancelled: "Sign-in was cancelled.",
+    appleFailed: "Couldn't sign in with Apple. Try again, or use your password.",
+    /* The fallback for a code neither provider owns — a rate limit, or one added later. */
+    signInFailed: "Couldn't sign in. Try again, or use your password.",
     suspendedTitle: "This workspace is suspended",
     suspendedBody: "Your clinic's subscription is paused. Get in touch to reactivate it. Your data is safe.",
     removedTitle: "This workspace has been closed",

@@ -70,6 +70,9 @@ const SUITES = [
   ["load: can one caller take the platform down", "scripts/qa-dos.ts"],
   ["ops: does anybody find out when it breaks", "scripts/qa-ops-alert.ts"],
   ["sessions: idle timeout and the password again", "scripts/qa-session-hardening.ts"],
+  // Both shipped without being registered, so neither had ever run in CI.
+  ["sign-in: Google, and every way it says no", "scripts/qa-google-signin.ts"],
+  ["sign-in: Apple, and every way it says no", "scripts/qa-apple-signin.ts"],
   ["whatsapp: a new number warms up", "scripts/qa-whatsapp-warmup.ts"],
   ["image: the worker can find everything it imports", "scripts/qa-worker-image.ts"],
   ["whatsapp: session keys survive storage", "scripts/qa-wa-auth-state.ts"],

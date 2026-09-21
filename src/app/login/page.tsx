@@ -4,6 +4,7 @@ import { LoginForm } from "./login-form";
 import { LanguageToggle } from "@/components/language-toggle";
 import { BrandMark } from "@/components/brand-mark";
 import { googleConfigured } from "@/lib/google-oauth";
+import { appleConfigured } from "@/lib/apple-oauth";
 
 /**
  * Auth is the one working-adjacent screen on the night surface — the brand
@@ -33,7 +34,12 @@ export default async function LoginPage({
       </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-8 p-6">
         <BrandMark size={72} />
-        <LoginForm next={next ?? undefined} google={googleConfigured()} oauthError={sp.error} />
+        <LoginForm
+          next={next ?? undefined}
+          google={googleConfigured()}
+          apple={appleConfigured()}
+          oauthError={sp.error}
+        />
       </div>
       <footer className="flex items-center justify-center gap-3 pb-6 text-center text-xs text-white/40">
         <a
