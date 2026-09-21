@@ -687,24 +687,45 @@ not after the first rejection.
 
 ### What to create, at developer.apple.com
 
-Four values, all four required, or the button does not appear.
+Four values, all four required, or the button does not appear. Everything below
+needs a **paid** Apple Developer Program membership; Sign in with Apple is not
+available on a free account.
 
-1. **Identifiers ▸ Services IDs ▸ +** — create one (e.g. `app.clinicti.signin`).
+1. **Identifiers ▸ + ▸ App IDs** — create one (e.g. `app.clinicti.ios`) and tick
+   the **Sign in with Apple** capability. Nothing in the web flow uses it, and it
+   still has to exist: both of the next two steps must be attached to a *primary
+   App ID*, and this is it. It is also the identifier the iOS app will ship under.
+
+2. **Identifiers ▸ + ▸ Services IDs** — create one (e.g. `app.clinicti.signin`).
    This is `APPLE_CLIENT_ID`. It is *not* the bundle identifier: a native app and
    this web flow are two separate clients, and only a Services ID can carry a web
-   Return URL. Enable "Sign in with Apple" on it, press Configure, and set:
-   - Domains: `app.clinicti.app`
+   Return URL. Register it, then open it again, tick **Sign in with Apple**, press
+   Configure, and set:
+   - Primary App ID: the one from step 1
+   - Domains and Subdomains: `app.clinicti.app` — hostname only, no `https://`,
+     no trailing slash
    - Return URLs: `https://app.clinicti.app/api/auth/apple/callback`
 
    The Return URL must match `${APP_URL}` exactly, scheme and all. Apple compares
-   it as a string.
+   it as a string, so a trailing slash or a `www.` is a rejected sign-in and not
+   a warning.
 
-2. **Keys ▸ + ▸ Sign in with Apple** — create a key, attach it to the primary App
-   ID, download the `.p8`. Its id is `APPLE_KEY_ID`; the file's contents are
-   `APPLE_PRIVATE_KEY`. **Apple lets you download it once.** Railway cannot hold a
-   literal newline, so paste it with `\n` escapes — both forms parse.
+3. **Verify the domain, which that sheet will insist on.** It offers a
+   `apple-developer-domain-association.txt` to download. Commit it to
+   `public/.well-known/apple-developer-domain-association.txt`, deploy, confirm
+   `https://app.clinicti.app/.well-known/apple-developer-domain-association.txt`
+   returns it, then press Verify. Next serves `public/.well-known/` as-is and the
+   web image copies it, despite the leading dot — but deploy *before* pressing
+   Verify, because Apple fetches it there and then.
 
-3. **`APPLE_TEAM_ID`** — ten characters, top right of the developer portal.
+4. **Keys ▸ + ▸ Sign in with Apple** — create a key, Configure it against the same
+   primary App ID, then download the `.p8`. Its id is `APPLE_KEY_ID`; the file's
+   contents are `APPLE_PRIVATE_KEY`. **Apple lets you download it once** — lose it
+   and the only way back is a new key. Railway cannot hold a literal newline, so
+   paste it with `\n` escapes; both forms parse.
+
+5. **`APPLE_TEAM_ID`** — ten characters, top right of the developer portal, or on
+   the Membership page.
 
 Set all four on the **web** service only. The worker never touches auth.
 
