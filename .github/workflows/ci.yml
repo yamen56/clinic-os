@@ -1,0 +1,121 @@
+# The checks, run by something other than the person in a hurry.
+#
+# There are over a hundred QA suites in scripts/, and until now every one of
+# them ran only when somebody remembered, on one laptop, immediately before a
+# deploy that is also triggered by hand. That is an enormous safety net with a
+# voluntary catch: the run that gets skipped is always the rushed one, and the
+# rushed one is where the mistake is.
+#
+# This runs the half that needs no browser — the type checker, the tenant
+# isolation proof, and the suites that talk only to Postgres. They are the ones
+# where a failure means "this is broken for everybody" rather than "a selector
+# moved", and together they take a couple of minutes.
+#
+# Deliberately NOT the browser suites. They need Chromium, a dev server and a
+# warm compile, they take the better part of an hour, and a check that is
+# usually red because of a timeout teaches people to ignore checks. `npm run qa`
+# on a warm local stack stays the gate before a release; this is the gate on
+# every push, and the two have different jobs.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer commit makes an older run irrelevant; do not pay for both.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # The suites reach for this port; `npm run db` serves it.
+      PG_PORT: "5544"
+      # Nothing here renders a PDF, and the download is ~150MB per run.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches Dockerfile.web, so a syntax or API difference cannot pass
+          # here and fail in the image.
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # First, because it is the fastest way to be told the build is broken and
+      # it needs nothing else to be running.
+      - name: Types
+        run: npm run typecheck
+
+      - name: Start Postgres
+        run: |
+          npm run db > "$RUNNER_TEMP/db.log" 2>&1 &
+          # The daemon initialises a data directory on first run, which is well
+          # over a second. Poll rather than sleep a guessed amount.
+          for i in $(seq 1 60); do
+            if node -e "require('net').connect(${PG_PORT},'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>/dev/null; then
+              echo "postgres up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "postgres did not come up:"; cat "$RUNNER_TEMP/db.log"; exit 1
+
+      # `npm run db` applies migrations on boot; this proves they are also
+      # idempotent, which is what makes running them twice around a deploy safe.
+      - name: Migrations are idempotent
+        run: npm run migrate
+
+      - name: Tenant isolation, and that every table is covered
+        run: npm run test:rls
+
+      - name: Phone normalisation
+        run: npm run test:phone
+
+      - name: Arabic-insensitive search
+        run: npm run test:search
+
+      - name: Readable ink on a clinic colour
+        run: npx tsx scripts/test-contrast.ts
+
+      - name: Surviving a database blip
+        run: npx tsx scripts/qa-db-resilience.ts
+
+      - name: Rate limits that survive a second replica
+        run: npm run qa:ratelimit
+
+      - name: An error that reaches somebody
+        run: npm run qa:errors
+
+      - name: Paging past the first hundred patients
+        run: npm run qa:paging
+
+      # The check that would have caught the day-long crash loop: the worker
+      # image is a subset of the repository, so an import outside the copied
+      # paths resolves here and dies in the container.
+      - name: The worker image has everything it imports
+        run: npx tsx scripts/qa-worker-image.ts
+
+      # Takes a real backup, restores it into an empty database and compares the
+      # two by content. Also the check that nothing the worker imports at
+      # runtime is a devDependency — the misfiling that stopped backups for five
+      # weeks while every screen looked healthy.
+      - name: A backup that actually restores
+        run: npm run qa:backup
+
+      - name: Postgres log, if anything failed
+        if: failure()
+        run: cat "$RUNNER_TEMP/db.log" || true

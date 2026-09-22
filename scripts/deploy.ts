@@ -132,6 +132,31 @@ async function main() {
   const targets = SERVICES.filter((s) => s.id && only.includes(s.key));
 
   /*
+    Does it compile?
+
+    Railway builds the image before it finds out, which means a type error costs
+    a five-minute build, a failed deploy and a second round trip to discover
+    something `tsc` answers in twenty seconds. CI answers it on every push now,
+    but this path is reachable without one — a deploy of an uncommitted tree, or
+    of a commit CI has not finished with — and this is the last point where
+    being wrong is still cheap.
+
+    `--skip-checks` exists for the one case that justifies it: shipping a known
+    good commit while something unrelated is red.
+  */
+  if (!process.argv.includes("--skip-checks")) {
+    const types = spawnSync("npm", ["run", "typecheck"], { encoding: "utf8", shell: true });
+    if (types.status !== 0) {
+      console.error("\nRefusing to deploy: this does not typecheck.\n");
+      console.error(types.stdout ?? "");
+      console.error(types.stderr ?? "");
+      console.error("Fix it, or pass --skip-checks if you know why it is red.\n");
+      process.exit(1);
+    }
+    console.log("\n✓ typecheck passed");
+  }
+
+  /*
     Pre-flight, and it is not optional.
 
     The worker runs a subset of this repository — see Dockerfile.worker — so an
