@@ -10,7 +10,7 @@ import { silenceByClinic, SILENCE_MIN_VOLUME, SILENCE_ALERT_RATIO } from "@/lib/
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { Activity, HardDrive, MessageCircle, Sparkles, AlertTriangle, DatabaseBackup, ShieldAlert } from "lucide-react";
+import { Activity, HardDrive, MessageCircle, Sparkles, AlertTriangle, DatabaseBackup, ShieldAlert, Bug } from "lucide-react";
 
 import { internalSecret } from "@/lib/internal-secret";
 
@@ -140,6 +140,40 @@ export default async function MonitoringPage() {
       opened_at: string;
       notifications: number;
       severity: string;
+    }[]
+  ).catch(() => []);
+
+  /*
+    What the application itself has been throwing.
+
+    Every other panel on this page reports infrastructure — jobs, sends,
+    backups, whether the worker is breathing. None of them would have shown a
+    server action that 500s for one clinic on one screen, because the database
+    is up and `/api/health` answers 200 throughout. That fault used to reach us
+    only when the clinic sent a WhatsApp message about it.
+
+    Grouped by fingerprint, worst-recent first, unresolved only. Ten is
+    deliberate: this is a "what is broken right now" list, not a log, and a page
+    of them would be read exactly as attentively as no page at all.
+  */
+  const appErrors = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select fingerprint, message, route, kind, count, first_seen, last_seen, last_digest
+           from app_errors
+          where resolved_at is null
+          order by last_seen desc
+          limit 10`
+      )
+    ).rows as {
+      fingerprint: string;
+      message: string;
+      route: string | null;
+      kind: string | null;
+      count: number;
+      first_seen: string;
+      last_seen: string;
+      last_digest: string | null;
     }[]
   ).catch(() => []);
   const load = publicLoad();
@@ -389,6 +423,59 @@ export default async function MonitoringPage() {
                 </li>
               );
             })}
+          </ul>
+        </Card>
+      )}
+
+      {/*
+        What the application is throwing, as opposed to what the platform is.
+
+        Same rule as the alerts card above: only rendered when there is
+        something, because a permanent "0 errors" panel is one more green box to
+        stop reading. The count is the point — a fault that has fired four
+        thousand times since Tuesday is a different decision from one that fired
+        once, and neither is visible from a log line.
+      */}
+      {appErrors.length > 0 && (
+        <Card className="mt-4 border-danger/40">
+          <CardHeader
+            title={
+              <span className="flex items-center gap-2">
+                <Bug className="h-4 w-4 text-danger" />
+                Application errors
+              </span>
+            }
+            sub="Unresolved, grouped by fault, most recent first"
+          />
+          <ul className="divide-y divide-line">
+            {appErrors.map((e) => (
+              <li key={e.fingerprint} className="px-5 py-2.5 text-[13px]">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 font-medium text-ink-700">{e.message}</span>
+                  <span className="shrink-0 text-ink-400">
+                    {fmtRelative(e.last_seen, locale)}
+                    {e.count > 1 ? ` · ${e.count}×` : ""}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-ink-500">
+                  {e.route && <code className="text-[12px]">{e.route}</code>}
+                  {e.kind && <Badge status="neutral">{e.kind}</Badge>}
+                  {/*
+                    The digest is what a production client-side error reports
+                    instead of a stack, so it is the only way to tie the red
+                    screen a clinic photographed to the fault behind it.
+                  */}
+                  {e.last_digest && (
+                    <span className="text-[12px] text-ink-400">digest {e.last_digest}</span>
+                  )}
+                  {e.count > 1 && (
+                    <span className="text-[12px] text-ink-400">
+                      first {fmtRelative(e.first_seen, locale)}
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
           </ul>
         </Card>
       )}

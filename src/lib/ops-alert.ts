@@ -130,6 +130,7 @@ export async function collectFindings(): Promise<Finding[]> {
     silenceChecks,
     storageChecks,
     webChecks,
+    appErrorChecks,
   ];
   for (const check of checks) {
     try {
@@ -220,6 +221,68 @@ async function jobChecks(): Promise<Finding[]> {
   }
   return out;
 }
+
+/**
+ * Faults the application itself is throwing.
+ *
+ * Everything else in this file watches infrastructure, and infrastructure was
+ * never the only way this platform breaks. A server action that throws for one
+ * clinic on one screen leaves the database up, the worker breathing, the jobs
+ * draining and `/api/health` answering 200 — so every existing check stays
+ * green while a receptionist looks at an error page. The only thing that
+ * noticed was the clinic.
+ *
+ * Two shapes, because they mean different things:
+ *
+ *   - **A new fault**, first seen in the last hour. Worth saying out loud even
+ *     once: it almost always means something that just shipped.
+ *   - **A fault that is happening a lot**, whatever its age. A slow leak nobody
+ *     opened the page to see is the one that quietly costs a customer.
+ *
+ * Both are notices rather than urgent. An error page for one clinic is bad and
+ * is not a dead platform, and the rule this codebase already settled on is that
+ * urgent means mail — so wiring application errors to mail would, on the first
+ * bad afternoon, teach somebody to ignore the address that also carries "the
+ * backups have stopped". These live on /admin/monitoring, which is where the
+ * WhatsApp notices already live.
+ */
+async function appErrorChecks(): Promise<Finding[]> {
+  const rows = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select fingerprint, message, route, count, first_seen
+           from app_errors
+          where resolved_at is null
+            and (first_seen > now() - interval '1 hour' or count >= $1)
+          order by count desc
+          limit 5`,
+        [APP_ERROR_VOLUME]
+      )
+    ).rows
+  );
+  return rows.map((r) => ({
+    // Per fault, not one lump: two unrelated bugs are two things to fix, and a
+    // combined alert would clear the moment either one did.
+    key: `app_error:${r.fingerprint}`,
+    severity: "notice" as const,
+    title:
+      Number(r.count) >= APP_ERROR_VOLUME
+        ? `An error has fired ${r.count}× — ${String(r.message).slice(0, 80)}`
+        : `A new error appeared — ${String(r.message).slice(0, 80)}`,
+    detail:
+      (r.route ? `At ${r.route}. ` : "") +
+      "Full fault and stack on /admin/monitoring; mark it resolved there once it is dealt with.",
+  }));
+}
+
+/**
+ * How many occurrences make a fault worth reporting on its own.
+ *
+ * Above the noise an ordinary week produces — a bot probing a public route, one
+ * person's flaky connection — and far below what a genuine regression reaches
+ * in an afternoon.
+ */
+const APP_ERROR_VOLUME = Number(process.env.APP_ERROR_VOLUME || 25);
 
 async function outboxChecks(): Promise<Finding[]> {
   const failed = await withSystem(async (c) =>

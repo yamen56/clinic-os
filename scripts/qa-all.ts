@@ -15,6 +15,7 @@ const SUITES = [
   ["numbers: a price you can actually delete", "scripts/qa-number-fields.ts"],
   ["unit: surviving a database blip", "scripts/qa-db-resilience.ts"],
   ["unit: rate limits that survive a second replica", "scripts/qa-rate-limit-shared.ts"],
+  ["unit: an error that reaches somebody", "scripts/qa-error-capture.ts"],
   ["phase 1: foundation, auth, tenancy", "scripts/qa-phase1.ts"],
   ["vocabulary: one workspace, different words", "scripts/qa-vocabulary.ts"],
   ["dashboard: analytics, shortcuts, and what each member may see", "scripts/qa-dashboard.ts"],
