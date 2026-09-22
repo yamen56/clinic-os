@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { randomInt } from "node:crypto";
 import { withSystem } from "@/lib/db";
-import { rateLimit, clientIp } from "@/lib/booking-public";
+import { clientIp } from "@/lib/booking-public";
+import { rateLimitShared } from "@/lib/rate-limit-shared";
 import { resolveIn } from "@/lib/esign/public";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
@@ -33,7 +34,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const body = read.ok ? read.body : {};
   const isVerify = typeof body.code === "string" && body.code.trim().length > 0;
 
-  if (!rateLimit(`sign-code:${ip}`, isVerify ? 20 : 4, 10 * 60_000)) {
+  if (!(await rateLimitShared(`sign-code:${ip}`, isVerify ? 20 : 4, 10 * 60_000))) {
     return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
   }
 

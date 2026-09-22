@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSession, passwordMatchesUser, markReauthenticated } from "@/lib/auth";
 import { readJsonCapped } from "@/lib/public-guard";
-import { rateLimit, clientIp } from "@/lib/booking-public";
+import { clientIp } from "@/lib/booking-public";
+import { rateLimitShared } from "@/lib/rate-limit-shared";
 import { audit } from "@/lib/audit";
 import { withSystem } from "@/lib/db";
 
@@ -29,12 +30,12 @@ export async function POST(req: Request) {
     fat-fingering lock out the receptionist next to them — and would not slow
     the attacker down, since they hold the session and can come from anywhere.
   */
-  if (!rateLimit(`reauth:${session.sessionId}`, 10, 15 * 60_000)) {
+  if (!(await rateLimitShared(`reauth:${session.sessionId}`, 10, 15 * 60_000))) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   // Second bucket, so one compromised session cannot be used to grind against
   // the account from many places at once.
-  if (!rateLimit(`reauth-ip:${clientIp(req)}`, 20, 15 * 60_000)) {
+  if (!(await rateLimitShared(`reauth-ip:${clientIp(req)}`, 20, 15 * 60_000))) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 

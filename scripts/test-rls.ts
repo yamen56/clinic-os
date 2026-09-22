@@ -485,6 +485,47 @@ async function main() {
   });
   ok(annBlocked, "clinic context must not write announcements");
 
+  /*
+    Every table has row-level security on it, and a policy.
+
+    The tests above prove isolation for the tables somebody remembered to
+    write a test for. This proves the cheaper property that no table was
+    *forgotten*, which is the failure this codebase has actually had — twice.
+    `auth_attempts` shipped without a policy in 0029 and was fixed in 0032;
+    `ops_alerts` and `ops_state` shipped without one in 0042 and were fixed in
+    0043. Both times the reasoning was the same — no clinic_id, so no tenant
+    to isolate — and both times it missed that a table with no policy is a
+    table the app role can empty.
+
+    A table added next month gets this check on the day it is added, rather
+    than whenever somebody next happens to read the directory.
+  */
+  const uncovered = (
+    await su.query(
+      `select c.relname,
+              c.relrowsecurity as rls,
+              (select count(*) from pg_policies p
+                where p.schemaname = 'public' and p.tablename = c.relname) as policies
+         from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          -- Deliberately exempt: read by the backup and by scripts/doctor.ts,
+          -- holds nothing worth protecting, and enabling RLS on it would risk
+          -- those paths for no gain. See the note at the end of 0043.
+          and c.relname <> '_migrations'
+        order by c.relname`
+    )
+  ).rows.filter((r: { rls: boolean; policies: string }) => !r.rls || Number(r.policies) === 0);
+
+  for (const t of uncovered as { relname: string; rls: boolean }[]) {
+    console.error(
+      `  ${t.relname}: ` + (!t.rls ? "row-level security is not enabled" : "has no policy")
+    );
+  }
+  ok(
+    uncovered.length === 0,
+    `every table must have RLS and a policy (${uncovered.length} without)`
+  );
+
   // Cleanup
   await su.query(`delete from clinics where slug like 'rls-test-%'`);
   await su.query(`delete from users where email like 'rls-%@test.local'`);

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { randomInt } from "node:crypto";
 import { withSystem } from "@/lib/db";
-import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
+import { loadPublicLink, clientIp } from "@/lib/booking-public";
+import { rateLimitShared } from "@/lib/rate-limit-shared";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import type { BookingPayload } from "../finalize";
@@ -22,7 +23,7 @@ import { readJsonCapped } from "@/lib/public-guard";
 export async function POST(req: Request, ctx: { params: Promise<{ bslug: string }> }) {
   const { bslug } = await ctx.params;
   const ip = clientIp(req);
-  if (!rateLimit(`resend:${bslug}:${ip}`, 6, 10 * 60_000)) {
+  if (!(await rateLimitShared(`resend:${bslug}:${ip}`, 6, 10 * 60_000))) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   const data = await loadPublicLink(bslug);
@@ -48,7 +49,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
 
     // Per number, not per caller: every resend sends a WhatsApp message from the
     // clinic's own number and counts against its daily cap.
-    if (!rateLimit(`resend-phone:${v.phone_e164}`, 3, 10 * 60_000)) {
+    if (!(await rateLimitShared(`resend-phone:${v.phone_e164}`, 3, 10 * 60_000))) {
       return { error: "rate_limited" as const };
     }
 

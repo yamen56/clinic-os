@@ -251,7 +251,25 @@ export function clientIp(req: Request): string {
   return parts[parts.length - 1] || "local";
 }
 
-/** Naive fixed-window rate limiter for public endpoints. */
+/**
+ * Fixed-window rate limiter for public endpoints, counted **in this process**.
+ *
+ * Which means it is a floor per instance, not a fleet-wide limit: with N
+ * replicas the real allowance is N times the number at the call site. That is
+ * the right trade for the endpoints left on it — slots, days, logos, doctor
+ * photos, PDF fetches — where the number is about shedding load, and a floor
+ * per instance still sheds it without paying a database round trip on a read
+ * path that runs constantly.
+ *
+ * It is the wrong trade wherever the number is a promise about the real world:
+ * how many one-time codes a phone number may be sent, or how many guesses
+ * somebody gets at one. Those moved to `rateLimitShared` in
+ * lib/rate-limit-shared.ts, which counts once for the whole fleet.
+ *
+ * The test when adding a limit here: "what breaks if this number is quietly
+ * multiplied by the replica count?" If the answer is worse than "more load
+ * gets through", it belongs in the shared one.
+ */
 const buckets = new Map<string, { count: number; reset: number }>();
 export function rateLimit(key: string, max: number, windowMs: number): boolean {
   const now = Date.now();

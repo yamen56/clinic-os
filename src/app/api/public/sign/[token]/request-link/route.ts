@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withSystem } from "@/lib/db";
-import { rateLimit, clientIp } from "@/lib/booking-public";
+import { clientIp } from "@/lib/booking-public";
+import { rateLimitShared } from "@/lib/rate-limit-shared";
 import { resolveIn } from "@/lib/esign/public";
 import { notifyClinicStaff } from "@/lib/notify";
 import { logDocEvent } from "@/lib/esign/events";
@@ -15,7 +16,7 @@ import { logDocEvent } from "@/lib/esign/events";
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
   const ip = clientIp(req);
-  if (!rateLimit(`sign-request:${ip}`, 6, 30 * 60_000)) {
+  if (!(await rateLimitShared(`sign-request:${ip}`, 6, 30 * 60_000))) {
     return NextResponse.json({ ok: false }, { status: 429 });
   }
 

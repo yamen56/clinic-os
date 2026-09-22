@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { randomInt } from "node:crypto";
 import { withSystem } from "@/lib/db";
-import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
+import { loadPublicLink, clientIp } from "@/lib/booking-public";
+import { rateLimitShared } from "@/lib/rate-limit-shared";
 import { normalizePhone } from "@/lib/phone";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
@@ -16,7 +17,7 @@ import { readJsonCapped } from "@/lib/public-guard";
 export async function POST(req: Request, ctx: { params: Promise<{ bslug: string }> }) {
   const { bslug } = await ctx.params;
   const ip = clientIp(req);
-  if (!rateLimit(`start:${bslug}:${ip}`, 8, 10 * 60_000)) {
+  if (!(await rateLimitShared(`start:${bslug}:${ip}`, 8, 10 * 60_000))) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   const data = await loadPublicLink(bslug);
@@ -81,7 +82,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
     against the clinic's daily cap. Three codes in ten minutes is more than a
     real booking needs.
   */
-  if (!rateLimit(`start-phone:${phone}`, 3, 10 * 60_000)) {
+  if (!(await rateLimitShared(`start-phone:${phone}`, 3, 10 * 60_000))) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
