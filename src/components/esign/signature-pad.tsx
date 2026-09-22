@@ -114,9 +114,16 @@ export function SignaturePad({
   locale?: Locale;
   heightClass?: string;
 }) {
+  /*
+    The provider's dictionary is preferred over `dictFor` inside the workspace
+    because it has the clinic's vocabulary applied to it — an agency workspace
+    says "client" where a medical one says "patient", and rebuilding it from the
+    locale alone would quietly undo that. Outside a provider there is nothing to
+    prefer, so Arabic is the fallback here rather than in the hook.
+  */
   const provider = useI18nSafe();
-  const t = locale ? dictFor(locale) : provider.t;
-  const uiLocale = locale ?? provider.locale;
+  const t = locale ? dictFor(locale) : (provider?.t ?? dictFor("ar"));
+  const uiLocale = locale ?? provider?.locale ?? "ar";
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const strokesRef = useRef<Stroke[]>(initialStrokes?.length ? initialStrokes : []);
