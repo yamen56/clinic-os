@@ -89,6 +89,8 @@ const AGENCY_EN: Patch = {
     noPatient: "No clinic file linked",
     createPatient: "Create clinic file",
     patientCreated: "Clinic file created",
+    linkPatient: "Or link an existing clinic file",
+    unlinkPatient: "Not this clinic? Unlink",
     newPatientLead: "New prospect",
   },
   /*
@@ -280,6 +282,8 @@ const AGENCY_AR: Patch = {
     noPatient: "لا يوجد ملف عيادة مرتبط",
     createPatient: "إنشاء ملف عيادة",
     patientCreated: "تم إنشاء ملف العيادة",
+    linkPatient: "أو اربطها بملف عيادة موجود",
+    unlinkPatient: "ليست هذه العيادة؟ إلغاء الربط",
     newPatientLead: "عميل محتمل جديد",
   },
   calendar: {

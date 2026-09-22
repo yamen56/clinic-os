@@ -2,6 +2,8 @@ import {
   normalizePhone,
   e164ToJid,
   jidToE164,
+  isLidJid,
+  bareJidUser,
   splitE164,
   joinE164,
   countryFromClinic,
@@ -74,6 +76,56 @@ if (jid === "962790744070@s.whatsapp.net" && jidToE164(jid) === "+962790744070")
 } else {
   fail++;
   console.error(`FAIL jid round-trip: ${jid}`);
+}
+
+/*
+  The forms Baileys actually hands back. Its LID→number lookup always carries a
+  device (`…:0@s.whatsapp.net`); matching only `digits@` dropped every answer and
+  left every LID thread unlinked. A LID is never a number.
+*/
+const jids: [string, string | null][] = [
+  ["962790744070:0@s.whatsapp.net", "+962790744070"],
+  ["962790744070:12@s.whatsapp.net", "+962790744070"],
+  ["962790744070@c.us", "+962790744070"],
+  ["962790744070@hosted", "+962790744070"],
+  ["191091802390675@lid", null],
+  ["191091802390675:3@lid", null],
+  ["191091802390675@hosted.lid", null],
+  ["120363025246125888@g.us", null],
+  ["status@broadcast", null],
+  ["", null],
+];
+for (const [input, expected] of jids) {
+  const got = jidToE164(input);
+  if (got === expected) pass++;
+  else {
+    fail++;
+    console.error(`FAIL jidToE164(${JSON.stringify(input)}) = ${got}, expected ${expected}`);
+  }
+}
+for (const [input, expected] of [
+  ["191091802390675@lid", true],
+  ["191091802390675@hosted.lid", true],
+  ["962790744070@s.whatsapp.net", false],
+  ["", false],
+] as [string, boolean][]) {
+  if (isLidJid(input) === expected) pass++;
+  else {
+    fail++;
+    console.error(`FAIL isLidJid(${JSON.stringify(input)}), expected ${expected}`);
+  }
+}
+for (const [input, expected] of [
+  ["191091802390675:3@lid", "191091802390675"],
+  ["191091802390675@lid", "191091802390675"],
+  ["191091802390675", "191091802390675"],
+  ["962790744070_1:2@s.whatsapp.net", "962790744070"],
+]) {
+  if (bareJidUser(input) === expected) pass++;
+  else {
+    fail++;
+    console.error(`FAIL bareJidUser(${JSON.stringify(input)}) = ${bareJidUser(input)}`);
+  }
 }
 
 /* ------------------------------------------- the countries added for the picker */

@@ -346,7 +346,10 @@ async function main() {
         getPNsForLIDs: async (lids: string[]) =>
           lids
             .filter((l) => l.startsWith(PENDING_LID))
-            .map((l) => ({ lid: l, pn: `${PENDING_PN.replace("+", "")}@s.whatsapp.net` })),
+            // The shape Baileys 7 really answers with: always a device. Mocking
+            // it without one is how a parser that rejected every real answer
+            // passed this suite for seven weeks.
+            .map((l) => ({ lid: l, pn: `${PENDING_PN.replace("+", "")}:0@s.whatsapp.net` })),
       },
     },
   };
@@ -405,7 +408,7 @@ async function main() {
     signalRepository: {
       lidMapping: {
         getPNForLID: async (l: string) =>
-          l.startsWith(KNOWN_LID) ? `${KNOWN_PN.replace("+", "")}@s.whatsapp.net` : null,
+          l.startsWith(KNOWN_LID) ? `${KNOWN_PN.replace("+", "")}:0@s.whatsapp.net` : null,
       },
     },
     updateMediaMessage: async () => ({}),
@@ -552,6 +555,221 @@ async function main() {
     merged.last_message_preview
   );
 
+  /* ------------------------------ the number WhatsApp puts on the message */
+  /*
+    A LID message usually carries the sender's number beside it (`sender_pn`,
+    which Baileys hands over as `remoteJidAlt`). It needs no store and no sweep:
+    the message says who it is from.
+  */
+  const ALT_PN = "+962793334445";
+  const ALT_LID = "880770660550440";
+  const altPatient = (
+    await db.query(
+      `insert into patients (clinic_id, full_name, phone_e164, source)
+       values ($1,'Alt Known',$2,'staff') returning id`,
+      [clinic.id, ALT_PN]
+    )
+  ).rows[0];
+  const altThread = (
+    await db.query(
+      `insert into conversations (clinic_id, phone_e164, patient_id, identifier_kind)
+       values ($1,$2,$3,'phone') returning id`,
+      [clinic.id, ALT_PN, altPatient.id]
+    )
+  ).rows[0];
+  /** No mapping store at all: only what is on the message. */
+  const bareSock = { user: { id: "962790000000:1@s.whatsapp.net" }, updateMediaMessage: async () => ({}) };
+  const upsert = (key: Record<string, unknown>, message: unknown, pushName = "QA") =>
+    handleUpsert(clinic.id, bareSock as never, {
+      type: "notify",
+      messages: [{ key, message, pushName }],
+    } as never);
+
+  await upsert(
+    { remoteJid: `${ALT_LID}@lid`, remoteJidAlt: `${ALT_PN.replace("+", "")}@s.whatsapp.net`, id: "ALTQA1", fromMe: false },
+    { conversation: "رقمي على الرسالة" }
+  );
+  const altLanded = (
+    await db.query(`select conversation_id from messages where clinic_id = $1 and wa_message_id = 'ALTQA1'`, [clinic.id])
+  ).rows[0];
+  check(
+    "a LID message carrying its number lands on the patient's thread",
+    altLanded?.conversation_id === altThread.id,
+    !altLanded ? "not recorded" : altLanded.conversation_id === altThread.id ? "" : "another thread"
+  );
+  const altThreads = await db.query(
+    `select 1 from conversations where clinic_id = $1 and (wa_lid = $2 or phone_e164 = $3)`,
+    [clinic.id, ALT_LID, `+${ALT_LID}`]
+  );
+  check("without a stand-in thread beside it", altThreads.rowCount === 1, `${altThreads.rowCount} threads`);
+
+  // On a message the clinic sent from its phone, the "sender" is the clinic.
+  const ECHO_LID = "330220110990880";
+  await upsert(
+    { remoteJid: `${ECHO_LID}@lid`, remoteJidAlt: "962790000000@s.whatsapp.net", id: "ECHOQA1", fromMe: true },
+    { conversation: "من هاتف العيادة" }
+  );
+  const ownThread = await db.query(
+    `select 1 from conversations where clinic_id = $1 and phone_e164 = '+962790000000'`,
+    [clinic.id]
+  );
+  check("the clinic's own number is never taken for the patient's", ownThread.rowCount === 0);
+
+  /* --------------------------- the reply to a message the clinic sent first */
+  /*
+    The clinic wrote to COLD first, and the send stored COLD's LID on COLD's
+    thread. The reply comes back from that LID with no number on it and no
+    store to ask — it still belongs on COLD's thread, not a stranger's.
+  */
+  await upsert({ remoteJid: `${COLD_LID}@lid`, id: "COLDREPLY1", fromMe: false }, { conversation: "تمام، بجي" });
+  const coldReply = (
+    await db.query(
+      `select cv.phone_e164 from messages m join conversations cv on cv.id = m.conversation_id
+        where m.clinic_id = $1 and m.wa_message_id = 'COLDREPLY1'`,
+      [clinic.id]
+    )
+  ).rows[0];
+  check(
+    "a reply to the clinic's own message lands on the thread it answers",
+    coldReply?.phone_e164 === COLD,
+    coldReply?.phone_e164 ?? "not recorded"
+  );
+  const coldStrays = await db.query(
+    `select 1 from conversations where clinic_id = $1 and phone_e164 = $2`,
+    [clinic.id, `+${COLD_LID}`]
+  );
+  check("and opens no stand-in thread", coldStrays.rowCount === 0);
+
+  /* ------------------------------------------ what the message looks like */
+  const TYPES_PN = "962795556667@s.whatsapp.net";
+  const recorded = async (id: string) =>
+    (
+      await db.query(
+        `select msg_type, body from messages where clinic_id = $1 and wa_message_id = $2`,
+        [clinic.id, id]
+      )
+    ).rows[0] as { msg_type: string; body: string } | undefined;
+
+  await upsert(
+    { remoteJid: TYPES_PN, id: "TYPEQA1", fromMe: false },
+    { ephemeralMessage: { message: { extendedTextMessage: { text: "رسالة مختفية" } } } }
+  );
+  const eph = await recorded("TYPEQA1");
+  check(
+    "a message from a chat with disappearing messages on is kept",
+    eph?.body === "رسالة مختفية",
+    eph ? eph.body : "dropped"
+  );
+
+  await upsert(
+    { remoteJid: TYPES_PN, id: "TYPEQA2", fromMe: false },
+    {
+      documentWithCaptionMessage: {
+        message: { documentMessage: { caption: "التقرير", mimetype: "application/pdf", fileName: "r.pdf" } },
+      },
+    }
+  );
+  const doc = await recorded("TYPEQA2");
+  check(
+    "a document sent with a caption is kept",
+    doc?.msg_type === "document" && doc.body === "التقرير",
+    doc ? `${doc.msg_type}/${doc.body}` : "dropped"
+  );
+
+  await upsert(
+    { remoteJid: TYPES_PN, id: "TYPEQA3", fromMe: false },
+    {
+      contactMessage: {
+        displayName: "Dr Sami",
+        vcard: "BEGIN:VCARD\nVERSION:3.0\nFN:Dr Sami\nTEL;type=CELL;waid=962795551234:+962 79 555 1234\nEND:VCARD",
+      },
+    }
+  );
+  const card = await recorded("TYPEQA3");
+  check(
+    "a shared contact arrives as a name and a number",
+    !!card && card.body.includes("Dr Sami") && card.body.includes("+962795551234"),
+    card?.body ?? "dropped"
+  );
+
+  await upsert(
+    { remoteJid: TYPES_PN, id: "TYPEQA4", fromMe: false },
+    { reactionMessage: { text: "👍", key: { id: "TYPEQA1" } } }
+  );
+  check("a reaction is not a message", !(await recorded("TYPEQA4")));
+
+  await upsert(
+    { remoteJid: TYPES_PN, id: "TYPEQA5", fromMe: false },
+    { pollCreationMessageV3: { name: "متى؟", options: [{ optionName: "الصبح" }] } }
+  );
+  const poll = await recorded("TYPEQA5");
+  check("something unrenderable is shown as unknown, not dropped", poll?.msg_type === "unknown", poll?.msg_type ?? "dropped");
+
+  /* --------------------------------- a fold keeps the file it was linked to */
+  /*
+    Staff made a file from the identity thread before its number was known, and
+    the number's own thread has none. Folding used to keep only the surviving
+    thread's link, so the file they made came loose.
+  */
+  const LINKED_PN = "+962797778889";
+  const LINKED_LID = "445566778899001";
+  const lidFile = (
+    await db.query(
+      `insert into patients (clinic_id, full_name, source) values ($1,'Made From Chat','staff') returning id`,
+      [clinic.id]
+    )
+  ).rows[0];
+  const plain = (
+    await db.query(
+      `insert into conversations (clinic_id, phone_e164, identifier_kind) values ($1,$2,'phone') returning id`,
+      [clinic.id, LINKED_PN]
+    )
+  ).rows[0];
+  await db.query(
+    `insert into conversations (clinic_id, phone_e164, wa_lid, wa_jid, identifier_kind, patient_id)
+     values ($1,$2,$3,$4,'lid',$5)`,
+    [clinic.id, `+${LINKED_LID}`, LINKED_LID, `${LINKED_LID}@lid`, lidFile.id]
+  );
+  await learnLidMapping(clinic.id, [{ lid: `${LINKED_LID}@lid`, jid: `${LINKED_PN.replace("+", "")}:0@s.whatsapp.net` }]);
+  const plainAfter = (await db.query(`select patient_id from conversations where id = $1`, [plain.id])).rows[0];
+  check("the file made from the identity thread survives the fold", plainAfter.patient_id === lidFile.id);
+  const fileAfter = (await db.query(`select phone_e164 from patients where id = $1`, [lidFile.id])).rows[0];
+  check("and the file is given the number it was missing", fileAfter.phone_e164 === LINKED_PN, fileAfter.phone_e164 ?? "none");
+
+  /* --------------------------- the backlog the database can already prove */
+  /*
+    Every split made before this fix: the clinic wrote first (the phone thread
+    holds the LID), and the reply opened a stand-in thread. The sweep folds
+    these without asking the library anything.
+  */
+  const SPLIT_PN = "+962794445556";
+  const SPLIT_LID = "112233445566778";
+  const splitPhone = (
+    await db.query(
+      `insert into conversations (clinic_id, phone_e164, wa_lid, wa_jid, identifier_kind)
+       values ($1,$2,$3,$4,'phone') returning id`,
+      [clinic.id, SPLIT_PN, SPLIT_LID, `${SPLIT_LID}@lid`]
+    )
+  ).rows[0];
+  const splitLid = (
+    await db.query(
+      `insert into conversations (clinic_id, phone_e164, wa_lid, wa_jid, identifier_kind)
+       values ($1,$2,$3,$4,'lid') returning id`,
+      [clinic.id, `+${SPLIT_LID}`, SPLIT_LID, `${SPLIT_LID}@lid`]
+    )
+  ).rows[0];
+  await db.query(
+    `insert into messages (clinic_id, conversation_id, direction, sender_kind, msg_type, body, status, wa_message_id)
+     values ($1,$2,'in','patient','text','نعم','delivered','SPLITQA1')`,
+    [clinic.id, splitLid.id]
+  );
+  const folded = await resolvePendingLids(clinic.id, {});
+  check("the sweep folds a split it can prove, with no library to ask", folded >= 1, String(folded));
+  const splitMsg = (
+    await db.query(`select conversation_id from messages where clinic_id = $1 and wa_message_id = 'SPLITQA1'`, [clinic.id])
+  ).rows[0];
+  check("and the reply is on the thread it answered", splitMsg?.conversation_id === splitPhone.id);
+
   /* ------------------------------------------------- and on the screen */
   /*
     Everything above proves the *data* is right, which is exactly why the
@@ -621,6 +839,39 @@ async function main() {
       !/177\s?176\s?108\s?388\s?417/.test(shown.replace(/‎|‏/g, "")),
       ""
     );
+
+    /*
+      A thread with no number to match on can still be somebody on file, and
+      the receptionist usually knows who. Linking it has to reach the database
+      and the panel, and a wrong link has to be undoable from the same place.
+    */
+    const standInId = (
+      await db.query(`select id from conversations where clinic_id = $1 and phone_e164 = $2`, [
+        clinic.id,
+        standIn,
+      ])
+    ).rows[0].id as string;
+    const linkLabel = page.getByText("Or link an existing patient file");
+    await linkLabel.waitFor({ state: "visible", timeout: 30_000 });
+    // Scoped to the picker: the inbox list also has a row for Alt Known's own
+    // thread, and clicking that one opens a different conversation.
+    const picker = linkLabel.locator("..");
+    await picker.getByPlaceholder("Search by name or phone…").fill("Alt Known");
+    await picker.getByRole("button", { name: /Alt Known/ }).first().click({ timeout: 30_000 });
+    await page.getByText("Not this patient? Unlink").waitFor({ state: "visible", timeout: 30_000 });
+    const linkedRow = (
+      await db.query(`select patient_id from conversations where id = $1`, [standInId])
+    ).rows[0];
+    check("staff can link a thread to an existing file", linkedRow.patient_id === altPatient.id);
+    const panel = await page.locator("body").innerText();
+    check("and the panel shows that file", panel.includes("Alt Known") && panel.includes("Open file"));
+
+    await page.getByText("Not this patient? Unlink").click();
+    await page.getByText("Or link an existing patient file").waitFor({ state: "visible", timeout: 30_000 });
+    const unlinkedRow = (
+      await db.query(`select patient_id from conversations where id = $1`, [standInId])
+    ).rows[0];
+    check("and undo it", unlinkedRow.patient_id === null);
   } finally {
     await browser.close();
   }

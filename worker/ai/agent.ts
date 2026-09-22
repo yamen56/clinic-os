@@ -3,6 +3,7 @@ import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import { DateTime } from "luxon";
 import { withSystem } from "../db";
 import { lockClinicSchedule } from "../../src/lib/appointments";
+import { findOrCreatePatient } from "../../src/lib/patients";
 import { buildSystemPrompt, type AgentConfig } from "./prompt";
 import { computeSlots } from "../../src/lib/slots";
 import { isWithinHours, type WeeklyHours } from "../../src/lib/hours";
@@ -30,6 +31,8 @@ type ConversationRow = {
   clinic_id: string;
   patient_id: string | null;
   phone_e164: string;
+  identifier_kind: string;
+  whatsapp_name: string | null;
   ai_enabled: boolean;
   ai_paused_until: string | null;
 };
@@ -155,7 +158,8 @@ export async function respondToConversation(conversationId: string): Promise<voi
   const prep = await withSystem(async (c) => {
     const conv = (
       await c.query(
-        `select id, clinic_id, patient_id, phone_e164, ai_enabled, ai_paused_until
+        `select id, clinic_id, patient_id, phone_e164, identifier_kind, whatsapp_name,
+                ai_enabled, ai_paused_until
          from conversations where id = $1`,
         [conversationId]
       )
@@ -365,15 +369,30 @@ export async function respondToConversation(conversationId: string): Promise<voi
           return "That time was just taken. Call check_availability again and offer the patient a different time.";
         }
 
-        // Patient identity rule: the conversation is already keyed by phone
+        // Patient identity rule: the conversation is keyed by phone — unless
+        // WhatsApp addressed it by LID, when it is keyed by a stand-in that is
+        // not a number and must never be written onto a file as one.
         let patientId = conv.patient_id;
         if (!patientId) {
-          const p = await c.query(
-            `insert into patients (clinic_id, full_name, phone_e164, source, status)
-             values ($1, $2, $3, 'ai_agent', 'active') returning id`,
-            [cfg.clinicId, patient_name?.trim() || conv.phone_e164, conv.phone_e164]
-          );
-          patientId = p.rows[0].id;
+          const dialable = conv.identifier_kind !== "lid";
+          let fallbackName: string | undefined;
+          if (!dialable && !patient_name?.trim() && !conv.whatsapp_name) {
+            const locale = (
+              await c.query(`select default_locale from clinics where id = $1`, [cfg.clinicId])
+            ).rows[0]?.default_locale;
+            fallbackName = locale === "en" ? "WhatsApp user" : "مستخدم واتساب";
+          }
+          // Through the identity rule, so a file staff added since this chat
+          // began is booked onto rather than duplicated. A LID thread's file
+          // starts without a number; the LID sweep gives it one once known.
+          const p = await findOrCreatePatient(c, cfg.clinicId, {
+            phone: dialable ? conv.phone_e164 : "",
+            fullName: patient_name?.trim() || fallbackName,
+            whatsappName: conv.whatsapp_name ?? undefined,
+            source: "ai_agent",
+            status: "active",
+          });
+          patientId = p.id;
           await c.query(`update conversations set patient_id = $2 where id = $1`, [conv.id, patientId]);
         } else if (patient_name?.trim()) {
           await c.query(
@@ -413,7 +432,7 @@ export async function respondToConversation(conversationId: string): Promise<voi
              values ($1, $2, 'ai_booking', $3, $4, $5)`,
             [
               cfg.clinicId, s.user_id,
-              `حجز جديد من المساعد الذكي: ${patient_name?.trim() || conv.phone_e164}`,
+              `حجز جديد من المساعد الذكي: ${patient_name?.trim() || conv.whatsapp_name || conv.phone_e164}`,
               `${svc.name} — ${local.toFormat("cccc d LLLL")} ${local.toFormat("h:mm a")}`,
               `/c/${s.slug}/calendar`,
             ]

@@ -16,6 +16,7 @@ import {
   addQuickReplyAction,
   deleteQuickReplyAction,
   createPatientFromConversationAction,
+  linkConversationToPatientAction,
 } from "./actions";
 import {
   MessageCircle,
@@ -114,6 +115,7 @@ export function InboxClient({
   const [quickReplies, setQuickReplies] = useState(initialQuickReplies);
   const [saveQrOpen, setSaveQrOpen] = useState(false);
   const [creatingPatient, setCreatingPatient] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
   const [qrTitle, setQrTitle] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -582,6 +584,27 @@ export function InboxClient({
                   </Button>
                 </Link>
               </div>
+              {/* A link staff made by hand can be wrong; it has to be undoable here. */}
+              <button
+                className="text-[12px] text-ink-400 hover:text-ink-700 disabled:opacity-50"
+                disabled={unlinking}
+                onClick={() => {
+                  if (!cv) return;
+                  setUnlinking(true);
+                  void linkConversationToPatientAction(slug, cv.id, null)
+                    .then((r) => {
+                      if (r.error) toast(t.common.genericError, "error");
+                      else {
+                        toast(t.conversations.patientUnlinked);
+                        void refreshThread(cv.id);
+                        void refreshList();
+                      }
+                    })
+                    .finally(() => setUnlinking(false));
+                }}
+              >
+                {t.conversations.unlinkPatient}
+              </button>
             </div>
           ) : (
             /*
@@ -611,6 +634,17 @@ export function InboxClient({
                 <UserRound className="h-4 w-4" />
                 {t.conversations.createPatient}
               </Button>
+              {cv && (
+                <LinkPatientPicker
+                  key={cv.id}
+                  slug={slug}
+                  conversationId={cv.id}
+                  onLinked={() => {
+                    void refreshThread(cv.id);
+                    void refreshList();
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
@@ -679,6 +713,96 @@ export function InboxClient({
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+/**
+ * Link an unfiled thread to a file that already exists.
+ *
+ * The thread WhatsApp addresses by identity has no number to match on, so
+ * "Create patient file" was the only way forward — and for somebody already on
+ * file it made a duplicate. Picking the file is the receptionist saying who
+ * this is, which they usually know from the first line of the chat.
+ */
+function LinkPatientPicker({
+  slug,
+  conversationId,
+  onLinked,
+}: {
+  slug: string;
+  conversationId: string;
+  onLinked: () => void;
+}) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<{ id: string; full_name: string; phone_e164: string | null }[]>([]);
+  const [searched, setSearched] = useState(false);
+  const [linking, setLinking] = useState<string | null>(null);
+  // Answers arrive out of order when someone types quickly; only the latest counts.
+  const seq = useRef(0);
+
+  const search = async (value: string) => {
+    setQ(value);
+    setSearched(false);
+    const mine = ++seq.current;
+    if (value.trim().length < 2) return setResults([]);
+    const r = await fetch(`/api/c/${slug}/patients/search?q=${encodeURIComponent(value)}`)
+      .then((x) => (x.ok ? x.json() : { results: [] }))
+      .catch(() => ({ results: [] }));
+    if (mine !== seq.current) return;
+    setResults(r.results ?? []);
+    setSearched(true);
+  };
+
+  return (
+    <div className="grid gap-2 border-t border-line pt-3 text-start">
+      <span className="text-[13px] text-ink-500">{t.conversations.linkPatient}</span>
+      <div className="relative">
+        <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto h-4 w-4 text-ink-300" />
+        <Input
+          value={q}
+          onChange={(e) => void search(e.target.value)}
+          placeholder={t.patients.searchPlaceholder}
+          className="ps-9"
+        />
+      </div>
+      {results.length > 0 && (
+        <ul className="max-h-56 overflow-y-auto rounded-lg border border-line">
+          {results.map((r) => (
+            <li key={r.id}>
+              <button
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-start text-sm hover:bg-sunken disabled:opacity-50 aria-busy:bg-sunken"
+                disabled={linking !== null}
+                aria-busy={linking === r.id}
+                onClick={() => {
+                  setLinking(r.id);
+                  void linkConversationToPatientAction(slug, conversationId, r.id)
+                    .then((res) => {
+                      if (res.error) toast(t.common.genericError, "error");
+                      else {
+                        toast(t.conversations.patientLinked.replace("{name}", r.full_name));
+                        onLinked();
+                      }
+                    })
+                    .finally(() => setLinking(null));
+                }}
+              >
+                <span className="truncate">{r.full_name}</span>
+                {r.phone_e164 && (
+                  <span className="num tnum text-[12px] text-ink-400" dir="ltr">
+                    {formatPhone(r.phone_e164)}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {searched && results.length === 0 && (
+        <span className="text-[12px] text-ink-400">{t.conversations.linkNoMatch}</span>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import type { BaileysEventMap } from "@whiskeysockets/baileys";
 import type { PoolClient } from "pg";
 import { withSystem } from "../db";
-import { jidToE164 } from "../../src/lib/phone";
+import { bareJidUser, isLidJid, jidToE164 } from "../../src/lib/phone";
 import { findPatientByPhone } from "../../src/lib/patients";
 
 /**
@@ -85,6 +85,9 @@ async function mergeThreads(
     `update conversations tgt
         set wa_jid = src.wa_jid,
             wa_lid = coalesce(src.wa_lid, tgt.wa_lid),
+            -- Staff may have made a file from the identity thread, or the AI
+            -- booked on it. The thread being deleted must not take that with it.
+            patient_id = coalesce(tgt.patient_id, src.patient_id),
             whatsapp_name = coalesce(tgt.whatsapp_name, src.whatsapp_name),
             unread_count = tgt.unread_count + src.unread_count,
             flagged = tgt.flagged or src.flagged,
@@ -118,63 +121,160 @@ async function mergeThreads(
   );
 }
 
+/**
+ * Give a patient file the number its thread just turned out to have.
+ *
+ * A file made from an identity thread — by staff, or by the AI booking — was
+ * created without a number, or in older data with the LID stand-in in the
+ * phone field. Once the number is known the file should carry it: that is what
+ * the receptionist dials and what the next message is matched on. Only fills a
+ * gap; a file with a real number of its own keeps it, and a number that
+ * already belongs to another file is left for staff to merge.
+ */
+async function giveFileItsNumber(
+  c: PoolClient,
+  clinicId: string,
+  args: { conversationId: string; lid: string; phone: string }
+): Promise<void> {
+  /*
+    Behind a savepoint: this rides in the transaction that records an inbound
+    message, and a file created with the same number a moment ago would trip
+    `patients_phone_key` — which must cost the file its number, not the
+    patient their message.
+  */
+  await c.query("savepoint give_file_number");
+  let r;
+  try {
+    r = await c.query(
+      `update patients p
+          set phone_e164 = $3
+         from conversations cv
+        where cv.id = $1 and cv.clinic_id = $2 and p.id = cv.patient_id
+          and (p.phone_e164 is null or p.phone_e164 = '' or p.phone_e164 = '+' || $4)
+          and not exists (
+            select 1 from patients o
+             where o.clinic_id = $2 and o.id <> p.id and o.merged_into is null
+               and (o.phone_e164 = $3 or o.secondary_phone_e164 = $3 or $3 = any(o.extra_phones)))`,
+      [args.conversationId, clinicId, args.phone, args.lid]
+    );
+    await c.query("release savepoint give_file_number");
+  } catch (e) {
+    await c.query("rollback to savepoint give_file_number");
+    console.error(`[wa ${clinicId}] could not give a file its number`, (e as Error).message);
+    return;
+  }
+  if (r.rowCount) console.log(`[wa ${clinicId}] gave a patient file its number from lid ${args.lid}`);
+}
+
+/**
+ * One LID has turned out to be one number: move its thread onto the number.
+ *
+ * Runs inside the caller's transaction, so the inbound path can do this in the
+ * same breath as recording the message that told us.
+ */
+export async function adoptNumber(
+  c: PoolClient,
+  clinicId: string,
+  pair: { lid: string; phone: string }
+): Promise<void> {
+  const lid = bareJidUser(pair.lid);
+  const { phone } = pair;
+  const conv = (
+    await c.query(
+      `select id, phone_e164 from conversations
+        where clinic_id = $1 and identifier_kind = 'lid'
+          and (wa_lid = $2 or wa_lid like $2 || ':%')`,
+      [clinicId, lid]
+    )
+  ).rows[0] as { id: string; phone_e164: string } | undefined;
+  if (!conv) return;
+
+  /*
+    The real number usually already has a thread of its own: the patient
+    wrote from a number once, was saved as a file, and WhatsApp moved them
+    to identity addressing afterwards. That is the ordinary case, not the
+    exotic one.
+
+    This used to log and give up, on the reasoning that a human should merge
+    them — but conversations have never been mergeable by hand, so "leave it
+    for a human" meant leaving it forever. The patient's own thread went
+    quiet while their messages piled up in a second one that showed a
+    fifteen-digit stand-in and was attached to nobody.
+  */
+  const clash = (
+    await c.query(
+      `select id from conversations where clinic_id = $1 and phone_e164 = $2 and id <> $3`,
+      [clinicId, phone, conv.id]
+    )
+  ).rows[0] as { id: string } | undefined;
+  if (clash) {
+    await mergeThreads(c, clinicId, { from: conv.id, into: clash.id, lid, phone });
+    await giveFileItsNumber(c, clinicId, { conversationId: clash.id, lid, phone });
+    return;
+  }
+
+  const patient = await findPatientByPhone(c, clinicId, phone);
+  await c.query(
+    `update conversations
+        set phone_e164 = $2,
+            identifier_kind = 'phone',
+            patient_id = coalesce(patient_id, $3),
+            -- Unknown again, and now answerable: it is a real number.
+            on_whatsapp = null,
+            wa_checked_at = null
+      where id = $1`,
+    [conv.id, phone, patient?.id ?? null]
+  );
+  await giveFileItsNumber(c, clinicId, { conversationId: conv.id, lid, phone });
+  console.log(`[wa ${clinicId}] resolved lid ${lid} to ${phone}`);
+}
+
 export async function learnLidMapping(
   clinicId: string,
   pairs: { lid: string; jid: string }[]
 ) {
   const clean = pairs
-    .map((p) => ({ lid: p.lid?.split("@")[0], phone: jidToE164(p.jid ?? "") }))
+    .map((p) => ({
+      lid: p.lid && isLidJid(p.lid.includes("@") ? p.lid : `${p.lid}@lid`) ? bareJidUser(p.lid) : null,
+      phone: jidToE164(p.jid ?? ""),
+    }))
     .filter((p): p is { lid: string; phone: string } => !!p.lid && !!p.phone);
   if (!clean.length) return;
 
   await withSystem(async (c) => {
-    for (const { lid, phone } of clean) {
-      const conv = (
-        await c.query(
-          `select id, phone_e164 from conversations
-            where clinic_id = $1 and wa_lid = $2 and identifier_kind = 'lid'`,
-          [clinicId, lid]
-        )
-      ).rows[0] as { id: string; phone_e164: string } | undefined;
-      if (!conv) continue;
+    for (const pair of clean) await adoptNumber(c, clinicId, pair);
+  });
+}
 
-      /*
-        The real number usually already has a thread of its own: the patient
-        wrote from a number once, was saved as a file, and WhatsApp moved them
-        to identity addressing afterwards. That is the ordinary case, not the
-        exotic one.
-
-        This used to log and give up, on the reasoning that a human should merge
-        them — but conversations have never been mergeable by hand, so "leave it
-        for a human" meant leaving it forever. The patient's own thread went
-        quiet while their messages piled up in a second one that showed a
-        fifteen-digit stand-in and was attached to nobody.
-      */
-      const clash = (
-        await c.query(
-          `select id from conversations where clinic_id = $1 and phone_e164 = $2 and id <> $3`,
-          [clinicId, phone, conv.id]
-        )
-      ).rows[0] as { id: string } | undefined;
-      if (clash) {
-        await mergeThreads(c, clinicId, { from: conv.id, into: clash.id, lid, phone });
-        continue;
-      }
-
-      const patient = await findPatientByPhone(c, clinicId, phone);
+/**
+ * Fold identity threads into the thread that already holds their LID.
+ *
+ * When the clinic wrote first, the send resolved the patient's number to their
+ * LID and stored it on their own thread; a reply that came back from the LID
+ * with no number on it then opened a second thread. Every such pair is one
+ * person, and the phone thread already says so — no lookup needed, which is
+ * what makes this work even for a LID the mapping store never learned.
+ */
+async function foldKnownLids(clinicId: string): Promise<number> {
+  return withSystem(async (c) => {
+    const pairs = (
       await c.query(
-        `update conversations
-            set phone_e164 = $2,
-                identifier_kind = 'phone',
-                patient_id = coalesce(patient_id, $3),
-                -- Unknown again, and now answerable: it is a real number.
-                on_whatsapp = null,
-                wa_checked_at = null
-          where id = $1`,
-        [conv.id, phone, patient?.id ?? null]
-      );
-      console.log(`[wa ${clinicId}] resolved lid ${lid} to ${phone}`);
+        `select distinct on (l.id) l.id as from_id, p.id as into_id, l.wa_lid, p.phone_e164
+           from conversations l
+           join conversations p
+             on p.clinic_id = l.clinic_id and p.id <> l.id and p.identifier_kind = 'phone'
+            and split_part(p.wa_lid, ':', 1) = split_part(l.wa_lid, ':', 1)
+          where l.clinic_id = $1 and l.identifier_kind = 'lid' and l.wa_lid is not null
+          order by l.id, p.last_message_at desc nulls last`,
+        [clinicId]
+      )
+    ).rows as { from_id: string; into_id: string; wa_lid: string; phone_e164: string }[];
+    for (const p of pairs) {
+      const lid = bareJidUser(p.wa_lid);
+      await mergeThreads(c, clinicId, { from: p.from_id, into: p.into_id, lid, phone: p.phone_e164 });
+      await giveFileItsNumber(c, clinicId, { conversationId: p.into_id, lid, phone: p.phone_e164 });
     }
+    return pairs.length;
   });
 }
 
@@ -192,53 +292,12 @@ export async function learnLidMapping(
  * waiting for WhatsApp to volunteer the pairing.
  */
 export async function resolvePendingLids(clinicId: string, sock: unknown): Promise<number> {
-  const resolver = (
-    sock as {
-      signalRepository?: {
-        lidMapping?: { getPNsForLIDs?: (lids: string[]) => Promise<{ pn: string; lid: string }[] | null> };
-      };
-    }
-  ).signalRepository?.lidMapping?.getPNsForLIDs;
-  if (typeof resolver !== "function") return 0;
-
-  const pending = await withSystem((c) =>
-    c.query(
-      `select wa_lid from conversations
-        where clinic_id = $1 and identifier_kind = 'lid' and wa_lid is not null
-        order by last_message_at desc nulls last
-        limit 100`,
-      [clinicId]
-    )
-  );
-  if (!pending.rowCount) return 0;
-
-  const lids = pending.rows.map((r) => `${String(r.wa_lid).split("@")[0]}@lid`);
-  let pairs: { pn: string; lid: string }[] | null = null;
-  try {
-    pairs = await resolver.call(
-      (sock as { signalRepository: { lidMapping: unknown } }).signalRepository.lidMapping,
-      lids
-    );
-  } catch (e) {
-    console.error(`[wa ${clinicId}] lid batch lookup failed`, (e as Error).message);
-    return 0;
-  }
-  if (!pairs?.length) return 0;
-
   /*
-    Report what changed, not what was asked.
-
-    This returned `pairs.length` — how many addresses Baileys was able to look
-    up — and the caller logs that as "resolved N identity thread(s)". Those are
-    different numbers, and on this data they differ by everything:
-    `learnLidMapping` refuses to merge a LID onto a number that already has a
-    thread of its own, so seventy threads were being looked up every ten minutes,
-    upgraded none of the time, and announced as resolved on each pass since
-    3 August.
-
-    Counting the rows that actually stopped being LID-addressed costs two cheap
-    queries on a ten-minute job and makes the log mean something — including
-    going quiet, which is the correct output when nothing moved.
+    Report what changed, not what was asked: the rows that actually stopped
+    being LID-addressed. For its first seven weeks this job looked up every
+    pending thread every ten minutes and moved none of them — the store's
+    answers carry a device suffix the number parser refused — so a count of
+    lookups would have announced success the whole time.
   */
   const stillLid = () =>
     withSystem(async (c) =>
@@ -254,10 +313,65 @@ export async function resolvePendingLids(clinicId: string, sock: unknown): Promi
     );
 
   const before = await stillLid();
-  await learnLidMapping(
-    clinicId,
-    pairs.filter((p) => p.pn && p.lid).map((p) => ({ lid: p.lid, jid: p.pn }))
+  if (!before) return 0;
+
+  // The pairs the database can already prove, before asking the library anything.
+  await foldKnownLids(clinicId).catch((e) =>
+    console.error(`[wa ${clinicId}] lid fold`, (e as Error).message)
   );
+
+  const store = (
+    sock as {
+      signalRepository?: {
+        lidMapping?: { getPNsForLIDs?: (lids: string[]) => Promise<{ pn: string; lid: string }[] | null> };
+      };
+    }
+  ).signalRepository?.lidMapping;
+  const resolver = store?.getPNsForLIDs;
+  if (typeof resolver === "function") {
+    /*
+      Every pending thread, a page at a time. This used to take the newest
+      hundred, so a clinic whose newest hundred were unresolvable never had
+      the older ones asked about at all. The store answers from its own keys,
+      without a network round trip, so asking about all of them is cheap.
+      Paged by id, which stays stable while threads leave the set under it.
+    */
+    const PAGE = 200;
+    let after: string | null = null;
+    for (;;) {
+      const page = await withSystem((c) =>
+        c.query(
+          `select id, wa_lid from conversations
+            where clinic_id = $1 and identifier_kind = 'lid' and wa_lid is not null
+              and ($2::uuid is null or id > $2::uuid)
+            order by id
+            limit $3`,
+          [clinicId, after, PAGE]
+        )
+      );
+      if (!page.rowCount) break;
+      after = page.rows[page.rows.length - 1].id as string;
+
+      let pairs: { pn: string; lid: string }[] | null = null;
+      try {
+        pairs = await resolver.call(
+          store,
+          page.rows.map((r) => `${bareJidUser(String(r.wa_lid))}@lid`)
+        );
+      } catch (e) {
+        console.error(`[wa ${clinicId}] lid batch lookup failed`, (e as Error).message);
+        break;
+      }
+      if (pairs?.length) {
+        await learnLidMapping(
+          clinicId,
+          pairs.filter((p) => p.pn && p.lid).map((p) => ({ lid: p.lid, jid: p.pn }))
+        );
+      }
+      if (page.rowCount < PAGE) break;
+    }
+  }
+
   return Math.max(0, before - (await stillLid()));
 }
 

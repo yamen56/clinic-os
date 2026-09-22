@@ -184,8 +184,33 @@ export function e164ToJid(e164: string): string {
   return `${e164.replace(/^\+/, "")}@s.whatsapp.net`;
 }
 
-/** E.164 from a WhatsApp JID (5-30 digit user part). */
+/**
+ * E.164 from a WhatsApp phone-number JID, or null for anything else.
+ *
+ * A JID is `user[_agent][:device]@server`, and the device part is not
+ * decoration: Baileys' own LID→number lookup answers `962790744070:0@s.whatsapp.net`,
+ * always with the device. Matching only `digits@` threw away every one of those
+ * answers, so no LID thread was ever given its number or its patient.
+ *
+ * Only the phone servers count. The digits of a LID look like a number and are
+ * not one — reading them as a number is how messages went to an address nobody
+ * is at — so a LID, group, broadcast or newsletter JID is null here.
+ */
 export function jidToE164(jid: string): string | null {
-  const m = jid.match(/^(\d{7,15})@/);
+  const m = jid.match(/^(\d{7,15})(?:_\d+)?(?::\d+)?@(?:s\.whatsapp\.net|c\.us|hosted)$/);
   return m ? `+${m[1]}` : null;
+}
+
+/** True for an identity (LID) address, including a hosted business one. */
+export function isLidJid(jid: string | null | undefined): boolean {
+  return !!jid && /@(?:hosted\.)?lid$/.test(jid);
+}
+
+/**
+ * The user part of a JID with the agent and device stripped: `123:4@lid` → `123`.
+ * Also accepts a bare id, so values stored with and without the device compare
+ * equal.
+ */
+export function bareJidUser(jid: string): string {
+  return jid.split("@")[0].split(":")[0].split("_")[0];
 }

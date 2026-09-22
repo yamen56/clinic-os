@@ -111,3 +111,51 @@ export async function createPatientFromConversationAction(
     return { patientId: patient.id };
   });
 }
+
+/**
+ * Attach a conversation to a file that already exists — or, with null, detach it.
+ *
+ * A thread WhatsApp addresses by identity has no number to match a file on, and
+ * some never will: a sender who hides their number is still somebody's patient.
+ * Staff know who they are talking to; this is them saying so.
+ *
+ * Only the link changes. Threads are not merged and no address moves, because
+ * the person writing is not always the patient — a mother writing about her son
+ * belongs on his file without taking over the thread his father replies on.
+ */
+export async function linkConversationToPatientAction(
+  slug: string,
+  conversationId: string,
+  patientId: string | null
+): Promise<{ ok?: true; error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "patients") || !can(access, "conversations")) return { error: "forbidden" };
+
+  return inClinic(access, async (c) => {
+    if (patientId) {
+      const p = await c.query(
+        `select 1 from patients where id = $1 and clinic_id = $2 and merged_into is null`,
+        [patientId, access.clinicId]
+      );
+      if (!p.rowCount) return { error: "not_found" };
+    }
+    const r = await c.query(
+      `update conversations set patient_id = $3 where id = $1 and clinic_id = $2 returning id`,
+      [conversationId, access.clinicId, patientId]
+    );
+    if (!r.rowCount) return { error: "not_found" };
+
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: patientId ? "conversation.link_patient" : "conversation.unlink_patient",
+      entity: "conversation",
+      entityId: conversationId,
+      detail: { patientId },
+    });
+
+    revalidatePath(`/c/${slug}/patients`);
+    return { ok: true as const };
+  });
+}

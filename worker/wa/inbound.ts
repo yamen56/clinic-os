@@ -1,5 +1,7 @@
 import {
   downloadMediaMessage,
+  normalizeMessageContent,
+  proto,
   type WASocket,
   type WAMessage,
   type BaileysEventMap,
@@ -7,8 +9,8 @@ import {
 import pino from "pino";
 import { withSystem } from "../db";
 import { findPatientByPhone } from "../../src/lib/patients";
-import { jidToE164 } from "../../src/lib/phone";
-import { pnForLid } from "./lid-mapping";
+import { bareJidUser, isLidJid, jidToE164 } from "../../src/lib/phone";
+import { adoptNumber, pnForLid } from "./lid-mapping";
 import { saveFile } from "../../src/lib/storage";
 
 const logger = pino({ level: "silent" });
@@ -21,9 +23,46 @@ type Extracted = {
   hasMedia: boolean;
 };
 
-function extract(msg: WAMessage): Extracted {
-  const m = msg.message;
-  if (!m) return { msgType: "unknown", body: "", hasMedia: false };
+/**
+ * What WhatsApp sends that nobody wrote: reactions, edits and deletions of
+ * earlier messages, poll votes, pins, and the key-exchange and context
+ * envelopes that ride along with real content. Everything else is something a
+ * person sent, and is kept even when it cannot be rendered.
+ */
+const HOUSEKEEPING = new Set([
+  "protocolMessage",
+  "reactionMessage",
+  "encReactionMessage",
+  "pollUpdateMessage",
+  "keepInChatMessage",
+  "pinInChatMessage",
+  "senderKeyDistributionMessage",
+  "messageContextInfo",
+]);
+
+/** A shared contact as a line a receptionist can read and dial. */
+function contactLine(c: { displayName?: string | null; vcard?: string | null }): string {
+  const vcard = c.vcard ?? "";
+  const numbers = [...vcard.matchAll(/waid=(\d{7,15})/g)].map((x) => `+${x[1]}`);
+  if (!numbers.length) {
+    for (const x of vcard.matchAll(/^TEL[^:]*:(.+)$/gm)) numbers.push(x[1].trim());
+  }
+  return [c.displayName?.trim(), ...new Set(numbers)].filter(Boolean).join(" — ");
+}
+
+/**
+ * Null when there is nothing a person sent — the message is housekeeping, or
+ * it could not be decrypted and has no content at all.
+ */
+function extract(msg: WAMessage): Extracted | null {
+  /*
+    Unwrap first. Disappearing messages, view-once media and documents sent
+    with a caption all arrive inside an envelope, and reading only the top
+    level dropped every one of them — which, for a patient who has
+    disappearing messages switched on, was every message they ever sent.
+  */
+  const m = normalizeMessageContent(msg.message);
+  if (!m) return null;
   if (m.conversation) return { msgType: "text", body: m.conversation, hasMedia: false };
   if (m.extendedTextMessage?.text)
     return { msgType: "text", body: m.extendedTextMessage.text, hasMedia: false };
@@ -56,13 +95,41 @@ function extract(msg: WAMessage): Extracted {
       mediaName: m.documentMessage.fileName ?? "document",
       hasMedia: true,
     };
+  // A round video note.
+  if (m.ptvMessage)
+    return {
+      msgType: "video",
+      body: "",
+      mediaMime: m.ptvMessage.mimetype ?? "video/mp4",
+      hasMedia: true,
+    };
   if (m.stickerMessage) return { msgType: "sticker", body: "", hasMedia: false };
-  if (m.locationMessage)
+  const place = m.locationMessage ?? m.liveLocationMessage;
+  if (place)
     return {
       msgType: "location",
-      body: `${m.locationMessage.degreesLatitude},${m.locationMessage.degreesLongitude}`,
+      body: `${place.degreesLatitude},${place.degreesLongitude}`,
       hasMedia: false,
     };
+  // Patients share a relative's or their doctor's number this way.
+  if (m.contactMessage)
+    return { msgType: "text", body: contactLine(m.contactMessage), hasMedia: false };
+  if (m.contactsArrayMessage?.contacts?.length)
+    return {
+      msgType: "text",
+      body: m.contactsArrayMessage.contacts.map(contactLine).join("\n"),
+      hasMedia: false,
+    };
+
+  /*
+    Something a person sent that this cannot render — a poll, an event, a
+    product. Keeping it as `unknown` puts "[unknown]" in the thread, which tells
+    the receptionist to look at the phone; dropping it told them nothing.
+  */
+  const content = Object.keys(m).filter(
+    (k) => !HOUSEKEEPING.has(k) && (m as Record<string, unknown>)[k] != null
+  );
+  if (!content.length) return null;
   return { msgType: "unknown", body: "", hasMedia: false };
 }
 
@@ -83,7 +150,31 @@ export async function handleUpsert(
 
 async function handleOne(clinicId: string, sock: WASocket, msg: WAMessage) {
   const jid = msg.key.remoteJid ?? "";
-  if (!jid || jid.endsWith("@g.us") || jid === "status@broadcast" || jid.endsWith("@newsletter")) return;
+  if (
+    !jid ||
+    jid.endsWith("@g.us") ||
+    jid.endsWith("@broadcast") ||
+    jid.endsWith("@newsletter")
+  )
+    return;
+
+  const fromMe = !!msg.key.fromMe;
+  const waId = msg.key.id ?? null;
+
+  if (!msg.message && msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
+    /*
+      A message that could not be decrypted. Baileys asks the phone to resend
+      it and it usually arrives moments later under the same id. Said out loud
+      so that a session whose keys have gone bad — every message failing, not
+      one — shows up in the logs instead of as a quiet inbox.
+    */
+    console.warn(
+      `[wa ${clinicId}] undecryptable message ${waId} (${msg.messageStubParameters?.[0] ?? "no reason"})`
+    );
+    return;
+  }
+  const ex = extract(msg);
+  if (!ex) return;
 
   /*
     WhatsApp addresses many chats by an opaque LID rather than a phone number.
@@ -92,31 +183,43 @@ async function handleOne(clinicId: string, sock: WASocket, msg: WAMessage) {
     the send silently goes nowhere. Keep the LID as a LID, and keep the real
     JID so replies go back to where the message came from.
   */
-  const isLid = jid.endsWith("@lid");
-  const lid = isLid ? jid.split("@")[0] : null;
+  const isLid = isLidJid(jid);
+  const alt = msg.key.remoteJidAlt ?? null;
+  /*
+    The other form of the same person, when WhatsApp put it on the message. On
+    a message we sent from another device the "sender" is the clinic, so the
+    alternate there can be the clinic's own number or LID — never let that
+    stand for the patient.
+  */
+  const own = sock.user?.id ? jidToE164(sock.user.id) : null;
+  const altPhone = alt ? jidToE164(alt) : null;
+  const lid = isLid
+    ? bareJidUser(jid)
+    : !fromMe && isLidJid(alt)
+      ? bareJidUser(alt!)
+      : null;
   /*
     Ask for the number before deciding this is a stranger.
 
-    Baileys frequently knows the pairing already; it just does not attach it to
-    the message. Without asking, a patient we have on file who moves to identity
-    addressing arrives as somebody new, gets a second thread keyed by their LID,
-    and their own thread goes quiet — which is what a clinic sees as "WhatsApp
-    put my patient's messages somewhere else under a number that isn't theirs".
+    First from the message itself: WhatsApp sends the sender's number beside
+    their LID (`sender_pn`), and Baileys hands it over as `remoteJidAlt`. Then
+    from the mapping store, which knows every pairing it has been told. Without
+    either, a patient we have on file who moves to identity addressing arrives
+    as somebody new, gets a second thread keyed by their LID, and their own
+    thread goes quiet — which is what a clinic sees as "WhatsApp put my
+    patient's messages somewhere else under a number that isn't theirs".
 
-    A null here is the ordinary case for a genuinely unknown sender, and leaves
-    the behaviour exactly as it was.
+    A null here is the ordinary case for a genuinely unknown sender;
+    `recordMessage` still tries the thread that already holds this LID.
   */
-  const phone = isLid ? await pnForLid(sock, jid) : jidToE164(jid);
+  const phone = isLid
+    ? (altPhone && altPhone !== own ? altPhone : null) ?? (await pnForLid(sock, jid))
+    : jidToE164(jid);
   // The identifier the conversation is keyed by. For a LID chat we do not know
-  // the number yet — `chats.phoneNumberShare` and the contact list fill it in
-  // later, and until then the LID stands in for it.
-  const identifier = phone ?? (lid ? `+${lid}` : null);
+  // the number yet — the mapping sweep fills it in later, and until then the
+  // LID stands in for it.
+  const identifier = phone ?? (isLid && lid ? `+${lid}` : null);
   if (!identifier) return;
-
-  const fromMe = !!msg.key.fromMe;
-  const waId = msg.key.id ?? null;
-  const ex = extract(msg);
-  if (ex.msgType === "unknown" && !ex.body) return;
 
   let mediaPath: string | null = null;
   if (ex.hasMedia) {
@@ -176,7 +279,9 @@ export async function recordMessage(
     pushName: string | null;
   }
 ) {
-  const dialable = m.dialable ?? true;
+  let dialable = m.dialable ?? true;
+  let phone = m.phone;
+  const lid = m.lid ? bareJidUser(m.lid) : null;
   await withSystem(async (c) => {
     // Dedup (our own sends echo back through messages.upsert)
     if (m.waId) {
@@ -188,6 +293,50 @@ export async function recordMessage(
     }
 
     /*
+      No number, but perhaps a thread that already knows this LID.
+
+      When the clinic writes first — a reminder, an invoice — the send resolves
+      the patient's number to their LID and stores it on their thread. Their
+      reply then comes back from that LID, often with no number on it, and
+      keying it by the LID opened a second thread beside the one it was
+      answering: the reminder in one, "yes, I'll come" in a stranger's.
+    */
+    if (!dialable && lid) {
+      const known = (
+        await c.query(
+          `select phone_e164 from conversations
+            where clinic_id = $1 and identifier_kind = 'phone'
+              and (wa_lid = $2 or wa_lid like $2 || ':%')
+            order by last_message_at desc nulls last
+            limit 1`,
+          [clinicId, lid]
+        )
+      ).rows[0] as { phone_e164: string } | undefined;
+      if (known) {
+        phone = known.phone_e164;
+        dialable = true;
+      }
+    }
+
+    /*
+      A number and a LID together: if this person already has a thread keyed by
+      the LID stand-in, from before the number was known, fold it into the
+      number's thread now rather than on the next sweep — otherwise this message
+      lands in one thread while the conversation so far sits in another.
+    */
+    if (dialable && lid) {
+      // Tidying, not recording: if the fold fails, the message still lands.
+      await c.query("savepoint adopt_number");
+      try {
+        await adoptNumber(c, clinicId, { lid, phone });
+        await c.query("release savepoint adopt_number");
+      } catch (e) {
+        await c.query("rollback to savepoint adopt_number");
+        console.error(`[wa ${clinicId}] lid fold on arrival`, (e as Error).message);
+      }
+    }
+
+    /*
       Look the sender up, but never create them. A message is not a patient —
       the patient list is for people staff added, the AI booked, or who came
       through the booking link. Anyone else gets a conversation and nothing
@@ -195,7 +344,7 @@ export async function recordMessage(
     */
     // A LID is not a number, so it cannot identify a patient. Only look one up
     // when we actually have something dialable.
-    const existing = dialable ? await findPatientByPhone(c, clinicId, m.phone) : null;
+    const existing = dialable ? await findPatientByPhone(c, clinicId, phone) : null;
     const patientId = existing?.id ?? null;
     if (patientId && m.pushName) {
       await c.query(
@@ -220,10 +369,10 @@ export async function recordMessage(
        returning id, ai_enabled, ai_paused_until`,
       [
         clinicId,
-        m.phone,
+        phone,
         patientId,
-        m.jid ?? `${m.phone.replace("+", "")}@s.whatsapp.net`,
-        m.lid ?? null,
+        m.jid ?? `${phone.replace("+", "")}@s.whatsapp.net`,
+        lid,
         dialable ? "phone" : "lid",
         m.pushName ?? null,
       ]

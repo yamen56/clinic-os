@@ -71,6 +71,29 @@ export class WASession {
         markOnlineOnConnect: false,
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
+        /*
+          When a patient's phone cannot decrypt something we sent, it asks for
+          it again, and Baileys needs the content to re-encrypt. Its own cache of
+          recent sends lives in memory and dies with every deploy, so a message
+          sent just before one sat on the patient's screen as "Waiting for this
+          message" for good. Text we can rebuild from the thread; anything else
+          stays unanswered, as before.
+        */
+        getMessage: async (key) => {
+          if (!key.id) return undefined;
+          const row = await withSystem(async (c) =>
+            (
+              await c.query(
+                `select body, msg_type from messages
+                  where clinic_id = $1 and wa_message_id = $2 and direction = 'out'
+                  limit 1`,
+                [this.clinicId, key.id]
+              )
+            ).rows[0] as { body: string; msg_type: string } | undefined
+          ).catch(() => undefined);
+          if (!row || row.msg_type !== "text" || !row.body) return undefined;
+          return { conversation: row.body };
+        },
       });
       this.sock = sock;
 
