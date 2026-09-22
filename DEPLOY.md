@@ -215,7 +215,7 @@ order the limits bite:
 
 | Limit | Roughly | Why |
 |---|---|---|
-| WhatsApp sessions | 60–100 clinics **per worker** | One Baileys socket per clinic. Leases (0054) divide the clinics between workers, so the platform limit is this times the worker count. The per-worker figure is still unmeasured — an estimate about one process's memory. |
+| WhatsApp sessions | **Measure it** — see below | One Baileys socket per clinic. Leases (0054) divide the clinics between workers, so the platform limit is the per-worker figure times the worker count. That figure used to be an estimate; /admin/monitoring now publishes what each worker is actually holding, so it is arithmetic. |
 | Slow-lane jobs | ~14,000/day per worker | One AI reply, filing or PDF at a time. `WORKER_SLOW_LANES` raises it, and so does another worker. |
 | Postgres connections | ~4 web replicas | `max_connections` 100 less 3 reserved, `PG_POOL_MAX` 20 plus one `LISTEN` per web process, 8 for each worker. Past that, move the request path to the transaction pooler — every RLS context is already transaction-local `set_config` and the schedule lock is `pg_advisory_xact_lock`, so it is compatible; only the `LISTEN` client must stay on the session pooler. |
 | Per-clinic data | ~30 MB | A busy multi-year practice: 5k patients, 25k appointments, 40k messages. Every screen's query is under 2ms at that size (`npm run bench`). |
@@ -245,9 +245,46 @@ later (`WA_LEASE_TTL_SECONDS`); a graceful shutdown hands them back at once.
 `npm run qa:leases` is the suite that proves two workers never run the same
 socket — run it after touching any of this.
 
-Worth knowing before scaling the **web** service: the rate limiters in
-`lib/booking-public.ts` are in-process, so N replicas means N times the written
-allowance. That wants a shared counter before the replica count goes up.
+### Working out how many one worker can hold
+
+Every worker publishes what it is carrying once a minute (`worker_instances`,
+0059) and **/admin/monitoring** shows it: sessions held, resident memory, and
+the megabytes per session that falls out of the two.
+
+The arithmetic is then:
+
+    (container memory - baseline) / MB per session = sessions this worker fits
+
+The baseline is what a worker holding nothing uses — around **246 MB** measured
+locally, which is the floor before a single clinic is connected. Take the
+per-session figure from a worker that is actually holding a realistic number of
+them, not from one holding two.
+
+Set **`WORKER_MEMORY_LIMIT_MB`** on the worker service to the container's memory
+limit. It is only read by the alerting: at 80% of it, the platform raises an
+*urgent* alert, which is the one capacity warning that emails. It is urgent
+because of what recovery costs — a worker that is killed drops every socket it
+holds, and each of those clinics then needs somebody standing at a phone to
+rescan a QR code.
+
+Set **`WA_MAX_SESSIONS_PER_WORKER`** to the number the arithmetic gives, less a
+margin. At 90% of it a notice appears on the monitoring page, which is the point
+to raise the replica count.
+
+Worth knowing before scaling the **web** service: `rateLimit` in
+`lib/booking-public.ts` and the flood gate in `lib/flood-gate.ts` are still
+in-process, so N replicas means N times the written allowance for whatever uses
+them. That is deliberate and it is now only the read endpoints — slots, days,
+logos, doctor photos, PDF fetches — where the number is about shedding load and
+a floor per instance still sheds it.
+
+Everything where the number is a promise about the real world moved to
+`rateLimitShared` (0056), which counts once for the whole fleet: how many
+one-time codes a phone may be sent, how many guesses somebody gets at a code,
+the sign-in re-auth. Those were the ones that made a second replica unsafe
+rather than merely looser. When adding a limit, the test is "what breaks if this
+number is quietly multiplied by the replica count?" — if the answer is worse
+than "more load gets through", use the shared one.
 
 `shared_buffers` is 128 MB and the whole database is far smaller, so raising it
 is premature. The trigger to watch is the cache hit ratio — currently 100%:

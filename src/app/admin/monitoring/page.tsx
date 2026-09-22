@@ -10,7 +10,7 @@ import { silenceByClinic, SILENCE_MIN_VOLUME, SILENCE_ALERT_RATIO } from "@/lib/
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { Activity, HardDrive, MessageCircle, Sparkles, AlertTriangle, DatabaseBackup, ShieldAlert, Bug } from "lucide-react";
+import { Activity, HardDrive, MessageCircle, Sparkles, AlertTriangle, DatabaseBackup, ShieldAlert, Bug, Server } from "lucide-react";
 
 import { internalSecret } from "@/lib/internal-secret";
 
@@ -174,6 +174,32 @@ export default async function MonitoringPage() {
       first_seen: string;
       last_seen: string;
       last_digest: string | null;
+    }[]
+  ).catch(() => []);
+
+  /*
+    What each worker is carrying, and what a WhatsApp session actually costs.
+
+    DEPLOY.md's "60–100 clinics per worker" was an estimate, and said so. The
+    megabytes-per-session figure below is the measured version of it: with it,
+    "when do we need a second worker" is arithmetic instead of a guess, and the
+    answer can be written back into DEPLOY.md from real numbers.
+  */
+  const workers = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select worker_id, sessions, rss_mb, heap_mb, version, started_at, updated_at
+           from worker_instances
+          order by started_at`
+      )
+    ).rows as {
+      worker_id: string;
+      sessions: number;
+      rss_mb: number;
+      heap_mb: number;
+      version: string;
+      started_at: string;
+      updated_at: string;
     }[]
   ).catch(() => []);
   const load = publicLoad();
@@ -420,6 +446,66 @@ export default async function MonitoringPage() {
                     </span>
                   </div>
                   <div className="mt-0.5 text-ink-500">{a.detail}</div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
+      {/*
+        The fleet, and what one WhatsApp session costs in memory.
+
+        Always rendered when there is a worker at all, unlike the alert cards —
+        this is a number somebody goes looking for when deciding whether to add
+        a replica, not a condition that should only appear when it is wrong.
+      */}
+      {workers.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader
+            title={
+              <span className="flex items-center gap-2">
+                <Server className="h-4 w-4 text-brand-600" />
+                Workers
+              </span>
+            }
+            sub="Each process, what it is holding, and the measured cost per WhatsApp session"
+          />
+          <ul className="divide-y divide-line">
+            {workers.map((w) => {
+              // Stale means the container is gone; the row outlives it by design
+              // so "no workers at all" and "this one died" stay distinguishable.
+              const stale = Date.now() - new Date(w.updated_at).getTime() > 5 * 60_000;
+              /*
+                Rounded to whole megabytes and only shown once there is a
+                session to divide by. The baseline is not subtracted because a
+                worker with no sessions is right there in the list to compare
+                against, and a derived number that quietly assumes a constant is
+                worse than two honest ones.
+              */
+              const perSession = w.sessions > 0 ? Math.round(w.rss_mb / w.sessions) : null;
+              return (
+                <li key={w.worker_id} className="px-5 py-2.5 text-[13px]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`font-medium ${stale ? "text-danger" : "text-ink-700"}`}>
+                      <code className="text-[12px]">{w.worker_id.slice(0, 12)}</code>
+                      {stale && <span className="ms-2">last seen {fmtRelative(w.updated_at, locale)}</span>}
+                    </span>
+                    <span className="shrink-0 text-ink-400">
+                      up {fmtRelative(w.started_at, locale)}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-ink-500">
+                    <span>
+                      {w.sessions} session{w.sessions === 1 ? "" : "s"}
+                    </span>
+                    <span className="num tnum">{w.rss_mb} MB resident</span>
+                    <span className="num tnum text-ink-400">{w.heap_mb} MB heap</span>
+                    {perSession !== null && (
+                      <span className="num tnum">≈{perSession} MB per session</span>
+                    )}
+                    {w.version && <span className="text-[12px] text-ink-400">{w.version}</span>}
+                  </div>
                 </li>
               );
             })}

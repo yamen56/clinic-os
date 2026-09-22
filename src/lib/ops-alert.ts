@@ -131,6 +131,7 @@ export async function collectFindings(): Promise<Finding[]> {
     storageChecks,
     webChecks,
     appErrorChecks,
+    workerCapacityChecks,
   ];
   for (const check of checks) {
     try {
@@ -246,6 +247,75 @@ async function jobChecks(): Promise<Finding[]> {
  * backups have stopped". These live on /admin/monitoring, which is where the
  * WhatsApp notices already live.
  */
+/**
+ * How close a worker is to the limits that take its clinics down with it.
+ *
+ * The per-worker ceiling was an estimate — DEPLOY.md said 60–100 clinics and
+ * said plainly that the figure was unmeasured. Worker instances publish what
+ * they are actually holding now (0059), so this can be a warning instead of a
+ * postmortem.
+ *
+ * The failure being headed off is specific: a worker that runs out of memory
+ * takes every WhatsApp socket it holds down with it, and those come back only
+ * when a *person* rescans a QR code for each affected clinic. The warning has
+ * to arrive with room to act — which means at a fraction of the limit, not at
+ * it.
+ *
+ * Both thresholds are ratios of numbers the operator sets, and are silent when
+ * they are not set. A limit this code invented for itself would either cry wolf
+ * on a big container or say nothing on a small one.
+ */
+async function workerCapacityChecks(): Promise<Finding[]> {
+  const memLimit = Number(process.env.WORKER_MEMORY_LIMIT_MB || 0);
+  const sessionLimit = Number(process.env.WA_MAX_SESSIONS_PER_WORKER || 0);
+  if (!memLimit && !sessionLimit) return [];
+
+  const rows = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select worker_id, sessions, rss_mb
+           from worker_instances
+          -- Only workers that are still reporting. A stale row is a container
+          -- that is gone, and "the dead worker was nearly full" is not news.
+          where updated_at > now() - interval '5 minutes'`
+      )
+    ).rows
+  );
+
+  const out: Finding[] = [];
+  for (const w of rows) {
+    const id = String(w.worker_id).slice(0, 12);
+    if (memLimit && Number(w.rss_mb) >= memLimit * 0.8) {
+      out.push({
+        key: `worker_memory:${w.worker_id}`,
+        /*
+          Urgent, unlike the other capacity notices, because of what recovery
+          costs. An out-of-memory worker drops every socket it holds, and a
+          dropped socket is a clinic that needs somebody to stand at a phone and
+          rescan a QR code. That is worth an email at 80%.
+        */
+        severity: "urgent",
+        title: `Worker ${id} is at ${w.rss_mb} MB of ${memLimit} MB`,
+        detail:
+          `It is holding ${w.sessions} WhatsApp session(s). If it is killed they all drop and ` +
+          "each clinic needs a QR rescan. Raise the container's memory, or set " +
+          "WA_MAX_SESSIONS_PER_WORKER and add a replica — see DEPLOY.md, running more than one worker.",
+      });
+    }
+    if (sessionLimit && Number(w.sessions) >= sessionLimit * 0.9) {
+      out.push({
+        key: `worker_sessions:${w.worker_id}`,
+        severity: "notice" as const,
+        title: `Worker ${id} is carrying ${w.sessions} of ${sessionLimit} sessions`,
+        detail:
+          "New clinics will have nowhere to connect once it is full. Another worker replica " +
+          "picks up the excess within WA_LEASE_TTL_SECONDS.",
+      });
+    }
+  }
+  return out;
+}
+
 async function appErrorChecks(): Promise<Finding[]> {
   const rows = await withSystem(async (c) =>
     (
