@@ -409,14 +409,37 @@ Restore the **schema from the migrations**, never from the archive: the script
 migrates the target first, so a restored database is built exactly the way
 production was rather than inheriting whatever the dump happened to carry.
 
-### The gap that is left
+### Keeping the archives away from what they protect
 
-The archives sit in the same bucket as the patient files they protect, and
+By default the archives sit in the same bucket as the patient files, and
 uploaded files exist **only** there — the database backup stores paths, not
-bytes. Object storage survives hardware failure; it does not survive a deleted
-bucket or a leaked key. Enabling object versioning on the bucket, and putting
-the archives somewhere separate, is the remaining work and it lives in the
-Cloudflare account rather than in this repository.
+bytes. Object storage survives hardware failure. It does not survive a deleted
+bucket or a leaked key, and either one would take the uploads and every archive
+that could have restored them in the same motion.
+
+Set **`BACKUP_S3_BUCKET`** and the archives go elsewhere. Nothing else changes:
+storage routes on the key prefix, so `_system/backups/` lands in the vault and
+`backup:list`, `backup:verify` and `restore` find it there without being told.
+
+Give it **its own credentials** as well — `BACKUP_S3_ACCESS_KEY_ID` and
+`BACKUP_S3_SECRET_ACCESS_KEY`, plus `BACKUP_S3_ENDPOINT` and
+`BACKUP_S3_REGION` for another account. The two protect against different
+things, and it is worth being clear which you have:
+
+| Setup | Survives | Does not survive |
+|---|---|---|
+| One bucket | A dead disk | Emptying the bucket; a leaked key |
+| Separate bucket, same key | Emptying the wrong bucket | A key lifted from the running app |
+| Separate bucket, own key | Both | Losing the whole Cloudflare account |
+
+/admin/monitoring says which of the three is in force, because "we have
+backups" and "the backups are somewhere the app cannot reach" are different
+claims and only the second one is worth much against an attacker.
+
+**Still outside this repository:** object versioning on both buckets, which
+lives in the Cloudflare account. Versioning is what turns an overwrite or a
+delete into something recoverable, and no amount of application code can
+substitute for it.
 
 ---
 

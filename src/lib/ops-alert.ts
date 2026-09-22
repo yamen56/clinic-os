@@ -37,7 +37,7 @@
 import { withSystem } from "@/lib/db";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { backupAgeHours, backupEngineReady } from "@/lib/backup";
-import { usingObjectStore } from "@/lib/storage";
+import { usingObjectStore, usingBackupVault, backupVaultSharesCredentials } from "@/lib/storage";
 import { appUrl } from "@/lib/urls";
 import { silenceByClinic, concerning } from "@/lib/whatsapp-health";
 
@@ -151,6 +151,50 @@ export async function collectFindings(): Promise<Finding[]> {
   return found;
 }
 
+/**
+ * Whether the archives could survive losing the bucket they protect.
+ *
+ * DEPLOY.md called this "the gap that is left" and it stayed open: the nightly
+ * archives sat in the same bucket as the patient files, and those files exist
+ * *only* there — the database backup stores paths, not bytes. Object storage
+ * survives hardware failure. It does not survive a deleted bucket or a leaked
+ * key, and either one takes the uploads and every archive that could have
+ * restored them in the same motion.
+ *
+ * A notice rather than urgent, deliberately. Nothing is broken today; this is a
+ * posture one bad afternoon away from mattering, and it is fixed by setting a
+ * variable rather than by waking anybody up.
+ */
+function vaultChecks(): Finding[] {
+  if (!usingBackupVault()) {
+    return [
+      {
+        key: "backup_same_bucket",
+        severity: "notice" as const,
+        title: "The database archives are in the same bucket as the patient files",
+        detail:
+          "A deleted bucket or a leaked key would take the uploads and every archive that could " +
+          "restore them at the same time. Set BACKUP_S3_BUCKET to keep them apart — see " +
+          "DEPLOY.md, Backups.",
+      },
+    ];
+  }
+  if (backupVaultSharesCredentials()) {
+    return [
+      {
+        key: "backup_shared_credentials",
+        severity: "notice" as const,
+        title: "The archive bucket is separate, but uses the app's own credentials",
+        detail:
+          "That survives somebody emptying the wrong bucket. It does not survive the key itself " +
+          "walking out of the running app. Give the vault its own key with " +
+          "BACKUP_S3_ACCESS_KEY_ID and BACKUP_S3_SECRET_ACCESS_KEY.",
+      },
+    ];
+  }
+  return [];
+}
+
 async function backupChecks(): Promise<Finding[]> {
   // Local disk in development is not a backup destination worth alerting on.
   if (!usingObjectStore()) return [];
@@ -180,6 +224,8 @@ async function backupChecks(): Promise<Finding[]> {
         "running and that object storage is reachable, then run `npm run backup:list`.",
     });
   }
+  // Where the archives are kept, as opposed to whether they are being written.
+  out.push(...vaultChecks());
   return out;
 }
 

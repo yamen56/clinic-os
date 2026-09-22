@@ -36,24 +36,86 @@ export function usingObjectStore(): boolean {
 // ---------------------------------------------------------------- S3 driver
 
 type S3Module = typeof import("@aws-sdk/client-s3");
-let s3Client: InstanceType<S3Module["S3Client"]> | null = null;
 let s3Mod: S3Module | null = null;
+const s3Clients = new Map<string, InstanceType<S3Module["S3Client"]>>();
 
-async function s3(): Promise<{ mod: S3Module; client: InstanceType<S3Module["S3Client"]>; bucket: string }> {
+/** Where the nightly database archives live. */
+const BACKUP_PREFIX = "_system/backups/";
+
+/**
+ * Whether the archives are kept somewhere separate from the patient files.
+ *
+ * They were not, and that was the one gap DEPLOY.md left open in writing: the
+ * archives sat in the same bucket as the uploads they protect, and the uploads
+ * exist *only* there — the database backup stores paths, not bytes. Object
+ * storage survives hardware failure. It does not survive a deleted bucket or a
+ * leaked key, and either one would take the patient files and every archive
+ * that could have restored them in the same motion.
+ *
+ * Set `BACKUP_S3_BUCKET` and the archives go elsewhere. Give it its own
+ * credentials too — `BACKUP_S3_ACCESS_KEY_ID` and `BACKUP_S3_SECRET_ACCESS_KEY`
+ * — and a key lifted from the running app cannot reach them at all, which is
+ * the difference between surviving an accident and surviving an attacker.
+ */
+export function usingBackupVault(): boolean {
+  return Boolean(process.env.BACKUP_S3_BUCKET);
+}
+
+/**
+ * Whether the archives share credentials with the app.
+ *
+ * A separate bucket on the same key survives somebody emptying the wrong
+ * bucket. It does not survive the key itself walking out, so the two are worth
+ * distinguishing on the monitoring page rather than both reading as "safe".
+ */
+export function backupVaultSharesCredentials(): boolean {
+  return usingBackupVault() && !process.env.BACKUP_S3_ACCESS_KEY_ID;
+}
+
+/**
+ * Which bucket a key belongs to, decided by the key itself.
+ *
+ * Routing on the prefix rather than through every call site is what keeps
+ * restore working: `readBackup` and `deleteFile` are handed a storage path and
+ * nothing else, so the path has to be enough to find the bytes again. It also
+ * means turning the vault on is one variable, not a migration of call sites.
+ */
+function targetFor(key: string): { vault: boolean } {
+  return { vault: usingBackupVault() && key.startsWith(BACKUP_PREFIX) };
+}
+
+async function s3(
+  key = ""
+): Promise<{ mod: S3Module; client: InstanceType<S3Module["S3Client"]>; bucket: string }> {
   if (!s3Mod) s3Mod = await import("@aws-sdk/client-s3");
-  if (!s3Client) {
-    s3Client = new s3Mod.S3Client({
-      region: process.env.S3_REGION || "auto",
-      endpoint: process.env.S3_ENDPOINT,
+  const { vault } = targetFor(key);
+  const name = vault ? "vault" : "main";
+  let client = s3Clients.get(name);
+  if (!client) {
+    // Each falls back to the main setting, so a vault in the same account needs
+    // only the bucket name — and one in a different account can override all of
+    // it without touching how the app reaches its own files.
+    client = new s3Mod.S3Client({
+      region: (vault ? process.env.BACKUP_S3_REGION : "") || process.env.S3_REGION || "auto",
+      endpoint: (vault ? process.env.BACKUP_S3_ENDPOINT : "") || process.env.S3_ENDPOINT,
       // R2 requires path-style addressing.
       forcePathStyle: true,
       credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
-        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
+        accessKeyId:
+          (vault ? process.env.BACKUP_S3_ACCESS_KEY_ID : "") || process.env.S3_ACCESS_KEY_ID || "",
+        secretAccessKey:
+          (vault ? process.env.BACKUP_S3_SECRET_ACCESS_KEY : "") ||
+          process.env.S3_SECRET_ACCESS_KEY ||
+          "",
       },
     });
+    s3Clients.set(name, client);
   }
-  return { mod: s3Mod, client: s3Client, bucket: process.env.S3_BUCKET! };
+  return {
+    mod: s3Mod,
+    client,
+    bucket: (vault ? process.env.BACKUP_S3_BUCKET! : process.env.S3_BUCKET!),
+  };
 }
 
 // -------------------------------------------------------------- public API
@@ -95,7 +157,7 @@ export async function saveSystemStream(
   );
 
   if (usingObjectStore()) {
-    const { client, bucket } = await s3();
+    const { client, bucket } = await s3(key);
     const { Upload } = await import("@aws-sdk/lib-storage");
     /*
       8 MB parts, two in flight. R2 requires every part but the last to be the
@@ -121,7 +183,7 @@ export async function saveSystemStream(
 export async function listSystemFiles(folder: string): Promise<string[]> {
   const prefix = path.posix.join("_system", folder) + "/";
   if (usingObjectStore()) {
-    const { mod, client, bucket } = await s3();
+    const { mod, client, bucket } = await s3(prefix);
     const out: string[] = [];
     let token: string | undefined;
     do {
@@ -152,7 +214,7 @@ export async function listSystemFileDetails(
 ): Promise<{ key: string; size: number }[]> {
   const prefix = path.posix.join("_system", folder) + "/";
   if (usingObjectStore()) {
-    const { mod, client, bucket } = await s3();
+    const { mod, client, bucket } = await s3(prefix);
     const out: { key: string; size: number }[] = [];
     let token: string | undefined;
     do {
@@ -183,7 +245,7 @@ export async function saveFile(
   const key = keyFor(clinicId, folder, fileName);
 
   if (usingObjectStore()) {
-    const { mod, client, bucket } = await s3();
+    const { mod, client, bucket } = await s3(key);
     await client.send(new mod.PutObjectCommand({ Bucket: bucket, Key: key, Body: data }));
     return { storagePath: key, sizeBytes: data.length };
   }
@@ -196,7 +258,7 @@ export async function saveFile(
 
 export async function openFile(storagePath: string): Promise<StoredFile | null> {
   if (usingObjectStore()) {
-    const { mod, client, bucket } = await s3();
+    const { mod, client, bucket } = await s3(storagePath);
     try {
       const r = await client.send(new mod.GetObjectCommand({ Bucket: bucket, Key: storagePath }));
       const bytes = await r.Body?.transformToByteArray();
@@ -221,7 +283,7 @@ export async function readFileBuffer(storagePath: string): Promise<Buffer | null
 
 export async function deleteFile(storagePath: string): Promise<void> {
   if (usingObjectStore()) {
-    const { mod, client, bucket } = await s3();
+    const { mod, client, bucket } = await s3(storagePath);
     await client
       .send(new mod.DeleteObjectCommand({ Bucket: bucket, Key: storagePath }))
       .catch(() => {});
