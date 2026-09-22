@@ -186,7 +186,21 @@ async function main() {
     }
   })(publicDir);
   check("public routes were found at all", routes.length > 5, `${routes.length}`);
-  const unguarded = routes.filter((r) => !fs.readFileSync(r, "utf8").includes("rateLimit("));
+  /*
+    Either limiter counts as metered. `rateLimit` counts in this process and is
+    the right answer for a read endpoint; `rateLimitShared` counts once for the
+    whole fleet and is the right answer wherever the number is a promise about
+    the real world — how many one-time codes a phone may be sent, how many
+    guesses somebody gets at one. What this check is about is that *something*
+    counts, not which.
+
+    Matched with a word boundary and an optional suffix rather than a substring:
+    the plain `"rateLimit("` test this used to do reported all five shared
+    routes as unmetered the moment they were converted, because
+    `rateLimitShared(` does not contain `rateLimit(`.
+  */
+  const METERED = /\brateLimit(Shared)?\(/;
+  const unguarded = routes.filter((r) => !METERED.test(fs.readFileSync(r, "utf8")));
   /*
     This is the check that would have caught the slot scan, which sat unmetered
     next to a guarded sibling for as long as both existed. It was found by
