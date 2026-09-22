@@ -148,6 +148,104 @@ export function patientFilterSql(
 }
 
 /**
+ * How many patients one page of the list carries.
+ *
+ * The list used to stop here full stop — `limit 100` with no paging, so on a
+ * clinic with thousands of files everyone past the hundredth was reachable only
+ * by searching for them by name. Now it is a page size, and there is a page
+ * after it.
+ */
+export const PATIENT_PAGE_SIZE = 100;
+
+/**
+ * The list's row select, shared by the first render and by "load more".
+ *
+ * One definition, because the two must agree about the columns, the order and
+ * the tiebreak — and a keyset cursor that disagrees with the ORDER BY by one
+ * column silently repeats and skips records rather than failing.
+ *
+ * **Ordered by `created_at desc, id desc`, and the tiebreak is not decoration.**
+ * The order used to be `updated_at desc`, which cannot be paged over at all
+ * here: every table in this schema carries a touch trigger, so `updated_at`
+ * means "last written to by anything" and an overnight automation stamping a
+ * field reorders the list underneath whoever is reading it. `created_at` is
+ * never rewritten. The id then gives two files created in the same millisecond
+ * one definite order, without which the cursor can drop whichever row the
+ * planner happened to put second.
+ *
+ * Matches `patients_list_idx` (0058) exactly, including the two conditions
+ * `patientFilterSql` always applies.
+ *
+ * @param where        from `patientFilterSql`
+ * @param cursorParam  placeholder number for the cursor's timestamp; the id
+ *                     follows it. Null for the first page.
+ */
+export function patientListRowsSql(where: string, cursorParam: number | null): string {
+  const after =
+    cursorParam === null
+      ? ""
+      : ` and (p.created_at, p.id) < ($${cursorParam}::timestamptz, $${cursorParam + 1}::uuid)`;
+  return `select p.id, p.full_name, p.phone_e164, p.tags, p.source, p.status,
+                 p.last_visit_at, p.automation_opt_out,
+                 /*
+                   As text, and this is not cosmetic — it is the difference
+                   between paging that works and paging that silently loses
+                   records.
+
+                   Postgres stores a timestamptz to the microsecond; node-pg
+                   hands it back as a JavaScript Date, which only has
+                   milliseconds. Send that value back as the cursor and it is a
+                   rounded version of the row's real timestamp, so the next page
+                   starts in the wrong place and everything between the two
+                   values is skipped — invisibly, because the page still looks
+                   full and the patients that vanished were never on screen to
+                   be missed. qa-patient-paging caught 49 of 237 going missing
+                   this way.
+
+                   ::text round-trips exactly through $n::timestamptz.
+                 */
+                 p.created_at::text as created_at,
+                 (select a.starts_at from appointments a
+                   where a.patient_id = p.id and a.starts_at > now()
+                     and a.status not in ('cancelled')
+                   order by a.starts_at limit 1) as next_appointment
+            from patients p
+           where ${where}${after}
+           order by p.created_at desc, p.id desc
+           limit ${PATIENT_PAGE_SIZE}`;
+}
+
+/** One list row, as both the page and the "load more" route return it. */
+export type PatientListRow = {
+  id: string;
+  fullName: string;
+  phone: string;
+  tags: string[];
+  source: string;
+  status: string;
+  lastVisitAt: string | null;
+  createdAt: string;
+  nextAppointment: string | null;
+  mutedFromAutomations: boolean;
+};
+
+/** The one place a row from `patientListRowsSql` becomes a `PatientListRow`. */
+export function toPatientListRow(r: Record<string, unknown>): PatientListRow {
+  return {
+    id: r.id as string,
+    fullName: r.full_name as string,
+    phone: r.phone_e164 as string,
+    tags: (r.tags ?? []) as string[],
+    source: r.source as string,
+    status: r.status as string,
+    lastVisitAt: r.last_visit_at ? String(r.last_visit_at) : null,
+    createdAt: String(r.created_at),
+    nextAppointment: r.next_appointment ? String(r.next_appointment) : null,
+    mutedFromAutomations: Boolean(r.automation_opt_out),
+  };
+}
+
+/**
  * Search by name or any phone format the user might type.
  *
  * Names are matched through `ar_normalize` on both sides, so the spellings that

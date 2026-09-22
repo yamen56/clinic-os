@@ -614,6 +614,8 @@ export const ar: Dict = {
     noPatients: "لا يوجد مرضى بعد",
     noPatientsBody: "أضف أول مريض، أو سيظهرون هنا تلقائياً عندما يراسلونك على واتساب.",
     showingOf: "يعرض {shown} من {total} — استخدم البحث للوصول لمريض محدد.",
+    loadMore: "عرض {n} إضافية",
+    loadMoreFailed: "تعذّر تحميل المزيد. حاول مرة أخرى.",
     existingPatient: "يوجد مريض مسجّل بهذا الرقم — تم فتح ملفه.",
     phoneTaken: "يوجد مريض آخر مسجّل بهذا الرقم",
     phoneTakenAction: "افتح ملفه أو ادمج السجلّين.",

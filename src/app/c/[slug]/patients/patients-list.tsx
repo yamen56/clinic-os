@@ -25,6 +25,8 @@ type Row = {
   source: string;
   status: string;
   lastVisitAt: string | null;
+  /* Half the keyset cursor; the id is the other half. See the load-more route. */
+  createdAt: string;
   nextAppointment: string | null;
   mutedFromAutomations: boolean;
 };
@@ -33,6 +35,7 @@ export function PatientsList({
   slug,
   patients,
   total,
+  pageSize,
   allTags,
   tz,
   initialFilters,
@@ -41,8 +44,10 @@ export function PatientsList({
   canImport,
 }: {
   slug: string;
+  /** The first page, rendered on the server and arriving with the document. */
   patients: Row[];
   total: number;
+  pageSize: number;
   allTags: string[];
   tz: string;
   initialFilters: { q: string; tag: string; source: string; visit: string; optedOut: string };
@@ -74,6 +79,72 @@ export function PatientsList({
   /** Which export is waiting on the password, if any. See ReauthPrompt. */
   const [reauthFor, setReauthFor] = useState<"pdf" | "xlsx" | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /*
+    Pages after the first, held here rather than pushed back through the URL.
+
+    Re-rendering the whole route to append a hundred rows would refetch the
+    count, the tag list and every row already on screen, and would lose the
+    reader's scroll position — for a button whose entire promise is "more of
+    what you are already looking at".
+  */
+  const [extra, setExtra] = useState<Row[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState(false);
+  /*
+    Whether the server said there is another page. Seeded from the count so the
+    button appears on first render without an extra request, then replaced by
+    what the route actually reports.
+  */
+  const [hasMore, setHasMore] = useState(total > patients.length);
+
+  const shown = patients.concat(extra);
+
+  // A new filter is a different list; anything paged in under the old one is not
+  // part of it. Keyed on the server-rendered page, which is what changes when a
+  // filter lands.
+  useEffect(() => {
+    setExtra([]);
+    setMoreError(false);
+    setHasMore(total > patients.length);
+  }, [patients, total]);
+
+  const loadMore = async () => {
+    const last = shown[shown.length - 1];
+    if (!last || loadingMore) return;
+    setLoadingMore(true);
+    setMoreError(false);
+    try {
+      const p = new URLSearchParams();
+      if (f.q) p.set("q", f.q);
+      if (f.tag) p.set("tag", f.tag);
+      if (f.source) p.set("source", f.source);
+      if (f.visit) p.set("visit", f.visit);
+      if (f.optedOut) p.set("optedOut", f.optedOut);
+      p.set("cursorTs", last.createdAt);
+      p.set("cursorId", last.id);
+      const res = await fetch(`/api/c/${slug}/patients/list?${p}`);
+      if (!res.ok) throw new Error(String(res.status));
+      const body = (await res.json()) as { patients: Row[]; hasMore: boolean };
+      /*
+        Filtered against what is already on screen. The cursor makes a duplicate
+        impossible on the server side, but a double-tap can put two identical
+        requests in flight, and React would then warn about repeated keys rather
+        than anything visible going wrong.
+      */
+      setExtra((prev) => {
+        const seen = new Set(patients.concat(prev).map((r) => r.id));
+        return prev.concat(body.patients.filter((r) => !seen.has(r.id)));
+      });
+      setHasMore(body.hasMore);
+    } catch {
+      // Left on screen with the button still there: the rows already loaded are
+      // still good, and the fix for a blip is to press it again.
+      setMoreError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const apply = (next: typeof f) => {
     setF(next);
@@ -290,16 +361,16 @@ export function PatientsList({
         </Select>
       </div>
 
-      {/* The query is capped, so say so rather than silently hiding records. */}
-      {total > patients.length && (
+      {/* Still says what is on screen — but it is no longer a dead end. */}
+      {total > shown.length && (
         <p className="mb-2 text-[13px] text-ink-500">
           {t.patients.showingOf
-            .replace("{shown}", String(patients.length))
+            .replace("{shown}", String(shown.length))
             .replace("{total}", String(total))}
         </p>
       )}
 
-      {patients.length === 0 ? (
+      {shown.length === 0 ? (
         <EmptyState
           icon={<Users />}
           title={f.q || f.tag || f.source ? t.common.noResults : t.patients.noPatients}
@@ -313,7 +384,7 @@ export function PatientsList({
       ) : (
         <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
           <ul className="divide-y divide-line">
-            {patients.map((p) => (
+            {shown.map((p) => (
               <li key={p.id}>
                 <Link
                   href={`/c/${slug}/patients/${p.id}`}
@@ -349,6 +420,27 @@ export function PatientsList({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/*
+        The way out of the first hundred.
+
+        This list used to stop dead at its page size — the footer said "Showing
+        100 of 3,412" and there was nothing to press. On a clinic with years of
+        files that made every record past the hundredth reachable only by
+        already knowing enough about the person to search for them.
+      */}
+      {shown.length > 0 && hasMore && (
+        <div className="mt-3 flex flex-col items-center gap-2">
+          <Button variant="outline" onClick={loadMore} loading={loadingMore}>
+            {t.patients.loadMore.replace("{n}", String(pageSize))}
+          </Button>
+          {moreError && (
+            <p className="text-[13px] text-danger" role="alert">
+              {t.patients.loadMoreFailed}
+            </p>
+          )}
         </div>
       )}
 

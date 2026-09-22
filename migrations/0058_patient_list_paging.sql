@@ -1,0 +1,32 @@
+-- The patient list, made reachable past its first hundred rows.
+--
+-- Two problems, and the second is why the first could not simply be fixed by
+-- raising the limit.
+--
+-- **You could not get to patient 101.** The list selected `limit 100` with no
+-- paging of any kind. A clinic three years in has thousands, and every one of
+-- them past the first hundred was reachable only by knowing enough about a
+-- person to search for them. The footer said "Showing 100 of 3,412", which was
+-- honest and not a way out.
+--
+-- **The order was not stable enough to page over.** It was `updated_at desc`,
+-- and `updated_at` is rewritten by the touch trigger every table here carries,
+-- so it means "last written to by anything" — an overnight automation that
+-- stamps a field reorders the whole list, and a row can move between pages
+-- while somebody is reading them. Paging over that column would repeat and skip
+-- records rather than merely look odd.
+--
+-- So the list orders by `created_at desc, id desc` now: newest file first,
+-- which is what "who did we just add" means at a reception desk, and stable,
+-- because neither column is ever rewritten. The id breaks ties so two patients
+-- created in the same millisecond have one definite order — without it, keyset
+-- paging can drop whichever row the planner felt like putting second.
+--
+-- This index is that exact query: the clinic, the ordering, the tiebreak, and
+-- the two conditions the list always applies. Partial, so archived and merged
+-- files are not in the structure being scanned at all rather than read and
+-- discarded — on a clinic with years of archived records that is most of the
+-- table.
+create index if not exists patients_list_idx
+  on patients (clinic_id, created_at desc, id desc)
+  where merged_into is null and status <> 'archived';

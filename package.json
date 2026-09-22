@@ -34,6 +34,7 @@
     "qa:leases": "tsx scripts/qa-wa-leases.ts",
     "qa:ratelimit": "tsx scripts/qa-rate-limit-shared.ts",
     "qa:errors": "tsx scripts/qa-error-capture.ts",
+    "qa:paging": "tsx scripts/qa-patient-paging.ts",
     "ops:test": "tsx scripts/ops-test-alert.ts",
     "ops:check": "tsx scripts/ops-test-alert.ts --check",
     "logs": "tsx scripts/logs.ts"

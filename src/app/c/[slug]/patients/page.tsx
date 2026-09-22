@@ -1,7 +1,12 @@
 import { guardCap } from "@/lib/guard";
 import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
-import { patientFilterSql } from "@/lib/patients";
+import {
+  patientFilterSql,
+  patientListRowsSql,
+  toPatientListRow,
+  PATIENT_PAGE_SIZE,
+} from "@/lib/patients";
 import { PatientsList } from "./patients-list";
 
 export default async function PatientsPage({
@@ -26,46 +31,48 @@ export default async function PatientsPage({
   const { where, values } = patientFilterSql(access.clinicId, sp);
 
   const data = await inClinic(access, async (c) => {
-    const rows = (
+    const rows = (await c.query(patientListRowsSql(where, null), values)).rows;
+
+    /*
+      Two round trips, not three.
+
+      The count and the tag list used to be a query each, and node-pg serialises
+      on a single client — so they were two sequential waits rather than two
+      things happening at once. They answer different questions but neither
+      depends on the other, so they travel together.
+
+      The rows stay separate: merging them in would mean either json-wrapping
+      every row or repeating the filter, and one extra round trip on a private
+      network is not worth either.
+    */
+    const meta = (
       await c.query(
-        `select p.id, p.full_name, p.phone_e164, p.tags, p.source, p.status, p.last_visit_at, p.created_at,
-                p.automation_opt_out,
-                (select starts_at from appointments a where a.patient_id = p.id and a.starts_at > now()
-                   and a.status not in ('cancelled') order by starts_at limit 1) as next_appointment
-         from patients p
-         where ${where}
-         order by p.updated_at desc
-         limit 100`,
+        `select
+           (select count(*) from patients p where ${where})::int as total,
+           /*
+             The tag list is the filter dropdown's options, and it comes from the
+             whole clinic rather than from the filtered set on purpose: the
+             options must not vanish the moment one of them is chosen.
+           */
+           coalesce((
+             select json_agg(tag order by tag)
+               from (select distinct unnest(tags) as tag from patients
+                      where clinic_id = $1 and merged_into is null
+                      limit 50) tg
+           ), '[]'::json) as tags`,
         values
       )
-    ).rows;
-    const tags = (
-      await c.query(
-        `select distinct unnest(tags) as tag from patients where clinic_id = $1 order by 1 limit 50`,
-        [access.clinicId]
-      )
-    ).rows.map((r) => r.tag as string);
-    const total = Number(
-      (await c.query(`select count(*)::int as n from patients p where ${where}`, values)).rows[0].n
-    );
-    return { rows, tags, total };
+    ).rows[0];
+
+    return { rows, total: Number(meta.total), tags: (meta.tags ?? []) as string[] };
   });
 
   return (
     <PatientsList
       slug={slug}
       total={data.total}
-      patients={data.rows.map((r) => ({
-        id: r.id,
-        fullName: r.full_name,
-        phone: r.phone_e164,
-        tags: r.tags,
-        source: r.source,
-        status: r.status,
-        lastVisitAt: r.last_visit_at ? String(r.last_visit_at) : null,
-        nextAppointment: r.next_appointment ? String(r.next_appointment) : null,
-        mutedFromAutomations: Boolean(r.automation_opt_out),
-      }))}
+      pageSize={PATIENT_PAGE_SIZE}
+      patients={data.rows.map(toPatientListRow)}
       allTags={data.tags}
       canExportAll={can(access, "patients.export") || access.session.user.isSuperAdmin}
       canImport={can(access, "patients.import")}
