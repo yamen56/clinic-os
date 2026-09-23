@@ -7,6 +7,7 @@ export const ar: Dict = {
     saving: "جارٍ الحفظ…",
     saved: "تم الحفظ",
     offline: "غير متصل — ستتم المزامنة تلقائياً",
+    saveRejected: "لم يُحفظ — إحدى القيم غير صحيحة",
     cancel: "إلغاء",
     close: "إغلاق",
     delete: "حذف",

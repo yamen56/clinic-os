@@ -39,6 +39,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       vals.push(v);
       sets.push(`${col} = $${vals.length}`);
     };
+    // Refused one field at a time, so the rest of the patch still saves. See
+    // the patient route for why a whole-patch 422 lost everything typed with it.
+    const rejected: Record<string, { error: string }> = {};
 
     for (const [k, raw] of Object.entries(patch)) {
       if (k in TEXT_COLS) {
@@ -52,7 +55,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
           continue;
         }
         const e = normalizePhone(s);
-        if (!e) return NextResponse.json({ error: "invalid_phone" }, { status: 422 });
+        if (!e) {
+          rejected[k] = { error: "invalid_phone" };
+          continue;
+        }
         push(k, e);
       } else if (k === "brand_color") {
         const v = String(raw ?? "");
@@ -88,6 +94,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
         detail: { fields: Object.keys(patch) },
       });
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, rejected });
   });
 }

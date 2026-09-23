@@ -209,9 +209,21 @@ export function PatientProfile(props: {
   const { patch, state } = useAutosave({
     url: `/api/c/${slug}/patients/${p.id}`,
     entityKey: `patient:${p.id}`,
-    onConflict: (data) => {
-      const other = (data as { other?: { id: string; full_name: string } }).other;
-      toast(`${t.patients.phoneTaken}${other ? ` — ${other.full_name}` : ""}`, "error");
+    // Each custom field is sent on its own; two edited inside the debounce must
+    // both arrive, not the second replacing the first.
+    mergeKeys: ["custom_fields"],
+    // The rest of the file saved; say which value did not, and why.
+    onRejected: (rejected) => {
+      for (const r of Object.values(rejected)) {
+        if (r.error === "phone_taken") {
+          const other = r.other as { full_name?: string } | undefined;
+          toast(`${t.patients.phoneTaken}${other?.full_name ? ` — ${other.full_name}` : ""}`, "error");
+        } else if (r.error === "invalid_phone") {
+          toast(t.common.invalidPhone, "error");
+        } else {
+          toast(t.common.genericError, "error");
+        }
+      }
     },
   });
 

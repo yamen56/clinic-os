@@ -59,6 +59,7 @@ const SUITES = [
   ["tablet: iPad layouts", "scripts/qa-tablet.ts"],
   ["phone: nothing scrolls sideways", "scripts/qa-mobile-width.ts"],
   ["account & tags: the profile page and the tag catalogue", "scripts/qa-profile-tags.ts"],
+  ["autosave: what Saved says is what you find when you come back", "scripts/qa-autosave.ts"],
   ["import & digest: reading their file, sending one summary", "scripts/qa-import-digest.ts"],
   ["import: the shapes a real patient list arrives in", "scripts/qa-import-variants.ts"],
   ["waitlist & insurance: filling cancellations, splitting the bill", "scripts/qa-waitlist-insurance.ts"],

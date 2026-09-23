@@ -38,6 +38,10 @@ export function ClinicProfileForm({
   const { patch, state } = useAutosave({
     url: `/api/c/${slug}/clinic`,
     entityKey: `clinic:${slug}`,
+    // The phone is the only field here the server can refuse; the rest still saves.
+    onRejected: (rejected) => {
+      if (rejected.phone_e164) toast(t.common.invalidPhone, "error");
+    },
   });
   const [color, setColor] = useState(clinic.brand_color);
   const [uploading, setUploading] = useState(false);

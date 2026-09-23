@@ -5,6 +5,7 @@ export const en = {
     saving: "Saving…",
     saved: "Saved",
     offline: "Offline — changes will sync",
+    saveRejected: "Not saved — a value isn't valid",
     cancel: "Cancel",
     close: "Close",
     delete: "Delete",

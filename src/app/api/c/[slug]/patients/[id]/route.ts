@@ -36,6 +36,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       sets.push(`${col} = $${vals.length}`);
       changed[col] = { from: before[col], to: val };
     };
+    /*
+      A field that cannot be saved is refused on its own; the rest of the patch
+      still saves. Autosave batches whatever was typed in the last second and a
+      half, so returning early here threw away the name typed beside a
+      mistyped number — and the client, reading a 4xx as an outage, retried the
+      same doomed patch forever with every later edit piled on top of it.
+    */
+    const rejected: Record<string, { error: string; other?: unknown }> = {};
 
     for (const [key, raw] of Object.entries(patch)) {
       if (TEXT_FIELDS.has(key)) {
@@ -49,7 +57,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
           continue;
         }
         const e164 = normalizePhone(rawStr);
-        if (!e164) return NextResponse.json({ error: "invalid_phone", field: key }, { status: 422 });
+        if (!e164) {
+          rejected[key] = { error: "invalid_phone" };
+          continue;
+        }
         if (key === "phone_e164") {
           const dup = await c.query(
             `select id, full_name from patients
@@ -57,10 +68,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
             [access.clinicId, e164, id]
           );
           if (dup.rowCount) {
-            return NextResponse.json(
-              { error: "phone_taken", other: dup.rows[0] },
-              { status: 409 }
-            );
+            rejected[key] = { error: "phone_taken", other: dup.rows[0] };
+            continue;
           }
         }
         push(key, e164);
@@ -86,7 +95,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
             v,
             access.clinicId,
           ]);
-          if (!ok.rowCount) return NextResponse.json({ error: "unknown_insurer" }, { status: 422 });
+          if (!ok.rowCount) {
+            rejected[key] = { error: "unknown_insurer" };
+            continue;
+          }
           push(key, v);
         }
       } else if (key === "automation_opt_out") {
@@ -122,6 +134,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       });
     }
     const after = await c.query(`select * from patients where id = $1`, [id]);
-    return NextResponse.json({ ok: true, patient: after.rows[0] });
+    return NextResponse.json({ ok: true, patient: after.rows[0], rejected });
   });
 }

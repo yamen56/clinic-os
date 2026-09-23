@@ -28,6 +28,12 @@ export function SaveIndicator({ state }: { state: SaveState }) {
       text: t.common.offline,
       cls: "text-st-pending",
     },
+    // The server read the value and refused it; the rest of the form is saved.
+    rejected: {
+      icon: <AlertTriangle className="h-3.5 w-3.5" />,
+      text: t.common.saveRejected,
+      cls: "text-danger",
+    },
   }[state];
   return (
     <span className={`inline-flex h-5 items-center gap-1.5 text-xs font-medium ${map.cls}`}>

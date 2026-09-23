@@ -2,6 +2,7 @@ import { guardClinic } from "@/lib/guard";
 import { hasFullControl } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { ServiceWorkerRegistrar } from "@/components/pwa";
+import { AutosaveGuard } from "@/components/autosave-guard";
 import { Shell } from "./shell";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/client";
@@ -140,6 +141,7 @@ export default async function ClinicLayout({
         registration competes with the page they actually came for.
       */}
       <ServiceWorkerRegistrar />
+      <AutosaveGuard />
       {children}
     </Shell>
     </div>
