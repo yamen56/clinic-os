@@ -74,8 +74,14 @@ export function PrescriptionsTab({
       .finally(() => setResending(null));
   };
 
+  /*
+    `@container`: the rows lay out by the width of this card, not of the
+    screen. An iPad in portrait has the sidebar open and leaves the file about
+    as narrow as a large phone, and a row that decided by viewport put three
+    buttons beside the text there and squeezed the medicine names to a stub.
+  */
   return (
-    <Card>
+    <Card className="@container">
       {inFlight.length > 0 && <DeliveryWatch slug={slug} messageIds={inFlight} />}
       {rows.length === 0 ? (
         <div className="p-5">
@@ -96,8 +102,8 @@ export function PrescriptionsTab({
       ) : (
         <>
           {canWrite && (
-            <div className="flex justify-end border-b border-line px-5 py-3">
-              <Button size="sm" onClick={onNew}>
+            <div className="flex border-b border-line px-4 py-3 @xl:justify-end @xl:px-5">
+              <Button onClick={onNew} className="w-full @xl:w-auto">
                 <Plus className="h-4 w-4" />
                 {T.new}
               </Button>
@@ -106,8 +112,24 @@ export function PrescriptionsTab({
           <ul className="divide-y divide-line">
             {rows.map((r) => {
               const status = r.sent_at ? (r.message_status ?? "queued") : null;
+              const actions = [
+                canWrite && { key: "repeat", icon: <Repeat />, label: T.repeat, onClick: () => onRepeat(r) },
+                { key: "pdf", icon: <FileText />, label: T.pdf, href: `/api/c/${slug}/prescriptions/${r.id}/pdf` },
+                canWrite &&
+                  hasPhone && {
+                    key: "resend",
+                    icon: <Send />,
+                    label: T.resend,
+                    onClick: () => resend(r),
+                    busy: resending === r.id,
+                    disabled: !!resending,
+                  },
+              ].filter(Boolean) as RowActionProps[];
               return (
-                <li key={r.id} className="flex flex-wrap items-start gap-3 px-5 py-3.5">
+                <li
+                  key={r.id}
+                  className="flex flex-col gap-3 px-4 py-3.5 @2xl:flex-row @2xl:items-center @2xl:gap-4 @xl:px-5"
+                >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="text-sm font-semibold tnum" dir="ltr">
@@ -145,31 +167,19 @@ export function PrescriptionsTab({
                       )}
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                    {canWrite && (
-                      <Button variant="outline" size="sm" onClick={() => onRepeat(r)}>
-                        <Repeat className="h-4 w-4" />
-                        {T.repeat}
-                      </Button>
-                    )}
-                    <a href={`/api/c/${slug}/prescriptions/${r.id}/pdf`} target="_blank" rel="noreferrer">
-                      <Button variant="outline" size="sm" tabIndex={-1}>
-                        <FileText className="h-4 w-4" />
-                        {T.pdf}
-                      </Button>
-                    </a>
-                    {canWrite && hasPhone && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => resend(r)}
-                        loading={resending === r.id}
-                        disabled={!!resending}
-                      >
-                        <Send className="h-4 w-4" />
-                        {T.resend}
-                      </Button>
-                    )}
+                  {/*
+                    Narrow, the actions are one row of equal cells under the
+                    text, icon above label, so "إعادة الإرسال" fits a third of a
+                    phone without being cut. Wide, they sit beside the text as
+                    ordinary buttons.
+                  */}
+                  <div
+                    className="grid gap-2 @2xl:flex @2xl:shrink-0"
+                    style={{ gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))` }}
+                  >
+                    {actions.map(({ key, ...a }) => (
+                      <RowAction key={key} {...a} />
+                    ))}
                   </div>
                 </li>
               );
@@ -178,6 +188,49 @@ export function PrescriptionsTab({
         </>
       )}
     </Card>
+  );
+}
+
+type RowActionProps = {
+  key: string;
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  href?: string;
+  busy?: boolean;
+  disabled?: boolean;
+};
+
+/**
+ * One of a prescription's actions.
+ *
+ * Not the shared Button: that one has a fixed height and a single row, and
+ * here the same control is a stacked cell on a phone and an inline button on
+ * a desk. Styled to match it at the wide size.
+ */
+function RowAction({ icon, label, onClick, href, busy, disabled }: Omit<RowActionProps, "key">) {
+  const cls = `relative flex min-w-0 touch-manipulation select-none flex-col items-center justify-center gap-1 rounded-ctl border border-line px-2 py-2 text-[12px] font-semibold text-ink-900 transition-colors duration-140 hover:bg-brand-100 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 @2xl:h-9 @2xl:flex-row @2xl:gap-2 @2xl:px-3 @2xl:py-0 @2xl:text-[13px] [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 ${
+    busy ? "animate-pulse" : ""
+  }`;
+  const body = (
+    <>
+      {icon}
+      {/* Wraps in its cell on the narrowest phones rather than losing its end:
+          "إعادة الإرسال" cut to "إعادة الإ…" no longer says what it does. */}
+      <span className="max-w-full text-center leading-tight @2xl:whitespace-nowrap">{label}</span>
+    </>
+  );
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" className={cls}>
+        {body}
+      </a>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} aria-busy={busy || undefined} className={cls}>
+      {body}
+    </button>
   );
 }
 

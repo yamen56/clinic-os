@@ -149,6 +149,19 @@ type FieldDef = {
 
 const storageKeyOf = (d: FieldDef) => d.storage_key ?? d.key.replace(/^patient\./, "");
 
+/*
+  The header's action buttons, on a phone: full-width cells of a two-column
+  grid whose labels may wrap to a second line and fill the row's height.
+
+  They wrap because they have to. Buttons render at the inherited 16px (a
+  global `font: inherit` sits outside Tailwind's layers and beats the button's
+  own 13px), so at 320px an English "Book appointment" is wider than half the
+  screen, and a clinic's own vocabulary can make any of them longer. From a
+  tablet up they are ordinary one-line buttons in a wrapping row.
+*/
+const HEADER_ACTION =
+  "w-full max-sm:h-full max-sm:min-h-9 max-sm:gap-1.5 max-sm:px-2 max-sm:py-1.5 max-sm:whitespace-normal max-sm:text-center max-sm:leading-tight sm:w-auto";
+
 const apptStatus: Record<string, StatusKey> = {
   pending_approval: "pending",
   scheduled: "scheduled",
@@ -353,9 +366,19 @@ export function PatientProfile(props: {
   return (
     <>
       {/* Header */}
-      <div className="mb-5 flex flex-wrap items-start gap-4">
+      <div className="relative mb-5 flex flex-wrap items-start gap-4">
         <Avatar name={p.full_name} size={52} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
-        <div className="min-w-0 flex-1">
+        {/*
+          At least 12rem before anything shares its line. With a basis of
+          zero, the row of actions took all the width it wanted and an iPad in
+          landscape squeezed the patient's name and number into a column one
+          word wide; now the actions wrap underneath instead. 12rem still fits
+          beside the avatar on the narrowest phone.
+
+          Room at the end on a phone for the ⋯ menu, which sits in the corner
+          there.
+        */}
+        <div className="min-w-0 flex-[1_1_12rem] max-sm:pe-10">
           <div className="flex flex-wrap items-center gap-2.5">
             <input
               className="min-w-40 max-w-full rounded-md border border-transparent bg-transparent text-xl font-semibold tracking-tight outline-none transition-colors hover:border-line focus:border-brand-500 focus:bg-surface"
@@ -406,7 +429,17 @@ export function PatientProfile(props: {
           already wraps; this did not, and adding the Message button made a
           long-standing overflow impossible to miss.
         */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/*
+          On a phone the actions are an even two-column grid, every button the
+          same width, rather than a row that wraps wherever the labels happen
+          to end — with six of them that left rows of three, two and one. An
+          odd one out at the end spans both columns. The ⋯ menu leaves the grid
+          for the header's corner, where a phone expects it. From a tablet up
+          they are one wrapping row, as before.
+
+          See HEADER_ACTION for why a label may take two lines on a phone.
+        */}
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center [&>*:nth-last-child(2):nth-child(odd)]:col-span-2">
           {/* First in the row: for a doctor it is the thing they came to the
               file to do. Hovering starts loading the medicine list, in case
               the press beats the idle prefetch. */}
@@ -414,6 +447,7 @@ export function PatientProfile(props: {
             <Button
               variant="soft"
               size="sm"
+              className={HEADER_ACTION}
               onClick={() => openComposer()}
               onPointerEnter={() => void rxData.load()}
             >
@@ -424,7 +458,7 @@ export function PatientProfile(props: {
           {/* Sending through the platform is the Conversations section; the
               wa.me link and the tel: link beside it are not, and stay. */}
           {p.phone_e164 && caps.conversations && (
-            <Button variant="soft" size="sm" onClick={openThread} disabled={opening}>
+            <Button variant="soft" size="sm" className={HEADER_ACTION} onClick={openThread} disabled={opening}>
               <MessageCircle className="h-4 w-4" />
               {t.patients.message}
             </Button>
@@ -433,14 +467,14 @@ export function PatientProfile(props: {
               send, which is the button beside it. */}
           {waLink && (
             <a href={waLink} target="_blank" rel="noreferrer">
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className={HEADER_ACTION}>
                 {t.patients.whatsappOpen}
               </Button>
             </a>
           )}
           {p.phone_e164 && (
             <a href={`tel:${p.phone_e164}`}>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className={HEADER_ACTION}>
                 <PhoneIcon className="h-4 w-4" />
                 {t.patients.call}
               </Button>
@@ -448,7 +482,7 @@ export function PatientProfile(props: {
           )}
           {caps.calendar && (
             <Link href={`/c/${slug}/calendar?patient=${p.id}`}>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className={HEADER_ACTION}>
                 <CalendarPlus className="h-4 w-4" />
                 {t.patients.bookAppointment}
               </Button>
@@ -456,13 +490,13 @@ export function PatientProfile(props: {
           )}
           {caps.invoices && (
             <Link href={`/c/${slug}/invoices/new?patient=${p.id}`}>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className={HEADER_ACTION}>
                 <ReceiptText className="h-4 w-4" />
                 {t.patients.createInvoice}
               </Button>
             </Link>
           )}
-          <div className="relative">
+          <div className="relative max-sm:absolute max-sm:end-0 max-sm:top-0">
             <Button variant="ghost" size="icon" onClick={() => setMenuOpen((v) => !v)} aria-label={t.common.actions}>
               <MoreVertical className="h-4.5 w-4.5" />
             </Button>

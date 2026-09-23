@@ -266,6 +266,14 @@ PDF for the pharmacy."*
     what WhatsApp will show; closing with unsent changes asks first;
   - *Manage list* (inside the composer — doctors do not hold `settings`) hides a
     misspelled medicine or deletes a template.
+  - **Phones and iPads**: a full-screen sheet on a phone (fixed header and one-row
+    footer, only the middle scrolls, notch and home bar kept clear), a dialog from a
+    tablet up with the live preview beside the form from 1024px. Templates are an
+    even grid of the six most used with "show all". Touch screens get finger-sized
+    answers (`pointer-coarse`), and the medicine suggestions open up or down to
+    stay clear of the keyboard. The prescriptions tab lays out by its own width
+    (container queries), so an iPad with the sidebar open gets the stacked layout.
+    `qa-prescriptions` measures all of it at 320, 390, 820×1180 and 1180×820.
 - **Send on WhatsApp**: saved first, then the PDF is rendered from `/rx-print/{id}` (HMAC
   key, kind `prescription`, five minutes) by the worker's Chromium and stored under
   `prescriptions/`, then **one document message** is queued with the caption from the

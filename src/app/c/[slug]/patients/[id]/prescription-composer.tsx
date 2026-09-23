@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { dictFor } from "@/lib/i18n/client-dict";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { ConfirmDialog } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -438,90 +439,80 @@ export function PrescriptionComposer({
 
   const hasPhone = !!patient.phone_e164;
   const templates = data?.templates ?? [];
+  /*
+    The most-used six, with the rest one tap away: a clinic with twenty
+    templates would otherwise push the medicines off the first screen of a
+    phone. Most-used first, so the six shown are the six that get pressed.
+  */
+  const TEMPLATE_LIMIT = 6;
+  const [allTemplates, setAllTemplates] = useState(false);
+  const shownTemplates = allTemplates ? templates : templates.slice(0, TEMPLATE_LIMIT);
 
   const footer =
     view === "manage" ? (
-      <Button variant="outline" onClick={() => setView("form")}>
+      <Button variant="outline" size="lg" onClick={() => setView("form")}>
         <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
         {t.common.back}
       </Button>
     ) : (
-      <div className="flex w-full flex-wrap items-center gap-2">
-        {tplOpen ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <Input
-              autoFocus
-              value={tplName}
-              onChange={(e) => setTplName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveTemplate();
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  setTplOpen(false);
-                }
-              }}
-              placeholder={T.templateNamePlaceholder}
-              aria-label={T.templateName}
-              maxLength={80}
-              className="h-9 min-w-0 max-w-64"
-            />
-            <Button size="sm" onClick={saveTemplate} loading={tplSaving} disabled={!tplName.trim()}>
-              {t.common.save}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setTplOpen(false)}>
-              {t.common.cancel}
-            </Button>
-          </div>
-        ) : (
-          <Button variant="ghost" size="sm" onClick={() => setTplOpen(true)} disabled={!clean.length}>
-            <BookmarkPlus className="h-4 w-4" />
-            {T.saveTemplate}
-          </Button>
-        )}
-        <div className="ms-auto flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => submit(false)}
-            loading={pending === "print"}
-            disabled={!!pending || !doctorId}
-          >
-            <Printer className="h-4 w-4" />
-            {T.print}
-          </Button>
-          <Button
-            onClick={() => submit(true)}
-            loading={pending === "send"}
-            disabled={!!pending || !doctorId || !hasPhone}
-            title={hasPhone ? undefined : T.noPhone}
-          >
-            <Send className="h-4 w-4" />
-            {T.send}
-          </Button>
-        </div>
+      /*
+        One row, at every size. On a phone Send takes the width that is left,
+        so the primary action is the widest thing under the thumb; from a tablet
+        up both sit at the end, where the form's own buttons are elsewhere.
+      */
+      <div className="flex items-center gap-2 sm:justify-end">
+        {/* Under 360px the two labels do not fit side by side at the size
+            buttons render (16px), so Print keeps its icon and its accessible
+            name and gives its width to Send. */}
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={() => submit(false)}
+          loading={pending === "print"}
+          disabled={!!pending || !doctorId}
+          aria-label={T.print}
+          className="max-[359px]:px-3.5"
+        >
+          <Printer className="h-4 w-4" />
+          <span className="max-[359px]:sr-only">{T.print}</span>
+        </Button>
+        <Button
+          size="lg"
+          className="min-w-0 flex-1 max-[359px]:px-3 sm:flex-none"
+          onClick={() => submit(true)}
+          loading={pending === "send"}
+          disabled={!!pending || !doctorId || !hasPhone}
+          title={hasPhone ? undefined : T.noPhone}
+        >
+          <Send className="h-4 w-4" />
+          {T.send}
+        </Button>
       </div>
     );
 
   return (
     <>
-      <Modal
-        open
+      <RxSheet
+        title={view === "manage" ? T.manageTitle : T.new}
+        sub={patient.full_name}
+        closeLabel={t.common.close}
         onClose={requestClose}
-        wide="xl"
-        title={view === "manage" ? T.manageTitle : T.composerTitle.replace("{name}", patient.full_name)}
         footer={footer}
       >
         {view === "manage" ? (
           <ManageList slug={slug} data={data} setData={setData} />
         ) : (
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="min-w-0 space-y-4">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="min-w-0 space-y-5">
               {!hasPhone && (
                 <p className="rounded-lg border border-st-pending/30 bg-st-pending/10 px-3 py-2 text-[13px] text-ink-700">
                   {T.noPhone}
                 </p>
               )}
 
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+              {/* Doctor and language on one line at every width: both are
+                  settled once and rarely touched, so they get one row, not two. */}
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
                 <label className="block min-w-0">
                   <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{T.doctor}</span>
                   <Select
@@ -546,12 +537,20 @@ export function PrescriptionComposer({
                         type="button"
                         role="radio"
                         aria-checked={locale === l}
+                        aria-label={l === "ar" ? "عربي" : "English"}
                         onClick={() => switchLocale(l)}
-                        className={`min-w-18 rounded-[calc(var(--radius-ctl)-2px)] px-3 text-sm font-semibold transition-colors duration-140 ${
+                        className={`min-w-12 rounded-[6px] px-3 text-sm font-semibold transition-colors duration-140 ${
                           locale === l ? "bg-brand-600 text-white" : "text-ink-700 hover:bg-sunken"
                         }`}
                       >
-                        {l === "ar" ? "عربي" : "English"}
+                        {l === "ar" ? (
+                          "عربي"
+                        ) : (
+                          <>
+                            <span className="sm:hidden">EN</span>
+                            <span className="hidden sm:inline">English</span>
+                          </>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -559,7 +558,7 @@ export function PrescriptionComposer({
               </div>
 
               {doctor && !doctor.has_signature && (
-                <p className="text-[12px] text-ink-500">
+                <p className="-mt-2 text-[12px] leading-5 text-ink-500">
                   {T.noSignature.replace("{doctor}", doctor.name)}{" "}
                   {doctor.is_me && (
                     <Link href={`/c/${slug}/signature`} className="font-semibold text-brand-700 underline">
@@ -570,40 +569,100 @@ export function PrescriptionComposer({
               )}
 
               {/* Templates first: for a routine prescription they are the whole job. */}
-              <div>
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-medium text-ink-700">{T.templates}</span>
+              <section>
+                {/* Wraps rather than overflows: buttons render at 16px here,
+                    and "Save as template" and "Manage list" in English do not
+                    fit beside the heading on a 320px phone. */}
+                <div className="mb-2 flex flex-wrap items-center gap-x-1 gap-y-0.5">
+                  <span className="me-auto text-[13px] font-medium text-ink-700">{T.templates}</span>
+                  <button
+                    type="button"
+                    onClick={() => setTplOpen(true)}
+                    disabled={!clean.length || tplOpen}
+                    className="inline-flex h-8 items-center gap-1 rounded-ctl px-2 text-[12px] font-semibold text-brand-700 hover:bg-brand-50 disabled:text-ink-400 disabled:hover:bg-transparent"
+                  >
+                    <BookmarkPlus className="h-3.5 w-3.5" />
+                    {T.saveTemplate}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setView("manage")}
                     disabled={!data}
-                    className="inline-flex items-center gap-1 text-[12px] font-medium text-ink-500 hover:text-ink-900"
+                    className="inline-flex h-8 items-center gap-1 rounded-ctl px-2 text-[12px] font-medium text-ink-500 hover:bg-sunken hover:text-ink-900"
                   >
                     <Settings2 className="h-3.5 w-3.5" />
                     {T.manage}
                   </button>
                 </div>
-                {templates.length ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {templates.map((tpl) => (
-                      <button
-                        key={tpl.id}
-                        type="button"
-                        onClick={() => applyTemplate(tpl)}
-                        className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors duration-140 ${
-                          templateId === tpl.id
-                            ? "border-brand-600 bg-brand-600 text-white"
-                            : "border-line bg-surface text-ink-900 hover:border-brand-300 hover:bg-brand-50"
-                        }`}
-                      >
-                        {tpl.name}
-                      </button>
-                    ))}
+
+                {tplOpen && (
+                  <div className="mb-2 flex items-center gap-2 rounded-card border border-line bg-subtle p-2">
+                    <Input
+                      autoFocus
+                      value={tplName}
+                      onChange={(e) => setTplName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveTemplate();
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setTplOpen(false);
+                        }
+                      }}
+                      placeholder={T.templateNamePlaceholder}
+                      aria-label={T.templateName}
+                      maxLength={80}
+                      className="min-w-0 flex-1"
+                    />
+                    <Button onClick={saveTemplate} loading={tplSaving} disabled={!tplName.trim()}>
+                      {t.common.save}
+                    </Button>
+                    <Button variant="ghost" onClick={() => setTplOpen(false)}>
+                      {t.common.cancel}
+                    </Button>
                   </div>
-                ) : (
-                  <p className="text-[12px] text-ink-500">{T.noTemplates}</p>
                 )}
-              </div>
+
+                {templates.length ? (
+                  <>
+                    {/* An even grid rather than pills that wrap wherever their
+                        names end: every button the same width, lined up, and
+                        tall enough for a thumb. A long name takes a second
+                        line rather than being cut — the whole point of a
+                        template button is being able to read which one it is.
+                        Buttons in a row share the taller one's height. */}
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {shownTemplates.map((tpl) => (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          onClick={() => applyTemplate(tpl)}
+                          title={tpl.name}
+                          aria-pressed={templateId === tpl.id}
+                          className={`flex min-h-11 min-w-0 items-center justify-center rounded-ctl border px-3 py-1.5 text-[13px] font-semibold leading-snug transition-colors duration-140 ${
+                            templateId === tpl.id
+                              ? "border-brand-600 bg-brand-600 text-white"
+                              : "border-line bg-surface text-ink-900 hover:border-brand-300 hover:bg-brand-50"
+                          }`}
+                        >
+                          <span className="line-clamp-2 break-words text-center">{tpl.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {templates.length > TEMPLATE_LIMIT && (
+                      <button
+                        type="button"
+                        onClick={() => setAllTemplates((v) => !v)}
+                        className="mt-2 text-[12px] font-semibold text-brand-700"
+                      >
+                        {allTemplates ? T.fewerTemplates : T.allTemplates.replace("{n}", String(templates.length))}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  !tplOpen && <p className="text-[12px] leading-5 text-ink-500">{T.noTemplates}</p>
+                )}
+              </section>
 
               <label className="block">
                 <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{T.diagnosis}</span>
@@ -635,7 +694,7 @@ export function PrescriptionComposer({
                     />
                   ))}
                 </div>
-                <Button variant="soft" size="sm" className="mt-2.5" onClick={addRow} disabled={items.length >= 20}>
+                <Button variant="soft" className="mt-3 w-full sm:w-auto" onClick={addRow} disabled={items.length >= 20}>
                   <Plus className="h-4 w-4" />
                   {T.addMedicine}
                 </Button>
@@ -660,13 +719,13 @@ export function PrescriptionComposer({
             </div>
 
             <aside className="hidden lg:block">
-              <div className="sticky top-2">
+              <div className="sticky top-0">
                 <Preview caption={caption} locale={locale} title={T.preview} fileLabel={dictFor(locale).prescriptions.sheet.title} />
               </div>
             </aside>
           </div>
         )}
-      </Modal>
+      </RxSheet>
 
       <ConfirmDialog
         open={confirmDiscard}
@@ -681,6 +740,93 @@ export function PrescriptionComposer({
         cancelLabel={T.keepEditing}
       />
     </>
+  );
+}
+
+/* ================================================================ the sheet */
+
+/**
+ * The composer's frame: full screen on a phone, a dialog from a tablet up.
+ *
+ * Its own rather than the shared Modal, because the shared one scrolls as a
+ * whole with its header and footer stuck to it — which on a phone left the
+ * page showing above a sheet that never reached the top, let the medicine
+ * suggestions draw over the title, and put two rows of buttons over a fifth of
+ * the screen. Here the header and footer are fixed rows and only the middle
+ * scrolls (`data-rx-scroll`, which the suggestions measure against), and the
+ * notch and the home bar are kept clear.
+ */
+function RxSheet({
+  title,
+  sub,
+  closeLabel,
+  onClose,
+  footer,
+  children,
+}: {
+  title: string;
+  sub: string;
+  closeLabel: string;
+  onClose: () => void;
+  footer: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      // A confirmation open over the sheet takes the Escape for itself.
+      if (document.querySelectorAll('[role="dialog"]').length > 1) return;
+      close.current();
+    };
+    document.addEventListener("keydown", onKey);
+    const before = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = before;
+    };
+  }, []);
+
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-4">
+      <div
+        className="absolute inset-0 hidden bg-[rgb(11_18_32/0.55)] animate-fade-in sm:block"
+        onClick={() => close.current()}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rx-sheet-title"
+        className="relative flex h-dvh w-full flex-col bg-surface animate-fade-up sm:h-auto sm:max-h-[min(92dvh,960px)] sm:max-w-3xl sm:rounded-modal sm:shadow-modal lg:max-w-5xl"
+      >
+        <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5 sm:pt-3.5">
+          <div className="min-w-0 flex-1">
+            <h2 id="rx-sheet-title" className="truncate font-display text-lg font-semibold leading-7 sm:text-xl">
+              {title}
+            </h2>
+            <p className="truncate text-[13px] text-ink-500">{sub}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => close.current()}
+            aria-label={closeLabel}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-ctl text-ink-500 hover:bg-sunken"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+        <div data-rx-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+          {children}
+        </div>
+        <footer className="shrink-0 border-t border-line bg-surface px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-3.5">
+          {footer}
+        </footer>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -743,7 +889,10 @@ function MedicineRow({
       }`}
     >
       <div className="flex items-start gap-2">
-        <span className="mt-2 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-100 text-[12px] font-bold text-brand-700 tnum">
+        <span
+          aria-hidden
+          className="mt-2 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-100 text-[12px] font-bold text-brand-700 tnum"
+        >
           {index + 1}
         </span>
         <MedicineName
@@ -761,13 +910,16 @@ function MedicineRow({
             onClick={onRemove}
             aria-label={T.removeMedicine}
             title={T.removeMedicine}
-            className="mt-1 rounded-md p-1.5 text-ink-400 hover:bg-sunken hover:text-danger"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-ctl text-ink-400 hover:bg-sunken hover:text-danger"
           >
             <X className="h-4 w-4" />
           </button>
         )}
       </div>
-      <div className="mt-2 grid gap-2.5 ps-8 sm:grid-cols-2">
+      {/* Indented under the name from a tablet up, where there is room to show
+          what belongs to what; flush on a phone, where 32px is a tenth of the
+          screen. */}
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 sm:ps-8">
         {field("dose", T.dose, T.dosePlaceholder)}
         {field("frequency", T.frequency)}
         {field("duration", T.duration)}
@@ -789,7 +941,7 @@ function Chips({
   onPick: (v: string) => void;
 }) {
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1" dir={locale === "ar" ? "rtl" : "ltr"}>
+    <div className="mt-1.5 flex flex-wrap gap-1.5" dir={locale === "ar" ? "rtl" : "ltr"}>
       {chips.map((c) => {
         const on = value.trim() === c[locale];
         return (
@@ -802,7 +954,9 @@ function Chips({
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onPick(on ? "" : c[locale])}
             aria-pressed={on}
-            className={`rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors duration-140 ${
+            // A finger needs more than a cursor: taller on any touch screen,
+            // phone or iPad, and the mouse keeps the compact size.
+            className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-[12px] font-medium transition-colors duration-140 pointer-coarse:min-h-9 pointer-coarse:px-3.5 pointer-coarse:text-[13px] ${
               on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-brand-50"
             }`}
           >
@@ -857,12 +1011,63 @@ function MedicineName({
     setOpen(false);
   };
 
+  /*
+    Where the list opens, and how tall it may be.
+
+    Measured against the sheet's scrolling body and the visual viewport — the
+    part of the screen the on-screen keyboard has not covered — so the list is
+    never drawn under the keyboard, under the footer, or over the title. Below
+    the field when there is room, above it when above is roomier.
+  */
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [place, setPlace] = useState<{ up: boolean; max: number }>({ up: false, max: 288 });
+  const measure = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const box = el.closest("[data-rx-scroll]")?.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const top = Math.max(box?.top ?? 0, vv?.offsetTop ?? 0);
+    const bottom = Math.min(box?.bottom ?? window.innerHeight, vv ? vv.offsetTop + vv.height : window.innerHeight);
+    const below = bottom - r.bottom - 8;
+    const above = r.top - top - 8;
+    const up = below < 180 && above > below;
+    setPlace({ up, max: Math.max(96, Math.min(288, up ? above : below)) });
+  }, []);
+
+  /*
+    On a touch screen, bring the field up to the top of the sheet once the
+    keyboard has opened, so the suggestions have the rest of the screen to
+    open into. A mouse user already sees the whole form and is left alone.
+  */
+  const onFocus = () => {
+    setOpen(true);
+    measure();
+    if (!window.matchMedia?.("(pointer: coarse)").matches) return;
+    setTimeout(() => {
+      const el = inputRef.current;
+      const scroller = el?.closest<HTMLElement>("[data-rx-scroll]");
+      if (!el || !scroller || document.activeElement !== el) return;
+      const gap = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 12;
+      if (gap > 40) scroller.scrollBy({ top: gap, behavior: "smooth" });
+      setTimeout(measure, 350);
+    }, 320);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", measure);
+    return () => vv?.removeEventListener("resize", measure);
+  }, [open, measure]);
+
   const listId = `rx-med-${index}`;
   const shown = open && matches.length > 0;
 
   return (
     <div className="relative min-w-0 flex-1">
       <Input
+        ref={inputRef}
         data-rx-input
         data-rx-name={index}
         value={value}
@@ -870,8 +1075,9 @@ function MedicineName({
           onChange(e.target.value);
           setOpen(true);
           setHi(0);
+          measure();
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={onFocus}
         onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
           if (!shown) return;
@@ -888,6 +1094,8 @@ function MedicineName({
             e.stopPropagation();
             pick(matches[hi]);
           } else if (e.key === "Escape") {
+            // Closes the list, not the prescription.
+            e.preventDefault();
             e.stopPropagation();
             setOpen(false);
           }
@@ -907,7 +1115,10 @@ function MedicineName({
         <ul
           id={listId}
           role="listbox"
-          className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-card border border-line bg-surface p-1 shadow-pop"
+          style={{ maxHeight: place.max }}
+          className={`absolute inset-x-0 z-20 overflow-auto overscroll-contain rounded-card border border-line bg-surface p-1 shadow-pop ${
+            place.up ? "bottom-full mb-1" : "top-full mt-1"
+          }`}
         >
           {matches.map((m, k) => {
             const detail = itemDetail(m);
@@ -921,7 +1132,7 @@ function MedicineName({
                   pick(m);
                 }}
                 onMouseEnter={() => setHi(k)}
-                className={`cursor-pointer rounded-lg px-3 py-2 ${k === hi ? "bg-brand-50" : ""}`}
+                className={`cursor-pointer rounded-lg px-3 py-2 pointer-coarse:py-2.5 ${k === hi ? "bg-brand-50" : ""}`}
               >
                 <div className="text-sm font-semibold" dir="auto">
                   {m.name}
@@ -1039,9 +1250,14 @@ function ManageList({
       .finally(() => setBusy(false));
   };
 
+  /*
+    grid-cols-1, not the implicit column: an implicit track is as wide as the
+    longest unbroken name in it, and "Chlorhexidine mouthwash 0.12%" pushed the
+    hide buttons off the side of a phone.
+  */
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <section>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <section className="min-w-0">
         <h3 className="text-[15px] font-semibold">{T.manageTemplates}</h3>
         {data.templates.length === 0 ? (
           <p className="mt-2 text-[13px] text-ink-500">{T.noTemplatesYet}</p>
@@ -1070,13 +1286,13 @@ function ManageList({
         )}
       </section>
 
-      <section>
+      <section className="min-w-0">
         <h3 className="text-[15px] font-semibold">{T.manageMedicines}</h3>
         <p className="mt-0.5 text-[12px] text-ink-500">{T.manageMedicinesHint}</p>
         {data.medications.length === 0 ? (
           <p className="mt-2 text-[13px] text-ink-500">{T.noMedicines}</p>
         ) : (
-          <ul className="mt-2 max-h-[50dvh] divide-y divide-line overflow-auto rounded-card border border-line">
+          <ul className="mt-2 divide-y divide-line rounded-card border border-line lg:max-h-[50dvh] lg:overflow-auto">
             {data.medications.map((m) => (
               <li key={m.id} className={`flex items-center gap-3 px-3 py-2.5 ${m.hidden ? "opacity-55" : ""}`}>
                 <div className="min-w-0 flex-1">

@@ -25,6 +25,8 @@ import { Client } from "pg";
 import { chromium, type Page } from "playwright";
 import bcrypt from "bcryptjs";
 import { ar } from "../src/lib/i18n/ar";
+import { en } from "../src/lib/i18n/en";
+import { describeSpills, spills } from "./lib-layout";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -214,10 +216,19 @@ async function main() {
   }
   console.log(`\n✓ fixture clinic ${slug}`);
 
-  const ctx = async (email: string, viewport = { width: 1360, height: 900 }) => {
-    const c = await browser.newContext({ viewport });
+  const ctx = async (
+    email: string,
+    viewport = { width: 1360, height: 900 },
+    // A phone or a tablet: touch, so `pointer: coarse` and the larger targets apply.
+    touch = false,
+    // The interface language, which the app reads from this cookie. Set after
+    // signing in, which writes the cookie from the user's own language.
+    lang: "ar" | "en" = "ar"
+  ) => {
+    const c = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch && viewport.width < 600 });
     const pg = await c.newPage();
     await signIn(pg, email);
+    await c.addCookies([{ name: "cos_locale", value: lang, url: BASE }]);
     return { c, pg };
   };
   const hideDevOverlay = (pg: Page) => pg.addStyleTag({ content: "nextjs-portal{display:none!important}" });
@@ -550,19 +561,103 @@ async function main() {
     await doc.pg.keyboard.press("Escape");
 
     /* ============================================================ phone width */
-    console.log("\n[on a phone]");
-    const phone = await ctx(`doctor-${slug}@test.local`, { width: 390, height: 844 });
-    await openFile(phone.pg, patient);
-    await phone.pg.getByRole("button", { name: A.quickAction, exact: true }).click();
-    await dialog(phone.pg).waitFor();
-    await phone.pg.getByRole("combobox", { name: A.medicineName }).first().fill("Panadol 500mg");
-    const overflow = await phone.pg.evaluate(() => {
-      const d = document.querySelector('[role="dialog"]') as HTMLElement;
-      return d.scrollWidth - d.clientWidth;
-    });
-    check("the composer does not scroll sideways", overflow <= 1, `${overflow}px`);
-    if (SHOTS) await phone.pg.screenshot({ path: path.join(SHOTS, "composer-phone.png") });
-    await phone.c.close();
+    /*
+      Phones and iPads, by measurement rather than by eye.
+
+      Every one of these was a real fault on a phone: the sheet stopped short of
+      the top with the page showing above it, the footer took two rows, the
+      templates wrapped into uneven pills under the footer, a long medicine
+      name pushed the Manage list off the side, the tab's third button was cut
+      off, and on an iPad in landscape the header squeezed the patient's name
+      into a column one word wide.
+    */
+    const sideways = (pg: Page) =>
+      pg.evaluate(() => {
+        const sc = document.querySelector("[data-rx-scroll]") as HTMLElement | null;
+        return sc ? sc.scrollWidth - sc.clientWidth : -1;
+      });
+
+    for (const [label, vp, D] of [
+      ["a small phone", { width: 320, height: 568 }, ar],
+      // English is the longer language here, and the one that overflowed the header.
+      ["a small phone, in English", { width: 320, height: 568 }, en],
+      ["a phone", { width: 390, height: 844 }, ar],
+      ["an iPad in portrait", { width: 820, height: 1180 }, ar],
+      ["an iPad in landscape", { width: 1180, height: 820 }, ar],
+    ] as const) {
+      console.log(`\n[on ${label}]`);
+      const L = D.prescriptions;
+      const dev = await ctx(`doctor-${slug}@test.local`, vp, true, D === en ? "en" : "ar");
+      const pg = dev.pg;
+      await openFile(pg, patient);
+      const pageOverflow = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      check("the file does not scroll sideways", pageOverflow <= 1, `${pageOverflow}px`);
+      const nameWidth = await pg.getByRole("textbox", { name: D.patients.fullName }).evaluate((e) => e.getBoundingClientRect().width);
+      check("the patient's name has room beside the actions", nameWidth >= 150, `${Math.round(nameWidth)}px`);
+      const fileSpills = await spills(pg);
+      check("nothing on the file pokes out of its box", fileSpills.length === 0, describeSpills(fileSpills));
+
+      await pg.getByRole("button", { name: L.quickAction, exact: true }).click();
+      await dialog(pg).waitFor();
+      await pg.getByRole("button", { name: "التهاب حلق — بالغ", exact: true }).waitFor();
+      // The sheet slides up as it opens; measure where it comes to rest.
+      await pg.waitForFunction(() =>
+        (document.querySelector('[role="dialog"]') as HTMLElement)
+          .getAnimations()
+          .every((a) => a.playState === "finished" || a.playState === "idle")
+      );
+      const box = await dialog(pg).evaluate((d) => {
+        const r = d.getBoundingClientRect();
+        return { top: r.top, left: r.left, width: r.width, height: r.height };
+      });
+      if (vp.width < 640) {
+        check(
+          "the composer takes the whole screen",
+          Math.abs(box.top) <= 1 && Math.abs(box.height - vp.height) <= 1 && Math.abs(box.width - vp.width) <= 1,
+          JSON.stringify(box)
+        );
+      } else {
+        check("the composer sits inside the screen", box.left >= 0 && box.top >= 0 && box.left + box.width <= vp.width);
+      }
+      const printTop = await pg.getByRole("button", { name: L.print, exact: true }).evaluate((e) => Math.round(e.getBoundingClientRect().top));
+      const sendTop = await pg.getByRole("button", { name: L.send, exact: true }).evaluate((e) => Math.round(e.getBoundingClientRect().top));
+      check("Print and Send share one row", Math.abs(printTop - sendTop) <= 1, `${printTop} / ${sendTop}`);
+
+      await pg.getByRole("button", { name: "التهاب حلق — بالغ", exact: true }).click();
+      await pg.getByRole("combobox", { name: L.medicineName }).first().fill("Chlorhexidine mouthwash 0.12% oral rinse");
+      check("the form does not scroll sideways", (await sideways(pg)) <= 1, `${await sideways(pg)}px`);
+      const chipHeight = await pg
+        .getByRole("button", { name: "بعد الأكل", exact: true })
+        .first()
+        .evaluate((e) => e.getBoundingClientRect().height);
+      check("the one-tap answers are big enough for a finger", chipHeight >= 34, `${Math.round(chipHeight)}px`);
+      if (SHOTS) await pg.screenshot({ path: path.join(SHOTS, `composer-${vp.width}x${vp.height}.png`) });
+
+      await pg.getByRole("button", { name: L.manage }).click();
+      await pg.getByRole("heading", { name: L.manageMedicines, exact: true }).waitFor();
+      check("the medicine list does not scroll sideways", (await sideways(pg)) <= 1, `${await sideways(pg)}px`);
+      const hideRight = await pg.getByRole("button", { name: L.hide }).first().evaluate((e) => {
+        const r = e.getBoundingClientRect();
+        const sc = (document.querySelector("[data-rx-scroll]") as HTMLElement).getBoundingClientRect();
+        return r.left >= sc.left - 1 && r.right <= sc.right + 1;
+      });
+      check("and its Hide buttons are on screen", hideRight);
+      await pg.getByRole("button", { name: D.common.back, exact: true }).click();
+      await pg.keyboard.press("Escape");
+      const discardBtn = pg.getByRole("button", { name: L.discard, exact: true });
+      if (await discardBtn.isVisible().catch(() => false)) await discardBtn.click();
+      await dialog(pg).first().waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});
+
+      await openFile(pg, patient, "prescriptions");
+      const tabOverflow = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      check("the prescriptions tab does not scroll sideways", tabOverflow <= 1, `${tabOverflow}px`);
+      const resendFits = await pg.getByRole("button", { name: L.resend, exact: true }).first().evaluate((e) => {
+        const r = e.getBoundingClientRect();
+        return r.left >= 0 && r.right <= window.innerWidth && e.scrollWidth <= e.clientWidth + 1;
+      });
+      check("its buttons fit, labels whole", resendFits);
+      await dev.c.close();
+    }
 
     await doc.c.close();
   } finally {
