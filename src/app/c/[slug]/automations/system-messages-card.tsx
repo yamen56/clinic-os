@@ -51,7 +51,7 @@ export function SystemMessagesCard({
     });
   };
 
-  const groups = ["booking", "waitlist", "documents", "billing"] as const;
+  const groups = ["booking", "waitlist", "patients", "documents", "billing"] as const;
 
   return (
     <>

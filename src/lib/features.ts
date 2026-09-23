@@ -63,7 +63,10 @@ export const OPT_IN_FEATURES = new Set<Feature>(["einvoicing"]);
 const FEATURE_CAPS: Record<Feature, Capability[]> = {
   conversations: ["conversations"],
   calendar: ["calendar"],
-  patients: ["patients"],
+  // Prescriptions go out on WhatsApp under a doctor's name, so they are named
+  // here rather than left to the patients gate: a masked module must not leave
+  // a send behind it.
+  patients: ["patients", "patients.prescriptions"],
   documents: ["documents", "documents.manage", "documents.void"],
   /*
     `invoices.analytics` and `earnings` were both missing from this list at

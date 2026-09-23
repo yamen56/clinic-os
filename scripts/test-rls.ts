@@ -341,6 +341,21 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     [signer, clinic, document]
   );
 
+  // Prescriptions (migration 0060): the record, the clinic's medicine list, a template.
+  await q(
+    `insert into prescriptions (clinic_id, patient_id, doctor_member_id, doctor_name, author_id, number, items)
+     values ($1, $2, $3, 'Dr RLS', $4, $5, '[{"name":"Amoxicillin"}]') returning id`,
+    [clinic, patient, member, user, seq]
+  );
+  await q(
+    `insert into medications (clinic_id, name, use_count) values ($1, $2, 1) returning id`,
+    [clinic, `Amoxicillin ${tag}`]
+  );
+  await q(
+    `insert into prescription_templates (clinic_id, name, items) values ($1, $2, '[]') returning id`,
+    [clinic, `Template ${tag}`]
+  );
+
   return { clinic, user, member, patient, service, appointment, conversation, invoice, automation, step, run };
 }
 

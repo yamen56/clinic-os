@@ -80,6 +80,7 @@ one column carried both, which made "let this doctor see the inbox" unrepresenta
 
 ```
 dashboard · conversations · calendar · patients · patients.import · patients.export
+patients.categories · patients.prescriptions
 documents · documents.manage · documents.void · invoices · invoices.analytics
 earnings · expenses · campaigns · automations · ai · settings · settings.clinic · settings.staff
 ```
@@ -103,8 +104,11 @@ Role defaults when switching a member to custom:
 
 | Job | Default capabilities |
 |---|---|
-| doctor | dashboard, calendar, patients, documents, earnings |
-| receptionist | conversations, calendar, patients, documents, documents.manage, invoices, settings |
+| doctor | dashboard, calendar, patients, patients.prescriptions, documents, earnings |
+| receptionist | conversations, calendar, patients, patients.prescriptions, documents, documents.manage, invoices, settings |
+
+A doctor on a custom map written before `patients.prescriptions` existed **inherits it from
+`patients`**; no other job does (see §4, Prescriptions).
 | other | calendar, patients |
 
 The sidebar nav **is** the capability set rendered — nothing reads a job title. The
@@ -185,7 +189,10 @@ Your data is safe."), and the AI agent refuses to answer for suspended clinics.
 
 ### Screens (tabs on the patient file)
 
-Overview · Notes · Appointments · Files · Documents · Invoices · Conversation
+Overview · Notes · Prescriptions · Appointments · Files · Documents · Invoices · Conversation
+
+`?tab=<key>` opens the file on a tab (a notification's link); a tab the member cannot see
+falls back to Overview.
 
 - **Overview**: details, additional (custom) fields, summary notes, upcoming appointment,
   balance due, recent activity.
@@ -220,10 +227,59 @@ Overview · Notes · Appointments · Files · Documents · Invoices · Conversat
     never from the caller, behind the `patients` capability like every other file.
 - **Files** (`patient_files`): upload with kind `xray` | `lab` | `consent` | `photo` |
   `other`. **25 MB limit**. Served through authenticated API routes, never public URLs.
-- **Merge records**: moves all notes, appointments, invoices and conversations from a
-  duplicate into the surviving record and keeps both phone numbers. Refuses self-merge.
+- **Merge records**: moves all notes, prescriptions, appointments, invoices and
+  conversations from a duplicate into the surviving record and keeps both phone numbers.
+  Refuses self-merge.
 - **Archive / restore**.
-- Quick actions: WhatsApp, Call, Book appointment, Create invoice.
+- Quick actions: Prescription, WhatsApp, Call, Book appointment, Create invoice.
+
+### Prescriptions (migration `0060`)
+
+*"Send the patient their prescription on WhatsApp — the medicines in the message, the
+PDF for the pharmacy."*
+
+- **Who**: writing, sending, repeating, templates and the medicine list need
+  `patients.prescriptions`. Reading and reprinting the ones already in a file need only
+  `patients` (they are part of the record, like Files). Anyone with the permission may
+  write for any prescriber, so an assistant can type what the doctor dictates.
+- **Prescriber**: a member whose job is doctor, or the clinic owner (usually the dentist
+  who owns the practice, filed as `other`). The composer preselects the writer when they
+  are a doctor, otherwise whoever saw the patient last, otherwise the clinic's doctor.
+- **Signature**: the prescriber's saved signature (`users.signature_png_path`, the one
+  used to countersign documents) is put on the PDF automatically. When somebody else
+  writes it, **the doctor is notified** (`prescription_in_your_name`, in their own
+  language, linking to `?tab=prescriptions`) and both people are in the audit log.
+- **The record** (`prescriptions`): clinic-sequential number (`RX-0001`,
+  `clinics.prescription_counter`), language (`ar`/`en`, chosen per prescription), optional
+  diagnosis, the medicines as jsonb (`name`, `dose`, `frequency`, `duration`,
+  `instructions`), the prescriber's name copied as it stood, the author. **No edit, no
+  delete** — a wrong one is corrected by Repeat → change → send.
+- **The composer** is built for taps, not typing:
+  - templates (`prescription_templates`) fill the whole prescription in one tap;
+  - the medicine field autocompletes from the clinic's own list (`medications`), which
+    **learns** every medicine prescribed together with how it was written, so picking it
+    again fills dose, frequency and duration; focused and empty it offers the most-used;
+  - one-tap answers under each field (dose, how often, how long, instructions), in the
+    prescription's language — switching language carries tapped answers across and
+    leaves typed text alone;
+  - Enter walks the fields and starts the next medicine; a live preview shows exactly
+    what WhatsApp will show; closing with unsent changes asks first;
+  - *Manage list* (inside the composer — doctors do not hold `settings`) hides a
+    misspelled medicine or deletes a template.
+- **Send on WhatsApp**: saved first, then the PDF is rendered from `/rx-print/{id}` (HMAC
+  key, kind `prescription`, five minutes) by the worker's Chromium and stored under
+  `prescriptions/`, then **one document message** is queued with the caption from the
+  `prescription_sent` system message (editable, always on). The caption lists the
+  medicines; the **diagnosis is left out of it by default** (a family phone is shared) and
+  is on the PDF. The message carries `patient_id`, so it lands on the patient's thread.
+  No phone, WhatsApp disconnected or a failed render leaves the prescription saved and
+  says so; it can be printed or resent.
+- **Print** saves and renders without sending, and opens the PDF (inline) in a new tab.
+- **The tab** lists them newest first with the WhatsApp status (sending → delivered →
+  read, refreshed live while one is in flight), who wrote it when that was not the
+  doctor, and Repeat / PDF / Resend.
+- Out of scope, deliberately: dose reminders (volume on a personal WhatsApp number), a
+  national drug database, linking to a visit.
 
 ### Search — Arabic normalisation (migration `0009`)
 

@@ -23,6 +23,7 @@ const SUITES = [
   ["phase 2: patients", "scripts/qa-phase2.ts"],
   ["patients: exporting the record", "scripts/qa-patient-export.ts"],
   ["patients: the list as a spreadsheet", "scripts/qa-patient-excel.ts"],
+  ["patients: prescriptions, written and sent on WhatsApp", "scripts/qa-prescriptions.ts"],
   ["adding somebody back after removing them", "scripts/qa-readd.ts"],
   ["phase 3: calendar", "scripts/qa-phase3.ts"],
   ["phase 4: public booking", "scripts/qa-phase4.ts"],

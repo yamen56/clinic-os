@@ -431,6 +431,9 @@ export async function mergePatientsAction(
     for (const [table, col] of [
       ["patient_notes", "patient_id"],
       ["patient_files", "patient_id"],
+      // A prescription is part of the record; left behind it would sit on the
+      // tombstone, where nobody can open it.
+      ["prescriptions", "patient_id"],
       ["appointments", "patient_id"],
       ["invoices", "patient_id"],
       ["payments", "patient_id"],

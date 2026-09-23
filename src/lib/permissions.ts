@@ -39,6 +39,19 @@ export const CAPABILITIES = [
     under. An owner ticks this for the person who curates the list.
   */
   "patients.categories",
+  /*
+    Write a prescription and send it to the patient on WhatsApp.
+
+    Carved out of `patients` because it is two things opening a file is not: a
+    clinical act done in a doctor's name, and a message that leaves the building
+    with that doctor's signature on it. Reading the prescriptions already in a
+    file stays with `patients` — they are part of the record, like its files.
+
+    Dotted, so `REQUIRES` ties it to `patients`, and deliberately not gated on a
+    job title: an assistant typing for the doctor is the ordinary case in a busy
+    clinic, and the owner decides who that is by ticking it.
+  */
+  "patients.prescriptions",
   "documents",
   "documents.manage",
   "documents.void",
@@ -96,6 +109,7 @@ const REQUIRES: Partial<Record<Capability, Capability>> = {
   "patients.import": "patients",
   "patients.export": "patients",
   "patients.categories": "patients",
+  "patients.prescriptions": "patients",
   "documents.manage": "documents",
   "documents.void": "documents",
   "invoices.analytics": "invoices",
@@ -108,7 +122,7 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
   // A doctor on a revenue share can see what they have earned, and nothing else
   // about the clinic's money. The screen is empty and harmless for a doctor who
   // has no arrangement, so it costs nothing to start on.
-  doctor: ["dashboard", "calendar", "patients", "documents", "earnings"],
+  doctor: ["dashboard", "calendar", "patients", "patients.prescriptions", "documents", "earnings"],
   receptionist: [
     "dashboard",
     "conversations",
@@ -117,6 +131,8 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
     // Bringing a list in is desk work. Taking the whole list out is not, and
     // stays off until an owner says otherwise — see the note on the resolver.
     "patients.import",
+    // The assistant who types the prescription the doctor dictates.
+    "patients.prescriptions",
     "documents",
     "documents.manage",
     "invoices",
@@ -253,6 +269,23 @@ export function resolveCapabilities(
   if (!("patients.import" in ticked) && caps.patients) caps["patients.import"] = true;
 
   /*
+    A doctor's silence about prescriptions inherits from `patients`; nobody
+    else's does.
+
+    The capability is new, so every custom map written before it says nothing
+    about it. Reading that as "no" — the `earnings` rule — would switch the
+    feature off for every doctor on custom access the day it ships, and a doctor
+    is the one person the feature is for. It grants no wider view either: a
+    doctor with Patients already reads everything a prescription is written
+    from. Other jobs do not inherit, because a prescription goes out under a
+    doctor's signature, and who else may do that is the owner's decision to
+    tick rather than ours to assume. An explicit false is honoured.
+  */
+  if (!("patients.prescriptions" in ticked) && opts.role === "doctor" && caps.patients) {
+    caps["patients.prescriptions"] = true;
+  }
+
+  /*
     The dashboard inherits from nothing, and that is the difference between this
     rule and the three above it.
 
@@ -370,7 +403,10 @@ export const CAPABILITY_GROUPS: {
   { section: "dashboard", actions: [] },
   { section: "conversations", actions: [] },
   { section: "calendar", actions: [] },
-  { section: "patients", actions: ["patients.import", "patients.export", "patients.categories"] },
+  {
+    section: "patients",
+    actions: ["patients.prescriptions", "patients.import", "patients.export", "patients.categories"],
+  },
   { section: "documents", actions: ["documents.manage", "documents.void"] },
   { section: "invoices", actions: ["invoices.analytics"], group: "finance" },
   { section: "earnings", actions: [], group: "finance" },

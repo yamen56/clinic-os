@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
@@ -38,6 +38,9 @@ import { DOC_STATUS_BADGE } from "@/components/esign/status";
 import { DownloadSignedPdf } from "@/components/esign/download-signed";
 import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-document-modal";
 import type { DocumentListRow } from "@/lib/esign/queries";
+import type { PrescriptionRow } from "@/lib/prescriptions";
+import { PrescriptionsTab } from "./prescriptions-tab";
+import { PrescriptionComposer, useComposerData, type RxDraft } from "./prescription-composer";
 import {
   MessageCircle,
   Phone as PhoneIcon,
@@ -62,6 +65,7 @@ import {
   Download,
   BellOff,
   Settings2,
+  Pill,
 } from "lucide-react";
 
 export type NoteRow = {
@@ -188,7 +192,12 @@ export function PatientProfile(props: {
     exportPatient: boolean;
     /** Add or delete a note category — the clinic's list, not this patient's. */
     manageCategories: boolean;
+    /** Write, send and repeat prescriptions. Reading them needs only the file. */
+    prescriptions: boolean;
   };
+  prescriptions: PrescriptionRow[];
+  /** The tab to open on, from `?tab=` — a notification's link, usually. */
+  initialTab?: string;
   /** The clinic's country, so a new number defaults to the right dialling code. */
   country: CountryCode;
   /** The clinic's tag vocabulary — suggestions, and the colour each tag wears. */
@@ -201,7 +210,33 @@ export function PatientProfile(props: {
   const router = useRouter();
   const { toast } = useToast();
   const [p, setP] = useState(props.patient);
-  const [tab, setTab] = useState("overview");
+  const [chosenTab, setTab] = useState(props.initialTab || "overview");
+
+  /*
+    Prescriptions are held here rather than read from props, so a new one or a
+    resend shows the moment the action answers instead of after a reload. The
+    props still win whenever the server sends a fresher list — the delivery
+    watch refreshes it as a message goes from sending to read.
+  */
+  const [rxRows, setRxRows] = useState(props.prescriptions);
+  useEffect(() => setRxRows(props.prescriptions), [props.prescriptions]);
+  const upsertRx = (row: PrescriptionRow) =>
+    setRxRows((prev) =>
+      prev.some((r) => r.id === row.id) ? prev.map((r) => (r.id === row.id ? row : r)) : [row, ...prev]
+    );
+  const rxData = useComposerData(slug, props.patient.id, caps.prescriptions);
+  const [composer, setComposer] = useState<{ draft: RxDraft | null } | null>(null);
+  const openComposer = (draft: RxDraft | null = null) => setComposer({ draft });
+  const onRxSaved = (row: PrescriptionRow, warning: string | undefined, sent: boolean) => {
+    upsertRx(row);
+    setComposer(null);
+    setTab("prescriptions");
+    const T = t.prescriptions;
+    if (warning === "no_phone") toast(T.savedNoPhone, "error");
+    else if (warning === "wa_disconnected") toast(T.savedNotSent, "error");
+    else if (warning) toast(T.pdfFailed, "error");
+    else toast(sent ? T.sent : T.saved);
+  };
   const [menuOpen, setMenuOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -284,6 +319,14 @@ export function PatientProfile(props: {
   const tabs = [
     { key: "overview", label: t.patients.tabs.overview },
     { key: "notes", label: t.patients.tabs.notes, count: props.notes.length },
+    /* Beside Notes: a prescription is written at the same moment, by the same
+       person. Shown to anyone who can read the file once there is something
+       in it, and to anyone who may write one before there is. */
+    (caps.prescriptions || rxRows.length > 0) && {
+      key: "prescriptions",
+      label: t.patients.tabs.prescriptions,
+      count: rxRows.length,
+    },
     caps.calendar && {
       key: "appointments",
       label: t.patients.tabs.appointments,
@@ -304,6 +347,8 @@ export function PatientProfile(props: {
     },
     caps.conversations && { key: "conversation", label: t.patients.tabs.conversation },
   ].filter(Boolean) as { key: string; label: string; count?: number }[];
+  // `?tab=` is only a request: a tab this member cannot see opens the overview.
+  const tab = tabs.some((x) => x.key === chosenTab) ? chosenTab : "overview";
 
   return (
     <>
@@ -362,6 +407,20 @@ export function PatientProfile(props: {
           long-standing overflow impossible to miss.
         */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* First in the row: for a doctor it is the thing they came to the
+              file to do. Hovering starts loading the medicine list, in case
+              the press beats the idle prefetch. */}
+          {caps.prescriptions && (
+            <Button
+              variant="soft"
+              size="sm"
+              onClick={() => openComposer()}
+              onPointerEnter={() => void rxData.load()}
+            >
+              <Pill className="h-4 w-4" />
+              {t.prescriptions.quickAction}
+            </Button>
+          )}
           {/* Sending through the platform is the Conversations section; the
               wa.me link and the tel: link beside it are not, and stay. */}
           {p.phone_e164 && caps.conversations && (
@@ -724,6 +783,25 @@ export function PatientProfile(props: {
             canManageCategories={caps.manageCategories}
           />
         )}
+        {tab === "prescriptions" && (
+          <PrescriptionsTab
+            slug={slug}
+            rows={rxRows}
+            tz={tz}
+            canWrite={caps.prescriptions}
+            hasPhone={!!p.phone_e164}
+            onNew={() => openComposer()}
+            onRepeat={(r) =>
+              openComposer({
+                locale: r.locale,
+                diagnosis: r.diagnosis,
+                items: r.items,
+                doctorMemberId: r.doctor_member_id,
+              })
+            }
+            onUpdated={upsertRx}
+          />
+        )}
         {tab === "appointments" && (
           <Card>
             {props.appointments.length === 0 ? (
@@ -932,6 +1010,19 @@ export function PatientProfile(props: {
         )}
       </div>
 
+      {composer && (
+        <PrescriptionComposer
+          slug={slug}
+          patient={{ id: p.id, full_name: p.full_name, phone_e164: p.phone_e164 }}
+          tz={tz}
+          draft={composer.draft}
+          data={rxData.data}
+          setData={rxData.setData}
+          reload={rxData.load}
+          onClose={() => setComposer(null)}
+          onSaved={onRxSaved}
+        />
+      )}
       <MergeModal
         open={mergeOpen}
         onClose={() => setMergeOpen(false)}

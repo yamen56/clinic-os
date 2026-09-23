@@ -29,9 +29,10 @@ export type SystemMessageKey =
   | "signing_otp"
   | "invoice_sent"
   | "invoice_receipt"
-  | "receipt_sent";
+  | "receipt_sent"
+  | "prescription_sent";
 
-export type SystemMessageGroup = "booking" | "waitlist" | "documents" | "billing";
+export type SystemMessageGroup = "booking" | "waitlist" | "documents" | "billing" | "patients";
 
 export type SystemMessageDef = {
   key: SystemMessageKey;
@@ -211,6 +212,37 @@ export const SYSTEM_MESSAGES: SystemMessageDef[] = [
     vars: ["clinic.name", "receipt.number", "invoice.number", "receipt.total", "receipt.link"],
     ar: "إيصال من {{clinic.name}}\nرقم {{receipt.number}} عن الفاتورة {{invoice.number}}\nاستلمنا {{receipt.total}} — شكرًا لك.\n{{receipt.link}}",
     en: "Receipt from {{clinic.name}}\n{{receipt.number}} for invoice {{invoice.number}}\nWe received {{receipt.total}} — thank you.\n{{receipt.link}}",
+  },
+  /*
+    The caption under a prescription's PDF.
+
+    The medicines are written out in the message itself, not only in the file:
+    a patient checking how often to take something opens the chat, not a PDF.
+    The PDF is what the pharmacy is shown.
+
+    The diagnosis is offered as a variable but left out of the default. A
+    family's WhatsApp is often one phone passed around, and what a patient was
+    diagnosed with is theirs to share; it is on the PDF, and a clinic that
+    wants it in the message too can add it.
+
+    Always on, since the send is the whole feature — a prescription with its
+    caption switched off would arrive as an unexplained file.
+  */
+  {
+    key: "prescription_sent",
+    group: "patients",
+    canDisable: false,
+    vars: [
+      "patient.first_name",
+      "patient.name",
+      "clinic.name",
+      "doctor.name",
+      "prescription.date",
+      "prescription.medicines",
+      "prescription.diagnosis",
+    ],
+    ar: "مرحباً {{patient.first_name}}،\nهذه وصفتك الطبية من {{clinic.name}}\n{{doctor.name}} — {{prescription.date}}\n\n{{prescription.medicines}}\n\nالملف المرفق هو الوصفة، يمكنك عرضه في الصيدلية.",
+    en: "Hello {{patient.first_name}},\nHere is your prescription from {{clinic.name}}\n{{doctor.name}} — {{prescription.date}}\n\n{{prescription.medicines}}\n\nThe attached file is your prescription; you can show it at the pharmacy.",
   },
 ];
 

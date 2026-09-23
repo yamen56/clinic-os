@@ -131,6 +131,17 @@ async function main() {
       (await api(page, `/api/c/${SLUG}/appointments?from=2026-01-01&to=2026-12-31`)) === 200,
       "appointments 200"
     );
+    /*
+      Prescriptions are the doctor's own job, gated on `patients.prescriptions`
+      — which a doctor on a map written before it existed inherits. The refusal
+      side (desk, outsider) is proved with fixed fixtures in qa-prescriptions,
+      since a seeded receptionist's answer depends on when the seed ran.
+    */
+    ok((await api(page, `/api/c/${SLUG}/prescriptions/composer`)) === 200, "prescription composer 200");
+    ok(
+      (await api(page, `/api/c/${SLUG}/prescriptions/00000000-0000-0000-0000-000000000000/pdf`)) === 404,
+      "prescription PDF passes the gate (404 for none)"
+    );
 
     console.log("[doctor] is refused what it does not");
     ok((await api(page, `/api/c/${SLUG}/conversations`)) === 403, "conversations API 403");

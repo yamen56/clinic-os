@@ -6,13 +6,19 @@ import { PatientProfile } from "./profile-client";
 import { can } from "@/lib/auth";
 import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { countryFromClinic } from "@/lib/phone";
+import { PATIENT_PRESCRIPTIONS_JSON } from "@/lib/prescriptions";
 
 export default async function PatientProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { slug, id } = await params;
+  // A notification can open the file on a tab — "a prescription was sent in
+  // your name" lands on the prescriptions, not the overview.
+  const { tab } = await searchParams;
   const access = await guardCap(slug, "patients");
   /*
     The patient's own invoices, filtered the same way the invoice list is.
@@ -43,14 +49,26 @@ export default async function PatientProfilePage({
     invoices: can(access, "invoices"),
     exportPatient: can(access, "patients.export"),
     manageCategories: can(access, "patients.categories"),
+    /** Write, send and repeat. Reading the ones already written is `patients`. */
+    prescriptions: can(access, "patients.prescriptions"),
   };
   const none = { rows: [] as Record<string, unknown>[] };
 
   const data = await inClinic(access, async (c) => {
-    const p = (
-      await c.query(`select * from patients where id = $1 and clinic_id = $2`, [id, access.clinicId])
+    /*
+      The prescriptions ride inside this select rather than as another query
+      below: everything here shares one connection, where each statement is a
+      round trip in series whatever Promise.all suggests.
+    */
+    const row = (
+      await c.query(
+        `select p.*, ${PATIENT_PRESCRIPTIONS_JSON} as __prescriptions
+           from patients p where p.id = $1 and p.clinic_id = $2`,
+        [id, access.clinicId]
+      )
     ).rows[0];
-    if (!p) return null;
+    if (!row) return null;
+    const { __prescriptions: prescriptions, ...p } = row;
     if (p.merged_into) return { mergedInto: p.merged_into as string };
 
     const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags, insurers, noteCategories] =
@@ -168,6 +186,7 @@ export default async function PatientProfilePage({
 
     return {
       patient: p,
+      prescriptions,
       notes: notes.rows,
       files: files.rows,
       appointments: appointments.rows,
@@ -207,6 +226,8 @@ export default async function PatientProfilePage({
       clinicTags={JSON.parse(JSON.stringify(d.clinicTags))}
       insurers={JSON.parse(JSON.stringify(d.insurers))}
       noteCategories={JSON.parse(JSON.stringify(d.noteCategories))}
+      prescriptions={JSON.parse(JSON.stringify(d.prescriptions ?? []))}
+      initialTab={tab}
       canSendDocuments={can(access, "documents.manage")}
       caps={caps}
       country={countryFromClinic(access.clinic)}

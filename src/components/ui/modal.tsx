@@ -18,7 +18,8 @@ export function Modal({
   title?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  wide?: boolean;
+  /** `"xl"` is for a form with a live preview beside it, like the prescription composer. */
+  wide?: boolean | "xl";
 }) {
   useEffect(() => {
     if (!open) return;
@@ -40,7 +41,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={`relative m-0 max-h-[92dvh] w-full overflow-auto rounded-t-modal bg-surface shadow-modal animate-fade-up sm:m-4 sm:rounded-modal ${
-          wide ? "sm:max-w-3xl" : "sm:max-w-lg"
+          wide === "xl" ? "sm:max-w-5xl" : wide ? "sm:max-w-3xl" : "sm:max-w-lg"
         }`}
       >
         {title && (
