@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
-import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { CalendarPlus, UserPlus, ReceiptText, MessagesSquare } from "lucide-react";
 
 export type QuickAction = "appointment" | "patient" | "invoice" | "inbox";
@@ -91,18 +91,26 @@ export function QuickActions({ slug, actions }: { slug: string; actions: QuickAc
       {actions.map((a) => {
         const Icon = ICONS[a];
         return (
-          <Link key={a} href={hrefFor(slug, a)}>
-            <Button variant={a === "appointment" ? "primary" : "outline"} size="sm">
-              <Icon className="h-4 w-4" />
-              {label[a]}
-              {/*
-                The hint is desktop-only: a phone has no key to press, and the
-                extra glyph is noise on the screen with the least room for it.
-              */}
-              <kbd className="ms-1 hidden rounded border border-current/25 px-1 text-[10px] font-semibold opacity-60 lg:inline">
-                {SHORTCUTS[a].hint}
-              </kbd>
-            </Button>
+          <Link
+            key={a}
+            href={hrefFor(slug, a)}
+            /* Two to a row on a phone. Left to wrap, four labels broke three and
+               one in Arabic, with the inbox alone on a line of its own. */
+            className={buttonClass({
+              variant: a === "appointment" ? "primary" : "outline",
+              size: "sm",
+              className: "max-sm:flex-1 max-sm:basis-[calc(50%-0.25rem)]",
+            })}
+          >
+            <Icon className="h-4 w-4" />
+            {label[a]}
+            {/*
+              The hint is desktop-only: a phone has no key to press, and the
+              extra glyph is noise on the screen with the least room for it.
+            */}
+            <kbd className="ms-1 hidden rounded border border-current/25 px-1 text-[10px] font-semibold opacity-60 lg:inline">
+              {SHORTCUTS[a].hint}
+            </kbd>
           </Link>
         );
       })}

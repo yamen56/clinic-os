@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,7 +54,6 @@ export function FieldsClient({
   usage: Record<string, number>;
 }) {
   const { t, locale } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [editing, setEditing] = useState<Partial<Def> | null>(null);
   const [deleting, setDeleting] = useState<Def | null>(null);
@@ -83,7 +81,6 @@ export function FieldsClient({
       }
       toast(t.common.saved);
       setEditing(null);
-      router.refresh();
     });
 
   const copyToken = async (key: string) => {
@@ -94,7 +91,6 @@ export function FieldsClient({
   const move = (id: string, direction: "up" | "down") =>
     start(async () => {
       await moveFieldDefAction(slug, id, direction);
-      router.refresh();
     });
 
   const row = (d: Def, index: number, total: number) => (
@@ -154,7 +150,6 @@ export function FieldsClient({
             onChange={(visible) =>
               start(async () => {
                 await toggleFieldHiddenAction(slug, d.id, !visible);
-                router.refresh();
               })
             }
           />
@@ -342,7 +337,6 @@ export function FieldsClient({
             const r = await deleteFieldDefAction(slug, deleting.id);
             if (r.error) toast(t.fields.cannotDelete, "error");
             setDeleting(null);
-            router.refresh();
           })
         }
       />

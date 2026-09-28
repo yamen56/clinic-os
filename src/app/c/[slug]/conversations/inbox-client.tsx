@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
-import { useRealtime } from "@/lib/use-realtime";
+import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { fmtRelative, fmtTime, fmtDate, fmtMoney, fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Toggle, Input, Field, Textarea } from "@/components/ui/input";
 import { Avatar, EmptyState, Spinner } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
@@ -102,6 +103,17 @@ export function InboxClient({
   const { toast } = useToast();
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
+  /*
+    What the list is filtered by: the box, a moment after typing stops. Searching
+    on every keystroke sent a request per letter, and the answers could land out
+    of order — "Moh" arriving after "Mohammad" and replacing it.
+  */
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setQuery(q.trim()), 250);
+    return () => clearTimeout(id);
+  }, [q]);
+  const listSeq = useRef(0);
   const [list, setList] = useState<ConvRow[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [thread, setThread] = useState<{
@@ -121,11 +133,16 @@ export function InboxClient({
   const fileInput = useRef<HTMLInputElement>(null);
 
   const refreshList = useCallback(async () => {
+    // Only the latest answer is shown: a filter or search changed mid-flight
+    // makes an earlier one stale.
+    const mine = ++listSeq.current;
     const p = new URLSearchParams({ filter });
-    if (q.trim()) p.set("q", q.trim());
+    if (query) p.set("q", query);
     const res = await fetch(`/api/c/${slug}/conversations?${p}`);
-    if (res.ok) setList((await res.json()).conversations);
-  }, [slug, filter, q]);
+    if (!res.ok || mine !== listSeq.current) return;
+    const data = await res.json();
+    if (mine === listSeq.current) setList(data.conversations);
+  }, [slug, filter, query]);
 
   const refreshThread = useCallback(
     async (id: string, markRead = false) => {
@@ -154,10 +171,9 @@ export function InboxClient({
     else setThread(null);
   }, [openId, refreshThread]);
 
-  useRealtime(slug, ["conversations", "messages"], () => {
-    void refreshList();
-    if (openId) void refreshThread(openId);
-  });
+  useRealtimeRefresh(slug, ["conversations", "messages"], () =>
+    Promise.all([refreshList(), openId ? refreshThread(openId) : undefined])
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
@@ -514,7 +530,7 @@ export function InboxClient({
                 <Button variant="ghost" size="icon" aria-label={t.conversations.quickReplies} onClick={() => setQrOpen(true)}>
                   <Zap className="h-4.5 w-4.5" />
                 </Button>
-                <Button size="icon" onClick={() => void send()} loading={sending} aria-label="Send" disabled={!draft.trim()}>
+                <Button size="icon" onClick={() => void send()} loading={sending} aria-label={t.common.send} disabled={!draft.trim()}>
                   <Send className="h-4.5 w-4.5 rtl:-scale-x-100" />
                 </Button>
               </div>
@@ -565,23 +581,17 @@ export function InboxClient({
                 )}
               </div>
               <div className="grid gap-2">
-                <Link href={`/c/${slug}/patients/${thread.patient.id}`}>
-                  <Button variant="outline" className="w-full">
-                    <UserRound className="h-4 w-4" />
-                    {t.conversations.openPatient}
-                  </Button>
+                <Link href={`/c/${slug}/patients/${thread.patient.id}`} className={buttonClass({ variant: "outline", className: "w-full" })}>
+                  <UserRound className="h-4 w-4" />
+                  {t.conversations.openPatient}
                 </Link>
-                <Link href={`/c/${slug}/calendar?patient=${thread.patient.id}`}>
-                  <Button variant="outline" className="w-full">
-                    <CalendarPlus className="h-4 w-4" />
-                    {t.patients.bookAppointment}
-                  </Button>
+                <Link href={`/c/${slug}/calendar?patient=${thread.patient.id}`} className={buttonClass({ variant: "outline", className: "w-full" })}>
+                  <CalendarPlus className="h-4 w-4" />
+                  {t.patients.bookAppointment}
                 </Link>
-                <Link href={`/c/${slug}/invoices/new?patient=${thread.patient.id}`}>
-                  <Button variant="outline" className="w-full">
-                    <ReceiptText className="h-4 w-4" />
-                    {t.patients.createInvoice}
-                  </Button>
+                <Link href={`/c/${slug}/invoices/new?patient=${thread.patient.id}`} className={buttonClass({ variant: "outline", className: "w-full" })}>
+                  <ReceiptText className="h-4 w-4" />
+                  {t.patients.createInvoice}
                 </Link>
               </div>
               {/* A link staff made by hand can be wrong; it has to be undoable here. */}
@@ -748,6 +758,9 @@ function LinkPatientPicker({
     setSearched(false);
     const mine = ++seq.current;
     if (value.trim().length < 2) return setResults([]);
+    // A beat for the next keystroke, so a name typed at speed is one search.
+    await new Promise((done) => setTimeout(done, 200));
+    if (mine !== seq.current) return;
     const r = await fetch(`/api/c/${slug}/patients/search?q=${encodeURIComponent(value)}`)
       .then((x) => (x.ok ? x.json() : { results: [] }))
       .catch(() => ({ results: [] }));

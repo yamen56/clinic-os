@@ -31,6 +31,8 @@ import { DateTime } from "luxon";
 import { ROLE_DEFAULTS } from "../src/lib/permissions";
 import { computeInvoice, nextInvoiceNumber } from "../src/lib/invoices";
 import { financeTabs } from "../src/lib/finance";
+import { en } from "../src/lib/i18n/en";
+import { ar } from "../src/lib/i18n/ar";
 
 const BASE = "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -375,7 +377,9 @@ async function main() {
   const colleague = await page.locator("body").innerText();
   check(
     "a colleague's invoice does not open",
-    !colleague.includes(theirs.number) && /could not be found/i.test(colleague),
+    // The workspace's own not-found, in the page's language, with the sidebar still there.
+    !colleague.includes(theirs.number) &&
+      (colleague.includes(en.common.notFoundTitle) || colleague.includes(ar.common.notFoundTitle)),
     colleague.replace(/\s+/g, " ").slice(0, 100)
   );
 

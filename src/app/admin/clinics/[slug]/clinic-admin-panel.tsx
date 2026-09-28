@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   impersonateAction,
   updateSubscriptionAction,
@@ -37,7 +36,6 @@ export function ClinicAdminPanel({
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [featuresOpen, setFeaturesOpen] = useState(false);
   const [status, setStatus] = useState(clinic.subscriptionStatus);
@@ -129,7 +127,6 @@ export function ClinicAdminPanel({
                   });
                   toast(t.common.saved);
                   setOpen(false);
-                  router.refresh();
                 })
               }
             >
@@ -178,7 +175,6 @@ export function ClinicAdminPanel({
                         : t.admin.packUpToDate
                     );
                   setSpecialtyOpen(false);
-                  router.refresh();
                 })
               }
             >
@@ -212,7 +208,6 @@ export function ClinicAdminPanel({
                   await updateClinicFeaturesAction(clinic.id, toFeatureSetting(features));
                   toast(t.admin.featuresSaved);
                   setFeaturesOpen(false);
-                  router.refresh();
                 })
               }
             >

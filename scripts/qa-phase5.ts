@@ -2,6 +2,8 @@
 import { chromium } from "playwright";
 import { Client } from "pg";
 import bcrypt from "bcryptjs";
+import { ar } from "../src/lib/i18n/ar";
+import { en } from "../src/lib/i18n/en";
 
 const BASE = "http://localhost:3000";
 const WORKER = "http://localhost:4020";
@@ -106,7 +108,8 @@ async function main() {
 
   // 4. Reply from composer → queued message with staff sender + AI pause
   await page.fill("textarea", "أهلاً وسهلاً! متى يناسبك الموعد؟");
-  await page.click('button[aria-label="Send"]');
+  // Labelled in the page's language, which follows the cookie rather than the account.
+  await page.click(`button[aria-label="${en.common.send}"], button[aria-label="${ar.common.send}"]`);
   let sent: { rows: { status: string; sender_kind: string; ai_paused_until: string | null }[] } = { rows: [] };
   for (let i = 0; i < 20 && sent.rows.length === 0; i++) {
     sent = await db.query(

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
-import { useRealtime } from "@/lib/use-realtime";
+import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { fmtDate } from "@/lib/dates";
 import { Card, PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ export function DocumentsListClient({
   const [newOpen, setNewOpen] = useState(false);
 
   // Status moves while staff are watching this list, so it refreshes itself.
-  useRealtime(slug, ["documents", "document_signers"], () => router.refresh());
+  useRealtimeRefresh(slug, ["documents", "document_signers"], () => router.refresh());
 
   // Both scopes are already here, so a tab is a filter, not a page load.
   const counts = useMemo(

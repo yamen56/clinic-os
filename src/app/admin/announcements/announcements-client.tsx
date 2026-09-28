@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +26,6 @@ type Announcement = {
 
 export function AnnouncementsClient({ announcements }: { announcements: Announcement[] }) {
   const { t } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -58,7 +56,6 @@ export function AnnouncementsClient({ announcements }: { announcements: Announce
                   toast(t.common.saved);
                   setTitle("");
                   setBody("");
-                  router.refresh();
                 })
               }
             >
@@ -81,7 +78,6 @@ export function AnnouncementsClient({ announcements }: { announcements: Announce
                   label="Active"
                   onChange={async (v) => {
                     await toggleAnnouncementAction(a.id, v);
-                    router.refresh();
                   }}
                 />
                 <div className="min-w-0 flex-1">
@@ -113,7 +109,6 @@ export function AnnouncementsClient({ announcements }: { announcements: Announce
           if (deleteId) {
             await deleteAnnouncementAction(deleteId);
             setDeleteId(null);
-            router.refresh();
           }
         }}
       />

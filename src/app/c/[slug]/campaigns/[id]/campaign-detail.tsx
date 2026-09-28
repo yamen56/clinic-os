@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
-import { useRealtime } from "@/lib/use-realtime";
+import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
@@ -73,7 +73,7 @@ export function CampaignDetail({
   // The drip advances on the worker's clock, not on anything this page does.
   // Both tables emit, so progress follows the send instead of waiting for a
   // refresh the user has to think about.
-  useRealtime(slug, ["campaigns", "campaign_recipients"], () => router.refresh());
+  useRealtimeRefresh(slug, ["campaigns", "campaign_recipients"], () => router.refresh());
 
   const counts = recipients.reduce(
     (acc, r) => ({ ...acc, [r.status]: (acc[r.status] ?? 0) + 1 }),

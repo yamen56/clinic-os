@@ -4,7 +4,7 @@ import { getDict } from "@/lib/i18n";
 import { withSystem } from "@/lib/db";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge, type StatusKey } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { EmptyState, Avatar } from "@/components/ui/misc";
 import { FEATURES, resolveFeatures } from "@/lib/features";
 import { daysUntilPurge } from "@/lib/clinic-lifecycle";
@@ -49,11 +49,9 @@ export default async function AdminClinicsPage() {
         title={t.admin.clinics}
         action={
           s.adminCaps["clinics.create"] ? (
-            <Link href="/admin/clinics/new">
-              <Button>
-                <Plus className="h-4 w-4" />
-                {t.admin.newClinic}
-              </Button>
+            <Link href="/admin/clinics/new" className={buttonClass()}>
+              <Plus className="h-4 w-4" />
+              {t.admin.newClinic}
             </Link>
           ) : undefined
         }
@@ -64,9 +62,7 @@ export default async function AdminClinicsPage() {
           title={t.admin.noClinics}
           action={
             s.adminCaps["clinics.create"] ? (
-              <Link href="/admin/clinics/new">
-                <Button>{t.admin.newClinic}</Button>
-              </Link>
+              <Link href="/admin/clinics/new" className={buttonClass()}>{t.admin.newClinic}</Link>
             ) : undefined
           }
         />

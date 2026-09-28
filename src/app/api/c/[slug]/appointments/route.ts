@@ -11,6 +11,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
   if (!from || !to) return NextResponse.json({ error: "missing_range" }, { status: 400 });
+  // Unparseable bounds would reach Postgres as a cast error: a 500, not an answer.
+  if (Number.isNaN(Date.parse(from)) || Number.isNaN(Date.parse(to))) {
+    return NextResponse.json({ error: "bad_range" }, { status: 400 });
+  }
 
   const data = await inClinic(access, async (c) => {
     const [appts, doctors, services, sections, clinic] = await Promise.all([

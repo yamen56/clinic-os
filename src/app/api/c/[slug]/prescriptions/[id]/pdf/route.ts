@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { openFile } from "@/lib/storage";
 import { fileResponseHeaders } from "@/lib/download";
@@ -21,7 +22,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string; i
   const g = await apiClinic(slug, "patients");
   if (!g.ok) return g.res;
   const { access } = g;
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const rx = await inClinic(access, async (c) => {
     const r = await c.query(`select number, pdf_path from prescriptions where id = $1 and clinic_id = $2`, [

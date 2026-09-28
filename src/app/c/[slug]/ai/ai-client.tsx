@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -67,7 +66,6 @@ export function AiClient({
   usage: UsageRow[];
 }) {
   const { t } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [tab, setTab] = useState(initialTab);
   const [a, setA] = useState(initialAgent);
@@ -95,7 +93,6 @@ export function AiClient({
         return;
       }
       toast(t.common.saved);
-      router.refresh();
     });
 
   const filled = knowledge.filter((k) => k.content.trim()).length;
@@ -413,7 +410,6 @@ export function AiClient({
                     }
                     toast(t.common.saved);
                     setEditing(null);
-                    router.refresh();
                   })
                 }
               >
@@ -435,7 +431,6 @@ export function AiClient({
           if (deleteId) {
             await deleteKnowledgeItemAction(slug, deleteId);
             setDeleteId(null);
-            router.refresh();
           }
         }}
       />

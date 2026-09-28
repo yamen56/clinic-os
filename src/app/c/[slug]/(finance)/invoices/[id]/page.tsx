@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
+import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
 import { InvoiceDetailClient } from "./invoice-detail-client";
 import { can } from "@/lib/auth";
@@ -12,6 +13,7 @@ export default async function InvoiceDetailPage({
   params: Promise<{ slug: string; id: string }>;
 }) {
   const { slug, id } = await params;
+  if (!isUuid(id)) notFound();
   const access = await guardClinic(slug);
   if (!can(access, "invoices")) redirect(`/c/${slug}`);
 

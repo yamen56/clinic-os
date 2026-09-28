@@ -10,6 +10,7 @@
 import { chromium, type Page } from "playwright";
 import { Client } from "pg";
 import bcrypt from "bcryptjs";
+import { ar } from "../src/lib/i18n/ar";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -110,7 +111,8 @@ async function main() {
   check("because the run is isolated from the Arabic around it", /isolate/.test(isolated), isolated);
 
   /* --------------------------------------------- the country picker on the form */
-  const cc = page.locator('select[aria-label="Country"]').first();
+  // The picker is labelled in the page's language; this page is Arabic.
+  const cc = page.locator(`select[aria-label="${ar.common.country}"]`).first();
   check("the form offers a country", (await cc.count()) > 0);
   check("defaulted to the clinic's own", (await cc.inputValue()) === "JO", await cc.inputValue());
 

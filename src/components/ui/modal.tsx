@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "./button";
+import { useI18n } from "@/lib/i18n/client";
 
 export function Modal({
   open,
@@ -20,6 +21,7 @@ export function Modal({
   footer?: React.ReactNode;
   wide?: boolean;
 }) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -48,7 +50,7 @@ export function Modal({
             <h2 className="font-display text-xl font-semibold">{title}</h2>
             <button
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t.common.close}
               className="rounded-md p-1.5 text-ink-500 hover:bg-sunken"
             >
               <X className="h-4.5 w-4.5" />

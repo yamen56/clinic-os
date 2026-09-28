@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { DOC_STATUS_BADGE } from "@/components/esign/status";
@@ -125,10 +126,8 @@ export function RequiredDocuments({
                   <Badge status={(DOC_STATUS_BADGE[r.status ?? ""] ?? "neutral") as StatusKey}>
                     {(t.docs.statuses as Record<string, string>)[r.status ?? ""] ?? r.status}
                   </Badge>
-                  <Link href={`/c/${slug}/documents/${r.documentId}`}>
-                    <Button variant="ghost" size="sm">
-                      {t.common.open}
-                    </Button>
+                  <Link href={`/c/${slug}/documents/${r.documentId}`} className={buttonClass({ variant: "ghost", size: "sm" })}>
+                    {t.common.open}
                   </Link>
                 </>
               ) : (

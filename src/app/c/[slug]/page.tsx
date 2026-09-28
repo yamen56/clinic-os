@@ -435,16 +435,22 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4">
         {tiles.slice(0, 4).map((tile) => {
           const body = (
-            <Card className="h-full p-4">
+            <Card className="@container h-full p-4">
               <div className="eyebrow">{tile.label}</div>
               {/*
-                Smaller on a phone, where two tiles share 390px and a balance
-                like "JOD 594.00" does not fit at 32px — it was losing the
-                currency to the ellipsis, which is the one part of a money
-                figure that must never be the bit that gets cut. `truncate`
-                stays as the backstop for a six-figure balance.
+                Sized to fit the tile, not only to the screen. A fixed 26/32px
+                still lost the currency to the ellipsis once a balance reached
+                five figures — "…D 17,472.00" on a desktop, "…17,472.00" on a
+                phone — and the currency is the one part of a money figure that
+                must never be the bit that goes. The size is the smaller of the
+                old one and whatever lets this many characters span the tile
+                (a bold figure runs about 0.62em a character); `truncate` stays
+                as the backstop.
               */}
-              <div className="font-display mt-2 min-w-0 truncate text-[26px] font-bold leading-none tnum sm:text-[32px]">
+              <div
+                className="font-display mt-2 min-w-0 truncate font-bold leading-none tnum [--kpi-max:26px] sm:[--kpi-max:32px]"
+                style={{ fontSize: `min(var(--kpi-max), ${(100 / (Math.max(1, tile.value.length) * 0.62)).toFixed(1)}cqi)` }}
+              >
                 {tile.value}
               </div>
               {tile.foot && <div className="mt-2">{tile.foot}</div>}

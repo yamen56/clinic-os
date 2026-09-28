@@ -30,7 +30,10 @@ export default async function LoginPage({
   return (
     <main className="surface-night flex min-h-dvh flex-col">
       <div className="flex justify-end p-4">
-        <LanguageToggle onDark />
+        {/* A frosted plate under it: on a phone it sits over one of the light corner shapes. */}
+        <div className="rounded-full bg-black/70 backdrop-blur-md">
+          <LanguageToggle onDark />
+        </div>
       </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-8 p-6">
         <BrandMark size={72} />
@@ -41,7 +44,8 @@ export default async function LoginPage({
           oauthError={sp.error}
         />
       </div>
-      <footer className="flex items-center justify-center gap-3 pb-6 text-center text-xs text-white/40">
+      {/* On a dark plate, because on a phone the corner shapes reach under it. */}
+      <footer className="mx-auto mb-6 flex w-fit items-center justify-center gap-3 rounded-full bg-black/75 px-3 py-1 text-center text-xs text-white/60 backdrop-blur-md">
         <a
           href="https://clinicti.app"
           className="no-underline transition-colors hover:text-white/70"

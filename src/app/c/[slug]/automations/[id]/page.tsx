@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
+import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
 import { BuilderClient } from "./builder-client";
 import type { StepInput } from "../actions";
@@ -42,6 +43,7 @@ export default async function AutomationBuilderPage({
   if (!canEdit) redirect(`/c/${slug}`);
 
   const isNew = id === "new";
+  if (!isNew && !isUuid(id)) notFound();
 
   const data = await inClinic(access, async (c) => {
     const services = (

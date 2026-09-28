@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
+import { isUuid } from "@/lib/uuid";
 import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { loadDocumentDetail } from "@/lib/esign/queries";
@@ -14,6 +15,7 @@ export default async function DocumentPage({
   searchParams: Promise<{ sign?: string }>;
 }) {
   const { slug, id } = await params;
+  if (!isUuid(id)) notFound();
   const { sign } = await searchParams;
   const access = await guardClinic(slug);
   if (!can(access, "documents")) redirect(`/c/${slug}`);

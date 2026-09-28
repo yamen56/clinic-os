@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { withSystem } from "@/lib/db";
 import { openFile } from "@/lib/storage";
 import { rateLimit, clientIp } from "@/lib/booking-public";
@@ -44,6 +45,8 @@ export async function GET(
   ctx: { params: Promise<{ bslug: string; memberId: string }> }
 ) {
   const { bslug, memberId } = await ctx.params;
+
+  if (!isUuid(memberId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (!rateLimit(`docphoto:${clientIp(req)}`, 240, 10 * 60_000)) return rateLimited(600);
 
   const version = new URL(req.url).searchParams.get("v") ?? "";

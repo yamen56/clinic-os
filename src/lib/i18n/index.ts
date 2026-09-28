@@ -1,22 +1,14 @@
 import { cookies } from "next/headers";
 import { cache } from "react";
-import { en, type Dict } from "./en";
-import { ar } from "./ar";
-
 import { applyVocabulary } from "./vocab";
-export type Locale = "ar" | "en";
-export type { Dict };
+import { dictFor, type Dict, type Locale } from "./client-dict";
+
+// One definition, in the module the signing screens can import without
+// `next/headers`; the server side re-exports it rather than keeping a copy.
+export { dictFor, dirFor, type Dict, type Locale } from "./client-dict";
 
 import { LOCALE_COOKIE } from "./shared";
 export { LOCALE_COOKIE };
-
-export function dictFor(locale: Locale): Dict {
-  return locale === "en" ? en : ar;
-}
-
-export function dirFor(locale: Locale): "rtl" | "ltr" {
-  return locale === "en" ? "ltr" : "rtl";
-}
 
 /** Resolves the request locale: cookie wins, Arabic is the default. */
 export const getLocale = cache(async (): Promise<Locale> => {

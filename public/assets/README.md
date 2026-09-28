@@ -37,4 +37,4 @@ Rules worth repeating:
 | `logo-mark-primary.png` | Sidebar (64px), login (72px), source for all icons | no — the source |
 | `mark-light.png` | Email header logo; admin header via `BrandPlate` | yes, `npm run icons` |
 | `logo-mark-wide.png` | Wide lockup, kept for decks and docs | no |
-| `bg-aurora-grain.png` | Login background, in place of the CSS gradient | no |
+| `night-tl/tr/bl/br.webp` | Sign-in background (`.surface-night`): one soft shape per screen corner | yes, `npm run night`, from `scripts/assets/night-shapes.png` |

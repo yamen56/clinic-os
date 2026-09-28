@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 
 /** Thread detail: messages + linked patient panel. */
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
+
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const g = await apiClinic(slug, "conversations");
   if (!g.ok) return g.res;
 
@@ -58,6 +61,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
 /** Thread commands: read / ai toggle / assign / status. */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
+
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const g = await apiClinic(slug, "conversations");
   if (!g.ok) return g.res;
   const body = (await req.json().catch(() => ({}))) as {

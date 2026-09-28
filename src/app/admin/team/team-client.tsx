@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,7 +41,6 @@ type Admin = {
 
 export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string }) {
   const { t, locale } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
 
   const [addOpen, setAddOpen] = useState(false);
@@ -176,7 +174,7 @@ export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string
                     <Lock className="h-4 w-4" />
                   </span>
                 ) : (
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(a)}>
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(a)} aria-label={t.common.edit}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                 )}
@@ -237,7 +235,6 @@ export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string
                   setAddOpen(false);
                   toast(t.admin.adminInvited);
                   if (r.url && !r.emailed) setInviteLink(r.url);
-                  router.refresh();
                 })
               }
             >
@@ -295,7 +292,6 @@ export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string
                       if (r.error) return setError(errText(r.error));
                       setEditing(null);
                       toast(t.common.saved);
-                      router.refresh();
                     })
                   }
                 >
@@ -341,7 +337,6 @@ export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string
                     }
                     setConfirmRevoke(null);
                     toast(t.admin.revoked);
-                    router.refresh();
                   })
                 }
               >

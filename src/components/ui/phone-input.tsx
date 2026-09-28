@@ -38,7 +38,7 @@ export function PhoneInput({
   disabled?: boolean;
   autoFocus?: boolean;
 }) {
-  const { locale } = useI18n();
+  const { t, locale } = useI18n();
   const initial = splitE164(value, defaultCountry);
   const [country, setCountry] = useState<CountryCode>(initial.country);
   const [national, setNational] = useState(initial.national);
@@ -59,7 +59,7 @@ export function PhoneInput({
       <select
         value={country}
         disabled={disabled}
-        aria-label="Country"
+        aria-label={t.common.country}
         onChange={(e) => {
           const c = e.target.value as CountryCode;
           setCountry(c);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { saveFile } from "@/lib/storage";
@@ -7,6 +8,8 @@ const MAX_SIZE = 25 * 1024 * 1024;
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
+
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const g = await apiClinic(slug, "patients");
   if (!g.ok) return g.res;
   const access = g.access;

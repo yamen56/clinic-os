@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateTime } from "luxon";
 import { useI18n } from "@/lib/i18n/client";
-import { useRealtime } from "@/lib/use-realtime";
+import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { rangesForDay, hmToMin, effectiveHours, type WeeklyHours } from "@/lib/hours";
 import type { IntakeAnswer } from "@/lib/booking-intake";
 import { Button } from "@/components/ui/button";
@@ -80,6 +80,7 @@ export function CalendarClient({
   selfMemberId,
   initialPatient,
   openNew,
+  initialView = "week",
 }: {
   slug: string;
   tz: string;
@@ -88,10 +89,12 @@ export function CalendarClient({
   initialPatient: { id: string; name: string } | null;
   /** Open an empty create panel on arrival — the dashboard shortcut. */
   openNew?: boolean;
+  /** Day on a phone, where a week is seven columns wide on a 390px screen. */
+  initialView?: "day" | "week";
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
-  const [view, setView] = useState<"day" | "week" | "month">("week");
+  const [view, setView] = useState<"day" | "week" | "month">(initialView);
   const [anchor, setAnchor] = useState(() => DateTime.now().setZone(tz).toISODate()!);
   const [doctorFilter, setDoctorFilter] = useState<string>(isDoctor ? (selfMemberId ?? "") : "");
   const [serviceFilter, setServiceFilter] = useState("");
@@ -134,7 +137,7 @@ export function CalendarClient({
     void refetch();
   }, [refetch]);
 
-  useRealtime(slug, ["appointments"], () => void refetch());
+  useRealtimeRefresh(slug, ["appointments"], refetch);
 
   const days = useMemo(
     () => Array.from({ length: view === "month" ? 42 : range.days }, (_, i) => range.start.plus({ days: i })),

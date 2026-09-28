@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate } from "@/lib/dates";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Field, Input, NumberInput, Select, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
@@ -70,7 +70,6 @@ export function DocumentSettingsClient({
   settings: { linkDays: number; requireCode: boolean; reminderHours: number };
 }) {
   const { t, locale } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [pending, start] = useTransition();
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -91,14 +90,12 @@ export function DocumentSettingsClient({
       }
       toast(t.docTemplates.copied);
       setLibraryOpen(false);
-      router.refresh();
     });
 
   const saveSettings = () =>
     start(async () => {
       const r = await saveEsignSettingsAction(slug, cfg);
       toast(r.error ? t.common.genericError : t.common.saved, r.error ? "error" : "success");
-      router.refresh();
     });
 
   return (
@@ -117,11 +114,9 @@ export function DocumentSettingsClient({
                 {t.docTemplates.fromLibrary}
               </Button>
             )}
-            <Link href={`/c/${slug}/settings/documents/new`}>
-              <Button size="sm">
-                <Plus className="h-4 w-4" />
-                {t.docTemplates.addTemplate}
-              </Button>
+            <Link href={`/c/${slug}/settings/documents/new`} className={buttonClass({ size: "sm" })}>
+              <Plus className="h-4 w-4" />
+              {t.docTemplates.addTemplate}
             </Link>
           </div>
         </div>
@@ -171,10 +166,8 @@ export function DocumentSettingsClient({
                     )}
                   </div>
                 </Link>
-                <Link href={`/c/${slug}/settings/documents/${tpl.id}`}>
-                  <Button variant="ghost" size="icon" aria-label={t.common.edit}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+                <Link href={`/c/${slug}/settings/documents/${tpl.id}`} className={buttonClass({ variant: "ghost", size: "icon" })} aria-label={t.common.edit}>
+                  <Pencil className="h-4 w-4" />
                 </Link>
                 {isOwner && (
                   <Button
@@ -409,7 +402,6 @@ export function DocumentSettingsClient({
                     }
                     toast(t.common.saved);
                     setRoleEdit(null);
-                    router.refresh();
                   })
                 }
               >
@@ -433,7 +425,6 @@ export function DocumentSettingsClient({
             const r = await deleteSignerRoleAction(slug, roleDelete.id);
             if (r.error) toast(t.signerRoles.cannotDelete, "error");
             setRoleDelete(null);
-            router.refresh();
           })
         }
       />
@@ -451,7 +442,6 @@ export function DocumentSettingsClient({
             const r = await deleteTemplateAction(slug, tplDelete.id);
             if (r.error) toast(t.common.genericError, "error");
             setTplDelete(null);
-            router.refresh();
           })
         }
       />

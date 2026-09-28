@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +21,6 @@ const SWATCHES = [
 
 export function TagsClient({ slug, tags }: { slug: string; tags: Tag[] }) {
   const { t } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<Partial<Tag> | null>(null);
@@ -43,7 +41,6 @@ export function TagsClient({ slug, tags }: { slug: string; tags: Tag[] }) {
       }
       toast(editing.id ? t.tags.saved : t.tags.created);
       setEditing(null);
-      router.refresh();
     });
 
   return (
@@ -194,7 +191,6 @@ export function TagsClient({ slug, tags }: { slug: string; tags: Tag[] }) {
             if (r.error) toast(t.common.genericError, "error");
             else toast(t.tags.deleted);
             setConfirmDelete(null);
-            router.refresh();
           })
         }
       />

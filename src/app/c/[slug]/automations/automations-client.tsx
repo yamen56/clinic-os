@@ -2,11 +2,10 @@
 
 import { useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { useAutosave } from "@/lib/use-autosave";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Toggle, Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, Tabs } from "@/components/ui/misc";
@@ -66,7 +65,6 @@ export function AutomationsClient({
   mutedPatients: number;
 }) {
   const { t } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [, start] = useTransition();
   const { patch, state } = useAutosave({ url: `/api/c/${slug}/clinic`, entityKey: `msgwindow:${slug}` });
@@ -124,7 +122,6 @@ export function AutomationsClient({
               setShown({ id: a.id, active: v });
               await toggleAutomationAction(slug, a.id, v);
               toast(v ? t.automations.enabled : t.automations.disabled);
-              router.refresh();
             })
           }
         />
@@ -169,11 +166,9 @@ export function AutomationsClient({
         title={t.automations.title}
         sub={t.automations.sub}
         action={
-          <Link href={`/c/${slug}/automations/new`}>
-            <Button>
-              <Plus className="h-4 w-4" />
-              {t.automations.newAutomation}
-            </Button>
+          <Link href={`/c/${slug}/automations/new`} className={buttonClass()}>
+            <Plus className="h-4 w-4" />
+            {t.automations.newAutomation}
           </Link>
         }
       />
@@ -198,9 +193,7 @@ export function AutomationsClient({
               title={t.automations.empty}
               body={t.automations.emptyBody}
               action={
-                <Link href={`/c/${slug}/automations/new`}>
-                  <Button>{t.automations.newAutomation}</Button>
-                </Link>
+                <Link href={`/c/${slug}/automations/new`} className={buttonClass()}>{t.automations.newAutomation}</Link>
               }
             />
           ) : (
@@ -302,10 +295,8 @@ export function AutomationsClient({
                   : t.automations.optOutCount.replace("{n}", String(mutedPatients))}
               </span>
               {mutedPatients > 0 && (
-                <Link href={`/c/${slug}/patients?optedOut=1`}>
-                  <Button variant="outline" size="sm">
-                    {t.automations.optOutSee}
-                  </Button>
+                <Link href={`/c/${slug}/patients?optedOut=1`} className={buttonClass({ variant: "outline", size: "sm" })}>
+                  {t.automations.optOutSee}
                 </Link>
               )}
             </div>

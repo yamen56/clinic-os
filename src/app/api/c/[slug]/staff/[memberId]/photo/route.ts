@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { can } from "@/lib/auth";
 import { saveFile, openFile, deleteFile } from "@/lib/storage";
@@ -55,6 +56,8 @@ export async function GET(
   ctx: { params: Promise<{ slug: string; memberId: string }> }
 ) {
   const { slug, memberId } = await ctx.params;
+
+  if (!isUuid(memberId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const r = await resolve(slug, memberId);
   if ("error" in r) return r.error;
   if (!r.row.avatar_path) return NextResponse.json({ error: "no_photo" }, { status: 404 });
@@ -84,6 +87,8 @@ export async function POST(
   ctx: { params: Promise<{ slug: string; memberId: string }> }
 ) {
   const { slug, memberId } = await ctx.params;
+
+  if (!isUuid(memberId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const r = await resolve(slug, memberId);
   if ("error" in r) return r.error;
   if (!r.canEdit) return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -132,6 +137,8 @@ export async function DELETE(
   ctx: { params: Promise<{ slug: string; memberId: string }> }
 ) {
   const { slug, memberId } = await ctx.params;
+
+  if (!isUuid(memberId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const r = await resolve(slug, memberId);
   if ("error" in r) return r.error;
   if (!r.canEdit) return NextResponse.json({ error: "forbidden" }, { status: 403 });

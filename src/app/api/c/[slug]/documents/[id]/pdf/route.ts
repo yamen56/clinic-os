@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { readFileBuffer } from "@/lib/storage";
 import { logDocEvent, requestIp, requestUserAgent } from "@/lib/esign/events";
@@ -14,6 +15,8 @@ import { generateFinalPdf } from "@/lib/esign/pdf";
  */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
+
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;

@@ -8,6 +8,7 @@ import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/dates";
 import { asTaxCategory, taxBreakdown } from "@/lib/invoices";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { Field, Input, Select, Toggle } from "@/components/ui/input";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -160,7 +161,6 @@ export function InvoiceDetailClient({
         setTitle(inv.title ?? "");
         return toast(t.common.genericError, "error");
       }
-      router.refresh();
     });
   };
 
@@ -185,7 +185,6 @@ export function InvoiceDetailClient({
         return;
       }
       toast(t.invoices.receiptSent);
-      router.refresh();
     });
 
   const send = () =>
@@ -211,7 +210,6 @@ export function InvoiceDetailClient({
         return;
       }
       toast(t.invoices.sentOk);
-      router.refresh();
     });
 
   const pay = () =>
@@ -228,7 +226,6 @@ export function InvoiceDetailClient({
       }
       toast(t.invoices.paymentSaved);
       setPayOpen(false);
-      router.refresh();
     });
 
   return (
@@ -257,11 +254,9 @@ export function InvoiceDetailClient({
         sub={`${inv.patient_name} · ${fmtDate(inv.created_at, inv.timezone, locale)}`}
         action={
           <div className="flex flex-wrap gap-2">
-            <Link href={`/c/${slug}/patients/${inv.patient_id}`}>
-              <Button variant="ghost" size="sm">
-                <UserRound className="h-4 w-4" />
-                {t.conversations.openPatient}
-              </Button>
+            <Link href={`/c/${slug}/patients/${inv.patient_id}`} className={buttonClass({ variant: "ghost", size: "sm" })}>
+              <UserRound className="h-4 w-4" />
+              {t.conversations.openPatient}
             </Link>
             <a href={`/inv/${inv.public_token}`} target="_blank" rel="noreferrer">
               <Button variant="outline" size="sm">
@@ -374,7 +369,6 @@ export function InvoiceDetailClient({
                   startRetry(async () => {
                     const r = await retryEinvoiceAction(slug, inv.id);
                     toast(r.error ? t.common.genericError : t.einvoicing.retried, r.error ? "error" : "success");
-                    router.refresh();
                   })
                 }
               >
@@ -571,7 +565,6 @@ export function InvoiceDetailClient({
                       claimStatus,
                     });
                     if (r.error) return toast(r.error, "error");
-                    router.refresh();
                     toast(t.common.saved, "success");
                   })
                 }
@@ -619,7 +612,6 @@ export function InvoiceDetailClient({
                       return;
                     }
                     toast(r.queued ? t.einvoicing.queuedNow : t.common.saved);
-                    router.refresh();
                   });
                 }}
               />
@@ -711,7 +703,6 @@ export function InvoiceDetailClient({
           if (r.error === "einvoice_pending") toast(t.einvoicing.pendingBlocks, "error");
           else if (r.creditNoteId) toast(t.einvoicing.creditNoteRaised);
           setVoidReason("");
-          router.refresh();
         }}
       >
         {filed && (

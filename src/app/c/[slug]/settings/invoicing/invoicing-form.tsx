@@ -50,11 +50,11 @@ export function InvoicingForm({
               onChange={(e) => patch({ invoice_tax_label: e.target.value })} />
           </Field>
         </div>
-        <Field label={t.invoices.paymentInstructions} hint="CliQ / bank details">
+        <Field label={t.invoices.paymentInstructions} hint={t.invoices.paymentInstructionsHint}>
           <Textarea defaultValue={clinic.payment_instructions} disabled={ro} className="min-h-24"
             onChange={(e) => patch({ payment_instructions: e.target.value })} />
         </Field>
-        <Field label="Footer">
+        <Field label={t.invoices.invoiceFooter}>
           <Textarea defaultValue={clinic.invoice_footer} disabled={ro} className="min-h-24"
             onChange={(e) => patch({ invoice_footer: e.target.value })} />
         </Field>

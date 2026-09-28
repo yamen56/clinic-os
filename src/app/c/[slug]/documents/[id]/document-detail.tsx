@@ -8,6 +8,7 @@ import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { Card, PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/misc";
@@ -222,7 +223,6 @@ export function DocumentDetailClient({
       }
       if (r.delivered) toast(t.docs.sentOk);
       else if (r.staffNotified) toast(t.docs.sentToStaffOk);
-      router.refresh();
     });
 
   const startInPerson = () =>
@@ -270,7 +270,6 @@ export function DocumentDetailClient({
       }
       toast(t.docs.signed);
       setSignOpen(false);
-      router.refresh();
     });
 
   const saveOverride = (key: string, label: string, labelAr: string, value: string) =>
@@ -288,7 +287,6 @@ export function DocumentDetailClient({
         return;
       }
       setOverrideKey(null);
-      router.refresh();
     });
 
   /* ------------------------------------------------------------------- view */
@@ -308,10 +306,8 @@ export function DocumentDetailClient({
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-2">
-            <Link href={`/c/${slug}/documents`} aria-label={t.common.back}>
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-              </Button>
+            <Link href={`/c/${slug}/documents`} aria-label={t.common.back} className={buttonClass({ variant: "ghost", size: "icon" })}>
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
             </Link>
             {doc.title}
             <Badge status={statusBadge}>
@@ -638,7 +634,6 @@ export function DocumentDetailClient({
                               start(async () => {
                                 const r = await revokeLinkAction(slug, doc.id, s.id);
                                 toast(r.error ? t.common.genericError : t.docs.revoked, r.error ? "error" : "success");
-                                router.refresh();
                               })
                             }
                           >
@@ -740,7 +735,6 @@ export function DocumentDetailClient({
                                 onClick={() =>
                                   start(async () => {
                                     await clearFieldValueAction(slug, doc.id, f.key);
-                                    router.refresh();
                                   })
                                 }
                               >
@@ -941,7 +935,6 @@ export function DocumentDetailClient({
                   return;
                 }
                 setDeclineOpen(false);
-                router.refresh();
               })
             }
           >
@@ -988,7 +981,6 @@ export function DocumentDetailClient({
                       isOneOff: true,
                     });
                     setOneOff(null);
-                    router.refresh();
                   })
                 }
               >
@@ -1047,7 +1039,6 @@ export function DocumentDetailClient({
                 }
                 toast(t.docs.voided);
                 setVoidOpen(false);
-                router.refresh();
               })
             }
           >
@@ -1235,7 +1226,6 @@ function SignerEditor({
   onClose: () => void;
 }) {
   const { t, locale } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [pending, start] = useTransition();
   const [rows, setRows] = useState<Signer[]>(signers ?? []);
@@ -1387,7 +1377,6 @@ function SignerEditor({
                 }
                 toast(t.common.saved);
                 onClose();
-                router.refresh();
               })
             }
           >

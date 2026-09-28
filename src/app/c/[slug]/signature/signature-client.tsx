@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,7 +31,6 @@ export function SignatureSettings({
   myName: string;
 }) {
   const { t } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [pending, start] = useTransition();
   const [drawing, setDrawing] = useState(!currentSignature);
@@ -56,7 +54,6 @@ export function SignatureSettings({
       }
       toast(t.mySignature.saved);
       setDrawing(false);
-      router.refresh();
     });
 
   const savePin = () =>
@@ -78,7 +75,6 @@ export function SignatureSettings({
       toast(t.mySignature.pinSet);
       setPin("");
       setPin2("");
-      router.refresh();
     });
 
   return (

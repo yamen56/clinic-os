@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import QRCode from "qrcode";
 import { useI18n } from "@/lib/i18n/client";
-import { useRealtime } from "@/lib/use-realtime";
+import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { fmtRelative } from "@/lib/dates";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -61,14 +61,24 @@ export function WhatsappClient({
     void refresh();
   }, [refresh]);
 
-  // QR rotates and connection state changes — poll fast while pairing, slow otherwise
+  /*
+    Every write to the session row already arrives over the event stream below,
+    so this is the fallback for a stream that is down, not how the page learns
+    anything. Fast while pairing, where a missed QR costs the owner a rescan;
+    slow otherwise; and never for a tab nobody is looking at.
+  */
   useEffect(() => {
     const fast = st?.status === "qr" || st?.status === "connecting";
-    const iv = setInterval(() => void refresh(), fast ? 2500 : 15000);
+    const iv = setInterval(
+      () => {
+        if (document.visibilityState === "visible") void refresh();
+      },
+      fast ? 2500 : 60000
+    );
     return () => clearInterval(iv);
   }, [st?.status, refresh]);
 
-  useRealtime(slug, ["whatsapp_sessions"], () => void refresh());
+  useRealtimeRefresh(slug, ["whatsapp_sessions"], refresh);
 
   useEffect(() => {
     if (st?.qr) {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -112,7 +111,6 @@ export function BookingLinksClient({
   patientFields: PatientField[];
 }) {
   const { t, locale } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [editing, setEditing] = useState<Partial<LinkRow> | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -195,7 +193,6 @@ export function BookingLinksClient({
       }
       toast(t.common.saved);
       setEditing(null);
-      router.refresh();
     });
 
   const saveQuestion = () =>
@@ -229,13 +226,11 @@ export function BookingLinksClient({
       }
       toast(t.common.saved);
       setQuestion(null);
-      router.refresh();
     });
 
   const moveQuestion = (id: string, direction: "up" | "down") =>
     start(async () => {
       await moveBookingQuestionAction(slug, id, direction);
-      router.refresh();
     });
 
   const needsOptions =
@@ -959,7 +954,6 @@ export function BookingLinksClient({
           if (deleteId) {
             await deleteBookingLinkAction(slug, deleteId);
             setDeleteId(null);
-            router.refresh();
           }
         }}
       />
@@ -975,7 +969,6 @@ export function BookingLinksClient({
           if (deleteQuestion) {
             await deleteBookingQuestionAction(slug, deleteQuestion.id);
             setDeleteQuestion(null);
-            router.refresh();
           }
         }}
       />

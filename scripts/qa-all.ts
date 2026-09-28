@@ -83,6 +83,7 @@ const SUITES = [
   ["whatsapp: session keys survive storage", "scripts/qa-wa-auth-state.ts"],
   ["whatsapp: two workers never share a socket", "scripts/qa-wa-leases.ts"],
   ["charts: every clinic in its own colour", "scripts/qa-brand-chart.ts"],
+  ["requests: one click, one render; a bad link is not found", "scripts/qa-requests.ts"],
 ] as const;
 
 function run(script: string): Promise<{ ok: boolean; out: string }> {

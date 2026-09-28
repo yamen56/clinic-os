@@ -461,9 +461,9 @@ export function PrescriptionComposer({
         up both sit at the end, where the form's own buttons are elsewhere.
       */
       <div className="flex items-center gap-2 sm:justify-end">
-        {/* Under 360px the two labels do not fit side by side at the size
-            buttons render (16px), so Print keeps its icon and its accessible
-            name and gives its width to Send. */}
+        {/* Under 360px the two labels do not fit side by side at the large
+            button size, so Print keeps its icon and its accessible name and
+            gives its width to Send. */}
         <Button
           variant="outline"
           size="lg"
@@ -570,9 +570,9 @@ export function PrescriptionComposer({
 
               {/* Templates first: for a routine prescription they are the whole job. */}
               <section>
-                {/* Wraps rather than overflows: buttons render at 16px here,
-                    and "Save as template" and "Manage list" in English do not
-                    fit beside the heading on a 320px phone. */}
+                {/* Wraps rather than overflows: "Save as template" and "Manage
+                    list" in English may not fit beside the heading on a 320px
+                    phone. */}
                 <div className="mb-2 flex flex-wrap items-center gap-x-1 gap-y-0.5">
                   <span className="me-auto text-[13px] font-medium text-ink-700">{T.templates}</span>
                   <button

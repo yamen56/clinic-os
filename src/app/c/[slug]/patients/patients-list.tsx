@@ -8,6 +8,7 @@ import { fmtDate } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { SearchInput, Select, Field, Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, Avatar } from "@/components/ui/misc";
@@ -291,11 +292,9 @@ export function PatientsList({
               </>
             )}
             {canImport && (
-              <Link href={`/c/${slug}/patients/import`}>
-                <Button variant="outline">
-                  <Upload className="h-4 w-4" />
-                  {t.import.title}
-                </Button>
+              <Link href={`/c/${slug}/patients/import`} className={buttonClass({ variant: "outline" })}>
+                <Upload className="h-4 w-4" />
+                {t.import.title}
               </Link>
             )}
             <Button onClick={() => setNewOpen(true)}>

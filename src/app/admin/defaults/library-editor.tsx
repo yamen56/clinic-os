@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/client-dict";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -37,7 +36,6 @@ type Entry = {
  */
 export function LibraryEditor({ entries, locale }: { entries: Entry[]; locale: Locale }) {
   const { t } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<Partial<Entry> | null>(null);
@@ -64,7 +62,6 @@ export function LibraryEditor({ entries, locale }: { entries: Entry[]; locale: L
       }
       toast(t.common.saved);
       setEditing(null);
-      router.refresh();
     });
 
   return (
@@ -250,7 +247,6 @@ export function LibraryEditor({ entries, locale }: { entries: Entry[]; locale: L
             if (!deleting) return;
             await deleteLibraryTemplateAction(deleting.id);
             setDeleting(null);
-            router.refresh();
           })
         }
       />

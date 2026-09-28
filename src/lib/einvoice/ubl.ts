@@ -1,5 +1,5 @@
 import type { EinvoiceSettings, TaxpayerType } from "./settings";
-import type { TaxCategory } from "../invoices";
+import { round2, type TaxCategory } from "../invoices";
 
 /**
  * The UBL 2.1 document JoFotara wants, built as text.
@@ -146,9 +146,6 @@ function lineXml(line: EinvoiceLine, i: number, cur: string): string {
   ].join("\n");
 }
 
-function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
-}
 
 /** The totals block, summed from the same line numbers that were just emitted. */
 export function totalsOf(lines: EinvoiceLine[]): {

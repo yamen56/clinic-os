@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { guardClinic } from "@/lib/guard";
+import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
 import { isSignerDue, isTerminal, loadSigners } from "@/lib/esign/documents";
 import type { PublicSigningView } from "@/lib/esign/public";
@@ -23,6 +24,7 @@ export default async function SignDevicePage({
   params: Promise<{ slug: string; docId: string; signerId: string }>;
 }) {
   const { slug, docId, signerId } = await params;
+  if (!isUuid(docId) || !isUuid(signerId)) notFound();
   const access = await guardClinic(slug);
 
   const data = await inClinic(access, async (c) => {

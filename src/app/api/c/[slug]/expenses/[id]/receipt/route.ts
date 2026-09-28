@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { saveFile, openFile, deleteFile } from "@/lib/storage";
 import { fileResponseHeaders } from "@/lib/download";
@@ -15,6 +16,8 @@ const MAX_SIZE = 10 * 1024 * 1024;
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
+
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   // The same capability as the screen. The nav hides what a member may not
   // reach and the page redirects them, but neither stands between a request and
   // the database — only this does.
@@ -73,6 +76,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
 
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
+
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const g = await apiClinic(slug, "expenses");
   if (!g.ok) return g.res;
 

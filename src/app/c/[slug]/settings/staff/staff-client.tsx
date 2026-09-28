@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,7 +68,6 @@ export function StaffClient({
   viewerIsOwner: boolean;
 }) {
   const { t } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -303,7 +301,6 @@ export function StaffClient({
                   }
                   setAddOpen(false);
                   resetForm();
-                  router.refresh();
                 })
               }
             >
@@ -348,7 +345,6 @@ export function StaffClient({
             viewerIsOwner={viewerIsOwner}
             onDone={() => {
               setEditing(null);
-              router.refresh();
             }}
           />
         )}

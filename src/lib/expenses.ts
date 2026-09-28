@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { clinicNetRevenue } from "./earnings";
+import { round2 } from "./invoices";
 
 /**
  * What the clinic spent.
@@ -199,9 +200,6 @@ function toISODate(v: unknown): string {
   return String(v).slice(0, 10);
 }
 
-function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
-}
 
 /** One repeating bill, as both the worker and the expenses screen need it. */
 export type ScheduleRow = {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,6 @@ type Insurer = {
 export function InsurersClient({ slug, initial }: { slug: string; initial: Insurer[] }) {
   const { t } = useI18n();
   const { toast } = useToast();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Insurer | null>(null);
   const [name, setName] = useState("");
@@ -108,7 +106,6 @@ export function InsurersClient({ slug, initial }: { slug: string; initial: Insur
                   onClick={() =>
                     start(async () => {
                       await deleteInsurerAction(slug, i.id);
-                      router.refresh();
                     })
                   }
                 >
@@ -151,7 +148,6 @@ export function InsurersClient({ slug, initial }: { slug: string; initial: Insur
                   });
                   if (r.error) return toast(t.common.required, "error");
                   setOpen(false);
-                  router.refresh();
                 })
               }
             >

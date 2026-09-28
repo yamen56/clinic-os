@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { recordSignature, declineDocument, markViewed } from "@/lib/esign/signing";
 import { afterSignature } from "@/lib/esign/flow";
@@ -24,6 +25,8 @@ export async function POST(
   ctx: { params: Promise<{ slug: string; id: string }> }
 ) {
   const { slug, id } = await ctx.params;
+
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;
@@ -145,6 +148,8 @@ export async function PATCH(
   ctx: { params: Promise<{ slug: string; id: string }> }
 ) {
   const { slug, id } = await ctx.params;
+
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const auth = await apiClinic(slug, "documents");
   if (!auth.ok) return auth.res;
   const { access } = auth;

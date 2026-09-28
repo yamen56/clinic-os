@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,7 +99,6 @@ export function ServicesClient({
   currency: string;
 }) {
   const { t, locale } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -121,7 +119,6 @@ export function ServicesClient({
       }
       toast(t.common.saved);
       setDraft(null);
-      router.refresh();
     });
 
   const saveSection = () =>
@@ -134,13 +131,11 @@ export function ServicesClient({
       }
       toast(t.common.saved);
       setSectionDraft(null);
-      router.refresh();
     });
 
   const moveSection = (id: string, direction: "up" | "down") =>
     start(async () => {
       await moveSectionAction(slug, id, direction);
-      router.refresh();
     });
 
   /*
@@ -183,7 +178,6 @@ export function ServicesClient({
             label={t.common.active}
             onChange={async (v) => {
               await toggleServiceAction(slug, s.id, v);
-              router.refresh();
             }}
           />
           <Button
@@ -497,7 +491,6 @@ export function ServicesClient({
           if (deleteId) {
             await deleteServiceAction(slug, deleteId);
             setDeleteId(null);
-            router.refresh();
           }
         }}
       />
@@ -572,7 +565,6 @@ export function ServicesClient({
           if (deleteSectionId) {
             await deleteSectionAction(slug, deleteSectionId);
             setDeleteSectionId(null);
-            router.refresh();
           }
         }}
       />

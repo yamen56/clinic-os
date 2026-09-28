@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { renderUrlToPdf } from "@/lib/pdf";
@@ -31,6 +32,8 @@ import { fileResponseHeaders } from "@/lib/download";
  */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
+
+  if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const g = await apiClinic(slug, "patients.export");
   if (!g.ok) return g.res;
   const { access } = g;

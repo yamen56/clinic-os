@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,10 +36,20 @@ function blank(kind: StaffAlertKind): Omit<StaffAlert, "id"> & { id?: string } {
 export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffAlert[] }) {
   const { t } = useI18n();
   const { toast } = useToast();
-  const router = useRouter();
   const [, start] = useTransition();
   const [editing, setEditing] = useState<(Omit<StaffAlert, "id"> & { id?: string }) | null>(null);
   const [rows, setRows] = useState(alerts);
+  /*
+    The server's list replaces the local one whenever a new one arrives. The
+    rows were seeded once and never again, so an alert added or edited in the
+    editor below did not appear until the tab was left and reopened; the
+    optimistic edits here only bridge the wait for the save.
+  */
+  const [seen, setSeen] = useState(alerts);
+  if (alerts !== seen) {
+    setSeen(alerts);
+    setRows(alerts);
+  }
 
   const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
@@ -71,8 +80,11 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
         threshold: a.threshold,
         enabled,
       });
-      if (r.error) toast(t.common.genericError, "error");
-      router.refresh();
+      // Success comes back with the page; a refusal changed nothing, so undo the flip.
+      if (r.error) {
+        toast(t.common.genericError, "error");
+        setRows((rs) => rs.map((x) => (x.id === a.id ? { ...x, enabled: !enabled } : x)));
+      }
     });
   };
 
@@ -81,7 +93,6 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
     start(async () => {
       await deleteStaffAlertAction(slug, id);
       toast(t.automations.alertDeleted);
-      router.refresh();
     });
   };
 
@@ -167,7 +178,6 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
           onSaved={() => {
             setEditing(null);
             toast(t.automations.alertSaved);
-            router.refresh();
           }}
         />
       )}

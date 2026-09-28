@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +30,6 @@ export function NameEditor({
   children: React.ReactNode;
 }) {
   const { t } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(name);
@@ -52,7 +50,6 @@ export function NameEditor({
       }
       toast(t.common.saved);
       setOpen(false);
-      router.refresh();
     });
 
   if (!open) {

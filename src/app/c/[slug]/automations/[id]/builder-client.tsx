@@ -128,7 +128,6 @@ export function BuilderClient({
       }
       toast(t.automations.saved);
       if (!automation) router.replace(`/c/${slug}/automations/${r.id}`);
-      else router.refresh();
     });
 
   return (

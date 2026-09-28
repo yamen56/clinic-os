@@ -61,7 +61,6 @@ export function DangerZone({
       // A purged clinic's page no longer exists, so there is nowhere to refresh
       // back to; the list is the only honest destination.
       if (m === "purge") router.push("/admin");
-      else router.refresh();
     });
 
   if (clinic.deletedAt) {
@@ -107,7 +106,6 @@ export function DangerZone({
                     const r = await restoreClinicAction(clinic.id);
                     if (r.error) return toast(errorText(r.error));
                     toast(t.admin.restored);
-                    router.refresh();
                   })
                 }
               >

@@ -283,7 +283,8 @@ async function main() {
   await page.waitForLoadState("networkidle");
   // Wait for the page's own content, not just the shell: reading innerText at
   // networkidle can catch the nav alone and pass on an empty page.
-  await page.locator("button:has-text('New template')").first().waitFor({ timeout: 30000 });
+  // A link styled as a button: it navigates to the new template's page.
+  await page.getByRole("link", { name: "New template" }).first().waitFor({ timeout: 30000 });
   const offered = await page.evaluate(() => document.body.innerText);
   check(
     "the templates page offers neither upload nor import",

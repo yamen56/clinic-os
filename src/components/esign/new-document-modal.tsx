@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
-import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Modal } from "@/components/ui/modal";
 import { EmptyState } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
@@ -89,9 +89,7 @@ export function NewDocumentModal({
           title={t.docs.noTemplates}
           body={t.docs.noTemplatesBody}
           action={
-            <Link href={`/c/${slug}/settings/documents`}>
-              <Button>{t.docs.manageTemplates}</Button>
-            </Link>
+            <Link href={`/c/${slug}/settings/documents`} className={buttonClass()}>{t.docs.manageTemplates}</Link>
           }
         />
       ) : (

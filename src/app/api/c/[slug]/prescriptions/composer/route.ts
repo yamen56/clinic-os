@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { systemMessageDef } from "@/lib/system-messages";
+import { isUuid } from "@/lib/uuid";
 
 /**
  * Everything the prescription composer needs before the doctor types a letter.
@@ -20,7 +21,6 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   if (!g.ok) return g.res;
   const { access } = g;
   const patientId = new URL(req.url).searchParams.get("patient");
-  const uuid = /^[0-9a-f-]{36}$/i;
 
   const row = await inClinic(access, async (c) => {
     const r = await c.query(
@@ -53,7 +53,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
          ) s) as caption,
          cl.name as clinic_name, cl.name_ar as clinic_name_ar, cl.default_locale, cl.timezone
        from clinics cl where cl.id = $1`,
-      [access.clinicId, access.session.user.id, patientId && uuid.test(patientId) ? patientId : null]
+      [access.clinicId, access.session.user.id, isUuid(patientId) ? patientId : null]
     );
     return r.rows[0];
   });

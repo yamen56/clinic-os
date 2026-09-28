@@ -6,7 +6,7 @@
   Single source of truth: no hardcoded hex in components.
 
   Daylight-white product surface, near-black text, one slate-blue accent.
-  The dark "night aurora" surface is reserved for brand moments (auth/splash)
+  The dark night surface is reserved for brand moments (auth/splash)
   and the app sidebar — never for working screens.
 */
 @theme {
@@ -203,24 +203,63 @@ html[dir="rtl"] .italic:not(.latin) { font-style: normal; }
 .num { unicode-bidi: isolate; direction: ltr; }
 
 /*
-  Night aurora — brand moments only (auth, splash).
-  The supplied asset already carries the grain and light leaks, so it sits on
-  top of the gradient rather than repeating it. The gradient stays underneath as
-  the fallback if the image is ever missing.
+  Night surface — brand moments only: sign-in, forgot, reset, invite.
+
+  Four soft shapes on black, one pinned to each corner of the screen. They are
+  cut from `scripts/assets/night-shapes.png` by `npm run night`, which explains
+  why they ship as pieces: the source is 2.7:1, and under `cover` a laptop
+  cropped a shape away while a phone held upright was shown the black middle
+  and nothing else. `lighten` makes each piece's black surroundings vanish
+  where two meet.
+
+  --u is how many CSS pixels one pixel of the source becomes: about 0.7 on a
+  1440 laptop, where the shapes sit as drawn; 0.41 on a phone; capped so a 4K
+  screen does not balloon them. The sizes are the pieces' own, from the script.
+
+  About 12KB for all four, where the aurora before it was 36KB as WebP and
+  1.26MB as the PNG it started from.
 */
 .surface-night {
-  background-color: var(--color-night-deep);
+  --u: clamp(0.36px, 0.0486vmax, 1.3px);
+  background-color: #000;
   background-image:
-    url("/assets/bg-aurora-grain.png"),
-    radial-gradient(1200px 600px at 12% 30%, rgb(91 198 227 / 0.18), transparent 60%),
-    radial-gradient(900px 500px at 85% 70%, rgb(228 148 107 / 0.10), transparent 65%),
-    radial-gradient(1400px 800px at 50% 110%, rgb(30 58 107 / 0.55), transparent 70%),
-    linear-gradient(180deg, #050810 0%, #0b1220 100%);
-  background-size: cover, auto, auto, auto, auto;
-  background-position: center;
+    url("/assets/night-tl.webp"),
+    url("/assets/night-tr.webp"),
+    url("/assets/night-bl.webp"),
+    url("/assets/night-br.webp");
+  background-size:
+    calc(425 * var(--u)) auto,
+    calc(439 * var(--u)) auto,
+    calc(823 * var(--u)) auto,
+    calc(556 * var(--u)) auto;
+  /* The top-right shape sits in from the corner in the source; kept. */
+  background-position:
+    left top,
+    right calc(222 * var(--u)) top,
+    left bottom,
+    right bottom;
+  background-repeat: no-repeat;
+  background-blend-mode: lighten;
   color: #fff;
   position: relative;
   isolation: isolate;
+}
+
+/*
+  Held upright, the screen is narrower than the shapes are long. At the laptop
+  positions the two top shapes met in the middle and the two bottom ones ran
+  into a single band behind the footer. Here the top-right shape goes to its
+  corner, and the long bottom-left one is slid part-way off the edge so only
+  its rounded end shows.
+*/
+@media (orientation: portrait) {
+  .surface-night {
+    background-position:
+      left top,
+      right top,
+      left calc(-300 * var(--u)) bottom,
+      right calc(-90 * var(--u)) bottom;
+  }
 }
 .surface-night > * { position: relative; z-index: 2; }
 
@@ -388,4 +427,11 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
   border-radius: 4px;
 }
 
-input, textarea, select, button { font: inherit; }
+/*
+  No `font: inherit` reset for buttons and fields here: Tailwind's preflight
+  already applies one, inside the base layer. A copy of it used to sit at this
+  spot, outside any layer, and so outranked every utility — no button took its
+  own size or weight, and `text-[13px] font-semibold` rendered as the page's
+  plain 16px. Fields keep 16px on a phone through their own `text-base`, which
+  is what stops iOS zooming in on focus.
+*/

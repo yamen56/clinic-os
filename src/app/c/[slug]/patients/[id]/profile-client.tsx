@@ -10,6 +10,7 @@ import { inkOn } from "@/lib/contrast";
 import { formatPhone } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Input, Field, Select, Textarea, Toggle } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import type { CountryCode } from "@/lib/phone";
@@ -153,11 +154,10 @@ const storageKeyOf = (d: FieldDef) => d.storage_key ?? d.key.replace(/^patient\.
   The header's action buttons, on a phone: full-width cells of a two-column
   grid whose labels may wrap to a second line and fill the row's height.
 
-  They wrap because they have to. Buttons render at the inherited 16px (a
-  global `font: inherit` sits outside Tailwind's layers and beats the button's
-  own 13px), so at 320px an English "Book appointment" is wider than half the
-  screen, and a clinic's own vocabulary can make any of them longer. From a
-  tablet up they are ordinary one-line buttons in a wrapping row.
+  They wrap because they may have to: at 320px an English "Book appointment"
+  and its icon come close to half the screen, and a clinic's own vocabulary can
+  make any of them longer. From a tablet up they are ordinary one-line buttons
+  in a wrapping row.
 */
 const HEADER_ACTION =
   "w-full max-sm:h-full max-sm:min-h-9 max-sm:gap-1.5 max-sm:px-2 max-sm:py-1.5 max-sm:whitespace-normal max-sm:text-center max-sm:leading-tight sm:w-auto";
@@ -481,19 +481,15 @@ export function PatientProfile(props: {
             </a>
           )}
           {caps.calendar && (
-            <Link href={`/c/${slug}/calendar?patient=${p.id}`}>
-              <Button variant="outline" size="sm" className={HEADER_ACTION}>
-                <CalendarPlus className="h-4 w-4" />
-                {t.patients.bookAppointment}
-              </Button>
+            <Link href={`/c/${slug}/calendar?patient=${p.id}`} className={buttonClass({ variant: "outline", size: "sm", className: HEADER_ACTION })}>
+              <CalendarPlus className="h-4 w-4" />
+              {t.patients.bookAppointment}
             </Link>
           )}
           {caps.invoices && (
-            <Link href={`/c/${slug}/invoices/new?patient=${p.id}`}>
-              <Button variant="outline" size="sm" className={HEADER_ACTION}>
-                <ReceiptText className="h-4 w-4" />
-                {t.patients.createInvoice}
-              </Button>
+            <Link href={`/c/${slug}/invoices/new?patient=${p.id}`} className={buttonClass({ variant: "outline", size: "sm", className: HEADER_ACTION })}>
+              <ReceiptText className="h-4 w-4" />
+              {t.patients.createInvoice}
             </Link>
           )}
           <div className="relative max-sm:absolute max-sm:end-0 max-sm:top-0">
@@ -844,9 +840,7 @@ export function PatientProfile(props: {
                   icon={<CalendarPlus />}
                   title={t.patients.overview.noUpcoming}
                   action={
-                    <Link href={`/c/${slug}/calendar?patient=${p.id}`}>
-                      <Button>{t.patients.bookAppointment}</Button>
-                    </Link>
+                    <Link href={`/c/${slug}/calendar?patient=${p.id}`} className={buttonClass()}>{t.patients.bookAppointment}</Link>
                   }
                 />
               </div>
@@ -887,9 +881,7 @@ export function PatientProfile(props: {
                   icon={<ReceiptText />}
                   title={t.common.none}
                   action={
-                    <Link href={`/c/${slug}/invoices/new?patient=${p.id}`}>
-                      <Button>{t.patients.createInvoice}</Button>
-                    </Link>
+                    <Link href={`/c/${slug}/invoices/new?patient=${p.id}`} className={buttonClass()}>{t.patients.createInvoice}</Link>
                   }
                 />
               </div>
@@ -1031,11 +1023,9 @@ export function PatientProfile(props: {
                   })}
                 </div>
                 <div className="mt-4">
-                  <Link href={`/c/${slug}/conversations?open=${props.conversation.id}`}>
-                    <Button variant="soft" size="sm">
-                      <MessageCircle className="h-4 w-4" />
-                      {t.nav.conversations}
-                    </Button>
+                  <Link href={`/c/${slug}/conversations?open=${props.conversation.id}`} className={buttonClass({ variant: "soft", size: "sm" })}>
+                    <MessageCircle className="h-4 w-4" />
+                    {t.nav.conversations}
                   </Link>
                 </div>
               </>
@@ -1525,7 +1515,6 @@ function NotesTab({
       // row, and closing after each one would make that four round trips.
       setCategoryId(r.id);
       setCatName("");
-      router.refresh();
     });
 
   const removeCategory = (cat: NoteCategoryRow) =>
@@ -1540,7 +1529,6 @@ function NotesTab({
       setFilter((cur) => (cur === cat.id ? null : cur));
       setDeleteCat(null);
       toast(t.patients.notes.categoryDeleted);
-      router.refresh();
     });
 
   return (
@@ -2160,7 +2148,6 @@ function DocumentsTab({
   canSend: boolean;
 }) {
   const { t, locale } = useI18n();
-  const router = useRouter();
   const { toast } = useToast();
   const [newOpen, setNewOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -2192,7 +2179,6 @@ function DocumentsTab({
                     return;
                   }
                   toast(t.docs.sendAllDone.replace("{n}", String(r.sent ?? 0)));
-                  router.refresh();
                 })
               }
             >

@@ -5,6 +5,7 @@ import { dictForClinic, getLocale } from "@/lib/i18n";
 import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtMoney, fmtDate } from "@/lib/dates";
 import { PageHeader, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { redirect } from "next/navigation";
@@ -155,11 +156,9 @@ export default async function InvoicesPage({
                 </Button>
               </a>
             )}
-            <Link href={`${base}/new`}>
-              <Button>
-                <Plus className="h-4 w-4" />
-                {t.invoices.newInvoice}
-              </Button>
+            <Link href={`${base}/new`} className={buttonClass()}>
+              <Plus className="h-4 w-4" />
+              {t.invoices.newInvoice}
             </Link>
           </>
         }
@@ -224,9 +223,7 @@ export default async function InvoicesPage({
             title={t.invoices.empty}
             body={t.invoices.emptyBody}
             action={
-              <Link href={`${base}/new`}>
-                <Button>{t.invoices.newInvoice}</Button>
-              </Link>
+              <Link href={`${base}/new`} className={buttonClass()}>{t.invoices.newInvoice}</Link>
             }
           />
         ) : (

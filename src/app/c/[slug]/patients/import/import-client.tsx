@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDateTime } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Select, Textarea } from "@/components/ui/input";
 import { IMPORT_ACCEPT } from "@/lib/import/sheet";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +57,6 @@ export function ImportClient({
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
-  const router = useRouter();
   const [text, setText] = useState("");
   const [filename, setFilename] = useState("");
   /** A spreadsheet is read on the server, which is a round trip worth showing. */
@@ -146,11 +145,9 @@ export function ImportClient({
         title={t.import.title}
         sub={t.import.sub}
         action={
-          <Link href={`/c/${slug}/patients`}>
-            <Button variant="outline">
-              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-              {t.nav.patients}
-            </Button>
+          <Link href={`/c/${slug}/patients`} className={buttonClass({ variant: "outline" })}>
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+            {t.nav.patients}
           </Link>
         }
       />
@@ -289,7 +286,6 @@ export function ImportClient({
                       toast(`${t.import.done}: ${r.created} + ${r.matched}`, "success");
                       setPreview(null);
                       setText("");
-                      router.refresh();
                     })
                   }
                 >
@@ -334,7 +330,6 @@ export function ImportClient({
                             : `${t.import.undoneN}: ${r.removed}`,
                           "success"
                         );
-                        router.refresh();
                       })
                     }
                   >

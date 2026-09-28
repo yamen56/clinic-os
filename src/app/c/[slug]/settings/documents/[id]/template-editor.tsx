@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { fmtDateTime } from "@/lib/dates";
 import { Card, PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Field, Input, Select, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/misc";
@@ -214,8 +215,6 @@ export function TemplateEditor({
       toast(t.docTemplates.saved);
       if (!template?.id && r.id) {
         router.replace(`/c/${slug}/settings/documents/${r.id}`);
-      } else {
-        router.refresh();
       }
     });
 
@@ -232,10 +231,8 @@ export function TemplateEditor({
       <PageHeader
         title={
           <span className="flex items-center gap-2">
-            <Link href={`/c/${slug}/settings/documents`} aria-label={t.common.back}>
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-              </Button>
+            <Link href={`/c/${slug}/settings/documents`} aria-label={t.common.back} className={buttonClass({ variant: "ghost", size: "icon" })}>
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
             </Link>
             {template ? name || t.docTemplates.title : t.docTemplates.addTemplate}
           </span>

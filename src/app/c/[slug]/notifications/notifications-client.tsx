@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
-import { useRealtime } from "@/lib/use-realtime";
+import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { fmtDateTime } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,7 @@ export function NotificationsClient({
     void load();
   }, [load]);
 
-  useRealtime(slug, ["notifications"], () => void load());
+  useRealtimeRefresh(slug, ["notifications"], load);
 
   const markAll = async () => {
     await fetch("/api/me/notifications", {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtRelative } from "@/lib/dates";
@@ -47,7 +46,6 @@ export function WaitlistClient(props: {
   const { slug, tz } = props;
   const { t, locale } = useI18n();
   const { toast } = useToast();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
 
@@ -131,7 +129,6 @@ export function WaitlistClient(props: {
                   onClick={() =>
                     start(async () => {
                       await setWaitlistStatusAction(slug, e.id, "cancelled");
-                      router.refresh();
                     })
                   }
                 >
@@ -152,7 +149,6 @@ export function WaitlistClient(props: {
         sections={props.sections}
         onAdded={() => {
           setOpen(false);
-          router.refresh();
           toast(t.waitlist.added, "success");
         }}
         pending={pending}

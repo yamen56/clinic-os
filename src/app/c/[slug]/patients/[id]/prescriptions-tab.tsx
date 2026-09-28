@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
-import { useRealtime } from "@/lib/use-realtime";
+import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { fmtDate } from "@/lib/dates";
 import { rxNumber, type PrescriptionRow } from "@/lib/prescriptions";
 import { Card } from "@/components/ui/card";
@@ -242,8 +242,11 @@ function RowAction({ icon, label, onClick, href, busy, disabled }: Omit<RowActio
  */
 function DeliveryWatch({ slug, messageIds }: { slug: string; messageIds: string[] }) {
   const router = useRouter();
-  useRealtime(slug, ["messages"], (e) => {
-    if (!e || (e.id && messageIds.includes(e.id))) router.refresh();
-  });
+  useRealtimeRefresh(
+    slug,
+    ["messages"],
+    () => router.refresh(),
+    (e) => !!e.id && messageIds.includes(e.id)
+  );
   return null;
 }

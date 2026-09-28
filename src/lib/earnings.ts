@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { round2 } from "./invoices";
 
 /**
  * What a doctor earns of what the clinic collects.
@@ -377,6 +378,3 @@ export async function clinicHasCommission(c: PoolClient, clinicId: string): Prom
   return (r.rowCount ?? 0) > 0;
 }
 
-function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
-}

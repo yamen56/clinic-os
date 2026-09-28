@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
+import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
 import { NewInvoiceClient } from "./new-invoice-client";
 import { can } from "@/lib/auth";
@@ -46,7 +47,8 @@ export default async function NewInvoicePage({
       ])
     ).rows[0];
     let patient: { id: string; name: string } | null = null;
-    if (sp.patient) {
+    // A malformed id in the link is treated as no id — a blank invoice, not a crash.
+    if (isUuid(sp.patient)) {
       const p = (
         await c.query(
           `select id, full_name from patients where id = $1 and clinic_id = $2 and merged_into is null`,
@@ -57,7 +59,7 @@ export default async function NewInvoicePage({
     }
     let appointment: { id: string; serviceId: string | null; doctorMemberId: string | null } | null =
       null;
-    if (sp.appointment) {
+    if (isUuid(sp.appointment)) {
       // The doctor comes along with the service: an invoice raised from a visit
       // already knows who saw the patient, and asking reception to say so again
       // is how attribution ends up empty on most invoices.

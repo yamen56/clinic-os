@@ -707,14 +707,17 @@ export function ExpensesClient({
                       here has already been reported and leaves the expense
                       saved — losing what somebody typed because a photo would
                       not upload would be the worse trade.
+
+                      The save itself came back with the page redrawn, so only an
+                      upload after it leaves the list behind.
                     */
                     if (pendingReceipt && r.id) {
                       await uploadReceipt(r.id, pendingReceipt);
+                      router.refresh();
                     }
                     toast(t.common.saved);
                     setPendingReceipt(null);
                     setDraft(null);
-                    router.refresh();
                   })
                 }
               >

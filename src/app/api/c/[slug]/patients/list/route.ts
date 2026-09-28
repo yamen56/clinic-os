@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
+import { isUuid } from "@/lib/uuid";
 import {
   patientFilterSql,
   patientListRowsSql,
@@ -49,7 +50,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   }
   // A malformed uuid would otherwise reach the database as a cast error rather
   // than an answer.
-  if (hasCursor && !/^[0-9a-f-]{36}$/i.test(cursorId!)) {
+  if (hasCursor && !isUuid(cursorId)) {
     return NextResponse.json({ error: "bad_cursor" }, { status: 400 });
   }
 

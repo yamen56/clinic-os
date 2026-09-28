@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { guardCap } from "@/lib/guard";
+import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
 import { loadFieldDefinitions } from "@/lib/esign/fields";
 import { TemplateEditor } from "./template-editor";
@@ -14,6 +15,7 @@ export default async function TemplateEditorPage({
   const { slug, id } = await params;
   const access = await guardCap(slug, "settings");
   const isNew = id === "new";
+  if (!isNew && !isUuid(id)) notFound();
 
   const data = await inClinic(access, async (c) => {
     const [defs, roles] = await Promise.all([

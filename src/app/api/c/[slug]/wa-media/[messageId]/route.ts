@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { openFile } from "@/lib/storage";
 import { fileResponseHeaders } from "@/lib/download";
@@ -8,6 +9,8 @@ export async function GET(
   ctx: { params: Promise<{ slug: string; messageId: string }> }
 ) {
   const { slug, messageId } = await ctx.params;
+
+  if (!isUuid(messageId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const g = await apiClinic(slug, "conversations");
   if (!g.ok) return g.res;
 

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { sanitizeHtml } from "./render";
+import { escapeHtml, sanitizeHtml } from "./render";
 
 /**
  * Turning a file the clinic already has into an editable template body.
@@ -145,12 +145,6 @@ function standardFontsDir(): string | undefined {
   }
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
 
 function textLength(html: string): number {
   return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().length;

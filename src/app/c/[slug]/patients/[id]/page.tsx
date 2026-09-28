@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { guardCap } from "@/lib/guard";
+import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
 import { loadDocumentList } from "@/lib/esign/queries";
 import { PatientProfile } from "./profile-client";
@@ -16,6 +17,7 @@ export default async function PatientProfilePage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { slug, id } = await params;
+  if (!isUuid(id)) notFound();
   // A notification can open the file on a tab — "a prescription was sent in
   // your name" lands on the prescriptions, not the overview.
   const { tab } = await searchParams;

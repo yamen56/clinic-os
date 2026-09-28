@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
+import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
 import { CampaignDetail } from "./campaign-detail";
 import { can } from "@/lib/auth";
@@ -10,6 +11,7 @@ export default async function CampaignPage({
   params: Promise<{ slug: string; id: string }>;
 }) {
   const { slug, id } = await params;
+  if (!isUuid(id)) notFound();
   const access = await guardClinic(slug);
   const canSend = can(access, "campaigns");
   if (!canSend) redirect(`/c/${slug}`);
