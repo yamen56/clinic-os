@@ -1,8 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { hashPassword, verifyPassword, createSession, setSessionCookie } from "@/lib/auth";
 import { consumeAuthToken, wasJustConsumed } from "@/lib/invites";
+import { withSystem } from "@/lib/db";
+import { sendEmail, renderEmail } from "@/lib/email";
+import { appUrl } from "@/lib/urls";
 import type { SetPasswordState } from "@/components/set-password-form";
 
 /**
@@ -39,6 +43,17 @@ export async function acceptInviteAction(
   await setSessionCookie(session);
 
   /*
+    Only when this submission is the one that spent the token — the replay path
+    above is the same acceptance arriving twice, and must not welcome them twice.
+    `after` sends it once the redirect is on its way, so the invitee lands in the
+    app instead of waiting on the mail provider.
+  */
+  if (r.ok) {
+    const { userId, clinicSlug } = ok;
+    after(() => sendWelcomeEmail(userId, clinicSlug));
+  }
+
+  /*
     Redirect here rather than handing a destination back for the client to act
     on, and the difference is not stylistic — the old way did not work.
 
@@ -53,4 +68,45 @@ export async function acceptInviteAction(
     response, so there is no window in which a re-render can overtake it.
   */
   redirect(ok.clinicSlug ? `/c/${ok.clinicSlug}` : "/");
+}
+
+/**
+ * The welcome that follows an accepted invitation.
+ *
+ * It carries the two things a new colleague needs on their second device, where
+ * the invitation link no longer works: the address to sign in at and the email
+ * to sign in with. It doubles as notice that a password was just set, with the
+ * way back if that was not them.
+ *
+ * Same language and workspace name as the invitation they have just read — the
+ * clinic's default, or English for an agency invitation, which has no clinic.
+ */
+async function sendWelcomeEmail(userId: string, clinicSlug: string | null): Promise<void> {
+  try {
+    const row = await withSystem(async (c) => {
+      const r = await c.query(
+        `select u.email, u.full_name,
+                coalesce(nullif(cl.name_ar, ''), cl.name) as clinic_name, cl.default_locale
+           from users u
+           left join clinics cl on cl.slug = $2
+          where u.id = $1`,
+        [userId, clinicSlug]
+      );
+      return r.rows[0];
+    });
+    if (!row) return;
+
+    const mail = renderEmail({
+      type: "welcome",
+      locale: clinicSlug && row.default_locale !== "en" ? "ar" : "en",
+      name: row.full_name,
+      clinic: (row.clinic_name as string | null) ?? "Clinicti",
+      url: clinicSlug ? `${appUrl()}/c/${clinicSlug}` : `${appUrl()}/`,
+      email: row.email,
+    });
+    const sent = await sendEmail({ to: row.email, ...mail });
+    if (!sent.ok && !sent.skipped) console.error("[welcome email]", sent.error);
+  } catch (e) {
+    console.error("[welcome email]", (e as Error).message);
+  }
 }

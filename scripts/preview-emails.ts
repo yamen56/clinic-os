@@ -5,7 +5,7 @@ try { process.loadEnvFile?.(); } catch {}
 process.env.APP_URL = process.env.APP_URL || "https://app.clinicti.app";
 
 const to = process.argv[2] ?? "6000yamen.batarseh@gmail.com";
-const combos: [EmailType, EmailLocale][] = [["invitation", "ar"], ["password-reset", "en"]];
+const combos: [EmailType, EmailLocale][] = [["invitation", "ar"], ["password-reset", "en"], ["welcome", "ar"], ["welcome", "en"]];
 
 async function main() {
  for (const [type, locale] of combos) {
@@ -13,7 +13,8 @@ async function main() {
     type, locale,
     name: locale === "ar" ? "يامن" : "Yamen",
     clinic: "عيادات الحصن الطبي",
-    url: "https://app.clinicti.app/invite/PREVIEW-TOKEN",
+    url: type === "welcome" ? "https://app.clinicti.app/c/preview" : "https://app.clinicti.app/invite/PREVIEW-TOKEN",
+    email: to,
   });
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",

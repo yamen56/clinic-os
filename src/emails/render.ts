@@ -12,7 +12,7 @@ import { appUrl } from "@/lib/urls";
  * silently drop them.
  */
 
-export type EmailType = "invitation" | "password-reset";
+export type EmailType = "invitation" | "password-reset" | "welcome";
 export type EmailLocale = "en" | "ar";
 
 const cache = new Map<string, string>();
@@ -58,6 +58,10 @@ const SUBJECTS: Record<EmailType, Record<EmailLocale, (clinic: string) => string
     en: () => "Reset your password",
     ar: () => "إعادة تعيين كلمة المرور",
   },
+  welcome: {
+    en: (c) => `Welcome to ${c}`,
+    ar: (c) => `أهلًا بك في ${c}`,
+  },
 };
 
 /** Plain-text alternative. Single-part HTML mail is a well-known spam signal. */
@@ -67,8 +71,15 @@ function plainText(opts: {
   name: string;
   clinic: string;
   url: string;
+  email?: string;
 }): string {
   const ar = opts.locale === "ar";
+  if (opts.type === "welcome") {
+    const app = appUrl();
+    return ar
+      ? `أهلًا بك، ${opts.name}\n\nتم ضبط كلمة المرور وأصبحت الآن جزءًا من فريق ${opts.clinic}.\n\nسجّل الدخول من: ${app}/login\nباستخدام بريدك الإلكتروني: ${opts.email ?? ""}\n\n${opts.url}\n\nإذا لم تضبط كلمة المرور بنفسك، أعد تعيينها الآن: ${app}/forgot`
+      : `Welcome, ${opts.name}\n\nYour password is set and you are now part of the ${opts.clinic} team.\n\nSign in at: ${app}/login\nWith your email: ${opts.email ?? ""}\n\n${opts.url}\n\nIf you did not set this password, reset it now: ${app}/forgot`;
+  }
   if (opts.type === "invitation") {
     return ar
       ? `مرحباً ${opts.name}،\n\nتمت إضافتك إلى فريق ${opts.clinic}. اضبط كلمة المرور للبدء.\n\n${opts.url}\n\nتنتهي صلاحية هذه الدعوة بعد 7 أيام.`
@@ -85,11 +96,17 @@ export function renderEmail(opts: {
   name: string;
   clinic: string;
   url: string;
+  /** The recipient's own address — the welcome repeats it as the sign-in name. */
+  email?: string;
 }): { subject: string; html: string; text: string } {
+  const app = appUrl();
   const html = template(opts.type, opts.locale)
     .replaceAll("{{name}}", escapeHtml(opts.name))
     .replaceAll("{{clinic}}", escapeHtml(opts.clinic))
+    .replaceAll("{{email}}", escapeHtml(opts.email ?? ""))
     .replaceAll("{{url}}", escapeUrl(opts.url))
+    .replaceAll("{{app_url}}", escapeUrl(app))
+    .replaceAll("{{app_host}}", escapeHtml(new URL(app).host))
     .replaceAll("{{logo_url}}", logoUrl());
 
   return {

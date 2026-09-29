@@ -12,6 +12,8 @@ const combos: [EmailType, EmailLocale][] = [
   ["invitation", "ar"],
   ["password-reset", "en"],
   ["password-reset", "ar"],
+  ["welcome", "en"],
+  ["welcome", "ar"],
 ];
 
 let bad = 0;
@@ -22,6 +24,7 @@ for (const [type, locale] of combos) {
     name: "سامي <script>",
     clinic: "Rima & Co",
     url: "https://example.com/invite/AbC-123_xyz?a=1&b=2",
+    email: "sami+<b>@example.com",
   });
   const checks: [string, boolean][] = [
     ["no placeholders left", !r.html.includes("{{")],
@@ -34,6 +37,13 @@ for (const [type, locale] of combos) {
     ["plain-text part", r.text.trim().length > 0],
     ["name html-escaped", !r.html.includes("<script>")],
     ["ampersand escaped in url", !/href="[^"]*[^p]&[^a#]/.test(r.html)],
+    ...(type === "welcome"
+      ? ([
+          ["email shown, escaped", r.html.includes("sami+&lt;b&gt;@example.com")],
+          ["sign-in host shown", r.html.includes(">clinic-web-production-bbff.up.railway.app<")],
+          ["forgot link absolute", r.html.includes('href="https://clinic-web-production-bbff.up.railway.app/forgot"')],
+        ] as [string, boolean][])
+      : []),
     ...(locale === "ar"
       ? ([["RLM marks intact", r.html.includes("&#8207;")]] as [string, boolean][])
       : []),

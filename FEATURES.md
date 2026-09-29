@@ -158,10 +158,14 @@ Your data is safe."), and the AI agent refuses to answer for suspended clinics.
   Staff never handle each other's credentials. Tokens live in `auth_tokens`
   (`purpose = 'invite'`), **expire after 7 days**, single use, hash-only storage.
   If email isn't configured the UI shows the raw invite link to send manually.
+- **Welcome email**: sent once when an invitation is accepted (password set) — the
+  sign-in address and email for their next device, a home-screen tip, and a "not you?
+  reset your password" line. Same language and workspace name as the invitation;
+  sent after the redirect, so accepting never waits on the mail provider.
 - **Password reset**: `/forgot` → emailed link, `auth_tokens` `purpose = 'reset'`,
   **expires in one hour**, single use. Expired-link page offers "Request a new link".
   Password minimum **8 characters**.
-- **Email templates**: Arabic and English HTML for invitation and password reset
+- **Email templates**: Arabic and English HTML for invitation, welcome and password reset
   (`src/emails/templates/`), rendered by `src/emails/render.ts`.
 - **Kiosk PIN**: `users.kiosk_pin_hash`, 4–8 digits, optional. Unlocks the in-clinic signing
   view after a tablet has been handed to a patient; falls back to the password if unset.
