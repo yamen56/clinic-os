@@ -14,7 +14,16 @@ const combos: [EmailType, EmailLocale][] = [
   ["password-reset", "ar"],
   ["welcome", "en"],
   ["welcome", "ar"],
+  ["member-joined", "en"],
+  ["member-joined", "ar"],
+  ["payment-overdue", "en"],
+  ["payment-overdue", "ar"],
+  ["account-suspended", "en"],
+  ["account-suspended", "ar"],
 ];
+
+// The billing notices are answered by replying, so they carry no button.
+const noButton: EmailType[] = ["payment-overdue", "account-suspended"];
 
 let bad = 0;
 for (const [type, locale] of combos) {
@@ -25,12 +34,15 @@ for (const [type, locale] of combos) {
     clinic: "Rima & Co",
     url: "https://example.com/invite/AbC-123_xyz?a=1&b=2",
     email: "sami+<b>@example.com",
+    member: { name: "Lina <i>", email: "lina&co@example.com" },
   });
   const checks: [string, boolean][] = [
     ["no placeholders left", !r.html.includes("{{")],
     ["absolute https logo", /<img src="https:\/\/[^"]+mark-light\.png"/.test(r.html)],
     ["mso conditional kept", r.html.includes("<!--[if mso]>")],
-    ["v:roundrect kept", r.html.includes("<v:roundrect")],
+    ...(noButton.includes(type)
+      ? ([["no button, reply instead", !r.html.includes("<v:roundrect") && /reply|الرد/.test(r.html)]] as [string, boolean][])
+      : ([["v:roundrect kept", r.html.includes("<v:roundrect")]] as [string, boolean][])),
     ["no <style tag", !r.html.includes("<style")],
     ["no class attribute", !/\sclass=/.test(r.html)],
     ["subject non-empty", r.subject.trim().length > 0],
@@ -42,6 +54,13 @@ for (const [type, locale] of combos) {
           ["email shown, escaped", r.html.includes("sami+&lt;b&gt;@example.com")],
           ["sign-in host shown", r.html.includes(">clinic-web-production-bbff.up.railway.app<")],
           ["forgot link absolute", r.html.includes('href="https://clinic-web-production-bbff.up.railway.app/forgot"')],
+        ] as [string, boolean][])
+      : []),
+    ...(type === "member-joined"
+      ? ([
+          ["member name escaped", r.html.includes("Lina &lt;i&gt;") && !r.html.includes("<i>")],
+          ["member email escaped", r.html.includes("lina&amp;co@example.com")],
+          ["subject names member", r.subject.includes("Lina <i>")],
         ] as [string, boolean][])
       : []),
     ...(locale === "ar"

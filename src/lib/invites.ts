@@ -103,16 +103,22 @@ export async function consumeAuthToken(
   raw: string,
   purpose: Purpose,
   passwordHash: string
-): Promise<{ ok: boolean; userId?: string; clinicSlug?: string | null }> {
+): Promise<{
+  ok: boolean;
+  userId?: string;
+  clinicSlug?: string | null;
+  /** Whoever issued this token — the person to tell that the invitation was accepted. */
+  issuedBy?: string | null;
+}> {
   return withSystem(async (c) => {
     const r = await c.query(
       `update auth_tokens set used_at = now()
        where token_hash = $1 and purpose = $2 and used_at is null and expires_at > now()
-       returning user_id, clinic_id`,
+       returning user_id, clinic_id, created_by`,
       [hashToken(raw), purpose]
     );
     if (!r.rowCount) return { ok: false };
-    const { user_id, clinic_id } = r.rows[0];
+    const { user_id, clinic_id, created_by } = r.rows[0];
 
     await c.query(
       `update users set password_hash = $2, email_verified_at = coalesce(email_verified_at, now())
@@ -131,7 +137,7 @@ export async function consumeAuthToken(
     const slug = clinic_id
       ? (await c.query(`select slug from clinics where id = $1`, [clinic_id])).rows[0]?.slug ?? null
       : null;
-    return { ok: true, userId: user_id, clinicSlug: slug };
+    return { ok: true, userId: user_id, clinicSlug: slug, issuedBy: created_by ?? null };
   });
 }
 

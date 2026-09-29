@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { requireSuperAdmin, requireAdminCap, createSession, setSessionCookie } from "@/lib/auth";
 import { createAuthToken } from "@/lib/invites";
 import { sendEmail, renderEmail } from "@/lib/email";
@@ -261,13 +262,16 @@ export async function updateSubscriptionAction(
   const s = await requireAdminCap("clinics.edit");
   const status = data.status;
   if (status && !["trial", "active", "past_due", "suspended"].includes(status)) return;
-  await withSystem(async (c) => {
-    await c.query(
-      `update clinics set
-         subscription_status = coalesce($2, subscription_status),
-         plan = coalesce($3, plan),
-         plan_price = coalesce($4, plan_price)
-       where id = $1`,
+  const was = await withSystem(async (c) => {
+    // `old` is read under the row lock, so `was` is the status this save replaced.
+    const r = await c.query(
+      `update clinics cl set
+         subscription_status = coalesce($2, cl.subscription_status),
+         plan = coalesce($3, cl.plan),
+         plan_price = coalesce($4, cl.plan_price)
+       from (select subscription_status from clinics where id = $1 for update) old
+       where cl.id = $1
+       returning old.subscription_status as was`,
       [clinicId, status ?? null, data.plan ?? null, data.planPrice ?? null]
     );
     await audit(c, {
@@ -278,8 +282,68 @@ export async function updateSubscriptionAction(
       entityId: clinicId,
       detail: data as Record<string, unknown>,
     });
+    return r.rows[0]?.was as string | undefined;
   });
   revalidatePath("/admin");
+
+  /*
+    Only on the change itself. The same modal saves the plan and the price, and
+    re-saving a clinic that is already past due must not send the reminder again.
+    `after` keeps the modal from waiting on the mail provider.
+  */
+  if ((status === "past_due" || status === "suspended") && was && was !== status) {
+    after(() => emailOwnersAboutStatus(clinicId, status));
+  }
+}
+
+/**
+ * Tells a clinic's owners that its subscription is past due, or that it has
+ * been suspended.
+ *
+ * Suspension is otherwise silent — the first anyone hears of it is a morning
+ * where nobody can sign in — and "past due" is the only warning the platform
+ * has, because suspending is a decision the agency makes by hand rather than a
+ * date that arrives. Both say what actually stops (sign-in, the booking page)
+ * and that nothing is deleted, and both are answered by replying, which lands
+ * with the agency through EMAIL_REPLY_TO.
+ *
+ * Re-reads the status before sending, so a mistaken click put straight back
+ * does not announce something that is no longer true.
+ */
+async function emailOwnersAboutStatus(
+  clinicId: string,
+  status: "past_due" | "suspended"
+): Promise<void> {
+  try {
+    const owners = await withSystem(async (c) => {
+      const r = await c.query(
+        `select u.email, u.full_name, u.locale, cl.slug,
+                coalesce(nullif(cl.name_ar, ''), cl.name) as clinic_name
+           from clinic_members m
+           join users u on u.id = m.user_id
+           join clinics cl on cl.id = m.clinic_id
+          where m.clinic_id = $1 and m.is_owner and m.active
+            and cl.deleted_at is null and cl.subscription_status = $2`,
+        [clinicId, status]
+      );
+      return r.rows;
+    });
+    for (const o of owners) {
+      const sent = await sendEmail({
+        to: o.email,
+        ...renderEmail({
+          type: status === "past_due" ? "payment-overdue" : "account-suspended",
+          locale: o.locale === "en" ? "en" : "ar",
+          name: o.full_name,
+          clinic: o.clinic_name,
+          url: `${appUrl()}/c/${o.slug}`,
+        }),
+      });
+      if (!sent.ok && !sent.skipped) console.error("[subscription email]", sent.error);
+    }
+  } catch (e) {
+    console.error("[subscription email]", (e as Error).message);
+  }
 }
 
 /* -------------------------------------------------------- clinic licensing */

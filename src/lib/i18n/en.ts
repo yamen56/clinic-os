@@ -467,6 +467,7 @@ export const en = {
     activeSub: "Active",
     pastDue: "Past due",
     suspended: "Suspended",
+    statusEmailsOwner: "Saving emails the clinic's owner about this.",
     noClinics: "No clinics yet. Create the first one to get started.",
 
     analytics: "Analytics",

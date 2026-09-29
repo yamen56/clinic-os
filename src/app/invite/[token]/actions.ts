@@ -45,12 +45,16 @@ export async function acceptInviteAction(
   /*
     Only when this submission is the one that spent the token — the replay path
     above is the same acceptance arriving twice, and must not welcome them twice.
-    `after` sends it once the redirect is on its way, so the invitee lands in the
-    app instead of waiting on the mail provider.
+    `after` sends them once the redirect is on its way, so the invitee lands in
+    the app instead of waiting on the mail provider.
   */
   if (r.ok) {
     const { userId, clinicSlug } = ok;
-    after(() => sendWelcomeEmail(userId, clinicSlug));
+    const issuedBy = r.issuedBy ?? null;
+    after(async () => {
+      await sendWelcomeEmail(userId, clinicSlug);
+      if (issuedBy && issuedBy !== userId) await sendJoinedEmail(issuedBy, userId, clinicSlug);
+    });
   }
 
   /*
@@ -108,5 +112,59 @@ async function sendWelcomeEmail(userId: string, clinicSlug: string | null): Prom
     if (!sent.ok && !sent.skipped) console.error("[welcome email]", sent.error);
   } catch (e) {
     console.error("[welcome email]", (e as Error).message);
+  }
+}
+
+/**
+ * Tells whoever sent the invitation that it was accepted, so they are not left
+ * wondering whether a colleague ever got the email — and are reminded that the
+ * new member's access is theirs to review.
+ *
+ * Written in the inviter's own language, and only while they still belong to
+ * that clinic: someone who has since left it should not keep hearing about its
+ * staff. The agency is the exception — a super admin who invited a clinic's
+ * owner is told too, which is how it learns the clinic is actually onboarded.
+ */
+async function sendJoinedEmail(
+  inviterId: string,
+  memberId: string,
+  clinicSlug: string | null
+): Promise<void> {
+  try {
+    const row = await withSystem(async (c) => {
+      const r = await c.query(
+        `select i.email, i.full_name, i.locale, i.is_super_admin,
+                m.full_name as member_name, m.email as member_email,
+                coalesce(nullif(cl.name_ar, ''), cl.name) as clinic_name,
+                exists (select 1 from clinic_members cm
+                         where cm.user_id = i.id and cm.clinic_id = cl.id and cm.active) as in_clinic
+           from users i
+           join users m on m.id = $2
+           left join clinics cl on cl.slug = $3
+          where i.id = $1`,
+        [inviterId, memberId, clinicSlug]
+      );
+      return r.rows[0];
+    });
+    if (!row) return;
+    if (clinicSlug && !row.in_clinic && !row.is_super_admin) return;
+
+    const path = !clinicSlug
+      ? "/admin/team"
+      : row.in_clinic
+        ? `/c/${clinicSlug}/settings/staff`
+        : `/admin/clinics/${clinicSlug}`;
+    const mail = renderEmail({
+      type: "member-joined",
+      locale: row.locale === "en" ? "en" : "ar",
+      name: row.full_name,
+      clinic: (row.clinic_name as string | null) ?? "Clinicti",
+      url: `${appUrl()}${path}`,
+      member: { name: row.member_name, email: row.member_email },
+    });
+    const sent = await sendEmail({ to: row.email, ...mail });
+    if (!sent.ok && !sent.skipped) console.error("[joined email]", sent.error);
+  } catch (e) {
+    console.error("[joined email]", (e as Error).message);
   }
 }

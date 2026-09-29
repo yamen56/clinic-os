@@ -39,6 +39,9 @@ export function ClinicAdminPanel({
   const [open, setOpen] = useState(false);
   const [featuresOpen, setFeaturesOpen] = useState(false);
   const [status, setStatus] = useState(clinic.subscriptionStatus);
+  // What the server holds now — the hint below compares against this, not the
+  // page's first render, so it does not reappear after the change is saved.
+  const [savedStatus, setSavedStatus] = useState(clinic.subscriptionStatus);
   const [plan, setPlan] = useState(clinic.plan);
   const [price, setPrice] = useState(String(clinic.planPrice));
   const [features, setFeatures] = useState(clinic.features);
@@ -89,7 +92,14 @@ export function ClinicAdminPanel({
 
       <Modal open={open} onClose={() => setOpen(false)} title={t.admin.subscription}>
         <div className="grid gap-4">
-          <Field label={t.common.status}>
+          <Field
+            label={t.common.status}
+            hint={
+              status !== savedStatus && (status === "past_due" || status === "suspended")
+                ? t.admin.statusEmailsOwner
+                : undefined
+            }
+          >
             <Select value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="trial">{t.admin.trial}</option>
               <option value="active">{t.admin.activeSub}</option>
@@ -125,6 +135,7 @@ export function ClinicAdminPanel({
                     plan,
                     planPrice: Number(price) || 0,
                   });
+                  setSavedStatus(status);
                   toast(t.common.saved);
                   setOpen(false);
                 })

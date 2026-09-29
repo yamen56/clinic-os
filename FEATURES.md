@@ -162,11 +162,19 @@ Your data is safe."), and the AI agent refuses to answer for suspended clinics.
   sign-in address and email for their next device, a home-screen tip, and a "not you?
   reset your password" line. Same language and workspace name as the invitation;
   sent after the redirect, so accepting never waits on the mail provider.
+- **"Joined" email**: whoever issued the invitation is told it was accepted, with the new
+  member's name and email and a link to the team page. Only while the inviter still belongs
+  to that clinic — or is a super admin, which is how the agency learns a clinic's owner is in.
+- **Subscription emails**: moving a clinic to **Past due** emails its owners a payment
+  reminder (everything still works; if unpaid, sign-in and the booking page stop, nothing
+  is deleted); moving it to **Suspended** tells them access is paused and their data is
+  safe. Both are answered by replying, which reaches the agency via `EMAIL_REPLY_TO`. Sent
+  only on the change itself, never on a re-save; the subscription modal says so before saving.
 - **Password reset**: `/forgot` → emailed link, `auth_tokens` `purpose = 'reset'`,
   **expires in one hour**, single use. Expired-link page offers "Request a new link".
   Password minimum **8 characters**.
-- **Email templates**: Arabic and English HTML for invitation, welcome and password reset
-  (`src/emails/templates/`), rendered by `src/emails/render.ts`.
+- **Email templates**: Arabic and English HTML for invitation, welcome, joined, payment
+  overdue, account suspended and password reset (`src/emails/templates/`), rendered by `src/emails/render.ts`.
 - **Kiosk PIN**: `users.kiosk_pin_hash`, 4–8 digits, optional. Unlocks the in-clinic signing
   view after a tablet has been handed to a patient; falls back to the password if unset.
 - **Saved staff signature**: `users.signature_svg_path` / `signature_png_path` — drawn once,

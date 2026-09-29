@@ -440,6 +440,7 @@ export const ar: Dict = {
     activeSub: "نشط",
     pastDue: "متأخر الدفع",
     suspended: "موقوف",
+    statusEmailsOwner: "عند الحفظ، يصل بريد إلكتروني إلى مالك العيادة بهذا الشأن.",
     noClinics: "لا توجد عيادات بعد. أنشئ أول عيادة للبدء.",
 
     analytics: "التحليلات",
