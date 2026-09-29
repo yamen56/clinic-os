@@ -1,5 +1,5 @@
 import { apiClinic } from "@/lib/clinic-api";
-import { subscribeClinic, type AppEvent } from "@/lib/realtime-server";
+import { subscribeClinic, subscribeUser, type AppEvent } from "@/lib/realtime-server";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   const wanted = only ? new Set(only.split(",").filter(Boolean)) : null;
 
   const encoder = new TextEncoder();
-  let cleanup: (() => void) | null = null;
+  let cleanupClinic: (() => void) | null = null;
+  let cleanupUser: (() => void) | null = null;
+  const cleanup = () => {
+    cleanupClinic?.();
+    cleanupUser?.();
+  };
   let heartbeat: ReturnType<typeof setInterval> | null = null;
 
   const stream = new ReadableStream({
@@ -40,15 +45,33 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
         } catch {}
       };
       send(`retry: 3000\n\n`);
-      cleanup = await subscribeClinic(clinicId, (e: AppEvent) => {
+      cleanupClinic = await subscribeClinic(clinicId, (e: AppEvent) => {
         if (wanted && !wanted.has(e.t)) return;
         // A notification belongs to one person; a colleague's is not this tab's news.
         if (e.t === "notifications" && e.user_id && e.user_id !== userId) return;
         send(`data: ${JSON.stringify(e)}\n\n`);
       });
+      /*
+        This person's notifications from anywhere else — another clinic they
+        work at, or none. The header badge counts all of them, so it has to
+        hear about all of them; this clinic's arrive above, and are not sent
+        twice.
+      */
+      if (!wanted || wanted.has("notifications")) {
+        cleanupUser = await subscribeUser(userId, (e: AppEvent) => {
+          if (e.t !== "notifications" || e.clinic_id === clinicId) return;
+          send(`data: ${JSON.stringify(e)}\n\n`);
+        });
+      }
+      // The browser can leave while the subscriptions above were being set up,
+      // before there was an abort listener to hear it.
+      if (req.signal.aborted) {
+        cleanup();
+        return;
+      }
       heartbeat = setInterval(() => send(`: ping\n\n`), 25000);
       req.signal.addEventListener("abort", () => {
-        cleanup?.();
+        cleanup();
         if (heartbeat) clearInterval(heartbeat);
         try {
           controller.close();
@@ -56,7 +79,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       });
     },
     cancel() {
-      cleanup?.();
+      cleanup();
       if (heartbeat) clearInterval(heartbeat);
     },
   });

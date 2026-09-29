@@ -20,7 +20,22 @@ export type PushPayload = {
   url?: string;
   tag?: string;
   lang?: string;
+  /** The notification row, so tapping it on the phone marks it read in the app. */
+  id?: string;
+  /** Unread count after this one, for the badge on the installed app's icon. */
+  badge?: number;
 };
+
+/**
+ * How insistently the push service should deliver.
+ *
+ * `urgency` is the part that decides whether it arrives on time: a phone in
+ * battery saving holds "normal" pushes back until it next wakes, which can be
+ * many minutes — fine for a digest, useless for "your patient is in ten
+ * minutes". `ttl` is how long the service keeps trying while the phone is off;
+ * past it, the notification is still in the app, only not on the lock screen.
+ */
+export type PushOptions = { urgency?: "low" | "normal" | "high"; ttl?: number };
 
 /**
  * Sends a web push to every device a user registered.
@@ -29,7 +44,8 @@ export type PushPayload = {
 export async function pushToUser(
   c: PoolClient,
   userId: string,
-  payload: PushPayload
+  payload: PushPayload,
+  opts: PushOptions = {}
 ): Promise<number> {
   if (!pushConfigured()) return 0;
   const subs = await c.query(
@@ -42,7 +58,7 @@ export async function pushToUser(
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: s.keys as { p256dh: string; auth: string } },
         JSON.stringify(payload),
-        { TTL: 3600 }
+        { TTL: opts.ttl ?? 3600, urgency: opts.urgency ?? "normal" }
       );
       sent++;
     } catch (e) {

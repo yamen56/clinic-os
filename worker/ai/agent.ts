@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import { DateTime } from "luxon";
 import { withSystem } from "../db";
+import { notifyUser } from "../../src/lib/notify";
 import { lockClinicSchedule } from "../../src/lib/appointments";
 import { findOrCreatePatient } from "../../src/lib/patients";
 import { buildSystemPrompt, type AgentConfig } from "./prompt";
@@ -131,17 +132,13 @@ async function flagForStaff(clinicId: string, conversationId: string, reason: st
       [clinicId]
     );
     for (const s of staff.rows) {
-      await c.query(
-        `insert into notifications (clinic_id, user_id, kind, title, body, url)
-         values ($1, $2, 'ai_escalation', $3, $4, $5)`,
-        [
-          clinicId,
-          s.user_id,
-          "المساعد الذكي يحتاج تدخلك",
-          reason.slice(0, 300),
-          `/c/${clinic.slug}/conversations?open=${conversationId}`,
-        ]
-      );
+      await notifyUser(c, s.user_id as string, {
+        clinicId,
+        kind: "ai_escalation",
+        title: "المساعد الذكي يحتاج تدخلك",
+        body: reason.slice(0, 300),
+        url: `/c/${clinic.slug}/conversations?open=${conversationId}`,
+      });
     }
     await c.query(
       `insert into ai_usage (clinic_id, day, escalations) values ($1, current_date, 1)
@@ -427,16 +424,13 @@ export async function respondToConversation(conversationId: string): Promise<voi
         );
         const local = start.setZone(clinic.timezone).setLocale("ar-JO-u-nu-latn");
         for (const s of staff.rows) {
-          await c.query(
-            `insert into notifications (clinic_id, user_id, kind, title, body, url)
-             values ($1, $2, 'ai_booking', $3, $4, $5)`,
-            [
-              cfg.clinicId, s.user_id,
-              `حجز جديد من المساعد الذكي: ${patient_name?.trim() || conv.whatsapp_name || conv.phone_e164}`,
-              `${svc.name} — ${local.toFormat("cccc d LLLL")} ${local.toFormat("h:mm a")}`,
-              `/c/${s.slug}/calendar`,
-            ]
-          );
+          await notifyUser(c, s.user_id as string, {
+            clinicId: cfg.clinicId,
+            kind: "ai_booking",
+            title: `حجز جديد من المساعد الذكي: ${patient_name?.trim() || conv.whatsapp_name || conv.phone_e164}`,
+            body: `${svc.name} — ${local.toFormat("cccc d LLLL")} ${local.toFormat("h:mm a")}`,
+            url: `/c/${s.slug}/calendar`,
+          });
         }
         booked = true;
         return `Booked: ${svc.name} on ${local.toFormat("cccc d LLLL")} at ${local.toFormat("h:mm a")}. Confirm this to the patient with the day, date, and time.`;

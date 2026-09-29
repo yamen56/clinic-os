@@ -3,7 +3,7 @@ import type { PoolClient } from "pg";
 import { withSystem } from "./db";
 import { loadContext, renderTemplate } from "./templates";
 import { createAndSendFromTemplate } from "../src/lib/esign/flow";
-import { staffInRoles } from "../src/lib/notify";
+import { notifyUser, staffInRoles } from "../src/lib/notify";
 
 /**
  * Automation engine.
@@ -331,11 +331,9 @@ export async function advanceRun(runId: string): Promise<void> {
         const roles = Array.isArray(cfg.roles) && cfg.roles.length ? cfg.roles : ["owner", "receptionist"];
         // "owner" is a flag now, not a role value — see staffInRoles.
         const staff = await staffInRoles(c, run.clinic_id, roles as string[]);
+        const body = renderTemplate(String(cfg.body ?? ""), tmplCtx);
         for (const userId of staff) {
-          await c.query(
-            `insert into notifications (clinic_id, user_id, kind, title, body) values ($1, $2, 'automation', $3, $4)`,
-            [run.clinic_id, userId, title, renderTemplate(String(cfg.body ?? ""), tmplCtx)]
-          );
+          await notifyUser(c, userId, { clinicId: run.clinic_id, kind: "automation", title, body });
         }
         await log(c, run.clinic_id, runId, step.id, "ok", { notified: staff.length });
       } else if (step.step_type === "send_document") {

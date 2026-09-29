@@ -134,7 +134,8 @@ async function main() {
   );
 
   // ---- the switch: knob inset and travel
-  await go(page, `/c/${SLUG}/notifications`);
+  // The switches are on the notifications page's Settings tab.
+  await go(page, `/c/${SLUG}/notifications?tab=settings`);
   const sw = page.locator('[role="switch"]').first();
   if (await sw.count()) {
     const geom = async () => {

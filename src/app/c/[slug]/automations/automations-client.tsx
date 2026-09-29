@@ -52,6 +52,7 @@ export function AutomationsClient({
   windowStart,
   windowEnd,
   mutedPatients,
+  initialTab,
 }: {
   slug: string;
   isOwner: boolean;
@@ -63,6 +64,7 @@ export function AutomationsClient({
   windowEnd: string;
   /** Patients muted from every flow on this page, and from campaigns. */
   mutedPatients: number;
+  initialTab?: "flows" | "messages" | "alerts";
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -76,7 +78,7 @@ export function AutomationsClient({
     would never be found. The counts are on the tabs precisely so nobody has to
     open one to discover whether it holds anything.
   */
-  const [tab, setTab] = useState<"flows" | "messages" | "alerts">("flows");
+  const [tab, setTab] = useState<"flows" | "messages" | "alerts">(initialTab ?? "flows");
 
   /*
     Enabling an automation moves its row between the two sections, so the knob

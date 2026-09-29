@@ -1400,53 +1400,99 @@ separate transactions.)
 
 ## 18. Notifications & PWA
 
-### Sending each notification once
+### Writing a notification
 
-Every insert goes through `src/lib/notify.ts`, which writes with
-`on conflict (dedupe_key) where dedupe_key is not null do nothing` against a **partial**
-unique index — the predicate has to be repeated in the `ON CONFLICT` clause or Postgres
-cannot match the index.
+Every notification goes through `src/lib/notify.ts`, which calls the database function
+`app_notify()` (migration 0061). Three things are decided there, in one statement:
 
-The key is scoped per recipient (`${dedupeKey}:${userId}`). Callers that should fire once
-per event pass one (e.g. `waitlist_booked:${appointmentId}`); callers that legitimately
-repeat pass none. This replaced a set of per-caller guards that were mis-firing because the
-scheduler's 60s tick was narrower than a 90s look-back window.
+- **At most once.** The key is scoped per recipient (`${dedupeKey}:${userId}`) against a
+  partial unique index. Callers that should fire once per event pass one (e.g.
+  `waitlist_booked:${appointmentId}`); callers that legitimately repeat pass none.
+- **Who may be addressed.** Inside a member's own transaction: themselves, or a member of
+  the clinic that transaction is acting for. Anybody else is *skipped*, not refused. The
+  worker and public routes (system context) may address anyone. It is a `security definer`
+  function because the `ON CONFLICT` clause holds the new row to the **read** policy, and a
+  colleague's notifications are not ours to read. Before 0061 a member notifying a colleague
+  was refused by RLS and the refusal rolled back the whole transaction — in-person signing,
+  a staff decline, "request a new link", sending a document a doctor must sign — in any
+  clinic with more than one owner or receptionist.
+- **Switched off.** A kind the recipient set to *off* is never written.
 
-**Kinds in use**: `booking` · `clinical` · `doctor_reminder` · `document` ·
-`document_awaiting_signature` · `document_digest` · `document_expired` ·
-`document_integrity` · `document_new_link` · `waitlist_booked` · `whatsapp_disconnected` ·
-`whatsapp_errors`.
+The registry of kinds lives in `src/lib/notification-kinds.ts`: which personal switch
+silences each kind, which are urgent, how long a push may wait. The worker, the preferences
+page and the header all read it.
 
+### In the app, the moment it happens
 
-### In-app notifications
+- **Bell badge**: live unread count on the sidebar bell; on a phone, a dot on **More** and a
+  count beside Notifications in its sheet. Also the installed app's icon badge
+  (`navigator.setAppBadge`, and from the service worker on each push).
+- **Pop-ups**: a new notification appears top-end on whatever screen is open (not on the
+  notifications page itself, whose list updates in place). Tap opens it and marks it read;
+  it leaves after 8 s, paused while hovered; at most 3 at once. Optional chime.
+- Both ride the realtime stream (`notifications` events for this user, from this clinic and —
+  via `subscribeUser` — from any other clinic they belong to). The header re-reads once when
+  its connection opens, so nothing written between render and connect is missed.
+- **One live connection per tab.** `useRealtime` pools every subscriber on a screen into one
+  `EventSource` carrying the union of their tables, reopened (new before old closes) only
+  when the union changes. A header subscription on top of each screen's own would have been
+  two per tab, and HTTP/1.1 allows six per site across all tabs.
+- Reading on one device clears the badge everywhere: the emit trigger also fires on
+  `update of read_at`, with no row id so a mark-all folds into one event per transaction.
 
-`notifications` per user, with kind, title, body, url, read state. Notification centre with
-**Mark all read**. Kinds:
+Notification centre: **Inbox** (All / Unread, paged by `before=`, merged live) and
+**Settings** tabs; `?tab=settings` links straight to the second.
 
-```
-booking · ai_escalation · ai_booking · whatsapp_disconnected · whatsapp_errors
-automation · doctor_reminder · daily_summary · day_end · unread_digest · cancellation
-document_awaiting_signature · document_signed · document_declined · document_completed
-document_expired · document_digest · document_integrity · document_new_link
-```
+### Personal settings (`users.notification_prefs`)
+
+| Setting | Values |
+|---|---|
+| Per kind (grouped: appointments, summaries, patients and documents, the clinic) | **Phone and app** · **App only** · **Off** |
+| Quiet hours | on/off, from, until (clinic timezone), let urgent alerts through |
+| While in the app | pop-ups on/off, sound on/off |
+| Language of my notifications | Arabic / English (`users.locale`) |
+| Before my appointments (doctors) | `clinic_members.reminder_minutes` |
+
+- A row is shown only for what this person can be sent — by their access and by which of the
+  clinic's team alerts name their role.
+- Legacy booleans keep their meaning: `false` = app only.
+- **Cannot be switched off**, only kept in the app: the WhatsApp number (`whatsapp_*`) and
+  the AI assistant handing a patient back (`ai_escalation`). `document_integrity` and
+  `test` answer to no switch.
+- **Send me a test** (`POST /api/me/notifications/test`, one per 15 s) writes a real
+  notification, so the badge, pop-up and push can each be seen working on a device.
 
 ### Web push
 
 - VAPID web push (`web-push`), subscriptions in `push_subscriptions`, mirrored **once** per
   notification (`push_sent` flag). Revoked subscriptions are pruned.
+- What goes to the phone is decided by `planDelivery()` (pure, tested at any hour):
+  already read in the app → not pushed; *app only* → not pushed; inside quiet hours → held
+  in `push_after` until they end, then everything held for one person comes out as **one
+  summary push**; urgent kinds break through if allowed; a reminder is not held, because
+  late it is noise.
+- Push **urgency is high** for urgent kinds, reminders, bookings and appointment changes, so
+  a phone in battery saving does not sit on them. TTL: 30 min for reminders, 6 h urgent,
+  3 h otherwise.
+- One lock-screen entry per event (tag = notification id); summaries replace their own
+  previous one (tag = kind). Tapping marks it read and focuses or opens the app; text
+  direction follows the words (Arabic RTL, English LTR).
 - **Critical alerts fall back to WhatsApp** on the staff member's own number when no push
   subscription is live: `whatsapp_disconnected`, `whatsapp_errors`, `ai_escalation` — exactly
   the failures that make the app itself untrustworthy.
-- Per-user preferences: before my appointments, my morning schedule, new bookings,
-  cancellations, unread message digest, end-of-day summary; plus per-member
-  `reminder_minutes` (default 30).
+- Rows more than a day past their moment are marked sent by a sweep, so the unsent index
+  stays the size of the backlog.
+
+Worker-written texts (reminders, summaries, appointment alerts) are in the **recipient's**
+language (`src/lib/notification-text.ts`); `users.locale` is `ar` unless chosen otherwise.
 
 ### Doctor and team alerts (`clinic_staff_alerts`)
 
-Rows the clinic edits on its own automations page (**Team alerts** tab), not hardcoded
-rules. Every clinic is given these four — by a trigger on `clinics`, so a clinic created
-down any path has them, because a clinic missing them does not look broken, its doctors
-simply stop being reminded.
+Rows the clinic edits on its own automations page (**Team alerts** tab,
+`/automations?tab=alerts`), not hardcoded rules. Every clinic is given these — by a trigger
+on `clinics`, so a clinic created down any path has them, because a clinic missing them does
+not look broken, its doctors simply stop being reminded. 0061 added the last six to every
+existing clinic.
 
 | Kind | Default | To whom |
 |---|---|---|
@@ -1454,20 +1500,46 @@ simply stop being reminded.
 | `day_schedule` | 08:00 | each doctor |
 | `unread_digest` | 12:00, only if ≥ 3 unread | owners + receptionists |
 | `day_end` | 20:00 — completed, no-shows, revenue | owners |
+| `appointment_booked` | instantly | the appointment's doctor |
+| `appointment_cancelled` | instantly | the appointment's doctor |
+| `appointment_rescheduled` | instantly (time or doctor changed) | the appointment's doctor |
+| `unconfirmed_tomorrow` | 17:00, only if any | owners + receptionists |
+| `tomorrow_schedule` | 20:00, **off** by default | each doctor |
+| `weekly_summary` | Sunday 09:00 — last 7 days | owners |
 
+- **Templates by role** in the add dialog ("For doctors", "For reception", "For the clinic
+  admin") fill the form; nothing is saved until Save.
+- For the reminder and the three instant kinds, *doctor* means **the appointment's own
+  doctor**. Nobody is told about a change they made themselves (`actorUserId` in the trigger
+  payload). A booking from the public link or the AI assistant does not re-notify the front
+  desk, which its own `booking` / `ai_booking` notification already told. A request awaiting
+  approval is announced when approved. An appointment already over wakes nobody.
+- Moves are emitted as `trigger:appointment_rescheduled`, held 60 s and keyed per
+  appointment, so dragging a block around the calendar is one alert about where it ended up
+  (and none if it ended where it started). The worker frees the key as it runs.
+- Instant alerts run after the clinic's automations for the same trigger and cannot fail the
+  job (a retry would re-run the automations); they are keyed by the job.
 - `minutes_before = null` means **"whatever each person set for themselves"** — the
   per-member `reminder_minutes` the notifications page writes. A number overrides it
   clinic-wide, which is how a clinic adds a second, earlier nudge without touching anybody's
   preferences.
 - A clinic can add rows, change the hour, change the audience, or delete what nobody reads.
   Two rows of the same kind at different hours are two different digests.
-- `day_schedule` sends a **doctor** their own list and anyone else the clinic's whole day —
-  "how busy are we today" and "what have I got" are the same question about different rows.
-- Notification `kind` values are unchanged (`doctor_reminder`, `daily_summary`, `day_end`,
-  `unread_digest`) because every user's saved preferences are keyed by them.
-- Claims are per alert per clinic-local day (`digest:{kind}:{alertId}:{date}`), so the
-  three-minute firing window still cannot send twice. Migration 0033 pre-claimed the day it
-  shipped, so nobody was told twice on the changeover.
+- `day_schedule` / `tomorrow_schedule` send a **doctor** their own list and anyone else the
+  clinic's — "how busy are we" and "what have I got" are the same question about different
+  rows.
+- Every summary checks what its recipient may open: the takings only with
+  `invoices.analytics`, the unread digest only with `conversations`, the clinic's lists only
+  with `calendar`.
+- **Catch-up windows**: a reminder may go out up to 10 minutes after its moment, a digest up
+  to 15 minutes after its hour — so a worker restarting over a deploy no longer skips them.
+  The keys stop the width sending twice: reminders are keyed by appointment **and start
+  time** (a moved appointment is reminded again at its new time; 0061 rewrote recent keys so
+  nothing repeated on the day it shipped), digests by alert per clinic-local day
+  (`digest:{kind}:{alertId}:{date}`).
+- Notification `kind` values for the first four are unchanged (`doctor_reminder`,
+  `daily_summary`, `day_end`, `unread_digest`) because every user's saved preferences are
+  keyed by them.
 
 Not a row, and still fixed: **Sunday 09:00** — documents still waiting for signature (+ how
 many expire within 2 days), to owners. Sunday is the start of the working week in Jordan; a

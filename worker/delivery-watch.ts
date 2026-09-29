@@ -1,4 +1,5 @@
 import { withSystem } from "./db";
+import { notifyUser } from "../src/lib/notify";
 
 /**
  * Notice when messages stop arriving.
@@ -65,17 +66,13 @@ export async function deliveryWatch() {
         [row.clinic_id]
       );
       for (const s of staff.rows) {
-        await c.query(
-          `insert into notifications (clinic_id, user_id, kind, title, body, url)
-           values ($1, $2, 'whatsapp_undelivered', $3, $4, $5)`,
-          [
-            row.clinic_id,
-            s.user_id ?? s.id,
-            "الرسائل تُرسَل ولا تصل",
-            `أُرسلت ${row.sent} رسالة دون أي إشعار استلام. أعد ربط واتساب، وتحقّق من وصول رسالة تجريبية.`,
-            `/c/${clinic.slug}/settings/whatsapp`,
-          ]
-        );
+        await notifyUser(c, (s.user_id ?? s.id) as string, {
+          clinicId: row.clinic_id,
+          kind: "whatsapp_undelivered",
+          title: "الرسائل تُرسَل ولا تصل",
+          body: `أُرسلت ${row.sent} رسالة دون أي إشعار استلام. أعد ربط واتساب، وتحقّق من وصول رسالة تجريبية.`,
+          url: `/c/${clinic.slug}/settings/whatsapp`,
+        });
       }
       console.error(
         `[delivery-watch] ${clinic.slug}: ${row.sent} messages sent, none acknowledged`

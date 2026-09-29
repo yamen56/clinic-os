@@ -3,6 +3,7 @@ import { advanceRun, handleTrigger } from "./automations";
 import { respondToConversation } from "./ai/agent";
 import { autoSendServiceDocuments } from "./esign";
 import { offerFreedSlot, closeWaitlistOnBooking } from "./waitlist";
+import { appointmentAlerts } from "./notifications";
 
 /**
  * Job runner: claims due jobs with FOR UPDATE SKIP LOCKED so multiple worker
@@ -94,6 +95,22 @@ async function runOne(slow: boolean): Promise<boolean> {
       const kind = job.kind.slice("trigger:".length);
       if (!job.clinic_id) throw new Error("trigger job without clinic");
       await handleTrigger(kind, job.clinic_id, job.payload ?? {});
+
+      /*
+        The team's own alerts about the appointment — its doctor hearing it was
+        booked, cancelled or moved. After the automations, and unable to fail
+        the job: a throw here would retry it, and a retry runs the clinic's
+        automations a second time, which is a second WhatsApp to the patient
+        over a notification. The alerts are keyed by this job, so they are
+        at-most-once regardless.
+      */
+      if (kind.startsWith("appointment_")) {
+        try {
+          await appointmentAlerts(kind, job.clinic_id, job.payload ?? {}, job.id);
+        } catch (e) {
+          console.error(`[job ${job.kind}] appointment alerts:`, (e as Error).message);
+        }
+      }
 
       /*
         A confirmed appointment also raises the consent forms its service

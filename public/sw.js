@@ -33,6 +33,17 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+/** The number on the installed app's icon. Not every platform has one. */
+function setBadge(n) {
+  try {
+    const nav = self.navigator;
+    if (typeof n === "number" && nav && "setAppBadge" in nav) {
+      return (n > 0 ? nav.setAppBadge(n) : nav.clearAppBadge()).catch(() => {});
+    }
+  } catch {}
+  return Promise.resolve();
+}
+
 self.addEventListener("push", (event) => {
   let payload = {};
   try {
@@ -41,32 +52,62 @@ self.addEventListener("push", (event) => {
     payload = { title: "Clinicti", body: event.data ? event.data.text() : "" };
   }
   const title = payload.title || "Clinicti";
+  // The direction follows the words, not the product's default: a notification
+  // written in English was laid out right-to-left with its punctuation flipped.
+  const lang = payload.lang === "en" ? "en" : "ar";
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: payload.body || "",
-      icon: "/icons/icon-192.png",
-      badge: "/icons/badge.png",
-      dir: "rtl",
-      lang: payload.lang || "ar",
-      tag: payload.tag || undefined,
-      renotify: !!payload.tag,
-      data: { url: payload.url || "/" },
-    })
+    Promise.all([
+      self.registration.showNotification(title, {
+        body: payload.body || "",
+        icon: "/icons/icon-192.png",
+        badge: "/icons/badge.png",
+        dir: lang === "ar" ? "rtl" : "ltr",
+        lang,
+        tag: payload.tag || undefined,
+        renotify: !!payload.tag,
+        timestamp: Date.now(),
+        data: { url: payload.url || "/", id: payload.id || null },
+      }),
+      setBadge(payload.badge),
+    ])
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/";
-  event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      for (const client of list) {
-        if ("focus" in client) {
-          client.navigate(url);
-          return client.focus();
+  const data = event.notification.data || {};
+  const url = new URL(data.url || "/", self.location.origin).href;
+
+  // Opening it on the phone is reading it: the bell in the app should agree.
+  const markRead = data.id
+    ? fetch("/api/me/notifications", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: data.id }),
+      }).catch(() => {})
+    : Promise.resolve();
+
+  const open = self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (list) => {
+    // Already showing that page: just bring it forward.
+    const exact = list.find((c) => c.url === url);
+    if (exact && "focus" in exact) return exact.focus();
+    for (const client of list) {
+      if (!("focus" in client)) continue;
+      /*
+        `navigate` only works on a window this worker controls, and rejects on
+        one it does not — a tab opened before the worker installed. That
+        rejection used to end the handler: the tap did nothing at all.
+      */
+      try {
+        if ("navigate" in client) {
+          const moved = await client.navigate(url);
+          return (moved || client).focus();
         }
-      }
-      return self.clients.openWindow(url);
-    })
-  );
+      } catch {}
+    }
+    return self.clients.openWindow(url);
+  });
+
+  event.waitUntil(Promise.all([markRead, open]));
 });

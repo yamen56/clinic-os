@@ -27,6 +27,10 @@ export default async function ClinicLayout({
          (select count(*)::int from documents
            where clinic_id = $1 and status in ('sent', 'partially_signed')) as pending_documents,
          (select avatar_path is not null from users where id = $2) as has_photo,
+         -- The bell's count, and what this person wants done with a new one.
+         (select count(*)::int from notifications where user_id = $2 and read_at is null) as notif_unread,
+         (select notification_prefs from users where id = $2) as notification_prefs,
+         now() as server_now,
          /*
            Whether this person has anything of their own on the Earnings screen:
            a share agreed with them now, or money already earned under one that
@@ -59,6 +63,9 @@ export default async function ClinicLayout({
       unread: number;
       pending_documents: number;
       has_photo: boolean;
+      notif_unread: number;
+      notification_prefs: Record<string, unknown> | null;
+      server_now: Date;
       has_earnings: boolean;
       announcements: { id: string; title: string; body: string }[];
     };
@@ -127,6 +134,14 @@ export default async function ClinicLayout({
       hasPhoto={!!chrome.has_photo}
       isImpersonating={access.isImpersonating}
       unreadCount={chrome.unread}
+      notifications={{
+        unread: chrome.notif_unread,
+        serverNow: new Date(chrome.server_now).toISOString(),
+        prefs: {
+          popups: chrome.notification_prefs?.popups !== false,
+          sound: chrome.notification_prefs?.sound === true,
+        },
+      }}
       pendingDocuments={chrome.pending_documents}
       hasEarnings={!!chrome.has_earnings}
       fullControl={hasFullControl(access)}

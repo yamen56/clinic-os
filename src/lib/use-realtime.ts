@@ -4,6 +4,139 @@ import { useEffect, useRef } from "react";
 
 export type RealtimeEvent = { t: string; op: string; id?: string };
 
+type Sub = {
+  tables: Set<string>;
+  cb: { current: (e: RealtimeEvent | null) => void };
+  /** Wants one resync once the connection carrying its tables is live. */
+  syncOnOpen: boolean;
+  synced: boolean;
+};
+
+type Stream = {
+  slug: string;
+  subs: Set<Sub>;
+  es: EventSource | null;
+  /** The table filter the open connection carries; "" is everything, null is closed. */
+  key: string | null;
+  wasDown: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
+/**
+ * One connection per tab, shared by everything on the screen that listens.
+ *
+ * Each hook used to open its own EventSource. That was one per tab while only
+ * the screen listened, and it became two when the header started listening for
+ * notifications too — and a browser on HTTP/1.1 allows six connections to a
+ * site across all of its tabs. At three tabs every request after that queues
+ * behind the streams, and the app looks frozen with nothing in the console.
+ *
+ * So the subscriptions are pooled per clinic. The connection carries the union
+ * of what its subscribers want, and is reopened only when that union changes —
+ * which is on navigation, when the old screen's hook and the new one's swap in
+ * the same moment. The new connection is opened before the old is closed, so no
+ * event falls into the gap; the overlap can deliver one twice, which every
+ * subscriber already tolerates, since all they do with an event is re-read.
+ */
+const streams = new Map<string, Stream>();
+
+function unionKey(s: Stream): string | null {
+  if (!s.subs.size) return null;
+  const all = new Set<string>();
+  for (const sub of s.subs) {
+    if (!sub.tables.size) return "";
+    for (const t of sub.tables) all.add(t);
+  }
+  return [...all].sort().join(",");
+}
+
+function dispatch(s: Stream, e: RealtimeEvent | null) {
+  for (const sub of [...s.subs]) {
+    if (e && sub.tables.size && !sub.tables.has(e.t)) continue;
+    try {
+      sub.cb.current(e);
+    } catch {}
+  }
+}
+
+/**
+ * The first-open resync, for the subscribers that asked for one.
+ *
+ * What a screen shows was read when the page was rendered, and the connection
+ * opens some moments later. Anything written in between arrives on no stream at
+ * all, and the next event may be a long time coming. Most screens can live with
+ * that gap; the unread badge cannot — it is the thing that says "something
+ * happened" — so it asks to re-read once the connection is actually live.
+ */
+function syncNewcomers(s: Stream) {
+  for (const sub of [...s.subs]) {
+    if (!sub.syncOnOpen || sub.synced) continue;
+    sub.synced = true;
+    try {
+      sub.cb.current(null);
+    } catch {}
+  }
+}
+
+function openStream(s: Stream, key: string) {
+  const prev = s.es;
+  const es = new EventSource(`/api/c/${s.slug}/events${key ? `?t=${encodeURIComponent(key)}` : ""}`);
+  s.es = es;
+  s.key = key;
+  let handedOver = !prev;
+  const handOver = () => {
+    if (handedOver) return;
+    handedOver = true;
+    prev?.close();
+  };
+  es.onopen = () => {
+    handOver();
+    if (s.wasDown) {
+      s.wasDown = false;
+      dispatch(s, null); // resync after silent reconnect
+    }
+    syncNewcomers(s);
+  };
+  es.onerror = () => {
+    if (s.es !== es) return;
+    // A replacement that cannot connect must not keep the old one open forever.
+    handOver();
+    s.wasDown = true; // EventSource auto-retries per `retry:` hint
+  };
+  es.onmessage = (ev) => {
+    try {
+      dispatch(s, JSON.parse(ev.data));
+    } catch {}
+  };
+}
+
+/**
+ * Settles the connection to what its subscribers now want, a moment later.
+ *
+ * The delay folds a navigation's unsubscribe-then-subscribe (and React's
+ * development double mount) into one decision instead of a close and a reopen.
+ */
+function settle(s: Stream) {
+  if (s.timer) return;
+  s.timer = setTimeout(() => {
+    s.timer = null;
+    const key = unionKey(s);
+    if (key === s.key) {
+      // Already carrying what a newcomer wants, and already live.
+      if (s.es?.readyState === 1) syncNewcomers(s);
+      return;
+    }
+    if (key === null) {
+      s.es?.close();
+      s.es = null;
+      s.key = null;
+      if (streams.get(s.slug) === s) streams.delete(s.slug);
+      return;
+    }
+    openStream(s, key);
+  }, 50);
+}
+
 /**
  * Subscribes to the clinic's SSE event stream. Reconnection is handled by
  * EventSource itself; after a dropped connection we fire onEvent(null) so the
@@ -12,49 +145,40 @@ export type RealtimeEvent = { t: string; op: string; id?: string };
  * The tables go to the server as well as being checked here, so a tab watching
  * the calendar is not sent every message a campaign delivers only to throw it
  * away. The check here stays: it is what keeps a caller correct against a
- * server that has not been deployed with the filter yet.
+ * server that has not been deployed with the filter yet, and what keeps each
+ * subscriber to its own tables on the shared connection.
  */
 export function useRealtime(
   slug: string,
   tables: string[],
-  onEvent: (e: RealtimeEvent | null) => void
+  onEvent: (e: RealtimeEvent | null) => void,
+  opts: { syncOnOpen?: boolean } = {}
 ) {
   const cb = useRef(onEvent);
   cb.current = onEvent;
   const tablesKey = tables.join(",");
+  const syncOnOpen = opts.syncOnOpen === true;
 
   useEffect(() => {
-    const wanted = new Set(tablesKey.split(",").filter(Boolean));
-    let es: EventSource | null = null;
-    let wasDown = false;
-    let closed = false;
-
-    const open = () => {
-      if (closed) return;
-      const qs = wanted.size ? `?t=${encodeURIComponent(tablesKey)}` : "";
-      es = new EventSource(`/api/c/${slug}/events${qs}`);
-      es.onopen = () => {
-        if (wasDown) {
-          wasDown = false;
-          cb.current(null); // resync after silent reconnect
-        }
-      };
-      es.onerror = () => {
-        wasDown = true; // EventSource auto-retries per `retry:` hint
-      };
-      es.onmessage = (ev) => {
-        try {
-          const e = JSON.parse(ev.data);
-          if (wanted.size === 0 || wanted.has(e.t)) cb.current(e);
-        } catch {}
-      };
+    let s = streams.get(slug);
+    if (!s) {
+      s = { slug, subs: new Set(), es: null, key: null, wasDown: false, timer: null };
+      streams.set(slug, s);
+    }
+    const stream = s;
+    const sub: Sub = {
+      tables: new Set(tablesKey.split(",").filter(Boolean)),
+      cb,
+      syncOnOpen: !!syncOnOpen,
+      synced: false,
     };
-    open();
+    stream.subs.add(sub);
+    settle(stream);
     return () => {
-      closed = true;
-      es?.close();
+      stream.subs.delete(sub);
+      settle(stream);
     };
-  }, [slug, tablesKey]);
+  }, [slug, tablesKey, syncOnOpen]);
 }
 
 /** How long the first event of a burst waits for the rest of it. */
@@ -87,7 +211,8 @@ export function useRealtimeRefresh(
   slug: string,
   tables: string[],
   refresh: () => unknown,
-  match?: (e: RealtimeEvent) => boolean
+  match?: (e: RealtimeEvent) => boolean,
+  opts: { syncOnOpen?: boolean } = {}
 ) {
   const run = useRef(refresh);
   run.current = refresh;
@@ -138,8 +263,13 @@ export function useRealtimeRefresh(
     }, wait);
   };
 
-  useRealtime(slug, tables, (e) => {
-    if (e && accept.current && !accept.current(e)) return;
-    schedule();
-  });
+  useRealtime(
+    slug,
+    tables,
+    (e) => {
+      if (e && accept.current && !accept.current(e)) return;
+      schedule();
+    },
+    opts
+  );
 }

@@ -97,7 +97,14 @@ export async function createAppointmentAction(
       entityId: id,
       detail: { patientId, startsAt: input.startsAt },
     });
-    await emitTrigger(c, access.clinicId, "appointment_created", { appointmentId: id, patientId });
+    // Who booked it travels with the event, so the doctor's "new appointment"
+    // alert is not also sent to the person who just made it.
+    await emitTrigger(c, access.clinicId, "appointment_created", {
+      appointmentId: id,
+      patientId,
+      source: "staff",
+      actorUserId: access.session.user.id,
+    });
     return { id };
   });
 }
@@ -149,6 +156,37 @@ export async function updateAppointmentAction(
       entityId: id,
       detail: { startsAt, endsAt },
     });
+
+    /*
+      Moved in time or to another doctor: the doctors involved hear about it.
+
+      Held for a minute and keyed per appointment, because a move is rarely one
+      save — dragging a block across the calendar and nudging it into place is
+      several. The first save of a burst enqueues the event carrying where the
+      appointment *was*; the rest find it already queued. When it runs it reads
+      where the appointment is *now*, so the doctor is told once, about the
+      final place, and not at all if it ended up back where it started. The
+      worker frees the key as it runs, so the next move is its own event.
+    */
+    const moved =
+      new Date(cur.starts_at).getTime() !== new Date(startsAt).getTime() ||
+      (cur.doctor_member_id ?? null) !== (doctor ?? null);
+    if (moved) {
+      await emitTrigger(
+        c,
+        access.clinicId,
+        "appointment_rescheduled",
+        {
+          appointmentId: id,
+          patientId: cur.patient_id,
+          actorUserId: access.session.user.id,
+          previousStartsAt: new Date(cur.starts_at).toISOString(),
+          previousDoctorMemberId: cur.doctor_member_id ?? null,
+        },
+        `appointment_rescheduled:${id}`,
+        60
+      );
+    }
     return { ok: true };
   });
 }
@@ -161,9 +199,14 @@ export async function setAppointmentStatusAction(
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
+    // The status it had before, read under the same row lock, so cancelling an
+    // appointment that was already cancelled is not a second cancellation.
     const r = await c.query(
-      `update appointments set status = $3 where id = $1 and clinic_id = $2
-       returning patient_id, starts_at`,
+      `with prev as (
+         select status from appointments where id = $1 and clinic_id = $2 for update
+       )
+       update appointments set status = $3 where id = $1 and clinic_id = $2
+       returning patient_id, starts_at, (select status from prev) as previous_status`,
       [id, access.clinicId, status]
     );
     if (!r.rowCount) return { error: "not_found" };
@@ -188,6 +231,8 @@ export async function setAppointmentStatusAction(
       appointmentId: id,
       patientId: patient_id,
       status,
+      previousStatus: r.rows[0].previous_status,
+      actorUserId: access.session.user.id,
     });
     return { ok: true };
   });

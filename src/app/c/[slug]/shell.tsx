@@ -12,6 +12,7 @@ import { Avatar } from "@/components/ui/misc";
 import { clinicLogoUrl } from "@/lib/clinic-logo";
 import { FINANCE_PREFIXES, firstFinanceHref } from "@/lib/finance";
 import { BrandLockup } from "@/components/brand-mark";
+import { NotificationPopups, useLiveNotifications, type InAppPrefs } from "@/components/live-notifications";
 import type { CapabilityMap, MemberRole } from "@/lib/permissions";
 import {
   LayoutDashboard,
@@ -75,6 +76,7 @@ export function Shell({
   hasPhoto,
   isImpersonating,
   unreadCount,
+  notifications,
   pendingDocuments,
   hasEarnings,
   fullControl,
@@ -99,6 +101,8 @@ export function Shell({
   hasPhoto: boolean;
   isImpersonating: boolean;
   unreadCount: number;
+  /** This person's own unread notifications, and what they asked the app to do with new ones. */
+  notifications: { unread: number; serverNow: string; prefs: InAppPrefs };
   pendingDocuments: number;
   /** This person has a share agreed, or money already earned under one. */
   hasEarnings: boolean;
@@ -111,6 +115,8 @@ export function Shell({
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [hiddenAnnouncements, setHiddenAnnouncements] = useState<string[]>([]);
+  const live = useLiveNotifications(clinic.slug, notifications);
+  const notifBadge = live.unread > 99 ? "99+" : String(live.unread);
 
   const base = `/c/${clinic.slug}`;
 
@@ -295,11 +301,21 @@ export function Shell({
               </Link>
               <Link
                 href={`${base}/notifications`}
-                className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
-                aria-label={t.nav.notifications}
+                className={`relative rounded-ctl p-1.5 transition-colors hover:bg-white/5 hover:text-white ${
+                  live.unread ? "text-white" : "text-white/50"
+                }`}
+                aria-label={
+                  live.unread ? `${t.nav.notifications} (${live.unread})` : t.nav.notifications
+                }
                 title={t.nav.notifications}
+                data-unread={live.unread}
               >
                 <Bell className="h-4.5 w-4.5" strokeWidth={1.75} />
+                {live.unread > 0 && (
+                  <span className="absolute -end-1 -top-1 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-4 text-white tnum">
+                    {notifBadge}
+                  </span>
+                )}
               </Link>
               <form action={logoutAction}>
                 <button
@@ -362,6 +378,8 @@ export function Shell({
           ))}
         <main className="mx-auto max-w-6xl px-4 py-6 pb-24 md:px-8 md:pb-10">{children}</main>
       </div>
+
+      <NotificationPopups items={live.popups} onDismiss={live.dismiss} />
 
       {/* Mobile bottom nav */}
       {moreOpen && (
@@ -438,7 +456,12 @@ export function Shell({
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
             >
               <Bell className="h-[18px] w-[18px] shrink-0 text-ink-400" />
-              {t.nav.notifications}
+              <span className="flex-1">{t.nav.notifications}</span>
+              {live.unread > 0 && (
+                <span className="rounded-full bg-danger px-1.5 py-0.5 text-[11px] font-semibold text-white tnum">
+                  {notifBadge}
+                </span>
+              )}
             </Link>
             <Link
               href={`${base}/signature`}
@@ -492,12 +515,18 @@ export function Shell({
           <button
             onClick={() => setMoreOpen((v) => !v)}
             aria-expanded={moreOpen}
-            className={`flex touch-manipulation flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors duration-140 ease-out ${
+            aria-label={live.unread ? `${t.nav.more} — ${t.nav.notifications} (${live.unread})` : undefined}
+            className={`relative flex touch-manipulation flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors duration-140 ease-out ${
               moreOpen ? "text-brand-700" : "text-ink-500"
             }`}
           >
             <MoreHorizontal className="h-5 w-5" />
             {t.nav.more}
+            {/* On a phone the notifications live in this sheet, so the sheet's
+                button is where an unread one has to show. */}
+            {live.unread > 0 && (
+              <span className="absolute top-1 end-[calc(50%-1.4rem)] h-2 w-2 rounded-full bg-danger" />
+            )}
           </button>
         </div>
       </nav>

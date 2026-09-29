@@ -35,6 +35,7 @@ const SUITES = [
   ["automations: built-in messages, team alerts, specialty packs", "scripts/qa-automation-coverage.ts"],
   ["phase 8: AI receptionist", "scripts/qa-phase8.ts"],
   ["phase 9: PWA & notifications", "scripts/qa-phase9.ts"],
+  ["notifications: on time, by role, and in the app", "scripts/qa-notifications.ts"],
   ["phase 10: admin & demo data", "scripts/qa-phase10.ts"],
   ["campaigns: bulk send & drip rails", "scripts/qa-campaigns.ts"],
   ["concurrency: one slot, one appointment", "scripts/qa-booking-race.ts"],

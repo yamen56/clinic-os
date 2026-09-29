@@ -245,12 +245,14 @@ async function main() {
   await pool.end();
   pushServer.close();
 
-  // 8. Notification preferences persist
-  await page.locator('button[role="switch"]').last().click();
+  // 8. Notification preferences persist. They live on the Settings tab, one
+  // level per kind: phone and app, app only, or off.
+  await page.getByRole("tab", { name: "Settings" }).click();
+  await page.locator('[data-pref="new_booking"] select').selectOption("app");
   await until(async () => {
     const r = await db.query(`select notification_prefs from users where id = $1`, [owner.id]);
     const p = r.rows[0].notification_prefs ?? {};
-    return Object.values(p).some((v) => v === false) ? p : null;
+    return p.new_booking === "app" ? p : null;
   });
   console.log("✓ notification preferences saved");
 
@@ -281,7 +283,9 @@ async function main() {
   await dpage.click('button[type="submit"]');
   await dpage.waitForURL((u) => !u.pathname.includes("login"), { timeout: 30000 });
   await dpage.goto(`${BASE}/c/${slug}/notifications`);
-  await dpage.waitForSelector("text=موعدك القادم", { timeout: 15000 });
+  // In the doctor's own language: this fixture doctor reads the app in English.
+  await dpage.waitForSelector("text=Your next appointment", { timeout: 15000 });
+  await dpage.getByRole("tab", { name: "Settings" }).click();
   await dpage.waitForSelector("text=Before my appointments", { timeout: 10000 });
   console.log("✓ doctor sees the reminder and doctor-only preferences");
   await dpage.screenshot({ path: "scripts/qa-shots/phase9-notifications.png" });

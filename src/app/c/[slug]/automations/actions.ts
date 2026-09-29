@@ -254,6 +254,7 @@ const staffAlertSchema = z.object({
   roles: z.array(z.enum(STAFF_ALERT_ROLES)).min(1),
   minutesBefore: z.number().int().min(0).max(1440).nullable().default(null),
   atHour: z.number().int().min(0).max(23).nullable().default(null),
+  weekday: z.number().int().min(1).max(7).nullable().default(null),
   threshold: z.number().int().min(0).max(999).default(0),
   enabled: z.boolean().default(true),
 });
@@ -277,6 +278,7 @@ export async function saveStaffAlertAction(
   const shape = alertShape(d.kind);
   const minutes = shape.minutes ? d.minutesBefore : null;
   const hour = shape.hour ? (d.atHour ?? 8) : null;
+  const weekday = shape.weekday ? (d.weekday ?? 7) : null;
   const threshold = shape.threshold ? d.threshold : 0;
 
   return inClinic(access, async (c) => {
@@ -284,18 +286,19 @@ export async function saveStaffAlertAction(
     if (id) {
       const r = await c.query(
         `update clinic_staff_alerts
-            set kind = $3, roles = $4, minutes_before = $5, at_hour = $6, threshold = $7, enabled = $8
+            set kind = $3, roles = $4, minutes_before = $5, at_hour = $6, threshold = $7, enabled = $8,
+                weekday = $9
           where id = $1 and clinic_id = $2`,
-        [id, access.clinicId, d.kind, d.roles, minutes, hour, threshold, d.enabled]
+        [id, access.clinicId, d.kind, d.roles, minutes, hour, threshold, d.enabled, weekday]
       );
       if (!r.rowCount) return { error: "not_found" };
     } else {
       const r = await c.query(
-        `insert into clinic_staff_alerts (clinic_id, kind, roles, minutes_before, at_hour, threshold, enabled, sort)
-         values ($1, $2, $3, $4, $5, $6, $7,
+        `insert into clinic_staff_alerts (clinic_id, kind, roles, minutes_before, at_hour, threshold, enabled, weekday, sort)
+         values ($1, $2, $3, $4, $5, $6, $7, $8,
                  coalesce((select max(sort) + 1 from clinic_staff_alerts where clinic_id = $1), 0))
          returning id`,
-        [access.clinicId, d.kind, d.roles, minutes, hour, threshold, d.enabled]
+        [access.clinicId, d.kind, d.roles, minutes, hour, threshold, d.enabled, weekday]
       );
       id = r.rows[0].id as string;
     }
@@ -306,7 +309,7 @@ export async function saveStaffAlertAction(
       action: d.id ? "automation.alert.update" : "automation.alert.create",
       entity: "staff_alert",
       entityId: id!,
-      detail: { kind: d.kind, roles: d.roles, minutes, hour, enabled: d.enabled },
+      detail: { kind: d.kind, roles: d.roles, minutes, hour, weekday, enabled: d.enabled },
     });
     revalidatePath(`/c/${slug}/automations`);
     return { id };

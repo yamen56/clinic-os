@@ -9,9 +9,13 @@ import { EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import {
+  ALERT_TEMPLATES,
+  INSTANT_ALERT_KINDS,
   STAFF_ALERT_KINDS,
   STAFF_ALERT_ROLES,
   alertShape,
+  followsAppointmentDoctor,
+  type AlertTemplate,
   type StaffAlert,
   type StaffAlertKind,
   type StaffAlertRole,
@@ -23,10 +27,11 @@ import { BellRing, Pencil, Plus, Trash2 } from "lucide-react";
 function blank(kind: StaffAlertKind): Omit<StaffAlert, "id"> & { id?: string } {
   return {
     kind,
-    roles: kind === "appointment_reminder" ? ["doctor"] : ["owner"],
+    roles: followsAppointmentDoctor(kind) ? ["doctor"] : ["owner"],
     // null is a value here, not a gap: "whatever each person set for themselves".
     minutes_before: null,
-    at_hour: kind === "appointment_reminder" ? null : 8,
+    at_hour: alertShape(kind).hour ? 8 : null,
+    weekday: kind === "weekly_summary" ? 7 : null,
     threshold: kind === "unread_digest" ? 3 : 0,
     enabled: true,
     sort: 99,
@@ -54,7 +59,14 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
   const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
   const summary = (a: StaffAlert) => {
-    const who = a.roles.map((r) => t.automations.alertRoles[r]).join("، ");
+    const who = a.roles
+      .map((r) =>
+        r === "doctor" && followsAppointmentDoctor(a.kind)
+          ? t.automations.doctorOfAppointment
+          : t.automations.alertRoles[r]
+      )
+      .join("، ");
+    if (INSTANT_ALERT_KINDS.has(a.kind)) return `${t.automations.instantly} · ${who}`;
     if (a.kind === "appointment_reminder") {
       const lead =
         a.minutes_before === null
@@ -62,7 +74,11 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
           : `${a.minutes_before} ${t.automations.minutesUnit}`;
       return `${t.automations.leadTime} ${lead} · ${who}`;
     }
-    const base = `${t.automations.atHour} ${hourLabel(a.at_hour ?? 8)} · ${who}`;
+    const day =
+      a.kind === "weekly_summary"
+        ? `${t.automations.onWeekday} ${t.automations.weekdays[(a.weekday ?? 7) as 1 | 2 | 3 | 4 | 5 | 6 | 7]} · `
+        : "";
+    const base = `${day}${t.automations.atHour} ${hourLabel(a.at_hour ?? 8)} · ${who}`;
     return a.kind === "unread_digest"
       ? `${base} · ${t.automations.threshold} ${a.threshold} ${t.automations.thresholdUnit}`
       : base;
@@ -77,6 +93,7 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
         roles: a.roles,
         minutesBefore: a.minutes_before,
         atHour: a.at_hour,
+        weekday: a.weekday,
         threshold: a.threshold,
         enabled,
       });
@@ -203,9 +220,24 @@ function AlertEditor({
   const [roles, setRoles] = useState<StaffAlertRole[]>(initial.roles);
   const [minutes, setMinutes] = useState<number | null>(initial.minutes_before);
   const [hour, setHour] = useState<number>(initial.at_hour ?? 8);
+  const [weekday, setWeekday] = useState<number>(initial.weekday ?? 7);
   const [threshold, setThreshold] = useState<number>(initial.threshold);
 
   const shape = alertShape(kind);
+
+  /*
+    A template fills the form; it does not save. Somebody picking "For
+    reception → unconfirmed tomorrow" still sees exactly what will be sent, to
+    whom and when, and presses Save themselves.
+  */
+  const applyTemplate = (tpl: AlertTemplate) => {
+    setKind(tpl.kind);
+    setRoles(tpl.roles);
+    setMinutes(tpl.minutes_before ?? null);
+    if (tpl.at_hour != null) setHour(tpl.at_hour);
+    if (tpl.weekday != null) setWeekday(tpl.weekday);
+    setThreshold(tpl.threshold ?? (tpl.kind === "unread_digest" ? 3 : 0));
+  };
 
   const submit = () => {
     if (!roles.length) return toast(t.automations.noRecipients, "error");
@@ -216,6 +248,7 @@ function AlertEditor({
         roles,
         minutesBefore: shape.minutes ? minutes : null,
         atHour: shape.hour ? hour : null,
+        weekday: shape.weekday ? weekday : null,
         threshold: shape.threshold ? threshold : 0,
         enabled: initial.enabled,
       });
@@ -241,6 +274,35 @@ function AlertEditor({
       }
     >
       <div className="grid gap-4">
+        {!initial.id && (
+          <div>
+            <div className="mb-1.5 text-[13px] font-semibold text-ink-900">{t.automations.templates}</div>
+            <div className="grid gap-2.5">
+              {STAFF_ALERT_ROLES.map((forRole) => (
+                <div key={forRole}>
+                  <div className="mb-1 text-[12px] font-medium text-ink-500">
+                    {t.automations.templatesFor[forRole]}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ALERT_TEMPLATES.filter((tpl) => tpl.forRole === forRole).map((tpl) => (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        data-template={tpl.id}
+                        onClick={() => applyTemplate(tpl)}
+                        className="rounded-full border border-line bg-surface px-2.5 py-1 text-[12px] font-medium text-ink-700 transition-colors duration-140 hover:border-brand-600 hover:text-brand-700"
+                      >
+                        {t.automations.alertKinds[tpl.kind]}
+                        {tpl.minutes_before ? ` · ${tpl.minutes_before} ${t.automations.minutesUnit}` : ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <Field label={t.automations.trigger} hint={t.automations.alertKindHints[kind]}>
           <Select
             value={kind}
@@ -251,6 +313,7 @@ function AlertEditor({
               // sensible starting point rather than keeping numbers that mean
               // nothing here.
               if (next === "unread_digest" && !threshold) setThreshold(3);
+              if (next === "appointment_reminder") setMinutes(null);
             }}
           >
             {STAFF_ALERT_KINDS.map((k) => (
@@ -282,7 +345,7 @@ function AlertEditor({
                   {/* For a reminder, "doctors" means the one doctor this
                       appointment belongs to — saying so here stops it reading
                       as "every doctor in the clinic, for every appointment". */}
-                  {r === "doctor" && kind === "appointment_reminder"
+                  {r === "doctor" && followsAppointmentDoctor(kind)
                     ? t.automations.doctorOfAppointment
                     : t.automations.alertRoles[r]}
                 </button>
@@ -313,6 +376,22 @@ function AlertEditor({
                 />
               )}
             </div>
+          </Field>
+        )}
+
+        {shape.weekday && (
+          <Field label={t.automations.onWeekday}>
+            <Select
+              value={String(weekday)}
+              onChange={(e) => setWeekday(Number(e.target.value))}
+              className="!w-auto"
+            >
+              {([7, 1, 2, 3, 4, 5, 6] as const).map((d) => (
+                <option key={d} value={d}>
+                  {t.automations.weekdays[d]}
+                </option>
+              ))}
+            </Select>
           </Field>
         )}
 

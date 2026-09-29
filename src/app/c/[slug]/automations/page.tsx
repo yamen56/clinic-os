@@ -7,8 +7,16 @@ import { loadSystemMessages } from "@/lib/system-messages";
 import { loadStaffAlerts } from "@/lib/staff-alerts";
 import { asSpecialty } from "@/lib/specialties";
 
-export default async function AutomationsPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function AutomationsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { slug } = await params;
+  // So another screen can send somebody straight to the team alerts.
+  const { tab } = await searchParams;
   const access = await guardClinic(slug);
   const canEdit = can(access, "automations");
   if (!canEdit) redirect(`/c/${slug}`);
@@ -64,6 +72,7 @@ export default async function AutomationsPage({ params }: { params: Promise<{ sl
       windowStart={String(data.clinic.message_window_start).slice(0, 5)}
       windowEnd={String(data.clinic.message_window_end).slice(0, 5)}
       mutedPatients={data.muted}
+      initialTab={tab === "alerts" || tab === "messages" ? tab : "flows"}
     />
   );
 }

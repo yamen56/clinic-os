@@ -445,17 +445,13 @@ async function notifyBlastGuard(c: PoolClient, clinicId: string, n: number) {
     [clinicId]
   );
   for (const s of staff.rows) {
-    await c.query(
-      `insert into notifications (clinic_id, user_id, kind, title, body, url)
-       values ($1, $2, 'whatsapp_blast_guard', $3, $4, $5)`,
-      [
-        clinicId,
-        s.user_id ?? s.id,
-        "تم إيقاف الأتمتة مؤقتاً لحماية الرقم",
-        `أُرسل النص نفسه إلى ${n} رقماً خلال عشر دقائق. إن كان مقصوداً فاستخدم الحملات، وإلا فراجع الأتمتة.`,
-        `/c/${clinic.slug}/settings/whatsapp`,
-      ]
-    );
+    await notifyUser(c, (s.user_id ?? s.id) as string, {
+      clinicId,
+      kind: "whatsapp_blast_guard",
+      title: "تم إيقاف الأتمتة مؤقتاً لحماية الرقم",
+      body: `أُرسل النص نفسه إلى ${n} رقماً خلال عشر دقائق. إن كان مقصوداً فاستخدم الحملات، وإلا فراجع الأتمتة.`,
+      url: `/c/${clinic.slug}/settings/whatsapp`,
+    });
   }
 }
 

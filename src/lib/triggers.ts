@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 export type TriggerKind =
   | "appointment_created"
   | "appointment_status_changed"
+  | "appointment_rescheduled"
   | "patient_created"
   | "waitlist_booked"
   | "tag_added"
@@ -27,12 +28,19 @@ export async function emitTrigger(
   clinicId: string,
   kind: TriggerKind,
   payload: Record<string, unknown>,
-  dedupeKey?: string
+  dedupeKey?: string,
+  /**
+   * Hold the event this long before anything acts on it. For a change people
+   * make in bursts — dragging an appointment across the calendar is several
+   * saves — paired with a dedupe key, so the burst is acted on once, by
+   * whatever it has settled to by then.
+   */
+  delaySeconds = 0
 ) {
   await c.query(
-    `insert into jobs (clinic_id, kind, payload, dedupe_key)
-     values ($1, $2, $3, $4)
+    `insert into jobs (clinic_id, kind, payload, dedupe_key, run_at)
+     values ($1, $2, $3, $4, now() + ($5::int * interval '1 second'))
      on conflict (dedupe_key) do nothing`,
-    [clinicId, `trigger:${kind}`, JSON.stringify(payload), dedupeKey ?? null]
+    [clinicId, `trigger:${kind}`, JSON.stringify(payload), dedupeKey ?? null, delaySeconds]
   );
 }

@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { mutableKey, prefKeyFor } from "./notification-kinds";
 
 /**
  * Resolves a notification audience.
@@ -28,6 +29,8 @@ export type StaffMember = {
    * whatever goes in the body has already left the building.
    */
   permissions: Record<string, unknown> | null;
+  /** The language to write to them in. 'ar' unless they chose English. */
+  locale: string;
 };
 
 /**
@@ -45,8 +48,9 @@ export async function staffMembersInRoles(
   const wantsOwner = roles.includes("owner");
   const jobs = roles.filter((r) => r !== "owner");
   const r = await c.query(
-    `select id, user_id, role, is_owner, permissions from clinic_members
-      where clinic_id = $1 and active and (($2 and is_owner) or role = any($3))`,
+    `select cm.id, cm.user_id, cm.role, cm.is_owner, cm.permissions, u.locale
+       from clinic_members cm join users u on u.id = cm.user_id
+      where cm.clinic_id = $1 and cm.active and (($2 and cm.is_owner) or cm.role = any($3))`,
     [clinicId, wantsOwner, jobs]
   );
   return r.rows.map((x) => ({
@@ -55,6 +59,7 @@ export async function staffMembersInRoles(
     role: x.role as string,
     isOwner: x.is_owner as boolean,
     permissions: (x.permissions ?? null) as Record<string, unknown> | null,
+    locale: (x.locale as string) ?? "ar",
   }));
 }
 
@@ -73,6 +78,22 @@ export async function staffMembersInRoles(
  * Leave it out where a repeat is genuinely a new event — a second document
  * signed, another escalation — and the insert behaves as it always did.
  */
+/*
+  Every notification is written here, through `app_notify` (migration 0061),
+  and two things are decided on the way in.
+
+  Whether the recipient switched this kind off — read in the same statement, so
+  a muted kind costs nothing and never lands in their list ("in the app only"
+  is a different level, handled by the worker, which still writes the row and
+  only keeps it off the phone).
+
+  And whether this transaction may address them at all. Inside a member's own
+  transaction that means themselves or a colleague in the same clinic; anybody
+  else is skipped rather than refused, because telling somebody about a
+  signature must never be the reason the signature is rolled back. It is a
+  function rather than a plain insert because the at-most-once clause holds the
+  row to the read policy, and a colleague's notifications are not ours to read.
+*/
 async function insertNotification(
   c: PoolClient,
   clinicId: string | null,
@@ -80,19 +101,16 @@ async function insertNotification(
   n: { kind: string; title: string; body?: string; url?: string; dedupeKey?: string }
 ) {
   await c.query(
-    `insert into notifications (clinic_id, user_id, kind, title, body, url, dedupe_key)
-     values ($1, $2, $3, $4, $5, $6, $7)
-     -- The index is partial (only keyed rows), so the predicate has to be
-     -- repeated here or Postgres cannot infer which index this refers to.
-     on conflict (dedupe_key) where dedupe_key is not null do nothing`,
+    `select app_notify($1::uuid, $2::uuid, $3::text, $4::text, $5::text, $6::text, $7::text, $8::text)`,
     [
       clinicId,
       userId,
       n.kind,
-      n.title,
-      n.body ?? "",
+      n.title.slice(0, 300),
+      (n.body ?? "").slice(0, 2000),
       n.url ?? null,
       n.dedupeKey ? `${n.dedupeKey}:${userId}` : null,
+      mutableKey(prefKeyFor(n.kind)),
     ]
   );
 }
