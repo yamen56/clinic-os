@@ -5,7 +5,7 @@ try { process.loadEnvFile?.(); } catch {}
 process.env.APP_URL = process.env.APP_URL || "https://app.clinicti.app";
 
 const to = process.argv[2] ?? "6000yamen.batarseh@gmail.com";
-const combos: [EmailType, EmailLocale][] = [["invitation", "ar"], ["password-reset", "en"], ["welcome", "ar"], ["welcome", "en"], ["member-joined", "ar"], ["payment-overdue", "ar"], ["account-suspended", "en"]];
+const combos: [EmailType, EmailLocale][] = [["invitation", "ar"], ["password-reset", "en"], ["welcome", "ar"], ["welcome", "en"], ["added-to-clinic", "ar"], ["member-joined", "ar"], ["payment-overdue", "ar"], ["account-suspended", "en"]];
 
 async function main() {
  for (const [type, locale] of combos) {

@@ -47,7 +47,14 @@ const addStaffSchema = z.object({
 export async function addStaffAction(
   slug: string,
   data: unknown
-): Promise<{ error?: string; existing?: boolean; inviteUrl?: string; emailed?: boolean }> {
+): Promise<{
+  error?: string;
+  existing?: boolean;
+  /** The account already had a password, so it was told it was added rather than invited. */
+  existingAccount?: boolean;
+  inviteUrl?: string;
+  emailed?: boolean;
+}> {
   const access = await requireClinic(slug);
   if (!can(access, "settings.staff")) return { error: "forbidden" };
   const parsed = addStaffSchema.safeParse(data);
@@ -106,9 +113,11 @@ export async function addStaffAction(
 
   return inClinic(access, async (c) => {
     const dup = await c.query(
-      `select id from clinic_members where clinic_id = $1 and user_id = $2`,
+      `select id, active from clinic_members where clinic_id = $1 and user_id = $2`,
       [access.clinicId, userId]
     );
+    // Already an active member here: the form edited them, it did not add them.
+    const alreadyHere = Boolean(dup.rows[0]?.active);
     if (dup.rowCount) {
       /*
         Everything the form collected, not just the role — somebody adding a
@@ -148,39 +157,25 @@ export async function addStaffAction(
       detail: { role: d.role, email: d.email },
     });
     /*
-      Whether an invitation is owed is about the account having no password, not
-      about the row being new. A person who was invited, never accepted, and then
-      removed has a user row and no way in — and used to get nothing at all here.
+      An email is owed whenever this gives somebody access — a first add, an add
+      after being removed, an account that works at another clinic — and not when
+      the form only edited a person who is already here. Which email is about the
+      account having a password, not about the row being new: see emailMemberAccess.
     */
-    let inviteUrl: string | undefined;
-    let emailed = false;
-    if (needsInvite) {
-      const raw = await withSystem((sc) =>
-        createAuthToken(sc, {
-          userId,
-          clinicId: access.clinicId,
-          purpose: "invite",
-          createdBy: access.session.user.id,
-        })
-      );
-      inviteUrl = `${appUrl()}/invite/${raw}`;
-      const clinic = await clinicEmailContext(c, access.clinicId);
-      const mail = renderEmail({
-        type: "invitation",
-        locale: clinic.locale,
-        name: d.fullName,
-        clinic: clinic.name,
-        url: inviteUrl,
-      });
-      const sent = await sendEmail({ to: d.email, ...mail });
-      emailed = sent.ok;
-      if (!sent.ok && !sent.skipped) console.error("[invite email]", sent.error);
-    }
+    const { emailed, inviteUrl } =
+      needsInvite || !alreadyHere
+        ? await emailMemberAccess(c, access.clinicId, slug, userId, access.session.user.id)
+        : { emailed: false, inviteUrl: undefined };
 
     revalidatePath(`/c/${slug}/settings/staff`);
     // The link goes back only when it could not be delivered, so the owner can
     // pass it on; on success it is never exposed in the UI.
-    return { existing: wasExisting, emailed, inviteUrl: emailed ? undefined : inviteUrl };
+    return {
+      existing: wasExisting,
+      existingAccount: !needsInvite,
+      emailed,
+      inviteUrl: emailed ? undefined : inviteUrl,
+    };
   });
 }
 
@@ -232,6 +227,72 @@ export async function resendInviteAction(
 }
 
 /**
+ * Emails somebody who has just been given access to this clinic — added for the
+ * first time, added back, or reactivated. Every one of those is news to them.
+ *
+ * An account with no password gets this clinic's invitation. An account with a
+ * password — they work at another clinic, or had been removed from this one —
+ * has nothing to accept, and used to hear nothing at all: they were simply in,
+ * and found out only if somebody told them. They are told now, by this clinic,
+ * by name, with a link that opens this clinic's workspace. In their own name and
+ * language, not the form's: the account is theirs, and a second clinic typing
+ * their email does not get to rename them.
+ *
+ * Returns whether the mail was accepted, and the invitation link so a caller can
+ * hand it over when it was not.
+ */
+async function emailMemberAccess(
+  c: PoolClient,
+  clinicId: string,
+  slug: string,
+  userId: string,
+  createdBy: string
+): Promise<{ emailed: boolean; inviteUrl?: string }> {
+  const u = await withSystem(async (sc) => {
+    const r = await sc.query(
+      `select email, full_name, locale, password_hash is not null as has_password
+         from users where id = $1`,
+      [userId]
+    );
+    return r.rows[0] as { email: string; full_name: string; locale: string; has_password: boolean };
+  });
+  const clinic = await clinicEmailContext(c, clinicId);
+
+  if (!u.has_password) {
+    const raw = await withSystem((sc) =>
+      createAuthToken(sc, { userId, clinicId, purpose: "invite", createdBy })
+    );
+    const inviteUrl = `${appUrl()}/invite/${raw}`;
+    const sent = await sendEmail({
+      to: u.email,
+      ...renderEmail({
+        type: "invitation",
+        locale: clinic.locale,
+        name: u.full_name,
+        clinic: clinic.name,
+        url: inviteUrl,
+      }),
+    });
+    if (!sent.ok && !sent.skipped) console.error("[invite email]", sent.error);
+    return { emailed: sent.ok, inviteUrl };
+  }
+
+  const sent = await sendEmail({
+    to: u.email,
+    ...renderEmail({
+      type: "added-to-clinic",
+      locale: u.locale === "en" ? "en" : "ar",
+      name: u.full_name,
+      clinic: clinic.name,
+      url: `${appUrl()}/c/${slug}`,
+      email: u.email,
+    }),
+  });
+  if (!sent.ok && !sent.skipped) console.error("[added email]", sent.error);
+  return { emailed: sent.ok };
+}
+
+/**
  * Display name and language for an invitation. A newly invited person has no
  * stored language preference yet, so the clinic's default decides which of the
  * four templates they receive.
@@ -279,12 +340,14 @@ export async function updateMemberAction(
   return inClinic(access, async (c) => {
     const target = (
       await c.query(
-        `select cm.is_owner, cm.user_id, u.full_name
+        `select cm.is_owner, cm.user_id, cm.active, u.full_name
            from clinic_members cm join users u on u.id = cm.user_id
           where cm.id = $1 and cm.clinic_id = $2`,
         [memberId, access.clinicId]
       )
-    ).rows[0] as { is_owner: boolean; user_id: string; full_name: string } | undefined;
+    ).rows[0] as
+      | { is_owner: boolean; user_id: string; active: boolean; full_name: string }
+      | undefined;
     if (!target) return { error: "not_found" };
 
     /*
@@ -453,6 +516,10 @@ export async function updateMemberAction(
         ? { fields: Object.keys(patch), name: { from: target.full_name, to: newName } }
         : { fields: Object.keys(patch) },
     });
+    // Reactivating is adding them back, and they hear about it the same way.
+    if (patch.active === true && !target.active) {
+      await emailMemberAccess(c, access.clinicId, slug, target.user_id, access.session.user.id);
+    }
     revalidatePath(`/c/${slug}/settings/staff`);
     return {};
   });

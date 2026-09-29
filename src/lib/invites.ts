@@ -31,11 +31,19 @@ export async function createAuthToken(
       ? `${INVITE_TTL_DAYS} days`
       : `${RESET_TTL_MINUTES} minutes`;
 
-  // Supersede any outstanding token of the same kind so an old email stops working.
+  /*
+    Supersede any outstanding token of the same kind *for the same clinic*, so an
+    old email from that clinic stops working. The clinic is part of the key: one
+    person can be invited by two clinics at once, and the second invitation used
+    to kill the first clinic's link, so the email from clinic A answered "no
+    longer valid" because clinic B had also invited them. Reset tokens carry no
+    clinic, so they still supersede each other.
+  */
   await c.query(
     `update auth_tokens set used_at = now()
-     where user_id = $1 and purpose = $2 and used_at is null`,
-    [opts.userId, opts.purpose]
+     where user_id = $1 and purpose = $2 and clinic_id is not distinct from $3
+       and used_at is null`,
+    [opts.userId, opts.purpose, opts.clinicId ?? null]
   );
 
   await c.query(
@@ -56,6 +64,12 @@ export type TokenInfo = {
   clinicName: string | null;
   clinicSlug: string | null;
   locale: "ar" | "en";
+  /**
+   * The account already has a password — set through another clinic's invitation
+   * that arrived at the same time. This link then has nothing to set up: the
+   * membership is already active, and the person only needs to sign in.
+   */
+  hasPassword: boolean;
 };
 
 /** Resolves a raw token, or null when missing, expired or already used. */
@@ -64,7 +78,7 @@ export async function readAuthToken(raw: string, purpose: Purpose): Promise<Toke
   return withSystem(async (c) => {
     const r = await c.query(
       `select t.id, t.user_id, t.clinic_id, t.purpose, t.token_hash,
-              u.email, u.full_name, u.locale,
+              u.email, u.full_name, u.locale, u.password_hash is not null as has_password,
               cl.name as clinic_name, cl.slug as clinic_slug
        from auth_tokens t
        join users u on u.id = t.user_id
@@ -91,6 +105,7 @@ export async function readAuthToken(raw: string, purpose: Purpose): Promise<Toke
       clinicName: row.clinic_name,
       clinicSlug: row.clinic_slug,
       locale: row.locale === "en" ? "en" : "ar",
+      hasPassword: row.has_password === true,
     };
   });
 }
@@ -111,10 +126,19 @@ export async function consumeAuthToken(
   issuedBy?: string | null;
 }> {
   return withSystem(async (c) => {
+    /*
+      An invitation only ever sets a *first* password. With invitations now
+      outstanding from several clinics at once, the second link can be opened
+      after the first has been accepted — and without this guard it would
+      quietly replace the password the person had just chosen. A reset link is
+      the way to change an existing password, never an invitation.
+    */
     const r = await c.query(
-      `update auth_tokens set used_at = now()
-       where token_hash = $1 and purpose = $2 and used_at is null and expires_at > now()
-       returning user_id, clinic_id, created_by`,
+      `update auth_tokens t set used_at = now()
+         from users u
+        where t.token_hash = $1 and t.purpose = $2 and t.used_at is null and t.expires_at > now()
+          and u.id = t.user_id and ($2 <> 'invite' or u.password_hash is null)
+       returning t.user_id, t.clinic_id, t.created_by`,
       [hashToken(raw), purpose]
     );
     if (!r.rowCount) return { ok: false };

@@ -16,6 +16,7 @@ export type EmailType =
   | "invitation"
   | "password-reset"
   | "welcome"
+  | "added-to-clinic"
   | "member-joined"
   | "payment-overdue"
   | "account-suspended";
@@ -62,7 +63,7 @@ export type RenderOptions = {
   name: string;
   clinic: string;
   url: string;
-  /** The recipient's own address — the welcome repeats it as the sign-in name. */
+  /** The recipient's own address — repeated as the sign-in name. */
   email?: string;
   /** The colleague a member-joined email is about. */
   member?: { name: string; email: string };
@@ -80,6 +81,10 @@ const SUBJECTS: Record<EmailType, Record<EmailLocale, (o: RenderOptions) => stri
   welcome: {
     en: (o) => `Welcome to ${o.clinic}`,
     ar: (o) => `أهلًا بك في ${o.clinic}`,
+  },
+  "added-to-clinic": {
+    en: (o) => `You have been added to ${o.clinic}`,
+    ar: (o) => `تمت إضافتك إلى ${o.clinic}`,
   },
   "member-joined": {
     en: (o) => `${o.member?.name ?? ""} has joined ${o.clinic}`,
@@ -122,6 +127,28 @@ With your email: ${opts.email ?? ""}
 ${opts.url}
 
 If you did not set this password, reset it now: ${app}/forgot`;
+    case "added-to-clinic":
+      return ar
+        ? `مرحبًا ${opts.name}،
+
+تمت إضافتك إلى فريق ${opts.clinic}. لديك حساب في كلينيكتي بالفعل، فلا يوجد ما تحتاج إلى إعداده — سجّل الدخول بكلمة المرور المعتادة.
+
+سجّل الدخول من: ${app}/login
+باستخدام بريدك الإلكتروني: ${opts.email ?? ""}
+
+${opts.url}
+
+نسيت كلمة المرور؟ ${app}/forgot`
+        : `Hi ${opts.name},
+
+You have been added to the ${opts.clinic} team. You already have a Clinicti account, so there is nothing to set up — sign in with your usual password.
+
+Sign in at: ${app}/login
+With your email: ${opts.email ?? ""}
+
+${opts.url}
+
+Forgot your password? ${app}/forgot`;
     case "member-joined":
       return ar
         ? `مرحبًا ${opts.name}،

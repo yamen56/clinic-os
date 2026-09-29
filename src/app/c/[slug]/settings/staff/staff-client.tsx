@@ -293,9 +293,15 @@ export function StaffClient({
                       invitation does have an existing account, and does get a
                       fresh invitation — telling them the email was "already
                       taken" described the database rather than what happened.
+                      Somebody with an account elsewhere gets no invitation but
+                      is emailed that they were added, and is told so here.
                     */
                     toast(
-                      r.emailed ? t.staff.invited : t.staff.emailTaken,
+                      r.emailed
+                        ? r.existingAccount
+                          ? t.staff.addedEmailed
+                          : t.staff.invited
+                        : t.staff.emailTaken,
                       r.emailed ? "success" : "info"
                     );
                   }

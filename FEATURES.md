@@ -158,6 +158,15 @@ Your data is safe."), and the AI agent refuses to answer for suspended clinics.
   Staff never handle each other's credentials. Tokens live in `auth_tokens`
   (`purpose = 'invite'`), **expire after 7 days**, single use, hash-only storage.
   If email isn't configured the UI shows the raw invite link to send manually.
+- **An email every time somebody is given access**, per clinic: added, added back after
+  being deactivated (through the form or the Reactivate button), or made owner of a new
+  clinic by the agency. No password yet → that clinic's invitation. A password already
+  (they work at another clinic, or were removed and added back) → "You have been added to
+  {clinic}", with that clinic's link and nothing to set up. Re-saving somebody already
+  active sends nothing. Invitations are keyed by **user + clinic**: a second clinic's
+  invitation no longer cancels the first's, and a link opened after the account already
+  has a password shows "you already have an account — open {clinic}" instead of a password
+  form, so it can never overwrite the password they chose.
 - **Welcome email**: sent once when an invitation is accepted (password set) — the
   sign-in address and email for their next device, a home-screen tip, and a "not you?
   reset your password" line. Same language and workspace name as the invitation;

@@ -106,9 +106,6 @@ export async function createClinicAction(
   const phone = d.phone ? normalizePhone(d.phone) : null;
 
   let slug = "";
-  // Set inside the transaction, read after it: only a brand-new account needs an
-  // invitation. Somebody who already runs another clinic has a password already.
-  let ownerIsNew = false;
   let ownerId = "";
   let clinicId = "";
   /*
@@ -135,7 +132,6 @@ export async function createClinicAction(
       });
       clinicId = p.clinicId;
       ownerId = p.ownerId;
-      ownerIsNew = p.ownerIsNew;
 
       await audit(c, {
         clinicId,
@@ -160,14 +156,53 @@ export async function createClinicAction(
     time. The clinic exists either way; a failed send is recoverable from the
     clinic page, an aborted creation is not.
   */
-  if (ownerIsNew) {
-    await sendOwnerInvite(clinicId, ownerId, d.ownerEmail, d.ownerName, s.user.id).catch((e) =>
-      console.error("[owner invite]", (e as Error).message)
-    );
-  }
+  await notifyNewOwner(clinicId, ownerId, s.user.id).catch((e) =>
+    console.error("[owner invite]", (e as Error).message)
+  );
 
   revalidatePath("/admin");
   redirect(`/admin/clinics/${slug}`);
+}
+
+/**
+ * Tells a new clinic's owner about it, whoever they are.
+ *
+ * This used to invite only an address Clinicti had never seen, on the
+ * assumption that anyone already known "runs another clinic and has a
+ * password". Neither half held: an owner invited to another clinic who had not
+ * accepted yet got nothing and had no way in, and one who had accepted was made
+ * owner of a workspace nobody told them about. Now an account without a password
+ * gets this clinic's invitation, and one with a password is told it was added,
+ * with a link to this clinic.
+ */
+async function notifyNewOwner(clinicId: string, ownerId: string, createdBy: string): Promise<void> {
+  const owner = await withSystem(async (c) => {
+    const r = await c.query(
+      `select u.email, u.full_name, u.locale, u.password_hash is not null as has_password,
+              cl.slug, coalesce(nullif(cl.name_ar, ''), cl.name) as clinic_name
+         from users u, clinics cl
+        where u.id = $1 and cl.id = $2`,
+      [ownerId, clinicId]
+    );
+    return r.rows[0];
+  });
+  if (!owner) return;
+  if (!owner.has_password) {
+    await sendOwnerInvite(clinicId, ownerId, owner.email, owner.full_name, createdBy);
+    return;
+  }
+  const sent = await sendEmail({
+    to: owner.email,
+    ...renderEmail({
+      type: "added-to-clinic",
+      locale: owner.locale === "en" ? "en" : "ar",
+      name: owner.full_name,
+      clinic: owner.clinic_name,
+      url: `${appUrl()}/c/${owner.slug}`,
+      email: owner.email,
+    }),
+  });
+  if (!sent.ok && !sent.skipped) console.error("[owner added email]", sent.error);
 }
 
 /**

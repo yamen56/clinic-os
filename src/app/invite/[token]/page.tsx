@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { readAuthToken } from "@/lib/invites";
+import { buttonClass } from "@/components/ui/button-class";
 import { getDict } from "@/lib/i18n";
 import { BrandMark } from "@/components/brand-mark";
 import { SetPasswordForm } from "@/components/set-password-form";
@@ -52,15 +54,42 @@ export default async function InvitePage({
   const info = await readAuthToken(token, "invite");
   const t = await getDict();
 
+  const clinic = info?.clinicName ?? "Clinicti";
+
   return (
     <main className="surface-night flex min-h-dvh flex-col items-center justify-center gap-8 p-6">
       <BrandMark size={64} />
-      {info ? (
+      {info?.hasPassword ? (
+        /*
+          Invited by two clinics at once, and already accepted the other one. The
+          membership here is active already; there is no password to choose, and
+          offering the form would be offering to overwrite the one they just set.
+          The link goes through the sign-in gate, which returns them here.
+        */
+        <div className="w-full max-w-[420px] rounded-modal border border-line bg-surface p-6 text-center shadow-modal">
+          <h1 className="font-display text-xl font-semibold text-ink-900">{t.invite.alreadyTitle}</h1>
+          <p className="mt-2 text-sm text-ink-500">
+            {t.invite.alreadyBody.replace("{email}", info.email).replace("{clinic}", clinic)}
+          </p>
+          <Link
+            href={info.clinicSlug ? `/c/${info.clinicSlug}` : "/"}
+            className={buttonClass({ className: "mt-5 w-full" })}
+          >
+            {t.invite.alreadyOpen.replace("{clinic}", clinic)}
+          </Link>
+          <Link
+            href="/forgot"
+            className="mt-4 inline-block text-[13px] text-ink-500 underline underline-offset-4 hover:text-ink-900"
+          >
+            {t.auth.forgotPassword}
+          </Link>
+        </div>
+      ) : info ? (
         <div className="flex w-full flex-col items-center gap-4">
           <SetPasswordForm
             token={token}
             action={acceptInviteAction}
-            heading={t.invite.heading.replace("{clinic}", info.clinicName ?? "Clinicti")}
+            heading={t.invite.heading.replace("{clinic}", clinic)}
             sub={t.invite.sub.replace("{email}", info.email)}
             submitLabel={t.invite.submit}
           />

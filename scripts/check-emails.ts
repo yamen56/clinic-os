@@ -14,6 +14,8 @@ const combos: [EmailType, EmailLocale][] = [
   ["password-reset", "ar"],
   ["welcome", "en"],
   ["welcome", "ar"],
+  ["added-to-clinic", "en"],
+  ["added-to-clinic", "ar"],
   ["member-joined", "en"],
   ["member-joined", "ar"],
   ["payment-overdue", "en"],
@@ -49,7 +51,7 @@ for (const [type, locale] of combos) {
     ["plain-text part", r.text.trim().length > 0],
     ["name html-escaped", !r.html.includes("<script>")],
     ["ampersand escaped in url", !/href="[^"]*[^p]&[^a#]/.test(r.html)],
-    ...(type === "welcome"
+    ...(type === "welcome" || type === "added-to-clinic"
       ? ([
           ["email shown, escaped", r.html.includes("sami+&lt;b&gt;@example.com")],
           ["sign-in host shown", r.html.includes(">clinic-web-production-bbff.up.railway.app<")],
