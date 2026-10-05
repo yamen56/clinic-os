@@ -6,13 +6,27 @@ import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { landingPathIn } from "@/lib/permissions";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
-import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtTime, fmtMoney } from "@/lib/dates";
+import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtTime, fmtMoney, fmtLongToday } from "@/lib/dates";
 import { Card, CardHeader, PageHeader } from "@/components/ui/card";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { BarChart, RowBar, type Point } from "@/components/ui/chart";
 import { QuickActions, type QuickAction } from "./quick-actions";
-import { CalendarDays, TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarCheck,
+  CalendarClock,
+  TrendingUp,
+  TrendingDown,
+  ArrowRight,
+  MessageCircle,
+  Banknote,
+  ReceiptText,
+  Target,
+  UserX,
+  UserPlus,
+  ChevronRight,
+} from "lucide-react";
 
 const apptStatus: Record<string, StatusKey> = {
   pending_approval: "pending",
@@ -25,6 +39,22 @@ const apptStatus: Record<string, StatusKey> = {
 
 /** A stat tile. Built as data so the visible four follow the viewer's access. */
 type Tile = { key: string; label: string; value: string; foot?: React.ReactNode; href?: string };
+
+/*
+  Each tile's mark, by key. A row of four labelled numbers is read by position
+  until somebody learns it; the icon lets the eye find "money" or "messages"
+  without reading a label first.
+*/
+const tileIcons: Record<string, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
+  today: CalendarDays,
+  unread: MessageCircle,
+  revenue: Banknote,
+  owed: ReceiptText,
+  demos: CalendarCheck,
+  prospects: Target,
+  noshow: UserX,
+  newpatients: UserPlus,
+};
 
 export default async function DashboardPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -419,8 +449,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         needed while she was looking at today's list. A disconnection still
         reaches the owner as a notification, which is the moment it matters.
       */}
+      {/* The date under the title: the front desk's first question of the
+          screen is "which day am I looking at", and the clinic's day is not
+          always the device's. */}
       <PageHeader
         title={t.dashboard.title}
+        sub={fmtLongToday(tz, locale)}
         action={actions.length > 0 ? <QuickActions slug={slug} actions={actions} /> : undefined}
       />
 
@@ -434,9 +468,26 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       */}
       <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4">
         {tiles.slice(0, 4).map((tile) => {
+          const Icon = tileIcons[tile.key];
           const body = (
             <Card className="@container h-full p-4">
-              <div className="eyebrow">{tile.label}</div>
+              {/*
+                The mark sits in a chip in the corner where the tile has room,
+                and shrinks to a glyph beside the label where it does not: on a
+                phone the chip took a fifth of the tile and pushed every label
+                onto two lines.
+              */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="eyebrow flex min-w-0 items-center gap-1.5">
+                  {Icon && <Icon className="h-3.5 w-3.5 shrink-0 text-brand-500 @[10rem]:hidden" strokeWidth={2} />}
+                  <span className="min-w-0">{tile.label}</span>
+                </div>
+                {Icon && (
+                  <span className="hidden h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-500 ring-1 ring-brand-100 @[10rem]:grid">
+                    <Icon className="h-[15px] w-[15px]" strokeWidth={1.9} />
+                  </span>
+                )}
+              </div>
               {/*
                 Sized to fit the tile, not only to the screen. A fixed 26/32px
                 still lost the currency to the ellipsis once a balance reached
@@ -457,7 +508,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             </Card>
           );
           return tile.href ? (
-            <Link key={tile.key} href={tile.href} className="transition-shadow hover:shadow-pop">
+            <Link
+              key={tile.key}
+              href={tile.href}
+              className="rounded-card transition-[box-shadow,transform] duration-140 ease-out hover:-translate-y-px hover:shadow-pop"
+            >
               {body}
             </Link>
           ) : (
@@ -487,13 +542,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             }
           />
           {data.appts.length === 0 ? (
-            <div className="p-5">
-              <EmptyState
-                icon={<CalendarDays />}
-                title={t.dashboard.noAppointmentsToday}
-                body={t.dashboard.emptyDay}
-              />
-            </div>
+            <EmptyState
+              bare
+              icon={<CalendarDays />}
+              title={t.dashboard.noAppointmentsToday}
+              body={t.dashboard.emptyDay}
+            />
           ) : (
             <ul className="divide-y divide-line">
               {data.appts.map((ap) => (
@@ -529,26 +583,20 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           <CardHeader title={t.dashboard.pending} />
           <ul className="grid gap-1 p-3">
             {showMoney && (
-              <li>
-                <Link
-                  href={`${base}/invoices?status=unpaid`}
-                  className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm hover:bg-ink-900/4"
-                >
-                  <span>{t.dashboard.unpaidInvoices}</span>
-                  <span className="font-semibold tnum">{data.stats.unpaid}</span>
-                </Link>
-              </li>
+              <FollowUpRow
+                href={`${base}/invoices?status=unpaid`}
+                icon={ReceiptText}
+                label={t.dashboard.unpaidInvoices}
+                count={data.stats.unpaid}
+              />
             )}
             {showCalendar && (
-              <li>
-                <Link
-                  href={`${base}/calendar`}
-                  className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm hover:bg-ink-900/4"
-                >
-                  <span>{t.dashboard.unconfirmed}</span>
-                  <span className="font-semibold tnum">{data.stats.unconfirmed}</span>
-                </Link>
-              </li>
+              <FollowUpRow
+                href={`${base}/calendar`}
+                icon={CalendarClock}
+                label={t.dashboard.unconfirmed}
+                count={data.stats.unconfirmed}
+              />
             )}
           </ul>
         </Card>
@@ -672,5 +720,44 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         </Card>
       </div>
     </>
+  );
+}
+
+/**
+ * One thing waiting on somebody, and how many of it.
+ *
+ * The count is a chip so that "11 waiting" and "nothing waiting" look different
+ * at a glance — amber when there is work, quiet when there is none — rather
+ * than the same bold digit either way.
+ */
+function FollowUpRow({
+  href,
+  icon: Icon,
+  label,
+  count,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  label: string;
+  count: number;
+}) {
+  return (
+    <li>
+      <Link
+        href={href}
+        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors duration-140 ease-out hover:bg-ink-900/4"
+      >
+        <Icon className="h-4 w-4 shrink-0 text-ink-400" strokeWidth={1.75} />
+        <span className="min-w-0 flex-1">{label}</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[12px] font-semibold tnum ${
+            count > 0 ? "bg-st-pending-soft text-st-pending" : "bg-ink-900/4 text-ink-500"
+          }`}
+        >
+          {count}
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
+      </Link>
+    </li>
   );
 }

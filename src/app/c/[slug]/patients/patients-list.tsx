@@ -304,15 +304,22 @@ export function PatientsList({
           </>
         }
       />
-      <div className="mb-4 flex flex-wrap gap-2">
+      {/*
+        Two to a row on a phone. Wrapped at their natural widths the four
+        filters fell into lines of one, two and one, each a different length;
+        a grid gives them equal halves and flush edges on both sides. The grid
+        is phone-only (`max-sm:grid`) rather than `grid` undone at sm, so on a
+        desktop this row carries no grid class for a selector to mistake it by.
+      */}
+      <div className="mb-4 flex flex-wrap gap-2 max-sm:grid max-sm:grid-cols-2">
         <SearchInput
-          className="w-full sm:w-72"
+          className="w-full max-sm:col-span-2 sm:w-72"
           placeholder={t.patients.searchPlaceholder}
           value={f.q}
           onChange={(e) => apply({ ...f, q: e.target.value })}
         />
         <Select
-          className="!w-auto"
+          className="min-w-0 sm:!w-auto"
           value={f.tag}
           onChange={(e) => apply({ ...f, tag: e.target.value })}
         >
@@ -324,7 +331,7 @@ export function PatientsList({
           ))}
         </Select>
         <Select
-          className="!w-auto"
+          className="min-w-0 sm:!w-auto"
           value={f.source}
           onChange={(e) => apply({ ...f, source: e.target.value })}
         >
@@ -336,7 +343,7 @@ export function PatientsList({
           ))}
         </Select>
         <Select
-          className="!w-auto"
+          className="min-w-0 sm:!w-auto"
           value={f.visit}
           onChange={(e) => apply({ ...f, visit: e.target.value })}
         >
@@ -351,7 +358,7 @@ export function PatientsList({
           list is the list.
         */}
         <Select
-          className="!w-auto"
+          className="min-w-0 sm:!w-auto"
           value={f.optedOut}
           onChange={(e) => apply({ ...f, optedOut: e.target.value })}
         >

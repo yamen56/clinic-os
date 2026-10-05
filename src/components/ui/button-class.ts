@@ -26,7 +26,9 @@ export type Size = "sm" | "md" | "lg" | "icon" | "iconMd";
 */
 const variants: Record<Variant, string> = {
   primary: "bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-700",
-  outline: "border border-line bg-transparent text-ink-900 hover:bg-brand-100",
+  /* White, not transparent: on the tinted canvas a see-through outline button
+     took the page's grey and read as disabled. Inside a card nothing changes. */
+  outline: "border border-line bg-surface text-ink-900 hover:bg-brand-50 hover:border-line-strong",
   ghost: "text-ink-700 hover:bg-sunken hover:text-ink-900",
   danger: "bg-danger text-white hover:bg-danger-hover",
   soft: "bg-brand-100 text-brand-700 hover:bg-brand-200",

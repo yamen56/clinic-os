@@ -22,16 +22,23 @@ export function EmptyState({
   title,
   body,
   action,
+  bare,
 }: {
   icon?: React.ReactNode;
   title: string;
   body?: string;
   action?: React.ReactNode;
+  /** Inside a card already: no box of its own, so it is not a card in a card. */
+  bare?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-card border border-line bg-surface px-6 py-14 text-center">
+    <div
+      className={`flex flex-col items-center justify-center gap-3 text-center ${
+        bare ? "px-6 py-10" : "rounded-card border border-line bg-surface px-6 py-14 shadow-card"
+      }`}
+    >
       {icon && (
-        <div className="grid h-16 w-16 place-items-center rounded-card bg-sunken text-brand-600 [&>svg]:h-8 [&>svg]:w-8">
+        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-500 ring-1 ring-brand-100 [&>svg]:h-7 [&>svg]:w-7">
           {icon}
         </div>
       )}

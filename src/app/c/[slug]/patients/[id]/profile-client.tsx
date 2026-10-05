@@ -71,6 +71,7 @@ import {
   Pill,
   ShieldCheck,
   ShieldAlert,
+  ExternalLink,
 } from "lucide-react";
 
 export type NoteRow = {
@@ -499,18 +500,23 @@ export function PatientProfile(props: {
           {/* The patient's own WhatsApp, for a call or a look — not the way to
               send, which is the button beside it. */}
           {waLink && (
-            <a href={waLink} target="_blank" rel="noreferrer">
-              <Button variant="outline" size="sm" className={HEADER_ACTION}>
-                {t.patients.whatsappOpen}
-              </Button>
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonClass({ variant: "outline", size: "sm", className: HEADER_ACTION })}
+            >
+              <ExternalLink className="h-4 w-4" />
+              {t.patients.whatsappOpen}
             </a>
           )}
           {p.phone_e164 && (
-            <a href={`tel:${p.phone_e164}`}>
-              <Button variant="outline" size="sm" className={HEADER_ACTION}>
-                <PhoneIcon className="h-4 w-4" />
-                {t.patients.call}
-              </Button>
+            <a
+              href={`tel:${p.phone_e164}`}
+              className={buttonClass({ variant: "outline", size: "sm", className: HEADER_ACTION })}
+            >
+              <PhoneIcon className="h-4 w-4" />
+              {t.patients.call}
             </a>
           )}
           {caps.calendar && (

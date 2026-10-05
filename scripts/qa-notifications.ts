@@ -700,17 +700,18 @@ async function main() {
       !!(await until(async () => (await bell.getAttribute("data-unread")) === "0", 8000))
     );
 
-    // On a phone the notifications are in the More sheet: the sheet's button carries the news.
+    // On a phone the bell sits in the top bar, on every screen: its label carries the count.
     const phone = await login(`qa-reception-${tag}@test.local`, { width: 390, height: 844 });
     await phone.goto(`${BASE}/c/${slug}/patients`);
     await phone.waitForLoadState("networkidle");
     await workerSystem((c) => notifyUser(c, rec, { clinicId: clinic.id, kind: "booking", title: `phone ${tag}` }));
-    const more = phone.locator("nav button[aria-expanded]");
+    const phoneBell = phone.locator(`header a[href="/c/${slug}/notifications"]`);
     check(
-      "on a phone the More button says there is something unread",
-      !!(await until(async () => ((await more.getAttribute("aria-label")) ?? "").includes("(1)"), 8000)),
-      (await more.getAttribute("aria-label")) ?? "none"
+      "on a phone the top bar's bell says there is something unread",
+      !!(await until(async () => ((await phoneBell.getAttribute("aria-label")) ?? "").includes("(1)"), 8000)),
+      (await phoneBell.getAttribute("aria-label")) ?? "none"
     );
+    check("and it is on screen, not folded into a menu", await phoneBell.isVisible());
 
     // The owner's side: templates for each role on the team-alerts tab.
     const op = await login(`qa-owner-${tag}@test.local`);

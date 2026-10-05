@@ -272,17 +272,23 @@ export function InvoiceDetailClient({
               <UserRound className="h-4 w-4" />
               {t.conversations.openPatient}
             </Link>
-            <a href={`/inv/${inv.public_token}`} target="_blank" rel="noreferrer">
-              <Button variant="outline" size="sm">
-                <ExternalLink className="h-4 w-4" />
-                {t.invoices.viewPublic}
-              </Button>
+            <a
+              href={`/inv/${inv.public_token}`}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonClass({ variant: "outline", size: "sm" })}
+            >
+              <ExternalLink className="h-4 w-4" />
+              {t.invoices.viewPublic}
             </a>
-            <a href={`/api/c/${slug}/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer">
-              <Button variant="outline" size="sm">
-                <FileDown className="h-4 w-4" />
-                {t.invoices.downloadPdf}
-              </Button>
+            <a
+              href={`/api/c/${slug}/invoices/${inv.id}/pdf`}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonClass({ variant: "outline", size: "sm" })}
+            >
+              <FileDown className="h-4 w-4" />
+              {t.invoices.downloadPdf}
             </a>
             {/*
               Sending stays available once the invoice is paid. A settled invoice
@@ -428,9 +434,20 @@ export function InvoiceDetailClient({
               <tbody>
                 {items.map((it, i) => (
                   <tr key={i} className="border-b border-line last:border-0">
-                    <td className="px-5 py-2.5">{it.description}</td>
-                    <td className="w-16 px-2 py-2.5 text-center tnum">{Number(it.qty)}</td>
-                    <td className="w-28 px-2 py-2.5 text-end tnum">
+                    {/*
+                      On a phone, quantity and unit price ride under the
+                      description instead of taking two columns of their own:
+                      five columns in 358px broke every amount in half, "40.00"
+                      on one line and "JOD" on the next.
+                    */}
+                    <td className="px-5 py-2.5">
+                      {it.description}
+                      <span className="mt-0.5 block text-[12px] text-ink-500 tnum sm:hidden">
+                        {Number(it.qty)} × {fmtMoney(Number(it.unit_price), inv.currency, locale)}
+                      </span>
+                    </td>
+                    <td className="hidden w-16 px-2 py-2.5 text-center tnum sm:table-cell">{Number(it.qty)}</td>
+                    <td className="hidden w-28 whitespace-nowrap px-2 py-2.5 text-end tnum sm:table-cell">
                       {fmtMoney(Number(it.unit_price), inv.currency, locale)}
                     </td>
                     {/* Only says something when there is something to say — a line
@@ -444,7 +461,7 @@ export function InvoiceDetailClient({
                           ? t.invoices.taxCategories[it.tax_category as "S" | "Z" | "E" | "O"]
                           : ""}
                     </td>
-                    <td className="w-32 px-5 py-2.5 text-end font-medium tnum">
+                    <td className="w-32 whitespace-nowrap px-5 py-2.5 text-end font-medium tnum">
                       {fmtMoney(
                         Number(it.amount) - Number(it.discount_amount) + Number(it.tax_amount),
                         inv.currency,

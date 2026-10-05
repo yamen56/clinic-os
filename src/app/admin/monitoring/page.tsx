@@ -434,7 +434,7 @@ export default async function MonitoringPage() {
                       className={`font-medium ${urgent ? "text-danger" : "text-ink-700"}`}
                     >
                       {!urgent && (
-                        <span className="mr-1.5 rounded bg-ink-100 px-1.5 py-0.5 text-[11px] font-normal text-ink-500">
+                        <span className="mr-1.5 rounded bg-sunken px-1.5 py-0.5 text-[11px] font-normal text-ink-500">
                           not emailed
                         </span>
                       )}

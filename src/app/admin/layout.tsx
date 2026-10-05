@@ -10,7 +10,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const s = await guardAdmin();
   const t = await getDict();
   return (
-    <div className="min-h-dvh bg-paper">
+    <div className="min-h-dvh bg-canvas">
       <header className="sticky top-0 z-40 border-b border-line bg-surface/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
           <div className="flex items-center gap-6">

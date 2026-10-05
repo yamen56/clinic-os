@@ -686,7 +686,7 @@ async function main() {
       { dir: "in", kind: "patient", body: "مرحبا، بدي أحجز موعد تنظيف أسنان" },
       { dir: "out", kind: "staff", body: "أهلاً وسهلاً! متوفر عندنا يوم الأحد ١١ صباحاً أو الاثنين ٢ ظهراً. أي وقت يناسبك؟" },
       { dir: "in", kind: "patient", body: "الأحد ١١ تمام" },
-      { dir: "out", kind: "automation", body: "تم تأكيد موعدك في ${P.nameAr} 🦷\n📅 الأحد\n🕐 ١١:٠٠ ص\nتنظيف وتلميع" },
+      { dir: "out", kind: "automation", body: `تم تأكيد موعدك في ${P.nameAr} 🦷\n📅 الأحد\n🕐 ١١:٠٠ ص\nتنظيف وتلميع` },
     ]],
     [1, [
       { dir: "in", kind: "patient", body: "كم سعر التبييض؟" },
@@ -699,7 +699,7 @@ async function main() {
       { dir: "out", kind: "staff", body: "أهلاً، معك هبة من العيادة. بنقدر نستقبلك اليوم الساعة ٤. بتقدر تجي؟" },
     ]],
     [3, [
-      { dir: "out", kind: "automation", body: "تذكير بموعدك غداً في ${P.nameAr} 🦷\n🕐 ١٠:٣٠ ص\nمراجعة تقويم" },
+      { dir: "out", kind: "automation", body: `تذكير بموعدك غداً في ${P.nameAr} 🦷\n🕐 ١٠:٣٠ ص\nمراجعة تقويم` },
       { dir: "in", kind: "patient", body: "تمام، بكون موجود" },
     ]],
     [4, [

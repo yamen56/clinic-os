@@ -71,9 +71,9 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 md:mb-6">
       <div className="min-w-0">
-        <h1 className="font-display text-2xl font-bold text-ink-900">{title}</h1>
+        <h1 className="font-display text-[22px] font-bold text-ink-900 md:text-2xl">{title}</h1>
         {sub && <p className="mt-1 text-sm text-ink-500">{sub}</p>}
       </div>
       {/*
@@ -83,8 +83,19 @@ export function PageHeader({
         document page reported itself 761px wide on a 390px screen, which is not
         a header that looks slightly wrong but a whole page that scrolls
         sideways. The header above has always wrapped; this never did.
+
+        On a phone the row also takes the full width and each button grows
+        into it. Wrapped at their natural widths, four buttons fell into rows of
+        three and one with a ragged edge; grown, every row is flush, and the
+        lone primary action on the last line becomes a full-width target. Only
+        buttons and links grow: a status chip or a segmented control stretched
+        across the screen stops reading as what it is.
       */}
-      {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
+      {action && (
+        <div className="flex w-full flex-wrap items-center gap-2 max-sm:[&>a]:grow max-sm:[&>button]:grow sm:w-auto">
+          {action}
+        </div>
+      )}
     </div>
   );
 }

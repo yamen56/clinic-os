@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { fmtDateOnly, fmtMoney, monthLabel } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
@@ -266,11 +267,13 @@ export function ExpensesClient({
                 <ChevronRight className="h-4 w-4 rtl:rotate-180" />
               </button>
             </div>
-            <a href={`/api/c/${slug}/expenses/export?from=${monthFrom}&to=${monthTo}`} download>
-              <Button variant="outline" size="sm">
-                <Download className="h-4 w-4" />
-                {t.invoices.exportCsv}
-              </Button>
+            <a
+              href={`/api/c/${slug}/expenses/export?from=${monthFrom}&to=${monthTo}`}
+              download
+              className={buttonClass({ variant: "outline", size: "sm" })}
+            >
+              <Download className="h-4 w-4" />
+              {t.invoices.exportCsv}
             </a>
             <Button size="sm" onClick={() => setDraft(emptyDraft())}>
               <Plus className="h-4 w-4" />
@@ -654,7 +657,7 @@ export function ExpensesClient({
                         router.refresh();
                       }}
                     />
-                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-[12px] font-medium text-ink-600 hover:border-brand-400">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-[12px] font-medium text-ink-700 hover:border-brand-400">
                       <Paperclip className="h-3.5 w-3.5" />
                       {uploading
                         ? t.common.saving

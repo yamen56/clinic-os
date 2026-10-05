@@ -81,6 +81,11 @@ export function fmtDateOnly(d: string | Date, locale: string): string {
   return dt.setLocale(numLocale(locale)).toFormat("d LLL yyyy");
 }
 
+/** Today in the clinic, spelled out — "Monday 5 October" — for a page that is about today. */
+export function fmtLongToday(tz: string, locale: string): string {
+  return clinicNow(tz).setLocale(numLocale(locale)).toFormat("cccc d LLLL");
+}
+
 export function fmtDateTime(iso: string | Date, tz: string, locale: string): string {
   return DateTime.fromJSDate(new Date(iso)).setZone(tz).setLocale(numLocale(locale)).toFormat("d LLL · h:mm a");
 }

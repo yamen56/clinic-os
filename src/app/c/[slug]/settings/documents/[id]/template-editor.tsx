@@ -321,8 +321,9 @@ export function TemplateEditor({
                 href={`/api/c/${slug}/documents/template-pdf?path=${encodeURIComponent(pdfPath)}`}
                 target="_blank"
                 rel="noreferrer"
+                className={buttonClass({ variant: "outline", size: "sm" })}
               >
-                <Button variant="outline" size="sm">{t.docTemplates.openPdf}</Button>
+                {t.docTemplates.openPdf}
               </a>
             )}
           </div>

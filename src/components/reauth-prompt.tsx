@@ -90,7 +90,7 @@ export function ReauthPrompt({
         </>
       }
     >
-      <p className="mb-3 text-[13px] leading-relaxed text-ink-600">{body ?? t.auth.reauthBody}</p>
+      <p className="mb-3 text-[13px] leading-relaxed text-ink-700">{body ?? t.auth.reauthBody}</p>
       <Field label={t.auth.reauthPassword}>
         <Input
           type="password"

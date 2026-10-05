@@ -279,7 +279,7 @@ export function InboxClient({
   const cv = thread?.conversation;
 
   return (
-    <div className="flex h-[calc(100dvh-8.5rem)] overflow-hidden rounded-card border border-line bg-surface shadow-card md:h-[calc(100dvh-5rem)]">
+    <div className="flex h-[calc(100dvh_-_11.5rem_-_env(safe-area-inset-top))] overflow-hidden rounded-card border border-line bg-surface shadow-card md:h-[calc(100dvh-5rem)]">
       {/* ------ List pane ------ */}
       <div className={`flex w-full flex-col border-e border-line lg:w-[17rem] xl:w-80 ${openId ? "hidden lg:flex" : ""}`}>
         <div className="border-b border-line p-3">

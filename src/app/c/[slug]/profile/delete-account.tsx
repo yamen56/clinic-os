@@ -78,13 +78,13 @@ export function DeleteAccount({
       <Modal open={open} onClose={close} title={td.title}>
         <div className="grid gap-4">
           {isOwner ? (
-            <div className="flex items-start gap-2.5 rounded-ctl bg-sunken px-3.5 py-3 text-[13px] leading-relaxed text-ink-600">
+            <div className="flex items-start gap-2.5 rounded-ctl bg-sunken px-3.5 py-3 text-[13px] leading-relaxed text-ink-700">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
               <span className="min-w-0">{td.ownerBlocked}</span>
             </div>
           ) : (
             <>
-              <p className="text-[13px] leading-relaxed text-ink-600">{td.body}</p>
+              <p className="text-[13px] leading-relaxed text-ink-700">{td.body}</p>
               {/*
                 Said plainly, because it is the part people are surprised by
                 later: the notes stay. They are the patient's record and have

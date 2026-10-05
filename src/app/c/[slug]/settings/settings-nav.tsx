@@ -65,7 +65,7 @@ export function SettingsNav({
               onClick={() => setPressed(i.href)}
               aria-current={active ? "page" : undefined}
               className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-140 ease-out ${
-                active ? "bg-brand-50 text-brand-800" : "text-ink-700 hover:bg-ink-900/4"
+                active ? "bg-surface text-ink-900 shadow-card" : "text-ink-700 hover:bg-ink-900/4"
               }`}
             >
               {i.label}

@@ -30,7 +30,7 @@ import {
   Bell,
   PenTool,
   UserRound,
-  ChevronLeft,
+  ChevronRight,
   LogOut,
   ShieldAlert,
   X,
@@ -64,6 +64,9 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   aiAgent: Sparkles,
   settings: Settings,
 };
+
+/** A count as a badge shows it: three characters at most. */
+const fmtCount = (n: number) => (n > 99 ? "99+" : String(n));
 
 export function Shell({
   clinic,
@@ -116,7 +119,6 @@ export function Shell({
   const [moreOpen, setMoreOpen] = useState(false);
   const [hiddenAnnouncements, setHiddenAnnouncements] = useState<string[]>([]);
   const live = useLiveNotifications(clinic.slug, notifications);
-  const notifBadge = live.unread > 99 ? "99+" : String(live.unread);
 
   const base = `/c/${clinic.slug}`;
 
@@ -181,6 +183,12 @@ export function Shell({
   const visible = items.filter((i) => i.show);
   const mobileMain = visible.slice(0, 4);
   const mobileMore = visible.slice(4);
+  /*
+    Something folded into the sheet wants attention — an unread chat, a
+    document out for signature. Without this a receptionist whose inbox sits
+    fifth had no way to know a patient had written until she opened the sheet.
+  */
+  const moreHasBadge = mobileMore.some((i) => !!i.badge);
 
   /*
     Derived from the section, not from the link. Finance points wherever this
@@ -201,9 +209,13 @@ export function Shell({
   useEffect(() => setMoreOpen(false), [pathname]);
 
   const clinicDisplay = locale === "ar" ? clinic.nameAr || clinic.name : clinic.name;
+  const logoSrc = clinicLogoUrl(clinic.slug, clinic.logoPath);
+  const photoSrc = hasPhoto && memberId ? `/api/c/${clinic.slug}/staff/${memberId}/photo` : null;
+  const roleLabel = isOwner ? t.staff.owner : t.staff.roles[role];
+  const bellLabel = live.unread ? `${t.nav.notifications} (${live.unread})` : t.nav.notifications;
 
   return (
-    <div className="min-h-dvh bg-paper">
+    <div className="min-h-dvh bg-canvas">
       {/* Desktop sidebar — night surface, the one dark region of the app chrome */}
       <aside className="fixed inset-y-0 start-0 z-40 hidden w-[248px] flex-col border-e border-white/6 bg-night md:flex">
         <div className="flex h-[88px] items-center justify-center border-b border-white/6">
@@ -213,13 +225,7 @@ export function Shell({
           {/* Their own logo once one is uploaded. The initials stay underneath
               rather than being swapped out, so a logo that fails to load leaves
               a marked circle rather than a hole. */}
-          <Avatar
-            name={clinic.name}
-            size={30}
-            color={clinic.brandColor}
-            src={clinicLogoUrl(clinic.slug, clinic.logoPath)}
-            fit="contain"
-          />
+          <Avatar name={clinic.name} size={30} color={clinic.brandColor} src={logoSrc} fit="contain" />
           <div className="min-w-0">
             <div className="truncate text-[13px] font-semibold leading-tight text-white">
               {clinicDisplay}
@@ -253,7 +259,7 @@ export function Shell({
                 <span className="flex-1">{t.nav[key]}</span>
                 {!!badge && (
                   <span className="rounded-full bg-white/12 px-1.5 py-0.5 text-[11px] font-semibold text-white tnum">
-                    {badge > 99 ? "99+" : badge}
+                    {fmtCount(badge)}
                   </span>
                 )}
               </Link>
@@ -269,17 +275,10 @@ export function Shell({
             shell either one is written.
           */}
           <div className="flex items-center gap-2.5 px-1">
-            <Avatar
-              name={userName}
-              size={30}
-              color="rgb(255 255 255 / 0.14)"
-              src={hasPhoto && memberId ? `/api/c/${clinic.slug}/staff/${memberId}/photo` : null}
-            />
+            <Avatar name={userName} size={30} color="rgb(255 255 255 / 0.14)" src={photoSrc} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] font-medium text-white">{userName}</div>
-              <div className="truncate text-[11px] text-white/40">
-                {isOwner ? t.staff.owner : t.staff.roles[role]}
-              </div>
+              <div className="truncate text-[11px] text-white/40">{roleLabel}</div>
             </div>
           </div>
           <div className="mt-2 space-y-1 px-1">
@@ -304,16 +303,14 @@ export function Shell({
                 className={`relative rounded-ctl p-1.5 transition-colors hover:bg-white/5 hover:text-white ${
                   live.unread ? "text-white" : "text-white/50"
                 }`}
-                aria-label={
-                  live.unread ? `${t.nav.notifications} (${live.unread})` : t.nav.notifications
-                }
+                aria-label={bellLabel}
                 title={t.nav.notifications}
                 data-unread={live.unread}
               >
                 <Bell className="h-4.5 w-4.5" strokeWidth={1.75} />
                 {live.unread > 0 && (
                   <span className="absolute -end-1 -top-1 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-4 text-white tnum">
-                    {notifBadge}
+                    {fmtCount(live.unread)}
                   </span>
                 )}
               </Link>
@@ -331,34 +328,86 @@ export function Shell({
         </div>
       </aside>
 
-      {/*
-        Content. The top inset is zero in a browser tab and only becomes real
-        once the app is installed to a home screen, where the page runs behind
-        the status bar and the first line of every screen would otherwise sit
-        under the clock.
-      */}
-      <div className="pt-[env(safe-area-inset-top)] md:ms-[248px] md:pt-0">
-        {isImpersonating && (
-          <div className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-danger px-4 py-2 text-center text-[13px] font-medium text-white">
-            <ShieldAlert className="h-4 w-4 shrink-0" />
-            {t.admin.impersonating}
-            <form action={exitImpersonationAction}>
-              <button className="underline underline-offset-2 hover:opacity-80">
-                {t.admin.exitImpersonation}
-              </button>
-            </form>
-          </div>
-        )}
+      <div className="md:ms-[248px]">
+        {/*
+          The top of the screen: on a phone the app bar, on every size the
+          impersonation warning.
+
+          One sticky block rather than two sticky siblings — both pinned to the
+          top, the second slid under the first as soon as the page scrolled.
+
+          The status-bar inset lives here too. It is zero in a browser tab and
+          only becomes real once the app is installed to a home screen, where
+          the page runs behind the status bar and the first line of every
+          screen would otherwise sit under the clock.
+        */}
+        <div className="sticky top-0 z-30 pt-[env(safe-area-inset-top)] max-md:bg-surface/90 max-md:backdrop-blur-md md:pt-0">
+          {isImpersonating && (
+            <div className="flex items-center justify-center gap-2 bg-danger px-4 py-2 text-center text-[13px] font-medium text-white">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              {t.admin.impersonating}
+              <form action={exitImpersonationAction}>
+                <button className="underline underline-offset-2 hover:opacity-80">
+                  {t.admin.exitImpersonation}
+                </button>
+              </form>
+            </div>
+          )}
+          {/*
+            The phone had no top bar at all: the screen opened on the page
+            title, with nothing saying which clinic this was, and the bell lived
+            inside the More sheet — an unread notification was a red dot on a
+            button labelled "More". The clinic, the bell and the account are the
+            three things every screen needs, so they get the one strip that is
+            always there.
+
+            A <header>, not a <nav>: the bottom bar is the phone's navigation,
+            and the suites that measure it find it as `nav.fixed`.
+          */}
+          <header className="flex h-14 items-center gap-1 border-b border-line px-4 md:hidden">
+            <Link
+              href={visible[0]?.href ?? `${base}/profile`}
+              className="me-auto flex min-w-0 touch-manipulation items-center gap-2.5"
+            >
+              <Avatar name={clinic.name} size={32} color={clinic.brandColor} src={logoSrc} fit="contain" />
+              <span className="font-display truncate text-[15px] font-bold text-ink-900">
+                {clinicDisplay}
+              </span>
+            </Link>
+            <Link
+              href={`${base}/notifications`}
+              aria-label={bellLabel}
+              className={`relative grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full transition-colors duration-140 ease-out active:bg-sunken ${
+                live.unread ? "text-ink-900" : "text-ink-500"
+              }`}
+            >
+              <Bell className="h-5 w-5" strokeWidth={1.75} />
+              {live.unread > 0 && (
+                <span className="absolute end-0.5 top-0.5 min-w-[18px] rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-[18px] text-white ring-2 ring-surface tnum">
+                  {fmtCount(live.unread)}
+                </span>
+              )}
+            </Link>
+            <Link
+              href={`${base}/profile`}
+              aria-label={t.profile.title}
+              className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full"
+            >
+              <Avatar name={userName} size={30} src={photoSrc} />
+            </Link>
+          </header>
+        </div>
         {announcements
           .filter((a) => !hiddenAnnouncements.includes(a.id))
           .map((a) => (
             <div
               key={a.id}
-              className="flex items-start justify-between gap-3 border-b border-line bg-brand-100 px-4 py-2.5 text-[13px] text-brand-800"
+              className="flex items-start gap-3 border-b border-brand-100 bg-brand-50 px-4 py-2.5 text-[13px] text-ink-900 md:px-8"
             >
-              <div>
+              <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" strokeWidth={1.75} />
+              <div className="min-w-0 flex-1">
                 <span className="font-semibold">{a.title}</span>
-                {a.body && <span className="ms-2">{a.body}</span>}
+                {a.body && <span className="ms-2 text-ink-700">{a.body}</span>}
               </div>
               <button
                 onClick={() => {
@@ -370,13 +419,13 @@ export function Shell({
                   }).catch(() => {});
                 }}
                 aria-label={t.common.close}
-                className="mt-0.5 shrink-0 text-brand-700 hover:text-brand-800"
+                className="-m-1 shrink-0 rounded-full p-1 text-ink-500 transition-colors hover:bg-brand-100 hover:text-ink-900"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
           ))}
-        <main className="mx-auto max-w-6xl px-4 py-6 pb-24 md:px-8 md:pb-10">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-6">{children}</main>
       </div>
 
       <NotificationPopups items={live.popups} onDismiss={live.dismiss} />
@@ -390,13 +439,7 @@ export function Shell({
           className="fixed inset-0 z-30 bg-night/25 animate-fade-in md:hidden"
         />
       )}
-      {/*
-        The horizontal insets matter in landscape on a notched phone, where the
-        cutout eats into the row and would otherwise sit on top of the first
-        tab. They are physical (`pl`/`pr`), not logical: the notch is on the
-        same side of the handset whichever way the text runs.
-      */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 md:hidden">
         {/*
           The sheet is rendered before the tab row deliberately. The bar is
           anchored to the bottom edge, so markup placed after the tabs grows
@@ -404,64 +447,59 @@ export function Shell({
           them it rises above the bar, which is where a menu opened from the
           bottom of the screen is expected to come from.
 
-          72dvh clears the full owner menu — nine entries plus the footer come
-          to ~440px, which overflowed a 62dvh cap on an ordinary handset and
-          left the language and sign-out row sliced in half against the tab bar.
-          The scroll stays for the short phones where it genuinely cannot fit.
+          The sections are tiles, four to a row, rather than a list. As a list
+          the owner's sheet was taller than an ordinary handset could show and
+          its last row — language and sign-out — sat half-cut against the tab
+          bar. The scroll stays for the short phones where it genuinely cannot
+          fit.
         */}
         {moreOpen && (
-          <div className="max-h-[72dvh] overflow-y-auto border-b border-line bg-surface px-2 py-2 animate-fade-up">
-            {mobileMore.map(({ key, href, badge }) => {
-              const Icon = icons[key];
-              return (
-                <Link
-                  key={key}
-                  href={href}
-                  onClick={() => setMoreOpen(false)}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
-                >
-                  <Icon className="h-[18px] w-[18px] shrink-0 text-ink-400" />
-                  <span className="flex-1">{t.nav[key]}</span>
-                  {!!badge && (
-                    <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 tnum">
-                      {badge > 99 ? "99+" : badge}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-            {/* The account, first and unmistakable: on a phone this sheet is
-                the only route to it. */}
+          <div className="max-h-[72dvh] overflow-y-auto rounded-t-[22px] border-t border-line bg-surface px-3 pb-2 pt-2 shadow-modal animate-fade-up">
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-ink-300" aria-hidden />
+            {mobileMore.length > 0 && (
+              <div className="mb-2 grid grid-cols-3 gap-1 min-[360px]:grid-cols-4">
+                {mobileMore.map(({ key, href, badge }) => {
+                  const Icon = icons[key];
+                  const active = isActive({ key, href });
+                  return (
+                    <Link
+                      key={key}
+                      href={href}
+                      onClick={() => setMoreOpen(false)}
+                      aria-current={active ? "page" : undefined}
+                      className="flex min-w-0 touch-manipulation flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center text-[11.5px] font-medium leading-tight text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
+                    >
+                      <span
+                        className={`relative grid h-11 w-11 place-items-center rounded-2xl ${
+                          active ? "bg-brand-100 text-brand-700" : "bg-sunken text-ink-700"
+                        }`}
+                      >
+                        <Icon className="h-5 w-5" strokeWidth={1.75} />
+                        {!!badge && (
+                          <span className="absolute -end-1.5 -top-1.5 min-w-[18px] rounded-full bg-brand-600 px-1 text-center text-[10px] font-semibold leading-[18px] text-white ring-2 ring-surface tnum">
+                            {fmtCount(badge)}
+                          </span>
+                        )}
+                      </span>
+                      <span className="line-clamp-2 max-w-full [overflow-wrap:anywhere]">{t.nav[key]}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+            {/* The account, first and unmistakable among the rows: the top bar's
+                avatar opens the same page, but here it is spelled out. */}
             <Link
               href={`${base}/profile`}
               onClick={() => setMoreOpen(false)}
-              className="mb-1 flex touch-manipulation items-center gap-3 rounded-lg border border-line px-3 py-2.5 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
+              className="mb-1 flex touch-manipulation items-center gap-3 rounded-xl border border-line px-3 py-2.5 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
             >
-              <Avatar
-                name={userName}
-                size={34}
-                src={hasPhoto && memberId ? `/api/c/${clinic.slug}/staff/${memberId}/photo` : null}
-              />
+              <Avatar name={userName} size={34} src={photoSrc} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{userName}</span>
-                <span className="block text-[12px] text-ink-500">
-                  {isOwner ? t.staff.owner : t.staff.roles[role]}
-                </span>
+                <span className="block text-[12px] text-ink-500">{roleLabel}</span>
               </span>
-              <ChevronLeft className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
-            </Link>
-            <Link
-              href={`${base}/notifications`}
-              onClick={() => setMoreOpen(false)}
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
-            >
-              <Bell className="h-[18px] w-[18px] shrink-0 text-ink-400" />
-              <span className="flex-1">{t.nav.notifications}</span>
-              {live.unread > 0 && (
-                <span className="rounded-full bg-danger px-1.5 py-0.5 text-[11px] font-semibold text-white tnum">
-                  {notifBadge}
-                </span>
-              )}
+              <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
             </Link>
             <Link
               href={`${base}/signature`}
@@ -482,7 +520,17 @@ export function Shell({
             </div>
           </div>
         )}
-        <div className="grid auto-cols-fr grid-flow-col">
+        {/*
+          The horizontal insets matter in landscape on a notched phone, where the
+          cutout eats into the row and would otherwise sit on top of the first
+          tab. They are physical (`pl`/`pr`), not logical: the notch is on the
+          same side of the handset whichever way the text runs.
+
+          The active tab is a filled pill behind its icon, not only a change of
+          ink: grey on a slightly darker grey was the whole difference before,
+          and in sunlight at a front desk the two were the same colour.
+        */}
+        <div className="grid auto-cols-fr grid-flow-col border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur">
           {mobileMain.map(({ key, href, badge }) => {
             const Icon = icons[key];
             const active = isActive({ key, href });
@@ -491,42 +539,53 @@ export function Shell({
                 key={key}
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={`relative flex touch-manipulation flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors duration-140 ease-out ${
-                  active ? "text-brand-700" : "text-ink-500"
+                className={`flex min-w-0 touch-manipulation flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] transition-colors duration-140 ease-out ${
+                  active ? "font-semibold text-ink-900" : "font-medium text-ink-500"
                 }`}
               >
-                <Icon className="h-5 w-5" />
-                {t.nav[key]}
-                {!!badge && (
-                  <span className="absolute top-1 end-[calc(50%-1.4rem)] h-2 w-2 rounded-full bg-brand-600" />
-                )}
+                <span
+                  className={`relative grid h-7 w-14 place-items-center rounded-full transition-colors duration-140 ease-out ${
+                    active ? "bg-brand-100 text-brand-700" : ""
+                  }`}
+                >
+                  <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.75} />
+                  {!!badge && (
+                    <span className="absolute -top-0.5 start-[calc(50%+0.375rem)] min-w-4 rounded-full bg-brand-600 px-1 text-center text-[10px] font-semibold leading-4 text-white ring-2 ring-surface tnum">
+                      {fmtCount(badge)}
+                    </span>
+                  )}
+                </span>
+                <span className="max-w-full truncate px-1">{t.nav[key]}</span>
               </Link>
             );
           })}
           {/*
             Always rendered, never conditional on the overflow being non-empty.
             The sheet is not only the nav's spill-over — it is the account, the
-            notifications, the signature, the language and the sign-out button,
-            and on a phone it is the only route to any of them. Gating it on
-            `mobileMore.length` meant a member with exactly four sections could
-            not sign out, which was reachable before and is ordinary now that
-            the dashboard can be taken away.
+            signature, the language and the sign-out button, and on a phone it
+            is the only route to most of them. Gating it on `mobileMore.length`
+            meant a member with exactly four sections could not sign out, which
+            was reachable before and is ordinary now that the dashboard can be
+            taken away.
           */}
           <button
             onClick={() => setMoreOpen((v) => !v)}
             aria-expanded={moreOpen}
-            aria-label={live.unread ? `${t.nav.more} — ${t.nav.notifications} (${live.unread})` : undefined}
-            className={`relative flex touch-manipulation flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors duration-140 ease-out ${
-              moreOpen ? "text-brand-700" : "text-ink-500"
+            className={`flex min-w-0 touch-manipulation flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] transition-colors duration-140 ease-out ${
+              moreOpen ? "font-semibold text-ink-900" : "font-medium text-ink-500"
             }`}
           >
-            <MoreHorizontal className="h-5 w-5" />
-            {t.nav.more}
-            {/* On a phone the notifications live in this sheet, so the sheet's
-                button is where an unread one has to show. */}
-            {live.unread > 0 && (
-              <span className="absolute top-1 end-[calc(50%-1.4rem)] h-2 w-2 rounded-full bg-danger" />
-            )}
+            <span
+              className={`relative grid h-7 w-14 place-items-center rounded-full transition-colors duration-140 ease-out ${
+                moreOpen ? "bg-brand-100 text-brand-700" : ""
+              }`}
+            >
+              <MoreHorizontal className="h-5 w-5" />
+              {moreHasBadge && !moreOpen && (
+                <span className="absolute top-0.5 start-[calc(50%+0.375rem)] h-2 w-2 rounded-full bg-brand-600 ring-2 ring-surface" />
+              )}
+            </span>
+            <span className="max-w-full truncate px-1">{t.nav.more}</span>
           </button>
         </div>
       </nav>

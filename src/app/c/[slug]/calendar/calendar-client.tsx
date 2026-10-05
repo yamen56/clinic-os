@@ -232,7 +232,7 @@ export function CalendarClient({
   };
 
   return (
-    <div className="flex h-[calc(100dvh-8.5rem)] flex-col md:h-[calc(100dvh-5.5rem)]">
+    <div className="flex h-[calc(100dvh_-_11.5rem_-_env(safe-area-inset-top))] flex-col md:h-[calc(100dvh-5.5rem)]">
       {/* Toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
@@ -247,7 +247,13 @@ export function CalendarClient({
           </Button>
         </div>
         <h2 className="min-w-40 text-[15px] font-semibold tnum">{title}</h2>
-        <div className="ms-auto flex flex-wrap items-center gap-2">
+        {/*
+          On a phone the controls are one row that scrolls sideways, with the
+          new-appointment button first. Wrapped, they stacked four rows deep
+          above a calendar that is sized to the screen — every row of filters
+          was a row of appointments nobody could see.
+        */}
+        <div className="ms-auto flex flex-wrap items-center gap-2 max-sm:w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&>*]:shrink-0">
           <div className="flex rounded-full bg-ink-900/5 p-0.5">
             {(["day", "week", "month"] as const).map((v) => (
               <button
@@ -305,7 +311,11 @@ export function CalendarClient({
           >
             {t.calendar.colorBy}: {colorBy === "service" ? t.calendar.byService : t.calendar.byDoctor}
           </button>
-          <Button size="sm" onClick={() => openCreate(anchorDt.set({ hour: 10 }), doctorFilter || null)}>
+          <Button
+            size="sm"
+            className="max-sm:order-first"
+            onClick={() => openCreate(anchorDt.set({ hour: 10 }), doctorFilter || null)}
+          >
             <Plus className="h-4 w-4" />
             {t.calendar.newAppointment}
           </Button>

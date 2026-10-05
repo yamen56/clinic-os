@@ -121,7 +121,7 @@ export const Textarea = forwardRef<
 export const Select = forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
   function Select({ className = "", children, ...rest }, ref) {
     return (
-      <select ref={ref} className={`${base} h-10 appearance-none ${className}`} {...rest}>
+      <select ref={ref} className={`${base} select-chevron h-10 appearance-none pe-8 ${className}`} {...rest}>
         {children}
       </select>
     );

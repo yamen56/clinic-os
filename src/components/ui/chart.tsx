@@ -55,10 +55,11 @@ export function BarChart({
         ) : (
           <span className="text-ink-400">
             {/* Idle state names the peak, so the chart says something without
-                being touched. */}
+                being touched. A fortnight of zeros has no peak: naming its
+                first day as one announced a high point that never happened. */}
             {(() => {
               const peak = data.reduce((a, b) => (b.value > a.value ? b : a), data[0]);
-              return peak ? `${format(peak.value)} · ${peak.sub ?? peak.label}` : "";
+              return peak && peak.value > 0 ? `${format(peak.value)} · ${peak.sub ?? peak.label}` : "";
             })()}
           </span>
         )}

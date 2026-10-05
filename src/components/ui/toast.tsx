@@ -34,7 +34,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="pointer-events-none fixed bottom-20 z-[60] flex w-full flex-col items-center gap-2 px-4 sm:bottom-6">
+      {/*
+        Clear of the phone's tab bar, which is there below `md` and grows by the
+        home-indicator inset on an iPhone: a fixed 80px left the toast sitting
+        on the tabs there, and between `sm` and `md` it dropped to 24px while
+        the bar was still on screen.
+      */}
+      <div className="pointer-events-none fixed bottom-[calc(5.5rem_+_env(safe-area-inset-bottom))] z-[60] flex w-full flex-col items-center gap-2 px-4 md:bottom-6">
         {items.map((t) => (
           <div
             key={t.id}

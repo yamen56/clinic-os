@@ -22,6 +22,15 @@
   /* Neutrals — near-black ink on daylight white */
   --color-paper: #ffffff;
   --color-surface: #ffffff;
+  /*
+    The working screens' backdrop: the staff workspace and the agency panel.
+
+    One step off white so a white card has an edge to stand on. On a white page
+    the hairline and shadow-1 were doing all of that work alone, and a dashboard
+    of six cards read as one undivided sheet. Public pages keep `paper` — a
+    patient's invoice or booking form is a single document, not a desk.
+  */
+  --color-canvas: #f5f6f8;
   --color-subtle: #f7f8fa;
   --color-sunken: #f2f5f9;
   --color-ink-900: #16181c;
@@ -403,6 +412,36 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
   bottom: 26%;
   border-bottom: 1px dashed var(--color-line-strong);
   pointer-events: none;
+}
+
+/*
+  A select says it is one.
+
+  The fields are `appearance-none` so they share the input's box, and that took
+  the browser's arrow with it: every filter in the product read as a text box
+  nobody could type in. The chevron comes back as a background so the select
+  keeps its single element — eighty call sites pass width and height classes to
+  it, and a wrapper would have needed every one of them moved.
+
+  The room for it is `pe-8` on the Select itself, not a rule here: the field's
+  own `px-3` is a utility, and utilities outrank this layer whatever the
+  specificity, so padding set here was silently undone.
+
+  In the components layer, so a utility on a particular select still wins. The
+  attribute rule is the fallback for browsers without `:dir()`; where it exists
+  it answers for the element itself, which matters for a select inside a
+  `dir="ltr"` island on an Arabic page.
+*/
+@layer components {
+  .select-chevron {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a828c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-size: 16px 16px;
+    background-position: right 0.625rem center;
+  }
+  [dir="rtl"] .select-chevron { background-position: left 0.625rem center; }
+  .select-chevron:dir(ltr) { background-position: right 0.625rem center; }
+  .select-chevron:dir(rtl) { background-position: left 0.625rem center; }
 }
 
 ::selection { background: var(--color-brand-100); color: var(--color-ink-900); }

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Field, Input, NumberInput, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
@@ -300,11 +301,14 @@ export function BookingLinksClient({
                   <Copy className="h-3.5 w-3.5" />
                   {t.common.copy}
                 </Button>
-                <a href={`/book/${l.slug}`} target="_blank" rel="noreferrer">
-                  <Button variant="outline" size="sm">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    {tb.openPage}
-                  </Button>
+                <a
+                  href={`/book/${l.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={buttonClass({ variant: "outline", size: "sm" })}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  {tb.openPage}
                 </a>
                 {canEdit && (
                   <>

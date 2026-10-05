@@ -4,7 +4,6 @@ import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtMoney, fmtDate } from "@/lib/dates";
 import { PageHeader, Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
@@ -149,11 +148,9 @@ export default async function InvoicesPage({
                 route refuses it either way now; this stops offering a button
                 that answers 403. */}
             {showTotals && (
-              <a href={`/api/c/${slug}/payments/export`} download>
-                <Button variant="outline">
-                  <Download className="h-4 w-4" />
-                  {t.invoices.exportCsv}
-                </Button>
+              <a href={`/api/c/${slug}/payments/export`} download className={buttonClass({ variant: "outline" })}>
+                <Download className="h-4 w-4" />
+                {t.invoices.exportCsv}
               </a>
             )}
             <Link href={`${base}/new`} className={buttonClass()}>
@@ -205,7 +202,7 @@ export default async function InvoicesPage({
                 key={key || "all"}
                 href={key ? `${base}?status=${key}` : base}
                 className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-140 ease-out ${
-                  on ? "bg-st-pending-soft text-st-pending" : "bg-ink-900/4 text-ink-500 hover:text-ink-700"
+                  on ? "bg-brand-600 text-white" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8 hover:text-ink-700"
                 }`}
               >
                 {label}
@@ -241,14 +238,24 @@ export default async function InvoicesPage({
                       padding come to more than a phone is wide, so the row used
                       to push the entire page sideways. The widths earn their
                       keep on a desktop, where they line the numbers up into
-                      columns; on a phone they are dropped and the row is allowed
-                      to wrap instead.
+                      columns.
+
+                      On a phone the row is two lines on a grid instead: who and
+                      how much on the first, which invoice and its state on the
+                      second. Wrapped in one line, the number and the name both
+                      lost their ends to an ellipsis — "RIMA-2026-00…" beside
+                      "خالد السع…" — and between them identified nothing.
+                      `order` puts the cells where the phone wants them and is
+                      dropped at sm, so the desktop columns are untouched.
                     */}
                     <Link
                       href={`${base}/${inv.id}`}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-sunken sm:flex-nowrap sm:gap-4 sm:px-5"
+                      className="flex items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-sunken max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4 sm:px-5"
                     >
-                      <span className="w-24 shrink-0 truncate text-sm font-semibold tnum sm:w-36" dir="ltr">
+                      <span
+                        className="order-3 min-w-0 justify-self-start truncate text-[12px] text-ink-500 tnum sm:order-none sm:w-36 sm:shrink-0 sm:text-sm sm:font-semibold sm:text-ink-900"
+                        dir="ltr"
+                      >
                         {String(inv.number)}
                       </span>
                       {/*
@@ -257,8 +264,8 @@ export default async function InvoicesPage({
                         title shortens rather than widening the row — the same
                         rule the rest of this list already follows.
                       */}
-                      <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                        <span className="truncate text-sm">{String(inv.patient_name)}</span>
+                      <span className="order-1 flex min-w-0 flex-1 items-baseline gap-2 sm:order-none">
+                        <span className="truncate text-sm font-medium sm:font-normal">{String(inv.patient_name)}</span>
                         {inv.title ? (
                           <span className="truncate text-[13px] text-ink-400">
                             {String(inv.title)}
@@ -274,7 +281,7 @@ export default async function InvoicesPage({
                         reception cannot act on — what they need to say on the
                         phone is how much is still owed.
                       */}
-                      <span className="shrink-0 text-end sm:w-32">
+                      <span className="order-2 shrink-0 text-end sm:order-none sm:w-32">
                         <span className="block text-sm font-semibold tnum">
                           {fmtMoney(partial ? paid : total, access.clinic.currency, locale)}
                         </span>
@@ -287,7 +294,7 @@ export default async function InvoicesPage({
                           </span>
                         )}
                       </span>
-                      <span className="shrink-0 text-end sm:w-28">
+                      <span className="order-4 shrink-0 text-end sm:order-none sm:w-28">
                         <Badge status={invStatus[String(inv.status)] ?? "neutral"}>
                           {(t.invoices.statuses as Record<string, string>)[String(inv.status)]}
                         </Badge>
