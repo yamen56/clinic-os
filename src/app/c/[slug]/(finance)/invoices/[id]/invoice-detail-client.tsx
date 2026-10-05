@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/dates";
 import { asTaxCategory, taxBreakdown } from "@/lib/invoices";
+import { coverState, insurerShareFor, ruleOf } from "@/lib/insurance";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
@@ -67,6 +68,10 @@ type Invoice = {
   patient_id: string;
   patient_name: string;
   patient_phone: string | null;
+  /** The patient's cover as the file has it now, and the invoice's own date — all yyyy-MM-dd. */
+  patient_insurer_id: string | null;
+  patient_cover_until: string | null;
+  issue_day: string | null;
   timezone: string;
   wa_connected: boolean;
   einvoice_status: string;
@@ -107,8 +112,8 @@ export function InvoiceDetailClient({
     tax_amount: string;
   }[];
   payments: { id: string; amount: string; method: string; reference: string; paid_at: string; recorded_by: string | null }[];
-  /** Active companies. Empty for a clinic that only takes cash. */
-  insurers: { id: string; name: string }[];
+  /** Active companies, with the clinic's terms for each. Empty for a clinic that only takes cash. */
+  insurers: { id: string; name: string; coverage_percent: string | null; coverage_cap: string | null }[];
   /** Whether this clinic files with JoFotara and has the credentials to do it. */
   filesEinvoices: boolean;
 }) {
@@ -528,10 +533,40 @@ export function InvoiceDetailClient({
           <Card className="h-fit">
             <CardHeader title={t.insurers.claim} />
             <div className="grid gap-3 p-5">
+              {/*
+                Said where the claim is made: a company asked to pay for a visit
+                after the patient's cover ran out will refuse, and the desk
+                should know that before it submits rather than when it is
+                rejected.
+              */}
+              {inv.patient_insurer_id &&
+                inv.patient_insurer_id === insurerId &&
+                inv.issue_day &&
+                coverState(inv.patient_insurer_id, inv.patient_cover_until, inv.issue_day) === "expired" && (
+                  <p className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                    {t.insurers.coverExpiredOn.replace(
+                      "{date}",
+                      fmtDate(`${inv.patient_cover_until}T12:00:00Z`, inv.timezone, locale)
+                    )}
+                  </p>
+                )}
               <Field label={t.insurers.insurer}>
                 <Select
                   value={insurerId}
-                  onChange={(e) => setInsurerId(e.target.value)}
+                  onChange={(e) => {
+                    setInsurerId(e.target.value);
+                    /*
+                      Picking a company with standing terms suggests its share,
+                      but only into an empty box: a figure somebody typed is a
+                      decision, and changing the company must not overwrite it.
+                    */
+                    const picked = insurers.find((i) => i.id === e.target.value);
+                    if (picked && !covered.trim() && !splitLocked) {
+                      const share = insurerShareFor(Number(inv.total), ruleOf(picked));
+                      if (share > 0) setCovered(String(share));
+                    }
+                  }}
                   disabled={inv.status === "void"}
                 >
                   <option value="">{t.insurers.none}</option>

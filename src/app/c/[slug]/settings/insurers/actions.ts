@@ -14,19 +14,38 @@ import { inClinic } from "@/lib/clinic-api";
 
 export async function saveInsurerAction(
   slug: string,
-  data: { id?: string; name: string; code?: string; notes?: string; active?: boolean }
+  data: {
+    id?: string;
+    name: string;
+    code?: string;
+    notes?: string;
+    active?: boolean;
+    /** The share of a bill this company pays; null for no standing rule. */
+    coveragePercent?: number | null;
+    /** The most it pays on one invoice; null for no ceiling. */
+    coverageCap?: number | null;
+  }
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "settings")) return { error: "forbidden" };
   const name = data.name.trim();
   if (!name) return { error: "name_required" };
+  const pct = data.coveragePercent ?? null;
+  const cap = data.coverageCap ?? null;
+  if (pct !== null && !(Number.isFinite(pct) && pct >= 0 && pct <= 100)) return { error: "invalid_coverage" };
+  if (cap !== null && !(Number.isFinite(cap) && cap >= 0)) return { error: "invalid_coverage" };
 
   return inClinic(access, async (c) => {
     if (data.id) {
+      /*
+        Notes are only written when sent: the edit form has no notes field, and
+        the old `notes = ''` default quietly wiped them on every rename.
+      */
       await c.query(
-        `update insurers set name = $3, code = $4, notes = $5, active = $6
+        `update insurers set name = $3, code = $4, notes = coalesce($5, notes), active = $6,
+                             coverage_percent = $7, coverage_cap = $8
           where id = $1 and clinic_id = $2`,
-        [data.id, access.clinicId, name, data.code ?? "", data.notes ?? "", data.active ?? true]
+        [data.id, access.clinicId, name, data.code ?? "", data.notes ?? null, data.active ?? true, pct, cap]
       );
       revalidatePath(`/c/${slug}/settings/insurers`);
       return { id: data.id };
@@ -34,10 +53,12 @@ export async function saveInsurerAction(
     // Re-adding a name that already exists is almost always someone not seeing
     // it in the list, so revive the existing row rather than refusing.
     const r = await c.query(
-      `insert into insurers (clinic_id, name, code, notes) values ($1, $2, $3, $4)
-       on conflict (clinic_id, name) do update set active = true, code = excluded.code
+      `insert into insurers (clinic_id, name, code, notes, coverage_percent, coverage_cap)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (clinic_id, name) do update set active = true, code = excluded.code,
+         coverage_percent = excluded.coverage_percent, coverage_cap = excluded.coverage_cap
        returning id`,
-      [access.clinicId, name, data.code ?? "", data.notes ?? ""]
+      [access.clinicId, name, data.code ?? "", data.notes ?? "", pct, cap]
     );
     revalidatePath(`/c/${slug}/settings/insurers`);
     return { id: r.rows[0].id as string };

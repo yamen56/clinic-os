@@ -42,6 +42,8 @@ import type { DocumentListRow } from "@/lib/esign/queries";
 import type { PrescriptionRow } from "@/lib/prescriptions";
 import { PrescriptionsTab } from "./prescriptions-tab";
 import { PrescriptionComposer, useComposerData, type RxDraft } from "./prescription-composer";
+import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
+import { coverState } from "@/lib/insurance";
 import {
   MessageCircle,
   Phone as PhoneIcon,
@@ -67,6 +69,8 @@ import {
   BellOff,
   Settings2,
   Pill,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 
 export type NoteRow = {
@@ -128,6 +132,8 @@ type Patient = {
   insurer_id: string | null;
   insurance_no: string;
   insurance_valid_until: string | null;
+  /** The same date as text, yyyy-MM-dd — what every comparison and input uses. */
+  cover_until: string | null;
   created_at: string;
 };
 
@@ -181,7 +187,7 @@ export function PatientProfile(props: {
   noteCategories: NoteCategoryRow[];
   files: { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string }[];
   appointments: { id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null }[];
-  invoices: { id: string; number: string; status: string; total: string; amount_paid: string; created_at: string }[];
+  invoices: ({ id: string; number: string; status: string; total: string; amount_paid: string; created_at: string } & PatientClaim)[];
   conversation: { id: string; msgs: { id: string; direction: string; sender_kind: string; body: string; msg_type: string; created_at: string }[] | null } | null;
   defs: FieldDef[];
   activity: { action: string; created_at: string; detail: Record<string, unknown>; actor: string | null }[];
@@ -215,8 +221,10 @@ export function PatientProfile(props: {
   country: CountryCode;
   /** The clinic's tag vocabulary — suggestions, and the colour each tag wears. */
   clinicTags: { name: string; color: string }[];
-  /** Active insurance companies. Empty for a clinic that only takes cash. */
-  insurers: { id: string; name: string }[];
+  /** Active insurance companies, with the clinic's terms. Empty for a clinic that only takes cash. */
+  insurers: InsurerOption[];
+  /** The clinic's today, yyyy-MM-dd — what "has this cover expired" is measured against. */
+  today: string;
 }) {
   const { slug, tz, currency, caps } = props;
   const { t, locale } = useI18n();
@@ -299,8 +307,12 @@ export function PatientProfile(props: {
     if (!d) return fallback;
     return locale === "ar" ? d.label_ar || d.label : d.label;
   };
-  // Fields backed by a real column already have their own input above.
-  const extraDefs = props.defs.filter((d) => !d.source_column);
+  // Fields backed by a real column already have their own input above, and the
+  // national number has its own place beside the date of birth.
+  const nationalIdDef = props.defs.find((d) => d.key === "patient.national_id") ?? null;
+  const extraDefs = props.defs.filter((d) => !d.source_column && d !== nationalIdDef);
+  const insurerName = props.insurers.find((i) => i.id === p.insurer_id)?.name ?? null;
+  const cover = coverState(p.insurer_id, p.cover_until, props.today);
 
   const waLink = p.phone_e164 ? `https://wa.me/${p.phone_e164.replace("+", "")}` : null;
 
@@ -403,6 +415,22 @@ export function PatientProfile(props: {
               <Badge status="neutral">
                 <BellOff className="h-3 w-3" />
                 {t.patients.automations.muted}
+              </Badge>
+            )}
+            {/*
+              Who covers them, in the header, because "is this patient insured"
+              is asked before anything else at the desk — and lapsed cover in
+              red, because finding out after the claim is the expensive way.
+            */}
+            {insurerName && (
+              <Badge status={cover === "expired" ? "danger" : cover === "expiring" ? "pending" : "brand"}>
+                {cover === "expired" || cover === "expiring" ? (
+                  <ShieldAlert className="h-3 w-3" />
+                ) : (
+                  <ShieldCheck className="h-3 w-3" />
+                )}
+                {insurerName}
+                {cover === "expired" ? ` · ${t.insurers.card.expiredShort}` : ""}
               </Badge>
             )}
             <SaveIndicator state={state} />
@@ -587,40 +615,22 @@ export function PatientProfile(props: {
                     </Select>
                   </Field>
                   {/*
-                    Who covers this person, so an invoice can split itself and
-                    reception can answer "how much do I pay today" without
-                    looking it up somewhere else. Hidden entirely until the
-                    clinic has added a company — a self-paying practice should
-                    not be asked about insurance on every file.
+                    The national number, beside the other things that identify
+                    the person rather than among the clinic's extra fields: it is
+                    what an insurer, and Hakeem, match them on. Still the clinic's
+                    own field definition — renamed or hidden in settings, it is
+                    renamed or hidden here — and saved where it always was; the
+                    server checks it (see the patient route).
                   */}
-                  {props.insurers.length > 0 && (
-                    <>
-                      <Field label={t.insurers.insurer}>
-                        <Select
-                          value={p.insurer_id ?? ""}
-                          onChange={(e) => set({ insurer_id: e.target.value || null })}
-                        >
-                          <option value="">{t.insurers.none}</option>
-                          {props.insurers.map((i) => (
-                            <option key={i.id} value={i.id}>{i.name}</option>
-                          ))}
-                        </Select>
-                      </Field>
-                      <Field label={t.insurers.policyNo}>
-                        <Input
-                          dir="ltr"
-                          defaultValue={p.insurance_no ?? ""}
-                          onChange={(e) => patch({ insurance_no: e.target.value })}
-                        />
-                      </Field>
-                      <Field label={t.insurers.validUntil}>
-                        <Input
-                          type="date"
-                          defaultValue={p.insurance_valid_until?.slice(0, 10) ?? ""}
-                          onChange={(e) => patch({ insurance_valid_until: e.target.value })}
-                        />
-                      </Field>
-                    </>
+                  {nationalIdDef && (
+                    <Field label={locale === "ar" ? nationalIdDef.label_ar || nationalIdDef.label : nationalIdDef.label}>
+                      <Input
+                        dir="ltr"
+                        inputMode="numeric"
+                        defaultValue={String(p.custom_fields?.[storageKeyOf(nationalIdDef)] ?? "")}
+                        onChange={(e) => setCustom(storageKeyOf(nationalIdDef), e.target.value)}
+                      />
+                    </Field>
                   )}
                 </div>
                 {extraDefs.length > 0 && (
@@ -700,6 +710,31 @@ export function PatientProfile(props: {
                   </>
                 )}
               </Card>
+              {/*
+                Insurance has a card of its own. Hidden entirely until the clinic
+                has added a company — a self-paying practice should not be asked
+                about insurance on every file.
+              */}
+              {props.insurers.length > 0 && (
+                <InsuranceCard
+                  slug={slug}
+                  patientId={p.id}
+                  currency={currency}
+                  today={props.today}
+                  insurerId={p.insurer_id}
+                  insuranceNo={p.insurance_no}
+                  coverUntil={p.cover_until}
+                  insurers={props.insurers}
+                  cardFiles={props.files.filter((f) => f.kind === "insurance_card")}
+                  claims={caps.invoices ? props.invoices.filter((i) => i.claim_status && i.claim_status !== "none") : null}
+                  onInsurer={(id) => set({ insurer_id: id })}
+                  onPolicy={(v) => patch({ insurance_no: v })}
+                  onValidUntil={(v) => {
+                    setP((prev) => ({ ...prev, cover_until: v || null }));
+                    patch({ insurance_valid_until: v });
+                  }}
+                />
+              )}
               <Card className="p-5">
                 <h3 className="mb-3 text-[15px] font-semibold">{t.patients.overview.summary}</h3>
                 <Textarea

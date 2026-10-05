@@ -1409,10 +1409,24 @@ month look profitable for three weeks.
 `insurers` per clinic: `name`, `code` (what reception types into the insurer's own portal —
 almost never the same string as the name), `notes`, `active`. Unique on `(clinic_id, name)`.
 
+**Terms** (migration `0065`): `coverage_percent` (what the company pays) and an optional
+`coverage_cap` (the most it pays on one invoice), set on the insurers screen. With them, a new
+invoice for an insured patient fills in `insurer_amount` itself — at creation, before the first
+payment, because the split decides what JoFotara is told and locks once filing starts. No terms,
+no change: the amount waits for a person, as before. The claim card suggests the share when a
+company with terms is picked, only into an empty box. All the arithmetic is
+[src/lib/insurance.ts](src/lib/insurance.ts), pure and shared by the server and the screens.
+
 ### On the patient
 
 `insurer_id`, `insurance_no`, `insurance_valid_until` — so the desk can see cover has lapsed
-before the visit rather than after the claim.
+before the visit rather than after the claim. The patient file gives them an **Insurance card**
+of its own (hidden for a clinic with no companies): whether cover holds *today* — active, ending
+within 30 days, or expired, measured against the clinic's own date with the column read as text
+— the company's terms, photos of the card (`patient_files.kind = 'insurance_card'`, camera on a
+phone), and this patient's claims with what the company still owes. The header carries the
+company, in red once cover has lapsed. Lapsed cover takes no share on a new invoice and says so
+on its claim card; the invoice still names the company, in case the patient renewed.
 
 ### On the invoice
 
@@ -1424,6 +1438,27 @@ before the visit rather than after the claim.
 - `claim_ref`, `claim_submitted_at`, `claim_note` carry the rest.
 - The claims worklist is "everything not settled", read straight off a partial index on
   `claim_status <> 'none'`.
+
+### The claims screen (`/c/{slug}/claims`)
+
+A tab of the money section, behind the `invoices` capability and only for a clinic with at least
+one company (`hasInsurers` on the finance viewer). Scoped like the invoice list. Loaded by
+[src/lib/claims.ts](src/lib/claims.ts), the same loader the statement uses:
+
+- **Per company**: what it owes (to submit, submitted, approved), how many were rejected, and the
+  amount aged by issue date — ≤30, 31–60, 61–90, 90+ days. Across every open claim whatever the
+  list is filtered to; a card is also the company filter.
+- **The list**, filtered by company, status (open by default) and month, each row with the
+  patient's national number and policy, and lapsed cover flagged.
+- **Bulk work** on the ticked rows: submitted (stamps `claim_submitted_at`), approved, rejected
+  (the reason kept in `claim_note`), and **paid by insurer** — which records a real payment on
+  each invoice, by transfer, for the company's share or what is left owing, with the company
+  and the transfer reference on it. The invoice settles, the patient's balance stops counting
+  the company's money, and earnings see it collected. No message goes to the patient.
+- **Monthly statement**: `/api/c/{slug}/claims/export` — the filtered claims as Excel, one row
+  per claim (patient, national number, policy, services, billing codes, total, company's and
+  patient's share, status, reference, and a totals row) plus a sheet of service lines. Audited
+  as `claims.export`.
 - Claims are still entered in the insurer's or Hakeem Claim's portal by hand. Hakeem Claim
   (EHSI's national claims hub) has APIs for clinic systems, but the spec is partner-only; the
   adapter waits on it. With JoFotara on, only the patient's share is filed (see JoFotara above).
@@ -1892,7 +1927,7 @@ Plus focused suites: `qa-access`, `qa-automation-coverage`, `qa-backup`, `qa-boo
 `qa-esign-browser`, `qa-finance`, `qa-first-message`, `qa-import-digest`, `qa-mobile`,
 `qa-mobile-width`, `qa-tablet`,
 `qa-einvoicing`, `qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`,
-`qa-national-id`.
+`qa-national-id`, `qa-insurance-desk`.
 
 `qa-mobile-width` and `qa-tablet` walk **one shared route list** (`scripts/lib-layout.ts`)
 and ask two questions of every screen: does the document scroll sideways, and does anything

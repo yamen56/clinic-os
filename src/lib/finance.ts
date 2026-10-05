@@ -15,7 +15,7 @@ import type { CapabilityMap } from "./permissions";
  * Pure, and importable from a client component: no database, no `next/headers`.
  */
 
-export type FinanceTab = "invoices" | "payments" | "earnings" | "expenses";
+export type FinanceTab = "invoices" | "payments" | "claims" | "earnings" | "expenses";
 
 export type FinanceViewer = {
   caps: CapabilityMap;
@@ -23,6 +23,12 @@ export type FinanceViewer = {
   hasEarnings: boolean;
   /** `hasFullControl(access)` — an owner, or somebody on `full` access. */
   fullControl: boolean;
+  /**
+   * The clinic deals with at least one insurance company. Claims is a tab only
+   * then: a practice that takes cash should not be shown an empty screen about
+   * insurers, any more than its patient files ask about cover.
+   */
+  hasInsurers?: boolean;
 };
 
 /**
@@ -32,7 +38,7 @@ export type FinanceViewer = {
  * must light while they are anywhere in the section, and a member whose first
  * tab is Earnings is still "in Finance" when they are on Expenses.
  */
-export const FINANCE_PREFIXES = ["/invoices", "/earnings", "/expenses"] as const;
+export const FINANCE_PREFIXES = ["/invoices", "/claims", "/earnings", "/expenses"] as const;
 
 export function financeHref(slug: string, tab: FinanceTab): string {
   const base = `/c/${slug}`;
@@ -55,6 +61,8 @@ export function financeHref(slug: string, tab: FinanceTab): string {
 export function financeTabs(v: FinanceViewer): FinanceTab[] {
   const out: FinanceTab[] = [];
   if (v.caps.invoices) out.push("invoices", "payments");
+  // Claims are invoices seen from the insurer's side, so the same door opens them.
+  if (v.caps.invoices && v.hasInsurers) out.push("claims");
   if ((v.caps.earnings && v.hasEarnings) || (v.caps["invoices.analytics"] && v.fullControl)) {
     out.push("earnings");
   }

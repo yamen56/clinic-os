@@ -19,6 +19,7 @@ import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { emitTrigger } from "@/lib/triggers";
 import { enqueueEinvoiceSubmit, requeueEinvoiceSubmit } from "@/lib/einvoice/jobs";
+import { coverHolds, insurerShareFor, ruleOf } from "@/lib/insurance";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 import { renderUrlToPdf } from "@/lib/pdf";
 import { saveFile } from "@/lib/storage";
@@ -75,11 +76,21 @@ export async function createInvoiceAction(
   const d = parsed.data;
 
   return inClinic(access, async (c) => {
+    /*
+      The patient's cover, read with the company's rule and the clinic's own
+      today in one round trip. Dates as text: see src/lib/insurance.ts.
+    */
     const patient = (
-      await c.query(`select id from patients where id = $1 and clinic_id = $2`, [
-        d.patientId,
-        access.clinicId,
-      ])
+      await c.query(
+        `select p.id, p.insurer_id, p.insurance_valid_until::text as valid_until,
+                ins.coverage_percent, ins.coverage_cap,
+                ((now() at time zone cl.timezone))::date::text as today
+           from patients p
+           join clinics cl on cl.id = p.clinic_id
+           left join insurers ins on ins.id = p.insurer_id and ins.clinic_id = p.clinic_id
+          where p.id = $1 and p.clinic_id = $2`,
+        [d.patientId, access.clinicId]
+      )
     ).rows[0];
     if (!patient) return { error: "patient_not_found" };
 
@@ -89,28 +100,42 @@ export async function createInvoiceAction(
     // The clinic's standing answer, unless the person raising it said otherwise.
     const einv = await loadEinvoiceSettings(c, access.clinicId);
     const fileEinvoice = d.fileEinvoice ?? einv.fileByDefault;
+    /*
+      What the company pays, when the clinic has told us its terms. Without a
+      rule the amount stays zero until somebody sets it — what a company covers
+      is the clinic's decision, and a rule is that decision made once instead of
+      at every visit. Lapsed cover takes nothing: the invoice still names the
+      company, so the claim can be made if the patient renewed, but the patient
+      is not told the insurer will pay when the file says it will not.
+
+      Set here, at creation, rather than later on the claim card: the insurer's
+      share decides what is filed with JoFotara for the patient, and it locks
+      once filing starts — so the moment before the first payment is the moment
+      to get it right.
+    */
+    const insurerAmount = coverHolds(patient.insurer_id, patient.valid_until, patient.today)
+      ? insurerShareFor(totals.total, ruleOf(patient))
+      : 0;
 
     const inv = await c.query(
       /*
         The insurer comes off the patient's file, so an insured patient's
         invoice already knows who to claim from and reception is not asked the
-        same question at every visit. The amount stays zero until somebody sets
-        it: what a company will actually cover is a decision, not a default.
+        same question at every visit.
       */
       `insert into invoices (clinic_id, patient_id, appointment_id, seq, number, currency,
                              subtotal, discount_amount, tax_rate, tax_amount, total, notes, created_by,
                              title, file_einvoice,
-                             issue_date, insurer_id, claim_status)
+                             issue_date, insurer_id, claim_status, insurer_amount)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
                ((now() at time zone (select timezone from clinics where id = $1)))::date,
-               (select insurer_id from patients where id = $2 and clinic_id = $1),
-               case when (select insurer_id from patients where id = $2 and clinic_id = $1) is null
-                    then 'none' else 'to_submit' end)
+               $16, case when $16::uuid is null then 'none' else 'to_submit' end, $17)
        returning id`,
       [
         access.clinicId, d.patientId, d.appointmentId ?? null, seq, number, currency,
         totals.subtotal, totals.discount, totals.taxRate, totals.taxAmount, totals.total,
         d.notes, access.session.user.id, d.title.trim(), fileEinvoice,
+        patient.insurer_id ?? null, insurerAmount,
       ]
     );
     const invoiceId = inv.rows[0].id as string;

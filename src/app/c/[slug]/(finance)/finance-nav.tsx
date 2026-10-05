@@ -32,7 +32,9 @@ export function FinanceNav({ slug, tabs }: { slug: string; tabs: FinanceTab[] })
 
   const current: FinanceTab =
     pressed ??
-    (pathname.includes("/earnings")
+    (pathname.includes("/claims")
+      ? "claims"
+      : pathname.includes("/earnings")
       ? "earnings"
       : pathname.includes("/expenses")
         ? "expenses"
@@ -43,6 +45,7 @@ export function FinanceNav({ slug, tabs }: { slug: string; tabs: FinanceTab[] })
   const label: Record<FinanceTab, string> = {
     invoices: t.nav.invoices,
     payments: t.invoices.payments,
+    claims: t.claims.tab,
     earnings: t.nav.earnings,
     expenses: t.nav.expenses,
   };

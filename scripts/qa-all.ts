@@ -25,6 +25,7 @@ const SUITES = [
   ["patients: the list as a spreadsheet", "scripts/qa-patient-excel.ts"],
   ["patients: prescriptions, written and sent on WhatsApp", "scripts/qa-prescriptions.ts"],
   ["patients: the national number an insurer matches on", "scripts/qa-national-id.ts"],
+  ["insurance: terms, lapsed cover, claims, the monthly statement", "scripts/qa-insurance-desk.ts"],
   ["adding somebody back after removing them", "scripts/qa-readd.ts"],
   ["phase 3: calendar", "scripts/qa-phase3.ts"],
   ["phase 4: public booking", "scripts/qa-phase4.ts"],

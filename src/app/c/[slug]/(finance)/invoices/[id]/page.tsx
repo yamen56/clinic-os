@@ -30,6 +30,8 @@ export default async function InvoiceDetailPage({
     const inv = (
       await c.query(
         `select i.*, p.full_name as patient_name, p.phone_e164 as patient_phone,
+                p.insurer_id as patient_insurer_id, p.insurance_valid_until::text as patient_cover_until,
+                i.issue_date::text as issue_day,
                 cl.timezone, cl.currency as clinic_currency,
                 ins.name as insurer_name,
                 orig.number as corrects_number,
@@ -64,7 +66,7 @@ export default async function InvoiceDetailPage({
     ).rows;
     const insurers = (
       await c.query(
-        `select id, name from insurers where clinic_id = $1 and active order by name`,
+        `select id, name, coverage_percent, coverage_cap from insurers where clinic_id = $1 and active order by name`,
         [access.clinicId]
       )
     ).rows;

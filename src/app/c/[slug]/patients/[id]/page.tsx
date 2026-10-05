@@ -9,6 +9,7 @@ import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { countryFromClinic } from "@/lib/phone";
 import { PATIENT_PRESCRIPTIONS_JSON } from "@/lib/prescriptions";
 import { auditView } from "@/lib/audit";
+import { DateTime } from "luxon";
 
 export default async function PatientProfilePage({
   params,
@@ -65,7 +66,9 @@ export default async function PatientProfilePage({
     */
     const row = (
       await c.query(
-        `select p.*, ${PATIENT_PRESCRIPTIONS_JSON} as __prescriptions
+        // The cover's end date as text: a `date` read through node-pg is a JS Date in
+        // the server's zone, which moves it by a day west of the clinic.
+        `select p.*, p.insurance_valid_until::text as cover_until, ${PATIENT_PRESCRIPTIONS_JSON} as __prescriptions
            from patients p where p.id = $1 and p.clinic_id = $2`,
         [id, access.clinicId]
       )
@@ -124,8 +127,10 @@ export default async function PatientProfilePage({
           : none,
         caps.invoices
           ? c.query(
-              `select i.id, i.number, i.status, i.total, i.amount_paid, i.created_at
-               from invoices i where i.patient_id = $1 and i.clinic_id = $2${invScope.sql}
+              `select i.id, i.number, i.status, i.total, i.amount_paid, i.created_at,
+                      i.insurer_amount, i.claim_status, i.issue_date::text as issue_day, ins.name as insurer_name
+               from invoices i left join insurers ins on ins.id = i.insurer_id
+               where i.patient_id = $1 and i.clinic_id = $2${invScope.sql}
                order by i.created_at desc limit 50`,
               [id, access.clinicId, ...invScope.params]
             )
@@ -182,10 +187,13 @@ export default async function PatientProfilePage({
           access.clinicId,
         ]),
         // Only companies still in use, so a list that has been tidied does not
-        // offer a defunct insurer to the next patient.
-        c.query(`select id, name from insurers where clinic_id = $1 and active order by name`, [
-          access.clinicId,
-        ]),
+        // offer a defunct insurer to the next patient — plus this patient's own,
+        // so a file whose company was retired still says who covered them.
+        c.query(
+          `select id, name, coverage_percent, coverage_cap from insurers
+            where clinic_id = $1 and (active or id = $2) order by name`,
+          [access.clinicId, p.insurer_id ?? null]
+        ),
         // The note categories this clinic defined. Inactive ones come too: a note
         // filed under a retired category still has to show which one.
         c.query(
@@ -222,6 +230,7 @@ export default async function PatientProfilePage({
     <PatientProfile
       slug={slug}
       tz={access.clinic.timezone}
+      today={DateTime.now().setZone(access.clinic.timezone).toISODate()!}
       currency={access.clinic.currency}
       balanceDue={d.balanceDue}
       patient={JSON.parse(JSON.stringify(d.patient))}

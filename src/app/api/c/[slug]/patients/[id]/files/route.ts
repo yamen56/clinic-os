@@ -41,7 +41,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         file.type || "application/octet-stream",
         sizeBytes,
         storagePath,
-        ["xray", "lab", "consent", "photo", "other"].includes(kind) ? kind : "other",
+        ["xray", "lab", "consent", "photo", "insurance_card", "other"].includes(kind) ? kind : "other",
       ]
     );
     await audit(c, {
