@@ -165,6 +165,9 @@ async function main() {
   // A doctor on custom access whose map predates prescriptions: silence.
   const doctorId = await mkUser("doctor", "د. سامي خليل");
   const doctorMember = await mkMember(doctorId, "doctor", custom({ dashboard: true, calendar: true, patients: true }));
+  // Licensed, so the sheet has something to print under the signature.
+  await db.query(`update clinic_members set license_no = 'L-48213', syndicate_no = '22917' where id = $1`, [doctorMember]);
+  await db.query(`update clinics set moh_license_no = 'MOH-7731' where id = $1`, [clinicId]);
   // The assistant who types what the doctor dictates.
   const assistantId = await mkUser("assistant", "سارة المساعدة");
   await mkMember(
@@ -384,6 +387,15 @@ async function main() {
     check("it carries the number and the diagnosis", sheetText.includes("RX-0001") && sheetText.includes("التهاب حلق"));
     check("and the medicine with its instructions", sheetText.includes("Amoxicillin 500mg") && sheetText.includes("بعد الأكل"));
     check("the doctor's signature is on it", (await sheet.locator('img[src^="data:image/png"]').count()) === 1);
+    check(
+      "with the doctor's licence and syndicate numbers, and the clinic's",
+      sheetText.includes("L-48213") && sheetText.includes("22917") && sheetText.includes("MOH-7731")
+    );
+    check(
+      "copied onto the prescription itself, so a renewal cannot rewrite it",
+      rx1?.doctor_license_no === "L-48213" && rx1?.doctor_syndicate_no === "22917",
+      `${rx1?.doctor_license_no}/${rx1?.doctor_syndicate_no}`
+    );
     check("laid out right to left", (await sheet.locator("main").getAttribute("dir")) === "rtl");
     if (SHOTS) await sheet.screenshot({ path: path.join(SHOTS, "rx-ar.png"), fullPage: true });
     await sheet.close();

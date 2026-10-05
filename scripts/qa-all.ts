@@ -24,6 +24,7 @@ const SUITES = [
   ["patients: exporting the record", "scripts/qa-patient-export.ts"],
   ["patients: the list as a spreadsheet", "scripts/qa-patient-excel.ts"],
   ["patients: prescriptions, written and sent on WhatsApp", "scripts/qa-prescriptions.ts"],
+  ["patients: the national number an insurer matches on", "scripts/qa-national-id.ts"],
   ["adding somebody back after removing them", "scripts/qa-readd.ts"],
   ["phase 3: calendar", "scripts/qa-phase3.ts"],
   ["phase 4: public booking", "scripts/qa-phase4.ts"],

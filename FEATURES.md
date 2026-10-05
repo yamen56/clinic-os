@@ -207,6 +207,16 @@ Your data is safe."), and the AI agent refuses to answer for suspended clinics.
 - **Status**: `lead` | `active` | `archived`
 - **Phone is identity**: a partial unique index on `(clinic_id, phone_e164)` for
   non-merged rows. Creating a patient with an existing number opens their file instead.
+- **National number** (الرقم الوطني, migration `0063`): still stored where the clinic's
+  `patient.national_id` field definition has always put it, `custom_fields.national_id`, so
+  the profile, e-sign merge fields, booking intake and export are untouched. `national_id` is
+  a **stored generated column** derived from it — ten digits, either numeral set, spaces and
+  dashes dropped, null for anything else — indexed (not unique) and matched exactly by patient
+  search. The patient route refuses an all-digit value that is not ten digits
+  (`invalid_national_id`) and one already on another file (`national_id_taken`, naming it);
+  a value with letters in it (a passport, a residence card) is kept as typed and unchecked.
+  `nationalIdOf` / `checkNationalId` in `src/lib/patients.ts` mirror the column expression.
+  This is the identifier insurers and Hakeem Claim match a patient on.
 
 ### Screens (tabs on the patient file)
 
@@ -266,6 +276,10 @@ PDF for the pharmacy."*
 - **Prescriber**: a member whose job is doctor, or the clinic owner (usually the dentist
   who owns the practice, filed as `other`). The composer preselects the writer when they
   are a doctor, otherwise whoever saw the patient last, otherwise the clinic's doctor.
+- **Licence numbers** (migration `0063`): a doctor's `clinic_members.license_no` (رقم مزاولة
+  المهنة) and `syndicate_no`, set on the staff screen, are **copied onto the prescription**
+  (`doctor_license_no`, `doctor_syndicate_no`) like `doctor_name`, and printed under the
+  signature; the clinic's `moh_license_no` (clinic settings) prints under its address.
 - **Signature**: the prescriber's saved signature (`users.signature_png_path`, the one
   used to countersign documents) is put on the PDF automatically. When somebody else
   writes it, **the doctor is notified** (`prescription_in_your_name`, in their own
@@ -464,6 +478,10 @@ patient being pestered about every slot that opens in the same hour — `last_of
   builder, the calendar, the appointment panel, the waitlist, the booking link and question
   pickers, document templates, and the public booking page.
 - Services can require consent forms (`service_documents`, see §12).
+- `fee_code` (migration `0063`): the code an insurer knows the service by — CPT, or the
+  doctors' syndicate fee schedule. Free text until Hakeem Claim says which set it wants.
+  Copied onto `invoice_items.fee_code` when a line is raised (and mirrored onto a credit
+  note), so recoding a service never rewrites a past claim.
 
 ---
 
@@ -1862,7 +1880,8 @@ Plus focused suites: `qa-access`, `qa-automation-coverage`, `qa-backup`, `qa-boo
 `qa-brand-credit`, `qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`,
 `qa-esign-browser`, `qa-finance`, `qa-first-message`, `qa-import-digest`, `qa-mobile`,
 `qa-mobile-width`, `qa-tablet`,
-`qa-einvoicing`, `qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`.
+`qa-einvoicing`, `qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`,
+`qa-national-id`.
 
 `qa-mobile-width` and `qa-tablet` walk **one shared route list** (`scripts/lib-layout.ts`)
 and ask two questions of every screen: does the document scroll sideways, and does anything

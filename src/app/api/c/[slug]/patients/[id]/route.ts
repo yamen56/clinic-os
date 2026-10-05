@@ -3,6 +3,7 @@ import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
+import { checkNationalId, nationalIdOf } from "@/lib/patients";
 
 const TEXT_FIELDS = new Set(["full_name", "notes_summary", "whatsapp_name"]);
 
@@ -118,7 +119,37 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         const v = String(raw ?? "");
         push(key, /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
       } else if (key === "custom_fields" && raw && typeof raw === "object") {
-        const merged = { ...before.custom_fields, ...(raw as Record<string, unknown>) };
+        const incoming = { ...(raw as Record<string, unknown>) };
+        if ("national_id" in incoming) {
+          /*
+            The national number is what an insurer matches a claim on, so a typo
+            is refused here rather than discovered as a rejected claim. And it is
+            one person's: a number already on another file is that patient, and
+            saying who is the way to the merge rather than to a second file.
+          */
+          const checked = checkNationalId(incoming.national_id);
+          if ("error" in checked) {
+            rejected[key] = { error: checked.error };
+            delete incoming.national_id;
+          } else {
+            incoming.national_id = checked.value;
+            const nid = nationalIdOf(checked.value);
+            if (nid) {
+              const dup = await c.query(
+                `select id, full_name from patients
+                  where clinic_id = $1 and national_id = $2 and id <> $3 and merged_into is null
+                  limit 1`,
+                [access.clinicId, nid, id]
+              );
+              if (dup.rowCount) {
+                rejected[key] = { error: "national_id_taken", other: dup.rows[0] };
+                delete incoming.national_id;
+              }
+            }
+          }
+        }
+        if (!Object.keys(incoming).length) continue;
+        const merged = { ...before.custom_fields, ...incoming };
         push("custom_fields", JSON.stringify(merged));
       }
     }

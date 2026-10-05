@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import { normalizePhone, type CountryCode } from "./phone";
+import { normalizePhone, toAsciiDigits, type CountryCode } from "./phone";
 
 /**
  * The patient identity rule: phone number is the single source of identity
@@ -272,5 +272,42 @@ export function patientSearchClause(
     parts.push(`p.phone_e164 like $${paramOffset + params.length}`);
     params.push(`%${digits.slice(-7)}%`);
   }
+  // A national number is exact or nothing: ten digits that are not a phone.
+  const nid = nationalIdOf(trimmed);
+  if (nid) {
+    parts.push(`p.national_id = $${paramOffset + params.length}`);
+    params.push(nid);
+  }
   return { clause: `(${parts.join(" or ")})`, params };
+}
+
+/**
+ * A Jordanian national number (الرقم الوطني), or null when `raw` is not one.
+ *
+ * Ten digits, typed in either numeral set, with whatever spaces or dashes the
+ * card's layout invited. Mirrors the expression behind `patients.national_id`
+ * (migrations/0063), which is what makes it searchable and comparable — the
+ * value itself still lives in `custom_fields`, where the clinic's field
+ * definitions, e-sign merge fields, booking intake and export already read it.
+ */
+export function nationalIdOf(raw: unknown): string | null {
+  const s = toAsciiDigits(String(raw ?? "")).replace(/[\s-]/g, "");
+  return /^\d{10}$/.test(s) ? s : null;
+}
+
+/**
+ * What to store for a national ID typed on the patient file.
+ *
+ * A value made only of digits is a national number and must be one — nine or
+ * eleven digits is a typo, and a typo here is a claim an insurer rejects weeks
+ * later. Anything with letters in it is another document (a passport, a
+ * residence card) and is kept as typed, unchecked: refusing it would leave the
+ * clinic nowhere to write a non-Jordanian patient's ID at all.
+ */
+export function checkNationalId(raw: unknown): { value: string } | { error: "invalid_national_id" } {
+  const typed = String(raw ?? "").trim();
+  if (!typed) return { value: "" };
+  const compact = toAsciiDigits(typed).replace(/[\s-]/g, "");
+  if (!/^\d+$/.test(compact)) return { value: typed.slice(0, 40) };
+  return compact.length === 10 ? { value: compact } : { error: "invalid_national_id" };
 }

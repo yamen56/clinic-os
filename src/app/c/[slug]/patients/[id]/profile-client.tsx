@@ -268,6 +268,11 @@ export function PatientProfile(props: {
           toast(`${t.patients.phoneTaken}${other?.full_name ? ` — ${other.full_name}` : ""}`, "error");
         } else if (r.error === "invalid_phone") {
           toast(t.common.invalidPhone, "error");
+        } else if (r.error === "invalid_national_id") {
+          toast(t.patients.nationalIdInvalid, "error");
+        } else if (r.error === "national_id_taken") {
+          const other = r.other as { full_name?: string } | undefined;
+          toast(`${t.patients.nationalIdTaken}${other?.full_name ? ` — ${other.full_name}` : ""}`, "error");
         } else {
           toast(t.common.genericError, "error");
         }

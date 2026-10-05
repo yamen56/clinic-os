@@ -12,7 +12,7 @@ export default async function ClinicProfileSettings({
   const access = await guardCap(slug, "settings");
   const clinic = await inClinic(access, async (c) => {
     const r = await c.query(
-      `select name, name_ar, phone_e164, address, address_ar, google_maps_url,
+      `select name, name_ar, phone_e164, address, address_ar, google_maps_url, moh_license_no,
               brand_color, default_locale, timezone, logo_path
        from clinics where id = $1`,
       [access.clinicId]

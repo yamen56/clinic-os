@@ -35,6 +35,9 @@ type Member = {
   active: boolean;
   reminder_minutes: number;
   meeting_url: string | null;
+  /** رقم مزاولة المهنة, and the doctors' syndicate number — printed on prescriptions. */
+  license_no: string | null;
+  syndicate_no: string | null;
   permissions: Record<string, unknown>;
   working_hours: Record<string, [string, string][]> | null;
   full_name: string;
@@ -577,6 +580,31 @@ function EditMember({
         itself — and generating one per booking would put a third-party outage
         inside the booking transaction.
       */}
+      {/*
+        What makes a prescription or a claim this doctor's in law rather than in
+        name: the licence to practise and the syndicate membership. Printed under
+        the signature on prescriptions, and what an insurer — or Hakeem Claim —
+        identifies the treating doctor by.
+      */}
+      {m.role === "doctor" && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={t.staff.licenseNo}>
+            <Input
+              dir="ltr"
+              value={m.license_no ?? ""}
+              onChange={(e) => setM({ ...m, license_no: e.target.value })}
+            />
+          </Field>
+          <Field label={t.staff.syndicateNo}>
+            <Input
+              dir="ltr"
+              value={m.syndicate_no ?? ""}
+              onChange={(e) => setM({ ...m, syndicate_no: e.target.value })}
+            />
+          </Field>
+        </div>
+      )}
+
       {m.role === "doctor" && (
         <Field label={t.staff.meetingUrl} hint={t.staff.meetingUrlHint}>
           <Input
@@ -684,6 +712,8 @@ function EditMember({
                 color: m.color,
                 reminderMinutes: m.reminder_minutes,
                 meetingUrl: m.meeting_url ?? "",
+                licenseNo: m.role === "doctor" ? (m.license_no ?? "") : undefined,
+                syndicateNo: m.role === "doctor" ? (m.syndicate_no ?? "") : undefined,
                 /*
                   Sent only by an owner editing a doctor, and left absent
                   otherwise so a save from any other screen state cannot clear a

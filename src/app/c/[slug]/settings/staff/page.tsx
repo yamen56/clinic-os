@@ -20,7 +20,8 @@ export default async function StaffSettingsPage({ params }: { params: Promise<{ 
       */
       `select cm.id, cm.user_id, cm.role, cm.is_owner, cm.title, cm.specialty, cm.color, cm.active,
               ${access.isOwner ? "cm.commission_percent" : "null::numeric as commission_percent"},
-              cm.reminder_minutes, cm.meeting_url, cm.permissions, cm.working_hours, u.full_name, u.email,
+              cm.reminder_minutes, cm.meeting_url, cm.license_no, cm.syndicate_no,
+              cm.permissions, cm.working_hours, u.full_name, u.email,
               (u.avatar_path is not null) as has_photo
        from clinic_members cm join users u on u.id = cm.user_id
        where cm.clinic_id = $1 order by cm.created_at`,

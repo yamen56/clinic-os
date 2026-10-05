@@ -41,6 +41,7 @@ type Service = {
   active: boolean;
   section_id: string | null;
   doctor_ids: string[];
+  fee_code: string | null;
 };
 
 type Section = {
@@ -64,6 +65,7 @@ type Draft = {
   locationKind: "in_person" | "online";
   sectionId: string | null;
   doctorIds: string[];
+  feeCode: string;
 };
 
 type SectionDraft = { id?: string; name: string; nameAr: string; color: string; active: boolean };
@@ -79,6 +81,7 @@ const empty: Draft = {
   locationKind: "in_person",
   sectionId: null,
   doctorIds: [],
+  feeCode: "",
 };
 
 const emptySection: SectionDraft = { name: "", nameAr: "", color: "#6989a6", active: true };
@@ -197,6 +200,7 @@ export function ServicesClient({
                 locationKind: s.location_kind,
                 sectionId: s.section_id,
                 doctorIds: s.doctor_ids,
+                feeCode: s.fee_code ?? "",
               })
             }
           >
@@ -404,6 +408,14 @@ export function ServicesClient({
                 />
               </Field>
             </div>
+            <Field label={t.services.feeCode} hint={t.services.feeCodeHint}>
+              <Input
+                dir="ltr"
+                maxLength={30}
+                value={draft.feeCode}
+                onChange={(e) => setDraft({ ...draft, feeCode: e.target.value })}
+              />
+            </Field>
             <div className="flex items-center gap-6">
               <Field label={t.services.color}>
                 <input

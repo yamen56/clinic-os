@@ -86,6 +86,41 @@ async function main() {
   );
   check("trigram index on ar_normalize(full_name) exists", idx.rowCount === 1);
 
+  /*
+    The national number, typed however the card invites. Run against the real
+    clause and the real generated column, inside a transaction that is rolled
+    back, so the two halves — nationalIdOf in TypeScript and the expression in
+    migration 0063 — are held to agreeing with each other.
+  */
+  const { patientSearchClause, nationalIdOf, checkNationalId } = await import("../src/lib/patients");
+  await c.query("begin");
+  const p = (await c.query(`select id, clinic_id from patients where merged_into is null limit 1`)).rows[0];
+  if (p) {
+    await c.query(
+      `update patients set custom_fields = custom_fields || '{"national_id":"٩٨٨ ١٢٣-٤٥٦٧"}'::jsonb where id = $1`,
+      [p.id]
+    );
+    for (const typed of ["9881234567", "٩٨٨١٢٣٤٥٦٧", "988-123-4567"]) {
+      const { clause, params } = patientSearchClause(typed, 2);
+      const r = await c.query(`select p.id from patients p where p.clinic_id = $1 and ${clause}`, [
+        p.clinic_id,
+        ...params,
+      ]);
+      check(`national number "${typed}" finds the file`, r.rows.some((x) => x.id === p.id));
+    }
+    const { clause, params } = patientSearchClause("988123456", 2);
+    const near = await c.query(
+      `select p.id from patients p where p.clinic_id = $1 and p.national_id is not null and ${clause}`,
+      [p.clinic_id, ...params]
+    );
+    check("nine digits is not a national number", !near.rows.some((x) => x.id === p.id));
+  }
+  await c.query("rollback");
+  check("nationalIdOf agrees with the column", nationalIdOf("٩٨٨ ١٢٣-٤٥٦٧") === "9881234567");
+  check("a nine-digit number is refused", "error" in checkNationalId("988123456"));
+  check("a passport number is kept as typed", JSON.stringify(checkNationalId("N1234567")) === '{"value":"N1234567"}');
+  check("clearing is allowed", JSON.stringify(checkNationalId("  ")) === '{"value":""}');
+
   await c.end();
   console.log(`\nsearch tests: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

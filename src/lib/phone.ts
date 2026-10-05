@@ -12,7 +12,7 @@ const ARABIC_DIGITS: Record<string, string> = {
   "۵": "5", "۶": "6", "۷": "7", "۸": "8", "۹": "9",
 };
 
-function toAsciiDigits(s: string): string {
+export function toAsciiDigits(s: string): string {
   return s.replace(/[٠-٩۰-۹]/g, (d) => ARABIC_DIGITS[d] ?? d);
 }
 

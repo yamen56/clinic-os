@@ -19,7 +19,7 @@ export default async function ServicesSettingsPage({
           before `true`, so the trailing bucket falls out of the first term.
         */
         `select s.id, s.name, s.name_ar, s.duration_min, s.price, s.color, s.buffer_after_min,
-                s.bookable_online, s.location_kind, s.active, s.section_id,
+                s.bookable_online, s.location_kind, s.active, s.section_id, s.fee_code,
                 coalesce(array_agg(sd.member_id) filter (where sd.member_id is not null), '{}') as doctor_ids
          from services s
          left join service_doctors sd on sd.service_id = s.id

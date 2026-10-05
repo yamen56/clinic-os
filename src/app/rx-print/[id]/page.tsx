@@ -44,10 +44,11 @@ export default async function PrescriptionPrintPage({
   const rx = await withSystem(async (c) => {
     const r = await c.query(
       `select rx.number, rx.created_at, rx.locale, rx.diagnosis, rx.items, rx.doctor_name,
+              rx.doctor_license_no, rx.doctor_syndicate_no,
               p.full_name as patient_name,
               u.signature_png_path,
               cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.address_ar,
-              cl.phone_e164 as clinic_phone, cl.timezone
+              cl.phone_e164 as clinic_phone, cl.timezone, cl.moh_license_no
          from prescriptions rx
          join patients p on p.id = rx.patient_id
          join clinics cl on cl.id = rx.clinic_id
@@ -110,6 +111,11 @@ export default async function PrescriptionPrintPage({
                 {rx.clinic_phone && (
                   <p className="text-[13px] text-ink-500 tnum" dir="ltr">
                     {formatPhone(rx.clinic_phone)}
+                  </p>
+                )}
+                {rx.moh_license_no && (
+                  <p className="text-[12px] text-ink-500">
+                    {L.facilityLicense}: <bdi className="tnum">{rx.moh_license_no}</bdi>
                   </p>
                 )}
               </div>
@@ -196,6 +202,22 @@ export default async function PrescriptionPrintPage({
                 <div className="h-20" />
               )}
               <div className="border-t border-ink-300 pt-2 text-[14px] font-semibold">{rx.doctor_name}</div>
+              {/* Copied onto the prescription when it was written — see createPrescriptionAction. */}
+              {(rx.doctor_license_no || rx.doctor_syndicate_no) && (
+                <div className="text-[12px] text-ink-700">
+                  {rx.doctor_license_no && (
+                    <span>
+                      {L.licenseNo}: <bdi className="tnum">{rx.doctor_license_no}</bdi>
+                    </span>
+                  )}
+                  {rx.doctor_license_no && rx.doctor_syndicate_no && " · "}
+                  {rx.doctor_syndicate_no && (
+                    <span>
+                      {L.syndicateNo}: <bdi className="tnum">{rx.doctor_syndicate_no}</bdi>
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="text-[12px] text-ink-500">{L.signature}</div>
             </div>
           </div>

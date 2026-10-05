@@ -325,6 +325,9 @@ export async function updateMemberAction(
     reminderMinutes?: number;
     /** This person's standing meeting room, used by services held online. */
     meetingUrl?: string;
+    /** Licence to practise and syndicate number, as printed on prescriptions. */
+    licenseNo?: string;
+    syndicateNo?: string;
     /**
      * What this doctor earns of what they bill. `null` clears the arrangement,
      * which is not the same as setting it to 0. Owner-only — see the guard.
@@ -434,6 +437,9 @@ export async function updateMemberAction(
       push("role", patch.role);
     if (patch.title !== undefined) push("title", patch.title.slice(0, 60));
     if (patch.specialty !== undefined) push("specialty", patch.specialty.slice(0, 60));
+    // Blank clears; whatever the issuing body printed is kept as typed.
+    if (patch.licenseNo !== undefined) push("license_no", patch.licenseNo.trim().slice(0, 40) || null);
+    if (patch.syndicateNo !== undefined) push("syndicate_no", patch.syndicateNo.trim().slice(0, 40) || null);
     if (patch.color && /^#[0-9a-fA-F]{6}$/.test(patch.color)) push("color", patch.color);
     if (patch.active !== undefined) push("active", patch.active);
     if (patch.reminderMinutes !== undefined && patch.reminderMinutes >= 0)

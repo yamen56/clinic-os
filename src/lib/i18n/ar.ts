@@ -629,6 +629,8 @@ export const ar: Dict = {
     existingPatient: "يوجد مريض مسجّل بهذا الرقم — تم فتح ملفه.",
     phoneTaken: "يوجد مريض آخر مسجّل بهذا الرقم",
     phoneTakenAction: "افتح ملفه أو ادمج السجلّين.",
+    nationalIdInvalid: "الرقم الوطني ١٠ خانات — لم يُحفظ هذا الرقم",
+    nationalIdTaken: "يوجد مريض آخر مسجّل بهذا الرقم الوطني",
     tabs: {
       overview: "نظرة عامة",
       notes: "الملاحظات",
@@ -849,6 +851,8 @@ export const ar: Dict = {
     price: "السعر",
     color: "اللون",
     buffer: "فاصل بعد الموعد (دقائق)",
+    feeCode: "رمز الفوترة",
+    feeCodeHint: "الرمز الذي تعرف به شركات التأمين هذه الخدمة (CPT أو لائحة أجور النقابة). يُنسخ إلى كل بند في الفاتورة.",
     bookableOnline: "متاح للحجز الإلكتروني",
     locationKind: "مكان الانعقاد",
     inPerson: "في العيادة",
@@ -942,6 +946,8 @@ export const ar: Dict = {
     specialty: "التخصص",
     color: "لون التقويم",
     reminderMinutes: "التذكير قبل المواعيد (دقائق)",
+    licenseNo: "رقم مزاولة المهنة",
+    syndicateNo: "رقم العضوية في النقابة",
     meetingUrl: "رابط غرفة الاجتماع",
     meetingUrlHint:
       "يُستخدم لكل ما يُحجز كاجتماع أونلاين. يصل هذا الرابط إلى العميل في رسالة التأكيد وفي دعوة التقويم.",
@@ -1060,6 +1066,9 @@ export const ar: Dict = {
       doctor: "الطبيب",
       diagnosis: "التشخيص",
       signature: "التوقيع",
+      licenseNo: "رقم المزاولة",
+      syndicateNo: "رقم النقابة",
+      facilityLicense: "رقم ترخيص وزارة الصحة",
       poweredBy: "مدعوم من كلينيكتي",
     },
   },
@@ -2036,6 +2045,8 @@ export const ar: Dict = {
     mySignature: "توقيعي",
     notificationPrefs: "الإشعارات",
     languageRegion: "اللغة",
+    mohLicense: "رقم ترخيص وزارة الصحة",
+    mohLicenseHint: "رقم ترخيص المنشأة. يُطبع على الوصفات الطبية.",
   },
 
   /* ------------------------------------------------------- توقيع المستندات */

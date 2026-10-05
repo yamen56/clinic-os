@@ -96,7 +96,7 @@ export async function createPrescriptionAction(
     */
     const doctor = (
       await c.query(
-        `select m.id, m.user_id, u.full_name, u.locale,
+        `select m.id, m.user_id, u.full_name, u.locale, m.license_no, m.syndicate_no,
                 u.signature_png_path is not null as has_signature
            from clinic_members m join users u on u.id = m.user_id
           where m.id = $1 and m.clinic_id = $2 and m.active and (m.role = 'doctor' or m.is_owner)`,
@@ -107,9 +107,15 @@ export async function createPrescriptionAction(
 
     const number = await allocatePrescriptionNumber(c, access.clinicId);
     const ins = await c.query(
+      /*
+        The licence and syndicate numbers are copied, like the name: this is a
+        record of who prescribed, and a renewal next year must not rewrite what
+        an old prescription says.
+      */
       `insert into prescriptions (clinic_id, patient_id, doctor_member_id, doctor_name, author_id,
-                                  number, locale, diagnosis, items, signed)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                                  number, locale, diagnosis, items, signed,
+                                  doctor_license_no, doctor_syndicate_no)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        returning id`,
       [
         access.clinicId,
@@ -122,6 +128,8 @@ export async function createPrescriptionAction(
         diagnosis,
         JSON.stringify(items),
         doctor.has_signature,
+        doctor.license_no ?? null,
+        doctor.syndicate_no ?? null,
       ]
     );
     const id = ins.rows[0].id as string;

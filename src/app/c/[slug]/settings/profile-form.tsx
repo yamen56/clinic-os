@@ -26,6 +26,7 @@ export function ClinicProfileForm({
     address: string | null;
     address_ar: string | null;
     google_maps_url: string | null;
+    moh_license_no: string | null;
     brand_color: string;
     default_locale: string;
     timezone: string;
@@ -128,6 +129,9 @@ export function ClinicProfileForm({
         </Field>
         <Field label="Google Maps">
           <Input dir="ltr" defaultValue={clinic.google_maps_url ?? ""} disabled={ro} placeholder="https://maps.app.goo.gl/…" onChange={(e) => patch({ google_maps_url: e.target.value })} />
+        </Field>
+        <Field label={t.settings.mohLicense} hint={t.settings.mohLicenseHint}>
+          <Input dir="ltr" defaultValue={clinic.moh_license_no ?? ""} disabled={ro} onChange={(e) => patch({ moh_license_no: e.target.value })} />
         </Field>
         <Field label={t.settings.branding}>
           {/* Wraps: the swatch, the hex, the preview and the upload button come to

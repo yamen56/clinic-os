@@ -25,6 +25,12 @@ const serviceSchema = z.object({
      default — a clinic that never creates a section is unaffected. */
   sectionId: z.string().uuid().nullable().default(null),
   doctorIds: z.array(z.string().uuid()).default([]),
+  /*
+    The code an insurer knows this service by — a CPT code, or the line in the
+    doctors' syndicate fee schedule. Free text until Hakeem Claim says which set
+    it wants; blank is the default and changes nothing.
+  */
+  feeCode: z.string().trim().max(30).optional().default(""),
 });
 
 const sectionSchema = z.object({
@@ -76,9 +82,10 @@ export async function saveServiceAction(slug: string, data: unknown): Promise<{ 
     if (serviceId) {
       const r = await c.query(
         `update services set name = $3, name_ar = $4, duration_min = $5, price = $6, color = $7,
-           buffer_after_min = $8, bookable_online = $9, location_kind = $10, section_id = $11
+           buffer_after_min = $8, bookable_online = $9, location_kind = $10, section_id = $11,
+           fee_code = $12
          where id = $1 and clinic_id = $2`,
-        [serviceId, access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind, d.sectionId]
+        [serviceId, access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind, d.sectionId, d.feeCode || null]
       );
       if (!r.rowCount) return { error: "not_found" };
       await c.query(`delete from service_doctors where service_id = $1 and clinic_id = $2`, [
@@ -87,11 +94,11 @@ export async function saveServiceAction(slug: string, data: unknown): Promise<{ 
       ]);
     } else {
       const r = await c.query(
-        `insert into services (clinic_id, name, name_ar, duration_min, price, color, buffer_after_min, bookable_online, location_kind, section_id, sort)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        `insert into services (clinic_id, name, name_ar, duration_min, price, color, buffer_after_min, bookable_online, location_kind, section_id, fee_code, sort)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
            (select coalesce(max(sort), 0) + 1 from services where clinic_id = $1))
          returning id`,
-        [access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind, d.sectionId]
+        [access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind, d.sectionId, d.feeCode || null]
       );
       serviceId = r.rows[0].id;
     }

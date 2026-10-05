@@ -658,6 +658,8 @@ export const en = {
     existingPatient: "A patient with this number already exists — opened their file.",
     phoneTaken: "Another patient already has this number",
     phoneTakenAction: "Open their file or merge the two records.",
+    nationalIdInvalid: "A national number is 10 digits — this one was not saved",
+    nationalIdTaken: "Another patient already has this national number",
     tabs: {
       overview: "Overview",
       notes: "Notes",
@@ -879,6 +881,8 @@ export const en = {
     price: "Price",
     color: "Color",
     buffer: "Buffer after (minutes)",
+    feeCode: "Billing code",
+    feeCodeHint: "The code insurers know this service by (CPT, or the syndicate fee schedule). Copied onto each invoice line.",
     bookableOnline: "Bookable online",
     locationKind: "Where it happens",
     inPerson: "At the clinic",
@@ -972,6 +976,8 @@ export const en = {
     specialty: "Specialty",
     color: "Calendar color",
     reminderMinutes: "Remind before appointments (minutes)",
+    licenseNo: "Licence to practise no.",
+    syndicateNo: "Syndicate membership no.",
     meetingUrl: "Meeting room link",
     meetingUrlHint:
       "Used for anything booked as an online meeting. The customer gets this link in their confirmation and their calendar invite.",
@@ -1093,6 +1099,9 @@ export const en = {
       doctor: "Doctor",
       diagnosis: "Diagnosis",
       signature: "Signature",
+      licenseNo: "Licence no.",
+      syndicateNo: "Syndicate no.",
+      facilityLicense: "MoH licence no.",
       poweredBy: "Powered by Clinicti",
     },
   },
@@ -2100,6 +2109,8 @@ export const en = {
     mySignature: "My signature",
     notificationPrefs: "Notifications",
     languageRegion: "Language",
+    mohLicense: "Ministry of Health licence no.",
+    mohLicenseHint: "The facility licence. Printed on prescriptions.",
   },
 
   /* ------------------------------------------------------- document signing */

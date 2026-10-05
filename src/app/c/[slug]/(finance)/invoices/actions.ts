@@ -144,9 +144,15 @@ export async function createInvoiceAction(
       // what the header was summed from — nothing recalculated a second way.
       const line = totals.lines[i];
       const item = await c.query(
+        /*
+          The service's billing code is copied onto the line as it stands today,
+          like the price: a claim argues from what was billed, and recoding the
+          service next month must not rewrite last month's invoices.
+        */
         `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount,
-                                    discount_amount, tax_category, tax_rate, tax_amount, sort)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                                    discount_amount, tax_category, tax_rate, tax_amount, sort, fee_code)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                 (select fee_code from services where id = $3 and clinic_id = $1))
          returning id`,
         [
           access.clinicId, invoiceId, it.serviceId ?? null, it.description,
@@ -800,9 +806,9 @@ export async function voidInvoiceAction(
       creditNoteId = note.rows[0].id as string;
       await c.query(
         `insert into invoice_items (clinic_id, invoice_id, service_id, description, qty, unit_price, amount,
-                                    discount_amount, tax_category, tax_rate, tax_amount, sort)
+                                    discount_amount, tax_category, tax_rate, tax_amount, sort, fee_code)
          select clinic_id, $2, service_id, description, qty, unit_price, amount,
-                discount_amount, tax_category, tax_rate, tax_amount, sort
+                discount_amount, tax_category, tax_rate, tax_amount, sort, fee_code
            from invoice_items where invoice_id = $1`,
         [invoiceId, creditNoteId]
       );
