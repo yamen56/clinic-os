@@ -130,6 +130,17 @@ async function main() {
       els.map((e) => (e as HTMLInputElement).value)
     );
     check("the profile shows it", inputs.includes("9881234567"), "");
+
+    console.log("\n[who looked]");
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    const views = await db.query(
+      `select count(*)::int n, min(user_id::text) as who from audit_log
+        where entity_id = $1 and action = 'patient.view'`,
+      [first]
+    );
+    check("opening the file is recorded", views.rows[0].n >= 1 && views.rows[0].who === userId, `${views.rows[0].n}`);
+    check("once an hour, not once a refresh", views.rows[0].n === 1, `${views.rows[0].n}`);
   } finally {
     await browser.close();
     await db.query(`delete from clinics where id = $1`, [clinicId]);

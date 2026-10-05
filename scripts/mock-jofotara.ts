@@ -75,6 +75,8 @@ export function validateUbl(xml: string): string | null {
 
 /** The last document accepted, so a test can read what was actually filed. */
 let lastXml = "";
+/** And the key it came with — a sealed one reaching ISTD would be a rejection. */
+let lastSecret = "";
 
 export function startMockJofotara(): Promise<http.Server> {
   const server = http.createServer((req, res) => {
@@ -101,6 +103,10 @@ export function startMockJofotara(): Promise<http.Server> {
     if (req.method === "GET" && req.url === "/__last") {
       res.writeHead(200, { "Content-Type": "application/xml" });
       return res.end(lastXml);
+    }
+    if (req.method === "GET" && req.url === "/__last-secret") {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      return res.end(lastSecret);
     }
 
     if (!req.url?.startsWith("/core/invoices")) return send(404, { error: "not_found" });
@@ -131,6 +137,7 @@ export function startMockJofotara(): Promise<http.Server> {
         return send(400, { EINV_RESULTS: { ERRORS: [{ EINV_MESSAGE: problem }] } });
       }
       lastXml = xml;
+      lastSecret = String(secret);
       const uuid = xml.match(/<cbc:UUID>([^<]+)<\/cbc:UUID>/)?.[1] ?? "";
       const id = xml.match(/<cbc:ID>([^<]+)<\/cbc:ID>/)?.[1] ?? "";
       send(200, {

@@ -3,6 +3,7 @@ import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { openFile } from "@/lib/storage";
 import { fileResponseHeaders } from "@/lib/download";
+import { auditView } from "@/lib/audit";
 
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string; fileId: string }> }) {
   const { slug, fileId } = await ctx.params;
@@ -13,10 +14,27 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string; f
 
   const meta = await inClinic(g.access, async (c) => {
     const r = await c.query(
-      `select storage_path, file_name, mime_type from patient_files where id = $1 and clinic_id = $2`,
+      `select storage_path, file_name, mime_type, patient_id from patient_files where id = $1 and clinic_id = $2`,
       [fileId, g.access.clinicId]
     );
-    return r.rows[0] ?? null;
+    const row = r.rows[0] ?? null;
+    /*
+      An x-ray or a lab result leaving the server is a read of the record like
+      opening the file is. Deduplicated per person and file an hour, because the
+      same route draws the thumbnails on the patient's Files tab.
+    */
+    if (row) {
+      await auditView(c, {
+        clinicId: g.access.clinicId,
+        userId: g.access.session.user.id,
+        impersonatedBy: g.access.session.impersonatedBy,
+        action: "patient.file.view",
+        entity: "patient_file",
+        entityId: fileId,
+        detail: { patientId: row.patient_id },
+      });
+    }
+    return row;
   });
   if (!meta) return NextResponse.json({ error: "not_found" }, { status: 404 });
 

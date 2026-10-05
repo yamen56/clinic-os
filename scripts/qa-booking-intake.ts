@@ -368,6 +368,32 @@ async function main() {
       `consent was not enforced: ${noConsent.status} ${JSON.stringify(noConsent.body)}`
     );
     ok("a link that requires agreement refuses a booking without it");
+
+    const agreed = await post(`/api/public/book/${slug}/start`, {
+      serviceId: checkup.id,
+      doctorId: member.id,
+      startISO: at(16),
+      fullName: "Did Agree",
+      phone: nextPhone(),
+      locale: "en",
+      consent: true,
+      answers: { [qReason]: "Cleaning" },
+    });
+    assert(agreed.status === 200, `booking with consent failed: ${JSON.stringify(agreed.body)}`);
+    const kept = (
+      await db.query(`select booking_consent from appointments where id = $1`, [agreed.body.appointmentId])
+    ).rows[0]?.booking_consent as { at?: string; text?: string } | null;
+    assert(
+      kept?.text === "I agree." && Boolean(kept?.at && !Number.isNaN(Date.parse(kept.at))),
+      `the consent was not kept on the appointment: ${JSON.stringify(kept)}`
+    );
+    // Rewording the link afterwards must not change what this patient accepted.
+    await db.query(`update booking_links set consent_text = 'Something else.' where id = $1`, [link.id]);
+    const still = (
+      await db.query(`select booking_consent->>'text' as t from appointments where id = $1`, [agreed.body.appointmentId])
+    ).rows[0].t;
+    assert(still === "I agree.", `the kept consent changed with the link: ${still}`);
+    ok("and keeps the words a patient agreed to, and when, on the appointment");
     await db.query(`update booking_links set require_consent = false where id = $1`, [link.id]);
 
     /* -------------------------------------------------- the day availability */

@@ -19,6 +19,8 @@ export type BookingPayload = {
   locale: "ar" | "en";
   /** Already validated against the clinic's questions before it got here. */
   answers?: IntakeAnswer[];
+  /** The consent the link asked for: when it was given, and the words shown. */
+  consent?: { at: string; text: string } | null;
 };
 
 /**
@@ -144,8 +146,8 @@ export async function finalizeBooking(
         : null;
 
     const appt = await c.query(
-      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, intake_answers, meeting_url)
-       values ($1, $2, $3, $4, $5, $6, $7, 'booking_link', $8, $9::jsonb, $10) returning id`,
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, intake_answers, meeting_url, booking_consent)
+       values ($1, $2, $3, $4, $5, $6, $7, 'booking_link', $8, $9::jsonb, $10, $11::jsonb) returning id`,
       [
         data.clinic.id,
         patient.id,
@@ -158,6 +160,7 @@ export async function finalizeBooking(
         // Stringified, or a JS array reaches jsonb as a Postgres array literal.
         JSON.stringify(answers),
         meetingUrl,
+        p.consent ? JSON.stringify(p.consent) : null,
       ]
     );
     const appointmentId = appt.rows[0].id as string;

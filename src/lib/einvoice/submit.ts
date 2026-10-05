@@ -1,4 +1,5 @@
 import type { EinvoiceSettings } from "./settings";
+import { openSecret } from "../crypto-secret";
 
 /**
  * Talking to JoFotara.
@@ -74,6 +75,20 @@ export async function submitInvoice(args: {
 }): Promise<SubmitResult> {
   const url = `${BASE().replace(/\/+$/, "")}/core/invoices/`;
 
+  /*
+    Opened here, at the last moment and only in the worker, rather than where
+    the settings are loaded: loading also happens while a payment is being
+    recorded, and a missing key must never stop a clinic taking money. Here it
+    is a filing that fails and says why — not retried, because no number of
+    retries brings a key back.
+  */
+  let secret: string;
+  try {
+    secret = openSecret(args.settings.secretKey);
+  } catch (e) {
+    return { ok: false, status: null, error: (e as Error).message, raw: null, retryable: false };
+  }
+
   let res: Response;
   try {
     res = await fetch(url, {
@@ -83,7 +98,7 @@ export async function submitInvoice(args: {
         Accept: "application/json",
         // Issued per taxpayer when they create a device on the JoFotara portal.
         "Client-Id": args.settings.clientId,
-        "Secret-Key": args.settings.secretKey,
+        "Secret-Key": secret,
       },
       body: JSON.stringify({ invoice: args.payload }),
       signal: AbortSignal.timeout(30_000),

@@ -258,6 +258,11 @@ falls back to Overview.
     never from the caller, behind the `patients` capability like every other file.
 - **Files** (`patient_files`): upload with kind `xray` | `lab` | `consent` | `photo` |
   `other`. **25 MB limit**. Served through authenticated API routes, never public URLs.
+- **Who looked** (migration `0064`): reads are audited, not just writes — `patient.view` when
+  the file opens, `patient.file.view` when a file is served (thumbnails included),
+  `prescription.view` for a prescription PDF. Through `auditView` (`src/lib/audit.ts`): one
+  statement, at most one row per person, record and action an hour, read off a partial index.
+  It is the first question a health-data review, or a patient after a leak, asks.
 - **Merge records**: moves all notes, prescriptions, appointments, invoices and
   conversations from a duplicate into the surviving record and keeps both phone numbers.
   Refuses self-merge.
@@ -505,7 +510,7 @@ Configured per **booking link** (`booking_links`), and a clinic can have several
 | `success_note` / `success_note_ar` | null — parking, what to bring, when to arrive |
 | `show_prices` | `true` — off for clinics that quote per case |
 | `allow_any_doctor` | `true` — off forces the patient to choose a doctor |
-| `require_consent` + `consent_text` / `consent_text_ar` | `false` — a tick-box in the clinic's words |
+| `require_consent` + `consent_text` / `consent_text_ar` | `false` — a tick-box in the clinic's words. Since `0064` the consent is **kept**: `appointments.booking_consent` = `{ at, text }`, the moment it was given and the wording shown in the patient's language, copied — rewording the link later changes nothing already agreed. Null when the link asked nothing |
 
 ### Wizard
 
@@ -1310,6 +1315,12 @@ amount is locked (`einvoice_split_locked`); the way to change it is the credit n
 built: Clinicti filing the insurer's own invoice — its shape (per visit, monthly, or via Hakeem
 Claim) waits on what EHSI and the insurers require.
 
+**The device secret is sealed at rest** (`APP_ENCRYPTION_KEY`, see §29): sealed when the
+settings route saves it, opened only by `submitInvoice` in the worker at send time — loading
+the settings also happens while a payment is recorded, and a missing key must never stop the
+desk taking money. Without the key a sealed secret makes the filing fail, unretried, with the
+reason on the invoice.
+
 **On the invoice**: the QR (rendered from `einvoice_qr` at request time), the seller's tax
 number, the UUID, and the credit-note reference. **Trail**: `invoice_einvoice_events` records
 every queue, acceptance and rejection per invoice — mirroring `document_events` rather than
@@ -1917,6 +1928,7 @@ Two things run against local doubles because both need credentials the dev envir
 | `APP_URL` | Public base URL — used in WhatsApp links and invoice PDFs |
 | `WORKER_URL` | Where the web app reaches the worker (default `http://localhost:4020`) |
 | `INTERNAL_API_SECRET` | Shared secret between web and worker |
+| `APP_ENCRYPTION_KEY` | Seals third-party credentials at rest (the JoFotara device secret) — `src/lib/crypto-secret.ts`. **Same value on web and worker.** Unset, nothing is sealed and plain values pass through; a sealed value with no key fails its filing in the worker, never the payment at the desk. `scripts/seal-secrets.ts` seals what was stored before |
 | `SESSION_SECRET` | Reserved for signed-cookie use |
 | `STORAGE_DIR` | Local storage root (dev) |
 | `S3_BUCKET` / `S3_REGION` / `S3_ENDPOINT` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Object storage (**required in production**) |

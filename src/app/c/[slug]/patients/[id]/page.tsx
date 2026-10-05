@@ -8,6 +8,7 @@ import { can } from "@/lib/auth";
 import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { countryFromClinic } from "@/lib/phone";
 import { PATIENT_PRESCRIPTIONS_JSON } from "@/lib/prescriptions";
+import { auditView } from "@/lib/audit";
 
 export default async function PatientProfilePage({
   params,
@@ -72,6 +73,14 @@ export default async function PatientProfilePage({
     if (!row) return null;
     const { __prescriptions: prescriptions, ...p } = row;
     if (p.merged_into) return { mergedInto: p.merged_into as string };
+    await auditView(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "patient.view",
+      entity: "patient",
+      entityId: id,
+    });
 
     const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags, insurers, noteCategories] =
       await Promise.all([

@@ -5,6 +5,7 @@ import { openFile } from "@/lib/storage";
 import { fileResponseHeaders } from "@/lib/download";
 import { renderPrescriptionPdf } from "@/lib/prescription-pdf";
 import { rxNumber } from "@/lib/prescriptions";
+import { auditView } from "@/lib/audit";
 
 /**
  * A prescription's PDF, for printing or keeping.
@@ -25,11 +26,24 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string; i
   if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const rx = await inClinic(access, async (c) => {
-    const r = await c.query(`select number, pdf_path from prescriptions where id = $1 and clinic_id = $2`, [
-      id,
-      access.clinicId,
-    ]);
-    return r.rows[0] as { number: number; pdf_path: string | null } | undefined;
+    const r = await c.query(
+      `select number, pdf_path, patient_id from prescriptions where id = $1 and clinic_id = $2`,
+      [id, access.clinicId]
+    );
+    const row = r.rows[0] as { number: number; pdf_path: string | null; patient_id: string } | undefined;
+    // A copy of the record leaving the server; see auditView.
+    if (row) {
+      await auditView(c, {
+        clinicId: access.clinicId,
+        userId: access.session.user.id,
+        impersonatedBy: access.session.impersonatedBy,
+        action: "prescription.view",
+        entity: "prescription",
+        entityId: id,
+        detail: { patientId: row.patient_id },
+      });
+    }
+    return row;
   });
   if (!rx) return NextResponse.json({ error: "not_found" }, { status: 404 });
 

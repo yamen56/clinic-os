@@ -3,6 +3,7 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { can } from "@/lib/auth";
 import { TAXPAYER_TYPES } from "@/lib/einvoice/settings";
+import { sealSecret } from "@/lib/crypto-secret";
 
 /**
  * Autosave endpoint for a clinic's JoFotara registration (owner only).
@@ -67,7 +68,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
         const v = String(raw ?? "").trim().slice(0, TEXT_COLS[k]);
         // See the note above: blank is "unchanged", not "delete the key".
         if (k === "secret_key" && !v) continue;
-        push(k, v);
+        // Sealed at rest — see src/lib/crypto-secret.ts.
+        push(k, k === "secret_key" ? sealSecret(v) : v);
       } else if (k === "enabled") {
         push("enabled", raw === true);
       } else if (k === "file_by_default") {

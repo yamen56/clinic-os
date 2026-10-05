@@ -576,6 +576,59 @@ async function main() {
   );
 
   /* ================================================================== */
+  console.log("\n[the device secret, at rest]");
+  /*
+    The JoFotara secret files tax documents in the clinic's name, so a database
+    dump must not be enough to do it. Sealed with APP_ENCRYPTION_KEY; opened only
+    in the worker, at send time.
+  */
+  const { sealSecret, openSecret, isSealed } = await import("../src/lib/crypto-secret");
+  const priorKey = process.env.APP_ENCRYPTION_KEY;
+  delete process.env.APP_ENCRYPTION_KEY;
+  check("with no key configured, nothing changes", sealSecret("sk") === "sk");
+  process.env.APP_ENCRYPTION_KEY = "qa-only-key-not-for-anything-real";
+  const sealedSk = sealSecret("sk");
+  check("with one, the secret is sealed", isSealed(sealedSk) && !sealedSk.includes("sk"), sealedSk.slice(0, 12));
+  check("and opens again", openSecret(sealedSk) === "sk");
+  check("a secret from before sealing still reads", openSecret("sk") === "sk");
+  check("sealing twice is sealing once", sealSecret(sealedSk) === sealedSk);
+  const tampered = sealedSk.slice(0, -4) + (sealedSk.endsWith("AAAA") ? "BBBB" : "AAAA");
+  let tamperThrew = false;
+  try { openSecret(tampered); } catch { tamperThrew = true; }
+  check("a tampered one refuses to open rather than opening wrong", tamperThrew);
+
+  await db.query(`update clinic_einvoice_settings set secret_key = $2 where clinic_id = $1`, [filer.id, sealedSk]);
+  const invSealed = await makeInvoice(filer.id, filer.patient, { unitPrice: 20 });
+  await enqueueEinvoiceSubmit(dbAsClient, filer.id, invSealed, "paid");
+  await submitEinvoice(invSealed, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
+  const sealedDone = (await db.query(`select einvoice_status from invoices where id = $1`, [invSealed])).rows[0];
+  check("a sealed secret still files", sealedDone.einvoice_status === "submitted", sealedDone.einvoice_status);
+  check(
+    "and ISTD receives the secret itself, not the sealed form",
+    (await (await fetch(`${MOCK}/__last-secret`)).text()) === "sk"
+  );
+
+  delete process.env.APP_ENCRYPTION_KEY;
+  const invNoKey = await makeInvoice(filer.id, filer.patient, { unitPrice: 21 });
+  await enqueueEinvoiceSubmit(dbAsClient, filer.id, invNoKey, "paid");
+  let noKeyThrew = false;
+  try {
+    await submitEinvoice(invNoKey, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
+  } catch {
+    noKeyThrew = true;
+  }
+  const noKey = (await db.query(`select einvoice_status, einvoice_error from invoices where id = $1`, [invNoKey])).rows[0];
+  check(
+    "without the key the filing fails and says why, rather than looping",
+    !noKeyThrew && noKey.einvoice_status === "failed" && /APP_ENCRYPTION_KEY/.test(noKey.einvoice_error ?? ""),
+    `${noKey.einvoice_status}: ${noKey.einvoice_error}`
+  );
+  if (priorKey === undefined) delete process.env.APP_ENCRYPTION_KEY;
+  else process.env.APP_ENCRYPTION_KEY = priorKey;
+  // Back to plain, so the rest of the file runs as it always did.
+  await db.query(`update clinic_einvoice_settings set secret_key = 'sk' where clinic_id = $1`, [filer.id]);
+
+  /* ================================================================== */
   console.log("\n[correcting a filed invoice]");
 
   const originalNumber = (await db.query(`select number from invoices where id = $1`, [invA])).rows[0].number;

@@ -86,15 +86,32 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
+  const locale = (body.locale === "en" ? "en" : "ar") as "ar" | "en";
   const payload = {
     serviceId,
     doctorId: doctorId ?? null,
     startISO,
     fullName: fullName.trim().slice(0, 80),
-    locale: (body.locale === "en" ? "en" : "ar") as "ar" | "en",
+    locale,
     // Carried through the OTP round trip already validated, so the code path
     // that finalises never has to trust the browser a second time.
     answers: checked.answers,
+    /*
+      What the patient agreed to, and when — kept, not just checked. Health
+      data needs explicit consent under the data protection law (No. 24 of
+      2023), and a tick-box the clinic cannot later produce proves nothing. The
+      wording is copied as the page showed it, in the patient's language, so
+      rewording the link next month cannot change what this patient accepted.
+    */
+    consent: data.link.require_consent
+      ? {
+          at: new Date().toISOString(),
+          text:
+            (locale === "ar"
+              ? data.link.consent_text_ar || data.link.consent_text
+              : data.link.consent_text) ?? "",
+        }
+      : null,
   };
 
   /*
