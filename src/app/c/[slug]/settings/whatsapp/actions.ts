@@ -14,7 +14,7 @@ export async function whatsappControlAction(
   op: "connect" | "disconnect"
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.whatsapp")) return { error: "forbidden" };
   try {
     const res = await fetch(`${WORKER_URL}/sessions/${access.clinicId}/${op}`, {
       method: "POST",

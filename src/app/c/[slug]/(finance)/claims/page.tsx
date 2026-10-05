@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { guardCap } from "@/lib/guard";
+import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { isUuid } from "@/lib/uuid";
 import { loadClaims, summariseOpenClaims } from "@/lib/claims";
@@ -8,9 +9,10 @@ import { ClaimsClient } from "./claims-client";
 /**
  * Insurance claims: what each company owes the clinic, and the list to work.
  *
- * Opened with the invoices capability, because a claim is an invoice seen from
- * the insurer's side — the same rows, the same scope. The tab itself only shows
- * for a clinic with at least one company (lib/finance).
+ * Opened with the insurance capability; working the claims takes
+ * `insurance.claims`. The rows are scoped like the invoice list — a claim is an
+ * invoice seen from the insurer's side — and the tab itself only shows for a
+ * clinic with at least one company (lib/finance).
  */
 export default async function ClaimsPage({
   params,
@@ -21,7 +23,7 @@ export default async function ClaimsPage({
 }) {
   const { slug } = await params;
   const sp = await searchParams;
-  const access = await guardCap(slug, "invoices");
+  const access = await guardCap(slug, "insurance");
   const today = DateTime.now().setZone(access.clinic.timezone).toISODate()!;
 
   const filters = {
@@ -50,6 +52,9 @@ export default async function ClaimsPage({
       rows={JSON.parse(JSON.stringify(data.rows))}
       summary={data.summary}
       insurers={JSON.parse(JSON.stringify(data.insurers))}
+      canWork={can(access, "insurance.claims")}
+      canOpenInvoices={can(access, "invoices")}
+      canOpenPatients={can(access, "patients")}
     />
   );
 }

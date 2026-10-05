@@ -49,7 +49,7 @@ export async function setClaimStatusAction(
   note?: string
 ): Promise<{ updated?: number; error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "invoices")) return { error: "forbidden" };
+  if (!can(access, "insurance.claims")) return { error: "forbidden" };
   if (!(SETTABLE as readonly string[]).includes(status)) return { error: "bad_status" };
 
   return inClinic(access, async (c) => {
@@ -101,7 +101,7 @@ export async function markClaimsPaidAction(
   data: { reference?: string; paidOn?: string }
 ): Promise<{ paid?: number; amount?: number; error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "invoices")) return { error: "forbidden" };
+  if (!can(access, "insurance.claims")) return { error: "forbidden" };
   const paidOn = data.paidOn && /^\d{4}-\d{2}-\d{2}$/.test(data.paidOn) ? data.paidOn : null;
 
   return inClinic(access, async (c) => {

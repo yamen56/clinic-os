@@ -82,6 +82,7 @@ export function Shell({
   notifications,
   pendingDocuments,
   hasEarnings,
+  hasInsurers,
   fullControl,
   announcements,
   children,
@@ -109,6 +110,8 @@ export function Shell({
   pendingDocuments: number;
   /** This person has a share agreed, or money already earned under one. */
   hasEarnings: boolean;
+  /** The clinic deals with at least one insurance company, so Claims is a tab. */
+  hasInsurers: boolean;
   /** `hasFullControl(access)` — an owner, or somebody on `full` access. */
   fullControl: boolean;
   announcements: { id: string; title: string; body: string }[];
@@ -159,6 +162,7 @@ export function Shell({
     caps,
     hasEarnings,
     fullControl,
+    hasInsurers,
   });
   const finance: { key: NavKey; href: string; show: boolean; badge?: number } = {
     key: "finance",

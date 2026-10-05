@@ -1,13 +1,12 @@
-import { redirect } from "next/navigation";
-import { guardClinic } from "@/lib/guard";
+import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
-import { can } from "@/lib/auth";
 import { InsurersClient } from "./insurers-client";
 
 export default async function InsurersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const access = await guardClinic(slug);
-  if (!can(access, "settings")) redirect(`/c/${slug}`);
+  // Insurance, not only Settings: the companies are the first thing the
+  // insurance switch is meant to take away. REQUIRES ties this to both.
+  const access = await guardCap(slug, "insurance.companies");
 
   const rows = await inClinic(access, async (c) =>
     (

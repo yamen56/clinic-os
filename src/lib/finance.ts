@@ -61,8 +61,9 @@ export function financeHref(slug: string, tab: FinanceTab): string {
 export function financeTabs(v: FinanceViewer): FinanceTab[] {
   const out: FinanceTab[] = [];
   if (v.caps.invoices) out.push("invoices", "payments");
-  // Claims are invoices seen from the insurer's side, so the same door opens them.
-  if (v.caps.invoices && v.hasInsurers) out.push("claims");
+  // Claims answer to Insurance, not Invoices: an insurance clerk works them
+  // without raising invoices, and a desk that takes cash need never see them.
+  if (v.caps.insurance && v.hasInsurers) out.push("claims");
   if ((v.caps.earnings && v.hasEarnings) || (v.caps["invoices.analytics"] && v.fullControl)) {
     out.push("earnings");
   }

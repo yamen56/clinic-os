@@ -30,7 +30,7 @@ export const financeViewer = cache(async (slug: string): Promise<FinanceViewer> 
   const hasEarnings = access.caps.earnings
     ? await inClinic(access, (c) => memberHasEarnings(c, access.clinicId, access.memberId))
     : false;
-  const hasInsurers = access.caps.invoices
+  const hasInsurers = access.caps.insurance
     ? await inClinic(access, async (c) =>
         Boolean(
           (await c.query(`select 1 from insurers where clinic_id = $1 and active limit 1`, [access.clinicId]))

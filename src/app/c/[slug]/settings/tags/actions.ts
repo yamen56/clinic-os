@@ -22,7 +22,7 @@ export async function createTagAction(
   color: string
 ): Promise<{ error?: string; id?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.tags")) return { error: "forbidden" };
   const n = clean(name);
   if (!n) return { error: "invalid" };
   const c6 = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#0b1220";
@@ -55,7 +55,7 @@ export async function updateTagAction(
   patch: { name?: string; color?: string }
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.tags")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
     const before = (
@@ -116,7 +116,7 @@ export async function updateTagAction(
 
 export async function deleteTagAction(slug: string, id: string): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.tags")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
     const row = (

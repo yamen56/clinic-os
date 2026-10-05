@@ -64,12 +64,20 @@ export default async function InvoiceDetailPage({
         [id]
       )
     ).rows;
-    const insurers = (
-      await c.query(
-        `select id, name, coverage_percent, coverage_cap from insurers where clinic_id = $1 and active order by name`,
-        [access.clinicId]
-      )
-    ).rows;
+    /*
+      Only for somebody with Insurance. An empty list is what hides the claim
+      panel — the same signal a clinic that takes only cash gives it — so the
+      switch reaches this screen without a second flag. The insurer's share in
+      the totals stays: it is what the patient is asked to pay.
+    */
+    const insurers = can(access, "insurance")
+      ? (
+          await c.query(
+            `select id, name, coverage_percent, coverage_cap from insurers where clinic_id = $1 and active order by name`,
+            [access.clinicId]
+          )
+        ).rows
+      : [];
     // Whether this clinic can file at all decides whether the invoice shows a
     // filing switch or says nothing about JoFotara, exactly as before.
     const settings = await loadEinvoiceSettings(c, access.clinicId);
@@ -86,6 +94,7 @@ export default async function InvoiceDetailPage({
       payments={JSON.parse(JSON.stringify(data.payments))}
       insurers={JSON.parse(JSON.stringify(data.insurers))}
       filesEinvoices={data.filesEinvoices}
+      canVoid={can(access, "invoices.void")}
     />
   );
 }

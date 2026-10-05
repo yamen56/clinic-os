@@ -71,7 +71,7 @@ async function sectionBelongs(
 
 export async function saveServiceAction(slug: string, data: unknown): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.services")) return { error: "forbidden" };
   const parsed = serviceSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -125,7 +125,7 @@ export async function saveServiceAction(slug: string, data: unknown): Promise<{ 
 
 export async function toggleServiceAction(slug: string, id: string, active: boolean) {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return;
+  if (!can(access, "settings.services")) return;
   await inClinic(access, (c) =>
     c.query(`update services set active = $3 where id = $1 and clinic_id = $2`, [
       id,
@@ -138,7 +138,7 @@ export async function toggleServiceAction(slug: string, id: string, active: bool
 
 export async function deleteServiceAction(slug: string, id: string) {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return;
+  if (!can(access, "settings.services")) return;
   await inClinic(access, async (c) => {
     await c.query(`delete from services where id = $1 and clinic_id = $2`, [id, access.clinicId]);
     await audit(c, {
@@ -159,7 +159,7 @@ export async function deleteServiceAction(slug: string, id: string) {
 
 export async function saveSectionAction(slug: string, data: unknown): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.services")) return { error: "forbidden" };
   const parsed = sectionSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -212,7 +212,7 @@ export async function saveSectionAction(slug: string, data: unknown): Promise<{ 
 
 export async function deleteSectionAction(slug: string, id: string): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.services")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
     const row = (
@@ -255,7 +255,7 @@ export async function moveSectionAction(
   direction: "up" | "down"
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.services")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
     const me = (

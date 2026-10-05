@@ -7,7 +7,7 @@ import { TagsClient } from "./tags-client";
 export default async function TagsSettingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const access = await guardClinic(slug);
-  if (!can(access, "settings")) redirect(`/c/${slug}`);
+  if (!can(access, "settings.tags")) redirect(`/c/${slug}`);
 
   const tags = await inClinic(access, async (c) => {
     /*

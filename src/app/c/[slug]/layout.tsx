@@ -51,6 +51,10 @@ export default async function ClinicLayout({
            or exists(select 1 from invoice_line_doctors
                       where clinic_id = $1 and doctor_member_id = $3)
          ) as has_earnings,
+         -- Claims are a Finance tab only for a clinic that deals with insurers,
+         -- and for somebody with Insurance and nothing else in Finance it is
+         -- the tab the sidebar entry has to point at.
+         exists(select 1 from insurers where clinic_id = $1 and active) as has_insurers,
          coalesce((
            select json_agg(json_build_object('id', a.id, 'title', a.title, 'body', a.body))
            from (
@@ -67,6 +71,7 @@ export default async function ClinicLayout({
       notification_prefs: Record<string, unknown> | null;
       server_now: Date;
       has_earnings: boolean;
+      has_insurers: boolean;
       announcements: { id: string; title: string; body: string }[];
     };
   });
@@ -144,6 +149,7 @@ export default async function ClinicLayout({
       }}
       pendingDocuments={chrome.pending_documents}
       hasEarnings={!!chrome.has_earnings}
+      hasInsurers={!!chrome.has_insurers}
       fullControl={hasFullControl(access)}
       announcements={chrome.announcements.filter((a) => !dismissed.includes(a.id))}
     >

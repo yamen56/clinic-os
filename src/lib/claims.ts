@@ -63,9 +63,15 @@ export async function loadClaims(c: PoolClient, access: ClinicAccess, f: ClaimFi
     where += ` and to_char(i.issue_date, 'YYYY-MM') = $${params.length}`;
   }
   const scope = invoiceScopeSql(access, "i", params.length + 1);
+  /*
+    The creation day stands in for a missing issue date. Every invoice gets one
+    (0034 backfilled the old ones), but a row without it used to take the whole
+    screen down in `ageBucket` rather than land in the wrong aging column.
+  */
   return (
     await c.query(
-      `select i.id, i.number, i.issue_date::text as issue_day, i.total, i.insurer_amount, i.amount_paid,
+      `select i.id, i.number, coalesce(i.issue_date, i.created_at::date)::text as issue_day,
+              i.total, i.insurer_amount, i.amount_paid,
               i.claim_status, i.claim_ref, i.claim_note, i.insurer_id, ins.name as insurer_name,
               p.id as patient_id, p.full_name as patient_name, p.national_id, p.insurance_no,
               p.insurance_valid_until::text as cover_until

@@ -52,11 +52,48 @@ export const CAPABILITIES = [
     clinic, and the owner decides who that is by ticking it.
   */
   "patients.prescriptions",
+  /*
+    Fold a duplicate file into another. Irreversible from the screen — the
+    duplicate's notes, files, invoices and appointments move and it is gone from
+    every list — so it is housekeeping an owner hands to somebody, not a side
+    effect of being able to open a file.
+  */
+  "patients.merge",
   "documents",
   "documents.manage",
   "documents.void",
   "invoices",
   "invoices.analytics",
+  /*
+    Void an invoice. The same argument as `documents.void`: raising and
+    settling invoices is the desk's job, cancelling one is not the same act — a
+    voided invoice that was filed raises a credit note with the tax authority.
+  */
+  "invoices.void",
+  /*
+    Insurance, as one switch.
+
+    It used to be spread across three others — claims rode on `invoices`, the
+    list of companies on `settings`, the card on a patient's file on `patients` —
+    so there was no way to say "this person does not deal with insurers" short
+    of taking away the invoices, the settings or the patients they also needed.
+    Off, a member sees no claims tab, no insurance card or insurer chip on a
+    file, no claim panel on an invoice, and cannot set any of it through the
+    API either.
+
+    Not off: the arithmetic. An invoice raised for an insured patient still
+    takes the insurer's share off what the patient pays, whoever raises it — the
+    split is a fact about the patient, and a receptionist without this switch
+    still has to collect the right amount.
+  */
+  "insurance",
+  /* Work the claims: submitted, approved, rejected, paid, and the statement. */
+  "insurance.claims",
+  /*
+    The companies and their terms. A tab of Settings, so it needs Settings too —
+    see the second entry in `REQUIRES`.
+  */
+  "insurance.companies",
   /*
     A doctor's own earnings, and nobody else's.
 
@@ -85,6 +122,15 @@ export const CAPABILITIES = [
   "settings",
   "settings.clinic",
   "settings.staff",
+  /*
+    Settings, tab by tab. Until these existed, `settings` opened every tab but
+    the two above — which meant the person trusted to fix a service's price
+    could also unlink the clinic's WhatsApp number.
+  */
+  "settings.services",
+  "settings.booking",
+  "settings.whatsapp",
+  "settings.tags",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -104,18 +150,42 @@ export type AccessSetting = {
  * leaving its actions ticked would produce a member who may void a document they
  * cannot open, so the resolver closes that off rather than trusting the stored
  * map — the same rule then applies to a hand-edited row, not just to the UI.
+ *
+ * A list, because one capability needs two: the insurance companies are a tab
+ * of Settings and part of Insurance, and switching off either takes them away.
  */
-const REQUIRES: Partial<Record<Capability, Capability>> = {
-  "patients.import": "patients",
-  "patients.export": "patients",
-  "patients.categories": "patients",
-  "patients.prescriptions": "patients",
-  "documents.manage": "documents",
-  "documents.void": "documents",
-  "invoices.analytics": "invoices",
-  "settings.clinic": "settings",
-  "settings.staff": "settings",
+const REQUIRES: Partial<Record<Capability, Capability[]>> = {
+  "patients.import": ["patients"],
+  "patients.export": ["patients"],
+  "patients.categories": ["patients"],
+  "patients.prescriptions": ["patients"],
+  "patients.merge": ["patients"],
+  "documents.manage": ["documents"],
+  "documents.void": ["documents"],
+  "invoices.analytics": ["invoices"],
+  "invoices.void": ["invoices"],
+  "insurance.claims": ["insurance"],
+  "insurance.companies": ["insurance", "settings"],
+  "settings.clinic": ["settings"],
+  "settings.staff": ["settings"],
+  "settings.services": ["settings"],
+  "settings.booking": ["settings"],
+  "settings.whatsapp": ["settings"],
+  "settings.tags": ["settings"],
 };
+
+/** Every capability's prerequisites are held. */
+function requirementsMet(caps: Partial<Record<Capability, boolean>>, cap: Capability): boolean {
+  return (REQUIRES[cap] ?? []).every((needed) => caps[needed] === true);
+}
+
+/** Switch off anything whose prerequisites are not all held. */
+function enforceRequires<T extends Partial<Record<Capability, boolean>>>(caps: T): T {
+  for (const cap of Object.keys(REQUIRES) as Capability[]) {
+    if (!requirementsMet(caps, cap)) (caps as Partial<Record<Capability, boolean>>)[cap] = false;
+  }
+  return caps;
+}
 
 /** The starting point when an owner switches a member to custom access. */
 export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
@@ -133,9 +203,16 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
     "patients.import",
     // The assistant who types the prescription the doctor dictates.
     "patients.prescriptions",
+    "patients.merge",
     "documents",
     "documents.manage",
     "invoices",
+    // Correcting the desk's own mistake. Everything below this line up to
+    // `settings` is what the desk could already do before it had a name.
+    "invoices.void",
+    "insurance",
+    "insurance.claims",
+    "insurance.companies",
     /*
       `invoices.analytics` is deliberately *not* here any more.
 
@@ -150,6 +227,12 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
       takings ticks it, once, for that person.
     */
     "settings",
+    // The tabs `settings` opened before they were separate switches. Not the
+    // clinic profile and not the staff screen, which never came with it.
+    "settings.services",
+    "settings.booking",
+    "settings.whatsapp",
+    "settings.tags",
   ],
   other: ["dashboard", "calendar", "patients"],
 };
@@ -286,6 +369,37 @@ export function resolveCapabilities(
   }
 
   /*
+    The capabilities carved out on 2026-10-06, each from whatever used to grant
+    it — the `patients.import` rule, applied to all of them at once.
+
+    Every one of these was already possible for whoever held the wider switch,
+    so a row written before the split that does not mention one is not a "no";
+    it was written when the answer came with something else. Reading it as a
+    denial would have taken WhatsApp, the services list and the claims away from
+    every desk on deploy. An explicit false is honoured, and once a member is
+    saved from the new screen every key is written, so the inheritance stops.
+
+    Insurance comes from either door that used to open part of it: the claims
+    from Invoices and the companies from Settings. Not from Patients, which
+    showed the card on a file — so a doctor whose row predates this stops seeing
+    a patient's insurer, which is billing, until an owner says otherwise.
+  */
+  const INHERITED: [Capability, boolean][] = [
+    ["patients.merge", caps.patients],
+    ["invoices.void", caps.invoices],
+    ["insurance", caps.invoices || caps.settings],
+    ["insurance.claims", caps.invoices],
+    ["insurance.companies", caps.settings],
+    ["settings.services", caps.settings],
+    ["settings.booking", caps.settings],
+    ["settings.whatsapp", caps.settings],
+    ["settings.tags", caps.settings],
+  ];
+  for (const [cap, from] of INHERITED) {
+    if (!(cap in ticked) && from) caps[cap] = true;
+  }
+
+  /*
     The dashboard inherits from nothing, and that is the difference between this
     rule and the three above it.
 
@@ -301,10 +415,7 @@ export function resolveCapabilities(
   */
   if (!("dashboard" in ticked)) caps.dashboard = true;
 
-  for (const [cap, needs] of Object.entries(REQUIRES) as [Capability, Capability][]) {
-    if (!caps[needs]) caps[cap] = false;
-  }
-  return caps;
+  return enforceRequires(caps);
 }
 
 /**
@@ -324,10 +435,7 @@ export function toAccessSetting(level: "full" | "custom", caps: CapabilityMap): 
   if (level === "full") return { level: "full", caps: {} };
   const out: Partial<Record<Capability, boolean>> = {};
   for (const c of CAPABILITIES) out[c] = caps[c] === true;
-  for (const [cap, needs] of Object.entries(REQUIRES) as [Capability, Capability][]) {
-    if (!out[needs]) out[cap] = false;
-  }
-  return { level: "custom", caps: out };
+  return { level: "custom", caps: enforceRequires(out) };
 }
 
 /**
@@ -392,27 +500,77 @@ export function landingPathIn(slug: string, caps: CapabilityMap): string {
  * they are now three tabs of one screen. Merging them would undo the reason
  * both of the newer two are top-level: the person who does the buying is not
  * the person who does the billing, and a doctor who may see what they earned
- * has no business in either. `group` is a label, not a gate.
+ * has no business in either. `area` is a heading, not a gate.
+ *
+ * Every dotted capability is listed under exactly one section — the place an
+ * owner would look for it. `insurance.companies` sits under Insurance although
+ * it is a Settings tab, because "everything to do with insurers" is the
+ * question somebody opening that section is asking; `REQUIRES` still ties it to
+ * Settings as well.
  */
+export type CapabilityArea = "daily" | "money" | "growth" | "admin";
+
 export const CAPABILITY_GROUPS: {
   section: Capability;
   actions: Capability[];
-  /** A key in the `nav` dictionary. Sections sharing one get a heading. */
-  group?: string;
+  area: CapabilityArea;
 }[] = [
-  { section: "dashboard", actions: [] },
-  { section: "conversations", actions: [] },
-  { section: "calendar", actions: [] },
+  { section: "dashboard", actions: [], area: "daily" },
+  { section: "calendar", actions: [], area: "daily" },
+  { section: "conversations", actions: [], area: "daily" },
   {
     section: "patients",
-    actions: ["patients.prescriptions", "patients.import", "patients.export", "patients.categories"],
+    actions: [
+      "patients.prescriptions",
+      "patients.import",
+      "patients.export",
+      "patients.merge",
+      "patients.categories",
+    ],
+    area: "daily",
   },
-  { section: "documents", actions: ["documents.manage", "documents.void"] },
-  { section: "invoices", actions: ["invoices.analytics"], group: "finance" },
-  { section: "earnings", actions: [], group: "finance" },
-  { section: "expenses", actions: [], group: "finance" },
-  { section: "campaigns", actions: [] },
-  { section: "automations", actions: [] },
-  { section: "ai", actions: [] },
-  { section: "settings", actions: ["settings.clinic", "settings.staff"] },
+  { section: "documents", actions: ["documents.manage", "documents.void"], area: "daily" },
+  { section: "invoices", actions: ["invoices.void", "invoices.analytics"], area: "money" },
+  { section: "insurance", actions: ["insurance.claims", "insurance.companies"], area: "money" },
+  { section: "earnings", actions: [], area: "money" },
+  { section: "expenses", actions: [], area: "money" },
+  { section: "campaigns", actions: [], area: "growth" },
+  { section: "automations", actions: [], area: "growth" },
+  { section: "ai", actions: [], area: "growth" },
+  {
+    section: "settings",
+    actions: [
+      "settings.clinic",
+      "settings.services",
+      "settings.booking",
+      "settings.whatsapp",
+      "settings.tags",
+      "settings.staff",
+    ],
+    area: "admin",
+  },
 ];
+
+/**
+ * A section switched on or off, with everything under it.
+ *
+ * On grants every action listed under the section whose other prerequisites
+ * are already held — the owner sees them ticked straight away and unticks what
+ * this person should not have, which is the editor working the way people
+ * expect a group switch to. Off takes every capability that needs it, wherever
+ * that capability is listed, so Settings off also clears the insurance
+ * companies shown under Insurance.
+ */
+export function withSection(caps: CapabilityMap, section: Capability, on: boolean): CapabilityMap {
+  const next = { ...caps, [section]: on };
+  if (on) {
+    const group = CAPABILITY_GROUPS.find((g) => g.section === section);
+    for (const a of group?.actions ?? []) if (requirementsMet(next, a)) next[a] = true;
+  }
+  return enforceRequires(next);
+}
+
+/** The prerequisites of a capability that are not held, for saying why a switch is unavailable. */
+export function missingRequirements(caps: CapabilityMap, cap: Capability): Capability[] {
+  return (REQUIRES[cap] ?? []).filter((needed) => !caps[needed]);
+}

@@ -415,7 +415,7 @@ export async function mergePatientsAction(
   duplicateId: string
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "patients")) return { error: "forbidden" };
+  if (!can(access, "patients.merge")) return { error: "forbidden" };
   if (keepId === duplicateId) return { error: "self" };
   return inClinic(access, async (c) => {
     const both = await c.query(

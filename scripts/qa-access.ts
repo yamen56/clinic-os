@@ -226,6 +226,70 @@ async function main() {
       }),
     ]
   );
+  /*
+    The switches carved out on 2026-10-06, each one explicitly off for somebody
+    who holds the section it was carved from. A clerk who raises invoices, opens
+    files and edits services — and was told no to insurance, WhatsApp, voiding
+    and merging. Every refusal below is made against a capability this member
+    lacks while holding the one that used to imply it, which is the only way
+    such a test proves anything.
+  */
+  const clerkId = await mkUser("clerk", "QA Clerk");
+  await db.query(
+    `insert into clinic_members (clinic_id, user_id, role, permissions)
+     values ($1, $2, 'receptionist', $3)`,
+    [
+      clinic.id,
+      clerkId,
+      JSON.stringify({
+        level: "custom",
+        caps: {
+          dashboard: true,
+          patients: true,
+          "patients.merge": false,
+          invoices: true,
+          "invoices.void": false,
+          insurance: false,
+          "insurance.claims": false,
+          "insurance.companies": false,
+          settings: true,
+          "settings.services": true,
+          "settings.whatsapp": false,
+        },
+      }),
+    ]
+  );
+  // And the other way round: insurance and nothing else of the money section.
+  const insClerkId = await mkUser("insclerk", "QA Insurance Clerk");
+  await db.query(
+    `insert into clinic_members (clinic_id, user_id, role, permissions)
+     values ($1, $2, 'other', $3)`,
+    [
+      clinic.id,
+      insClerkId,
+      JSON.stringify({
+        level: "custom",
+        caps: { dashboard: true, insurance: true, "insurance.claims": true, invoices: false, patients: false },
+      }),
+    ]
+  );
+  const insurerId = (
+    await db.query(`insert into insurers (clinic_id, name) values ($1, 'QA Assurance') returning id`, [clinic.id])
+  ).rows[0].id as string;
+  const insuredId = (
+    await db.query(
+      `insert into patients (clinic_id, full_name, insurer_id, insurance_no)
+       values ($1, 'QA Insured', $2, 'POL-1') returning id`,
+      [clinic.id, insurerId]
+    )
+  ).rows[0].id as string;
+  const claimInvoiceId = (
+    await db.query(
+      `insert into invoices (clinic_id, patient_id, seq, number, status, total, insurer_id, insurer_amount, claim_status, issue_date)
+       values ($1, $2, 1, 'QA-0001', 'sent', 100, $3, 60, 'to_submit', current_date) returning id`,
+      [clinic.id, insuredId, insurerId]
+    )
+  ).rows[0].id as string;
   console.log(`✓ fixture clinic ${slug}`);
 
   const browser = await chromium.launch();
@@ -405,6 +469,127 @@ async function main() {
     await page.locator("select[disabled]").first().isVisible()
   );
 
+  /* -------------------------------------- the switches carved out of others */
+  await signIn(page, `clerk-${slug}@test.local`);
+  const apiStatusOf = (url: string, init?: RequestInit) =>
+    page.evaluate(
+      async ([u, i]) => (await fetch(u as string, (i as RequestInit) ?? undefined)).status,
+      [url, init ?? null] as const
+    );
+
+  const clerkClaims = await landsOn(page, `/c/${slug}/claims`, `/c/${slug}`);
+  check("invoices without insurance: the claims screen is refused", clerkClaims === `/c/${slug}`, clerkClaims);
+  check(
+    "and so is the claims statement",
+    (await apiStatusOf(`/api/c/${slug}/claims/export`)) === 403
+  );
+  const clerkInsurers = await landsOn(page, `/c/${slug}/settings/insurers`, `/c/${slug}`);
+  check("settings without insurance: the insurance companies are refused", clerkInsurers === `/c/${slug}`, clerkInsurers);
+  const clerkWa = await landsOn(page, `/c/${slug}/settings/whatsapp`, `/c/${slug}`);
+  check("settings without WhatsApp: the WhatsApp tab is refused", clerkWa === `/c/${slug}`, clerkWa);
+  check(
+    "and so is its status endpoint",
+    (await apiStatusOf(`/api/c/${slug}/whatsapp/status`)) === 403
+  );
+  check(
+    "while the tab they were given opens",
+    (await landsOn(page, `/c/${slug}/settings/services`)).endsWith("/settings/services")
+  );
+  const settingsTabs = (await page.locator("main nav").first().innerText()).replace(/\s+/g, " ");
+  check(
+    "and the settings strip offers only what opens",
+    settingsTabs.includes("Services") && !settingsTabs.includes("WhatsApp") && !settingsTabs.includes("Insurance companies"),
+    settingsTabs
+  );
+
+  /*
+    The patient file: the insurer is withheld rather than undrawn, and the API
+    refuses to set it while still saving the rest of the same autosave batch.
+  */
+  await page.goto(`${BASE}/c/${slug}/patients/${insuredId}`);
+  await page.waitForLoadState("networkidle");
+  const fileText = (await page.locator("main").first().innerText()).replace(/\s+/g, " ");
+  check("a file does not name the insurer to them", !fileText.includes("QA Assurance"), fileText.slice(0, 160));
+  // The merge lives in the file's ⋮ menu, so open it before saying it is absent.
+  await page.getByRole("button", { name: "Actions", exact: true }).first().click();
+  await page.waitForTimeout(300);
+  check(
+    "nor offer to merge it",
+    (await page.getByRole("button", { name: "Merge records" }).count()) === 0
+  );
+  await page.keyboard.press("Escape");
+  const patchResult = await page.evaluate(
+    async ([s, id, ins]) => {
+      const r = await fetch(`/api/c/${s}/patients/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patch: { insurer_id: null, insurance_no: "", full_name: "QA Insured Renamed" } }),
+      });
+      return { status: r.status, body: await r.json(), ins };
+    },
+    [slug, insuredId, insurerId] as const
+  );
+  check(
+    "the API refuses to change who covers them",
+    patchResult.body?.rejected?.insurer_id?.error === "forbidden" &&
+      patchResult.body?.rejected?.insurance_no?.error === "forbidden",
+    JSON.stringify(patchResult.body?.rejected)
+  );
+  const afterPatch = (
+    await db.query(`select full_name, insurer_id, insurance_no from patients where id = $1`, [insuredId])
+  ).rows[0];
+  check(
+    "the cover is untouched and the rest of the batch still saved",
+    afterPatch.insurer_id === insurerId && afterPatch.insurance_no === "POL-1" && afterPatch.full_name === "QA Insured Renamed",
+    JSON.stringify(afterPatch)
+  );
+  const cardUpload = await page.evaluate(
+    async ([s, id]) => {
+      const fd = new FormData();
+      fd.append("file", new Blob(["x"], { type: "image/png" }), "card.png");
+      fd.append("kind", "insurance_card");
+      return (await fetch(`/api/c/${s}/patients/${id}/files`, { method: "POST", body: fd })).status;
+    },
+    [slug, insuredId] as const
+  );
+  check("a photo of the insurance card cannot be filed", cardUpload === 403, `status ${cardUpload}`);
+
+  await page.goto(`${BASE}/c/${slug}/invoices/${claimInvoiceId}`);
+  await page.waitForLoadState("networkidle");
+  check(
+    "an invoice opens without the void button",
+    (await page.getByRole("button", { name: "Void invoice" }).count()) === 0
+  );
+  check(
+    "and without the claim panel",
+    (await page.getByRole("heading", { name: "Claim", exact: true }).count()) === 0
+  );
+
+  // Insurance and nothing else of the money section.
+  await signIn(page, `insclerk-${slug}@test.local`);
+  await page.goto(`${BASE}/c/${slug}`);
+  await page.waitForLoadState("networkidle");
+  const insNav = await navLabels();
+  check("insurance alone still gets a Finance entry", insNav.some((n) => n.includes("Finance")), insNav.join(", "));
+  check(
+    "which opens on the claims",
+    (await landsOn(page, `/c/${slug}/claims`)).endsWith("/claims")
+  );
+  check(
+    "lists them",
+    (await page.locator("main").first().innerText()).includes("QA-0001")
+  );
+  check(
+    "offers the statement to somebody who works them",
+    (await page.locator('main a[href*="/claims/export"]').count()) > 0
+  );
+  check(
+    "but does not link into invoices they cannot open",
+    (await page.locator(`main a[href="/c/${slug}/invoices/${claimInvoiceId}"]`).count()) === 0
+  );
+  const insInvoices = await landsOn(page, `/c/${slug}/invoices`, `/c/${slug}`);
+  check("and the invoice list stays shut", insInvoices === `/c/${slug}`, insInvoices);
+
   /* --------------------------------------- the access editor on the way in */
   /*
     The invite form, driven the way a person drives it. Everything below this
@@ -456,7 +641,7 @@ async function main() {
     a member with nothing. The server used to read an empty list as "no opinion"
     and substitute the job's defaults.
   */
-  for (const section of ["WhatsApp inbox", "Calendar", "Patients", "Documents", "Invoices", "Settings"]) {
+  for (const section of ["Dashboard", "WhatsApp inbox", "Calendar", "Patients", "Documents", "Invoices", "Insurance", "Settings"]) {
     const sw = page.getByRole("switch", { name: section }).first();
     if ((await sw.count()) && (await sw.getAttribute("aria-checked")) === "true") await sw.click();
   }
@@ -562,6 +747,63 @@ async function main() {
     legacy.conversations && legacy.invoices && legacy.automations && !legacy["settings.staff"]
   );
 
+  /*
+    The 2026-10-06 split. A row written before it says nothing about the new
+    switches, and every one of them was possible for whoever held the wider
+    switch — so silence inherits, and nobody loses anything on deploy.
+  */
+  const { withSection, capabilitiesFor, toAccessSetting, CAPABILITIES } = await import("../src/lib/permissions");
+  const preSplit = resolveCapabilities(
+    { level: "custom", caps: { patients: true, invoices: true, settings: true } },
+    { isOwner: false, role: "receptionist" }
+  );
+  check(
+    "a row from before the split keeps what it could already do",
+    preSplit.insurance &&
+      preSplit["insurance.claims"] &&
+      preSplit["insurance.companies"] &&
+      preSplit["invoices.void"] &&
+      preSplit["patients.merge"] &&
+      preSplit["settings.whatsapp"] &&
+      preSplit["settings.services"],
+    JSON.stringify(preSplit)
+  );
+  const toldNo = resolveCapabilities(
+    { level: "custom", caps: { invoices: true, insurance: false } },
+    { isOwner: false, role: "receptionist" }
+  );
+  check("an explicit no to insurance takes the claims with it", !toldNo.insurance && !toldNo["insurance.claims"]);
+  const companiesWithoutSettings = resolveCapabilities(
+    { level: "custom", caps: { insurance: true, "insurance.companies": true, settings: false } },
+    { isOwner: false, role: "other" }
+  );
+  check("the insurance companies need Settings as well as Insurance", !companiesWithoutSettings["insurance.companies"]);
+  const filesOnlyDoctor = resolveCapabilities(
+    { level: "custom", caps: { patients: true } },
+    { isOwner: false, role: "doctor" }
+  );
+  check("opening files does not bring insurance with it", !filesOnlyDoctor.insurance);
+
+  const patientsOn = withSection(capabilitiesFor([]), "patients", true);
+  check(
+    "switching a section on switches on everything in it",
+    patientsOn["patients.export"] && patientsOn["patients.merge"] && patientsOn["patients.import"]
+  );
+  const patientsOff = withSection(patientsOn, "patients", false);
+  check("and off takes it all away", !patientsOff["patients.export"] && !patientsOff["patients.merge"]);
+  const insuranceOnly = withSection(capabilitiesFor([]), "insurance", true);
+  check(
+    "an action that needs another section stays off until it has it",
+    insuranceOnly["insurance.claims"] && !insuranceOnly["insurance.companies"]
+  );
+  const settingsOff = withSection(capabilitiesFor(["settings", "insurance", "insurance.companies"]), "settings", false);
+  check("and loses it when that other section goes", !settingsOff["insurance.companies"] && settingsOff.insurance);
+  const saved = toAccessSetting("custom", capabilitiesFor(["insurance"]));
+  check(
+    "a save writes every switch, so silence stops inheriting",
+    CAPABILITIES.every((c) => typeof saved.caps[c] === "boolean")
+  );
+
   // …and the settings screen must agree with that, or opening the row and
   // pressing save would quietly promote them to everything.
   const { accessLevelOf } = await import("../src/lib/permissions");
@@ -609,7 +851,7 @@ async function main() {
   await db.query(`delete from clinics where id = $1`, [clinic.id]);
   // The invited one has no id here — the form made it — so it goes by address.
   await db.query(`delete from users where id = any($1::uuid[]) or email = $2`, [
-    [ownerId, docId, recId],
+    [ownerId, docId, recId, clerkId, insClerkId],
     `nobody-${slug}@test.local`,
   ]);
   await db.end();

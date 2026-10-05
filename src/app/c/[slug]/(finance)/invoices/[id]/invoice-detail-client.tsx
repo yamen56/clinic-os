@@ -98,6 +98,7 @@ export function InvoiceDetailClient({
   payments,
   insurers,
   filesEinvoices,
+  canVoid,
 }: {
   slug: string;
   invoice: Invoice;
@@ -116,6 +117,8 @@ export function InvoiceDetailClient({
   insurers: { id: string; name: string; coverage_percent: string | null; coverage_cap: string | null }[];
   /** Whether this clinic files with JoFotara and has the credentials to do it. */
   filesEinvoices: boolean;
+  /** `invoices.void` — the server refuses without it, so the button is not offered. */
+  canVoid: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -326,7 +329,7 @@ export function InvoiceDetailClient({
                 {t.invoices.recordPayment}
               </Button>
             )}
-            {inv.status !== "void" && (
+            {canVoid && inv.status !== "void" && (
               <Button variant="ghost" size="sm" className="!text-danger" onClick={() => setVoidOpen(true)}>
                 <Ban className="h-4 w-4" />
                 {t.invoices.voidInvoice}

@@ -10,7 +10,7 @@ export default async function BookingSettingsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const access = await guardCap(slug, "settings");
+  const access = await guardCap(slug, "settings.booking");
   const data = await inClinic(access, async (c) => {
     const links = (
       await c.query(
@@ -73,7 +73,7 @@ export default async function BookingSettingsPage({
   return (
     <BookingLinksClient
       slug={slug}
-      canEdit={can(access, "settings")}
+      canEdit={can(access, "settings.booking")}
       links={JSON.parse(JSON.stringify(data.links))}
       doctors={JSON.parse(JSON.stringify(data.doctors))}
       services={JSON.parse(JSON.stringify(data.services))}

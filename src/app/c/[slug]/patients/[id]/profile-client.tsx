@@ -214,6 +214,13 @@ export function PatientProfile(props: {
     manageCategories: boolean;
     /** Write, send and repeat prescriptions. Reading them needs only the file. */
     prescriptions: boolean;
+    /** Fold a duplicate file into this one. */
+    merge: boolean;
+    /**
+     * The insurance card, the insurer in the header, the claims on this file.
+     * Without it the page is handed no insurers, which hides all three.
+     */
+    insurance: boolean;
   };
   prescriptions: PrescriptionRow[];
   /** The tab to open on, from `?tab=` — a notification's link, usually. */
@@ -537,16 +544,18 @@ export function PatientProfile(props: {
             </Button>
             {menuOpen && (
               <div className="absolute end-0 top-10 z-30 w-52 rounded-card border border-line bg-surface p-1.5 shadow-pop animate-fade-up">
-                <button
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink-900/4"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setMergeOpen(true);
-                  }}
-                >
-                  <Merge className="h-4 w-4 text-ink-400" />
-                  {t.patients.merge.button}
-                </button>
+                {caps.merge && (
+                  <button
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink-900/4"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setMergeOpen(true);
+                    }}
+                  >
+                    <Merge className="h-4 w-4 text-ink-400" />
+                    {t.patients.merge.button}
+                  </button>
+                )}
                 {/*
                   A plain link, not a fetch. The PDF is built by the worker and
                   streamed back with a Content-Disposition; letting the browser
@@ -732,7 +741,7 @@ export function PatientProfile(props: {
                   coverUntil={p.cover_until}
                   insurers={props.insurers}
                   cardFiles={props.files.filter((f) => f.kind === "insurance_card")}
-                  claims={caps.invoices ? props.invoices.filter((i) => i.claim_status && i.claim_status !== "none") : null}
+                  claims={caps.insurance && caps.invoices ? props.invoices.filter((i) => i.claim_status && i.claim_status !== "none") : null}
                   onInsurer={(id) => set({ insurer_id: id })}
                   onPolicy={(v) => patch({ insurance_no: v })}
                   onValidUntil={(v) => {

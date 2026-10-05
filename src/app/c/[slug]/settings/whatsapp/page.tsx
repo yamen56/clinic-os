@@ -10,7 +10,7 @@ export default async function WhatsappSettingsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const access = await guardCap(slug, "settings");
+  const access = await guardCap(slug, "settings.whatsapp");
 
   /*
     What actually landed this week. Connection status on its own says nothing
@@ -43,7 +43,7 @@ export default async function WhatsappSettingsPage({
     <div className="grid gap-4">
       <WhatsappClient
         slug={slug}
-        canEdit={can(access, "settings")}
+        canEdit={can(access, "settings.whatsapp")}
         canSetCap={can(access, "settings.clinic")}
       />
       <Deliverability stats={JSON.parse(JSON.stringify(stats))} />

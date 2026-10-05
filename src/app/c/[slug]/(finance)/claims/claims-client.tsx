@@ -36,6 +36,9 @@ export function ClaimsClient({
   rows,
   summary,
   insurers,
+  canWork,
+  canOpenInvoices,
+  canOpenPatients,
 }: {
   slug: string;
   currency: string;
@@ -44,6 +47,11 @@ export function ClaimsClient({
   rows: ClaimRow[];
   summary: InsurerSummary[];
   insurers: { id: string; name: string }[];
+  /** `insurance.claims`: tick claims, move them along, download the statement. */
+  canWork: boolean;
+  /** The rows link to screens this member may not open; without them they are text. */
+  canOpenInvoices: boolean;
+  canOpenPatients: boolean;
 }) {
   const { t, locale } = useI18n();
   const T = t.claims;
@@ -112,10 +120,12 @@ export function ClaimsClient({
         title={T.title}
         sub={T.sub}
         action={
-          <a href={exportHref} className={buttonClass({ variant: "outline", size: "sm" })}>
-            <Download className="h-4 w-4" />
-            {T.statement}
-          </a>
+          canWork ? (
+            <a href={exportHref} className={buttonClass({ variant: "outline", size: "sm" })}>
+              <Download className="h-4 w-4" />
+              {T.statement}
+            </a>
+          ) : undefined
         }
       />
 
@@ -189,13 +199,15 @@ export function ClaimsClient({
       ) : (
         <Card>
           <div className="flex items-center gap-3 border-b border-line px-4 py-2.5 text-[13px] text-ink-500">
-            <input
-              type="checkbox"
-              aria-label={T.selectAll}
-              checked={allOn}
-              onChange={() => setSelected(allOn ? new Set() : new Set(rows.map((r) => r.id)))}
-              className="h-4 w-4 accent-brand-600"
-            />
+            {canWork && (
+              <input
+                type="checkbox"
+                aria-label={T.selectAll}
+                checked={allOn}
+                onChange={() => setSelected(allOn ? new Set() : new Set(rows.map((r) => r.id)))}
+                className="h-4 w-4 accent-brand-600"
+              />
+            )}
             <span>{T.count.replace("{n}", String(rows.length))}</span>
           </div>
           <ul className="divide-y divide-line">
@@ -203,24 +215,36 @@ export function ClaimsClient({
               const lapsed = !coverHolds(r.insurer_id, r.cover_until, r.issue_day);
               return (
                 <li key={r.id} className="flex items-start gap-3 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    aria-label={r.number}
-                    checked={selected.has(r.id)}
-                    onChange={() => toggle(r.id)}
-                    className="mt-1 h-4 w-4 accent-brand-600"
-                  />
+                  {canWork && (
+                    <input
+                      type="checkbox"
+                      aria-label={r.number}
+                      checked={selected.has(r.id)}
+                      onChange={() => toggle(r.id)}
+                      className="mt-1 h-4 w-4 accent-brand-600"
+                    />
+                  )}
                   <div className="grid min-w-0 flex-1 gap-1 sm:grid-cols-[1fr_1.4fr_1fr_auto] sm:items-center sm:gap-4">
                     <div className="min-w-0">
-                      <Link href={`/c/${slug}/invoices/${r.id}`} className="text-sm font-semibold hover:text-brand-700" dir="ltr">
-                        {r.number}
-                      </Link>
+                      {canOpenInvoices ? (
+                        <Link href={`/c/${slug}/invoices/${r.id}`} className="text-sm font-semibold hover:text-brand-700" dir="ltr">
+                          {r.number}
+                        </Link>
+                      ) : (
+                        <span className="text-sm font-semibold" dir="ltr">
+                          {r.number}
+                        </span>
+                      )}
                       <div className="text-[12px] text-ink-500">{fmtDate(`${r.issue_day}T12:00:00Z`, "UTC", locale)}</div>
                     </div>
                     <div className="min-w-0">
-                      <Link href={`/c/${slug}/patients/${r.patient_id}`} className="block truncate text-sm hover:text-brand-700">
-                        {r.patient_name}
-                      </Link>
+                      {canOpenPatients ? (
+                        <Link href={`/c/${slug}/patients/${r.patient_id}`} className="block truncate text-sm hover:text-brand-700">
+                          {r.patient_name}
+                        </Link>
+                      ) : (
+                        <span className="block truncate text-sm">{r.patient_name}</span>
+                      )}
                       <div className="truncate text-[12px] text-ink-500">
                         {r.national_id ? (
                           <span dir="ltr">{r.national_id}</span>
@@ -260,7 +284,7 @@ export function ClaimsClient({
         The work, on whatever is ticked. Sticky at the bottom so it is in reach
         however far down the list the last tick was.
       */}
-      {selected.size > 0 && (
+      {canWork && selected.size > 0 && (
         <div className="sticky bottom-3 z-20 mt-4 flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface p-3 shadow-pop">
           <span className="me-auto text-sm font-medium">
             {T.selected.replace("{n}", String(selected.size))} · <span className="tnum">{money(chosenTotal)}</span>

@@ -18,12 +18,33 @@ import {
   ROLE_DEFAULTS,
   accessLevelOf,
   capabilitiesFor,
+  missingRequirements,
   resolveCapabilities,
+  withSection,
   type Capability,
+  type CapabilityArea,
   type CapabilityMap,
   type MemberRole,
 } from "@/lib/permissions";
-import { UserPlus, Pencil, Lock } from "lucide-react";
+import {
+  UserPlus,
+  Pencil,
+  Lock,
+  LayoutDashboard,
+  CalendarDays,
+  MessageCircle,
+  Users,
+  FileSignature,
+  ReceiptText,
+  ShieldCheck,
+  Coins,
+  Wallet,
+  Megaphone,
+  Workflow,
+  Sparkles,
+  Settings,
+  RotateCcw,
+} from "lucide-react";
 
 type Member = {
   id: string;
@@ -58,6 +79,26 @@ type Member = {
 };
 
 const ROLES: MemberRole[] = ["doctor", "receptionist", "other"];
+
+/** The access editor's headings, in the order a working day meets them. */
+const AREAS: CapabilityArea[] = ["daily", "money", "growth", "admin"];
+
+/** The same marks the sidebar uses, so a switch is recognisably the screen it opens. */
+const SECTION_ICONS: Partial<Record<Capability, React.ComponentType<{ className?: string; strokeWidth?: number }>>> = {
+  dashboard: LayoutDashboard,
+  calendar: CalendarDays,
+  conversations: MessageCircle,
+  patients: Users,
+  documents: FileSignature,
+  invoices: ReceiptText,
+  insurance: ShieldCheck,
+  earnings: Coins,
+  expenses: Wallet,
+  campaigns: Megaphone,
+  automations: Workflow,
+  ai: Sparkles,
+  settings: Settings,
+};
 
 export function StaffClient({
   slug,
@@ -259,6 +300,7 @@ export function StaffClient({
           <AccessEditor
             level={form.access}
             caps={form.caps}
+            role={form.role}
             onLevel={(access) => setForm((f) => ({ ...f, access }))}
             onCaps={(caps) => setForm((f) => ({ ...f, caps }))}
           />
@@ -374,54 +416,58 @@ export function StaffClient({
 function AccessEditor({
   level,
   caps,
+  role,
   onLevel,
   onCaps,
 }: {
   level: "full" | "custom";
   caps: CapabilityMap;
+  /** The job, so the owner can go back to what it starts with. */
+  role: MemberRole;
   onLevel: (level: "full" | "custom") => void;
   onCaps: (caps: CapabilityMap) => void;
 }) {
   const { t } = useI18n();
+  const sectionsOn = CAPABILITY_GROUPS.filter((g) => caps[g.section]).length;
 
-  const setCap = (cap: Capability, on: boolean) => {
-    const next = { ...caps, [cap]: on };
-    // Turning a section off takes its actions with it — the reverse would leave
-    // someone able to void a document they cannot open.
-    if (!on) {
-      for (const g of CAPABILITY_GROUPS) {
-        if (g.section === cap) for (const a of g.actions) next[a] = false;
-      }
-    }
+  /** An action's own prerequisites beyond the section it sits under, said as a name. */
+  const blockedBy = (cap: Capability, section: Capability) =>
+    missingRequirements(caps, cap).filter((c) => c !== section);
+
+  const setActions = (actions: Capability[], on: boolean) => {
+    const next = { ...caps };
+    for (const a of actions) next[a] = on && missingRequirements(next, a).length === 0;
     onCaps(next);
   };
 
   return (
-    <div className="rounded-lg border border-line">
-      <div className="border-b border-line px-4 py-3">
-        <span className="block text-[13px] font-semibold">{t.staff.accessTitle}</span>
-        <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">{t.staff.accessSub}</p>
-        <div className="mt-2.5 flex flex-wrap gap-2">
+    <div className="overflow-hidden rounded-card border border-line bg-surface">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3.5">
+        <div className="min-w-0 flex-1 basis-60">
+          <span className="block text-sm font-semibold text-ink-900">{t.staff.accessTitle}</span>
+          <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">{t.staff.accessSub}</p>
+        </div>
+        {/*
+          A segmented control: two settings, one chosen. Only the level moves.
+          Switching to custom used to overwrite the ticks with *everything*,
+          which was redundant in one caller and wrong in the other: a member
+          stored on full already resolves to every capability, so the edit
+          screen is showing all of them anyway — while on the invite form the
+          ticks are the ones the chosen job implies, and replacing them handed a
+          receptionist the staff-settings and export boxes the moment somebody
+          looked at "Full access" and changed their mind. Nothing silently
+          grants more than the screen was showing.
+        */}
+        <div role="radiogroup" aria-label={t.staff.accessTitle} className="flex shrink-0 rounded-full bg-ink-900/5 p-0.5">
           {(["full", "custom"] as const).map((lv) => (
             <button
               key={lv}
               type="button"
-              /*
-                Only the level moves. Switching to custom used to overwrite the
-                ticks with *everything*, which was redundant in one caller and
-                wrong in the other: a member stored on full already resolves to
-                every capability, so the edit screen is showing all of them
-                anyway — while on the invite form the ticks are the ones the
-                chosen job implies, and replacing them handed a receptionist
-                the staff-settings and export boxes the moment somebody looked
-                at "Full access" and changed their mind. Nothing silently grants
-                more than the screen was showing.
-              */
+              role="radio"
+              aria-checked={level === lv}
               onClick={() => onLevel(lv)}
-              className={`touch-manipulation rounded-ctl border px-3 py-1.5 text-[13px] font-medium transition-colors duration-140 ease-out ${
-                level === lv
-                  ? "border-brand-600 bg-brand-50 text-brand-800"
-                  : "border-line text-ink-700 hover:border-line-strong"
+              className={`touch-manipulation rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+                level === lv ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
               }`}
             >
               {lv === "full" ? t.staff.fullAccess : t.staff.partialAccessLabel}
@@ -431,42 +477,150 @@ function AccessEditor({
       </div>
 
       {level === "custom" ? (
-        <ul className="grid gap-0.5 p-2">
-          {CAPABILITY_GROUPS.map((g, i) => (
-            <li key={g.section}>
-              {/* Sections that are one place in the nav get a heading saying so,
-                  so the list reads the way the sidebar does. Still three
-                  separate switches — they are three separate permissions. */}
-              {g.group && g.group !== CAPABILITY_GROUPS[i - 1]?.group && (
-                <div className="mt-3 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400 first:mt-0">
-                  {(t.nav as Record<string, string>)[g.group]}
-                </div>
-              )}
-              <label className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-sunken">
-                <span className="text-[13px] font-medium">{t.caps[g.section]}</span>
-                <Toggle
-                  checked={caps[g.section]}
-                  label={t.caps[g.section]}
-                  onChange={(v) => setCap(g.section, v)}
-                />
-              </label>
-              {g.actions.length > 0 && caps[g.section] && (
-                <ul className="mb-1 ms-3 border-s border-line ps-3">
-                  {g.actions.map((a) => (
-                    <li key={a}>
-                      <label className="flex items-center justify-between gap-3 rounded-lg px-2 py-1 hover:bg-sunken">
-                        <span className="text-[12px] text-ink-700">{t.caps[a]}</span>
-                        <Toggle checked={caps[a]} label={t.caps[a]} onChange={(v) => setCap(a, v)} />
+        <div className="grid gap-5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <p className="min-w-0 flex-1 basis-64 text-[12px] leading-relaxed text-ink-500">
+              {t.staff.accessCustomHint}
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[12px] font-semibold text-brand-700 ring-1 ring-brand-100 tnum">
+                {t.staff.accessSectionsOn
+                  .replace("{n}", String(sectionsOn))
+                  .replace("{total}", String(CAPABILITY_GROUPS.length))}
+              </span>
+              <button
+                type="button"
+                onClick={() => onCaps(capabilitiesFor(ROLE_DEFAULTS[role]))}
+                className="inline-flex touch-manipulation items-center gap-1 rounded-full px-2 py-1 text-[12px] font-medium text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {t.staff.accessReset}
+              </button>
+            </div>
+          </div>
+
+          {AREAS.map((area) => (
+            <section key={area}>
+              <h4 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                {t.staff.accessAreas[area]}
+              </h4>
+              <div className="grid gap-2">
+                {CAPABILITY_GROUPS.filter((g) => g.area === area).map(({ section, actions }) => {
+                  const Icon = SECTION_ICONS[section] ?? Settings;
+                  const on = caps[section];
+                  const granted = actions.filter((a) => caps[a]).length;
+                  return (
+                    <div
+                      key={section}
+                      className={`rounded-xl border transition-colors duration-140 ease-out ${
+                        on ? "border-brand-200 bg-brand-50/50" : "border-line"
+                      }`}
+                    >
+                      <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5">
+                        <span
+                          className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors duration-140 ease-out ${
+                            on ? "bg-brand-600 text-white" : "bg-sunken text-ink-500"
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" strokeWidth={1.9} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span className="text-[13px] font-semibold text-ink-900">{t.caps[section]}</span>
+                            {on && actions.length > 0 && (
+                              <span className="text-[11px] font-medium text-ink-500 tnum">
+                                {t.staff.accessCount
+                                  .replace("{n}", String(granted))
+                                  .replace("{total}", String(actions.length))}
+                              </span>
+                            )}
+                          </span>
+                          <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">
+                            {t.capsHelp[section]}
+                          </span>
+                        </span>
+                        <span className="mt-1.5 shrink-0">
+                          <Toggle
+                            checked={on}
+                            label={t.caps[section]}
+                            onChange={(v) => onCaps(withSection(caps, section, v))}
+                          />
+                        </span>
                       </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
+
+                      {/*
+                        Everything the section holds, shown the moment it is on —
+                        switching it on ticked all of it, so this is where the
+                        owner takes back what this person should not have.
+                      */}
+                      {on && actions.length > 0 && (
+                        <div className="border-t border-brand-100 px-3 pb-2 pt-1.5">
+                          <div className="flex justify-end gap-1 pb-1">
+                            <button
+                              type="button"
+                              onClick={() => setActions(actions, true)}
+                              className="touch-manipulation rounded-md px-2 py-0.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-100"
+                            >
+                              {t.staff.accessAll}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActions(actions, false)}
+                              className="touch-manipulation rounded-md px-2 py-0.5 text-[11px] font-semibold text-ink-500 hover:bg-ink-900/5"
+                            >
+                              {t.staff.accessNone}
+                            </button>
+                          </div>
+                          <ul className="grid gap-0.5">
+                            {actions.map((a) => {
+                              const missing = blockedBy(a, section);
+                              return (
+                                <li key={a}>
+                                  <label
+                                    className={`flex items-start gap-3 rounded-lg px-2 py-1.5 ${
+                                      missing.length ? "opacity-60" : "cursor-pointer hover:bg-surface"
+                                    }`}
+                                  >
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block text-[13px] font-medium text-ink-900">{t.caps[a]}</span>
+                                      <span className="block text-[11.5px] leading-snug text-ink-500">
+                                        {missing.length
+                                          ? t.staff.accessNeeds.replace(
+                                              "{what}",
+                                              missing.map((m) => t.caps[m]).join(" · ")
+                                            )
+                                          : t.capsHelp[a]}
+                                      </span>
+                                    </span>
+                                    <span className="mt-1 shrink-0">
+                                      <Toggle
+                                        checked={caps[a]}
+                                        disabled={missing.length > 0}
+                                        label={t.caps[a]}
+                                        onChange={(v) => onCaps({ ...caps, [a]: v })}
+                                      />
+                                    </span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           ))}
-        </ul>
+        </div>
       ) : (
-        <p className="px-4 py-3 text-[12px] leading-relaxed text-ink-500">{t.staff.fullAccessHint}</p>
+        <div className="flex items-start gap-3 px-4 py-4">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-white">
+            <ShieldCheck className="h-4 w-4" strokeWidth={1.9} />
+          </span>
+          <p className="text-[13px] leading-relaxed text-ink-700">{t.staff.fullAccessHint}</p>
+        </div>
       )}
     </div>
   );
@@ -655,7 +809,7 @@ function EditMember({
           {member.is_owner ? t.staff.ownerAccessLocked : t.staff.selfAccessLocked}
         </p>
       ) : (
-        <AccessEditor level={level} caps={caps} onLevel={setLevel} onCaps={setCaps} />
+        <AccessEditor level={level} caps={caps} role={m.role} onLevel={setLevel} onCaps={setCaps} />
       )}
 
       {m.role === "doctor" && (

@@ -395,7 +395,8 @@ export async function setInvoiceInsuranceAction(
   data: { insurerId?: string | null; insurerAmount?: number; claimStatus?: string; claimRef?: string }
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "invoices")) return { error: "forbidden" };
+  // The invoice and the insurer both: this edits a claim on an invoice.
+  if (!can(access, "invoices") || !can(access, "insurance")) return { error: "forbidden" };
   const STATUSES = ["none", "to_submit", "submitted", "approved", "rejected", "paid"];
   if (data.claimStatus && !STATUSES.includes(data.claimStatus)) return { error: "bad_status" };
 
@@ -775,7 +776,7 @@ export async function voidInvoiceAction(
   reason = ""
 ): Promise<{ error?: string; creditNoteId?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "invoices")) return { error: "forbidden" };
+  if (!can(access, "invoices.void")) return { error: "forbidden" };
   const why = String(reason).slice(0, 300);
 
   return inClinic(access, async (c) => {

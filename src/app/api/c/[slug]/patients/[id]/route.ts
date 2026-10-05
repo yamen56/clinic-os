@@ -4,8 +4,11 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { checkNationalId, nationalIdOf } from "@/lib/patients";
+import { can } from "@/lib/auth";
 
 const TEXT_FIELDS = new Set(["full_name", "notes_summary", "whatsapp_name"]);
+/** Who covers this patient: the Insurance switch's, not the file's. */
+const INSURANCE_FIELDS = new Set(["insurer_id", "insurance_no", "insurance_valid_until"]);
 
 /** Autosave endpoint for a patient file. Accepts a partial patch; last write wins, all versions audited. */
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
@@ -49,7 +52,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     */
     const rejected: Record<string, { error: string; other?: unknown }> = {};
 
+    const mayInsure = can(access, "insurance");
+
     for (const [key, raw] of Object.entries(patch)) {
+      /*
+        Refused one by one like any other field that cannot be saved, so the
+        rest of a batched autosave still lands. The screen never offers these
+        without the switch; this is for the request that did not come from it.
+      */
+      if (INSURANCE_FIELDS.has(key) && !mayInsure) {
+        rejected[key] = { error: "forbidden" };
+        continue;
+      }
       if (TEXT_FIELDS.has(key)) {
         const v = String(raw ?? "").slice(0, key === "notes_summary" ? 5000 : 200);
         if (key === "full_name" && !v.trim()) continue;

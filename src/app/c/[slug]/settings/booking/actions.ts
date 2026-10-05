@@ -57,7 +57,7 @@ export async function saveBookingLinkAction(
   data: unknown
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.booking")) return { error: "forbidden" };
   const parsed = linkSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
@@ -169,7 +169,7 @@ export async function saveBookingLinkAction(
 
 export async function deleteBookingLinkAction(slug: string, id: string) {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return;
+  if (!can(access, "settings.booking")) return;
   await inClinic(access, (c) =>
     c.query(`delete from booking_links where id = $1 and clinic_id = $2`, [id, access.clinicId])
   );
@@ -200,7 +200,7 @@ export async function saveBookingQuestionAction(
   input: unknown
 ): Promise<{ error?: string; id?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.booking")) return { error: "forbidden" };
   const parsed = questionSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" };
   const q = parsed.data;
@@ -288,7 +288,7 @@ export async function deleteBookingQuestionAction(
   id: string
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.booking")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
     /*
       Deleting the question does not touch the answers. They are frozen onto the
@@ -321,7 +321,7 @@ export async function moveBookingQuestionAction(
   direction: "up" | "down"
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "settings.booking")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
     const me = (
       await c.query(

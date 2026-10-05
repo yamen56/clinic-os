@@ -19,12 +19,13 @@ const NO_CACHE = "no-store, private";
  * their billing codes, what the company owes — with a totals row; and one row
  * per service line, for the companies that check line by line.
  *
- * Gated like the claims screen (invoices), scoped the same way, and audited:
+ * Gated on working the claims (`insurance.claims`), scoped like the claims
+ * screen, and audited:
  * this is patient data, with national numbers, leaving the building.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const g = await apiClinic(slug, "invoices");
+  const g = await apiClinic(slug, "insurance.claims");
   if (!g.ok) return g.res;
   const access = g.access;
   const url = new URL(req.url);

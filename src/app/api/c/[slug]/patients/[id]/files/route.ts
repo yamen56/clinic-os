@@ -3,6 +3,7 @@ import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { saveFile } from "@/lib/storage";
+import { can } from "@/lib/auth";
 
 const MAX_SIZE = 25 * 1024 * 1024;
 
@@ -18,6 +19,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
   const file = form.get("file");
   const kind = String(form.get("kind") ?? "other");
   if (!(file instanceof File)) return NextResponse.json({ error: "no_file" }, { status: 400 });
+  // A photo of the insurance card is filed as insurance, so it takes the switch.
+  if (kind === "insurance_card" && !can(access, "insurance")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
   if (file.size > MAX_SIZE) return NextResponse.json({ error: "too_large" }, { status: 413 });
 
   const buf = Buffer.from(await file.arrayBuffer());

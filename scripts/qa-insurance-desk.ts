@@ -57,9 +57,14 @@ async function main() {
   check("within a month it is expiring", coverState("x", "2026-10-30", "2026-10-05") === "expiring");
   check("ages bucket by the invoice date", ageBucket("2026-06-01", "2026-10-05") === "older" && ageBucket("2026-09-20", "2026-10-05") === "d30");
   check("open means everything not settled", statusesFor("open").join() === "to_submit,submitted,approved,rejected");
-  const caps = { invoices: true } as never;
+  // Claims answer to the Insurance switch, not to Invoices (2026-10-06).
+  const caps = { invoices: true, insurance: true } as never;
   check("a cash-only clinic has no claims tab", !financeTabs({ caps, hasEarnings: false, fullControl: false }).includes("claims"));
   check("one with a company does", financeTabs({ caps, hasEarnings: false, fullControl: false, hasInsurers: true }).includes("claims"));
+  check(
+    "but not for somebody without Insurance",
+    !financeTabs({ caps: { invoices: true } as never, hasEarnings: false, fullControl: false, hasInsurers: true }).includes("claims")
+  );
 
   /* ================================================================== fixtures */
   const db = new Client({ connectionString: PG });

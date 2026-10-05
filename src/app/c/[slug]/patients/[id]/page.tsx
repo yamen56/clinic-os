@@ -55,6 +55,8 @@ export default async function PatientProfilePage({
     manageCategories: can(access, "patients.categories"),
     /** Write, send and repeat. Reading the ones already written is `patients`. */
     prescriptions: can(access, "patients.prescriptions"),
+    merge: can(access, "patients.merge"),
+    insurance: can(access, "insurance"),
   };
   const none = { rows: [] as Record<string, unknown>[] };
 
@@ -189,11 +191,14 @@ export default async function PatientProfilePage({
         // Only companies still in use, so a list that has been tidied does not
         // offer a defunct insurer to the next patient — plus this patient's own,
         // so a file whose company was retired still says who covered them.
-        c.query(
-          `select id, name, coverage_percent, coverage_cap from insurers
-            where clinic_id = $1 and (active or id = $2) order by name`,
-          [access.clinicId, p.insurer_id ?? null]
-        ),
+        // Not at all without Insurance: an empty list is what hides the card.
+        caps.insurance
+          ? c.query(
+              `select id, name, coverage_percent, coverage_cap from insurers
+                where clinic_id = $1 and (active or id = $2) order by name`,
+              [access.clinicId, p.insurer_id ?? null]
+            )
+          : none,
         // The note categories this clinic defined. Inactive ones come too: a note
         // filed under a retired category still has to show which one.
         c.query(
@@ -203,11 +208,25 @@ export default async function PatientProfilePage({
         ),
       ]);
 
+    /*
+      Without Insurance the file says nothing about cover, rather than only not
+      drawing it: the row goes to the browser whole, so the fields are emptied
+      here, and the card photos are left out of the files with them. Who covers
+      a patient is billing, and the switch was turned off so that it stays with
+      whoever does the billing.
+    */
+    const patient = caps.insurance
+      ? p
+      : { ...p, insurer_id: null, insurance_no: "", insurance_valid_until: null, cover_until: null };
+    const visibleFiles = caps.insurance
+      ? files.rows
+      : files.rows.filter((f) => f.kind !== "insurance_card");
+
     return {
-      patient: p,
+      patient,
       prescriptions,
       notes: notes.rows,
-      files: files.rows,
+      files: visibleFiles,
       appointments: appointments.rows,
       invoices: invoices.rows,
       conversation: conversation.rows[0] ?? null,

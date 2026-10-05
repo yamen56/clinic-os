@@ -9,7 +9,7 @@ export default async function ServicesSettingsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const access = await guardCap(slug, "settings");
+  const access = await guardCap(slug, "settings.services");
   const data = await inClinic(access, async (c) => {
     const services = (
       await c.query(
@@ -57,7 +57,7 @@ export default async function ServicesSettingsPage({
   return (
     <ServicesClient
       slug={slug}
-      canEdit={can(access, "settings")}
+      canEdit={can(access, "settings.services")}
       services={JSON.parse(JSON.stringify(data.services))}
       doctors={JSON.parse(JSON.stringify(data.doctors))}
       sections={JSON.parse(JSON.stringify(data.sections))}

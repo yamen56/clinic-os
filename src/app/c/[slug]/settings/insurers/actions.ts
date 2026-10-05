@@ -27,7 +27,7 @@ export async function saveInsurerAction(
   }
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "insurance.companies")) return { error: "forbidden" };
   const name = data.name.trim();
   if (!name) return { error: "name_required" };
   const pct = data.coveragePercent ?? null;
@@ -67,7 +67,7 @@ export async function saveInsurerAction(
 
 export async function deleteInsurerAction(slug: string, id: string): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
-  if (!can(access, "settings")) return { error: "forbidden" };
+  if (!can(access, "insurance.companies")) return { error: "forbidden" };
 
   await inClinic(access, async (c) => {
     /*
