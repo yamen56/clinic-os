@@ -20,6 +20,7 @@ export default async function CampaignPage({
     const campaign = (
       await c.query(
         `select c.id, c.name, c.body, c.status, c.interval_seconds, c.total_count, c.filters,
+                c.media_kind, c.media_name,
                 c.created_at, c.started_at, c.finished_at, c.next_send_at,
                 u.full_name as created_by_name,
                 cl.message_window_start, cl.message_window_end, cl.daily_outbound_cap,

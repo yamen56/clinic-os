@@ -322,24 +322,7 @@ export async function processOnce() {
       }
 
       try {
-        let content: AnyMessageContent;
-        if (row.msg_type === "image" && row.media_path) {
-          const buf = await readFileBuffer(row.media_path);
-          if (!buf) throw new Error("media file missing");
-          content = { image: buf, caption: row.body || undefined };
-        } else if (row.msg_type === "document" && row.media_path) {
-          const buf = await readFileBuffer(row.media_path);
-          if (!buf) throw new Error("media file missing");
-          content = {
-            document: buf,
-            mimetype: row.media_mime ?? "application/octet-stream",
-            fileName: row.media_name ?? "document.pdf",
-            caption: row.body || undefined,
-          };
-        } else {
-          content = { text: row.body };
-        }
-
+        const content = await messageContent(row);
         const sent = await session.sock!.sendMessage(jid, content);
         await withSystem(async (c) => {
           await c.query(
@@ -422,6 +405,56 @@ export async function processOnce() {
       nextSendAt.set(clinicId, Date.now() + 3000 + Math.random() * 7000);
     })
   );
+}
+
+type OutboxRow = {
+  msg_type: string;
+  body: string | null;
+  media_path: string | null;
+  media_name: string | null;
+  media_mime: string | null;
+  media_meta: { thumb?: string; width?: number; height?: number; seconds?: number } | null;
+};
+
+/**
+ * What Baileys is handed for one outbox row. Exported so QA can check the
+ * shape without a socket.
+ */
+export async function messageContent(row: OutboxRow): Promise<AnyMessageContent> {
+  const caption = row.body || undefined;
+  if (!row.media_path || !["image", "video", "document"].includes(row.msg_type)) {
+    return { text: row.body ?? "" };
+  }
+  const buf = await readFileBuffer(row.media_path);
+  if (!buf) throw new Error("media file missing");
+
+  if (row.msg_type === "image") return { image: buf, caption };
+  if (row.msg_type === "video") {
+    /*
+      Without a thumbnail Baileys shells out to ffmpeg for one, which this image
+      does not have, and the recipient gets an empty box with no length on it.
+      The frame and measurements were taken by the browser that uploaded the
+      file (see migration 0066). Baileys spreads these onto the video proto, so
+      `seconds` is honoured even though its type for video does not list it.
+    */
+    const meta = row.media_meta ?? {};
+    const video = {
+      video: buf,
+      caption,
+      mimetype: row.media_mime ?? "video/mp4",
+      jpegThumbnail: meta.thumb,
+      width: meta.width,
+      height: meta.height,
+      seconds: meta.seconds,
+    };
+    return video;
+  }
+  return {
+    document: buf,
+    mimetype: row.media_mime ?? "application/octet-stream",
+    fileName: row.media_name ?? "document.pdf",
+    caption,
+  };
 }
 
 /**

@@ -647,6 +647,15 @@ Claiming uses `FOR UPDATE SKIP LOCKED`, so multiple worker instances never doubl
   list is frozen at creation** — a drip runs for hours and the audience must not shift underneath it.
 - One message body, supporting the same merge tokens as automations
   (`{{patient.first_name}}`, `{{patient.name}}`, `{{clinic.name}}`, `{{clinic.phone}}`).
+- **Optional photo or video** (migration 0066). With one attached, the message becomes its
+  caption and may be empty. Photos (JPG/PNG/WebP) are re-encoded on upload to a JPEG of at most
+  2048px with no metadata, so a phone photo's GPS position never goes out to the audience.
+  Video is MP4 only, up to 16 MB, sent as uploaded. The file is stored once and every
+  recipient's message points at it. The upload route (`/api/c/{slug}/campaigns/media`) needs
+  the campaigns capability before it reads the body, and the create action accepts only a path
+  in this clinic's `campaign-media/` folder. WhatsApp's video preview (frame, size, length) is
+  measured in the browser at upload, because Baileys would need ffmpeg, which the worker lacks.
+  Deleting a campaign removes its file only if nobody was ever queued.
 - **Pacing**: `interval_seconds`, constrained **30 – 86 400**, default **120**. The UI shows
   "Will message N patients", how many lack a phone and will be skipped, and an estimated
   total duration.
@@ -1923,7 +1932,7 @@ Real browser (Playwright) against the running app, asserting against the databas
 
 Plus focused suites: `qa-access`, `qa-automation-coverage`, `qa-backup`, `qa-booking-race`,
 `qa-doctor-earnings`, `qa-receipts`, `qa-expenses`, `qa-finance`, `qa-service-sections`,
-`qa-brand-credit`, `qa-campaigns`, `qa-db-resilience`, `qa-documents`, `qa-esign`,
+`qa-brand-credit`, `qa-campaigns`, `qa-campaign-media`, `qa-db-resilience`, `qa-documents`, `qa-esign`,
 `qa-esign-browser`, `qa-finance`, `qa-first-message`, `qa-import-digest`, `qa-mobile`,
 `qa-mobile-width`, `qa-tablet`,
 `qa-einvoicing`, `qa-payments`, `qa-pdf-idle`, `qa-photos`, `qa-waitlist-insurance`,

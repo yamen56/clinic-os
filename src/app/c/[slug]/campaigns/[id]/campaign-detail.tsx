@@ -20,6 +20,8 @@ type Campaign = {
   id: string;
   name: string;
   body: string;
+  media_kind: "image" | "video" | null;
+  media_name: string | null;
   status: "draft" | "running" | "done" | "cancelled";
   interval_seconds: number;
   total_count: number;
@@ -194,7 +196,27 @@ export function CampaignDetail({
 
         <Card className="p-5">
           <div className="eyebrow">{t.campaigns.message}</div>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-ink-700">{campaign.body}</p>
+          {campaign.media_kind === "image" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/c/${slug}/campaigns/${campaign.id}/media`}
+              alt={campaign.media_name ?? ""}
+              className="mt-2 max-h-72 w-full rounded-lg bg-sunken object-contain"
+            />
+          )}
+          {campaign.media_kind === "video" && (
+            <video
+              // #t= so Safari paints a frame instead of a black box before play.
+              src={`/api/c/${slug}/campaigns/${campaign.id}/media#t=0.1`}
+              controls
+              playsInline
+              preload="metadata"
+              className="mt-2 max-h-72 w-full rounded-lg bg-ink-900"
+            />
+          )}
+          {campaign.body && (
+            <p className="mt-2 whitespace-pre-wrap text-sm text-ink-700">{campaign.body}</p>
+          )}
           {campaign.created_by_name && (
             <p className="mt-3 text-xs text-ink-500">
               {t.campaigns.createdBy.replace("{name}", campaign.created_by_name)}

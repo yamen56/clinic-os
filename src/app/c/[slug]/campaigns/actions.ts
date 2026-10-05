@@ -5,10 +5,12 @@ import { requireClinic, type ClinicAccess, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { patientFilterSql, type PatientFilters } from "@/lib/patients";
+import { deleteFile } from "@/lib/storage";
 import {
   MIN_INTERVAL_SECONDS,
   MAX_INTERVAL_SECONDS,
   type CampaignAudience,
+  type VideoMeta,
 } from "./constants";
 
 /**
@@ -37,6 +39,72 @@ const SENDABLE = "p.phone_e164 is not null and not p.automation_opt_out";
 function assertCanSend(access: ClinicAccess) {
   const allowed = can(access, "campaigns");
   if (!allowed) throw new Error("forbidden");
+}
+
+type Attachment = {
+  kind: "image" | "video";
+  path: string;
+  name: string;
+  mime: string;
+  meta: VideoMeta | null;
+};
+
+/**
+ * The file the upload route stored, checked rather than believed.
+ *
+ * The path arrives from the browser, so it must be one the route could have
+ * written for this clinic — anything else would let a campaign send another
+ * clinic's file, or a patient document from this one, to the whole audience.
+ * The kind comes off the extension the route chose, and the name off the path,
+ * so nothing the browser says about the file is kept.
+ *
+ * Undefined means "not a file this clinic uploaded"; null means no file at all.
+ */
+function attachment(
+  clinicId: string,
+  input: { path?: unknown; meta?: unknown } | null | undefined
+): Attachment | null | undefined {
+  if (!input) return null;
+  const path = String(input.path ?? "");
+  const m = path.match(new RegExp(`^${clinicId}/campaign-media/[0-9a-f]{8}-([^/\\\\]+\\.(jpg|mp4))$`));
+  if (!m) return undefined;
+  const kind = m[2] === "mp4" ? "video" : "image";
+  return {
+    kind,
+    path,
+    name: m[1],
+    mime: kind === "video" ? "video/mp4" : "image/jpeg",
+    meta: kind === "video" ? videoMeta(input.meta) : null,
+  };
+}
+
+/**
+ * What the browser measured about a video, kept only where it is plausible.
+ * Every field is optional: a frame that would not decode just means WhatsApp
+ * draws its own placeholder, which is no reason to refuse the campaign.
+ */
+function videoMeta(raw: unknown): VideoMeta | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const out: VideoMeta = {};
+  const dim = (v: unknown) =>
+    typeof v === "number" && Number.isInteger(v) && v > 0 && v <= 8192 ? v : undefined;
+  out.width = dim(r.width);
+  out.height = dim(r.height);
+  if (typeof r.seconds === "number" && r.seconds > 0 && r.seconds <= 86400) {
+    out.seconds = Math.max(1, Math.round(r.seconds));
+  }
+  // A small JPEG, and only that: it is copied into every outgoing message.
+  if (
+    typeof r.thumb === "string" &&
+    r.thumb.length <= 64 * 1024 &&
+    /^[A-Za-z0-9+/]+={0,2}$/.test(r.thumb) &&
+    Buffer.from(r.thumb.slice(0, 8), "base64").subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))
+  ) {
+    out.thumb = r.thumb;
+  }
+  const kept = Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined));
+  return Object.keys(kept).length ? (kept as VideoMeta) : null;
 }
 
 /** How many patients this filter would actually message, before committing to it. */
@@ -83,15 +151,24 @@ export async function previewAudienceAction(
  */
 export async function createCampaignAction(
   slug: string,
-  input: { name: string; body: string; intervalSeconds: number; filters: PatientFilters }
+  input: {
+    name: string;
+    body: string;
+    intervalSeconds: number;
+    filters: PatientFilters;
+    /** From the upload route. With a file attached the message is its caption, and may be empty. */
+    media?: { path: string; meta?: VideoMeta | null } | null;
+  }
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
   assertCanSend(access);
 
   const name = input.name.trim().slice(0, 120);
   const body = input.body.trim();
+  const media = attachment(access.clinicId, input.media);
   if (!name) return { error: "nameRequired" };
-  if (!body) return { error: "messageRequired" };
+  if (media === undefined) return { error: "badMedia" };
+  if (!body && !media) return { error: "messageRequired" };
 
   const interval = Math.round(input.intervalSeconds);
   if (!Number.isFinite(interval) || interval < MIN_INTERVAL_SECONDS || interval > MAX_INTERVAL_SECONDS) {
@@ -104,8 +181,9 @@ export async function createCampaignAction(
   return inClinic(access, async (c) => {
     const campaign = (
       await c.query(
-        `insert into campaigns (clinic_id, name, body, filters, interval_seconds, created_by)
-         values ($1, $2, $3, $4, $5, $6) returning id`,
+        `insert into campaigns (clinic_id, name, body, filters, interval_seconds, created_by,
+                                media_kind, media_path, media_name, media_mime, media_meta)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
         [
           access.clinicId,
           name,
@@ -113,6 +191,11 @@ export async function createCampaignAction(
           JSON.stringify(input.filters ?? {}),
           interval,
           access.session.user.id,
+          media?.kind ?? null,
+          media?.path ?? null,
+          media?.name ?? null,
+          media?.mime ?? null,
+          media?.meta ? JSON.stringify(media.meta) : null,
         ]
       )
     ).rows[0];
@@ -144,7 +227,12 @@ export async function createCampaignAction(
       action: "campaign.create",
       entity: "campaign",
       entityId: campaign.id,
-      detail: { name, recipients: inserted.rowCount, intervalSeconds: interval },
+      detail: {
+        name,
+        recipients: inserted.rowCount,
+        intervalSeconds: interval,
+        media: media?.kind ?? null,
+      },
     });
     return { id: campaign.id as string };
   });
@@ -243,14 +331,30 @@ export async function deleteCampaignAction(slug: string, id: string): Promise<{ 
   const access = await requireClinic(slug);
   assertCanSend(access);
 
+  /*
+    The file goes with the campaign only if nobody was ever queued. Every
+    recipient's message points at the same stored file, and those messages stay
+    in the conversations after the campaign is gone ("Messages already sent stay
+    in the conversations") — removing it would blank the photo in every one of
+    those threads. Asked before the delete, because the recipients cascade.
+  */
   const result = await inClinic(access, async (c) => {
     const r = await c.query(
-      `delete from campaigns where id = $1 and clinic_id = $2 and status in ('draft', 'cancelled', 'done')
-       returning id`,
+      `with orphan as (
+         select media_path from campaigns
+          where id = $1 and clinic_id = $2 and media_path is not null
+            and not exists (select 1 from campaign_recipients
+                             where campaign_id = $1 and message_id is not null)
+       )
+       delete from campaigns where id = $1 and clinic_id = $2 and status in ('draft', 'cancelled', 'done')
+       returning (select media_path from orphan) as orphan_path`,
       [id, access.clinicId]
     );
-    return r.rowCount ? {} : { error: "notDeletable" };
+    if (!r.rowCount) return { error: "notDeletable" } as const;
+    return { orphanPath: r.rows[0].orphan_path as string | null };
   });
+  // After the commit: a rolled-back delete must not have taken the file with it.
+  if ("orphanPath" in result && result.orphanPath) await deleteFile(result.orphanPath);
   revalidatePath(`/c/${slug}/campaigns`);
-  return result;
+  return "error" in result ? { error: result.error } : {};
 }

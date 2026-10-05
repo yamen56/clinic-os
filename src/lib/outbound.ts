@@ -14,10 +14,12 @@ export async function queueWhatsAppMessage(
     senderKind: "staff" | "automation" | "ai" | "system" | "campaign";
     senderUserId?: string | null;
     automationRunId?: string | null;
-    msgType?: "text" | "image" | "document";
+    msgType?: "text" | "image" | "video" | "document";
     mediaPath?: string | null;
     mediaName?: string | null;
     mediaMime?: string | null;
+    /** For a video: the frame, size and length WhatsApp draws before it is downloaded. */
+    mediaMeta?: Record<string, unknown> | null;
     scheduledAt?: string | null; // UTC ISO; defaults to now
     patientId?: string | null;
   }
@@ -34,8 +36,9 @@ export async function queueWhatsAppMessage(
   const preview = opts.body ? opts.body.slice(0, 120) : `[${opts.msgType ?? "media"}]`;
   const msg = await c.query(
     `insert into messages (clinic_id, conversation_id, direction, sender_kind, sender_user_id,
-                           msg_type, body, media_path, media_name, media_mime, status, scheduled_at, automation_run_id)
-     values ($1, $2, 'out', $3, $4, $5, $6, $7, $8, $9, 'queued', coalesce($10::timestamptz, now()), $11)
+                           msg_type, body, media_path, media_name, media_mime, status, scheduled_at, automation_run_id,
+                           media_meta)
+     values ($1, $2, 'out', $3, $4, $5, $6, $7, $8, $9, 'queued', coalesce($10::timestamptz, now()), $11, $12)
      returning id`,
     [
       opts.clinicId,
@@ -49,6 +52,7 @@ export async function queueWhatsAppMessage(
       opts.mediaMime ?? null,
       opts.scheduledAt ?? null,
       opts.automationRunId ?? null,
+      opts.mediaMeta ? JSON.stringify(opts.mediaMeta) : null,
     ]
   );
   await c.query(

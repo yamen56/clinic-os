@@ -141,7 +141,7 @@ export async function pumpClinic(clinicId: string) {
            order by next_send_at
            limit 1 for update skip locked
          )
-         returning id, body, interval_seconds`,
+         returning id, body, interval_seconds, media_kind, media_path, media_name, media_mime, media_meta`,
         [clinicId]
       )
     ).rows[0];
@@ -202,7 +202,8 @@ export async function pumpClinic(clinicId: string) {
 
     const ctx = await loadContext(c, { clinicId, patientId: recipient.patient_id });
     const body = renderTemplate(campaign.body, ctx).trim();
-    if (!body) {
+    // With a photo or video the text is a caption, and a photo alone is a message.
+    if (!body && !campaign.media_path) {
       await c.query(
         `update campaign_recipients set status = 'failed', error = 'empty message' where id = $1`,
         [recipient.id]
@@ -210,12 +211,18 @@ export async function pumpClinic(clinicId: string) {
       return;
     }
 
+    // Every recipient's message points at the one stored file; see migration 0066.
     const { messageId } = await queueWhatsAppMessage(c, {
       clinicId,
       phoneE164: recipient.phone_e164,
       body,
       senderKind: "campaign",
       patientId: recipient.patient_id,
+      msgType: campaign.media_kind ?? "text",
+      mediaPath: campaign.media_path,
+      mediaName: campaign.media_name,
+      mediaMime: campaign.media_mime,
+      mediaMeta: campaign.media_meta,
     });
     await c.query(`update campaign_recipients set message_id = $2 where id = $1`, [
       recipient.id,

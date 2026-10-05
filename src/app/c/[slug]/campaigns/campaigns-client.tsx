@@ -1,20 +1,30 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate } from "@/lib/dates";
 import { PageHeader, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { createCampaignAction, previewAudienceAction } from "./actions";
-import { MIN_INTERVAL_SECONDS, type CampaignAudience } from "./constants";
-import { Megaphone, Plus, ChevronRight } from "lucide-react";
+import {
+  MIN_INTERVAL_SECONDS,
+  MAX_MEDIA_BYTES,
+  MEDIA_IMAGE_TYPES,
+  MEDIA_VIDEO_TYPES,
+  type CampaignAudience,
+  type UploadedMedia,
+  type VideoMeta,
+} from "./constants";
+import { readVideoMeta } from "./video-meta";
+import { Megaphone, Plus, ChevronRight, ImagePlus, X } from "lucide-react";
 
 export type CampaignRow = {
   id: string;
@@ -54,6 +64,33 @@ export function estimateDuration(remaining: number, intervalSeconds: number): st
 
 const INTERVAL_CHOICES = [30, 60, 120, 300, 600, 1800, 3600];
 
+/**
+ * A photo or video chosen in the dialog.
+ *
+ * `meta` is a promise so that submitting while a video is still being measured
+ * waits for it rather than racing it. `uploaded` remembers the stored path, so
+ * a create that fails on, say, the name does not upload the file again.
+ */
+type PickedMedia = {
+  file: File;
+  url: string;
+  kind: "image" | "video";
+  meta: Promise<VideoMeta | null>;
+  uploaded: UploadedMedia | null;
+};
+
+async function uploadMedia(slug: string, file: File): Promise<UploadedMedia | { error: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const res = await fetch(`/api/c/${slug}/campaigns/media`, { method: "POST", body: form });
+    const json = await res.json().catch(() => ({}));
+    return res.ok ? (json as UploadedMedia) : { error: json.error ?? "mediaUpload" };
+  } catch {
+    return { error: "mediaUpload" };
+  }
+}
+
 export function CampaignsClient({
   slug,
   campaigns,
@@ -77,6 +114,38 @@ export function CampaignsClient({
   const [filters, setFilters] = useState({ tag: "", source: "", visit: "" });
   const [audience, setAudience] = useState<CampaignAudience | null>(null);
   const [err, setErr] = useState("");
+  const [media, setMedia] = useState<PickedMedia | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const errorText = (code: string) =>
+    (t.campaigns.errors as Record<string, string>)[code] ?? t.common.genericError;
+
+  // Keyed on the URL, not the object: recording the upload makes a new object
+  // around the same preview, which must not revoke it.
+  const mediaUrl = media?.url;
+  useEffect(() => () => {
+    if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+  }, [mediaUrl]);
+
+  const pickMedia = (file: File | undefined) => {
+    if (!file) return;
+    const type = file.type.toLowerCase();
+    const kind = MEDIA_IMAGE_TYPES.includes(type)
+      ? "image"
+      : MEDIA_VIDEO_TYPES.includes(type)
+        ? "video"
+        : null;
+    if (!kind) return setErr(errorText("mediaType"));
+    if (file.size > MAX_MEDIA_BYTES) return setErr(errorText("mediaTooLarge"));
+    setErr("");
+    setMedia({
+      file,
+      url: URL.createObjectURL(file),
+      kind,
+      meta: kind === "video" ? readVideoMeta(file) : Promise.resolve(null),
+      uploaded: null,
+    });
+  };
 
   // Recount whenever the audience changes, so the number on the button is the
   // number that will actually be messaged.
@@ -95,19 +164,38 @@ export function CampaignsClient({
   const submit = () =>
     start(async () => {
       setErr("");
+      // Checked here as well as on the server so a missing name does not cost
+      // a sixteen-megabyte upload first.
+      if (!name.trim()) return setErr(errorText("nameRequired"));
+      if (!body.trim() && !media) return setErr(errorText("messageRequired"));
+
+      let attached: { path: string; meta: VideoMeta | null } | null = null;
+      if (media) {
+        let up = media.uploaded;
+        if (!up) {
+          const r = await uploadMedia(slug, media.file);
+          if ("error" in r) return setErr(errorText(r.error));
+          up = r;
+          setMedia((m) => (m && m.file === media.file ? { ...m, uploaded: r } : m));
+        }
+        attached = { path: up.path, meta: await media.meta };
+      }
+
       const r = await createCampaignAction(slug, {
         name,
         body,
         intervalSeconds: interval,
         filters,
+        media: attached,
       });
       if (r.error) {
-        setErr((t.campaigns.errors as Record<string, string>)[r.error] ?? t.common.genericError);
+        setErr(errorText(r.error));
         return;
       }
       setOpen(false);
       setName("");
       setBody("");
+      setMedia(null);
       router.push(`/c/${slug}/campaigns/${r.id}`);
     });
 
@@ -203,7 +291,82 @@ export function CampaignsClient({
             <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
           </Field>
 
-          <Field label={t.campaigns.message} hint={t.campaigns.messageHint} required>
+          {/*
+            Not a <Field>: that is a <label>, and a label hands every click
+            inside it to its first control — here, whichever button is showing,
+            so tapping the preview would remove the file or reopen the picker.
+          */}
+          <div>
+            <span className="mb-1.5 block text-[13px] font-semibold text-ink-900">
+              {t.campaigns.media}
+            </span>
+            <input
+              ref={fileInput}
+              type="file"
+              accept={[...MEDIA_IMAGE_TYPES, ...MEDIA_VIDEO_TYPES].join(",")}
+              className="hidden"
+              onChange={(e) => {
+                pickMedia(e.target.files?.[0]);
+                // So picking the same file again after removing it still fires.
+                e.target.value = "";
+              }}
+            />
+            {media ? (
+              <div className="flex items-start gap-3 rounded-ctl border border-line p-2">
+                {media.kind === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={media.url} alt="" className="h-24 w-24 shrink-0 rounded-md object-cover" />
+                ) : (
+                  <video
+                    src={media.url}
+                    controls
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="h-24 max-w-40 shrink-0 rounded-md bg-ink-900"
+                  />
+                )}
+                <div className="min-w-0 flex-1 py-1">
+                  <div className="truncate text-sm font-medium" dir="auto">
+                    {media.file.name}
+                  </div>
+                  <div className="mt-0.5 text-xs text-ink-500">
+                    {t.campaigns.mediaKinds[media.kind]} ·{" "}
+                    {/* Isolated, or an Arabic line reorders it to "MB 2.4". */}
+                    <bdi dir="ltr">
+                      {media.file.size < 1048576
+                        ? `${Math.max(1, Math.round(media.file.size / 1024))} KB`
+                        : `${(media.file.size / 1048576).toFixed(1)} MB`}
+                    </bdi>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setMedia(null)}
+                  aria-label={t.campaigns.removeMedia}
+                  disabled={pending}
+                >
+                  <X />
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInput.current?.click()}
+                className={buttonClass({ variant: "outline", className: "w-full border-dashed" })}
+              >
+                <ImagePlus /> {t.campaigns.addMedia}
+              </button>
+            )}
+            <span className="mt-1 block text-xs text-ink-500">{t.campaigns.mediaHint}</span>
+          </div>
+
+          <Field
+            label={media ? t.campaigns.caption : t.campaigns.message}
+            hint={t.campaigns.messageHint}
+            required={!media}
+          >
             <Textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
