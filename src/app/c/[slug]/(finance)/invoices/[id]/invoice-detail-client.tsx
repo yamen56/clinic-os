@@ -72,6 +72,8 @@ type Invoice = {
   einvoice_status: string;
   einvoice_error: string | null;
   einvoice_uuid: string | null;
+  /** The insurer's share the filed document left off; null before any filing. */
+  einvoice_excluded: string | null;
   credit_note_of: string | null;
   corrects_number: string | null;
   credit_note_id: string | null;
@@ -146,6 +148,13 @@ export function InvoiceDetailClient({
     inv.status === "void" ||
     inv.einvoice_status === "submitted" ||
     inv.einvoice_status === "pending";
+  /*
+    The same moment fixes the insurer's share: the patient's tax document is
+    the total less that share, and ISTD has it or is about to. The server
+    refuses a change too (setInvoiceInsuranceAction); this says so up front.
+  */
+  const splitLocked = inv.einvoice_status === "submitted" || inv.einvoice_status === "pending";
+  const excludedOnFiling = Number(inv.einvoice_excluded ?? 0);
 
   /*
     Saved on blur, not on every keystroke. A title is typed in one go and this
@@ -531,13 +540,24 @@ export function InvoiceDetailClient({
                   ))}
                 </Select>
               </Field>
-              <Field label={`${t.insurers.covered} (${inv.currency})`}>
+              <Field
+                label={`${t.insurers.covered} (${inv.currency})`}
+                hint={
+                  inv.einvoice_status === "submitted" && excludedOnFiling > 0
+                    ? t.einvoicing.splitFiled
+                        .replace("{patient}", fmtMoney(Number(inv.total) - excludedOnFiling, inv.currency, locale))
+                        .replace("{insurer}", fmtMoney(excludedOnFiling, inv.currency, locale))
+                    : splitLocked
+                      ? t.einvoicing.splitLockedHint
+                      : undefined
+                }
+              >
                 <Input
                   dir="ltr"
                   inputMode="decimal"
                   value={covered}
                   onChange={(e) => setCovered(e.target.value)}
-                  disabled={inv.status === "void" || !insurerId}
+                  disabled={inv.status === "void" || !insurerId || splitLocked}
                 />
               </Field>
               <Field label={t.insurers.claim}>
@@ -564,7 +584,12 @@ export function InvoiceDetailClient({
                       insurerAmount: Number(covered) || 0,
                       claimStatus,
                     });
-                    if (r.error) return toast(r.error, "error");
+                    if (r.error) {
+                      return toast(
+                        r.error === "einvoice_split_locked" ? t.einvoicing.splitLockedHint : r.error,
+                        "error"
+                      );
+                    }
                     toast(t.common.saved, "success");
                   })
                 }

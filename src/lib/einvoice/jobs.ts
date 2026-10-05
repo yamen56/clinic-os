@@ -51,10 +51,16 @@ export async function enqueueEinvoiceSubmit(
       and the nightly sweep all arrive through this function, so one condition
       is the difference between an opt-out that holds and three that mostly do.
       Turning the flag back on is what queues it, via setInvoiceFilingAction.
+
+      And only when the patient owes something. The insurer's share is invoiced
+      to the insurer, not filed against the patient (src/lib/einvoice/share.ts),
+      so an invoice an insurer covers in full has no patient document to file —
+      and saying so here keeps the nightly sweep from queueing it every night.
     */
     `update invoices set einvoice_status = 'pending'
       where id = $1 and clinic_id = $2 and einvoice_status = 'not_required'
         and file_einvoice and status <> 'void'
+        and (coalesce(insurer_amount, 0) = 0 or total > insurer_amount)
       returning id`,
     [invoiceId, clinicId]
   );
@@ -108,7 +114,7 @@ export async function logEinvoiceEvent(
   c: PoolClient,
   clinicId: string,
   invoiceId: string,
-  kind: "queued" | "submitted" | "accepted" | "rejected" | "error",
+  kind: "queued" | "submitted" | "accepted" | "rejected" | "error" | "skipped",
   detail: Record<string, unknown> = {}
 ): Promise<void> {
   await c.query(

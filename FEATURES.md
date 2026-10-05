@@ -1277,6 +1277,21 @@ same way — and both invoices show the link. Voiding an unfiled one behaves as 
 not touch the payment ledger: `payments.amount > 0` forbids a negative row, so refunds remain
 a gap this product has.
 
+**An insured invoice files the patient's share only** ([src/lib/einvoice/share.ts](src/lib/einvoice/share.ts)).
+The insurer's share is invoiced to the insurer — by Hakeem Claim, which issues the JoFotara
+invoice itself when a claim is submitted through it, or by the clinic directly — so filing the
+full total against the patient reported it twice. The patient's document spreads
+`total − insurer_amount` over the same lines in proportion to each line's gross, to the fil
+(largest remainder; each line's discount folded into its price; tax is the share less the
+net, so the document totals exactly what the patient owes). `einvoice_excluded` records what
+a filing left off, and a credit note splits by the original's record rather than today's
+insurer amount — null, on anything filed before this existed, means nothing was left off. Cash
+or receivable is judged against the patient's share. An invoice the insurer covers in full is
+never queued (and the nightly sweep skips it). Once filing is pending or done, the insurer
+amount is locked (`einvoice_split_locked`); the way to change it is the credit note. Not yet
+built: Clinicti filing the insurer's own invoice — its shape (per visit, monthly, or via Hakeem
+Claim) waits on what EHSI and the insurers require.
+
 **On the invoice**: the QR (rendered from `einvoice_qr` at request time), the seller's tax
 number, the UUID, and the credit-note reference. **Trail**: `invoice_einvoice_events` records
 every queue, acceptance and rejection per invoice — mirroring `document_events` rather than
@@ -1380,6 +1395,9 @@ before the visit rather than after the claim.
 - `claim_ref`, `claim_submitted_at`, `claim_note` carry the rest.
 - The claims worklist is "everything not settled", read straight off a partial index on
   `claim_status <> 'none'`.
+- Claims are still entered in the insurer's or Hakeem Claim's portal by hand. Hakeem Claim
+  (EHSI's national claims hub) has APIs for clinic systems, but the spec is partner-only; the
+  adapter waits on it. With JoFotara on, only the patient's share is filed (see JoFotara above).
 
 ---
 

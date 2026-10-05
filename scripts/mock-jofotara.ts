@@ -57,8 +57,24 @@ export function validateUbl(xml: string): string | null {
   if (/<cbc:InvoicedQuantity[^>]*>-/.test(xml) || /<cbc:PriceAmount[^>]*>-/.test(xml)) {
     return "negative quantity or price";
   }
+
+  // And each line must be its own arithmetic: quantity × price − discount. Half
+  // a fil of slack, for a fractional quantity whose product was rounded.
+  for (const [i, l] of lines.entries()) {
+    const qty = num(l, "cbc:InvoicedQuantity");
+    const price = num(l, "cbc:PriceAmount");
+    const discount = num(l.match(/<cac:AllowanceCharge>[\s\S]*?<\/cac:AllowanceCharge>/)?.[0] ?? "", "cbc:Amount") || 0;
+    const net = num(l, "cbc:LineExtensionAmount");
+    if (discount < 0) return `line ${i + 1}: negative discount`;
+    if (Math.abs(qty * price - discount - net) > 0.0051) {
+      return `line ${i + 1}: ${qty} × ${price} − ${discount} is not ${net}`;
+    }
+  }
   return null;
 }
+
+/** The last document accepted, so a test can read what was actually filed. */
+let lastXml = "";
 
 export function startMockJofotara(): Promise<http.Server> {
   const server = http.createServer((req, res) => {
@@ -81,6 +97,10 @@ export function startMockJofotara(): Promise<http.Server> {
     if (req.method === "POST" && req.url === "/__reset") {
       fault = null;
       return send(200, { ok: true });
+    }
+    if (req.method === "GET" && req.url === "/__last") {
+      res.writeHead(200, { "Content-Type": "application/xml" });
+      return res.end(lastXml);
     }
 
     if (!req.url?.startsWith("/core/invoices")) return send(404, { error: "not_found" });
@@ -110,6 +130,7 @@ export function startMockJofotara(): Promise<http.Server> {
       if (problem) {
         return send(400, { EINV_RESULTS: { ERRORS: [{ EINV_MESSAGE: problem }] } });
       }
+      lastXml = xml;
       const uuid = xml.match(/<cbc:UUID>([^<]+)<\/cbc:UUID>/)?.[1] ?? "";
       const id = xml.match(/<cbc:ID>([^<]+)<\/cbc:ID>/)?.[1] ?? "";
       send(200, {

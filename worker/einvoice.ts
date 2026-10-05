@@ -3,10 +3,11 @@ import { DateTime } from "luxon";
 import { withSystem } from "./db";
 import { registerJobHandler, type JobAttempt } from "./jobs";
 import { notifyClinicStaff } from "../src/lib/notify";
-import { asTaxCategory } from "../src/lib/invoices";
+import { asTaxCategory, round2 } from "../src/lib/invoices";
 import { isReady, loadEinvoiceSettings } from "../src/lib/einvoice/settings";
 import { logEinvoiceEvent } from "../src/lib/einvoice/jobs";
 import { submitInvoice } from "../src/lib/einvoice/submit";
+import { insurerShareOf, patientShareLines } from "../src/lib/einvoice/share";
 import {
   buildInvoiceXml,
   encodeInvoice,
@@ -31,6 +32,8 @@ type Ctx = {
   settings: Awaited<ReturnType<typeof loadEinvoiceSettings>>;
   slug: string;
   correctsNumber: string | null;
+  /** The insurer's share left off this document; see src/lib/einvoice/share.ts. */
+  excluded: number;
 };
 
 /**
@@ -47,7 +50,7 @@ async function load(invoiceId: string): Promise<Ctx | null> {
       await c.query(
         `select i.*, cl.slug, cl.timezone,
                 p.full_name as patient_name, p.phone_e164 as patient_phone,
-                orig.number as corrects_number
+                orig.number as corrects_number, orig.einvoice_excluded as corrects_excluded
            from invoices i
            join clinics cl on cl.id = i.clinic_id
            join patients p on p.id = i.patient_id
@@ -107,12 +110,23 @@ async function load(invoiceId: string): Promise<Ctx | null> {
       tax: Number(r.tax_amount),
     }));
 
+    /*
+      A credit note reverses the document that was filed, so it leaves off what
+      that filing left off — read from the original's record of it, not from the
+      insurer amount as it stands now. Null there means a filing from before the
+      split existed, which left nothing off.
+    */
+    const excluded = inv.credit_note_of
+      ? round2(Number(inv.corrects_excluded ?? 0))
+      : insurerShareOf(Number(inv.total), inv.insurer_amount);
+
     return {
       invoice: inv,
       lines,
       settings,
       slug: String(inv.slug),
       correctsNumber: (inv.corrects_number as string) ?? null,
+      excluded,
     };
   });
 }
@@ -120,11 +134,30 @@ async function load(invoiceId: string): Promise<Ctx | null> {
 export async function submitEinvoice(invoiceId: string, attempt: JobAttempt): Promise<void> {
   const ctx = await load(invoiceId);
   if (!ctx) return;
-  const { invoice: inv, lines, settings } = ctx;
+  const { invoice: inv, settings, excluded } = ctx;
+  const clinicId = String(inv.clinic_id);
 
   const isCreditNote = Boolean(inv.credit_note_of);
-  const total = Number(inv.total);
-  const paid = Number(inv.amount_paid) >= total && total > 0;
+  const lines = patientShareLines(ctx.lines, excluded);
+  if (!lines.length) {
+    /*
+      The insurer covers all of it: there is no sale to the patient to report.
+      Normally caught before queueing (enqueueEinvoiceSubmit); this is the
+      belt for an amount that reached the full total some other way.
+    */
+    await withSystem(async (c) => {
+      await c.query(
+        `update invoices set einvoice_status = 'not_required', einvoice_excluded = $2
+          where id = $1 and einvoice_status = 'pending'`,
+        [invoiceId, excluded]
+      );
+      await logEinvoiceEvent(c, clinicId, invoiceId, "skipped", { excluded });
+    });
+    return;
+  }
+  // What the patient owes, which is what this document is for.
+  const share = round2(Number(inv.total) - excluded);
+  const paid = Number(inv.amount_paid) >= share && share > 0;
   const issueDate = inv.issue_date
     ? DateTime.fromJSDate(new Date(inv.issue_date as string)).toFormat("yyyy-MM-dd")
     : DateTime.now().setZone(String(inv.timezone)).toFormat("yyyy-MM-dd");
@@ -152,7 +185,6 @@ export async function submitEinvoice(invoiceId: string, attempt: JobAttempt): Pr
   });
 
   const result = await submitInvoice({ settings, payload: encodeInvoice(xml) });
-  const clinicId = String(inv.clinic_id);
 
   if (result.ok) {
     await withSystem(async (c) => {
@@ -166,7 +198,7 @@ export async function submitEinvoice(invoiceId: string, attempt: JobAttempt): Pr
         `update invoices set einvoice_status = 'submitted', einvoice_qr = $2, einvoice_number = $3,
                              einvoice_type = $4, einvoice_payment_method = $5,
                              einvoice_submitted_at = now(), einvoice_error = null,
-                             pdf_path = null
+                             einvoice_excluded = $6, pdf_path = null
           where id = $1`,
         [
           invoiceId,
@@ -176,6 +208,7 @@ export async function submitEinvoice(invoiceId: string, attempt: JobAttempt): Pr
           // The sub-type digits carry cash/receivable; this column records the
           // plain fact so a person reading the invoice does not have to decode it.
           isCreditNote || paid ? "012" : "022",
+          excluded,
         ]
       );
       await c.query(
@@ -185,6 +218,7 @@ export async function submitEinvoice(invoiceId: string, attempt: JobAttempt): Pr
       await logEinvoiceEvent(c, clinicId, invoiceId, "accepted", {
         qr: Boolean(result.qr),
         number: result.number,
+        ...(excluded > 0 ? { excluded, filed: share } : {}),
       });
     });
     if (!result.qr) {

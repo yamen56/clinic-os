@@ -221,6 +221,9 @@ async function sweepEinvoices() {
           -- finished. Without this the sweep would quietly undo every opt-out
           -- twenty-four hours after it was made.
           and i.file_einvoice
+          -- Covered in full by an insurer: nothing for the patient to file, and
+          -- left in, these would fill the 500 every night for ever.
+          and (coalesce(i.insurer_amount, 0) = 0 or i.total > i.insurer_amount)
           and i.created_at < now() - interval '24 hours'
         limit 500`
     );

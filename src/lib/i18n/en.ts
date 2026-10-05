@@ -1722,6 +1722,12 @@ export const en = {
     fileThisOffHint: "This invoice will not be reported to the tax authority.",
     alreadyFiled: "Already filed. Cancelling it now raises a credit note instead.",
     queuedNow: "Filing now",
+
+    /* --- an insured invoice --- */
+    splitFiled:
+      "Filed with JoFotara for the patient's share, {patient}. The insurer's {insurer} is invoiced to the insurer — by Hakeem Claim when the claim goes through it, otherwise by you.",
+    splitLockedHint:
+      "Already with JoFotara, so the insurer's share can no longer change. To correct it, cancel the invoice (a credit note is raised) and issue it again.",
   },
 
   /** What the clinic actually practises. Picks its automation pack at creation. */

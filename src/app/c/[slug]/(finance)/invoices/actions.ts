@@ -371,10 +371,12 @@ export async function setInvoiceInsuranceAction(
   return inClinic(access, async (c) => {
     if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
     const inv = (
-      await c.query(`select total from invoices where id = $1 and clinic_id = $2`, [
-        invoiceId,
-        access.clinicId,
-      ])
+      await c.query(
+        // Locked, so the filing cannot start between this read and the write below.
+        `select total, insurer_amount, einvoice_status from invoices
+          where id = $1 and clinic_id = $2 for update`,
+        [invoiceId, access.clinicId]
+      )
     ).rows[0];
     if (!inv) return { error: "not_found" };
 
@@ -388,6 +390,21 @@ export async function setInvoiceInsuranceAction(
     // A company cannot cover more than the invoice is for; letting it would make
     // the patient's share negative and the claim unarguable.
     const amount = Math.max(0, Math.min(Number(data.insurerAmount ?? 0), Number(inv.total)));
+
+    /*
+      The split is part of what is filed with JoFotara: the patient's document
+      carries only the patient's share. Once that document is with ISTD, or on
+      its way, moving the split would leave the tax authority holding a figure
+      the clinic no longer agrees with. The way back is the one ISTD offers —
+      cancel the invoice, which raises a credit note, and issue it again. The
+      claim's status and reference are not money, and stay editable.
+    */
+    if (
+      (inv.einvoice_status === "submitted" || inv.einvoice_status === "pending") &&
+      round2(amount) !== round2(Number(inv.insurer_amount ?? 0))
+    ) {
+      return { error: "einvoice_split_locked" };
+    }
 
     await c.query(
       `update invoices

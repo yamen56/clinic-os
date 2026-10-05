@@ -437,6 +437,145 @@ async function main() {
   check("and succeeds once the fault is gone", fixed.einvoice_status === "submitted", fixed.einvoice_status);
 
   /* ================================================================== */
+  console.log("\n[an insured patient's share]");
+  /*
+    The insurer's share is invoiced to the insurer — by Hakeem Claim when the
+    claim goes through it — so the patient's document must carry only what the
+    patient owes. Filing the full total against the patient reported the
+    insurer's half twice.
+  */
+  const { patientShareLines } = await import("../src/lib/einvoice/share");
+  const gross = (ls: { amount: number; discount: number; tax: number }[]) =>
+    round2(ls.reduce((s, l) => s + l.amount - l.discount + l.tax, 0));
+  const docOf = (ls: typeof xmlArgs.lines) => buildInvoiceXml({ ...xmlArgs, lines: ls });
+
+  const split = patientShareLines(xmlArgs.lines, 100);
+  check("the patient's lines add up to the total less the insurer's share", gross(split) === 46, String(gross(split)));
+  check("every line is kept, with its service and category", split.length === 2 && split[1].taxCategory === "S");
+  check("and the document is valid", validateUbl(docOf(split)) === null, validateUbl(docOf(split)) ?? "");
+  check("nothing excluded leaves the lines alone", patientShareLines(xmlArgs.lines, 0) === xmlArgs.lines);
+  check("an insurer covering everything leaves nothing to file", patientShareLines(xmlArgs.lines, 146).length === 0);
+  check("nor can it cover more than everything", patientShareLines(xmlArgs.lines, 500).length === 0);
+  check(
+    "the same split twice is the same document — what a credit note relies on",
+    JSON.stringify(patientShareLines(xmlArgs.lines, 100)) === JSON.stringify(split)
+  );
+
+  // Every awkward shape at once: quantities, discounts, two rates, odd fils.
+  let splitBad = "";
+  for (let n = 0; n < 400 && !splitBad; n++) {
+    const items = Array.from({ length: 1 + (n % 4) }, (_, k) => ({
+      description: `L${k}`,
+      qty: [1, 2, 3, 1.5][(n + k) % 4],
+      unitPrice: round2(((n * 37 + k * 11) % 9000) / 100 + 0.01),
+      discountAmount: (n + k) % 3 === 0 ? round2(((n * 7) % 500) / 100) : 0,
+      taxCategory: ((n + k) % 2 ? "S" : "E") as "S" | "E",
+      taxRate: (n + k) % 2 ? [16, 4][k % 2] : 0,
+    }));
+    const computed = computeInvoice(items);
+    const ls = computed.lines.map((l, k) => ({
+      description: items[k].description, qty: items[k].qty, unitPrice: items[k].unitPrice,
+      amount: l.amount, discount: l.discount, taxCategory: l.taxCategory, taxRate: l.taxRate, tax: l.tax,
+    }));
+    const cut = round2(computed.total * ((n % 9) + 1) / 10);
+    const out = patientShareLines(ls, cut);
+    const want = round2(computed.total - cut);
+    if (want > 0 && gross(out) !== want) splitBad = `case ${n}: ${gross(out)} ≠ ${want}`;
+    else if (want > 0 && validateUbl(docOf(out))) splitBad = `case ${n}: ${validateUbl(docOf(out))}`;
+  }
+  check("400 shapes of invoice all split to the fil, and validate", !splitBad, splitBad);
+
+  const insurer = (
+    await db.query(
+      `insert into insurers (clinic_id, name, code) values ($1, 'QA Insurance', 'QAI') returning id`,
+      [filer.id]
+    )
+  ).rows[0].id as string;
+  const invIns = await makeInvoice(filer.id, filer.patient, { unitPrice: 100, taxRate: 16 });
+  // 116 in all; the insurer takes 80 and the patient has paid their 36 at the desk.
+  await db.query(
+    `update invoices set insurer_id = $2, insurer_amount = 80, claim_status = 'to_submit',
+                         amount_paid = 36, status = 'partially_paid' where id = $1`,
+    [invIns, insurer]
+  );
+  await enqueueEinvoiceSubmit(dbAsClient, filer.id, invIns, "paid");
+  await submitEinvoice(invIns, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
+  const insDone = (
+    await db.query(
+      `select einvoice_status, einvoice_excluded, einvoice_payment_method from invoices where id = $1`,
+      [invIns]
+    )
+  ).rows[0];
+  const filedXml = await (await fetch(`${MOCK}/__last`)).text();
+  check("an insured invoice is filed", insDone.einvoice_status === "submitted", insDone.einvoice_status);
+  check(
+    "for the patient's share only",
+    filedXml.includes(`<cbc:TaxInclusiveAmount currencyID="JOD">36.000</cbc:TaxInclusiveAmount>`),
+    filedXml.match(/TaxInclusiveAmount[^>]*>([^<]+)/)?.[1] ?? "nothing filed"
+  );
+  check("and records what it left off", Number(insDone.einvoice_excluded) === 80, String(insDone.einvoice_excluded));
+  check(
+    "a patient who paid their share is cash, even though the insurer has not paid yet",
+    insDone.einvoice_payment_method === "012",
+    insDone.einvoice_payment_method
+  );
+
+  const invCovered = await makeInvoice(filer.id, filer.patient, { unitPrice: 50 });
+  await db.query(`update invoices set insurer_id = $2, insurer_amount = total where id = $1`, [invCovered, insurer]);
+  const coveredQueued = await enqueueEinvoiceSubmit(dbAsClient, filer.id, invCovered, "paid");
+  check("an invoice the insurer covers in full is not queued", coveredQueued === false);
+
+  const mirror = async (originalId: string) => {
+    seq++;
+    const o = (await db.query(`select * from invoices where id = $1`, [originalId])).rows[0];
+    const n = (
+      await db.query(
+        `insert into invoices (clinic_id, patient_id, seq, number, status, currency, subtotal, discount_amount,
+                               tax_rate, tax_amount, total, amount_paid, issue_date, credit_note_of, void_reason)
+         values ($1,$2,$3,$4,'paid','JOD',$5,$6,$7,$8,$9,$9, current_date, $10, 'QA') returning id`,
+        [filer.id, filer.patient, seq, `QAE-2026-${String(seq).padStart(4, "0")}`,
+         o.subtotal, o.discount_amount, o.tax_rate, o.tax_amount, o.total, originalId]
+      )
+    ).rows[0].id as string;
+    await db.query(
+      `insert into invoice_items (clinic_id, invoice_id, description, qty, unit_price, amount,
+                                  discount_amount, tax_category, tax_rate, tax_amount, sort)
+       select clinic_id, $2, description, qty, unit_price, amount, discount_amount, tax_category, tax_rate, tax_amount, sort
+         from invoice_items where invoice_id = $1`,
+      [originalId, n]
+    );
+    await enqueueEinvoiceSubmit(dbAsClient, filer.id, n, "credit_note");
+    await submitEinvoice(n, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
+    return {
+      row: (await db.query(`select einvoice_status, einvoice_type from invoices where id = $1`, [n])).rows[0],
+      xml: await (await fetch(`${MOCK}/__last`)).text(),
+    };
+  };
+  const insNote = await mirror(invIns);
+  check(
+    "its credit note reverses the patient's document, not the full total",
+    insNote.row.einvoice_type === "381" &&
+      insNote.xml.includes(`<cbc:TaxInclusiveAmount currencyID="JOD">36.000</cbc:TaxInclusiveAmount>`),
+    insNote.xml.match(/TaxInclusiveAmount[^>]*>([^<]+)/)?.[1] ?? insNote.row.einvoice_status
+  );
+  /*
+    An invoice filed before the split existed went in at its full total, whatever
+    its insurer amount says. Its credit note must reverse that, not today's rule.
+  */
+  const invLegacy = await makeInvoice(filer.id, filer.patient, { unitPrice: 60 });
+  await db.query(
+    `update invoices set insurer_id = $2, insurer_amount = 40, einvoice_status = 'submitted',
+                         einvoice_uuid = gen_random_uuid()::text, einvoice_excluded = null where id = $1`,
+    [invLegacy, insurer]
+  );
+  const legacyNote = await mirror(invLegacy);
+  check(
+    "a credit note for an invoice filed before the split reverses its full total",
+    legacyNote.xml.includes(`<cbc:TaxInclusiveAmount currencyID="JOD">60.000</cbc:TaxInclusiveAmount>`),
+    legacyNote.xml.match(/TaxInclusiveAmount[^>]*>([^<]+)/)?.[1] ?? legacyNote.row.einvoice_status
+  );
+
+  /* ================================================================== */
   console.log("\n[correcting a filed invoice]");
 
   const originalNumber = (await db.query(`select number from invoices where id = $1`, [invA])).rows[0].number;
@@ -491,6 +630,20 @@ async function main() {
     await page.waitForLoadState("networkidle");
     const detail = await visible();
     check("a filed invoice says so on its page", detail.includes(ar.einvoicing.statusSubmitted), "");
+
+    await page.goto(`${BASE}/c/${filer.slug}/invoices/${invIns}`);
+    await page.waitForLoadState("networkidle");
+    const insText = await visible();
+    check(
+      "an insured one says the patient's share is what was filed",
+      insText.includes(ar.einvoicing.splitFiled.split("{patient}")[0].trim()),
+      ""
+    );
+    check(
+      "and the insurer's share can no longer be edited",
+      await page.getByLabel(ar.insurers.covered).first().isDisabled(),
+      ""
+    );
 
     await page.goto(`${BASE}/c/${filer.slug}/invoices/${invDown}`);
     await page.waitForLoadState("networkidle");
