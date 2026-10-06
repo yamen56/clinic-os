@@ -188,6 +188,50 @@ async function main() {
   });
   check(swReady, "service worker registered from an ordinary screen");
 
+  // ---- raising an invoice on a phone
+  /*
+    Two things were broken here at once (2026-10-06). Each line was five fixed
+    columns in a 300px card, so the description was squeezed to an empty box and
+    the row ran out of its card; and the total sat at the foot of the page, so
+    tapping a service changed nothing on screen. Measured, not looked at.
+  */
+  await go(page, `/c/${SLUG}/invoices/new`);
+  const serviceRows = page.locator("main button", { hasText: /\d+\.\d\d/ });
+  const firstRow = serviceRows.first();
+  const listedPrice = ((await firstRow.innerText()).match(/\d+\.\d\d/) ?? [""])[0];
+  await firstRow.click();
+  await page.waitForTimeout(400);
+  const viewportH = page.viewportSize()!.height;
+  const tabTop = (await page.locator("nav.fixed .grid").first().boundingBox())!.y;
+  const create = await page.getByRole("button", { name: "إنشاء", exact: true }).boundingBox();
+  check(
+    !!create && create.y >= 0 && create.y + create.height <= Math.min(viewportH, tabTop + 1),
+    "after a tap, the total and Create are on screen, above the tab bar",
+    create ? `button ${Math.round(create.y)}–${Math.round(create.y + create.height)}, tabs at ${Math.round(tabTop)}` : "not found"
+  );
+  const note = page.locator('main [role="status"]');
+  check(
+    (await note.count()) > 0 && (await note.first().innerText()).includes(listedPrice),
+    "and it says which service went on, at the price it was listed at",
+    (await note.count()) ? await note.first().innerText() : "no note"
+  );
+  check(
+    (await firstRow.locator("svg.lucide-check").count()) > 0,
+    "the service's own row shows it is on the invoice"
+  );
+  await serviceRows.nth(1).click();
+  await page.waitForTimeout(300);
+  await noSideScroll(page, "invoice with two lines");
+  const nameBoxes = await page
+    .locator('main input[placeholder="البند"]')
+    .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().width)));
+  check(
+    nameBoxes.length === 2 && nameBoxes.every((w) => w >= 180),
+    "each line's name has room to be read",
+    nameBoxes.join(", ")
+  );
+  await page.screenshot({ path: join(SHOTS, "mobile-invoice-new.png") });
+
   // ---- Arabic: the whole shell mirrors without the layout breaking
   await go(page, `/c/${SLUG}/calendar`);
   await noSideScroll(page, "calendar");

@@ -163,6 +163,15 @@
     from { opacity: 0; }
     to { opacity: 1; }
   }
+  /*
+    A line that has just been added: a green wash that fades to nothing, so the
+    eye finds it in a list without the list moving under the finger.
+  */
+  --animate-line-in: line-in 1.6s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  @keyframes line-in {
+    0% { background-color: var(--color-st-confirmed-soft); box-shadow: 0 0 0 2px rgb(47 158 106 / 0.45); }
+    100% { background-color: transparent; box-shadow: 0 0 0 0 rgb(47 158 106 / 0); }
+  }
   @keyframes slim-progress {
     from { transform: translateX(-100%); }
     to { transform: translateX(250%); }

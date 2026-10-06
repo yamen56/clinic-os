@@ -11,7 +11,7 @@ import {
   type ServiceLike,
   type ServiceRow,
 } from "@/lib/services";
-import { Plus, Search } from "lucide-react";
+import { Check, Plus, Search } from "lucide-react";
 
 /**
  * Picking a service, in the three shapes the app actually needs.
@@ -152,6 +152,8 @@ export function ServiceAddMenu({
   onPick,
   onCustom,
   currency,
+  addedCounts,
+  flash,
 }: {
   /* The full row here, unlike the two pickers above: this one shows the price,
      and seeds a line with it. */
@@ -160,6 +162,14 @@ export function ServiceAddMenu({
   onPick: (service: ServiceRow) => void;
   onCustom: () => void;
   currency: string;
+  /**
+   * How many lines each service already has on the invoice. A tap that changed
+   * nothing in view read as a tap that did nothing — on a phone the new line
+   * lands below the fold — so the row itself says it is on the bill.
+   */
+  addedCounts?: Record<string, number>;
+  /** The row just tapped, and a key that changes per tap so it can flash again. */
+  flash?: { serviceId: string; key: number } | null;
 }) {
   const { t, locale } = useI18n();
   const [q, setQ] = useState("");
@@ -206,19 +216,38 @@ export function ServiceAddMenu({
                   </span>
                 </div>
               )}
-              {g.services.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => onPick(s)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-start text-[13px] hover:bg-sunken"
-                >
-                  <span className="truncate">{serviceLabel(s, locale)}</span>
-                  <span className="shrink-0 tabular-nums text-[12px] text-ink-400">
-                    {Number(s.price).toFixed(2)} {currency}
-                  </span>
-                </button>
-              ))}
+              {g.services.map((s) => {
+                const count = addedCounts?.[s.id] ?? 0;
+                const flashing = flash?.serviceId === s.id;
+                return (
+                  <button
+                    // Keyed on the tap as well, so a second tap restarts the flash.
+                    key={flashing ? `${s.id}:${flash?.key}` : s.id}
+                    type="button"
+                    onClick={() => onPick(s)}
+                    className={`flex w-full touch-manipulation items-center gap-3 px-3 py-2.5 text-start text-[13px] transition-colors hover:bg-sunken active:bg-sunken sm:py-2 ${
+                      flashing ? "animate-line-in" : ""
+                    }`}
+                  >
+                    <span className={`min-w-0 flex-1 truncate ${count ? "font-semibold text-ink-900" : ""}`}>
+                      {serviceLabel(s, locale)}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-[12px] text-ink-500">
+                      {Number(s.price).toFixed(2)} {currency}
+                    </span>
+                    {count > 0 ? (
+                      <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center gap-0.5 rounded-full bg-st-confirmed-soft px-1.5 text-[11px] font-semibold text-st-confirmed tnum">
+                        <Check className="h-3 w-3" strokeWidth={2.5} />
+                        {count > 1 ? `×${count}` : ""}
+                      </span>
+                    ) : (
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-500" aria-hidden>
+                        <Plus className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           ))
         )}

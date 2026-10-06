@@ -35,6 +35,9 @@ export function workspacePages(ids: PageIds): [string, string][] {
     // The finance section, all four tabs. Absent from both suites until the
     // expenses header shipped broken.
     ["finance · invoices", `${s}/invoices`],
+    // Missing until 2026-10-06, which is how a line row 330px wide inside a
+    // 300px card reached phones. qa-mobile adds lines and measures them too.
+    ["finance · new invoice", `${s}/invoices/new`],
     ["finance · payments", `${s}/invoices?tab=payments`],
     ["finance · earnings", `${s}/earnings`],
     ["finance · expenses", `${s}/expenses`],

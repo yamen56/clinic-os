@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtMoney } from "@/lib/dates";
@@ -14,9 +14,15 @@ import { computeInvoice, taxBreakdown, TAX_CATEGORIES, type TaxCategory } from "
 import { serviceLabel, type SectionRow, type ServiceRow } from "@/lib/services";
 import { ServiceAddMenu } from "@/components/ui/service-picker";
 import { createInvoiceAction } from "../actions";
-import { Trash2, X } from "lucide-react";
+import { Check, Trash2, X } from "lucide-react";
 
 type Item = {
+  /**
+   * The line's identity on this screen, and nowhere else — stripped before the
+   * invoice is sent. Keys by position re-used one row's DOM for the next when a
+   * line was deleted, which is also what would have flashed the wrong row.
+   */
+  uid: number;
   serviceId: string | null;
   description: string;
   qty: number;
@@ -28,6 +34,9 @@ type Item = {
   doctorMemberId: string | null;
 };
 type Doctor = { id: string; full_name: string };
+
+/** What was just added, said for a moment where the person is looking. */
+type Added = { uid: number; serviceId: string | null; name: string; amount: number; at: number };
 
 export function NewInvoiceClient({
   slug,
@@ -79,6 +88,8 @@ export function NewInvoiceClient({
     ? appointmentDoctorId
     : null;
   const [invoiceDoctor, setInvoiceDoctor] = useState<string | null>(startingDoctor);
+  const nextUid = useRef(1);
+  const money = (n: number) => fmtMoney(n, currency, locale);
 
   /*
     A clinic that charges no sales tax should never have to think about it, so a
@@ -92,6 +103,7 @@ export function NewInvoiceClient({
     unitPrice: number,
     doctorMemberId: string | null = invoiceDoctor
   ): Item => ({
+    uid: nextUid.current++,
     serviceId,
     description,
     qty: 1,
@@ -104,25 +116,20 @@ export function NewInvoiceClient({
 
   const [items, setItems] = useState<Item[]>(() => {
     const svc = services.find((s) => s.id === appointmentServiceId);
-    return svc
-      ? [
-          {
-            serviceId: svc.id,
-            description: serviceLabel(svc, locale),
-            qty: 1,
-            unitPrice: Number(svc.price),
-            discountAmount: 0,
-            taxCategory: (defaultTaxRate > 0 ? "S" : "O") as TaxCategory,
-            taxRate: defaultTaxRate,
-            doctorMemberId: startingDoctor,
-          },
-        ]
-      : [];
+    return svc ? [newLine(svc.id, serviceLabel(svc, locale), Number(svc.price), startingDoctor)] : [];
   });
   const [notes, setNotes] = useState("");
   const [title, setTitle] = useState("");
   const [fileEinvoice, setFileEinvoice] = useState(einvoice?.fileByDefault ?? true);
+  const [added, setAdded] = useState<Added | null>(null);
   const [pending, start] = useTransition();
+
+  // The note fades on its own; a second tap replaces it and restarts the clock.
+  useEffect(() => {
+    if (!added) return;
+    const timer = setTimeout(() => setAdded(null), 2600);
+    return () => clearTimeout(timer);
+  }, [added]);
 
   /*
     The very same function the server bills with, rather than a second copy of
@@ -131,9 +138,32 @@ export function NewInvoiceClient({
   */
   const totals = useMemo(() => computeInvoice(items), [items]);
   const taxRows = useMemo(() => taxBreakdown(totals.lines).filter((r) => r.tax > 0), [totals]);
+  const taxTotal = taxRows.reduce((sum, r) => sum + r.tax, 0);
+  const addedCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const it of items) if (it.serviceId) out[it.serviceId] = (out[it.serviceId] ?? 0) + 1;
+    return out;
+  }, [items]);
+  /*
+    A line with no name is refused by the server, and used to come back as
+    "something went wrong" with nothing to say which line. The button waits
+    instead, and the empty box says it is the one.
+  */
+  const unnamed = items.some((it) => !it.description.trim());
 
-  const setItem = (i: number, patch: Partial<Item>) =>
-    setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const setItem = (uid: number, patch: Partial<Item>) =>
+    setItems((xs) => xs.map((x) => (x.uid === uid ? { ...x, ...patch } : x)));
+
+  const addService = (s: ServiceRow) => {
+    const line = newLine(s.id, serviceLabel(s, locale), Number(s.price));
+    setItems((xs) => [...xs, line]);
+    /*
+      The service's own price, the figure printed beside it in the list a moment
+      ago — not what the line adds with tax, which reads as a different price
+      for the thing just tapped. The tax is said under the total instead.
+    */
+    setAdded({ uid: line.uid, serviceId: s.id, name: line.description, amount: line.unitPrice, at: Date.now() });
+  };
 
   const submit = () =>
     start(async () => {
@@ -144,7 +174,7 @@ export function NewInvoiceClient({
       const r = await createInvoiceAction(slug, {
         patientId: patient.id,
         appointmentId,
-        items,
+        items: items.map(({ uid: _uid, ...line }) => line),
         notes,
         title,
         // Only sent by a clinic that files. Everyone else leaves it absent and
@@ -162,12 +192,12 @@ export function NewInvoiceClient({
   return (
     <>
       <PageHeader title={t.invoices.newInvoice} />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="grid content-start gap-4 lg:col-span-2">
           {/* grid-cols-1, not a bare grid: an implicit column is sized `auto`,
               whose floor is its content's min-content width — the same thing
               that once pushed this page sideways on a phone. */}
-          <Card className="grid grid-cols-1 gap-4 p-5">
+          <Card className="grid grid-cols-1 gap-4 p-4 sm:p-5">
             {/*
               Above the patient, because it is the first thing somebody raising a
               second invoice for the same person needs to tell the two apart —
@@ -186,8 +216,12 @@ export function NewInvoiceClient({
               {patient ? (
                 <div className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2">
                   <Avatar name={patient.name} size={28} />
-                  <span className="flex-1 text-sm font-medium">{patient.name}</span>
-                  <button onClick={() => setPatient(null)} aria-label={t.common.delete} className="text-ink-400 hover:text-danger">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{patient.name}</span>
+                  <button
+                    onClick={() => setPatient(null)}
+                    aria-label={t.common.delete}
+                    className="grid h-8 w-8 shrink-0 touch-manipulation place-items-center rounded-full text-ink-400 hover:bg-danger-soft hover:text-danger"
+                  >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -197,126 +231,155 @@ export function NewInvoiceClient({
             </Field>
           </Card>
 
-          <Card className="p-5">
-            <div className="mb-3 grid gap-3">
-              <h3 className="text-[15px] font-semibold">{t.invoices.item}</h3>
-              {/*
-                Every service, grouped by section and searchable — not the first
-                six. The old row of chips was capped at six with no way past it,
-                so on a clinic with more services the seventh could only be typed
-                by hand, which drops `service_id` and takes that money out of the
-                revenue-by-service and revenue-by-section charts.
-              */}
-              <ServiceAddMenu
-                services={services}
-                sections={sections}
-                currency={currency}
-                onPick={(s) =>
-                  setItems((xs) => [...xs, newLine(s.id, serviceLabel(s, locale), Number(s.price))])
-                }
-                onCustom={() => setItems((xs) => [...xs, newLine(null, "", 0)])}
-              />
-              {/*
-                Who the clinic owes for this visit. One control for the whole
-                invoice, because an invoice is usually one doctor's work; the
-                per-line override sits on each row below for the visit that was
-                not. Hidden entirely when no doctor has an arrangement.
+          <Card className="grid grid-cols-1 gap-3 p-4 sm:p-5">
+            <h3 className="text-[15px] font-semibold">{t.invoices.item}</h3>
+            {/*
+              Every service, grouped by section and searchable — not the first
+              six. The old row of chips was capped at six with no way past it,
+              so on a clinic with more services the seventh could only be typed
+              by hand, which drops `service_id` and takes that money out of the
+              revenue-by-service and revenue-by-section charts.
+            */}
+            <ServiceAddMenu
+              services={services}
+              sections={sections}
+              currency={currency}
+              addedCounts={addedCounts}
+              flash={added?.serviceId ? { serviceId: added.serviceId, key: added.at } : null}
+              onPick={addService}
+              onCustom={() => setItems((xs) => [...xs, newLine(null, "", 0)])}
+            />
+            {/*
+              Who the clinic owes for this visit. One control for the whole
+              invoice, because an invoice is usually one doctor's work; the
+              per-line override sits on each row below for the visit that was
+              not. Hidden entirely when no doctor has an arrangement.
 
-                The percentage is never shown here and never sent: this picker
-                says who, and the server decides what that is worth.
-              */}
-              {doctors.length > 0 && (
-                <Field label={t.invoices.doctor} hint={t.invoices.doctorHint}>
-                  <Select
-                    value={invoiceDoctor ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value || null;
-                      setInvoiceDoctor(v);
-                      setItems((xs) => xs.map((x) => ({ ...x, doctorMemberId: v })));
-                    }}
-                  >
-                    <option value="">{t.invoices.noDoctor}</option>
-                    {doctors.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.full_name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-            </div>
+              The percentage is never shown here and never sent: this picker
+              says who, and the server decides what that is worth.
+            */}
+            {doctors.length > 0 && (
+              <Field label={t.invoices.doctor} hint={t.invoices.doctorHint}>
+                <Select
+                  value={invoiceDoctor ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value || null;
+                    setInvoiceDoctor(v);
+                    setItems((xs) => xs.map((x) => ({ ...x, doctorMemberId: v })));
+                  }}
+                >
+                  <option value="">{t.invoices.noDoctor}</option>
+                  {doctors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+
             {items.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-line-strong py-8 text-center text-sm text-ink-400">
-                {t.invoices.addItem}
+              <p className="rounded-lg border border-dashed border-line-strong px-4 py-7 text-center text-sm text-ink-400">
+                {t.invoices.pickServiceHint}
               </p>
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-2.5">
                 {items.map((it, i) => {
                   const line = totals.lines[i];
+                  const nameless = !it.description.trim();
                   return (
-                    <div key={i} className="grid gap-1.5 rounded-lg border border-line p-2.5">
-                      <div className="grid grid-cols-[1fr_4.5rem_6rem_6rem_2rem] items-center gap-2">
+                    <div
+                      key={it.uid}
+                      className={`grid min-w-0 gap-2.5 rounded-xl border border-line p-3 ${
+                        added?.uid === it.uid ? "animate-line-in" : ""
+                      }`}
+                    >
+                      {/*
+                        Two rows on every screen, not one. Description, quantity,
+                        price, total and a bin across one row were five fixed
+                        columns — about 330px before the description got any —
+                        inside a 300px card on a phone, so the description was
+                        squeezed to an empty box and the row ran out of its card.
+                      */}
+                      <div className="flex items-start gap-2">
                         <Input
                           value={it.description}
                           placeholder={t.invoices.item}
-                          onChange={(e) => setItem(i, { description: e.target.value })}
+                          aria-invalid={nameless || undefined}
+                          // Amber, not red: a custom line is born empty, and
+                          // the box is asking for a name rather than reporting a fault.
+                          className={`min-w-0 flex-1 font-medium ${nameless ? "!border-st-pending" : ""}`}
+                          onChange={(e) => setItem(it.uid, { description: e.target.value })}
                         />
-                        {/* Labelled, because a bare number box in a row of number
-                            boxes tells a screen reader nothing — and now that the
-                            line carries a discount and a rate as well, position is
-                            no longer enough to say which is which. */}
-                        <NumberInput
-                          dir="ltr" min={1}
-                          aria-label={t.invoices.qty}
-                          value={it.qty}
-                          fallback={1}
-                          onChange={(qty) => setItem(i, { qty })}
-                        />
-                        <NumberInput
-                          dir="ltr" min={0} step="0.5"
-                          aria-label={t.invoices.unitPrice}
-                          value={it.unitPrice}
-                          onChange={(unitPrice) => setItem(i, { unitPrice })}
-                        />
-                        <span className="text-end text-sm font-medium tnum">
-                          {fmtMoney(line.net + line.tax, currency, locale)}
-                        </span>
                         <button
+                          type="button"
                           aria-label={t.common.delete}
-                          onClick={() => setItems((xs) => xs.filter((_, j) => j !== i))}
-                          className="text-ink-300 hover:text-danger"
+                          onClick={() => setItems((xs) => xs.filter((x) => x.uid !== it.uid))}
+                          className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-ctl text-ink-400 transition-colors hover:bg-danger-soft hover:text-danger"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
+                      <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-end gap-2 sm:grid-cols-[5rem_8rem_1fr]">
+                        {/* Labelled, because a bare number box in a row of number
+                            boxes tells a screen reader nothing — and now that the
+                            line carries a discount and a rate as well, position is
+                            no longer enough to say which is which. */}
+                        <label className="grid min-w-0 gap-1">
+                          <span className="text-[11px] font-medium text-ink-500">{t.invoices.qty}</span>
+                          <NumberInput
+                            dir="ltr" min={1}
+                            aria-label={t.invoices.qty}
+                            value={it.qty}
+                            fallback={1}
+                            onChange={(qty) => setItem(it.uid, { qty })}
+                          />
+                        </label>
+                        <label className="grid min-w-0 gap-1">
+                          <span className="text-[11px] font-medium text-ink-500">{t.invoices.unitPrice}</span>
+                          <NumberInput
+                            dir="ltr" min={0} step="0.5"
+                            aria-label={t.invoices.unitPrice}
+                            value={it.unitPrice}
+                            onChange={(unitPrice) => setItem(it.uid, { unitPrice })}
+                          />
+                        </label>
+                        <div className="grid gap-1 text-end">
+                          <span className="text-[11px] font-medium text-ink-500">{t.invoices.lineTotal}</span>
+                          <span className="flex h-10 items-center justify-end whitespace-nowrap text-[15px] font-semibold tnum">
+                            {money(line.net + line.tax)}
+                          </span>
+                        </div>
+                      </div>
                       {/*
                         The quiet row. Tax and discount belong to the line now,
                         but almost every line uses the clinic's default and
-                        no discount at all — so they sit here, small, rather than
-                        widening the row above past a phone.
+                        no discount at all — so they sit here, small. Three to a
+                        row on a phone, where wrapped at their natural widths
+                        they fell into ragged lines of one and two.
                       */}
-                      <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-500">
-                        <label className="flex items-center gap-1.5">
-                          <span className="whitespace-nowrap">{t.invoices.discount}</span>
+                      <div className="grid grid-cols-3 gap-2 border-t border-line pt-2.5 text-[12px] text-ink-500 sm:flex sm:flex-wrap sm:items-end">
+                        <label className="grid min-w-0 gap-1">
+                          <span className="truncate">{t.invoices.discount}</span>
                           <NumberInput
                             dir="ltr" min={0} step="0.5"
                             aria-label={t.invoices.discount}
-                            className="!h-8 !w-20 !text-[13px]"
+                            className="!h-8 !text-[13px] sm:!w-24"
                             value={it.discountAmount}
-                            onChange={(discountAmount) => setItem(i, { discountAmount })}
+                            onChange={(discountAmount) => setItem(it.uid, { discountAmount })}
                           />
                         </label>
-                        <label className="flex items-center gap-1.5">
-                          <span className="whitespace-nowrap">{t.invoices.taxCategory}</span>
+                        <label className="grid min-w-0 gap-1">
+                          <span className="truncate">{t.invoices.taxCategory}</span>
                           <Select
-                            className="!h-8 !w-auto !text-[13px]"
+                            className="!h-8 !text-[13px] sm:!w-auto"
                             value={it.taxCategory}
                             onChange={(e) => {
                               const next = e.target.value as TaxCategory;
                               // A non-standard category carries no rate at all;
                               // leaving a stray one behind is how an exempt
                               // consultation quietly gets taxed.
-                              setItem(i, {
+                              setItem(it.uid, {
                                 taxCategory: next,
                                 taxRate: next === "S" ? it.taxRate || defaultTaxRate : 0,
                               });
@@ -330,13 +393,13 @@ export function NewInvoiceClient({
                           </Select>
                         </label>
                         {it.taxCategory === "S" && (
-                          <label className="flex items-center gap-1.5">
-                            <span className="whitespace-nowrap">{taxLabel || t.invoices.tax} %</span>
+                          <label className="grid min-w-0 gap-1">
+                            <span className="truncate">{taxLabel || t.invoices.tax} %</span>
                             <NumberInput
                               dir="ltr" min={0} max={100} step="0.5"
-                              className="!h-8 !w-20 !text-[13px]"
+                              className="!h-8 !text-[13px] sm:!w-20"
                               value={it.taxRate}
-                              onChange={(taxRate) => setItem(i, { taxRate })}
+                              onChange={(taxRate) => setItem(it.uid, { taxRate })}
                             />
                           </label>
                         )}
@@ -348,14 +411,14 @@ export function NewInvoiceClient({
                           this alone.
                         */}
                         {doctors.length > 1 && (
-                          <label className="flex items-center gap-1.5">
-                            <span className="whitespace-nowrap">{t.invoices.doctor}</span>
+                          <label className="col-span-3 grid min-w-0 gap-1 sm:col-span-1">
+                            <span className="truncate">{t.invoices.doctor}</span>
                             <Select
-                              className="!h-8 !w-auto !text-[13px]"
+                              className="!h-8 !text-[13px] sm:!w-auto"
                               aria-label={t.invoices.doctor}
                               value={it.doctorMemberId ?? ""}
                               onChange={(e) =>
-                                setItem(i, { doctorMemberId: e.target.value || null })
+                                setItem(it.uid, { doctorMemberId: e.target.value || null })
                               }
                             >
                               <option value="">{t.invoices.noDoctor}</option>
@@ -375,7 +438,7 @@ export function NewInvoiceClient({
             )}
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <Field label={t.common.notes}>
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t.invoices.notesPlaceholder} />
             </Field>
@@ -388,7 +451,7 @@ export function NewInvoiceClient({
             invoice would frequently arrive after it had already gone to ISTD.
           */}
           {einvoice && (
-            <Card className="p-5">
+            <Card className="p-4 sm:p-5">
               <div className="flex items-start gap-3">
                 <Toggle
                   checked={fileEinvoice}
@@ -406,17 +469,40 @@ export function NewInvoiceClient({
           )}
         </div>
 
-        <Card className="h-fit p-5">
-          <div className="grid gap-3">
-            <div className="space-y-1.5 text-sm">
+        {/*
+          The total, always in view. Beside the form on a wide screen; below it,
+          pinned above the tab bar as the page scrolls. It used to sit at the
+          very bottom of a phone's page, so adding a service changed nothing on
+          screen — the line went in below the fold and so did the new total —
+          and a tap that answers with nothing reads as a tap that missed.
+
+          One element at every size rather than a bar plus a card, so there is
+          only ever one Create button: two, one of them hidden, is a control a
+          keyboard or a screen reader can land on and not see.
+        */}
+        <div className="z-20 max-lg:sticky max-lg:bottom-[calc(4.25rem_+_env(safe-area-inset-bottom))] md:max-lg:bottom-4 lg:sticky lg:top-6 lg:self-start">
+          <Card className="p-3.5 max-lg:shadow-pop sm:p-5">
+            {added && (
+              <div
+                role="status"
+                className="mb-2.5 flex items-center gap-2 rounded-lg bg-st-confirmed-soft px-2.5 py-1.5 text-[12.5px] font-medium text-st-confirmed animate-fade-up"
+              >
+                <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                <span className="min-w-0 truncate">
+                  {t.invoices.addedLine.replace("{name}", added.name).replace("{price}", money(added.amount))}
+                </span>
+              </div>
+            )}
+            {/* The breakdown, where there is room for it. */}
+            <div className="hidden space-y-1.5 text-sm lg:block">
               <div className="flex justify-between text-ink-500">
                 <span>{t.invoices.subtotal}</span>
-                <span className="tnum">{fmtMoney(totals.subtotal, currency, locale)}</span>
+                <span className="tnum">{money(totals.subtotal)}</span>
               </div>
               {totals.discount > 0 && (
                 <div className="flex justify-between text-ink-500">
                   <span>{t.invoices.discount}</span>
-                  <span className="tnum">−{fmtMoney(totals.discount, currency, locale)}</span>
+                  <span className="tnum">−{money(totals.discount)}</span>
                 </div>
               )}
               {/*
@@ -429,19 +515,44 @@ export function NewInvoiceClient({
                   <span>
                     {taxLabel || t.invoices.tax} ({r.taxRate}%)
                   </span>
-                  <span className="tnum">{fmtMoney(r.tax, currency, locale)}</span>
+                  <span className="tnum">{money(r.tax)}</span>
                 </div>
               ))}
-              <div className="flex justify-between border-t border-line pt-2 text-base font-bold">
-                <span>{t.invoices.total}</span>
-                <span className="tnum">{fmtMoney(totals.total, currency, locale)}</span>
-              </div>
             </div>
-            <Button size="lg" onClick={submit} loading={pending} disabled={!patient || items.length === 0}>
-              {t.common.create}
-            </Button>
-          </div>
-        </Card>
+            <div className="flex items-center gap-3 lg:mt-2 lg:grid lg:gap-3 lg:border-t lg:border-line lg:pt-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="hidden text-base font-bold lg:inline">{t.invoices.total}</span>
+                  <span
+                    // Keyed on the last add, so the figure re-enters as it changes.
+                    key={added?.at ?? 0}
+                    className="font-display text-xl font-bold tnum animate-fade-in lg:text-base"
+                  >
+                    {money(totals.total)}
+                  </span>
+                </div>
+                {/* What a phone does not show above: how many lines, and the tax in it. */}
+                <div className="truncate text-[11.5px] text-ink-500 lg:hidden">
+                  {t.invoices.lineCount.replace("{n}", String(items.length))}
+                  {taxTotal > 0 &&
+                    ` · ${t.invoices.includesTax
+                      .replace("{label}", taxLabel || t.invoices.tax)
+                      .replace("{amount}", money(taxTotal))}`}
+                </div>
+              </div>
+              <Button
+                size="lg"
+                className="max-lg:px-7 lg:w-full"
+                onClick={submit}
+                loading={pending}
+                disabled={!patient || items.length === 0 || unnamed}
+              >
+                {t.common.create}
+              </Button>
+            </div>
+            {unnamed && <p className="mt-2 text-[12px] font-medium text-st-pending">{t.invoices.nameEveryLine}</p>}
+          </Card>
+        </div>
       </div>
     </>
   );
@@ -479,12 +590,12 @@ function PatientSearch({
         <button
           key={r.id}
           onClick={() => onPick({ id: r.id, name: r.full_name })}
-          className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2 text-start text-sm hover:bg-sunken"
+          className="flex min-w-0 items-center gap-2.5 rounded-lg border border-line px-3 py-2.5 text-start text-sm hover:bg-sunken"
         >
           <Avatar name={r.full_name} size={26} />
-          <span className="flex-1 font-medium">{r.full_name}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">{r.full_name}</span>
           {r.phone_e164 && (
-            <span className="num text-[12px] text-ink-400 tnum">{formatPhone(r.phone_e164)}</span>
+            <span className="num shrink-0 text-[12px] text-ink-400 tnum">{formatPhone(r.phone_e164)}</span>
           )}
         </button>
       ))}

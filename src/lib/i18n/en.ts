@@ -1926,6 +1926,12 @@ export const en = {
     addItem: "Add line",
     addFromService: "Add service",
     freeItem: "Custom item",
+    /** Said where the thumb is, the moment a service lands on the invoice. */
+    addedLine: "Added {name} · +{price}",
+    lineCount: "Lines: {n}",
+    includesTax: "incl. {label} {amount}",
+    pickServiceHint: "Tap a service above to add it to the invoice.",
+    nameEveryLine: "Give every line a name",
     searchServices: "Search services",
     sendReceipt: "Send receipt",
     resendInvoice: "Re-send invoice",
