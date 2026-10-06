@@ -21,7 +21,7 @@ export function Modal({
   footer?: React.ReactNode;
   wide?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, dir, locale } = useI18n();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -35,8 +35,20 @@ export function Modal({
 
   if (!open || typeof document === "undefined") return null;
 
+  /*
+    The portal leaves the component tree's DOM for <body>, and with it any
+    `dir` set on the way down — so the dialog states the direction and language
+    of the provider it was opened under. Across the workspace that is the page's
+    own and changes nothing; inside an English island on an Arabic page (the
+    dental chart) it keeps the dialog left-to-right and in the Latin face.
+  */
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div
+      dir={dir}
+      lang={locale}
+      data-latin-island={dir === "ltr" || undefined}
+      className={`fixed inset-0 z-50 flex items-end justify-center sm:items-center ${dir === "ltr" ? "font-sans" : ""}`}
+    >
       <div className="absolute inset-0 bg-[rgb(11_18_32/0.55)] animate-fade-in" onClick={onClose} />
       <div
         role="dialog"

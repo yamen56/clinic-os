@@ -2731,8 +2731,8 @@ export const en = {
     addCustom: "Add a treatment",
     custom: {
       title: "New treatment",
-      nameAr: "Arabic name",
-      nameEn: "English name",
+      name: "Name",
+      namePlaceholder: "e.g. Fiber post",
       abbr: "Abbreviation",
       category: "Group",
       kind: "Type",

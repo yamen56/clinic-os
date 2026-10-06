@@ -123,10 +123,7 @@ export function ToothPanel({
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
           {tt ? (
-            <>
-              <div className="text-[15px] font-semibold leading-tight text-ink-900">{toothName(tt, locale)}</div>
-              <div className="mt-0.5 text-[12px] text-ink-500 latin">{toothName(tt, locale === "ar" ? "en" : "ar")}</div>
-            </>
+            <div className="text-[15px] font-semibold leading-tight text-ink-900">{toothName(tt, locale)}</div>
           ) : (
             <div className="text-[15px] font-semibold text-ink-900">{T.teeth.replace("{list}", teeth.join(" · "))}</div>
           )}

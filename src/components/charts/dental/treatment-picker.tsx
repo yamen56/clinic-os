@@ -107,7 +107,9 @@ function Chip({
           <span className={`block font-semibold leading-tight text-ink-900 ${compact ? "truncate text-[13px]" : "line-clamp-2 text-[13px]"}`}>
             {treatmentLabel(tr, locale)}
           </span>
-          {!compact && <span dir="auto" className="mt-0.5 block truncate text-start text-[11px] leading-tight text-ink-500 latin">{treatmentSubLabel(tr, locale)}</span>}
+          {!compact && treatmentSubLabel(tr, locale) && (
+            <span className="mt-0.5 block truncate text-[11px] leading-tight text-ink-500">{treatmentSubLabel(tr, locale)}</span>
+          )}
         </span>
       </button>
       <button

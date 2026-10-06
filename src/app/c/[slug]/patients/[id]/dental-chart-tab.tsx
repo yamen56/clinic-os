@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, MousePointer2, Paintbrush, Plus, History as HistoryIcon, Undo2, ChevronDown } from "lucide-react";
-import { useI18n } from "@/lib/i18n/client";
+import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
@@ -87,7 +87,6 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
   const { t, locale } = useI18n();
   const T = t.dental;
   const C = T.custom;
-  const [ar, setAr] = useState("");
   const [en, setEn] = useState("");
   const [abbr, setAbbr] = useState("");
   const [category, setCategory] = useState<Category>("restorative");
@@ -95,20 +94,22 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
   const [look, setLook] = useState<Look>("dot");
   useEffect(() => {
     if (open) {
-      setAr("");
       setEn("");
       setAbbr("");
     }
   }, [open]);
   const field = "h-10 w-full rounded-ctl border border-line bg-surface px-3 text-base md:text-sm focus:border-brand-600 focus:outline-none";
+  // Named in English like the rest of the chart. The record keeps an `ar`
+  // field for the day a patient-facing paper wants one; until then it is the
+  // English name, never a blank.
   const save = () => {
-    if (!ar.trim() && !en.trim()) return;
+    if (!en.trim()) return;
     onSave({
       key: `custom:${newId()}`,
       kind: category === "findings" ? "finding" : "procedure",
       category,
-      ar: ar.trim() || en.trim(),
-      en: en.trim() || ar.trim(),
+      ar: en.trim(),
+      en: en.trim(),
       abbr: abbr.trim() || undefined,
       scope,
       needsSurfaces: scope === "surface",
@@ -127,7 +128,7 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
           <Button variant="outline" onClick={onClose}>
             {T.cancel}
           </Button>
-          <Button onClick={save} disabled={!ar.trim() && !en.trim()}>
+          <Button onClick={save} disabled={!en.trim()}>
             {C.save}
           </Button>
         </>
@@ -137,12 +138,8 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
         <p className="text-[13px] text-ink-500">{C.hint}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-[13px] font-semibold">{C.nameAr}</span>
-            <input dir="rtl" value={ar} onChange={(e) => setAr(e.target.value)} className={field} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[13px] font-semibold">{C.nameEn}</span>
-            <input dir="ltr" value={en} onChange={(e) => setEn(e.target.value)} className={field} />
+            <span className="mb-1 block text-[13px] font-semibold">{C.name}</span>
+            <input autoFocus value={en} onChange={(e) => setEn(e.target.value)} placeholder={C.namePlaceholder} className={field} />
           </label>
           <label className="block">
             <span className="mb-1 block text-[13px] font-semibold">{C.abbr}</span>
@@ -191,7 +188,31 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
   );
 }
 
-export function DentalChartTab({ tz, birthDate, me, doctors }: { tz: string; birthDate: string | null; me: Person; doctors: Person[] }) {
+type TabProps = { tz: string; birthDate: string | null; me: Person; doctors: Person[] };
+
+/*
+  English inside, whatever the workspace speaks.
+
+  Dentists here trained in English and chart in it — "MO composite", "RCT on
+  36" — and the Arabic terms read as a translation nobody at the chair uses.
+  So the chart runs under its own provider: English for the catalog, the tooth
+  names, the surfaces and the dates, and left to right, while the file around
+  it stays in the clinic's language. Both dictionaries already carry the same
+  English `dental` block, so this only switches the locale; no second
+  dictionary is shipped to the browser.
+*/
+export function DentalChartTab(props: TabProps) {
+  const { t } = useI18n();
+  return (
+    <I18nProvider dict={t} locale="en">
+      <div dir="ltr" lang="en" className="font-sans" data-latin-island>
+        <DentalChart {...props} />
+      </div>
+    </I18nProvider>
+  );
+}
+
+function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
   const { t, locale } = useI18n();
   const T = t.dental;
   const { toast } = useToast();

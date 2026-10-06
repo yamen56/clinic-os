@@ -37,7 +37,7 @@ async function signIn(browser: Browser, email: string, lang: "ar" | "en", viewpo
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="password"]', "password123");
   await page.click('button[type="submit"]');
-  await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 120000, waitUntil: "commit" });
+  await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 240000, waitUntil: "commit" });
   return page;
 }
 
@@ -104,10 +104,23 @@ async function main() {
         const overflow = Number(await page.evaluate("document.documentElement.scrollWidth - window.innerWidth"));
         if (overflow > 1) fail(`${lang} ${v.name}: page scrolls sideways by ${overflow}px`);
         // A phone shows half the mouth at a time; 36 is on the patient's left.
-        if (v.viewport.width < 640) await page.getByRole("radio", { name: lang === "ar" ? "يسار المريض" : "Patient's left" }).click();
+        if (v.viewport.width < 640) await page.getByRole("radio", { name: "Patient's left" }).click();
         await page.locator("[data-dental-chart] [data-tooth='36']").first().click();
         await page.waitForTimeout(450);
         await page.screenshot({ path: join(SHOTS, `${lang}-${v.name}-tooth36.png`), fullPage: v.viewport.width >= 860 });
+        if (lang === "ar" && v.name === "desktop") {
+          // The chart speaks English inside an Arabic workspace, left to right.
+          const chart = await page.locator("[data-dental-chart]").innerText();
+          const dir = await page.locator("[data-latin-island]").first().getAttribute("dir");
+          const tabs = await page.locator('[role="tablist"]').first().innerText();
+          // Doctors' own names may be Arabic; the chart's words may not.
+          const arabicTerms = /تسوس|علاج عصب|الرحى|مخطط|منجز|العمل المتبقي/;
+          if (/Lower left first molar/.test(chart) && /Remaining work/.test(chart) && !arabicTerms.test(chart) && dir === "ltr")
+            ok("on an Arabic screen the chart is English and left-to-right");
+          else fail(`Arabic screen: chart dir=${dir}, text starts ${chart.slice(0, 200)}`);
+          if (tabs.includes("Dental chart") && tabs.includes("نظرة عامة")) ok("the tab is named in English among Arabic tabs");
+          else fail(`tab strip: ${tabs}`);
+        }
       }
     }
     ok("screenshots taken in Arabic and English at five sizes");

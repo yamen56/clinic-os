@@ -220,6 +220,19 @@ html[dir="rtl"] .font-display {
   letter-spacing: normal;
   line-height: 1.35;
 }
+/*
+  An English island on an Arabic page — the dental chart, which charts in the
+  language dentists trained in. The rule above would set its Latin headings in
+  Cairo at 800; inside the island (`data-latin-island`) they get the Latin face
+  back. Unlayered only because the rule it answers is; scoped to a marker rather
+  than to any `dir="ltr"`, so an English invoice on an Arabic page is untouched.
+*/
+html[dir="rtl"] [data-latin-island] .font-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: normal;
+}
 
 /* Eyebrow: uppercase + tracked in Latin, weight-led in Arabic */
 .eyebrow {

@@ -341,10 +341,14 @@ export function treatmentLabel(tr: { en: string; ar: string }, locale: string): 
   return locale === "ar" ? tr.ar : tr.en;
 }
 
-/** The other language's name — under the Arabic, the English medical term. */
+/**
+ * The line under a treatment's name. The chart is English, so it is the
+ * abbreviation as dentists write it — RCT, SSC, PFM — or nothing; an Arabic
+ * screen would carry the English term there instead.
+ */
 export function treatmentSubLabel(tr: { en: string; ar: string; abbr?: string }, locale: string): string {
-  const other = locale === "ar" ? tr.en : tr.ar;
-  return tr.abbr ? `${other} · ${tr.abbr}` : other;
+  if (locale === "ar") return tr.abbr ? `${tr.en} · ${tr.abbr}` : tr.en;
+  return tr.abbr ?? "";
 }
 
 /** True when the entry, once done, means the tooth is no longer there. */
