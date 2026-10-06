@@ -121,6 +121,17 @@ async function main() {
           if (tabs.includes("Dental chart") && tabs.includes("نظرة عامة")) ok("the tab is named in English among Arabic tabs");
           else fail(`tab strip: ${tabs}`);
         }
+        if (lang === "en" && v.name === "phone-390") {
+          // The panel docks below without dimming the chart, and the tooth stays in view above it.
+          const sheet = await page.locator("[data-dental-sheet]").count();
+          const modal = await page.locator('[role="dialog"][aria-modal="true"]').count();
+          const box = await page.locator("[data-dental-chart] svg [data-tooth='36']").first().boundingBox();
+          const openTop = v.viewport.height * (1 - 0.56);
+          if (sheet === 1 && modal === 0) ok("on a phone the tooth panel docks at the bottom without covering the page");
+          else fail(`phone: sheet=${sheet} modal=${modal}`);
+          if (box && box.y >= 0 && box.y + box.height <= openTop + 4) ok("on a phone the tapped tooth stays in view above the panel");
+          else fail(`phone: tooth 36 at ${box ? `${Math.round(box.y)}–${Math.round(box.y + box.height)}` : "nowhere"}, open area ends at ${Math.round(openTop)}`);
+        }
       }
     }
     ok("screenshots taken in Arabic and English at five sizes");
@@ -133,6 +144,33 @@ async function main() {
     const tabs = (await page.locator('[role="tablist"]').first().innerText()).replace(/\s+/g, " ");
     if (tabs.includes("Dental chart")) ok("super-admin sees the Dental chart tab");
     else fail(`super-admin tab strip lacks Dental chart: ${tabs}`);
+
+    // Whole-mouth work is a small mouth with its part lit, and points at the chart.
+    const scalingCard = page.locator("[data-mouth-mark='scaling']");
+    if ((await scalingCard.locator("svg rect").count()) >= 16) ok("a whole-mouth treatment is drawn as a mouth, not a chip");
+    else fail("the scaling card has no mouth drawing");
+    await scalingCard.hover();
+    if ((await page.locator("[data-dental-chart] svg [data-highlight='mouth']").count()) === 1) ok("pointing at a whole-mouth card outlines the mouth on the chart");
+    else fail("no outline on the chart while hovering the scaling card");
+    await page.mouse.move(5, 5);
+
+    // No coloured dots: the x-ray on 36 is an icon badge, the legend shows drawn swatches.
+    if ((await page.locator("[data-dental-chart] svg [data-tooth='36'] [data-badge]").count()) === 1) ok("work with no shape on a tooth shows as an icon badge by its number");
+    else fail("tooth 36 has no badge for its periapical x-ray");
+    const legendSwatches = await page.locator("[data-dental-chart] button[aria-pressed] svg path").count();
+    if (legendSwatches >= 4) ok("the legend shows a drawn tooth for each status");
+    else fail(`legend swatches: ${legendSwatches}`);
+
+    // At a desk, arrows walk the arch and Escape puts the tooth down.
+    await page.locator("[data-dental-chart] svg [data-tooth='36']").first().click();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowUp");
+    const walked = await page.locator("[data-dental-chart] svg [data-tooth='27'][aria-pressed='true']").count();
+    if (walked === 1) ok("arrow keys move from 36 to 37 and up to 27");
+    else fail("arrow keys did not land on 27");
+    await page.keyboard.press("Escape");
+    if ((await page.locator("[data-dental-panel]").count()) === 0) ok("Escape closes the tooth panel");
+    else fail("the panel stayed open after Escape");
 
     // Tooth first: 47, surfaces O and M, then a composite filling, done.
     const panel = page.locator("[data-dental-panel]").first();

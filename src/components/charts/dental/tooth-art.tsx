@@ -737,15 +737,42 @@ export function LookGlyph({ look, paint, t, uid, size = 30 }: { look: Look; pain
   const layer: Layer = { markId: "g", look, paint, surfaces, detail: {} };
   const st: ToothState =
     look === "missing"
-      ? { gone: true, buried: null, layers: [], dots: [] }
+      ? { gone: true, buried: null, layers: [], badges: [] }
       : look === "impacted" || look === "unerupted"
-        ? { gone: false, buried: { look, paint }, layers: [], dots: [] }
+        ? { gone: false, buried: { look, paint }, layers: [], badges: [] }
         : look === "implant" || look === "denture"
-          ? { gone: true, buried: null, layers: [layer], dots: [] }
-          : { gone: false, buried: null, layers: [layer], dots: [] };
+          ? { gone: true, buried: null, layers: [layer], badges: [] }
+          : { gone: false, buried: null, layers: [layer], badges: [] };
   return (
     <svg viewBox={`2 0 40 ${SIDE_H}`} width={size * 0.4} height={size} aria-hidden className="shrink-0 overflow-visible">
       <ToothSide t={t} st={st} uid={uid} />
+    </svg>
+  );
+}
+
+/**
+ * A crown the size of a letter, drawn the way each status is drawn on the
+ * chart — dashed red for planned, solid blue for done, slate for existing,
+ * a brown spot for a finding — so the legend is a sample of the picture and
+ * not a coloured dot to be matched against it.
+ */
+export function PaintSwatch({ paint, size = 16 }: { paint: Paint; size?: number }) {
+  const crown = "M3 6.5 C3 3.2 5 2 8 2 C11 2 13 3.2 13 6.5 L12.4 12.2 C12 15 10.4 15.6 8 13.6 C5.6 15.6 4 15 3.6 12.2 Z";
+  const ink = INK[paint];
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden className="shrink-0">
+      {paint === "finding" ? (
+        <>
+          <path d={crown} style={{ fill: "var(--color-tooth-enamel)", stroke: "var(--color-tooth-line)", strokeWidth: 1.1 }} />
+          <circle cx={9.4} cy={6.4} r={2.1} style={{ fill: "var(--color-dental-caries)" }} />
+        </>
+      ) : (
+        <path
+          d={crown}
+          style={{ fill: paint === "planned" ? SOFT.planned : ink, stroke: ink, strokeWidth: paint === "planned" ? 1.3 : 1 }}
+          strokeDasharray={paint === "planned" ? "2 1.4" : undefined}
+        />
+      )}
     </svg>
   );
 }

@@ -14,7 +14,7 @@ import { useI18n } from "@/lib/i18n/client";
 import type { Treatment } from "@/lib/charts/dental/catalog";
 import { SURFACES, surfaceAt, surfaceLabel, tooth as toothOf, toothName, type Surface } from "@/lib/charts/dental/teeth";
 import { stateOf, type Mark, type MarkEvent, type Paint, type Person, type Status, type ToothState } from "@/lib/charts/dental/state";
-import { OCC, SIDE_H, ToothSide, ToothTop, INK, SOFT } from "./tooth-art";
+import { OCC, SIDE_H, ToothSide, ToothTop, INK, SOFT, PaintSwatch } from "./tooth-art";
 import { TreatmentPicker, type Favorite } from "./treatment-picker";
 import { EntryRow, EventList } from "./history";
 
@@ -187,31 +187,36 @@ export function ToothPanel({
       {past ? (
         <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700">{T.readOnlyPast}</p>
       ) : (
-        <div className="grid gap-3">
-          <div>
-            <div className="inline-flex rounded-ctl bg-sunken p-0.5" role="radiogroup">
-              {STATUSES.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  role="radio"
-                  aria-checked={status === s}
-                  title={T.statusHint[s]}
-                  onClick={() => a.onStatus(s)}
-                  className="h-9 rounded-[6px] px-3 text-[13px] font-semibold transition-colors duration-140"
-                  style={status === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
-                >
-                  {T.status[s]}
-                </button>
-              ))}
-            </div>
+        /*
+          One line for "how" and "who", then straight to the treatments: the
+          doctor's next tap is a treatment, so nothing stands between the tooth
+          and the list of what can be done to it. What is already on the tooth
+          is drawn on the big tooth above and listed after.
+        */
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex shrink-0 rounded-ctl bg-sunken p-0.5" role="radiogroup">
+            {STATUSES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                role="radio"
+                aria-checked={status === s}
+                title={T.statusHint[s]}
+                onClick={() => a.onStatus(s)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-semibold transition-colors duration-140"
+                style={status === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
+              >
+                <PaintSwatch paint={s} size={14} />
+                {T.status[s]}
+              </button>
+            ))}
           </div>
-          <label className="block min-w-0">
-            <span className="mb-1 block text-[12px] font-semibold text-ink-500">{T.performedBy}</span>
+          <label className="flex min-w-[11rem] flex-1 items-center gap-2">
+            <span className="shrink-0 text-[12px] font-semibold text-ink-500">{T.performedBy}</span>
             <select
               value={performer}
               onChange={(e) => a.onPerformer(e.target.value)}
-              className="select-chevron h-9 w-full appearance-none rounded-ctl border border-line bg-surface ps-3 pe-8 text-base md:text-sm"
+              className="select-chevron h-9 min-w-0 flex-1 appearance-none rounded-ctl border border-line bg-surface ps-3 pe-8 text-base md:text-sm"
             >
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -223,9 +228,27 @@ export function ToothPanel({
         </div>
       )}
 
+      {!past && (
+        <section>
+          <TreatmentPicker
+            catalog={catalog}
+            context={tt}
+            favorites={favorites}
+            recent={recent}
+            paint={paint}
+            tz={tz}
+            onPick={a.onPick}
+            onToggleFavorite={a.onToggleFavorite}
+            onAddCustom={a.onAddCustom}
+          />
+        </section>
+      )}
+
       {here.length > 0 && (
         <section>
-          <h4 className="mb-2 text-[13px] font-semibold text-ink-900">{T.onTooth}</h4>
+          <h4 className="mb-2 text-[13px] font-semibold text-ink-900">
+            {T.onTooth} <span className="ms-1 rounded-full bg-sunken px-2 py-0.5 text-[12px] font-semibold text-ink-500 tnum">{here.length}</span>
+          </h4>
           <ul className="grid gap-2">
             {here.map((m) => (
               <EntryRow
@@ -243,22 +266,6 @@ export function ToothPanel({
               />
             ))}
           </ul>
-        </section>
-      )}
-
-      {!past && (
-        <section>
-          <TreatmentPicker
-            catalog={catalog}
-            context={tt}
-            favorites={favorites}
-            recent={recent}
-            paint={paint}
-            tz={tz}
-            onPick={a.onPick}
-            onToggleFavorite={a.onToggleFavorite}
-            onAddCustom={a.onAddCustom}
-          />
         </section>
       )}
 

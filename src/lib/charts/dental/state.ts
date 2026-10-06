@@ -91,11 +91,11 @@ export type ToothState = {
   /** Pushed into the bone: impacted or unerupted, with how it reads. */
   buried: { look: "impacted" | "unerupted"; paint: Paint } | null;
   layers: Layer[];
-  /** Work with no shape on a tooth — an x-ray, a vitality test — as small markers. */
-  dots: Paint[];
+  /** Work with no shape on a tooth — an x-ray, a vitality test — as small icon badges. */
+  badges: { paint: Paint; treatmentKey: string }[];
 };
 
-const EMPTY: ToothState = { gone: false, buried: null, layers: [], dots: [] };
+const EMPTY: ToothState = { gone: false, buried: null, layers: [], badges: [] };
 
 /**
  * Every tooth's state on a day (`at` = null for now).
@@ -110,7 +110,7 @@ export function toothStates(marks: Mark[], at: number | null): Map<string, Tooth
     if (!isToothSite(m.site)) continue;
     const paint = paintAt(m, at);
     if (!paint) continue;
-    const s = out.get(m.site) ?? { gone: false, buried: null, layers: [], dots: [] };
+    const s = out.get(m.site) ?? { gone: false, buried: null, layers: [], badges: [] };
     out.set(m.site, s);
     if (m.look === "missing") {
       s.gone = true;
@@ -127,7 +127,7 @@ export function toothStates(marks: Mark[], at: number | null): Map<string, Tooth
       continue;
     }
     if (m.look === "dot") {
-      s.dots.push(paint);
+      s.badges.push({ paint, treatmentKey: m.treatmentKey });
       continue;
     }
     // A pontic, an implant or a denture tooth stands where a tooth used to be.

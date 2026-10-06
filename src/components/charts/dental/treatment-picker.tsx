@@ -13,8 +13,8 @@
   patient search.
 */
 
-import { useMemo, useState } from "react";
-import { Star, Plus, Search, ScanSearch, Sparkles, Waves, Scissors, Smile, Sun, Activity, Baby, CircleDot, Anchor } from "lucide-react";
+import { memo, useMemo, useState } from "react";
+import { Star, Plus, Search } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate } from "@/lib/dates";
 import {
@@ -30,22 +30,9 @@ import {
 import { tooth as toothOf, type Tooth } from "@/lib/charts/dental/teeth";
 import type { Paint, Person } from "@/lib/charts/dental/state";
 import { LookGlyph } from "./tooth-art";
+import { iconFor } from "./icons";
 
 export type Favorite = { key: string; addedBy: Person; addedAt: string };
-
-const DOT_ICON: Partial<Record<Category, React.ComponentType<{ className?: string }>>> = {
-  diagnostic: ScanSearch,
-  preventive: Sparkles,
-  periodontic: Waves,
-  surgery: Scissors,
-  ortho: Smile,
-  cosmetic: Sun,
-  removable: Smile,
-  endodontic: Activity,
-  pediatric: Baby,
-  findings: CircleDot,
-  implant: Anchor,
-};
 
 const FRONT_LOOKS = new Set(["veneer", "bracket"]);
 
@@ -54,20 +41,26 @@ function glyphTooth(tr: Treatment, context: Tooth | null): Tooth {
   return toothOf(FRONT_LOOKS.has(tr.look) ? "11" : "16");
 }
 
-export function TreatmentGlyph({ tr, paint, context, size = 34 }: { tr: Treatment; paint: Paint; context: Tooth | null; size?: number }) {
+/*
+  Memoised: a picker holds forty of these, each a small drawing, and none of
+  them changes when the doctor taps a surface or a tooth beside it. Without
+  this every tap redrew them all, which is the lag between finger and tooth.
+*/
+export const TreatmentGlyph = memo(function TreatmentGlyph({ tr, paint, context, size = 34 }: { tr: Treatment; paint: Paint; context: Tooth | null; size?: number }) {
   if (tr.look === "dot") {
-    const Icon = DOT_ICON[tr.category] ?? CircleDot;
+    // Work with no shape on a tooth wears its group's icon on a soft tile.
+    const Icon = iconFor(tr.category);
     return (
       <span
-        className="grid shrink-0 place-items-center rounded-full"
-        style={{ width: size * 0.62, height: size * 0.62, background: `var(--color-dental-${paint}-soft)`, color: `var(--color-dental-${paint})` }}
+        className="grid shrink-0 place-items-center rounded-lg"
+        style={{ width: size * 0.66, height: size * 0.66, background: `var(--color-dental-${paint}-soft)`, color: `var(--color-dental-${paint})` }}
       >
         <Icon className="h-3.5 w-3.5" />
       </span>
     );
   }
   return <LookGlyph look={tr.look} paint={paint} t={glyphTooth(tr, context)} uid={`g-${tr.key}`} size={size} />;
-}
+});
 
 function Chip({
   tr,

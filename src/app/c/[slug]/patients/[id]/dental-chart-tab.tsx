@@ -19,11 +19,14 @@ import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { fmtDateOnly } from "@/lib/dates";
-import { BORROWABLE_LOOKS, BUILT_IN, PROCEDURE_CATEGORIES, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
+import { BORROWABLE_LOOKS, BUILT_IN, PROCEDURE_CATEGORIES, findTreatment, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
 import { endOfDay, eventDays, isToothSite, paintAt, toothStates, type Mark, type MarkEvent, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
-import { DentalDefs, INK, SOFT } from "@/components/charts/dental/tooth-art";
-import { Odontogram } from "@/components/charts/dental/odontogram";
+import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
+import { Odontogram, neighbour } from "@/components/charts/dental/odontogram";
+import { MouthGlyph, type MouthRegion } from "@/components/charts/dental/mouth-art";
+import { DockSheet, SHEET_SHARE } from "@/components/charts/dental/dock-sheet";
+import { iconFor } from "@/components/charts/dental/icons";
 import { ToothPanel, type PanelActions } from "@/components/charts/dental/tooth-panel";
 import { TreatmentGlyph, TreatmentPicker, type Favorite } from "@/components/charts/dental/treatment-picker";
 import { EntryRow, EventList } from "@/components/charts/dental/history";
@@ -73,9 +76,10 @@ function StatusPicker({ value, onChange }: { value: Status; onChange: (s: Status
           aria-checked={value === s}
           title={t.dental.statusHint[s]}
           onClick={() => onChange(s)}
-          className="h-8 rounded-[6px] px-2.5 text-[13px] font-semibold transition-colors duration-140"
+          className="inline-flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-semibold transition-colors duration-140"
           style={value === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
         >
+          <PaintSwatch paint={s} size={14} />
           {t.dental.status[s]}
         </button>
       ))}
@@ -256,6 +260,9 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
   const [voidReason, setVoidReason] = useState("");
   const [lastAdded, setLastAdded] = useState<{ ids: string[]; text: string; key: number } | null>(null);
   const [historyDoctor, setHistoryDoctor] = useState("");
+  /** A whole-mouth card being pointed at, and the one opened. */
+  const [mouthHover, setMouthHover] = useState<MouthRegion | null>(null);
+  const [mouthEntry, setMouthEntry] = useState<string | null>(null);
 
   /*
     Wide enough for the panel beside the chart, or narrow enough for half a
@@ -287,12 +294,77 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
     return () => clearTimeout(id);
   }, [lastAdded]);
 
+  /*
+    At a desk: the arrow keys walk from tooth to tooth — along the arch, and up
+    or down to the other jaw — and Escape puts the tooth down. Never while
+    typing, and never under a dialog that has its own Escape.
+  */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (e.key === "Escape" && selected.length) {
+        setSelected([]);
+        setPicked([]);
+        setSpan(null);
+        return;
+      }
+      if (mode !== "tooth" || selected.length !== 1) return;
+      const next = neighbour(selected[0], e.key, dentition);
+      if (!next) return;
+      e.preventDefault();
+      setSelected([next]);
+      setPicked([]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected, mode, dentition]);
+
+  /*
+    With the panel docked at the bottom, the tooth being worked on has to stay
+    in the open part of the screen above it — otherwise the doctor taps a
+    treatment and the tooth that changes is hidden behind the panel. Scrolled
+    only when it is actually out of view, so moving along the arch does not
+    make the page swim.
+  */
+  const sheetOpen = !wide && selected.length > 0 && mode === "tooth";
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const id = requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-dental-chart] svg [data-tooth="${selected[selected.length - 1]}"]`);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const top = 72; // under the phone's top bar
+      const open = window.innerHeight * (1 - SHEET_SHARE);
+      if (r.top >= top && r.bottom <= open - 8) return;
+      window.scrollBy({ top: r.top - Math.max(top, (open - r.height) / 2), behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [sheetOpen, selected]);
+
+  // A phone shows half the mouth; a sideways swipe across it shows the other.
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const p = e.touches[0];
+    swipe.current = { x: p.clientX, y: p.clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const s = swipe.current;
+    swipe.current = null;
+    if (!s || !phone) return;
+    const p = e.changedTouches[0];
+    const dx = p.clientX - s.x;
+    if (Math.abs(dx) > 56 && Math.abs(p.clientY - s.y) < 40) setHalf(dx < 0 ? "left" : "right");
+  };
+
   const days = useMemo(() => eventDays(marks, tz), [marks, tz]);
   const at = dayIdx === null || dayIdx >= days.length ? null : endOfDay(days[dayIdx], tz);
   const past = at !== null;
   const states = useMemo(() => toothStates(marks, at), [marks, at]);
   const visible = useCallback((p: Paint) => show[p], [show]);
   const catalog = useMemo(() => [...BUILT_IN, ...custom], [custom]);
+  const categoryOf = useCallback((key: string) => findTreatment(key, custom)?.category, [custom]);
   const performerPerson = roster.find((d) => d.id === performer) ?? null;
 
   /* ── Recording ───────────────────────────────────────────────────────── */
@@ -658,10 +730,10 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
                 aria-pressed={show[p]}
                 onClick={() => setShow((s) => ({ ...s, [p]: !s[p] }))}
                 title={T.statusHint[p]}
-                className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold transition-opacity duration-140 ${show[p] ? "" : "opacity-40"}`}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-full border ps-1.5 pe-2.5 text-[12px] font-semibold transition-opacity duration-140 ${show[p] ? "" : "opacity-40"}`}
                 style={{ borderColor: SOFT[p], background: show[p] ? SOFT[p] : "transparent", color: INK[p] }}
               >
-                <span className="h-2 w-2 rounded-full" style={{ background: INK[p] }} />
+                <PaintSwatch paint={p} size={18} />
                 {T.status[p]}
               </button>
             ))}
@@ -680,30 +752,8 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
             )}
           </div>
 
-          {/* Whole mouth: work that belongs to no single tooth. */}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-ctl bg-canvas px-2 py-1.5">
-            <span className="px-1 text-[12px] font-semibold text-ink-500">{T.wholeMouth}</span>
-            {mouthMarks.length === 0 && <span className="text-[12px] text-ink-400">{T.nothingWholeMouth}</span>}
-            {mouthMarks.map((m) => {
-              const p = paintAt(m, at)!;
-              return (
-                <span key={m.id} className="inline-flex h-7 items-center gap-1.5 rounded-full border bg-surface px-2.5 text-[12px] font-semibold" style={{ borderColor: SOFT[p], color: INK[p] }} data-mouth-mark={m.treatmentKey}>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: INK[p] }} />
-                  <span className="text-ink-900">{locale === "ar" ? m.labelAr : m.label}</span>
-                  {m.site !== "mouth" && <span className="font-normal text-ink-500">· {siteLabel(m.site, T)}</span>}
-                </span>
-              );
-            })}
-            {!past && (
-              <button type="button" onClick={() => setMouthOpen(true)} className="ms-auto inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-semibold text-brand-600 hover:bg-surface">
-                <Plus className="h-3.5 w-3.5" />
-                {T.addWholeMouth}
-              </button>
-            )}
-          </div>
-
           {/* The mouth */}
-          <div className="mt-3" dir="ltr">
+          <div className="mt-3" dir="ltr" onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
             <div className="mb-1 flex items-center justify-between px-1 text-[11px] font-semibold text-ink-400">
               <span>{!phone || half === "right" ? `◀ ${T.patientRight}` : ""}</span>
               <span>{T.upper}</span>
@@ -717,11 +767,70 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
               half={phone ? half : null}
               locale={locale}
               brush={mode === "brush"}
+              highlight={mouthHover}
               onTooth={onTooth}
               onSurface={onSurface}
+              categoryOf={categoryOf}
             />
             <div className="mt-1 text-center text-[11px] font-semibold text-ink-400">{T.lower}</div>
           </div>
+
+          {/*
+            Whole mouth: work that belongs to no single tooth, each as a small
+            mouth with the part it covers lit — the whole mouth, an arch, a
+            quadrant. Pointing at one outlines the same part of the chart above;
+            tapping it opens the entry.
+          */}
+          <section className="mt-4" aria-label={T.wholeMouth}>
+            <h4 className="mb-2 text-[13px] font-semibold text-ink-900">{T.wholeMouth}</h4>
+            <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
+              {mouthMarks.map((m) => {
+                const p = paintAt(m, at)!;
+                const region = m.site as MouthRegion;
+                const point = () => setMouthHover(region);
+                const unpoint = () => setMouthHover(null);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMouthEntry(m.id)}
+                    onMouseEnter={point}
+                    onMouseLeave={unpoint}
+                    onFocus={point}
+                    onBlur={unpoint}
+                    data-mouth-mark={m.treatmentKey}
+                    className="flex w-[15.5rem] shrink-0 snap-start items-center gap-3 rounded-card border bg-surface p-2 pe-3 text-start transition-shadow duration-140 hover:shadow-pop"
+                    style={{ borderColor: SOFT[p] }}
+                  >
+                    <MouthGlyph region={region} paint={p} icon={iconFor(categoryOf(m.treatmentKey))} size={72} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13.5px] font-semibold text-ink-900">{locale === "ar" ? m.labelAr : m.label}</span>
+                      <span className="mt-0.5 block truncate text-[12px] text-ink-500">{siteLabel(m.site, T)}</span>
+                      <span className="mt-1 flex items-center gap-1.5">
+                        <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: SOFT[p], color: INK[p] }}>
+                          {T.status[p]}
+                        </span>
+                        <span className="text-[11.5px] text-ink-500 tnum">{fmtDateOnly(m.doneAt ?? m.createdAt, locale)}</span>
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              {!past && (
+                <button
+                  type="button"
+                  onClick={() => setMouthOpen(true)}
+                  className="flex w-[15.5rem] shrink-0 snap-start items-center gap-3 rounded-card border border-dashed border-line-strong bg-surface p-2 pe-3 text-start transition-colors duration-140 hover:bg-sunken"
+                >
+                  <MouthGlyph region={null} paint={null} icon={Plus} size={72} />
+                  <span className="min-w-0">
+                    <span className="block text-[13.5px] font-semibold text-brand-600">{T.addWholeMouth}</span>
+                    {mouthMarks.length === 0 && <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">{T.nothingWholeMouth}</span>}
+                  </span>
+                </button>
+              )}
+            </div>
+          </section>
 
           {/* Time: the mouth on any day something happened. */}
           {days.length > 0 && (
@@ -754,7 +863,12 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
 
           {/* "Recorded — undo": the last tap can be taken back for a few seconds. */}
           {lastAdded && (
-            <div key={lastAdded.key} className="pointer-events-none sticky bottom-3 z-10 mt-3 flex justify-center animate-fade-up">
+            <div
+              key={lastAdded.key}
+              // Above the docked panel when it is open, so the undo is never under it.
+              className={`pointer-events-none z-[46] flex justify-center animate-fade-up ${sheetOpen ? "fixed inset-x-0" : "sticky bottom-3 mt-3"}`}
+              style={sheetOpen ? { bottom: `calc(${SHEET_SHARE * 100}dvh + 10px)` } : undefined}
+            >
               <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-brand-600 py-1.5 ps-4 pe-1.5 text-[13px] text-white shadow-pop">
                 <span className="max-w-[60vw] truncate">{lastAdded.text}</span>
                 <button type="button" onClick={undo} className="inline-flex h-7 items-center gap-1 rounded-full bg-white/15 px-2.5 font-semibold hover:bg-white/25">
@@ -774,15 +888,54 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
       </div>
 
       {!wide && (
-        <Modal open={!!panel} onClose={closePanel}>
+        <DockSheet open={!!panel} label={selected.length === 1 ? T.tooth.replace("{n}", selected[0]) : T.onTooth}>
           {panel || null}
-        </Modal>
+        </DockSheet>
       )}
       {!wide && (
         <Modal open={brushPicker} onClose={() => setBrushPicker(false)} title={T.brushPick}>
           {brushPickerBody}
         </Modal>
       )}
+
+      {/* A whole-mouth entry, opened from its card: the same row a tooth's entries use. */}
+      <Modal open={!!mouthEntry} onClose={() => setMouthEntry(null)} title={T.wholeMouth}>
+        {(() => {
+          const m = marks.find((x) => x.id === mouthEntry);
+          if (!m) return null;
+          return (
+            <div className="grid gap-3">
+              <div className="flex items-center gap-3">
+                <MouthGlyph region={m.site as MouthRegion} paint={paintAt(m, null) ?? "existing"} icon={iconFor(categoryOf(m.treatmentKey))} size={96} />
+                <div className="min-w-0">
+                  <div className="text-[15px] font-semibold text-ink-900">{locale === "ar" ? m.labelAr : m.label}</div>
+                  <div className="text-[13px] text-ink-500">{siteLabel(m.site, T)}</div>
+                </div>
+              </div>
+              <ul>
+                <EntryRow
+                  m={m}
+                  custom={custom}
+                  doctors={roster}
+                  tz={tz}
+                  canEdit={!past}
+                  onMarkDone={actions.onMarkDone}
+                  onVoid={(x) => {
+                    setMouthEntry(null);
+                    actions.onVoid(x);
+                  }}
+                  onNote={actions.onNote}
+                  onDetail={actions.onDetail}
+                  onPerformer={actions.onEntryPerformer}
+                />
+              </ul>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* Room to scroll the last of the page out from under the docked panel. */}
+      {sheetOpen && <div aria-hidden style={{ height: `${SHEET_SHARE * 100}dvh` }} />}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-4">

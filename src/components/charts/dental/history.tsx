@@ -11,7 +11,7 @@
 */
 
 import { useState } from "react";
-import { Check, ChevronDown, Ban } from "lucide-react";
+import { Check, ChevronDown, Ban, Plus, Pencil, UserRound, type LucideIcon } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { findTreatment, type Treatment } from "@/lib/charts/dental/catalog";
@@ -174,6 +174,14 @@ export function EntryRow({
   );
 }
 
+const EVENT_ICON: Record<MarkEvent["action"], LucideIcon> = {
+  created: Plus,
+  done: Check,
+  void: Ban,
+  note: Pencil,
+  performer: UserRound,
+};
+
 /** The ink of one line in the history: what the entry was at that moment. */
 function eventPaint(e: MarkEvent, m: Mark): Paint | null {
   if (e.action === "void") return null;
@@ -191,17 +199,21 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
   const rows = [...events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   if (rows.length === 0) return <p className="py-3 text-[13px] text-ink-500">{T.noHistory}</p>;
   return (
-    <ol className="relative grid gap-0.5 border-s border-line ps-4">
+    <ol className="relative ms-2.5 grid gap-0.5 border-s border-line ps-6">
       {rows.map((e) => {
         const m = byId.get(e.markId);
         if (!m) return null;
         const paint = eventPaint(e, m);
+        // What happened, as a picture: recorded, done, voided, re-noted, re-assigned.
+        const Icon = EVENT_ICON[e.action];
         return (
           <li key={e.id} className="relative py-1.5" data-event={e.action}>
             <span
-              className="absolute -start-[21px] top-3 h-2.5 w-2.5 rounded-full ring-2 ring-surface"
-              style={{ background: paint ? INK[paint] : "var(--color-ink-300)" }}
-            />
+              className="absolute -start-[34px] top-1.5 grid h-5 w-5 place-items-center rounded-md ring-2 ring-surface"
+              style={{ background: paint ? SOFT[paint] : "var(--color-sunken)", color: paint ? INK[paint] : "var(--color-ink-500)" }}
+            >
+              <Icon className="h-3 w-3" strokeWidth={2.6} />
+            </span>
             <div className="text-[13px] leading-snug text-ink-900">
               {showSite && <span className="font-semibold">{siteLabel(m.site, T)} · </span>}
               <span className={e.action === "void" ? "line-through" : ""}>{markLabel(m, locale)}</span>
