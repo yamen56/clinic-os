@@ -117,6 +117,31 @@
   --color-st-pending: #c98a2b;
   --color-st-pending-soft: #f9f0e2;
 
+  /*
+    The dental chart. A tooth is drawn in ivory on a pink gum, and everything
+    recorded on it wears one of four inks that dentists already read without a
+    legend: red for work still to do, blue for work done here, slate for work
+    that arrived in the patient's mouth from elsewhere, and brown for what was
+    found rather than done.
+  */
+  --color-tooth-enamel: #fffdf7;
+  --color-tooth-shade: #ece2cd;
+  --color-tooth-root: #f4ead5;
+  --color-tooth-root-shade: #e2d2b2;
+  --color-tooth-line: #a3977f;
+  --color-tooth-pulp: #f1c9c4;
+  --color-gum: #f3b6bd;
+  --color-gum-line: #e28f9b;
+  --color-dental-planned: #d33a3a;
+  --color-dental-planned-soft: #fbdede;
+  --color-dental-done: #2463cf;
+  --color-dental-done-soft: #d9e6fb;
+  --color-dental-existing: #687384;
+  --color-dental-existing-soft: #e3e7ec;
+  --color-dental-finding: #a0560f;
+  --color-dental-finding-soft: #f7e6d2;
+  --color-dental-caries: #4a2a12;
+
   --radius-card: 12px;
   --radius-ctl: 8px;
   --radius-modal: 20px;
@@ -141,6 +166,26 @@
   @keyframes slim-progress {
     from { transform: translateX(-100%); }
     to { transform: translateX(250%); }
+  }
+  @keyframes tooth-pop {
+    0% { opacity: 0; transform: scale(0.55); }
+    60% { opacity: 1; transform: scale(1.08); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+}
+
+/*
+  Something just recorded on a tooth lands with a small bounce, so the doctor
+  sees the tap take effect on the tooth itself and not only in a list. Scaled
+  around its own box: a filling grows out of its surface, not out of the corner
+  of the chart. The global reduced-motion rule below cuts it to nothing. In the
+  components layer, like every class here, so no utility is ever outranked.
+*/
+@layer components {
+  .tooth-pop {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: tooth-pop 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   }
 }
 

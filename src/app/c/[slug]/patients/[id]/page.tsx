@@ -59,6 +59,12 @@ export default async function PatientProfilePage({
     insurance: can(access, "insurance"),
   };
   const none = { rows: [] as Record<string, unknown>[] };
+  /*
+    The dental chart is a preview the Clinicti team judges on real files before
+    anything about it is stored. It writes nothing; it only needs the clinic's
+    doctors, for "performed by".
+  */
+  const dentalPreview = access.session.user.isSuperAdmin;
 
   const data = await inClinic(access, async (c) => {
     /*
@@ -87,7 +93,7 @@ export default async function PatientProfilePage({
       entityId: id,
     });
 
-    const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags, insurers, noteCategories] =
+    const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags, insurers, noteCategories, dentalDoctors] =
       await Promise.all([
         c.query(
           /*
@@ -206,6 +212,13 @@ export default async function PatientProfilePage({
            from note_categories where clinic_id = $1 order by sort, name`,
           [access.clinicId]
         ),
+        dentalPreview
+          ? c.query(
+              `select m.id, u.full_name as name from clinic_members m join users u on u.id = m.user_id
+                where m.clinic_id = $1 and m.active and m.role = 'doctor' order by u.full_name`,
+              [access.clinicId]
+            )
+          : none,
       ]);
 
     /*
@@ -238,6 +251,7 @@ export default async function PatientProfilePage({
       clinicTags: clinicTags.rows,
       insurers: insurers.rows,
       noteCategories: noteCategories.rows,
+      dentalDoctors: dentalDoctors.rows as { id: string; name: string }[],
     };
   });
 
@@ -270,6 +284,11 @@ export default async function PatientProfilePage({
       canSendDocuments={can(access, "documents.manage")}
       caps={caps}
       country={countryFromClinic(access.clinic)}
+      dentalPreview={
+        dentalPreview
+          ? { me: { id: access.session.user.id, name: access.session.user.fullName }, doctors: d.dentalDoctors }
+          : null
+      }
     />
   );
 }

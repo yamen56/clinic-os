@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useAutosave } from "@/lib/use-autosave";
@@ -73,6 +74,16 @@ import {
   ShieldAlert,
   ExternalLink,
 } from "lucide-react";
+
+/*
+  The dental chart preview is a few hundred kilobytes of drawing and catalog
+  that nobody but the Clinicti team can open yet, so it is fetched when its tab
+  is, not shipped with every patient file.
+*/
+const DentalChartTab = dynamic(() => import("./dental-chart-tab").then((m) => m.DentalChartTab), {
+  ssr: false,
+  loading: () => <Spinner />,
+});
 
 export type NoteRow = {
   id: string;
@@ -233,6 +244,11 @@ export function PatientProfile(props: {
   insurers: InsurerOption[];
   /** The clinic's today, yyyy-MM-dd — what "has this cover expired" is measured against. */
   today: string;
+  /**
+   * The dental chart, while it is a preview: set only for the Clinicti team,
+   * with the clinic's doctors for "performed by". Null hides the tab.
+   */
+  dentalPreview?: { me: { id: string; name: string }; doctors: { id: string; name: string }[] } | null;
 }) {
   const { slug, tz, currency, caps } = props;
   const { t, locale } = useI18n();
@@ -365,6 +381,8 @@ export function PatientProfile(props: {
       label: t.patients.tabs.prescriptions,
       count: rxRows.length,
     },
+    // The doctor's side of the file, beside the prescriptions. Preview only.
+    props.dentalPreview && { key: "dental", label: t.dental.tab },
     caps.calendar && {
       key: "appointments",
       label: t.patients.tabs.appointments,
@@ -886,6 +904,9 @@ export function PatientProfile(props: {
             }
             onUpdated={upsertRx}
           />
+        )}
+        {tab === "dental" && props.dentalPreview && (
+          <DentalChartTab tz={tz} birthDate={p.birth_date} me={props.dentalPreview.me} doctors={props.dentalPreview.doctors} />
         )}
         {tab === "appointments" && (
           <Card>
