@@ -35,7 +35,11 @@ export async function apiClinic(
       the clinic is gone.
     */
     const status =
-      code === "forbidden" || code === "deleted" ? 403 : code === "suspended" ? 402 : 401;
+      code === "forbidden" || code === "deleted" || code === "support_required"
+        ? 403
+        : code === "suspended"
+          ? 402
+          : 401;
     return { ok: false, res: NextResponse.json({ error: code }, { status }) };
   }
 

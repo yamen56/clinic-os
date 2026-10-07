@@ -18,7 +18,7 @@ The brief specified Supabase and BullMQ/Redis. Neither was installable here — 
 ## Security and tenancy
 
 7. **One database role (`clinicos_app`, no BYPASSRLS) with an `app.is_admin` escape hatch** — the worker and the auth layer legitimately span clinics. They run in an audited system context; every clinic-scoped request sets `app.clinic_id`, which RLS enforces. `npm run test:rls` asserts isolation on all 29 clinic-scoped tables plus cross-tenant insert and update attempts.
-8. **Impersonation issues a separate session carrying `impersonated_by`** — support access is visibly banner-flagged in the workspace, every action is attributable, and exiting destroys that session rather than just navigating away.
+8. **Impersonation issues a separate session carrying `impersonated_by`** — support access is visibly banner-flagged in the workspace, every action is attributable, and exiting destroys that session rather than just navigating away. *Since 0067:* the session is bound to a **support visit** that requires a reason, names one clinic and ends by itself after four hours. Visits are the only way an agency admin gets inside a clinic, and the clinic's owner can read the record of them under Settings → Support visits. Typing the address had been an unrecorded way in for any super admin, including those without `clinics.impersonate`.
 
 ## Product
 

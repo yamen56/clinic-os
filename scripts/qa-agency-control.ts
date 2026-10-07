@@ -11,6 +11,7 @@
 import { chromium, type Page, type Browser } from "playwright";
 import { Client } from "pg";
 import bcrypt from "bcryptjs";
+import { enterWorkspace } from "./lib-support-visit";
 
 try {
   process.loadEnvFile?.();
@@ -107,6 +108,8 @@ async function main() {
     const demo = (await db.query(`select id, slug from clinics where slug = 'rima-dental'`)).rows[0];
     if (!demo) fail("demo clinic missing — run `npm run seed`");
 
+    // In through a support visit: typing the address no longer opens a clinic.
+    await enterWorkspace(page, { base: BASE, slug: demo.slug, reason: "QA: module licensing" });
     await page.goto(`${BASE}/c/${demo.slug}`);
     await page.waitForSelector("nav", { timeout: 30000 });
     if (!((await page.textContent("nav")) ?? "").includes("Campaigns"))
@@ -293,9 +296,11 @@ async function main() {
       fail("restore did not clear the deletion");
     ok("restore brings the clinic back");
 
-    await page.goto(`${BASE}/c/${TEST_SLUG}`);
+    await enterWorkspace(page, { base: BASE, slug: TEST_SLUG, reason: "QA: restored workspace" });
     await page.waitForLoadState("networkidle");
     if (page.url().includes("/suspended")) fail("workspace still closed after restore");
+    if (new URL(page.url()).pathname !== `/c/${TEST_SLUG}`)
+      fail(`the restored workspace did not open: ${page.url()}`);
     ok("the workspace opens again after restore");
 
     // Delete once more, then destroy for real — which must refuse to run on a

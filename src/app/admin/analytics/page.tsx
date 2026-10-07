@@ -428,7 +428,9 @@ export default async function AnalyticsPage({
                   {stalled.map((cl) => (
                     <li key={cl.id} className="flex flex-wrap items-center gap-2 px-5 py-2.5">
                       <Link
-                        href={`/c/${cl.slug}/documents`}
+                        // To the clinic's page, not into it: the workspace opens only
+                        // through a support visit, which asks why.
+                        href={`/admin/clinics/${cl.slug}`}
                         className="min-w-32 flex-1 truncate text-[13px] font-medium hover:text-brand-700"
                       >
                         {cl.name_ar || cl.name}

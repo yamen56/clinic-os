@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { dictForClinic } from "@/lib/i18n";
 import { PageHeader } from "@/components/ui/card";
 import { SettingsNav } from "./settings-nav";
-import { can } from "@/lib/auth";
+import { can, hasFullControl } from "@/lib/auth";
 
 export default async function SettingsLayout({
   children,
@@ -21,7 +21,12 @@ export default async function SettingsLayout({
     <>
       <PageHeader title={t.settings.title} />
       <div className="grid gap-6 lg:grid-cols-[13rem_1fr]">
-        <SettingsNav slug={slug} caps={access.caps} hasEinvoicing={access.clinic.features.einvoicing} />
+        <SettingsNav
+          slug={slug}
+          caps={access.caps}
+          hasEinvoicing={access.clinic.features.einvoicing}
+          fullControl={hasFullControl(access)}
+        />
         <div className="min-w-0">{children}</div>
       </div>
     </>

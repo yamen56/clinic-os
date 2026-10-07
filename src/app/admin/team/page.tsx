@@ -1,14 +1,19 @@
 import { guardAdminCap } from "@/lib/guard";
-import { getDict } from "@/lib/i18n";
+import { getDict, getLocale } from "@/lib/i18n";
 import { withSystem } from "@/lib/db";
-import { PageHeader } from "@/components/ui/card";
+import { PageHeader, Card, CardHeader } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/misc";
+import { SupportVisitList } from "@/components/support-visit-list";
+import { listSupportVisits } from "@/lib/support-visits";
+import { ShieldCheck } from "lucide-react";
 import { TeamClient } from "./team-client";
 
 export default async function AdminTeamPage() {
   const s = await guardAdminCap("admins");
   const t = await getDict();
+  const locale = await getLocale();
 
-  const admins = await withSystem(async (c) => {
+  const { admins, visits } = await withSystem(async (c) => {
     const r = await c.query(
       // password_hash null means the invitation is still outstanding — the
       // account exists but cannot be signed into, exactly as for clinic staff.
@@ -22,7 +27,10 @@ export default async function AdminTeamPage() {
         where u.is_super_admin
         order by u.created_at`
     );
-    return r.rows;
+    // Every clinic the team went into, so whoever runs the team can answer for
+    // it without opening each clinic in turn.
+    const visits = await listSupportVisits(c, {}, { limit: 100 });
+    return { admins: r.rows, visits };
   });
 
   return (
@@ -40,6 +48,14 @@ export default async function AdminTeamPage() {
           lastSession: a.last_session ? new Date(a.last_session).toISOString() : null,
         }))}
       />
+      <Card className="mt-4">
+        <CardHeader title={t.admin.visits} sub={t.admin.teamVisitsSub} />
+        {visits.length === 0 ? (
+          <EmptyState bare icon={<ShieldCheck />} title={t.admin.noTeamVisits} />
+        ) : (
+          <SupportVisitList visits={visits} t={t} locale={locale} showClinic showOrigin />
+        )}
+      </Card>
     </>
   );
 }

@@ -356,6 +356,13 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     [clinic, `Template ${tag}`]
   );
 
+  // Support visits (migration 0067): the agency inside the clinic.
+  await q(
+    `insert into support_visits (clinic_id, admin_user_id, admin_name, admin_email, reason, expires_at)
+     values ($1, $2, 'RLS Admin', 'rls-admin@test.local', 'RLS fixture', now() + interval '1 hour') returning id`,
+    [clinic, user]
+  );
+
   return { clinic, user, member, patient, service, appointment, conversation, invoice, automation, step, run };
 }
 
@@ -499,6 +506,28 @@ async function main() {
     }
   });
   ok(annBlocked, "clinic context must not write announcements");
+
+  /*
+    Support visits: the clinic reads its own record of the agency, and cannot
+    rewrite it. A record the clinic could delete would be worth no more than one
+    the agency could.
+  */
+  const visitTamper = await withCtx(app, { userId: A.user, clinicId: A.clinic, role: "owner" }, async (c) => {
+    const del = await c.query(`delete from support_visits where clinic_id = $1`, [A.clinic]);
+    const upd = await c.query(`update support_visits set reason = 'nothing to see' where clinic_id = $1`, [A.clinic]);
+    let inserted = true;
+    try {
+      await c.query(
+        `insert into support_visits (clinic_id, admin_name, admin_email, reason, expires_at)
+         values ($1, 'x', 'x', 'forged', now())`,
+        [A.clinic]
+      );
+    } catch {
+      inserted = false;
+    }
+    return (del.rowCount ?? 0) + (upd.rowCount ?? 0) + (inserted ? 1 : 0);
+  });
+  ok(visitTamper === 0, `clinic context must not delete, edit or forge support visits (${visitTamper} got through)`);
 
   /*
     Every table has row-level security on it, and a policy.

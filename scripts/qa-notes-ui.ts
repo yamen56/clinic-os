@@ -9,6 +9,7 @@
  */
 import { chromium, type Page } from "playwright";
 import { Client } from "pg";
+import { enterWorkspace } from "./lib-support-visit";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -174,7 +175,7 @@ async function main() {
     await p.waitForURL((u) => !u.pathname.includes("login"), { timeout: 120000 });
     await p.goto(`${BASE}/admin/clinics/${clinic.slug}`);
     await p.waitForLoadState("networkidle");
-    await p.getByRole("button", { name: /open workspace|فتح مساحة العمل/i }).click();
+    await enterWorkspace(p);
     await p.waitForURL(`**/c/${clinic.slug}**`, { timeout: 60000 });
 
     await p.goto(`${BASE}/c/${clinic.slug}/patients/${patient.id}`);

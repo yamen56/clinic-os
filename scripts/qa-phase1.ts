@@ -1,6 +1,7 @@
 /** Browser QA for Phase 1: login, admin panel, clinic creation, workspace shell, RTL toggle. */
 import { chromium } from "playwright";
 import { acceptOwnerInvite } from "./lib-owner-invite";
+import { enterWorkspace } from "./lib-support-visit";
 
 const BASE = "http://localhost:3000";
 
@@ -43,7 +44,7 @@ async function main() {
   console.log("✓ owner accepted the invitation and chose a password");
 
   // 4. Impersonate → workspace shell (admin session is English)
-  await page.click("text=Open workspace");
+  await enterWorkspace(page);
   await page.waitForURL(`**/c/${slug}`, { timeout: 20000 });
   const banner = await page.textContent("body");
   if (!banner?.includes("Support mode")) throw new Error("impersonation banner missing");

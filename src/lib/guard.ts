@@ -73,6 +73,9 @@ export async function guardClinic(slug: string): Promise<ClinicAccess> {
       if (e.code === "deleted") redirect("/suspended?removed=1");
       if (e.code === "suspended") redirect("/suspended");
       if (e.code === "forbidden") redirect("/");
+      // To the clinic's page in the agency panel, where "Open workspace" asks
+      // for the reason and starts the visit — not to a dead end.
+      if (e.code === "support_required") redirect(`/admin/clinics/${encodeURIComponent(slug)}`);
     }
     redirect("/login");
   }

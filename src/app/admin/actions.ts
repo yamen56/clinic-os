@@ -3,7 +3,15 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { requireSuperAdmin, requireAdminCap, createSession, setSessionCookie } from "@/lib/auth";
+import { headers } from "next/headers";
+import {
+  requireSuperAdmin,
+  requireAdminCap,
+  insertSession,
+  setSessionCookie,
+} from "@/lib/auth";
+import { actionIp } from "@/lib/auth-throttle";
+import { SUPPORT_VISIT_HOURS, cleanSupportReason } from "@/lib/support-visits";
 import { createAuthToken } from "@/lib/invites";
 import { sendEmail, renderEmail } from "@/lib/email";
 import { appUrl } from "@/lib/urls";
@@ -639,42 +647,101 @@ async function purgeClinic(
   });
 }
 
-/** Ends support mode: drops the impersonation session and issues a clean admin one. */
+/**
+ * Ends support mode: closes the visit, drops the impersonation session and
+ * issues a clean admin one — back on the clinic's page, where the visit that
+ * just ended is the top line of the record.
+ */
 export async function exitImpersonationAction() {
   const s = await requireSuperAdmin();
-  await withSystem(async (c) => {
+  const { token, slug } = await withSystem(async (c) => {
+    let slug: string | null = null;
+    if (s.supportVisit) {
+      // Before the session goes, so the trigger finds it closed and leaves
+      // the reason as "exit" rather than "signed out".
+      const r = await c.query(
+        `update support_visits sv set ended_at = now(), end_reason = 'exit'
+           from clinics cl
+          where sv.id = $1 and sv.ended_at is null and cl.id = sv.clinic_id
+          returning cl.slug`,
+        [s.supportVisit.id]
+      );
+      slug = (r.rows[0]?.slug as string | undefined) ?? null;
+    }
     if (s.impersonatedBy) {
       await audit(c, {
+        clinicId: s.supportVisit?.clinicId ?? null,
         userId: s.user.id,
         impersonatedBy: s.impersonatedBy,
         action: "admin.impersonate.end",
+        entity: s.supportVisit ? "support_visit" : "",
+        entityId: s.supportVisit?.id ?? "",
       });
     }
     await c.query(`delete from sessions where id = $1`, [s.sessionId]);
+    return { token: await insertSession(c, s.user.id), slug };
   });
-  const token = await createSession(s.user.id);
   await setSessionCookie(token);
-  redirect("/admin");
+  redirect(slug ? `/admin/clinics/${slug}` : "/admin");
 }
 
-/** Support-mode entry: a new audited session that keeps the admin identity attached. */
-export async function impersonateAction(clinicSlug: string) {
+/**
+ * Support-mode entry: opens a visit, with its reason, and a session bound to it.
+ *
+ * The visit, its audit row and the session commit together. Whatever session
+ * this request arrived on is deleted in the same transaction: its cookie is
+ * about to be overwritten, so nothing can present it again, and if it was a
+ * visit to another clinic, going from one to the next ends that one — two
+ * visits open at once would each claim the time spent in the other.
+ */
+export async function impersonateAction(
+  clinicSlug: string,
+  reason: string
+): Promise<{ error: "reason" | "not_found" } | void> {
   const s = await requireAdminCap("clinics.impersonate");
-  await withSystem(async (c) => {
+  const why = cleanSupportReason(reason);
+  if (!why) return { error: "reason" };
+  const ip = await actionIp();
+  const ua = (await headers()).get("user-agent")?.slice(0, 400) ?? null;
+
+  const token = await withSystem(async (c) => {
     const r = await c.query("select id from clinics where slug = $1 and deleted_at is null", [
       clinicSlug,
     ]);
-    if (!r.rowCount) throw new Error("clinic not found");
+    if (!r.rowCount) return null;
+    const clinicId = r.rows[0].id as string;
+    if (s.supportVisit) {
+      await c.query(
+        `update support_visits set ended_at = now(), end_reason = 'switched'
+          where id = $1 and ended_at is null`,
+        [s.supportVisit.id]
+      );
+    }
+    const v = await c.query(
+      `insert into support_visits
+         (clinic_id, admin_user_id, admin_name, admin_email, reason, ip, user_agent, expires_at)
+       values ($1, $2, $3, $4, $5, $6, $7, now() + interval '${SUPPORT_VISIT_HOURS} hours')
+       returning id`,
+      [clinicId, s.user.id, s.user.fullName, s.user.email, why, ip, ua]
+    );
+    const visitId = v.rows[0].id as string;
     await audit(c, {
-      clinicId: r.rows[0].id,
+      clinicId,
       userId: s.user.id,
       impersonatedBy: s.user.id,
       action: "admin.impersonate.start",
-      entity: "clinic",
-      entityId: r.rows[0].id,
+      entity: "support_visit",
+      entityId: visitId,
+      detail: { reason: why },
+    });
+    await c.query(`delete from sessions where id = $1`, [s.sessionId]);
+    return insertSession(c, s.user.id, {
+      impersonatedBy: s.user.id,
+      supportVisitId: visitId,
+      userAgent: ua ?? undefined,
     });
   });
-  const token = await createSession(s.user.id, { impersonatedBy: s.user.id });
+  if (!token) return { error: "not_found" };
   await setSessionCookie(token);
   redirect(`/c/${clinicSlug}`);
 }

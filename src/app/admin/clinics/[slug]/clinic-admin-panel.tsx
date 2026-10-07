@@ -16,15 +16,18 @@ import { useToast } from "@/components/ui/toast";
 import { FeaturePicker } from "../../feature-picker";
 import { toFeatureSetting, type FeatureMap } from "@/lib/features";
 import type { AdminCapabilityMap } from "@/lib/admin-permissions";
+import { SUPPORT_REASON_MAX, SUPPORT_REASON_MIN } from "@/lib/support-visits";
 import { ExternalLink, Settings2, SlidersHorizontal, Stethoscope } from "lucide-react";
 
 export function ClinicAdminPanel({
   clinic,
   caps,
+  visitHours,
 }: {
   clinic: {
     id: string;
     slug: string;
+    name: string;
     subscriptionStatus: string;
     plan: string;
     planPrice: number;
@@ -33,6 +36,8 @@ export function ClinicAdminPanel({
     deleted: boolean;
   };
   caps: AdminCapabilityMap;
+  /** How long a visit lasts, from the server — the env override lives there. */
+  visitHours: number;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -51,6 +56,9 @@ export function ClinicAdminPanel({
   const [featPending, startFeat] = useTransition();
   const [specPending, startSpec] = useTransition();
   const [impPending, startImp] = useTransition();
+  const [enterOpen, setEnterOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState(false);
 
   /*
     A deleted clinic has one meaningful action left — restore — and it lives in
@@ -81,14 +89,67 @@ export function ClinicAdminPanel({
         </Button>
       )}
       {caps["clinics.impersonate"] && (
-        <Button
-          loading={impPending}
-          onClick={() => startImp(async () => impersonateAction(clinic.slug))}
-        >
+        <Button onClick={() => setEnterOpen(true)}>
           <ExternalLink className="h-4 w-4" />
           {t.admin.openWorkspace}
         </Button>
       )}
+
+      {/*
+        A reason before the door opens. It is saved with the visit and shown to
+        the clinic's owner, which is what makes the record answer "why was the
+        agency in my clinic" rather than only "when".
+      */}
+      <Modal
+        open={enterOpen}
+        onClose={() => setEnterOpen(false)}
+        title={t.admin.enterTitle.replace("{clinic}", clinic.name)}
+      >
+        <form
+          className="grid gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (reason.trim().length < SUPPORT_REASON_MIN) {
+              setReasonError(true);
+              return;
+            }
+            startImp(async () => {
+              const r = await impersonateAction(clinic.slug, reason);
+              if (r?.error === "reason") setReasonError(true);
+              else if (r?.error) toast(t.common.genericError, "error");
+            });
+          }}
+        >
+          <p className="text-[13px] text-ink-500">
+            {t.admin.enterNotice.replace("{h}", String(visitHours))}
+          </p>
+          <Field
+            label={t.admin.enterReason}
+            error={reasonError ? t.admin.enterReasonError : undefined}
+          >
+            <Input
+              name="reason"
+              autoFocus
+              maxLength={SUPPORT_REASON_MAX}
+              placeholder={t.admin.enterReasonPlaceholder}
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                if (reasonError) setReasonError(false);
+              }}
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setEnterOpen(false)}>
+              {t.common.cancel}
+            </Button>
+            <Button type="submit" loading={impPending}>
+              <ExternalLink className="h-4 w-4" />
+              {t.admin.enterConfirm}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal open={open} onClose={() => setOpen(false)} title={t.admin.subscription}>
         <div className="grid gap-4">

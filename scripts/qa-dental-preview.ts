@@ -12,6 +12,7 @@ import { Client } from "pg";
 import bcrypt from "bcryptjs";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { enterWorkspace } from "./lib-support-visit";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -106,6 +107,8 @@ async function main() {
       await db.query(`update users set locale = $1 where id = $2`, [lang, admin.id]);
       if (page) await page.context().close();
       page = await signIn(browser, `dent-admin-${tag}@test.local`, lang, views[0].viewport);
+      // An agency admin opens a clinic only through a support visit.
+      await enterWorkspace(page, { base: BASE, slug, reason: "QA: dental chart preview" });
       const p = page;
       p.on("pageerror", (e) => errors.push(`[${lang}] ${e.message}`));
       for (const v of views) {

@@ -133,8 +133,26 @@ Enforced in **PostgreSQL Row Level Security** on every clinic-scoped table:
 
 ### Impersonation (agency support mode)
 
-- The admin presses **Open workspace** on a clinic; a **separate session** is issued
-  carrying `sessions.impersonated_by`.
+- The admin presses **Open workspace** on a clinic and **must give a reason** (3–300
+  characters). That opens a **support visit** (`support_visits`, migration `0067`) and a
+  **separate session** carrying `sessions.impersonated_by` and `sessions.support_visit_id`.
+- **The visit is the only way in.** `requireClinic` admits an agency admin with no
+  membership only when their session's open visit names *this* clinic and they still hold
+  `clinics.impersonate`. Typing `/c/<slug>` sends them to `/admin/clinics/<slug>`; the
+  clinic API answers 403 `support_required`. A visit to one clinic does not open the next
+  by editing the URL, and support sessions issued before visits existed no longer work.
+- **A visit ends by itself** after `SUPPORT_VISIT_HOURS` (default 4); the session copies
+  the visit's expiry instead of getting 30 days.
+- **Every way out is recorded** with an end reason: `exit` (the banner button), `switched`
+  (opened another clinic), `signed_out` (sign-out, password reset, account removed), or
+  `expired`. A trigger on `sessions` closes the visit, so no path can leave one open.
+- **What a visit did** is read from the audit log for that admin, clinic and time window:
+  patient files opened, exports (counted on their own), and changes.
+- **Who sees the record:** the clinic's page in /admin and the Team page list visits with
+  the admin's email and IP, but never patient names. The clinic's owner, and anyone on full
+  access, get **Settings → Support visits**: who, why, when, how long, which patient files
+  were opened (named and linked), and how many changes. Clinic contexts can read the table
+  and cannot write it (RLS), so the record cannot be edited by either side.
 - The workspace shows a persistent banner: *"Support mode — you're viewing this clinic as
   the agency. Actions are logged."*
 - Every action is attributable; exiting **destroys that session** rather than just navigating away.

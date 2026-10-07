@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
+import type { PoolClient } from "pg";
 import { withSystem, readOneShot, safeLiteral } from "./db";
 import {
   accessLevelOf,
@@ -115,6 +116,12 @@ export type SessionInfo = {
     settings: Record<string, unknown>;
   };
   impersonatedBy: string | null;
+  /**
+   * The open support visit this session was issued for, if any. It names the
+   * one clinic an agency admin may be inside on this session; see
+   * migrations/0067 and `requireClinic`.
+   */
+  supportVisit: { id: string; clinicId: string } | null;
   memberships: Membership[];
   /**
    * What this person may do in the agency panel. All false for everybody who
@@ -159,19 +166,42 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export async function createSession(
+type SessionOpts = { impersonatedBy?: string; userAgent?: string; supportVisitId?: string };
+
+/**
+ * Issues a session on a client the caller already holds, so that opening a
+ * support visit and the session it is entered on commit together — a visit
+ * without its session would read as an agency admin sitting inside the clinic
+ * until it expired.
+ *
+ * A support session ends when its visit does: it copies the visit's expiry
+ * rather than getting the thirty days.
+ */
+export async function insertSession(
+  c: PoolClient,
   userId: string,
-  opts: { impersonatedBy?: string; userAgent?: string } = {}
+  opts: SessionOpts = {}
 ): Promise<string> {
   const token = randomBytes(32).toString("hex");
-  await withSystem((c) =>
-    c.query(
-      `insert into sessions (token_hash, user_id, impersonated_by, expires_at, user_agent)
-       values ($1, $2, $3, now() + interval '${SESSION_DAYS} days', $4)`,
-      [hashToken(token), userId, opts.impersonatedBy ?? null, opts.userAgent ?? null]
-    )
+  await c.query(
+    `insert into sessions (token_hash, user_id, impersonated_by, expires_at, user_agent, support_visit_id)
+     values ($1, $2, $3,
+             coalesce((select expires_at from support_visits where id = $5),
+                      now() + interval '${SESSION_DAYS} days'),
+             $4, $5)`,
+    [
+      hashToken(token),
+      userId,
+      opts.impersonatedBy ?? null,
+      opts.userAgent ?? null,
+      opts.supportVisitId ?? null,
+    ]
   );
   return token;
+}
+
+export async function createSession(userId: string, opts: SessionOpts = {}): Promise<string> {
+  return withSystem((c) => insertSession(c, userId, opts));
 }
 
 export async function setSessionCookie(token: string) {
@@ -259,6 +289,8 @@ const CLINIC_JSON = `json_build_object(
 type SessionRow = {
   session_id: string;
   impersonated_by: string | null;
+  support_visit_id: string | null;
+  support_clinic_id: string | null;
   id: string;
   email: string;
   full_name: string;
@@ -300,6 +332,10 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
     session that has *already* gone stale from being resurrected by the very
     request that should be refused. The `< now() - touch` clause is what keeps
     this from writing a row on every page view.
+
+    A support visit's last-used time moves with it, at the same cadence, so the
+    record keeps an answer to "when were they last in there" after the session
+    itself has been swept away.
   */
   const rows = await readOneShot<SessionRow>(
     { isAdmin: true },
@@ -309,9 +345,15 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
           and expires_at > now()
           and last_seen_at > now() - interval '${SESSION_IDLE_DAYS} days'
           and last_seen_at < now() - interval '${TOUCH_AFTER_MINUTES} minutes'
-       returning id
+       returning support_visit_id
+     ),
+     touched_visit as (
+       update support_visits sv set last_seen_at = now()
+         from touched t
+        where sv.id = t.support_visit_id and sv.ended_at is null
      )
      select s.id as session_id, s.impersonated_by,
+            sv.id as support_visit_id, sv.clinic_id as support_clinic_id,
             u.id, u.email, u.full_name, u.phone_e164, u.is_super_admin, u.admin_permissions,
             u.locale, u.settings,
             coalesce((
@@ -324,6 +366,7 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
               where cm.user_id = u.id and cm.active
             ), '[]'::json) as memberships
      from sessions s join users u on u.id = s.user_id
+     left join support_visits sv on sv.id = s.support_visit_id and sv.ended_at is null
      where s.token_hash = ${th}
        and s.expires_at > now()
        and s.last_seen_at > now() - interval '${SESSION_IDLE_DAYS} days'`
@@ -334,6 +377,10 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
   return {
     sessionId: row.session_id,
     impersonatedBy: row.impersonated_by,
+    supportVisit:
+      row.support_visit_id && row.support_clinic_id
+        ? { id: row.support_visit_id, clinicId: row.support_clinic_id }
+        : null,
     adminCaps: resolveAdminCapabilities(row.admin_permissions, {
       isSuperAdmin: row.is_super_admin,
     }),
@@ -403,7 +450,10 @@ export function safeNextPath(next: string | undefined | null): string | null {
 }
 
 export class AuthError extends Error {
-  constructor(public code: "unauthenticated" | "forbidden" | "suspended" | "deleted") {
+  constructor(
+    /** `support_required`: an agency admin outside a support visit for this clinic. */
+    public code: "unauthenticated" | "forbidden" | "suspended" | "deleted" | "support_required"
+  ) {
     super(code);
   }
 }
@@ -481,7 +531,10 @@ export function hasFullControl(access: ClinicAccess): boolean {
   return access.isOwner || access.accessLevel === "full";
 }
 
-/** Access check for a clinic workspace. Super admins get owner-level access (impersonation is audited separately). */
+/**
+ * Access check for a clinic workspace. An agency admin with no membership gets
+ * owner-level access, but only inside a support visit opened for this clinic.
+ */
 export async function requireClinic(slug: string): Promise<ClinicAccess> {
   const s = await requireUser();
   const m = s.memberships.find((x) => x.clinicSlug === slug);
@@ -519,6 +572,20 @@ export async function requireClinic(slug: string): Promise<ClinicAccess> {
     });
     if (!clinic) throw new AuthError("forbidden");
     if (clinic.deletedAt) throw new AuthError("deleted");
+    /*
+      Only through the door that writes it down.
+
+      Being a super admin used to be enough on its own: typing the address of
+      any clinic opened it with owner access and recorded nothing, which made
+      "Open workspace" — the audited way in — optional, and `clinics.impersonate`
+      a switch that hid a button rather than one that withheld anything. Now the
+      session has to have been issued for a support visit to this clinic, still
+      open, by somebody who still holds the capability. A visit to one clinic is
+      not a way into the next one by editing the URL.
+    */
+    if (s.supportVisit?.clinicId !== clinic.id || !s.adminCaps["clinics.impersonate"]) {
+      throw new AuthError("support_required");
+    }
     const features = resolveFeatures(clinic.features as unknown as Record<string, unknown>);
     return {
       session: s,

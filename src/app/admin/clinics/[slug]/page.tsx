@@ -11,7 +11,10 @@ import { DangerZone } from "./danger-zone";
 import { FEATURES, resolveFeatures } from "@/lib/features";
 import type { MemberRole } from "@/lib/permissions";
 import { asSpecialty } from "@/lib/specialties";
-import { CheckCircle2, Circle } from "lucide-react";
+import { CheckCircle2, Circle, ShieldCheck } from "lucide-react";
+import { listSupportVisits, SUPPORT_VISIT_HOURS } from "@/lib/support-visits";
+import { SupportVisitList } from "@/components/support-visit-list";
+import { EmptyState } from "@/components/ui/misc";
 
 const CHECKLIST: { key: string; en: string; ar: string }[] = [
   { key: "branding", en: "Branding set up", ar: "تم إعداد الهوية البصرية" },
@@ -64,10 +67,11 @@ export default async function AdminClinicDetail({
         [clinic.id]
       )
     ).rows[0];
-    return { clinic, members, stats };
+    const visits = await listSupportVisits(c, { clinicId: clinic.id }, { limit: 30 });
+    return { clinic, members, stats, visits };
   });
   if (!data) notFound();
-  const { clinic, members, stats } = data;
+  const { clinic, members, stats, visits } = data;
   const features = resolveFeatures(clinic.features);
   const missing = FEATURES.filter((f) => !features[f]);
 
@@ -98,9 +102,11 @@ export default async function AdminClinicDetail({
         action={
           <ClinicAdminPanel
             caps={s.adminCaps}
+            visitHours={SUPPORT_VISIT_HOURS}
             clinic={{
               id: clinic.id,
               slug: clinic.slug,
+              name: clinic.name_ar || clinic.name,
               subscriptionStatus: clinic.subscription_status,
               plan: clinic.plan,
               planPrice: Number(clinic.plan_price),
@@ -231,6 +237,15 @@ export default async function AdminClinicDetail({
           </Card>
         ))}
       </div>
+
+      <Card className="mt-4">
+        <CardHeader title={t.admin.visits} sub={t.admin.visitsSub} />
+        {visits.length === 0 ? (
+          <EmptyState bare icon={<ShieldCheck />} title={t.admin.noVisits} />
+        ) : (
+          <SupportVisitList visits={visits} t={t} locale={locale} showOrigin />
+        )}
+      </Card>
 
       {s.adminCaps["clinics.delete"] && (
         <DangerZone

@@ -39,6 +39,7 @@ const SUITES = [
   ["phase 9: PWA & notifications", "scripts/qa-phase9.ts"],
   ["notifications: on time, by role, and in the app", "scripts/qa-notifications.ts"],
   ["phase 10: admin & demo data", "scripts/qa-phase10.ts"],
+  ["support visits: the agency inside a clinic, on the record", "scripts/qa-support-visits.ts"],
   ["campaigns: bulk send & drip rails", "scripts/qa-campaigns.ts"],
   ["campaigns: a photo or video, through to the WhatsApp message", "scripts/qa-campaign-media.ts"],
   ["concurrency: one slot, one appointment", "scripts/qa-booking-race.ts"],

@@ -1,6 +1,7 @@
 /** Browser QA for Phase 2: patients, identity rule, autosave, notes, files, custom fields, merge. */
 import { chromium } from "playwright";
 import fs from "node:fs";
+import { enterWorkspace } from "./lib-support-visit";
 
 const BASE = "http://localhost:3000";
 
@@ -25,7 +26,7 @@ async function main() {
   await page.fill('input[name="ownerEmail"]', `owner-${slug}@test.local`);
   await page.click('button[type="submit"]');
   await page.waitForURL(`**/admin/clinics/${slug}`, { timeout: 20000 });
-  await page.click("text=Open workspace");
+  await enterWorkspace(page);
   await page.waitForURL(`**/c/${slug}`, { timeout: 20000 });
   console.log(`✓ in workspace ${slug}`);
 

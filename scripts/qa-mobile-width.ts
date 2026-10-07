@@ -15,6 +15,7 @@
 import { chromium, type Page } from "playwright";
 import { Client } from "pg";
 import { describeSpills, spills, workspacePages } from "./lib-layout";
+import { enterWorkspace } from "./lib-support-visit";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -168,7 +169,7 @@ async function main() {
   // Into the clinic workspace as the agency, which is how these pages are reached.
   await page.goto(`${BASE}/admin/clinics/${clinic.slug}`);
   await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: /open workspace|فتح مساحة العمل/i }).click();
+  await enterWorkspace(page);
   await page.waitForURL(`**/c/${clinic.slug}**`, { timeout: 60000 });
 
   const s = `${BASE}/c/${clinic.slug}`;

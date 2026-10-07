@@ -4,6 +4,7 @@
  */
 import { chromium } from "playwright";
 import { Client } from "pg";
+import { enterWorkspace } from "./lib-support-visit";
 
 try {
   process.loadEnvFile?.();
@@ -94,7 +95,7 @@ async function main() {
   console.log("✓ onboarding checklist rendered");
 
   // 6. Impersonation: enter support mode, see the banner + announcement, then exit
-  await page.click("text=Open workspace");
+  await enterWorkspace(page);
   await page.waitForURL("**/c/rima-dental", { timeout: 20000 });
   await page.waitForSelector("text=Support mode", { timeout: 15000 });
   await page.waitForSelector(`text=${annTitle}`, { timeout: 15000 });
@@ -111,7 +112,8 @@ async function main() {
     `select count(*)::int as n from sessions where impersonated_by is not null`
   );
   await page.click("text=Exit support mode");
-  await page.waitForURL("**/admin", { timeout: 20000 });
+  // Back on the clinic's page, where the visit that just ended heads the record.
+  await page.waitForURL("**/admin/clinics/rima-dental", { timeout: 20000 });
   const ended = await db.query(
     `select count(*)::int as n from audit_log where action = 'admin.impersonate.end'`
   );
