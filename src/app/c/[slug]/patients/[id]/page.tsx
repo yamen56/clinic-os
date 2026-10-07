@@ -114,8 +114,11 @@ export default async function PatientProfilePage({
           [id, access.clinicId]
         ),
         c.query(
-          `select id, file_name, mime_type, size_bytes, kind, created_at, teeth
-           from patient_files where patient_id = $1 and clinic_id = $2 order by created_at desc`,
+          `select f.id, f.file_name, f.mime_type, f.size_bytes, f.kind, f.created_at, f.teeth, d.name as device_name,
+                  case when f.dicom is null then null else jsonb_build_object(
+                    'modality', f.dicom->>'modality', 'instances', jsonb_array_length(f.dicom->'instances')) end as dicom
+             from patient_files f left join clinic_devices d on d.id = f.device_id
+            where f.patient_id = $1 and f.clinic_id = $2 order by f.created_at desc`,
           [id, access.clinicId]
         ),
         caps.calendar

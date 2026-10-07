@@ -246,7 +246,12 @@ async function main() {
     await tapTooth(page, "36");
     await panel.locator("[data-tooth-image-section] input[type='file']").first().setInputFiles({ name: "pa-36.png", mimeType: "image/png", buffer: PNG });
     await settle(page);
-    rows = await q(`select kind, teeth from patient_files where patient_id = $1`, [patient.id]);
+    // The upload and the label are two calls; the second can start after `settle` saw quiet.
+    for (let end = Date.now() + 10000; ; ) {
+      rows = await q(`select kind, teeth from patient_files where patient_id = $1`, [patient.id]);
+      if ((rows.length === 1 && rows[0].teeth.join() === "36") || Date.now() > end) break;
+      await page.waitForTimeout(300);
+    }
     check(rows.length === 1 && rows[0].kind === "xray" && rows[0].teeth.join() === "36", "an x-ray added from tooth 36 is a patient file of kind x-ray, labelled 36", JSON.stringify(rows));
     check((await chart(page).locator("[data-tooth='36'] [data-tooth-images]").count()) === 1, "36 carries a picture badge");
 

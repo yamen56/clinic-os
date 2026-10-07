@@ -278,6 +278,13 @@ export function patientSearchClause(
     parts.push(`p.national_id = $${paramOffset + params.length}`);
     params.push(nid);
   }
+  // The file number — what the x-ray software and the paper folder know them
+  // by. "#1042" always; a bare number only while it is too short to be a phone.
+  const fileNo = /^#\s*(\d{1,9})$|^(\d{1,6})$/.exec(toAsciiDigits(trimmed));
+  if (fileNo) {
+    parts.push(`p.file_no = $${paramOffset + params.length}::int`);
+    params.push(fileNo[1] ?? fileNo[2]);
+  }
   return { clause: `(${parts.join(" or ")})`, params };
 }
 

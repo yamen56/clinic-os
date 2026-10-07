@@ -6,7 +6,8 @@ import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { findOrCreatePatient } from "@/lib/patients";
 import { normalizePhone } from "@/lib/phone";
-import { deleteFile } from "@/lib/storage";
+import { deleteFiles } from "@/lib/storage";
+import { storedPaths } from "@/lib/imaging/ingest";
 import { emitTrigger } from "@/lib/triggers";
 import {
   createNote,
@@ -364,10 +365,11 @@ export async function deletePatientFileAction(slug: string, fileId: string) {
   if (!can(access, "patients")) return;
   await inClinic(access, async (c) => {
     const r = await c.query(
-      `delete from patient_files where id = $1 and clinic_id = $2 returning storage_path`,
+      `delete from patient_files where id = $1 and clinic_id = $2 returning storage_path, dicom`,
       [fileId, access.clinicId]
     );
-    if (r.rowCount) await deleteFile(r.rows[0].storage_path);
+    // A DICOM file is its preview and every original behind it.
+    if (r.rowCount) await deleteFiles(storedPaths(r.rows[0]));
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,

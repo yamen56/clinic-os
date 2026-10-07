@@ -303,7 +303,8 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files }: TabProps) 
   const images = useMemo<ChartImage[]>(
     () =>
       allFiles
-        .filter((f) => (f.kind === "xray" || f.kind === "photo" || f.mime_type.startsWith("image/")) && f.kind !== "insurance_card")
+        // A DICOM the server could not draw is on the Files tab with its original, not here.
+        .filter((f) => (f.kind === "xray" || f.kind === "photo" || f.mime_type.startsWith("image/")) && f.kind !== "insurance_card" && f.mime_type !== "application/dicom")
         .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
         .map<ChartImage>((f) => ({
           id: f.id,

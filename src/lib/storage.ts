@@ -295,6 +295,31 @@ export async function deleteFile(storagePath: string): Promise<void> {
 }
 
 /**
+ * Many files at once — a DICOM series is one entry on the Files tab and can
+ * be four hundred objects underneath. DeleteObjects takes 1000 keys a call.
+ * Backup keys are never in such a list; they go through `deleteFile`.
+ */
+export async function deleteFiles(storagePaths: string[]): Promise<void> {
+  const keys = [...new Set(storagePaths.filter(Boolean))];
+  if (!keys.length) return;
+  if (usingObjectStore()) {
+    const { mod, client, bucket } = await s3();
+    for (let i = 0; i < keys.length; i += 1000) {
+      await client
+        .send(
+          new mod.DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: { Objects: keys.slice(i, i + 1000).map((Key) => ({ Key })), Quiet: true },
+          })
+        )
+        .catch(() => {});
+    }
+    return;
+  }
+  for (const k of keys) await deleteFile(k);
+}
+
+/**
  * How much a clinic — or the whole deployment — is storing.
  *
  * Bounded, and that is the point. A bucket listing returns 1000 keys per round

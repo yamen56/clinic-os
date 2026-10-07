@@ -91,5 +91,8 @@ export const config = {
     "/login",
     "/forgot",
     "/api/public/:path*",
+    // Machines carry a key, not a session, so they meet the same floor — and a
+    // flood of made-up keys is refused here before each costs a key lookup.
+    "/api/devices/:path*",
   ],
 };

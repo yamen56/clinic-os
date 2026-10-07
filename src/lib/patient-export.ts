@@ -41,6 +41,8 @@ export type ExportedClinic = {
 export type ExportedRecord = {
   patient: {
     id: string;
+    /** The clinic file number, which machines and paper folders know them by. */
+    fileNo: number | null;
     fullName: string;
     phone: string | null;
     secondaryPhone: string | null;
@@ -333,6 +335,7 @@ export async function loadPatientExportBatch(
     records.push({
       patient: {
         id: p.id,
+        fileNo: p.file_no ?? null,
         fullName: p.full_name,
         phone: p.phone_e164,
         secondaryPhone: p.secondary_phone_e164,

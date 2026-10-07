@@ -15,7 +15,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   const results = await inClinic(g.access, async (c) => {
     const { clause, params } = patientSearchClause(q, 2);
     const r = await c.query(
-      `select p.id, p.full_name, p.phone_e164, p.status, p.tags
+      `select p.id, p.full_name, p.phone_e164, p.status, p.tags, p.file_no
        from patients p
        where p.clinic_id = $1 and p.merged_into is null and ${clause}
        order by p.updated_at desc limit 10`,

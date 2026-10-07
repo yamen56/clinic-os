@@ -149,6 +149,22 @@ type Patient = {
   /** The same date as text, yyyy-MM-dd — what every comparison and input uses. */
   cover_until: string | null;
   created_at: string;
+  /** The clinic's number for them: on paper folders, and the Patient ID an x-ray machine is given. */
+  file_no: number | null;
+};
+
+export type PatientFileRow = {
+  id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  kind: string;
+  created_at: string;
+  teeth?: string[];
+  /** The machine that sent it, when one did. */
+  device_name?: string | null;
+  /** A DICOM study kept with its originals; what the row shows is the preview. */
+  dicom?: { modality: string | null; instances: number } | null;
 };
 
 /**
@@ -199,7 +215,7 @@ export function PatientProfile(props: {
   patient: Patient;
   notes: NoteRow[];
   noteCategories: NoteCategoryRow[];
-  files: { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string; teeth?: string[] }[];
+  files: PatientFileRow[];
   appointments: { id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null }[];
   invoices: ({ id: string; number: string; status: string; total: string; amount_paid: string; created_at: string } & PatientClaim)[];
   conversation: { id: string; msgs: { id: string; direction: string; sender_kind: string; body: string; msg_type: string; created_at: string }[] | null } | null;
@@ -465,6 +481,11 @@ export function PatientProfile(props: {
             <SaveIndicator state={state} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-500">
+            {p.file_no != null && (
+              <span className="font-semibold text-ink-700 tnum" data-file-no={p.file_no}>
+                {t.devices.fileNo.replace("{n}", String(p.file_no))}
+              </span>
+            )}
             {p.phone_e164 && <span className="num tnum">{formatPhone(p.phone_e164)}</span>}
             {p.secondary_phone_e164 && (
               <span className="num tnum text-ink-400">{formatPhone(p.secondary_phone_e164)}</span>
@@ -2088,7 +2109,7 @@ function FilesTab({
 }: {
   slug: string;
   patientId: string;
-  files: { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string; teeth?: string[] }[];
+  files: PatientFileRow[];
   tz: string;
 }) {
   const { t, locale } = useI18n();
@@ -2179,6 +2200,21 @@ function FilesTab({
                     </span>
                   )}
                 </div>
+                {(f.device_name || f.dicom) && (
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-500">
+                    {f.device_name && <span data-file-device>{t.devices.fromDevice.replace("{device}", f.device_name)}</span>}
+                    {f.dicom && (
+                      <a
+                        href={`/api/c/${slug}/files/${f.id}/dicom`}
+                        className="inline-flex items-center gap-1 font-semibold text-brand-700 hover:underline"
+                        data-file-dicom={f.dicom.instances}
+                      >
+                        <Download className="h-3 w-3" />
+                        {f.dicom.instances > 1 ? t.devices.dicomImages.replace("{n}", String(f.dicom.instances)) : t.devices.dicomOriginal}
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => setDeleteId(f.id)}

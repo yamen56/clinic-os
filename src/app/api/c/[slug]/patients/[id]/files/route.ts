@@ -4,6 +4,8 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { saveFile } from "@/lib/storage";
 import { can } from "@/lib/auth";
+import { isDicom } from "@/lib/imaging/dicom";
+import { ingestImage } from "@/lib/imaging/ingest";
 
 const MAX_SIZE = 25 * 1024 * 1024;
 
@@ -26,6 +28,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
   if (file.size > MAX_SIZE) return NextResponse.json({ error: "too_large" }, { status: 413 });
 
   const buf = Buffer.from(await file.arrayBuffer());
+
+  /*
+    A DICOM — from the imaging station's folder, or dropped here by hand —
+    goes the way a machine's would: kept as it came, with a preview the
+    browser can draw, and a whole series as one entry.
+  */
+  if (isDicom(buf)) {
+    const r = await ingestImage(
+      {
+        clinicId: access.clinicId,
+        from: { userId: access.session.user.id, impersonatedBy: access.session.impersonatedBy },
+        fileName: file.name,
+        mime: "application/dicom",
+        data: buf,
+        kind: kind === "photo" ? "photo" : "xray",
+        patientRef: id,
+      },
+      (fn) => inClinic(access, fn)
+    );
+    if (r.placed === "nowhere") {
+      return NextResponse.json({ error: r.error }, { status: r.error === "series_elsewhere" ? 409 : 404 });
+    }
+    if (r.placed === "inbox") return NextResponse.json({ error: "series_in_inbox" }, { status: 409 });
+    const f = await inClinic(access, async (c) =>
+      (
+        await c.query(
+          `select id, file_name, mime_type, size_bytes, kind, created_at, teeth from patient_files where id = $1 and clinic_id = $2`,
+          [r.fileId, access.clinicId]
+        )
+      ).rows[0]
+    );
+    return NextResponse.json({ ok: true, file: f, added: r.added });
+  }
 
   const row = await inClinic(access, async (c) => {
     const p = await c.query(`select 1 from patients where id = $1 and clinic_id = $2`, [

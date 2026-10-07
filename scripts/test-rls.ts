@@ -370,6 +370,20 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   await q(`insert into chart_treatment_favorites (clinic_id, treatment_key) values ($1, 'rct') returning id`, [clinic]);
   await q(`insert into imaging_requests (clinic_id, patient_id, teeth) values ($1, $2, '{36}') returning id`, [clinic, patient]);
 
+  // Imaging devices (migration 0069): a registered machine and an image it
+  // sent for nobody in particular. patient_numbers fills itself — the patient
+  // above was given file number 1 by its trigger.
+  const device = (
+    await q(
+      `insert into clinic_devices (clinic_id, name, kind, key_hash, key_hint) values ($1, $2, 'opg', $3, 'abcd') returning id`,
+      [clinic, `OPG ${tag}`, `rls-${tag}-${seq}-${Date.now()}`]
+    )
+  ).id;
+  await q(
+    `insert into imaging_inbox (clinic_id, device_id, file_name, mime_type, storage_path) values ($1, $2, 'x.png', 'image/png', 'rls/x.png') returning id`,
+    [clinic, device]
+  );
+
   // Support visits (migration 0067): the agency inside the clinic.
   await q(
     `insert into support_visits (clinic_id, admin_user_id, admin_name, admin_email, reason, expires_at)

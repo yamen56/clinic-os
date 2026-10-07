@@ -49,6 +49,7 @@ export function SettingsNav({
     { href: `${base}/whatsapp`, label: t.settings.whatsapp, show: caps["settings.whatsapp"] },
     { href: `${base}/invoicing`, label: t.settings.invoiceSettings },
     { href: `${base}/einvoicing`, label: t.einvoicing.title, show: hasEinvoicing && caps["settings.clinic"] },
+    { href: `${base}/devices`, label: t.devices.tab, show: caps["settings.clinic"] },
     { href: `${base}/support-visits`, label: t.supportVisits.tab, show: caps["settings.support_visits"] },
     // Personal, not clinic configuration — and it lives outside /settings so that
     // members without the settings capability can still reach it.

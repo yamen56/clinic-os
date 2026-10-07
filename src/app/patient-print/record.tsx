@@ -42,6 +42,7 @@ export function PatientRecord({
       <section className="block">
         <table className="kv">
           <tbody>
+            {row(t.devices.fileNoLabel, p.fileNo != null ? <span className="tel">{p.fileNo}</span> : null)}
             {row(t.patients.phone, p.phone ? <span className="tel">{formatPhone(p.phone)}</span> : null)}
             {row(
               t.patients.secondaryPhone,

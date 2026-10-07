@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
+import { IMAGING_REQUEST_OPEN_FOR } from "@/lib/imaging/ingest";
 
 /*
   "Take x-ray": the doctor arms the imaging station from the chart, for this
@@ -13,7 +14,7 @@ import { audit } from "@/lib/audit";
   left the chair, and an image arriving then belongs to somebody else.
 */
 
-const OPEN_FOR = "20 minutes";
+const OPEN_FOR = IMAGING_REQUEST_OPEN_FOR;
 
 const bodySchema = z.object({
   patientId: z.string().uuid(),
