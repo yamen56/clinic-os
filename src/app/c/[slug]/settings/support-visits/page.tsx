@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation";
 import { guardCap } from "@/lib/guard";
-import { hasFullControl } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import { listSupportVisits } from "@/lib/support-visits";
@@ -12,15 +10,14 @@ import { ShieldCheck } from "lucide-react";
 /**
  * When the Clinicti team was inside this clinic, and what they did there.
  *
- * The owner's, and anybody the owner gave the whole clinic to. It names the
- * patients whose files the agency opened, and who was let in to look is a
- * question about the clinic as a whole rather than about any one module, so it
- * follows full control instead of a capability somebody could be handed alone.
+ * Behind its own switch, `settings.support_visits`: the owner and anybody on
+ * full access hold it, and an owner can tick it for one more person on the
+ * access editor. It names the patients whose files the agency opened, so it is
+ * never part of a job's defaults.
  */
 export default async function SupportVisitsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const access = await guardCap(slug, "settings");
-  if (!hasFullControl(access)) redirect(`/c/${slug}/settings`);
+  const access = await guardCap(slug, "settings.support_visits");
 
   const [t, locale] = await Promise.all([dictForClinic(access.clinic.vocabulary), getLocale()]);
   const visits = await inClinic(access, (c) =>

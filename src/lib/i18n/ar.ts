@@ -1168,6 +1168,7 @@ export const ar: Dict = {
     "settings.booking": "روابط الحجز",
     "settings.whatsapp": "ربط واتساب وإدارته",
     "settings.tags": "وسوم المرضى",
+    "settings.support_visits": "زيارات الدعم",
   },
   capsHelp: {
     dashboard: "مواعيد اليوم والمتابعات وأرقام العيادة في لمحة.",
@@ -1199,6 +1200,7 @@ export const ar: Dict = {
     "settings.booking": "إنشاء روابط الحجز العامة وتعديلها.",
     "settings.whatsapp": "ربط رقم واتساب العيادة أو فصله.",
     "settings.tags": "الوسوم التي يمكن تصنيف المرضى بها.",
+    "settings.support_visits": "معرفة متى دخل فريق كلينيكتي إلى مساحة العمل، ولماذا، وأي ملفات مرضى فتح.",
     "settings.staff": "دعوة الموظفين وتحديد ما يستطيع كل شخص فعله.",
   },
   patientSheet: {

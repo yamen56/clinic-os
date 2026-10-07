@@ -1201,6 +1201,7 @@ export const en = {
     "settings.booking": "Booking links",
     "settings.whatsapp": "Connect and manage WhatsApp",
     "settings.tags": "Patient tags",
+    "settings.support_visits": "Support visits",
   },
   /** One line under each switch on the access editor: what it actually lets somebody do. */
   capsHelp: {
@@ -1233,6 +1234,8 @@ export const en = {
     "settings.booking": "Create and change the public booking links.",
     "settings.whatsapp": "Link or unlink the clinic's WhatsApp number.",
     "settings.tags": "The tags patients can be labelled with.",
+    "settings.support_visits":
+      "See when the Clinicti team entered the workspace, why, and which patient files they opened.",
     "settings.staff": "Invite staff and change what each person can do.",
   },
   /**

@@ -55,6 +55,7 @@ export function workspacePages(ids: PageIds): [string, string][] {
     ["settings · hours", `${s}/settings/hours`],
     ["settings · whatsapp", `${s}/settings/whatsapp`],
     ["settings · tags", `${s}/settings/tags`],
+    ["settings · support visits", `${s}/settings/support-visits`],
     ["settings · booking", `${s}/settings/booking`],
     ["settings · fields", `${s}/settings/fields`],
     ["settings · documents", `${s}/settings/documents`],

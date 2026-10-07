@@ -38,6 +38,7 @@ const ROUTES = [
   "/settings/hours",
   "/settings/fields",
   "/settings/tags",
+  "/settings/support-visits",
   "/settings/documents",
   "/settings/booking",
   "/settings/whatsapp",

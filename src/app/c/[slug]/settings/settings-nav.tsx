@@ -10,7 +10,6 @@ export function SettingsNav({
   slug,
   caps,
   hasEinvoicing,
-  fullControl,
 }: {
   slug: string;
   /**
@@ -22,8 +21,6 @@ export function SettingsNav({
   caps: CapabilityMap;
   /** The JoFotara tab only exists for a clinic licensed for it. */
   hasEinvoicing: boolean;
-  /** The owner, or somebody handed the whole clinic. See the support-visits page. */
-  fullControl: boolean;
 }) {
   const { t } = useI18n();
   const pathname = usePathname();
@@ -52,7 +49,7 @@ export function SettingsNav({
     { href: `${base}/whatsapp`, label: t.settings.whatsapp, show: caps["settings.whatsapp"] },
     { href: `${base}/invoicing`, label: t.settings.invoiceSettings },
     { href: `${base}/einvoicing`, label: t.einvoicing.title, show: hasEinvoicing && caps["settings.clinic"] },
-    { href: `${base}/support-visits`, label: t.supportVisits.tab, show: fullControl },
+    { href: `${base}/support-visits`, label: t.supportVisits.tab, show: caps["settings.support_visits"] },
     // Personal, not clinic configuration — and it lives outside /settings so that
     // members without the settings capability can still reach it.
     { href: `/c/${slug}/signature`, label: t.settings.mySignature },

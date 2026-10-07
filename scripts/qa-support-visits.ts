@@ -121,6 +121,22 @@ async function main() {
       )
     ).rows;
 
+  /* ------------------------------------------- the switch, as the resolver reads it */
+
+  const { resolveCapabilities } = await import("../src/lib/permissions");
+  const resolve = (raw: Record<string, unknown>) =>
+    resolveCapabilities(raw, { isOwner: false, role: "receptionist" })["settings.support_visits"];
+  check(
+    resolve({ level: "custom", caps: { settings: true } }) === false,
+    "a limited member saved before the switch existed does not quietly gain it"
+  );
+  check(resolve({ level: "full", caps: {} }) === true, "full access includes it");
+  check(resolve({}) === false, "a member with no access level set falls back to job defaults, which leave it out");
+  check(
+    resolve({ level: "custom", caps: { "settings.support_visits": true } }) === false,
+    "without Settings the switch grants nothing"
+  );
+
   const browser = await chromium.launch();
   const errors: string[] = [];
   try {
@@ -196,15 +212,39 @@ async function main() {
     check(ownerText.includes("Rami Visit-Test"), "…and which patient's file was opened");
     check(!ownerText.includes("admin@makan.agency"), "…without the admin's address, which is the agency's business");
 
+    /*
+      Its own switch on the access editor. A member on limited access starts
+      without it — even one who holds Settings — and gets it when the owner
+      ticks it, through the editor the owner actually uses.
+    */
     const staffPage = await signIn(browser, STAFF);
     await staffPage.goto(`${BASE}/c/${A}/settings`);
     await staffPage.waitForSelector("nav", { timeout: 60000 });
-    check(!(await seen(staffPage)).includes("Support visits"), "a member without full control has no tab");
+    check(!(await seen(staffPage)).includes("Support visits"), "a member with Settings but not the switch has no tab");
     check(
-      (await land(staffPage, `/c/${A}/settings/support-visits`, (p) => p === `/c/${A}/settings`)) ===
-        `/c/${A}/settings`,
-      "…and typing the address sends them back to Settings"
+      (await land(staffPage, `/c/${A}/settings/support-visits`, (p) => p === `/c/${A}`)) === `/c/${A}`,
+      "…and typing the address sends them away"
     );
+
+    await ownerPage.goto(`${BASE}/c/${A}/settings/staff`);
+    await ownerPage.waitForLoadState("networkidle");
+    await ownerPage.locator("li", { hasText: "QA Reception" }).getByRole("button", { name: "Edit" }).click();
+    const grant = ownerPage.getByRole("switch", { name: "Support visits" });
+    await grant.waitFor({ timeout: 30000 });
+    check((await grant.getAttribute("aria-checked")) === "false", "the owner's access editor has a Support visits switch, off");
+    await grant.click();
+    await ownerPage.getByRole("button", { name: "Save", exact: true }).click();
+    await ownerPage.waitForSelector("text=Saved", { timeout: 30000 });
+    const stored = (
+      await db.query(`select permissions from clinic_members where user_id = $1`, [staff])
+    ).rows[0].permissions as { caps: Record<string, boolean> };
+    check(stored.caps["settings.support_visits"] === true, "ticking it is saved on the member");
+
+    await staffPage.goto(`${BASE}/c/${A}/settings`);
+    await staffPage.waitForSelector("nav >> text=Support visits", { timeout: 60000 });
+    await staffPage.goto(`${BASE}/c/${A}/settings/support-visits`);
+    await staffPage.waitForSelector(`text=${REASON}`, { timeout: 60000 });
+    ok("once ticked, the member has the tab and reads the visits");
     await staffPage.context().close();
 
     /* -------------------------------------------------------------- out */
@@ -223,7 +263,7 @@ async function main() {
     );
     check(!adminText.includes("Rami Visit-Test"), "…but not the patient's name, which only the clinic sees");
 
-    await ownerPage.reload();
+    await ownerPage.goto(`${BASE}/c/${A}/settings/support-visits`, { timeout: 120000 });
     await ownerPage.waitForSelector(`text=${REASON}`, { timeout: 60000 });
     ownerText = await seen(ownerPage);
     check(ownerText.includes("Left") && ownerText.includes("Opened 1 patient file"), "the owner sees it ended");
@@ -251,7 +291,7 @@ async function main() {
       (await land(admin2, `/c/${A}`, (p) => p.startsWith("/login"))).startsWith("/login"),
       "a visit past its time no longer opens anything"
     );
-    await ownerPage.reload();
+    await ownerPage.goto(`${BASE}/c/${A}/settings/support-visits`, { timeout: 120000 });
     await ownerPage.waitForSelector("text=QA: left open", { timeout: 60000 });
     check((await seen(ownerPage)).includes("Timed out"), "the owner sees a visit nobody ended as timed out");
     await db.query(`delete from sessions where support_visit_id = $1`, [leftOpen.id]);

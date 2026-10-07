@@ -131,6 +131,17 @@ export const CAPABILITIES = [
   "settings.booking",
   "settings.whatsapp",
   "settings.tags",
+  /*
+    The record of the Clinicti team's visits inside this clinic — who came in,
+    why, and whose files they opened (Settings → Support visits, migration 0067).
+
+    It shipped as full control only, and this is the switch that lets an owner
+    hand it to one more person — a practice manager, a compliance officer —
+    without handing them the clinic. No inheritance and not in any job's
+    defaults: it names patients, and a capability that did not exist yesterday
+    must never resolve to more access than the rule it replaced.
+  */
+  "settings.support_visits",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -172,6 +183,7 @@ const REQUIRES: Partial<Record<Capability, Capability[]>> = {
   "settings.booking": ["settings"],
   "settings.whatsapp": ["settings"],
   "settings.tags": ["settings"],
+  "settings.support_visits": ["settings"],
 };
 
 /** Every capability's prerequisites are held. */
@@ -545,6 +557,7 @@ export const CAPABILITY_GROUPS: {
       "settings.booking",
       "settings.whatsapp",
       "settings.tags",
+      "settings.support_visits",
       "settings.staff",
     ],
     area: "admin",

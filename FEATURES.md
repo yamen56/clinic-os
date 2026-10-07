@@ -83,6 +83,7 @@ dashboard · conversations · calendar · patients · patients.import · patient
 patients.categories · patients.prescriptions
 documents · documents.manage · documents.void · invoices · invoices.analytics
 earnings · expenses · campaigns · automations · ai · settings · settings.clinic · settings.staff
+settings.support_visits
 ```
 
 Two access levels:
@@ -149,8 +150,10 @@ Enforced in **PostgreSQL Row Level Security** on every clinic-scoped table:
 - **What a visit did** is read from the audit log for that admin, clinic and time window:
   patient files opened, exports (counted on their own), and changes.
 - **Who sees the record:** the clinic's page in /admin and the Team page list visits with
-  the admin's email and IP, but never patient names. The clinic's owner, and anyone on full
-  access, get **Settings → Support visits**: who, why, when, how long, which patient files
+  the admin's email and IP, but never patient names. The clinic's owner, anyone on full
+  access, and any member the owner ticks **Support visits** for on the access editor
+  (`settings.support_visits`, needs Settings; not in any job's defaults and not inherited
+  by older custom rows) get **Settings → Support visits**: who, why, when, how long, which patient files
   were opened (named and linked), and how many changes. Clinic contexts can read the table
   and cannot write it (RLS), so the record cannot be edited by either side.
 - The workspace shows a persistent banner: *"Support mode — you're viewing this clinic as
