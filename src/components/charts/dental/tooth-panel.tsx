@@ -9,8 +9,10 @@
   tooth; then the treatments to choose from; then the tooth's history.
 */
 
-import { X } from "lucide-react";
+import { Image as ImageIcon, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
+import type { ChartImage } from "./image-viewer";
+import { AddImageButtons, ImageThumb } from "./image-strip";
 import type { Treatment } from "@/lib/charts/dental/catalog";
 import { SURFACES, surfaceAt, surfaceLabel, tooth as toothOf, toothName, type Surface } from "@/lib/charts/dental/teeth";
 import { stateOf, type Mark, type MarkEvent, type Paint, type Person, type Status, type ToothState } from "@/lib/charts/dental/state";
@@ -32,6 +34,10 @@ export type PanelActions = {
   onNote: (id: string, note: string) => void;
   onDetail: (id: string, key: string, value: string) => void;
   onEntryPerformer: (id: string, personId: string) => void;
+  /** Open these images in the viewer, at this one. */
+  onOpenImages: (list: ChartImage[], index: number) => void;
+  onPinImage: (imageId: string, fdi: string) => void;
+  onUploadForTooth: (kind: "xray" | "photo", f: File, fdi: string) => void;
   onClose: () => void;
 };
 
@@ -76,6 +82,9 @@ export function ToothPanel({
   span,
   past,
   tz,
+  images,
+  pins,
+  uploading,
   a,
 }: {
   teeth: string[];
@@ -96,6 +105,10 @@ export function ToothPanel({
   /** Looking at an earlier day: everything reads, nothing writes. */
   past: boolean;
   tz: string;
+  /** Every x-ray and photo of the patient, and which teeth each is pinned to. */
+  images: ChartImage[];
+  pins: Record<string, string[]>;
+  uploading: boolean;
   a: PanelActions;
 }) {
   const { t, locale } = useI18n();
@@ -109,6 +122,9 @@ export function ToothPanel({
   const hereIds = new Set(here.map((m) => m.id));
   const paint: Paint = status;
   const spanName = span ? (locale === "ar" ? span.ar : span.en) : "";
+  // This tooth's x-rays and photos, and the patient's others that could be pinned to it.
+  const toothImages = single ? images.filter((img) => (pins[img.id] ?? []).includes(single)) : [];
+  const otherImages = single ? images.filter((img) => !(pins[img.id] ?? []).includes(single)) : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -126,6 +142,17 @@ export function ToothPanel({
             <div className="text-[15px] font-semibold leading-tight text-ink-900">{toothName(tt, locale)}</div>
           ) : (
             <div className="text-[15px] font-semibold text-ink-900">{T.teeth.replace("{list}", teeth.join(" · "))}</div>
+          )}
+          {toothImages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => a.onOpenImages(toothImages, 0)}
+              data-open-tooth-images
+              className="mt-1.5 inline-flex h-7 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-2.5 text-[12px] font-semibold text-brand-700 hover:bg-brand-100"
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+              {T.imagesOfTooth} · {toothImages.length}
+            </button>
           )}
         </div>
         <button type="button" onClick={a.onClose} aria-label={T.close} className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl text-ink-500 hover:bg-sunken">
@@ -266,6 +293,31 @@ export function ToothPanel({
               />
             ))}
           </ul>
+        </section>
+      )}
+
+      {single && (
+        <section data-tooth-image-section>
+          <h4 className="mb-2 text-[13px] font-semibold text-ink-900">
+            {T.imagesOfTooth}
+            {toothImages.length > 0 && <span className="ms-1 rounded-full bg-sunken px-2 py-0.5 text-[12px] text-ink-500 tnum">{toothImages.length}</span>}
+          </h4>
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {toothImages.map((img, i) => (
+              <ImageThumb key={img.id} img={img} pinned={pins[img.id] ?? []} size="sm" onOpen={() => a.onOpenImages(toothImages, i)} />
+            ))}
+            {!past && <AddImageButtons compact busy={uploading} onFile={(k, f) => a.onUploadForTooth(k, f, single)} />}
+          </div>
+          {!past && otherImages.length > 0 && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-[12.5px] font-semibold text-brand-600">{T.pinImage}</summary>
+              <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1">
+                {otherImages.map((img) => (
+                  <ImageThumb key={img.id} img={img} pinned={pins[img.id] ?? []} size="sm" onOpen={() => a.onPinImage(img.id, single)} />
+                ))}
+              </div>
+            </details>
+          )}
         </section>
       )}
 

@@ -906,7 +906,15 @@ export function PatientProfile(props: {
           />
         )}
         {tab === "dental" && props.dentalPreview && (
-          <DentalChartTab tz={tz} birthDate={p.birth_date} me={props.dentalPreview.me} doctors={props.dentalPreview.doctors} />
+          <DentalChartTab
+            slug={slug}
+            patientId={p.id}
+            tz={tz}
+            birthDate={p.birth_date}
+            me={props.dentalPreview.me}
+            doctors={props.dentalPreview.doctors}
+            files={props.files}
+          />
         )}
         {tab === "appointments" && (
           <Card>

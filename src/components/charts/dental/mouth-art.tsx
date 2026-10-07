@@ -63,19 +63,24 @@ export function MouthGlyph({
   paint,
   icon: Icon,
   size = 64,
+  x,
+  y,
 }: {
   /** What the work covers; null draws an empty smile (the "add" card). */
   region: MouthRegion | null;
   paint: Paint | null;
   icon: LucideIcon;
   size?: number;
+  /** Placed inside another drawing — a label on the chart. */
+  x?: number;
+  y?: number;
 }) {
-  const clip = `mouth-${useId().replace(/:/g, "")}`;
+  const clip = `mouth-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const ink = paint ? INK[paint] : "var(--color-brand-600)";
   const soft = paint ? SOFT[paint] : "var(--color-brand-50)";
   const dash = paint === "planned" ? "1.4 1" : undefined;
   return (
-    <svg viewBox="0 0 80 60" width={size} height={size * 0.75} aria-hidden className="shrink-0 overflow-visible">
+    <svg viewBox="0 0 80 60" x={x} y={y} width={size} height={size * 0.75} aria-hidden className="shrink-0 overflow-visible">
       <defs>
         <clipPath id={clip}>
           <path d={OPENING} />

@@ -23,7 +23,10 @@ import { BORROWABLE_LOOKS, BUILT_IN, PROCEDURE_CATEGORIES, findTreatment, type C
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
 import { endOfDay, eventDays, isToothSite, paintAt, toothStates, type Mark, type MarkEvent, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
 import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
-import { Odontogram, neighbour } from "@/components/charts/dental/odontogram";
+import { Odontogram, neighbour, type RegionMark } from "@/components/charts/dental/odontogram";
+import { ImageViewer, type ChartImage } from "@/components/charts/dental/image-viewer";
+import { ImageStrip } from "@/components/charts/dental/image-strip";
+import { sampleOpg, samplePa } from "@/components/charts/dental/radiographs";
 import { MouthGlyph, type MouthRegion } from "@/components/charts/dental/mouth-art";
 import { DockSheet, SHEET_SHARE } from "@/components/charts/dental/dock-sheet";
 import { iconFor } from "@/components/charts/dental/icons";
@@ -192,7 +195,18 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
   );
 }
 
-type TabProps = { tz: string; birthDate: string | null; me: Person; doctors: Person[] };
+export type PatientFile = { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string };
+
+type TabProps = {
+  slug: string;
+  patientId: string;
+  tz: string;
+  birthDate: string | null;
+  me: Person;
+  doctors: Person[];
+  /** The patient's files, from which the x-rays and photos are shown. */
+  files: PatientFile[];
+};
 
 /*
   English inside, whatever the workspace speaks.
@@ -216,7 +230,7 @@ export function DentalChartTab(props: TabProps) {
   );
 }
 
-function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
+function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: TabProps) {
   const { t, locale } = useI18n();
   const T = t.dental;
   const { toast } = useToast();
@@ -263,6 +277,41 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
   /** A whole-mouth card being pointed at, and the one opened. */
   const [mouthHover, setMouthHover] = useState<MouthRegion | null>(null);
   const [mouthEntry, setMouthEntry] = useState<string | null>(null);
+
+  /*
+    X-rays and photos: the patient's own uploads of those kinds, newest first,
+    after two sample radiographs that belong to the sample mouth. Which teeth
+    an image is pinned to lives here for the preview; with the chart saved it
+    becomes a column on the file.
+  */
+  const samples = useMemo<ChartImage[]>(() => {
+    const now = Date.now();
+    const ago = (d: number) => new Date(now - d * 86400000).toISOString();
+    return [
+      { id: "sample-pa", src: samplePa(), name: "Periapical 35–37", kind: "xray", mime: "image/svg+xml", date: ago(33), sample: true },
+      { id: "sample-opg", src: sampleOpg(), name: "Panoramic (OPG)", kind: "xray", mime: "image/svg+xml", date: ago(150), sample: true },
+    ];
+  }, []);
+  const [uploaded, setUploaded] = useState<PatientFile[]>([]);
+  const images = useMemo<ChartImage[]>(() => {
+    const real = [...uploaded, ...files]
+      .filter((f, i, all) => all.findIndex((x) => x.id === f.id) === i)
+      .filter((f) => f.kind === "xray" || f.kind === "photo" || f.mime_type.startsWith("image/"))
+      .filter((f) => f.kind !== "insurance_card")
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+      .map<ChartImage>((f) => ({
+        id: f.id,
+        src: `/api/c/${slug}/files/${f.id}`,
+        name: f.file_name,
+        kind: f.kind === "xray" || f.kind === "photo" ? f.kind : "other",
+        mime: f.mime_type,
+        date: f.created_at,
+      }));
+    return [...real, ...samples];
+  }, [uploaded, files, samples, slug]);
+  const [pins, setPins] = useState<Record<string, string[]>>({ "sample-pa": ["35", "36", "37"] });
+  const [viewer, setViewer] = useState<{ list: ChartImage[]; index: number } | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   /*
     Wide enough for the panel beside the chart, or narrow enough for half a
@@ -366,6 +415,68 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
   const catalog = useMemo(() => [...BUILT_IN, ...custom], [custom]);
   const categoryOf = useCallback((key: string) => findTreatment(key, custom)?.category, [custom]);
   const performerPerson = roster.find((d) => d.id === performer) ?? null;
+
+  /*
+    Work on the mouth, an arch or a quadrant, as the chart labels it on the day
+    shown. Memoised on purpose: the chart lays its bands out from this list,
+    and a new list every render would redraw every tooth on every tap.
+  */
+  const regionMarks = useMemo<RegionMark[]>(
+    () =>
+      marks
+        .filter((m) => !isToothSite(m.site))
+        .flatMap((m) => {
+          const paint = paintAt(m, at);
+          if (!paint || !visible(paint)) return [];
+          const label = locale === "ar" ? m.labelAr : m.label;
+          const when = fmtDateOnly(m.doneAt ?? m.createdAt, locale);
+          return [{ id: m.id, site: m.site as MouthRegion, label, title: `${label} · ${siteLabel(m.site, T)} · ${T.status[paint]} · ${when}`, paint, category: categoryOf(m.treatmentKey) }];
+        }),
+    [marks, at, visible, locale, categoryOf, T]
+  );
+
+  /* ── X-rays and photos ───────────────────────────────────────────────── */
+
+  const imageCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const img of images) for (const fdi of pins[img.id] ?? []) out[fdi] = (out[fdi] ?? 0) + 1;
+    return out;
+  }, [images, pins]);
+  const imagesOf = (fdi: string) => images.filter((img) => (pins[img.id] ?? []).includes(fdi));
+  const openToothImages = (fdi: string) => {
+    const list = imagesOf(fdi);
+    if (list.length) setViewer({ list, index: 0 });
+  };
+  const togglePin = (imageId: string, fdi: string) =>
+    setPins((prev) => {
+      const cur = prev[imageId] ?? [];
+      return { ...prev, [imageId]: cur.includes(fdi) ? cur.filter((x) => x !== fdi) : [...cur, fdi] };
+    });
+
+  /*
+    An image goes into the patient's Files through the same route the Files
+    tab uses, so it is a real upload, filed as an x-ray or a photo, and it is
+    there on the Files tab too. Added from a tooth, it comes pinned to it.
+  */
+  const upload = async (kind: "xray" | "photo", file: File, toTooth?: string) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      fd.set("kind", kind);
+      const res = await fetch(`/api/c/${slug}/patients/${patientId}/files`, { method: "POST", body: fd });
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; file?: PatientFile } | null;
+      if (!res.ok || !body?.file) throw new Error("upload");
+      const row = body.file;
+      setUploaded((prev) => [row, ...prev]);
+      if (toTooth) setPins((prev) => ({ ...prev, [row.id]: [toTooth] }));
+      toast(T.savedToFiles);
+    } catch {
+      toast(T.uploadFailed, "error");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   /* ── Recording ───────────────────────────────────────────────────────── */
 
@@ -553,6 +664,9 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
       patchMark(id, (m) => ({ ...m, performedBy: roster.find((d) => d.id === pid) ?? m.performedBy }));
       logEvent(id, "performer");
     },
+    onOpenImages: (list, index) => setViewer({ list, index }),
+    onPinImage: (imageId, fdi) => togglePin(imageId, fdi),
+    onUploadForTooth: (kind, file, fdi) => upload(kind, file, fdi),
     onClose: closePanel,
   };
 
@@ -577,7 +691,6 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
   /* ── What the screen shows ───────────────────────────────────────────── */
 
   const live = marks.filter((m) => !m.voidedAt);
-  const mouthMarks = marks.filter((m) => !isToothSite(m.site) && paintAt(m, at) && visible(paintAt(m, at)!));
   const remaining = live.filter((m) => m.status === "planned").sort((a, b) => siteOrder(a.site) - siteOrder(b.site));
   const historyEvents = historyDoctor ? events.filter((e) => marks.find((m) => m.id === e.markId)?.performedBy?.id === historyDoctor) : events;
 
@@ -599,6 +712,9 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
       span={span}
       past={past}
       tz={tz}
+      images={images}
+      pins={pins}
+      uploading={uploading}
       a={actions}
     />
   );
@@ -768,69 +884,28 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
               locale={locale}
               brush={mode === "brush"}
               highlight={mouthHover}
+              regions={regionMarks}
+              addRegionLabel={past ? null : `+ ${T.addRegion}`}
+              imageCounts={imageCounts}
+              imagesLabel={T.openImages}
               onTooth={onTooth}
               onSurface={onSurface}
+              onImages={openToothImages}
+              onRegion={(id) => (id ? setMouthEntry(id) : setMouthOpen(true))}
+              onRegionHover={setMouthHover}
               categoryOf={categoryOf}
             />
             <div className="mt-1 text-center text-[11px] font-semibold text-ink-400">{T.lower}</div>
           </div>
 
-          {/*
-            Whole mouth: work that belongs to no single tooth, each as a small
-            mouth with the part it covers lit — the whole mouth, an arch, a
-            quadrant. Pointing at one outlines the same part of the chart above;
-            tapping it opens the entry.
-          */}
-          <section className="mt-4" aria-label={T.wholeMouth}>
-            <h4 className="mb-2 text-[13px] font-semibold text-ink-900">{T.wholeMouth}</h4>
-            <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
-              {mouthMarks.map((m) => {
-                const p = paintAt(m, at)!;
-                const region = m.site as MouthRegion;
-                const point = () => setMouthHover(region);
-                const unpoint = () => setMouthHover(null);
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setMouthEntry(m.id)}
-                    onMouseEnter={point}
-                    onMouseLeave={unpoint}
-                    onFocus={point}
-                    onBlur={unpoint}
-                    data-mouth-mark={m.treatmentKey}
-                    className="flex w-[15.5rem] shrink-0 snap-start items-center gap-3 rounded-card border bg-surface p-2 pe-3 text-start transition-shadow duration-140 hover:shadow-pop"
-                    style={{ borderColor: SOFT[p] }}
-                  >
-                    <MouthGlyph region={region} paint={p} icon={iconFor(categoryOf(m.treatmentKey))} size={72} />
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13.5px] font-semibold text-ink-900">{locale === "ar" ? m.labelAr : m.label}</span>
-                      <span className="mt-0.5 block truncate text-[12px] text-ink-500">{siteLabel(m.site, T)}</span>
-                      <span className="mt-1 flex items-center gap-1.5">
-                        <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: SOFT[p], color: INK[p] }}>
-                          {T.status[p]}
-                        </span>
-                        <span className="text-[11.5px] text-ink-500 tnum">{fmtDateOnly(m.doneAt ?? m.createdAt, locale)}</span>
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-              {!past && (
-                <button
-                  type="button"
-                  onClick={() => setMouthOpen(true)}
-                  className="flex w-[15.5rem] shrink-0 snap-start items-center gap-3 rounded-card border border-dashed border-line-strong bg-surface p-2 pe-3 text-start transition-colors duration-140 hover:bg-sunken"
-                >
-                  <MouthGlyph region={null} paint={null} icon={Plus} size={72} />
-                  <span className="min-w-0">
-                    <span className="block text-[13.5px] font-semibold text-brand-600">{T.addWholeMouth}</span>
-                    {mouthMarks.length === 0 && <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">{T.nothingWholeMouth}</span>}
-                  </span>
-                </button>
-              )}
-            </div>
-          </section>
+          <ImageStrip
+            images={images}
+            pins={pins}
+            busy={uploading}
+            canAdd={!past}
+            onOpen={(i) => setViewer({ list: images, index: i })}
+            onFile={(kind, f) => upload(kind, f)}
+          />
 
           {/* Time: the mouth on any day something happened. */}
           {days.length > 0 && (
@@ -933,6 +1008,18 @@ function DentalChart({ tz, birthDate, me, doctors }: TabProps) {
           );
         })()}
       </Modal>
+
+      {viewer && (
+        <ImageViewer
+          images={viewer.list}
+          index={viewer.index}
+          pins={pins}
+          canPin={!past}
+          onIndex={(i) => setViewer((v) => (v ? { ...v, index: i } : v))}
+          onPin={togglePin}
+          onClose={() => setViewer(null)}
+        />
+      )}
 
       {/* Room to scroll the last of the page out from under the docked panel. */}
       {sheetOpen && <div aria-hidden style={{ height: `${SHEET_SHARE * 100}dvh` }} />}

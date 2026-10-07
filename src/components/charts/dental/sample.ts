@@ -103,6 +103,7 @@ export function sampleMouth(locale: string, now = Date.now()): { marks: Mark[]; 
 
   // Visit 2 — the urgent work done.
   mk("scaling", "mouth", { at: v2, done: v2 });
+  mk("night_guard", "upper", { at: v2, done: v2, by: P.omar, note: locale === "ar" ? "صرير ليلي" : "Night-time grinding" });
   mk("crown", "26", { at: v2, done: v3, by: P.omar, detail: { material: "zirconia" } });
   mk("filling_composite", "27", {
     at: v2,
@@ -123,6 +124,7 @@ export function sampleMouth(locale: string, now = Date.now()): { marks: Mark[]; 
   mk("rct", "36", { at: v3, by: P.omar, detail: { canals: "3" } });
   mk("mobility", "42", { at: v3, detail: { grade: "2" } });
   mk("xray_pa", "36", { at: v3, done: v3, rec: P.lina });
+  mk("xray_bw", "Q1", { at: v3, done: v3, rec: P.lina });
 
   // Visit 4 — this month.
   mk("veneer", "11", { at: v4, detail: { material: "emax" } });
@@ -131,6 +133,7 @@ export function sampleMouth(locale: string, now = Date.now()): { marks: Mark[]; 
   mk("filling_composite", "24", { at: v4, surfaces: ["D"] });
   mk("fracture", "45", { at: v4 });
   mk("crown", "45", { at: v4, detail: { material: "emax" } });
+  mk("srp", "Q3", { at: v4, by: P.omar });
 
   const favorites: Favorite[] = [
     { key: "filling_composite", addedBy: P.sara, addedAt: v1 },

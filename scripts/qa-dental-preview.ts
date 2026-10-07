@@ -32,13 +32,26 @@ async function signIn(browser: Browser, email: string, lang: "ar" | "en", viewpo
   const ctx = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch && viewport.width < 700, deviceScaleFactor: 2 });
   await ctx.addCookies([{ name: "cos_locale", value: lang, url: BASE }]);
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/login`);
-  await page.waitForLoadState("networkidle");
-  await page.fill('input[name="email"]', email);
-  await page.fill('input[name="password"]', "password123");
-  await page.click('button[type="submit"]');
-  await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 240000, waitUntil: "commit" });
-  return page;
+  /*
+    Twice before giving up. The dev server is shared with whatever else is
+    being worked on, and a sign-in that lands while it recompiles can sit on
+    the login page for minutes and then pass instantly on a second try — the
+    failure was the server's, not the sign-in's.
+  */
+  for (let attempt = 1; ; attempt++) {
+    await page.goto(`${BASE}/login`, { timeout: 120000 });
+    await page.waitForLoadState("networkidle");
+    await page.fill('input[name="email"]', email);
+    await page.fill('input[name="password"]', "password123");
+    await page.click('button[type="submit"]');
+    try {
+      await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 120000, waitUntil: "commit" });
+      return page;
+    } catch (e) {
+      if (attempt >= 2) throw e;
+      console.log(`  · sign-in for ${email} stalled; trying again`);
+    }
+  }
 }
 
 async function openChart(page: Page, url: string) {
@@ -145,14 +158,59 @@ async function main() {
     if (tabs.includes("Dental chart")) ok("super-admin sees the Dental chart tab");
     else fail(`super-admin tab strip lacks Dental chart: ${tabs}`);
 
-    // Whole-mouth work is a small mouth with its part lit, and points at the chart.
-    const scalingCard = page.locator("[data-mouth-mark='scaling']");
-    if ((await scalingCard.locator("svg rect").count()) >= 16) ok("a whole-mouth treatment is drawn as a mouth, not a chip");
-    else fail("the scaling card has no mouth drawing");
-    await scalingCard.hover();
-    if ((await page.locator("[data-dental-chart] svg [data-highlight='mouth']").count()) === 1) ok("pointing at a whole-mouth card outlines the mouth on the chart");
-    else fail("no outline on the chart while hovering the scaling card");
+    // Work on the mouth, an arch or a quadrant is on the chart itself, each in its own place.
+    const chartSvg = page.locator("[data-dental-chart] svg[role='group']").first();
+    const mouthPills = await chartSvg.locator("[data-region-pill='mouth']").count();
+    const upperPill = await chartSvg.locator("[data-region-pill='upper']").count();
+    const q1Pill = await chartSvg.locator("[data-region-pill='Q1']").count();
+    const q3Pill = await chartSvg.locator("[data-region-pill='Q3']").count();
+    if (mouthPills >= 3 && upperPill === 1 && q1Pill === 1 && q3Pill === 1) ok("whole-mouth, arch and quadrant work is labelled on the chart, each in its own band");
+    else fail(`region labels: mouth=${mouthPills} upper=${upperPill} Q1=${q1Pill} Q3=${q3Pill}`);
+    if ((await chartSvg.locator("[data-region-tint='upper']").count()) === 1 && (await chartSvg.locator("[data-region-tint='Q3']").count()) === 1)
+      ok("arch and quadrant work tints the teeth it covers");
+    else fail("no tint behind the upper arch or the lower left quadrant");
+    if ((await chartSvg.locator("[data-region-pill='mouth'] svg rect").count()) >= 16) ok("each label carries a small mouth with its part lit");
+    else fail("the whole-mouth labels have no mouth drawing");
+    await chartSvg.locator("[data-region-pill='Q3']").hover();
+    if ((await chartSvg.locator("[data-highlight='Q3']").count()) === 1) ok("pointing at a quadrant's label outlines that quadrant");
+    else fail("no outline while pointing at the Q3 label");
     await page.mouse.move(5, 5);
+    await chartSvg.locator("[data-region-pill='upper']").click();
+    const entryDialog = page.getByRole("dialog");
+    if (/Night guard/.test(await entryDialog.innerText())) ok("tapping a label opens its entry");
+    else fail("the upper-arch label did not open the night guard");
+    await page.keyboard.press("Escape");
+
+    // X-rays and photos: in the chart, on the tooth, and in a viewer made for reading them.
+    if ((await page.locator("[data-image-strip] [data-image]").count()) >= 2) ok("the chart shows the patient's x-rays and photos");
+    else fail("no images in the chart's strip");
+    const badge36 = chartSvg.locator("[data-tooth='36'] [data-tooth-images]");
+    if ((await badge36.count()) === 1) ok("a tooth with a pinned x-ray carries a picture badge");
+    else fail("tooth 36 has no picture badge");
+    await badge36.click();
+    const viewerEl = page.locator("[data-image-viewer]");
+    await viewerEl.waitFor({ timeout: 5000 });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(SHOTS, "en-desktop-xray-viewer.png") });
+    const viewerText = await viewerEl.innerText();
+    if (/Periapical 35–37/.test(viewerText) && (await viewerEl.locator("[data-pin='36'][aria-pressed='true']").count()) === 1)
+      ok("the badge opens the tooth's x-ray, showing the teeth it is pinned to");
+    else fail(`viewer: ${viewerText.slice(0, 120)}`);
+    await viewerEl.getByRole("button", { name: "Invert" }).click();
+    const filter = (await viewerEl.locator("img").first().getAttribute("style")) ?? "";
+    if (/invert/.test(filter)) ok("the viewer inverts an x-ray for reading");
+    else fail(`filter after invert: ${filter}`);
+    await page.keyboard.press("Escape");
+    if ((await page.locator("[data-image-viewer]").count()) === 0) ok("Escape closes the viewer");
+    else fail("the viewer stayed open");
+
+    // An x-ray added from the chart is a real upload into the patient's files.
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+    await page.locator("[data-image-strip] input[type='file']").first().setInputFiles({ name: "bitewing-left.png", mimeType: "image/png", buffer: png });
+    await page.waitForFunction("document.querySelectorAll('[data-image-strip] [data-image]').length >= 3", null, { timeout: 30000 });
+    const stored = await db.query(`select kind from patient_files where patient_id = $1`, [adult]);
+    if (stored.rowCount === 1 && stored.rows[0].kind === "xray") ok("an x-ray added from the chart is saved to the patient's files as an x-ray");
+    else fail(`patient_files after upload: ${JSON.stringify(stored.rows)}`);
 
     // No coloured dots: the x-ray on 36 is an icon badge, the legend shows drawn swatches.
     if ((await page.locator("[data-dental-chart] svg [data-tooth='36'] [data-badge]").count()) === 1) ok("work with no shape on a tooth shows as an icon badge by its number");
