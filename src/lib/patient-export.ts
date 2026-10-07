@@ -93,7 +93,24 @@ export type ExportedRecord = {
     issueDate: string | null;
   }[];
   documents: { id: string; title: string; status: string; createdAt: string }[];
-  files: { id: string; fileName: string; createdAt: string }[];
+  files: { id: string; fileName: string; createdAt: string; teeth: string[] }[];
+  /**
+   * The dental chart, entry by entry, in tooth order: what was found, planned
+   * and done, by whom and when — voided entries included and marked, as the
+   * record they are. Empty for a clinic that does not chart teeth.
+   */
+  dental: {
+    id: string;
+    site: string;
+    label: string;
+    surfaces: string[];
+    status: string;
+    kind: string;
+    doctor: string | null;
+    date: string;
+    note: string;
+    voided: boolean;
+  }[];
 };
 
 export type ExportedPatient = { clinic: ExportedClinic; generatedAt: string } & ExportedRecord;
@@ -257,7 +274,7 @@ export async function loadPatientExportBatch(
 
   const files = (
     await c.query(
-      `select patient_id, id, file_name, created_at from patient_files
+      `select patient_id, id, file_name, created_at, teeth from patient_files
         where clinic_id = $1 and patient_id = any($2::uuid[]) order by created_at desc`,
       scope
     )
@@ -277,7 +294,20 @@ export async function loadPatientExportBatch(
   const apptsBy = bucket(appointments);
   const invoicesBy = bucket(invoices);
   const docsBy = bucket(documents);
+  const dental = (
+    await c.query(
+      `select m.patient_id, m.id, m.site, m.label, m.surfaces, m.status, m.kind, m.note,
+              coalesce(m.done_at, m.created_at) as at, m.voided_at, u.full_name as doctor
+         from chart_marks m
+         left join clinic_members cm on cm.id = m.performed_by
+         left join users u on u.id = cm.user_id
+        where m.clinic_id = $1 and m.patient_id = any($2::uuid[])
+        order by m.created_at`,
+      scope
+    )
+  ).rows;
   const filesBy = bucket(files);
+  const dentalBy = bucket(dental);
 
   const byId = new Map(patients.map((p) => [p.id as string, p]));
   const records: ExportedRecord[] = [];
@@ -356,6 +386,19 @@ export async function loadPatientExportBatch(
         id: f.id,
         fileName: f.file_name,
         createdAt: String(f.created_at),
+        teeth: f.teeth ?? [],
+      })),
+      dental: (dentalBy.get(id) ?? []).map((m) => ({
+        id: m.id,
+        site: m.site,
+        label: m.label,
+        surfaces: m.surfaces ?? [],
+        status: m.status,
+        kind: m.kind,
+        doctor: m.doctor ?? null,
+        date: String(m.at),
+        note: m.note ?? "",
+        voided: !!m.voided_at,
       })),
     });
   }

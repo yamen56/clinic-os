@@ -98,12 +98,14 @@ const securityHeaders = (pixel = false) => [
     "denied" that no permission dialog had been offered for.
 
     `(self)` restores the ordinary behaviour: our own pages may ask, the person
-    decides, and an injected iframe still cannot. Everything else stays shut,
-    including the camera — the signature pad wants a pointer, not a lens.
+    decides, and an injected iframe still cannot. The camera is now asked for
+    too — the dental chart takes an intraoral camera's picture straight into
+    the patient's file — and gets the same rule for the same reason. Everything
+    else stays shut.
   */
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()",
+    value: "camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()",
   },
   /*
     Two years, subdomains included. Both hosts are HTTPS-only already, so this

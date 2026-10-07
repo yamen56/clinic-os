@@ -10,6 +10,7 @@ import { countryFromClinic } from "@/lib/phone";
 import { PATIENT_PRESCRIPTIONS_JSON } from "@/lib/prescriptions";
 import { auditView } from "@/lib/audit";
 import { DateTime } from "luxon";
+import { loadDentalChart } from "@/lib/charts/dental/db";
 
 export default async function PatientProfilePage({
   params,
@@ -59,12 +60,6 @@ export default async function PatientProfilePage({
     insurance: can(access, "insurance"),
   };
   const none = { rows: [] as Record<string, unknown>[] };
-  /*
-    The dental chart is a preview the Clinicti team judges on real files before
-    anything about it is stored. It writes nothing; it only needs the clinic's
-    doctors, for "performed by".
-  */
-  const dentalPreview = access.session.user.isSuperAdmin;
 
   const data = await inClinic(access, async (c) => {
     /*
@@ -83,6 +78,8 @@ export default async function PatientProfilePage({
     ).rows[0];
     if (!row) return null;
     const { __prescriptions: prescriptions, ...p } = row;
+    // The dental chart is a module the agency switches on for a clinic that charts teeth.
+    const dental = access.clinic.features.dental;
     if (p.merged_into) return { mergedInto: p.merged_into as string };
     await auditView(c, {
       clinicId: access.clinicId,
@@ -117,7 +114,7 @@ export default async function PatientProfilePage({
           [id, access.clinicId]
         ),
         c.query(
-          `select id, file_name, mime_type, size_bytes, kind, created_at
+          `select id, file_name, mime_type, size_bytes, kind, created_at, teeth
            from patient_files where patient_id = $1 and clinic_id = $2 order by created_at desc`,
           [id, access.clinicId]
         ),
@@ -212,7 +209,8 @@ export default async function PatientProfilePage({
            from note_categories where clinic_id = $1 order by sort, name`,
           [access.clinicId]
         ),
-        dentalPreview
+        // The doctors a chart entry can be performed by.
+        dental
           ? c.query(
               `select m.id, u.full_name as name from clinic_members m join users u on u.id = m.user_id
                 where m.clinic_id = $1 and m.active and m.role = 'doctor' order by u.full_name`,
@@ -252,6 +250,8 @@ export default async function PatientProfilePage({
       insurers: insurers.rows,
       noteCategories: noteCategories.rows,
       dentalDoctors: dentalDoctors.rows as { id: string; name: string }[],
+      // The saved chart: its entries and their history, the clinic's own treatments and favourites.
+      dentalChart: dental ? await loadDentalChart(c, access.clinicId, id) : null,
     };
   });
 
@@ -284,9 +284,17 @@ export default async function PatientProfilePage({
       canSendDocuments={can(access, "documents.manage")}
       caps={caps}
       country={countryFromClinic(access.clinic)}
-      dentalPreview={
-        dentalPreview
-          ? { me: { id: access.session.user.id, name: access.session.user.fullName }, doctors: d.dentalDoctors }
+      dental={
+        d.dentalChart
+          ? JSON.parse(
+              JSON.stringify({
+                me: { id: access.session.user.id, name: access.session.user.fullName },
+                myMemberId: access.memberId,
+                doctors: d.dentalDoctors,
+                canWrite: can(access, "patients.charts"),
+                chart: d.dentalChart,
+              })
+            )
           : null
       }
     />

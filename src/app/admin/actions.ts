@@ -23,7 +23,7 @@ import { deleteClinicFiles } from "@/lib/storage";
 import { internalSecret } from "@/lib/internal-secret";
 import { FEATURES, toFeatureSetting, type Feature, type FeatureMap } from "@/lib/features";
 import { RESTORE_WINDOW_DAYS } from "@/lib/clinic-lifecycle";
-import { SPECIALTIES, asSpecialty, type Specialty } from "@/lib/specialties";
+import { SPECIALTIES, asSpecialty, clinicSpecialties, isSpecialty, type Specialty } from "@/lib/specialties";
 import { provisionClinic, installRecipes, isReservedSlug } from "@/lib/clinic-provision";
 import { z } from "zod";
 
@@ -62,6 +62,12 @@ const createClinicSchema = z.object({
   // clinic is not worth failing to create over which pack of disabled recipes
   // it starts with, and the agency can change it afterwards.
   specialty: z.enum(SPECIALTIES).catch("general" as Specialty),
+  // A medical centre's other departments, as a comma list like `features`.
+  // Unknown values are dropped, for the same reason as the specialty above.
+  departments: z
+    .string()
+    .default("")
+    .transform((raw) => raw.split(",").map((v) => v.trim()).filter(isSpecialty)),
 });
 
 export type CreateClinicResult = { error?: string; fieldErrors?: Record<string, string> } | null;
@@ -76,23 +82,27 @@ export type CreateClinicResult = { error?: string; fieldErrors?: Record<string, 
  */
 export async function setClinicSpecialtyAction(
   slug: string,
-  specialty: string
+  specialty: string,
+  departments: string[] = []
 ): Promise<{ installed?: number; error?: string }> {
   const s = await requireAdminCap("clinics.edit");
   const chosen = asSpecialty(specialty);
+  // Everything it practises — what decides the charts on its patient files.
+  const practises = clinicSpecialties(chosen, departments);
   return withSystem(async (c) => {
     const clinic = await c.query(`select id from clinics where slug = $1`, [slug]);
     if (!clinic.rowCount) return { error: "not_found" };
     const clinicId = clinic.rows[0].id as string;
-    await c.query(`update clinics set specialty = $2 where id = $1`, [clinicId, chosen]);
-    const installed = await installRecipes(c, clinicId, chosen);
+    await c.query(`update clinics set specialty = $2, specialties = $3 where id = $1`, [clinicId, chosen, practises]);
+    let installed = 0;
+    for (const sp of practises.length ? practises : [chosen]) installed += await installRecipes(c, clinicId, sp);
     await audit(c, {
       clinicId,
       userId: s.user.id,
       action: "admin.clinic.specialty",
       entity: "clinic",
       entityId: clinicId,
-      detail: { specialty: chosen, installed },
+      detail: { specialty: chosen, specialties: practises, installed },
     });
     revalidatePath(`/admin/clinics/${slug}`);
     return { installed };
@@ -135,6 +145,7 @@ export async function createClinicAction(
         planPrice: d.planPrice,
         features: d.features,
         specialty: d.specialty,
+        departments: d.departments,
         ownerEmail: d.ownerEmail,
         ownerName: d.ownerName,
       });

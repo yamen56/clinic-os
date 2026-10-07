@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Field, Select } from "@/components/ui/input";
 import { FeaturePicker } from "../../feature-picker";
 import { allFeatures } from "@/lib/features";
-import { SPECIALTIES } from "@/lib/specialties";
+import { SPECIALTIES, type Specialty } from "@/lib/specialties";
+import { DepartmentPicker } from "../../department-picker";
 
 function slugify(s: string): string {
   return s
@@ -30,6 +31,18 @@ export function NewClinicForm() {
     exactly like a deliberate one.
   */
   const [features, setFeatures] = useState(allFeatures());
+  const [specialty, setSpecialty] = useState<Specialty>("general");
+  const [departments, setDepartments] = useState<Specialty[]>([]);
+  // Choosing dentistry switches the dental chart on below; it can still be switched off.
+  const dentalOn = () => setFeatures((f) => ({ ...f, dental: true }));
+  const pickSpecialty = (v: Specialty) => {
+    setSpecialty(v);
+    if (v === "dental") dentalOn();
+  };
+  const pickDepartments = (v: Specialty[]) => {
+    setDepartments(v);
+    if (v.includes("dental")) dentalOn();
+  };
 
   return (
     <form
@@ -87,7 +100,7 @@ export function NewClinicForm() {
         sold to them.
       */}
       <Field label={t.admin.specialty} hint={t.admin.specialtySub}>
-        <Select name="specialty" defaultValue="general">
+        <Select name="specialty" value={specialty} onChange={(e) => pickSpecialty(e.target.value as Specialty)}>
           {SPECIALTIES.map((s) => (
             <option key={s} value={s}>
               {t.specialties[s]}
@@ -95,6 +108,13 @@ export function NewClinicForm() {
           ))}
         </Select>
       </Field>
+      {/* A medical centre's other fields — a dental department puts the tooth chart on its files. */}
+      <div>
+        <div className="mb-1 text-sm font-medium text-ink-900">{t.admin.departments}</div>
+        <p className="mb-2.5 text-[13px] text-ink-500">{t.admin.departmentsSub}</p>
+        <DepartmentPicker value={departments} onChange={pickDepartments} primary={specialty} disabled={pending} />
+        <input type="hidden" name="departments" value={departments.filter((d) => d !== specialty).join(",")} />
+      </div>
       <div className="my-1 border-t border-line" />
       <div>
         <div className="mb-1 text-sm font-medium text-ink-900">{t.admin.features}</div>

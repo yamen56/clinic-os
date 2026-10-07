@@ -14,6 +14,7 @@ import { Modal } from "@/components/ui/modal";
 import { Field, Input, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { FeaturePicker } from "../../feature-picker";
+import { DepartmentPicker } from "../../department-picker";
 import { toFeatureSetting, type FeatureMap } from "@/lib/features";
 import type { AdminCapabilityMap } from "@/lib/admin-permissions";
 import { SUPPORT_REASON_MAX, SUPPORT_REASON_MIN } from "@/lib/support-visits";
@@ -33,6 +34,8 @@ export function ClinicAdminPanel({
     planPrice: number;
     features: FeatureMap;
     specialty: Specialty;
+    /** A medical centre's other departments. */
+    departments: Specialty[];
     deleted: boolean;
   };
   caps: AdminCapabilityMap;
@@ -52,6 +55,7 @@ export function ClinicAdminPanel({
   const [features, setFeatures] = useState(clinic.features);
   const [specialtyOpen, setSpecialtyOpen] = useState(false);
   const [specialty, setSpecialty] = useState<Specialty>(clinic.specialty);
+  const [departments, setDepartments] = useState<Specialty[]>(clinic.departments);
   const [pending, start] = useTransition();
   const [featPending, startFeat] = useTransition();
   const [specPending, startSpec] = useTransition();
@@ -224,11 +228,17 @@ export function ClinicAdminPanel({
               ))}
             </Select>
           </Field>
+          <div>
+            <div className="mb-1 text-[13px] font-semibold text-ink-900">{t.admin.departments}</div>
+            <p className="mb-2 text-[12px] text-ink-500">{t.admin.departmentsSub}</p>
+            <DepartmentPicker value={departments} onChange={setDepartments} primary={specialty} disabled={specPending} />
+          </div>
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
               onClick={() => {
                 setSpecialty(clinic.specialty);
+                setDepartments(clinic.departments);
                 setSpecialtyOpen(false);
               }}
             >
@@ -238,7 +248,7 @@ export function ClinicAdminPanel({
               loading={specPending}
               onClick={() =>
                 startSpec(async () => {
-                  const r = await setClinicSpecialtyAction(clinic.slug, specialty);
+                  const r = await setClinicSpecialtyAction(clinic.slug, specialty, departments.filter((d) => d !== specialty));
                   if (r.error) toast(t.common.genericError, "error");
                   else
                     toast(

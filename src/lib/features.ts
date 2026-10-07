@@ -32,6 +32,12 @@ export const FEATURES = [
   "automations",
   "ai",
   "einvoicing",
+  /*
+    The dental chart on every patient file. A module the agency switches on for
+    a clinic that charts teeth — a dental clinic, or a medical centre with a
+    dental department — rather than something every clinic sees.
+  */
+  "dental",
 ] as const;
 
 export type Feature = (typeof FEATURES)[number];
@@ -51,7 +57,12 @@ export type FeatureMap = Record<Feature, boolean>;
  * So these are opt-in twice over — the agency licenses it, and the clinic still
  * has to configure it before a single invoice moves.
  */
-export const OPT_IN_FEATURES = new Set<Feature>(["einvoicing"]);
+export const OPT_IN_FEATURES = new Set<Feature>([
+  "einvoicing",
+  // A tooth chart on a dermatology clinic's files is noise, so it waits to be
+  // switched on — the dental clinics that already existed were, in 0068.
+  "dental",
+]);
 
 /**
  * The capabilities each module owns.
@@ -66,7 +77,7 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
   // Prescriptions go out on WhatsApp under a doctor's name, so they are named
   // here rather than left to the patients gate: a masked module must not leave
   // a send behind it.
-  patients: ["patients", "patients.prescriptions"],
+  patients: ["patients", "patients.prescriptions", "patients.charts"],
   documents: ["documents", "documents.manage", "documents.void"],
   /*
     `invoices.analytics` and `earnings` were both missing from this list at
@@ -82,6 +93,8 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
   // its own: it is not a screen somebody visits, it is what happens to an
   // invoice. Its own settings tab is gated on the feature directly.
   einvoicing: [],
+  // Off, the chart's tab is gone from every file and nobody can record on it.
+  dental: ["patients.charts"],
 };
 
 /** What the new-clinic form starts from: everything except the opt-ins. */

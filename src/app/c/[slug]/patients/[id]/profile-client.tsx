@@ -41,6 +41,7 @@ import { DownloadSignedPdf } from "@/components/esign/download-signed";
 import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-document-modal";
 import type { DocumentListRow } from "@/lib/esign/queries";
 import type { PrescriptionRow } from "@/lib/prescriptions";
+import type { DentalTabData } from "./dental-chart-tab";
 import { PrescriptionsTab } from "./prescriptions-tab";
 import { PrescriptionComposer, useComposerData, type RxDraft } from "./prescription-composer";
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
@@ -73,12 +74,13 @@ import {
   ShieldCheck,
   ShieldAlert,
   ExternalLink,
+  Smile,
 } from "lucide-react";
 
 /*
-  The dental chart preview is a few hundred kilobytes of drawing and catalog
-  that nobody but the Clinicti team can open yet, so it is fetched when its tab
-  is, not shipped with every patient file.
+  The dental chart is a few hundred kilobytes of drawing and catalog that only
+  a dental clinic's files use, so it is fetched when its tab is, not shipped
+  with every patient file.
 */
 const DentalChartTab = dynamic(() => import("./dental-chart-tab").then((m) => m.DentalChartTab), {
   ssr: false,
@@ -197,7 +199,7 @@ export function PatientProfile(props: {
   patient: Patient;
   notes: NoteRow[];
   noteCategories: NoteCategoryRow[];
-  files: { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string }[];
+  files: { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string; teeth?: string[] }[];
   appointments: { id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null }[];
   invoices: ({ id: string; number: string; status: string; total: string; amount_paid: string; created_at: string } & PatientClaim)[];
   conversation: { id: string; msgs: { id: string; direction: string; sender_kind: string; body: string; msg_type: string; created_at: string }[] | null } | null;
@@ -245,10 +247,11 @@ export function PatientProfile(props: {
   /** The clinic's today, yyyy-MM-dd — what "has this cover expired" is measured against. */
   today: string;
   /**
-   * The dental chart, while it is a preview: set only for the Clinicti team,
-   * with the clinic's doctors for "performed by". Null hides the tab.
+   * The dental chart, for a dental clinic or a medical centre with a dental
+   * department: the saved chart, the doctors an entry can be performed by, and
+   * whether this member may record on it. Null hides the tab.
    */
-  dentalPreview?: { me: { id: string; name: string }; doctors: { id: string; name: string }[] } | null;
+  dental?: DentalTabData | null;
 }) {
   const { slug, tz, currency, caps } = props;
   const { t, locale } = useI18n();
@@ -381,8 +384,8 @@ export function PatientProfile(props: {
       label: t.patients.tabs.prescriptions,
       count: rxRows.length,
     },
-    // The doctor's side of the file, beside the prescriptions. Preview only.
-    props.dentalPreview && { key: "dental", label: t.dental.tab },
+    // The doctor's side of the file, beside the prescriptions: the tooth chart, for a dental clinic.
+    props.dental && { key: "dental", label: t.dental.tab },
     caps.calendar && {
       key: "appointments",
       label: t.patients.tabs.appointments,
@@ -905,16 +908,8 @@ export function PatientProfile(props: {
             onUpdated={upsertRx}
           />
         )}
-        {tab === "dental" && props.dentalPreview && (
-          <DentalChartTab
-            slug={slug}
-            patientId={p.id}
-            tz={tz}
-            birthDate={p.birth_date}
-            me={props.dentalPreview.me}
-            doctors={props.dentalPreview.doctors}
-            files={props.files}
-          />
+        {tab === "dental" && props.dental && (
+          <DentalChartTab slug={slug} patientId={p.id} tz={tz} birthDate={p.birth_date} data={props.dental} files={props.files} />
         )}
         {tab === "appointments" && (
           <Card>
@@ -2093,7 +2088,7 @@ function FilesTab({
 }: {
   slug: string;
   patientId: string;
-  files: { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string }[];
+  files: { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string; teeth?: string[] }[];
   tz: string;
 }) {
   const { t, locale } = useI18n();
@@ -2176,6 +2171,13 @@ function FilesTab({
                 <div className="text-[12px] text-ink-400">
                   {(t.patients.files.kinds as Record<string, string>)[f.kind]} ·{" "}
                   {(f.size_bytes / 1024).toFixed(0)} KB · {fmtDate(f.created_at, tz, locale)}
+                  {/* The teeth the dental chart pinned it to, in tooth numbers — read the same in any language. */}
+                  {f.teeth && f.teeth.length > 0 && (
+                    <span dir="ltr" className="ms-1.5 inline-flex items-center gap-1 rounded bg-brand-50 px-1.5 py-px font-semibold text-brand-700 tnum" data-file-teeth>
+                      <Smile className="h-3 w-3" />
+                      {f.teeth.join(" · ")}
+                    </span>
+                  )}
                 </div>
               </div>
               <button

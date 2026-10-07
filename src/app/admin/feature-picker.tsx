@@ -13,6 +13,7 @@ import {
   Workflow,
   Sparkles,
   Landmark,
+  Smile,
 } from "lucide-react";
 
 const icons: Record<Feature, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
@@ -25,6 +26,7 @@ const icons: Record<Feature, React.ComponentType<{ className?: string; strokeWid
   automations: Workflow,
   ai: Sparkles,
   einvoicing: Landmark,
+  dental: Smile,
 };
 
 /**

@@ -279,7 +279,10 @@ async function main() {
     */
     const pp = h["permissions-policy"] ?? "";
     ok(/microphone=\(self\)/.test(pp), `microphone is askable by this origin (${pp})`);
-    ok(/camera=\(\)/.test(pp) && /geolocation=\(\)/.test(pp), "camera and location stay shut");
+    // The camera joined the microphone when the dental chart learned to take an
+    // intraoral camera's picture: askable by this origin, never by an iframe.
+    ok(/camera=\(self\)/.test(pp), `camera is askable by this origin (${pp})`);
+    ok(/geolocation=\(\)/.test(pp) && /usb=\(\)/.test(pp), "location and USB stay shut");
 
     // The token pages are the ones where the URL is the credential.
     const signRes = await page.goto(`${BASE}/sign/definitely-not-a-real-token`, {

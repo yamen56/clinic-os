@@ -2,7 +2,7 @@ import type { PoolClient } from "pg";
 import { RECIPES_ON_BY_DEFAULT } from "./esign/constants";
 import { seedStaffAlerts } from "./staff-alerts";
 import { toFeatureSetting, allFeatures, type FeatureMap } from "./features";
-import type { Specialty } from "./specialties";
+import { clinicSpecialties, type Specialty } from "./specialties";
 
 /**
  * Everything a clinic needs to exist, in one place.
@@ -131,6 +131,8 @@ export type ProvisionInput = {
   planPrice?: number;
   features?: FeatureMap;
   specialty: Specialty;
+  /** A medical centre's other fields: the departments beside the primary specialty. */
+  departments?: Specialty[];
   ownerEmail: string;
   ownerName: string;
   /**
@@ -197,6 +199,10 @@ export async function provisionClinic(
     ]
   );
   const clinicId = clinic.rows[0].id as string;
+  // Everything the clinic practises, primary first — what decides which charts
+  // its patient files carry.
+  const practises = clinicSpecialties(input.specialty, input.departments ?? []);
+  await c.query(`update clinics set specialties = $2 where id = $1`, [clinicId, practises]);
 
   /*
     Owner account: reuse an existing user with this email, otherwise create one
@@ -245,8 +251,9 @@ export async function provisionClinic(
     input.slug,
   ]);
 
-  // Copy agency defaults: automation recipes (disabled) and knowledge structure
-  await installRecipes(c, clinicId, input.specialty);
+  // Copy agency defaults: automation recipes (disabled) and knowledge structure.
+  // A medical centre gets the pack for each of its departments too.
+  for (const s of practises.length ? practises : [input.specialty]) await installRecipes(c, clinicId, s);
   // The doctor and staff alerts this clinic will be able to edit from its own
   // automations page. Seeded with exactly what the worker used to do.
   await seedStaffAlerts(c, clinicId);

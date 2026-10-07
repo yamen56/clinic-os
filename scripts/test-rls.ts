@@ -356,6 +356,20 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     [clinic, `Template ${tag}`]
   );
 
+  // The dental chart (migration 0068): an entry and its history, a clinic
+  // treatment and favourite, and a "Take x-ray" request.
+  const mark = (
+    await q(
+      `insert into chart_marks (clinic_id, patient_id, site, treatment_key, label, label_ar, look, kind, status, recorded_by)
+       values ($1, $2, '16', 'caries', 'Caries', 'تسوس', 'caries', 'finding', 'existing', $3) returning id`,
+      [clinic, patient, user]
+    )
+  ).id;
+  await q(`insert into chart_mark_events (clinic_id, mark_id, action, by_user) values ($1, $2, 'created', $3) returning id`, [clinic, mark, user]);
+  await q(`insert into chart_treatments (clinic_id, category, name, scope, look) values ($1, 'restorative', $2, 'tooth', 'dot') returning id`, [clinic, `Treatment ${tag}`]);
+  await q(`insert into chart_treatment_favorites (clinic_id, treatment_key) values ($1, 'rct') returning id`, [clinic]);
+  await q(`insert into imaging_requests (clinic_id, patient_id, teeth) values ($1, $2, '{36}') returning id`, [clinic, patient]);
+
   // Support visits (migration 0067): the agency inside the clinic.
   await q(
     `insert into support_visits (clinic_id, admin_user_id, admin_name, admin_email, reason, expires_at)

@@ -38,6 +38,10 @@ export type PanelActions = {
   onOpenImages: (list: ChartImage[], index: number) => void;
   onPinImage: (imageId: string, fdi: string) => void;
   onUploadForTooth: (kind: "xray" | "photo", f: File, fdi: string) => void;
+  /** Arm the imaging station for this tooth. */
+  onTakeXray: (fdi: string) => void;
+  /** A photo of this tooth from a camera on this device. */
+  onCamera: (fdi: string) => void;
   onClose: () => void;
 };
 
@@ -81,6 +85,7 @@ export function ToothPanel({
   doctors,
   span,
   past,
+  canWrite,
   tz,
   images,
   pins,
@@ -104,6 +109,8 @@ export function ToothPanel({
   span: Treatment | null;
   /** Looking at an earlier day: everything reads, nothing writes. */
   past: boolean;
+  /** May this member record on the chart? Without it, everything reads and nothing writes. */
+  canWrite: boolean;
   tz: string;
   /** Every x-ray and photo of the patient, and which teeth each is pinned to. */
   images: ChartImage[];
@@ -121,6 +128,7 @@ export function ToothPanel({
     .sort((x, y) => Number(!!x.voidedAt) - Number(!!y.voidedAt) || Date.parse(y.createdAt) - Date.parse(x.createdAt));
   const hereIds = new Set(here.map((m) => m.id));
   const paint: Paint = status;
+  const locked = past || !canWrite;
   const spanName = span ? (locale === "ar" ? span.ar : span.en) : "";
   // This tooth's x-rays and photos, and the patient's others that could be pinned to it.
   const toothImages = single ? images.filter((img) => (pins[img.id] ?? []).includes(single)) : [];
@@ -211,8 +219,8 @@ export function ToothPanel({
         </div>
       )}
 
-      {past ? (
-        <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700">{T.readOnlyPast}</p>
+      {locked ? (
+        <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700" data-read-only>{past ? T.readOnlyPast : T.readOnly}</p>
       ) : (
         /*
           One line for "how" and "who", then straight to the treatments: the
@@ -255,7 +263,7 @@ export function ToothPanel({
         </div>
       )}
 
-      {!past && (
+      {!locked && (
         <section>
           <TreatmentPicker
             catalog={catalog}
@@ -284,7 +292,7 @@ export function ToothPanel({
                 custom={custom}
                 doctors={doctors}
                 tz={tz}
-                canEdit={!past}
+                canEdit={!locked}
                 onMarkDone={a.onMarkDone}
                 onVoid={a.onVoid}
                 onNote={a.onNote}
@@ -306,9 +314,17 @@ export function ToothPanel({
             {toothImages.map((img, i) => (
               <ImageThumb key={img.id} img={img} pinned={pins[img.id] ?? []} size="sm" onOpen={() => a.onOpenImages(toothImages, i)} />
             ))}
-            {!past && <AddImageButtons compact busy={uploading} onFile={(k, f) => a.onUploadForTooth(k, f, single)} />}
+            {!past && (
+              <AddImageButtons
+                compact
+                busy={uploading}
+                onFile={(k, f) => a.onUploadForTooth(k, f, single)}
+                onTakeXray={canWrite ? () => a.onTakeXray(single) : undefined}
+                onCamera={() => a.onCamera(single)}
+              />
+            )}
           </div>
-          {!past && otherImages.length > 0 && (
+          {!locked && otherImages.length > 0 && (
             <details className="mt-2">
               <summary className="cursor-pointer text-[12.5px] font-semibold text-brand-600">{T.pinImage}</summary>
               <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1">

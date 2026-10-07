@@ -154,8 +154,34 @@ export function PatientRecord({
             <tbody>
               {record.files.map((f) => (
                 <tr key={f.id}>
-                  <td>{f.fileName}</td>
+                  <td>
+                    {f.fileName}
+                    {f.teeth.length > 0 && <span className="muted"> · {f.teeth.join(" ")}</span>}
+                  </td>
                   <td className="nowrap">{fmtDate(f.createdAt, tz, locale)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Section>
+      )}
+
+      {record.dental.length > 0 && (
+        /* In English, like the chart itself: the vocabulary dentists chart in. */
+        <Section title={`${t.dental.tab} (${record.dental.length})`} empty={false} t={t}>
+          <table className="grid" dir="ltr">
+            <tbody>
+              {record.dental.map((m) => (
+                <tr key={m.id} className={m.voided ? "muted" : undefined}>
+                  <td className="nowrap num">{/^[1-8][1-8]$/.test(m.site) ? m.site : (t.dental.sites as Record<string, string>)[m.site] ?? m.site}</td>
+                  <td>
+                    {m.voided ? <s>{m.label}</s> : m.label}
+                    {m.surfaces.length > 0 && ` · ${m.surfaces.join("")}`}
+                    {m.note && <span className="muted"> — {m.note}</span>}
+                  </td>
+                  <td className="nowrap">{m.voided ? t.dental.voided : m.kind === "finding" ? t.dental.status.finding : (t.dental.status as Record<string, string>)[m.status]}</td>
+                  <td className="nowrap">{m.doctor ?? "—"}</td>
+                  <td className="nowrap">{fmtDate(m.date, tz, "en")}</td>
                 </tr>
               ))}
             </tbody>

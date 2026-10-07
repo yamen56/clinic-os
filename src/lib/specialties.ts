@@ -39,3 +39,17 @@ export function isSpecialty(v: unknown): v is Specialty {
 export function asSpecialty(v: unknown): Specialty {
   return isSpecialty(v) ? v : "general";
 }
+
+/**
+ * Everything a clinic practises: its primary specialty first, then the other
+ * departments of a medical centre, each once, with "general" left out — it is
+ * the absence of a specialty, not one of them.
+ */
+export function clinicSpecialties(primary: unknown, departments: readonly unknown[]): Specialty[] {
+  const out: Specialty[] = [];
+  for (const v of [primary, ...departments]) {
+    const s = asSpecialty(v);
+    if (s !== "general" && !out.includes(s)) out.push(s);
+  }
+  return out;
+}

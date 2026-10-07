@@ -10,7 +10,7 @@ import { OwnerInvite } from "./owner-invite";
 import { DangerZone } from "./danger-zone";
 import { FEATURES, resolveFeatures } from "@/lib/features";
 import type { MemberRole } from "@/lib/permissions";
-import { asSpecialty } from "@/lib/specialties";
+import { asSpecialty, isSpecialty } from "@/lib/specialties";
 import { CheckCircle2, Circle, ShieldCheck } from "lucide-react";
 import { listSupportVisits, SUPPORT_VISIT_HOURS } from "@/lib/support-visits";
 import { SupportVisitList } from "@/components/support-visit-list";
@@ -112,6 +112,7 @@ export default async function AdminClinicDetail({
               planPrice: Number(clinic.plan_price),
               features,
               specialty: asSpecialty(clinic.specialty),
+              departments: ((clinic.specialties ?? []) as string[]).filter(isSpecialty).filter((s) => s !== clinic.specialty),
               deleted: !!clinic.deleted_at,
             }}
           />

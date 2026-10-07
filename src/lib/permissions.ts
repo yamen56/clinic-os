@@ -53,6 +53,14 @@ export const CAPABILITIES = [
   */
   "patients.prescriptions",
   /*
+    Record on the dental chart: what was found on a tooth, what is planned,
+    what was done. A clinical record in a doctor's name, so carved out of
+    `patients` the way prescriptions are — reading the chart stays with
+    `patients`, like the rest of the file — and dotted, so an assistant who
+    charts for the dentist is ticked by the owner rather than assumed.
+  */
+  "patients.charts",
+  /*
     Fold a duplicate file into another. Irreversible from the screen — the
     duplicate's notes, files, invoices and appointments move and it is gone from
     every list — so it is housekeeping an owner hands to somebody, not a side
@@ -170,6 +178,7 @@ const REQUIRES: Partial<Record<Capability, Capability[]>> = {
   "patients.export": ["patients"],
   "patients.categories": ["patients"],
   "patients.prescriptions": ["patients"],
+  "patients.charts": ["patients"],
   "patients.merge": ["patients"],
   "documents.manage": ["documents"],
   "documents.void": ["documents"],
@@ -204,7 +213,7 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
   // A doctor on a revenue share can see what they have earned, and nothing else
   // about the clinic's money. The screen is empty and harmless for a doctor who
   // has no arrangement, so it costs nothing to start on.
-  doctor: ["dashboard", "calendar", "patients", "patients.prescriptions", "documents", "earnings"],
+  doctor: ["dashboard", "calendar", "patients", "patients.prescriptions", "patients.charts", "documents", "earnings"],
   receptionist: [
     "dashboard",
     "conversations",
@@ -379,6 +388,11 @@ export function resolveCapabilities(
   if (!("patients.prescriptions" in ticked) && opts.role === "doctor" && caps.patients) {
     caps["patients.prescriptions"] = true;
   }
+  // The dental chart, on the same reasoning: new, the doctor is who it is for,
+  // and it opens nothing a doctor with Patients cannot already read.
+  if (!("patients.charts" in ticked) && opts.role === "doctor" && caps.patients) {
+    caps["patients.charts"] = true;
+  }
 
   /*
     The capabilities carved out on 2026-10-06, each from whatever used to grant
@@ -534,6 +548,7 @@ export const CAPABILITY_GROUPS: {
     section: "patients",
     actions: [
       "patients.prescriptions",
+      "patients.charts",
       "patients.import",
       "patients.export",
       "patients.merge",

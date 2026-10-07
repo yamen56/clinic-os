@@ -1,32 +1,36 @@
 "use client";
 
 /*
-  The dental chart tab — PREVIEW.
+  The dental chart tab: the patient's own chart, saved.
 
-  Everything here lives in this component's state and nothing is written
-  anywhere: it is shown to the Clinicti team only, on real patient files, so
-  the drawing and the way it feels at the chair can be judged in place before a
-  single table exists. Leaving the tab or reloading starts again from the
-  sample mouth. The shapes of `Mark` and `MarkEvent` are the shapes the tables
-  will have, so what is learned here carries straight over.
+  Every tap lands on the tooth at once and is stored behind it. The browser
+  makes the ids, so the entry it drew and the row the server keeps are the same
+  entry from the start; if the server refuses, the tooth goes back the way it
+  was and says so. Nothing waits on the network to answer the finger.
+
+  Who may record is the `patients.charts` capability. Everybody else who can
+  open the file reads the chart, its history and its images, and can add an
+  x-ray or photo to the file like on the Files tab.
 */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, MousePointer2, Paintbrush, Plus, History as HistoryIcon, Undo2, ChevronDown } from "lucide-react";
+import { MousePointer2, Paintbrush, History as HistoryIcon, Undo2, ChevronDown, Radiation, X } from "lucide-react";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/ui/button-class";
 import { fmtDateOnly } from "@/lib/dates";
 import { BORROWABLE_LOOKS, BUILT_IN, PROCEDURE_CATEGORIES, findTreatment, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
 import { endOfDay, eventDays, isToothSite, paintAt, toothStates, type Mark, type MarkEvent, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
+import type { DentalChartData } from "@/lib/charts/dental/db";
 import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
 import { Odontogram, neighbour, type RegionMark } from "@/components/charts/dental/odontogram";
 import { ImageViewer, type ChartImage } from "@/components/charts/dental/image-viewer";
 import { ImageStrip } from "@/components/charts/dental/image-strip";
-import { sampleOpg, samplePa } from "@/components/charts/dental/radiographs";
+import { CameraCapture } from "@/components/charts/dental/camera-capture";
 import { MouthGlyph, type MouthRegion } from "@/components/charts/dental/mouth-art";
 import { DockSheet, SHEET_SHARE } from "@/components/charts/dental/dock-sheet";
 import { iconFor } from "@/components/charts/dental/icons";
@@ -34,7 +38,6 @@ import { ToothPanel, type PanelActions } from "@/components/charts/dental/tooth-
 import { TreatmentGlyph, TreatmentPicker, type Favorite } from "@/components/charts/dental/treatment-picker";
 import { EntryRow, EventList } from "@/components/charts/dental/history";
 import { siteLabel } from "@/components/charts/dental/labels";
-import { sampleMouth, samplePeople } from "@/components/charts/dental/sample";
 
 const ORDER = [...PERMANENT_UPPER, ...PRIMARY_UPPER, ...PRIMARY_LOWER, ...PERMANENT_LOWER];
 const siteOrder = (s: string) => {
@@ -42,9 +45,24 @@ const siteOrder = (s: string) => {
   return i === -1 ? -1 : i;
 };
 const uniq = <T,>(xs: T[]) => [...new Set(xs)];
-const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+const newId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (Number(c) ^ (Math.random() * 16) >> (Number(c) / 4)).toString(16));
 const PAINTS: Paint[] = ["planned", "done", "existing", "finding"];
 const STATUSES: Status[] = ["planned", "done", "existing"];
+
+/** A JSON call to the chart's routes; throws with the server's error code. */
+async function call<T = Record<string, unknown>>(url: string, method: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = (await res.json().catch(() => null)) as (T & { ok?: boolean; error?: string }) | null;
+  if (!res.ok || !json?.ok) throw new Error(json?.error ?? `http_${res.status}`);
+  return json;
+}
 
 function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { key: T; label: React.ReactNode }[]; onChange: (v: T) => void; label?: string }) {
   return (
@@ -90,40 +108,35 @@ function StatusPicker({ value, onChange }: { value: Status; onChange: (s: Status
   );
 }
 
-function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; onClose: () => void; onSave: (tr: Treatment) => void; me: Person }) {
+function CustomTreatmentModal({
+  open,
+  onClose,
+  onSave,
+  me,
+  busy,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (d: { name: string; abbr: string; category: Category; scope: Scope; look: Look }) => void;
+  me: Person;
+  busy: boolean;
+}) {
   const { t, locale } = useI18n();
   const T = t.dental;
   const C = T.custom;
-  const [en, setEn] = useState("");
+  const [name, setName] = useState("");
   const [abbr, setAbbr] = useState("");
   const [category, setCategory] = useState<Category>("restorative");
   const [scope, setScope] = useState<Scope>("tooth");
   const [look, setLook] = useState<Look>("dot");
   useEffect(() => {
     if (open) {
-      setEn("");
+      setName("");
       setAbbr("");
     }
   }, [open]);
   const field = "h-10 w-full rounded-ctl border border-line bg-surface px-3 text-base md:text-sm focus:border-brand-600 focus:outline-none";
-  // Named in English like the rest of the chart. The record keeps an `ar`
-  // field for the day a patient-facing paper wants one; until then it is the
-  // English name, never a blank.
-  const save = () => {
-    if (!en.trim()) return;
-    onSave({
-      key: `custom:${newId()}`,
-      kind: category === "findings" ? "finding" : "procedure",
-      category,
-      ar: en.trim(),
-      en: en.trim(),
-      abbr: abbr.trim() || undefined,
-      scope,
-      needsSurfaces: scope === "surface",
-      look: scope === "surface" && look === "dot" ? "filling" : look,
-      custom: { addedBy: me.name, addedAt: new Date().toISOString() },
-    });
-  };
+  const save = () => name.trim() && onSave({ name: name.trim(), abbr: abbr.trim(), category, scope, look });
   const sample = toothOf("16");
   return (
     <Modal
@@ -135,7 +148,7 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
           <Button variant="outline" onClick={onClose}>
             {T.cancel}
           </Button>
-          <Button onClick={save} disabled={!en.trim()}>
+          <Button onClick={save} disabled={!name.trim()} loading={busy}>
             {C.save}
           </Button>
         </>
@@ -146,7 +159,7 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-[13px] font-semibold">{C.name}</span>
-            <input autoFocus value={en} onChange={(e) => setEn(e.target.value)} placeholder={C.namePlaceholder} className={field} />
+            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={C.namePlaceholder} className={field} maxLength={80} />
           </label>
           <label className="block">
             <span className="mb-1 block text-[13px] font-semibold">{C.abbr}</span>
@@ -162,7 +175,7 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
               ))}
             </select>
           </label>
-          <label className="block sm:col-span-2">
+          <label className="block">
             <span className="mb-1 block text-[13px] font-semibold">{C.scope}</span>
             <select value={scope} onChange={(e) => setScope(e.target.value as Scope)} className={`${field} select-chevron appearance-none pe-8`}>
               {(["surface", "tooth", "quadrant", "arch", "mouth"] as Scope[]).map((s) => (
@@ -189,21 +202,33 @@ function CustomTreatmentModal({ open, onClose, onSave, me }: { open: boolean; on
             ))}
           </div>
         </div>
-        <p className="text-[12px] text-ink-500">{C.byline.replace("{name}", me.name)} · {fmtDateOnly(new Date(), locale)}</p>
+        <p className="text-[12px] text-ink-500">
+          {C.byline.replace("{name}", me.name)} · {fmtDateOnly(new Date(), locale)}
+        </p>
       </div>
     </Modal>
   );
 }
 
-export type PatientFile = { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string };
+export type PatientFile = { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string; teeth?: string[] };
+
+/** What the patient page hands the tab: the saved chart and who is charting. */
+export type DentalTabData = {
+  me: Person;
+  /** The signed-in member, so "performed by" starts on the doctor at the chair. */
+  myMemberId: string | null;
+  doctors: Person[];
+  /** May this member record on the chart (`patients.charts`)? */
+  canWrite: boolean;
+  chart: DentalChartData;
+};
 
 type TabProps = {
   slug: string;
   patientId: string;
   tz: string;
   birthDate: string | null;
-  me: Person;
-  doctors: Person[];
+  data: DentalTabData;
   /** The patient's files, from which the x-rays and photos are shown. */
   files: PatientFile[];
 };
@@ -230,29 +255,18 @@ export function DentalChartTab(props: TabProps) {
   );
 }
 
-function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: TabProps) {
+function DentalChart({ slug, patientId, tz, birthDate, data, files }: TabProps) {
   const { t, locale } = useI18n();
   const T = t.dental;
   const { toast } = useToast();
+  const { me, doctors: roster, canWrite } = data;
+  const base = `/api/c/${slug}/patients/${patientId}/dental/marks`;
 
-  const people = useMemo(() => samplePeople(locale), [locale]);
-  const roster = useMemo(() => {
-    const list = [...doctors, people.sara, people.omar];
-    return list.filter((p, i) => list.findIndex((x) => x.id === p.id) === i);
-  }, [doctors, people]);
-
-  const [marks, setMarks] = useState<Mark[]>([]);
-  const [events, setEvents] = useState<MarkEvent[]>([]);
-  const [favorites, setFavorites] = useState<Favorite[]>([]);
-  const [custom, setCustom] = useState<Treatment[]>([]);
-  const [recent, setRecent] = useState<string[]>([]);
-  const loadSample = useCallback(() => {
-    const s = sampleMouth(locale);
-    setMarks(s.marks);
-    setEvents(s.events);
-    setFavorites(s.favorites);
-  }, [locale]);
-  useEffect(() => loadSample(), [loadSample]);
+  const [marks, setMarks] = useState<Mark[]>(data.chart.marks);
+  const [events, setEvents] = useState<MarkEvent[]>(data.chart.events);
+  const [favorites, setFavorites] = useState<Favorite[]>(data.chart.favorites);
+  const [custom, setCustom] = useState<Treatment[]>(data.chart.custom);
+  const [customBusy, setCustomBusy] = useState(false);
 
   const [selected, setSelected] = useState<string[]>([]);
   const [picked, setPicked] = useState<Surface[]>([]);
@@ -261,7 +275,8 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
   const [brush, setBrush] = useState<Treatment | null>(null);
   const [brushPicker, setBrushPicker] = useState(false);
   const [status, setStatus] = useState<Status>("done");
-  const [performer, setPerformer] = useState(roster[0]?.id ?? "");
+  // The doctor at the chair if the person charting is one, otherwise the first doctor.
+  const [performer, setPerformer] = useState(() => roster.find((d) => d.id === data.myMemberId)?.id ?? roster[0]?.id ?? "");
   const [dentition, setDentition] = useState<Dentition>(() => dentitionForAge(birthDate));
   const [half, setHalf] = useState<"right" | "left">("right");
   const [show, setShow] = useState<Record<Paint, boolean>>({ planned: true, done: true, existing: true, finding: true });
@@ -274,44 +289,38 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
   const [voidReason, setVoidReason] = useState("");
   const [lastAdded, setLastAdded] = useState<{ ids: string[]; text: string; key: number } | null>(null);
   const [historyDoctor, setHistoryDoctor] = useState("");
-  /** A whole-mouth card being pointed at, and the one opened. */
+  /** A region label being pointed at, and the entry opened from one. */
   const [mouthHover, setMouthHover] = useState<MouthRegion | null>(null);
   const [mouthEntry, setMouthEntry] = useState<string | null>(null);
 
   /*
-    X-rays and photos: the patient's own uploads of those kinds, newest first,
-    after two sample radiographs that belong to the sample mouth. Which teeth
-    an image is pinned to lives here for the preview; with the chart saved it
-    becomes a column on the file.
+    X-rays and photos: the patient's own files of those kinds, newest first —
+    the same files the Files tab lists. Which teeth each shows is a label on
+    the file (`patient_files.teeth`).
   */
-  const samples = useMemo<ChartImage[]>(() => {
-    const now = Date.now();
-    const ago = (d: number) => new Date(now - d * 86400000).toISOString();
-    return [
-      { id: "sample-pa", src: samplePa(), name: "Periapical 35–37", kind: "xray", mime: "image/svg+xml", date: ago(33), sample: true },
-      { id: "sample-opg", src: sampleOpg(), name: "Panoramic (OPG)", kind: "xray", mime: "image/svg+xml", date: ago(150), sample: true },
-    ];
-  }, []);
   const [uploaded, setUploaded] = useState<PatientFile[]>([]);
-  const images = useMemo<ChartImage[]>(() => {
-    const real = [...uploaded, ...files]
-      .filter((f, i, all) => all.findIndex((x) => x.id === f.id) === i)
-      .filter((f) => f.kind === "xray" || f.kind === "photo" || f.mime_type.startsWith("image/"))
-      .filter((f) => f.kind !== "insurance_card")
-      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
-      .map<ChartImage>((f) => ({
-        id: f.id,
-        src: `/api/c/${slug}/files/${f.id}`,
-        name: f.file_name,
-        kind: f.kind === "xray" || f.kind === "photo" ? f.kind : "other",
-        mime: f.mime_type,
-        date: f.created_at,
-      }));
-    return [...real, ...samples];
-  }, [uploaded, files, samples, slug]);
-  const [pins, setPins] = useState<Record<string, string[]>>({ "sample-pa": ["35", "36", "37"] });
+  const allFiles = useMemo(() => [...uploaded, ...files].filter((f, i, all) => all.findIndex((x) => x.id === f.id) === i), [uploaded, files]);
+  const images = useMemo<ChartImage[]>(
+    () =>
+      allFiles
+        .filter((f) => (f.kind === "xray" || f.kind === "photo" || f.mime_type.startsWith("image/")) && f.kind !== "insurance_card")
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+        .map<ChartImage>((f) => ({
+          id: f.id,
+          src: `/api/c/${slug}/files/${f.id}`,
+          name: f.file_name,
+          kind: f.kind === "xray" || f.kind === "photo" ? f.kind : "other",
+          mime: f.mime_type,
+          date: f.created_at,
+        })),
+    [allFiles, slug]
+  );
+  const [pins, setPins] = useState<Record<string, string[]>>(() => Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []])));
   const [viewer, setViewer] = useState<{ list: ChartImage[]; index: number } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [camera, setCamera] = useState<{ tooth?: string } | null>(null);
+  /** A "Take x-ray" request waiting on the imaging station. */
+  const [pending, setPending] = useState<{ id: string; teeth: string[] } | null>(null);
 
   /*
     Wide enough for the panel beside the chart, or narrow enough for half a
@@ -410,11 +419,17 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
   const days = useMemo(() => eventDays(marks, tz), [marks, tz]);
   const at = dayIdx === null || dayIdx >= days.length ? null : endOfDay(days[dayIdx], tz);
   const past = at !== null;
+  const locked = past || !canWrite;
   const states = useMemo(() => toothStates(marks, at), [marks, at]);
   const visible = useCallback((p: Paint) => show[p], [show]);
   const catalog = useMemo(() => [...BUILT_IN, ...custom], [custom]);
   const categoryOf = useCallback((key: string) => findTreatment(key, custom)?.category, [custom]);
   const performerPerson = roster.find((d) => d.id === performer) ?? null;
+  // What this person used lately, newest first: learned from the chart, not stored.
+  const recent = useMemo(
+    () => uniq([...marks].filter((m) => m.recordedBy.id === me.id).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).map((m) => m.treatmentKey)).slice(0, 8),
+    [marks, me.id]
+  );
 
   /*
     Work on the mouth, an arch or a quadrant, as the chart labels it on the day
@@ -442,21 +457,32 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
     for (const img of images) for (const fdi of pins[img.id] ?? []) out[fdi] = (out[fdi] ?? 0) + 1;
     return out;
   }, [images, pins]);
-  const imagesOf = (fdi: string) => images.filter((img) => (pins[img.id] ?? []).includes(fdi));
   const openToothImages = (fdi: string) => {
-    const list = imagesOf(fdi);
+    const list = images.filter((img) => (pins[img.id] ?? []).includes(fdi));
     if (list.length) setViewer({ list, index: 0 });
   };
-  const togglePin = (imageId: string, fdi: string) =>
-    setPins((prev) => {
-      const cur = prev[imageId] ?? [];
-      return { ...prev, [imageId]: cur.includes(fdi) ? cur.filter((x) => x !== fdi) : [...cur, fdi] };
-    });
+
+  /** Which teeth a file shows, saved on the file; taken back if the save fails. */
+  const setTeeth = async (fileId: string, teeth: string[]) => {
+    const before = pins[fileId] ?? [];
+    setPins((prev) => ({ ...prev, [fileId]: teeth }));
+    try {
+      await call(`/api/c/${slug}/files/${fileId}/teeth`, "PATCH", { teeth });
+    } catch {
+      setPins((prev) => ({ ...prev, [fileId]: before }));
+      toast(T.saveFailed, "error");
+    }
+  };
+  const togglePin = (fileId: string, fdi: string) => {
+    if (!canWrite) return;
+    const cur = pins[fileId] ?? [];
+    void setTeeth(fileId, cur.includes(fdi) ? cur.filter((x) => x !== fdi) : [...cur, fdi]);
+  };
 
   /*
     An image goes into the patient's Files through the same route the Files
-    tab uses, so it is a real upload, filed as an x-ray or a photo, and it is
-    there on the Files tab too. Added from a tooth, it comes pinned to it.
+    tab uses, so it is a real file of the right kind and the Files tab lists it
+    too. Added from a tooth, it comes pinned to it.
   */
   const upload = async (kind: "xray" | "photo", file: File, toTooth?: string) => {
     setUploading(true);
@@ -469,7 +495,8 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
       if (!res.ok || !body?.file) throw new Error("upload");
       const row = body.file;
       setUploaded((prev) => [row, ...prev]);
-      if (toTooth) setPins((prev) => ({ ...prev, [row.id]: [toTooth] }));
+      setPins((prev) => ({ ...prev, [row.id]: [] }));
+      if (toTooth && canWrite) await setTeeth(row.id, [toTooth]);
       toast(T.savedToFiles);
     } catch {
       toast(T.uploadFailed, "error");
@@ -477,6 +504,59 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
       setUploading(false);
     }
   };
+
+  /*
+    "Take x-ray": arm the imaging station on the computer beside the x-ray
+    machine. The next image its software saves comes into this patient's
+    files, pinned to these teeth, and opens here the moment it lands.
+  */
+  const takeXray = async (teeth: string[]) => {
+    try {
+      const r = await call<{ request: { id: string } }>(`/api/c/${slug}/imaging/requests`, "POST", { patientId, teeth, kind: "xray" });
+      setPending({ id: r.request.id, teeth });
+    } catch {
+      toast(T.saveFailed, "error");
+    }
+  };
+  const cancelXray = async () => {
+    if (!pending) return;
+    const id = pending.id;
+    setPending(null);
+    await call(`/api/c/${slug}/imaging/requests/${id}`, "POST", { op: "cancel" }).catch(() => {});
+  };
+  useEffect(() => {
+    if (!pending) return;
+    let stop = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/c/${slug}/imaging/requests/${pending.id}`);
+        const body = (await res.json()) as { request?: { fulfilledAt: string | null; cancelledAt: string | null }; file?: PatientFile & { teeth: string[] } | null };
+        if (stop) return;
+        if (body.request?.cancelledAt) {
+          setPending(null);
+          return;
+        }
+        if (body.request?.fulfilledAt && body.file) {
+          const f = body.file;
+          setUploaded((prev) => [f, ...prev]);
+          setPins((prev) => ({ ...prev, [f.id]: f.teeth ?? [] }));
+          setPending(null);
+          toast(T.xrayArrived);
+          setViewer({
+            list: [{ id: f.id, src: `/api/c/${slug}/files/${f.id}`, name: f.file_name, kind: "xray", mime: f.mime_type, date: f.created_at }],
+            index: 0,
+          });
+        }
+      } catch {
+        // A missed poll is retried on the next tick.
+      }
+    };
+    const id = setInterval(tick, 2500);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, [pending, slug, T.xrayArrived, toast]);
 
   /* ── Recording ───────────────────────────────────────────────────────── */
 
@@ -488,11 +568,24 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
     return d;
   };
 
+  const removeLocal = (ids: Set<string>) => {
+    setMarks((prev) => prev.filter((m) => !ids.has(m.id)));
+    setEvents((prev) => prev.filter((e) => !ids.has(e.markId)));
+  };
+  /** Put the server's rows in place of the ones drawn ahead of it. */
+  const settle = (rows: Mark[], evs: MarkEvent[]) => {
+    const byId = new Map(rows.map((m) => [m.id, m]));
+    setMarks((prev) => prev.map((m) => byId.get(m.id) ?? m));
+    const evIds = new Set(evs.map((e) => e.id));
+    setEvents((prev) => [...prev.filter((e) => !evIds.has(e.id)), ...evs]);
+  };
+
   const record = (tr: Treatment, sites: { site: string; surfaces: Surface[]; role?: Mark["role"] }[], groupId?: string) => {
     const now = new Date().toISOString();
     const st: Status = tr.kind === "finding" ? "existing" : status;
-    const fresh: Mark[] = sites.map((s) => ({
+    const fresh: (Mark & { eventId: string })[] = sites.map((s) => ({
       id: newId(),
+      eventId: newId(),
       site: s.site,
       surfaces: s.surfaces,
       treatmentKey: tr.key,
@@ -514,22 +607,69 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
       voidReason: null,
       note: "",
     }));
-    setMarks((prev) => [...prev, ...fresh]);
-    setEvents((prev) => [...prev, ...fresh.map((m) => ({ id: newId(), markId: m.id, action: "created" as const, at: now, by: me }))]);
-    setRecent((prev) => [tr.key, ...prev.filter((k) => k !== tr.key)].slice(0, 8));
+    setMarks((prev) => [...prev, ...fresh.map(({ eventId: _e, ...m }) => m)]);
+    setEvents((prev) => [...prev, ...fresh.map((m) => ({ id: m.eventId, markId: m.id, action: "created" as const, at: now, by: me }))]);
     const where = sites.map((s) => (isToothSite(s.site) ? s.site : siteLabel(s.site, T))).join(" · ");
     setLastAdded({ ids: fresh.map((m) => m.id), text: T.added.replace("{name}", locale === "ar" ? tr.ar : tr.en).replace("{site}", where), key: Date.now() });
+    call<{ marks: Mark[]; events: MarkEvent[] }>(base, "POST", {
+      marks: fresh.map((m) => ({
+        id: m.id,
+        eventId: m.eventId,
+        site: m.site,
+        surfaces: m.surfaces,
+        treatmentKey: m.treatmentKey,
+        detail: m.detail,
+        status: m.status,
+        groupId: m.groupId ?? null,
+        role: m.role ?? null,
+        performedBy: m.performedBy?.id ?? null,
+      })),
+    })
+      .then((r) => settle(r.marks, r.events))
+      .catch(() => {
+        removeLocal(new Set(fresh.map((m) => m.id)));
+        setLastAdded(null);
+        toast(T.saveFailed, "error");
+      });
   };
 
-  const removeMarks = (ids: Set<string>) => {
-    setMarks((prev) => prev.filter((m) => !ids.has(m.id)));
-    setEvents((prev) => prev.filter((e) => !ids.has(e.markId)));
+  /** Take entries back: a mis-tap, within two minutes, by whoever made it. */
+  const unrecord = async (ids: string[]) => {
+    const gone = marks.filter((m) => ids.includes(m.id));
+    const evs = events.filter((e) => ids.includes(e.markId));
+    removeLocal(new Set(ids));
+    const failed: string[] = [];
+    for (const id of ids) await call(`${base}/${id}`, "DELETE").catch(() => failed.push(id));
+    if (failed.length) {
+      setMarks((prev) => [...prev, ...gone.filter((m) => failed.includes(m.id))]);
+      setEvents((prev) => [...prev, ...evs.filter((e) => failed.includes(e.markId))]);
+      toast(T.undoTooLate, "error");
+    }
   };
   const undo = () => {
     if (!lastAdded) return;
-    removeMarks(new Set(lastAdded.ids));
+    void unrecord(lastAdded.ids);
     setLastAdded(null);
   };
+
+  /*
+    A change to an entry: drawn now, stored behind it, and put back exactly as
+    it was if the server says no. The history line, when the change has one,
+    is drawn too and replaced by the server's.
+  */
+  const change = (m: Mark, next: Mark, body: Record<string, unknown>, action?: MarkEvent["action"], reason?: string) => {
+    const eventId = action ? newId() : null;
+    setMarks((prev) => prev.map((x) => (x.id === m.id ? next : x)));
+    if (action && eventId) setEvents((prev) => [...prev, { id: eventId, markId: m.id, action, at: new Date().toISOString(), by: me, reason }]);
+    call<{ mark: Mark; event: MarkEvent | null }>(`${base}/${m.id}`, "PATCH", eventId ? { ...body, eventId } : body)
+      .then((r) => settle([r.mark], r.event ? [r.event] : []))
+      .catch(() => {
+        setMarks((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+        if (eventId) setEvents((prev) => prev.filter((e) => e.id !== eventId));
+        toast(T.saveFailed, "error");
+      });
+  };
+  const find = (id: string) => marks.find((m) => m.id === id);
 
   const sitesFor = (tr: Treatment, teeth: string[]) => {
     if (tr.scope === "mouth") return [{ site: "mouth", surfaces: [] as Surface[] }];
@@ -551,7 +691,7 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
   };
 
   const pick = (tr: Treatment) => {
-    if (past || selected.length === 0) return;
+    if (locked || selected.length === 0) return;
     if (tr.needsSurfaces && picked.length === 0) {
       setFlash(true);
       setTimeout(() => setFlash(false), 1200);
@@ -575,22 +715,24 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
     that it is a record like any other, and leaves the chart by being voided.
   */
   const paint = (fdi: string, s: Surface | null) => {
-    if (!brush) return;
+    if (!brush || locked) return;
     const tr = brush;
-    const prior = [...marks].reverse().find((m) => !m.voidedAt && m.site === fdi && m.treatmentKey === tr.key && m.recordedBy.id === me.id && Date.now() - Date.parse(m.createdAt) < 60_000);
+    const prior = [...marks]
+      .reverse()
+      .find((m) => !m.voidedAt && m.site === fdi && m.treatmentKey === tr.key && m.recordedBy.id === me.id && Date.now() - Date.parse(m.createdAt) < 60_000);
     if (tr.needsSurfaces) {
       const sf = s ?? "O";
       if (prior) {
         const next = prior.surfaces.includes(sf) ? prior.surfaces.filter((x) => x !== sf) : [...prior.surfaces, sf];
-        if (next.length === 0) removeMarks(new Set([prior.id]));
-        else setMarks((prev) => prev.map((m) => (m.id === prior.id ? { ...m, surfaces: next } : m)));
+        if (next.length === 0) void unrecord([prior.id]);
+        else change(prior, { ...prior, surfaces: next }, { op: "surfaces", surfaces: next });
         return;
       }
       record(tr, [{ site: fdi, surfaces: [sf] }]);
       return;
     }
     if (prior) {
-      removeMarks(new Set([prior.id]));
+      void unrecord([prior.id]);
       return;
     }
     record(tr, [{ site: fdi, surfaces: [] }]);
@@ -599,7 +741,7 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
   const onTooth = (fdi: string, additive: boolean) => {
     if (mode === "brush") {
       if (!brush) setBrushPicker(true);
-      else if (!past) paint(fdi, null);
+      else paint(fdi, null);
       return;
     }
     if (span || additive) {
@@ -615,7 +757,7 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
   const onSurface = (fdi: string, s: Surface, additive: boolean) => {
     if (mode === "brush") {
       if (!brush) setBrushPicker(true);
-      else if (!past) paint(fdi, s);
+      else paint(fdi, s);
       return;
     }
     if (span || additive) return onTooth(fdi, true);
@@ -633,48 +775,59 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
 
   /* ── Changing what is recorded ───────────────────────────────────────── */
 
-  const logEvent = (markId: string, action: MarkEvent["action"], reason?: string) =>
-    setEvents((prev) => [...prev, { id: newId(), markId, action, at: new Date().toISOString(), by: me, reason }]);
-  const patchMark = (id: string, fn: (m: Mark) => Mark) => setMarks((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
+  const toggleFavorite = (key: string) => {
+    if (!canWrite) return;
+    const on = !favorites.some((f) => f.key === key);
+    const before = favorites;
+    setFavorites(on ? [...favorites, { key, addedBy: me, addedAt: new Date().toISOString() }] : favorites.filter((f) => f.key !== key));
+    call(`/api/c/${slug}/dental/favorites`, "POST", { key, on }).catch(() => {
+      setFavorites(before);
+      toast(T.saveFailed, "error");
+    });
+  };
 
   const actions: PanelActions = {
     onTogglePicked: togglePicked,
     onStatus: setStatus,
     onPerformer: setPerformer,
     onPick: pick,
-    onToggleFavorite: (key) =>
-      setFavorites((prev) => (prev.some((f) => f.key === key) ? prev.filter((f) => f.key !== key) : [...prev, { key, addedBy: me, addedAt: new Date().toISOString() }])),
+    onToggleFavorite: toggleFavorite,
     onAddCustom: () => setCustomOpen(true),
     onSpanRecord: () => span && recordSpan(span, selected),
     onSpanCancel: () => setSpan(null),
     onMarkDone: (id) => {
-      patchMark(id, (m) => ({ ...m, status: "done", doneAt: new Date().toISOString(), performedBy: m.performedBy ?? performerPerson }));
-      logEvent(id, "done");
+      const m = find(id);
+      if (m) change(m, { ...m, status: "done", doneAt: new Date().toISOString() }, { op: "done" }, "done");
     },
     onVoid: (m) => {
       setVoidReason("");
       setVoiding(m);
     },
     onNote: (id, note) => {
-      patchMark(id, (m) => ({ ...m, note }));
-      logEvent(id, "note");
+      const m = find(id);
+      if (m) change(m, { ...m, note }, { op: "note", note }, "note");
     },
-    onDetail: (id, key, value) => patchMark(id, (m) => ({ ...m, detail: { ...m.detail, [key]: value } })),
+    onDetail: (id, key, value) => {
+      const m = find(id);
+      if (m) change(m, { ...m, detail: { ...m.detail, [key]: value } }, { op: "detail", key, value });
+    },
     onEntryPerformer: (id, pid) => {
-      patchMark(id, (m) => ({ ...m, performedBy: roster.find((d) => d.id === pid) ?? m.performedBy }));
-      logEvent(id, "performer");
+      const m = find(id);
+      const who = roster.find((d) => d.id === pid);
+      if (m && who) change(m, { ...m, performedBy: who }, { op: "performer", performerId: pid }, "performer");
     },
     onOpenImages: (list, index) => setViewer({ list, index }),
     onPinImage: (imageId, fdi) => togglePin(imageId, fdi),
     onUploadForTooth: (kind, file, fdi) => upload(kind, file, fdi),
+    onTakeXray: (fdi) => void takeXray([fdi]),
+    onCamera: (fdi) => setCamera({ tooth: fdi }),
     onClose: closePanel,
   };
 
   const confirmVoid = () => {
     if (!voiding || !voidReason.trim()) return;
-    const now = new Date().toISOString();
-    patchMark(voiding.id, (m) => ({ ...m, voidedAt: now, voidedBy: me, voidReason: voidReason.trim() }));
-    logEvent(voiding.id, "void", voidReason.trim());
+    const reason = voidReason.trim();
+    change(voiding, { ...voiding, voidedAt: new Date().toISOString(), voidedBy: me, voidReason: reason }, { op: "void", reason }, "void", reason);
     setVoiding(null);
   };
 
@@ -686,6 +839,20 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
       return;
     }
     setScoped(tr);
+  };
+
+  const addCustom = async (d: { name: string; abbr: string; category: Category; scope: Scope; look: Look }) => {
+    setCustomBusy(true);
+    try {
+      const r = await call<{ treatment: Treatment }>(`/api/c/${slug}/dental/treatments`, "POST", d);
+      setCustom((prev) => [...prev, r.treatment]);
+      setCustomOpen(false);
+      toast(r.treatment.en);
+    } catch {
+      toast(T.saveFailed, "error");
+    } finally {
+      setCustomBusy(false);
+    }
   };
 
   /* ── What the screen shows ───────────────────────────────────────────── */
@@ -711,6 +878,7 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
       doctors={roster}
       span={span}
       past={past}
+      canWrite={canWrite}
       tz={tz}
       images={images}
       pins={pins}
@@ -747,48 +915,18 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
           setBrush(tr);
           setBrushPicker(false);
         }}
-        onToggleFavorite={actions.onToggleFavorite}
+        onToggleFavorite={toggleFavorite}
         onAddCustom={() => setCustomOpen(true)}
       />
     </div>
   );
 
   const dayLabel = at === null ? T.today : fmtDateOnly(days[dayIdx!], locale);
-  const sideBySide = wide && (mode === "brush" || !!panel);
+  const sideBySide = wide && ((mode === "brush" && canWrite) || !!panel);
 
   return (
-    <div ref={wrapRef} className="grid gap-4" data-dental-chart>
+    <div ref={wrapRef} className="grid gap-4" data-dental-chart data-can-write={canWrite || undefined}>
       <DentalDefs />
-
-      {/* Preview banner: what this is and who can see it. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-brand-200 bg-brand-50 px-4 py-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-white">
-          <Eye className="h-4.5 w-4.5" />
-        </span>
-        <div className="min-w-[13rem] flex-1 text-[13px] leading-snug">
-          <span className="font-semibold text-ink-900">{T.previewTitle} · </span>
-          <span className="text-ink-700">
-            {T.preview} {T.sampleNote}
-          </span>
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={loadSample}>
-            {T.loadSample}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setMarks([]);
-              setEvents([]);
-              setDayIdx(null);
-              closePanel();
-            }}
-          >
-            {T.clearAll}
-          </Button>
-        </div>
-      </div>
 
       {/*
         The chart has the whole width until there is something to hold beside
@@ -799,19 +937,21 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
         <Card className="relative p-3 sm:p-4">
           {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-2">
-            <Segmented
-              value={mode}
-              onChange={(m) => {
-                setMode(m);
-                closePanel();
-                if (m === "brush" && !brush && !wide) setBrushPicker(true);
-              }}
-              options={[
-                { key: "tooth", label: (<><MousePointer2 className="h-3.5 w-3.5" />{T.modeTooth}</>) },
-                { key: "brush", label: (<><Paintbrush className="h-3.5 w-3.5" />{T.modeBrush}</>) },
-              ]}
-            />
-            {mode === "brush" && (
+            {canWrite && (
+              <Segmented
+                value={mode}
+                onChange={(m) => {
+                  setMode(m);
+                  closePanel();
+                  if (m === "brush" && !brush && !wide) setBrushPicker(true);
+                }}
+                options={[
+                  { key: "tooth", label: (<><MousePointer2 className="h-3.5 w-3.5" />{T.modeTooth}</>) },
+                  { key: "brush", label: (<><Paintbrush className="h-3.5 w-3.5" />{T.modeBrush}</>) },
+                ]}
+              />
+            )}
+            {mode === "brush" && canWrite && (
               <button
                 type="button"
                 onClick={() => setBrushPicker(true)}
@@ -836,6 +976,7 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
               />
             </div>
           </div>
+          {!canWrite && <p className="mt-2 text-[12.5px] text-ink-500" data-read-only>{T.readOnly}</p>}
 
           {/* Legend: each ink can be hidden, to read one layer of the mouth at a time. */}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -868,6 +1009,23 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
             )}
           </div>
 
+          {/* "Take x-ray": waiting on the imaging station. */}
+          {pending && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-ctl border border-brand-200 bg-brand-50 px-3 py-2" data-xray-pending>
+              <span className="slim-progress w-10 shrink-0 rounded-full" aria-hidden />
+              <Radiation className="h-4 w-4 shrink-0 text-brand-600" />
+              <span className="min-w-0 flex-1 text-[13px] font-semibold text-ink-900">
+                {pending.teeth.length ? T.waitingXray.replace("{teeth}", pending.teeth.join(" · ")) : T.waitingXrayMouth}
+              </span>
+              <a href={`/c/${slug}/imaging`} target="_blank" rel="noreferrer" className={buttonClass({ variant: "outline", size: "sm" })}>
+                {T.openStation}
+              </a>
+              <button type="button" onClick={cancelXray} aria-label={T.cancel} className="grid h-8 w-8 place-items-center rounded-ctl text-ink-500 hover:bg-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
           {/* The mouth */}
           <div className="mt-3" dir="ltr" onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
             <div className="mb-1 flex items-center justify-between px-1 text-[11px] font-semibold text-ink-400">
@@ -885,7 +1043,7 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
               brush={mode === "brush"}
               highlight={mouthHover}
               regions={regionMarks}
-              addRegionLabel={past ? null : `+ ${T.addRegion}`}
+              addRegionLabel={locked ? null : `+ ${T.addRegion}`}
               imageCounts={imageCounts}
               imagesLabel={T.openImages}
               onTooth={onTooth}
@@ -905,6 +1063,8 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
             canAdd={!past}
             onOpen={(i) => setViewer({ list: images, index: i })}
             onFile={(kind, f) => upload(kind, f)}
+            onTakeXray={canWrite && !pending ? () => void takeXray([]) : undefined}
+            onCamera={() => setCamera({})}
           />
 
           {/* Time: the mouth on any day something happened. */}
@@ -973,7 +1133,7 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
         </Modal>
       )}
 
-      {/* A whole-mouth entry, opened from its card: the same row a tooth's entries use. */}
+      {/* An entry on the mouth, an arch or a quadrant, opened from its label. */}
       <Modal open={!!mouthEntry} onClose={() => setMouthEntry(null)} title={T.wholeMouth}>
         {(() => {
           const m = marks.find((x) => x.id === mouthEntry);
@@ -993,7 +1153,7 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
                   custom={custom}
                   doctors={roster}
                   tz={tz}
-                  canEdit={!past}
+                  canEdit={!locked}
                   onMarkDone={actions.onMarkDone}
                   onVoid={(x) => {
                     setMouthEntry(null);
@@ -1014,12 +1174,14 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
           images={viewer.list}
           index={viewer.index}
           pins={pins}
-          canPin={!past}
+          canPin={!locked}
           onIndex={(i) => setViewer((v) => (v ? { ...v, index: i } : v))}
           onPin={togglePin}
           onClose={() => setViewer(null)}
         />
       )}
+
+      <CameraCapture open={!!camera} onClose={() => setCamera(null)} onPhoto={(f) => void upload("photo", f, camera?.tooth)} />
 
       {/* Room to scroll the last of the page out from under the docked panel. */}
       {sheetOpen && <div aria-hidden style={{ height: `${SHEET_SHARE * 100}dvh` }} />}
@@ -1038,18 +1200,18 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
                 <li key={m.id} className="grid grid-cols-[2.75rem_1fr] items-start gap-2">
                   <span className="mt-2.5 text-center text-[13px] font-bold text-ink-700 tnum">{isToothSite(m.site) ? m.site : "—"}</span>
                   <ul>
-                  <EntryRow
-                    m={m}
-                    custom={custom}
-                    doctors={roster}
-                    tz={tz}
-                    canEdit={!past}
-                    onMarkDone={actions.onMarkDone}
-                    onVoid={actions.onVoid}
-                    onNote={actions.onNote}
-                    onDetail={actions.onDetail}
-                    onPerformer={actions.onEntryPerformer}
-                  />
+                    <EntryRow
+                      m={m}
+                      custom={custom}
+                      doctors={roster}
+                      tz={tz}
+                      canEdit={!locked}
+                      onMarkDone={actions.onMarkDone}
+                      onVoid={actions.onVoid}
+                      onNote={actions.onNote}
+                      onDetail={actions.onDetail}
+                      onPerformer={actions.onEntryPerformer}
+                    />
                   </ul>
                 </li>
               ))}
@@ -1113,23 +1275,14 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
               tz={tz}
               mouthOnly
               onPick={(tr) => pickWholeMouth(tr)}
-              onToggleFavorite={actions.onToggleFavorite}
+              onToggleFavorite={toggleFavorite}
               onAddCustom={() => setCustomOpen(true)}
             />
           </div>
         )}
       </Modal>
 
-      <CustomTreatmentModal
-        open={customOpen}
-        onClose={() => setCustomOpen(false)}
-        me={me}
-        onSave={(tr) => {
-          setCustom((prev) => [...prev, tr]);
-          setCustomOpen(false);
-          toast(locale === "ar" ? tr.ar : tr.en);
-        }}
-      />
+      <CustomTreatmentModal open={customOpen} onClose={() => setCustomOpen(false)} me={me} busy={customBusy} onSave={(d) => void addCustom(d)} />
 
       <Modal open={!!voiding} onClose={() => setVoiding(null)} title={T.voidTitle}>
         {voiding && (
@@ -1140,7 +1293,7 @@ function DentalChart({ slug, patientId, tz, birthDate, me, doctors, files }: Tab
             </p>
             <label className="block">
               <span className="mb-1 block text-[13px] font-semibold">{T.voidReason}</span>
-              <input autoFocus value={voidReason} onChange={(e) => setVoidReason(e.target.value)} className="h-10 w-full rounded-ctl border border-line bg-surface px-3 text-base md:text-sm" />
+              <input autoFocus value={voidReason} onChange={(e) => setVoidReason(e.target.value)} className="h-10 w-full rounded-ctl border border-line bg-surface px-3 text-base md:text-sm" maxLength={300} />
             </label>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setVoiding(null)}>

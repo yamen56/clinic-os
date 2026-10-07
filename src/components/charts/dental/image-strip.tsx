@@ -11,7 +11,7 @@
 */
 
 import { useRef } from "react";
-import { Camera, FileText, ScanLine } from "lucide-react";
+import { Camera, FileText, Radiation, ScanLine, Video } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDateOnly } from "@/lib/dates";
 import { isPicture, type ChartImage } from "./image-viewer";
@@ -43,7 +43,21 @@ export function ImageThumb({ img, pinned, onOpen, size = "md" }: { img: ChartIma
   );
 }
 
-export function AddImageButtons({ onFile, busy, compact }: { onFile: (kind: "xray" | "photo", f: File) => void; busy: boolean; compact?: boolean }) {
+export function AddImageButtons({
+  onFile,
+  busy,
+  compact,
+  onTakeXray,
+  onCamera,
+}: {
+  onFile: (kind: "xray" | "photo", f: File) => void;
+  busy: boolean;
+  compact?: boolean;
+  /** Arm the imaging station: the next image the x-ray machine saves comes here. */
+  onTakeXray?: () => void;
+  /** Capture from a camera on this device — an intraoral camera, a tablet's own. */
+  onCamera?: () => void;
+}) {
   const { t } = useI18n();
   const T = t.dental;
   const xray = useRef<HTMLInputElement>(null);
@@ -53,6 +67,24 @@ export function AddImageButtons({ onFile, busy, compact }: { onFile: (kind: "xra
   }`;
   return (
     <>
+      {onTakeXray && (
+        <button
+          type="button"
+          className={`${tile} border-solid border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100`}
+          onClick={onTakeXray}
+          disabled={busy}
+          data-take-xray
+        >
+          <Radiation className="h-5 w-5" />
+          {T.takeXray}
+        </button>
+      )}
+      {onCamera && (
+        <button type="button" className={tile} onClick={onCamera} disabled={busy} data-add-image="camera">
+          <Video className="h-5 w-5 text-ink-500" />
+          {T.camera}
+        </button>
+      )}
       <button type="button" className={tile} onClick={() => xray.current?.click()} disabled={busy} data-add-image="xray">
         <ScanLine className="h-5 w-5 text-ink-500" />
         {T.addXray}
@@ -94,6 +126,8 @@ export function ImageStrip({
   canAdd,
   onOpen,
   onFile,
+  onTakeXray,
+  onCamera,
 }: {
   images: ChartImage[];
   pins: Record<string, string[]>;
@@ -101,6 +135,8 @@ export function ImageStrip({
   canAdd: boolean;
   onOpen: (index: number) => void;
   onFile: (kind: "xray" | "photo", f: File) => void;
+  onTakeXray?: () => void;
+  onCamera?: () => void;
 }) {
   const { t } = useI18n();
   const T = t.dental;
@@ -114,7 +150,7 @@ export function ImageStrip({
         <span className="text-[11.5px] text-ink-500">{busy ? T.uploading : canAdd ? T.savedToFiles : ""}</span>
       </div>
       <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1" data-image-strip>
-        {canAdd && <AddImageButtons onFile={onFile} busy={busy} />}
+        {canAdd && <AddImageButtons onFile={onFile} busy={busy} onTakeXray={onTakeXray} onCamera={onCamera} />}
         {images.map((img, i) => (
           <ImageThumb key={img.id} img={img} pinned={pins[img.id] ?? []} onOpen={() => onOpen(i)} />
         ))}
