@@ -15,7 +15,7 @@ import { rateLimitShared } from "@/lib/rate-limit-shared";
  * context with no user at all.
  */
 
-export const DEVICE_KINDS = ["xray", "opg", "cbct", "camera", "scanner", "other"] as const;
+export const DEVICE_KINDS = ["xray", "opg", "cbct", "camera", "scanner", "ultrasound", "other"] as const;
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
 
 /**
@@ -47,6 +47,37 @@ export function newDeviceKey(): { key: string; hash: string; hint: string } {
 
 export function hashDeviceKey(key: string): string {
   return createHash("sha256").update(key).digest("hex");
+}
+
+/*
+  Pairing: what the doctor types into the Clinicti Bridge instead of a key.
+  Six characters from an alphabet with nothing that reads as something else
+  (no O/0, I/1/L), shown as "K7P-4QX". Hashed like the key, good for fifteen
+  minutes, used once — and the pair endpoint is rate-limited per address, so
+  887 million codes against twenty guesses a quarter-hour is not a door.
+*/
+const PAIR_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export const PAIR_MINUTES = 15;
+
+export function newPairCode(): { code: string; hash: string } {
+  const bytes = randomBytes(6);
+  let code = "";
+  for (const b of bytes) code += PAIR_ALPHABET[b % PAIR_ALPHABET.length];
+  return { code, hash: hashPairCode(code) };
+}
+
+/** What a person typed, as the code it means: case, spaces and dashes forgiven. */
+export function normalizePairCode(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export function hashPairCode(code: string): string {
+  return createHash("sha256").update(`pair:${normalizePairCode(code)}`).digest("hex");
+}
+
+/** "K7P4QX" → "K7P-4QX", the way it is shown and read aloud. */
+export function formatPairCode(code: string): string {
+  return `${code.slice(0, 3)}-${code.slice(3)}`;
 }
 
 /** The key from `Bearer <key>`, or from Basic auth's password (or user, if that is all there is). */
@@ -128,3 +159,6 @@ export async function deviceAuth(
 export function inDeviceClinic<T>(device: Device, fn: (c: PoolClient) => Promise<T>): Promise<T> {
   return withCtx({ clinicId: device.clinicId }, fn);
 }
+
+/** The columns the settings screen shows for a device, after any change to one. */
+export const DEVICE_RETURNING = `returning id, name, kind, match_by, method, key_hint, created_at, last_seen_at, images_received, revoked_at, paired_at, pair_expires_at, bridge`;

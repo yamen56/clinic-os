@@ -15,7 +15,7 @@ export default async function DevicesPage({ params }: { params: Promise<{ slug: 
   const rows = await inClinic(access, async (c) =>
     (
       await c.query(
-        `select id, name, kind, match_by, key_hint, created_at, last_seen_at, images_received, revoked_at
+        `select id, name, kind, match_by, method, key_hint, created_at, last_seen_at, images_received, revoked_at, paired_at, pair_expires_at, bridge
            from clinic_devices where clinic_id = $1
           order by revoked_at nulls first, created_at`,
         [access.clinicId]

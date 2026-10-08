@@ -49,7 +49,7 @@ export type IngestInput = {
   fileName: string;
   mime: string;
   data: Buffer;
-  kind?: "xray" | "photo";
+  kind?: "xray" | "photo" | "other";
   teeth?: string[];
   /** A doctor's "Take x-ray" this answers. */
   requestId?: string | null;
@@ -78,7 +78,8 @@ const TEETH = /^([1-8][1-8]|upper|lower|mouth|q[1-4])$/;
 /** A patient by Clinicti id or file number, following a merge to the record that survived. */
 export async function findPatientByRef(c: PoolClient, clinicId: string, ref: string): Promise<{ id: string; full_name: string } | null> {
   const s = toAsciiDigits(ref.trim());
-  const fileNo = /^#?(\d{1,9})$/.exec(s)?.[1];
+  // "1042", "#1042", or "CLN-1042" — the form the Bridge's worklist gives a machine.
+  const fileNo = /^(?:#|CLN-?)?(\d{1,9})$/i.exec(s)?.[1];
   let r;
   if (isUuid(s)) r = await c.query(`select id, full_name, merged_into from patients where id = $1 and clinic_id = $2`, [s, clinicId]);
   else if (fileNo) r = await c.query(`select id, full_name, merged_into from patients where file_no = $1 and clinic_id = $2`, [Number(fileNo), clinicId]);
@@ -257,8 +258,12 @@ export async function ingestImage(input: IngestInput, run: Run): Promise<IngestR
             : await findPatientByRef(c, clinicId, meta.patient.id);
         matchedBy = "machine_id";
       }
-      // A Clinicti id the machine was given cannot collide with another system's numbers.
-      if (!patient && meta && isUuid(meta.patient.id)) {
+      /*
+        A Clinicti id the machine was given cannot collide with another
+        system's numbers — neither a patient uuid nor "CLN-1042", the form the
+        Bridge's worklist hands a machine, whatever the device's setting.
+      */
+      if (!patient && meta && (isUuid(meta.patient.id) || /^CLN-?\d{1,9}$/i.test(meta.patient.id))) {
         patient = await findPatientByRef(c, clinicId, meta.patient.id);
         matchedBy = "machine_id";
       }

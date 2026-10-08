@@ -134,8 +134,10 @@ async function main() {
     const page = await signIn(browser, `dev-owner-${tag}@test.local`);
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(`${BASE}/c/${slug}/settings/devices`, { timeout: 120000 });
-    await page.waitForSelector("[data-add-device]", { timeout: 120000 });
+    await page.waitForSelector("[data-connect-machine]", { timeout: 120000 });
     check(await page.locator(`nav a[href='/c/${slug}/settings/devices']`).count(), "Settings has a Devices tab for the owner");
+    // The API-key route is the engineer's, folded under "For IT".
+    await page.click("[data-advanced]");
     await page.click("[data-add-device]");
     await page.fill("[data-device-name]", "OPG room 2");
     await page.selectOption("[data-device-kind]", "opg");

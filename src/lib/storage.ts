@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { Transform, type Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 /**
@@ -275,6 +275,30 @@ export async function openFile(storagePath: string): Promise<StoredFile | null> 
   if (!abs.startsWith(ROOT) || !fs.existsSync(abs)) return null;
   const data = await fs.promises.readFile(abs);
   return { data, size: data.length };
+}
+
+/**
+ * A stored file as a stream, for the downloads too large to hold in memory —
+ * the Clinicti Bridge installer is ~80 MB, and `openFile` would buffer it all
+ * once per person downloading it.
+ */
+export async function openFileStream(
+  storagePath: string
+): Promise<{ stream: ReadableStream<Uint8Array>; size: number | null } | null> {
+  if (usingObjectStore()) {
+    const { mod, client, bucket } = await s3(storagePath);
+    try {
+      const r = await client.send(new mod.GetObjectCommand({ Bucket: bucket, Key: storagePath }));
+      if (!r.Body) return null;
+      return { stream: r.Body.transformToWebStream() as ReadableStream<Uint8Array>, size: r.ContentLength ?? null };
+    } catch {
+      return null;
+    }
+  }
+  const abs = path.join(ROOT, storagePath);
+  if (!abs.startsWith(ROOT) || !fs.existsSync(abs)) return null;
+  const size = (await fs.promises.stat(abs)).size;
+  return { stream: Readable.toWeb(fs.createReadStream(abs)) as ReadableStream<Uint8Array>, size };
 }
 
 export async function readFileBuffer(storagePath: string): Promise<Buffer | null> {

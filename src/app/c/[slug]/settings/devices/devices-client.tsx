@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Ban, Box, Camera, Check, Copy, Cpu, FolderOpen, KeyRound, Network, Pencil, Plus, Radiation, ScanLine, ScanText, Terminal } from "lucide-react";
+import { AudioWaveform, Ban, Box, Camera, Check, Copy, Cpu, FolderOpen, KeyRound, Network, Pencil, Plus, Radiation, ScanLine, ScanText, Settings2, Terminal } from "lucide-react";
+import { BRIDGE_VERSION } from "@/lib/imaging/bridge-version";
+import { ConnectWizard } from "./connect-wizard";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtRelative } from "@/lib/dates";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -14,20 +16,36 @@ import { EmptyState, Tabs } from "@/components/ui/misc";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 
+/** What the Clinicti Bridge last said about itself (its heartbeat). */
+export type BridgeReport = {
+  version?: string;
+  host?: string;
+  lan?: string[];
+  folders?: { path: string; ok: boolean; error?: string }[];
+  dicom?: { enabled: boolean; port: number; aet: string; listening: boolean; error: string | null; lastEcho: number | null; lastStore: number | null };
+  queued?: number;
+  failed?: number;
+  at?: string;
+};
+
 export type DeviceRow = {
   id: string;
   name: string;
   kind: Kind;
   match_by: MatchBy;
+  method: "bridge" | "api";
   key_hint: string;
   created_at: string;
   last_seen_at: string | null;
   images_received: number;
   revoked_at: string | null;
+  paired_at: string | null;
+  pair_expires_at: string | null;
+  bridge: BridgeReport | null;
 };
 
-const KINDS = ["xray", "opg", "cbct", "camera", "scanner", "other"] as const;
-type Kind = (typeof KINDS)[number];
+const KINDS = ["xray", "opg", "cbct", "camera", "scanner", "ultrasound", "other"] as const;
+export type Kind = (typeof KINDS)[number];
 const MATCH = ["none", "clinicti", "national_id"] as const;
 type MatchBy = (typeof MATCH)[number];
 
@@ -37,8 +55,18 @@ const KIND_ICON: Record<Kind, typeof Radiation> = {
   cbct: Box,
   camera: Camera,
   scanner: ScanText,
+  ultrasound: AudioWaveform,
   other: Cpu,
 };
+
+/** "1.0.0" < "1.2.0", numerically. */
+function older(a: string | undefined, b: string): boolean {
+  if (!a) return false;
+  const x = a.split(".").map(Number);
+  const y = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+  return false;
+}
 
 /** What to paste where, with this device's key already in it. */
 function snippets(base: string, key: string) {
@@ -154,6 +182,13 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState<{ name: string; key: string } | null>(null);
   const [confirm, setConfirm] = useState<{ op: "rekey" | "revoke"; device: DeviceRow } | null>(null);
+  const [wizard, setWizard] = useState<{ existing: DeviceRow | null } | null>(null);
+  const [advanced, setAdvanced] = useState(false);
+  const openApiForm = () => {
+    setWizard(null);
+    setAdvanced(true);
+    setForm({ id: null, name: "", kind: "other", matchBy: "none" });
+  };
 
   async function call(url: string, method: string, body: unknown) {
     const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -211,9 +246,9 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
           title={T.title}
           sub={T.sub}
           action={
-            <Button size="sm" onClick={() => setForm({ id: null, name: "", kind: "opg", matchBy: "none" })} data-add-device>
+            <Button size="sm" onClick={() => setWizard({ existing: null })} data-connect-machine>
               <Plus className="h-4 w-4" />
-              {T.add}
+              {T.connect}
             </Button>
           }
         />
@@ -243,22 +278,35 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
                         <Badge status="pending">{T.neverSeen}</Badge>
                       )}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-ink-500">
-                      <span>{T.matchByOptions[d.match_by]}</span>
-                      <span dir="ltr">{T.keyHint.replace("{hint}", d.key_hint)}</span>
-                      <span>{T.received.replace("{n}", String(d.images_received))}</span>
-                    </div>
+                    {d.method === "bridge" ? (
+                      <BridgeLine d={d} />
+                    ) : (
+                      <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-ink-500">
+                        <span>{T.apiKey}</span>
+                        <span>{T.matchByOptions[d.match_by]}</span>
+                        <span dir="ltr">{T.keyHint.replace("{hint}", d.key_hint)}</span>
+                        <span>{T.received.replace("{n}", String(d.images_received))}</span>
+                      </div>
+                    )}
                   </div>
                   {!d.revoked_at && (
-                    <div className="flex gap-1.5">
+                    <div className="flex flex-wrap gap-1.5">
+                      {d.method === "bridge" && (
+                        <Button size="sm" variant="outline" onClick={() => setWizard({ existing: d })} data-device-setup-open>
+                          <Settings2 className="h-4 w-4" />
+                          {T.setupAgain}
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => setForm({ id: d.id, name: d.name, kind: d.kind, matchBy: d.match_by })}>
                         <Pencil className="h-4 w-4" />
                         {T.edit}
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setConfirm({ op: "rekey", device: d })} data-rekey>
-                        <KeyRound className="h-4 w-4" />
-                        {T.rekey}
-                      </Button>
+                      {d.method === "api" && (
+                        <Button size="sm" variant="ghost" onClick={() => setConfirm({ op: "rekey", device: d })} data-rekey>
+                          <KeyRound className="h-4 w-4" />
+                          {T.rekey}
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => setConfirm({ op: "revoke", device: d })} data-revoke>
                         <Ban className="h-4 w-4" />
                         {T.revoke}
@@ -272,12 +320,33 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
         )}
       </Card>
 
+      {/* The engineer's routes — Orthanc, a PACS, a script — out of the doctor's way. */}
       <Card>
-        <CardHeader title={T.setup} />
-        <div className="px-5 py-4">
-          <Setup slug={slug} base={base} keyText="<device key>" />
-        </div>
+        <button type="button" onClick={() => setAdvanced((v) => !v)} className="flex w-full items-center justify-between px-5 py-4 text-start" aria-expanded={advanced} data-advanced>
+          <span className="font-display text-base font-semibold text-ink-900">{T.advancedTitle}</span>
+          <span className="text-ink-400">{advanced ? "−" : "+"}</span>
+        </button>
+        {advanced && (
+          <div className="border-t border-line px-5 py-4">
+            <Setup slug={slug} base={base} keyText="<device key>" />
+            <Button size="sm" variant="outline" className="mt-4" onClick={openApiForm} data-add-device>
+              <KeyRound className="h-4 w-4" />
+              {T.add} · {T.apiKey}
+            </Button>
+          </div>
+        )}
       </Card>
+
+      {wizard && (
+        <ConnectWizard
+          slug={slug}
+          base={base}
+          existing={wizard.existing}
+          onDevice={put}
+          onClose={() => setWizard(null)}
+          onApi={openApiForm}
+        />
+      )}
 
       <Modal
         open={!!form}
@@ -367,6 +436,26 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
         cancelLabel={T.cancel}
         danger={confirm?.op === "revoke"}
       />
+    </div>
+  );
+}
+
+/** A Bridge device, in one line: where it runs, what it is doing, whether it needs anything. */
+function BridgeLine({ d }: { d: DeviceRow }) {
+  const { t } = useI18n();
+  const T = t.devices;
+  const b = d.bridge;
+  if (!d.paired_at) return <div className="mt-0.5 text-xs text-ink-500">{T.bridgeNotPaired}</div>;
+  return (
+    <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink-500" data-bridge-line>
+      <span>{T.bridgeOn.replace("{host}", b?.host || "—")}</span>
+      {b?.folders?.some((f) => f.ok) && <span>{T.folderWatched}</span>}
+      {b?.dicom?.enabled && b.dicom.listening && (
+        <span dir="ltr">{T.dicomAt.replace("{ip}", b.lan?.[0] ?? "—").replace("{port}", String(b.dicom.port))}</span>
+      )}
+      {!!b?.queued && <span className="font-semibold text-warning">{T.bridgeQueued.replace("{n}", String(b.queued))}</span>}
+      {older(b?.version, BRIDGE_VERSION) && <span className="font-semibold text-brand-700">{T.bridgeUpdate}</span>}
+      <span>{T.received.replace("{n}", String(d.images_received))}</span>
     </div>
   );
 }

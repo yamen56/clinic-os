@@ -11,5 +11,5 @@
     "resolveJsonModule": true,
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["worker/**/*.ts", "scripts/**/*.ts", "src/lib/**/*.ts"]
+  "include": ["worker/**/*.ts", "scripts/**/*.ts", "src/lib/**/*.ts", "bridge/**/*.ts"]
 }
