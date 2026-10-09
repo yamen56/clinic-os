@@ -47,6 +47,8 @@ export type DicomFixture = {
   studyUid: string;
   patientId: string;
   patientName: string;
+  /** YYYYMMDD, as DICOM writes a date. */
+  birthDate?: string;
   modality?: string;
   description?: string;
   studyDate?: string;
@@ -84,6 +86,7 @@ export function makeDicom(o: DicomFixture): Buffer {
     { tag: [0x0008, 0x103e], vr: "LO", value: o.description ?? "" },
     { tag: [0x0010, 0x0010], vr: "PN", value: o.patientName },
     { tag: [0x0010, 0x0020], vr: "LO", value: o.patientId },
+    { tag: [0x0010, 0x0030], vr: "DA", value: o.birthDate ?? "" },
     { tag: [0x0020, 0x000d], vr: "UI", value: o.studyUid },
     { tag: [0x0020, 0x000e], vr: "UI", value: o.seriesUid },
     { tag: [0x0020, 0x0013], vr: "IS", value: String(o.instanceNumber ?? 1) },

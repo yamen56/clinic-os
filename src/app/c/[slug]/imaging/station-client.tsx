@@ -21,7 +21,8 @@
 */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FolderOpen, Inbox, Radiation, Send, Trash2, Upload, X } from "lucide-react";
+import { FolderOpen, Inbox, Radiation, Send, Trash2, Upload, WifiOff, X } from "lucide-react";
+import { bridgeOffline } from "@/lib/imaging/offline";
 import Link from "next/link";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
@@ -43,7 +44,7 @@ type Picker = { showDirectoryPicker?: (o?: { id?: string; mode?: "read" }) => Pr
 
 type Request = { id: string; patient_id: string; patient_name: string; teeth: string[]; kind: "xray" | "photo"; created_at: string; requested_by_name: string | null };
 type Held = { key: string; file: File; at: number };
-export type StationDevice = { id: string; name: string; kind: string; last_seen_at: string | null };
+export type StationDevice = { id: string; name: string; kind: string; method: string; paired_at: string | null; revoked_at: string | null; last_seen_at: string | null; host: string | null };
 type InboxItem = {
   id: string;
   file_name: string;
@@ -57,6 +58,8 @@ type InboxItem = {
   study_date: string | null;
   instances: number;
   device_name: string | null;
+  /** Likely patients, from the name and birth date the machine gave. */
+  suggestions?: { id: string; full_name: string; file_no: number | null; birth_date: string | null }[];
 };
 type Found = { id: string; full_name: string; phone_e164: string | null; file_no?: number | null };
 type Sent = { key: string; name: string; patient: string; teeth: string[]; at: number };
@@ -141,6 +144,13 @@ function Station({ slug, devices, canManageDevices }: { slug: string; devices: S
 
   /* What the machines sent for nobody — the clinic's, not this computer's. */
   const [inbox, setInbox] = useState<InboxItem[]>([]);
+  // The clock, read in the browser only, for "offline since".
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   const loadInbox = useCallback(async () => {
     try {
       const res = await fetch(`/api/c/${slug}/imaging/inbox`, { cache: "no-store" });
@@ -351,6 +361,16 @@ function Station({ slug, devices, canManageDevices }: { slug: string; devices: S
         </h1>
         <p className="mt-1.5 text-[14px] leading-relaxed text-ink-700">{T.intro}</p>
       </div>
+
+      {/* A machine's computer gone quiet: said before somebody takes an x-ray that will not arrive. */}
+      {devices.filter((d) => bridgeOffline(d, now)).map((d) => (
+        <div key={d.id} className="flex items-start gap-3 rounded-card border border-danger/30 bg-danger-soft px-4 py-3 text-[13.5px] text-ink-900" data-device-offline={d.id}>
+          <WifiOff className="mt-0.5 h-4.5 w-4.5 shrink-0 text-danger" />
+          <span>
+            <b>{d.name}</b> — {T.offline.replace("{host}", d.host || T.theComputer).replace("{t}", fmtRelative(d.last_seen_at!, locale))}
+          </span>
+        </div>
+      ))}
 
       <Card className="p-4">
         {!supported ? (
@@ -671,6 +691,27 @@ function InboxRow({
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
+      {!!item.suggestions?.length && (
+        <div className="flex flex-wrap items-center gap-1.5" data-suggestions>
+          <span className="text-[12.5px] font-semibold text-ink-500">{T.likely}</span>
+          {item.suggestions.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              disabled={busy}
+              onClick={() => file(p.id, p.full_name)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 px-3 py-1 text-[13px] font-semibold text-ink-900 hover:bg-brand-100"
+              data-suggestion={p.id}
+            >
+              {p.full_name}
+              <span className="font-normal text-ink-500 tnum">
+                {p.file_no ? `#${p.file_no}` : ""}
+                {p.birth_date ? ` · ${T.born.replace("{date}", p.birth_date)}` : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       <div>
         <input
           value={q}

@@ -65,7 +65,7 @@ export type IngestResult =
       added: "new" | "series" | "duplicate";
       patientId: string;
       fileId: string;
-      matchedBy: "request" | "sender" | "machine_id" | "series" | "open_request";
+      matchedBy: "request" | "sender" | "machine_id" | "name_birth" | "series" | "open_request";
       requestId: string | null;
     }
   | { placed: "inbox"; added: "new" | "series" | "duplicate"; inboxId: string }
@@ -85,6 +85,49 @@ export async function findPatientByRef(c: PoolClient, clinicId: string, ref: str
   else if (fileNo) r = await c.query(`select id, full_name, merged_into from patients where file_no = $1 and clinic_id = $2`, [Number(fileNo), clinicId]);
   else return null;
   return followMerge(c, clinicId, r.rows[0]);
+}
+
+/**
+ * A name as comparable words: lower case, the Arabic letters that are written
+ * several ways written one way, diacritics and punctuation gone. "Haddad^Rana"
+ * and "RANA HADDAD" are the same two words; so are "أحمد" and "احمد".
+ */
+export function nameWords(raw: string): string[] {
+  return raw
+    .normalize("NFKD")
+    .replace(/[̀-ًͯ-ٰٟ]/g, "")
+    .toLowerCase()
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .split(" ")
+    .filter((w) => w.length >= 2);
+}
+
+/**
+ * The one patient whose birth date is this and whose name holds every word
+ * the machine's name has — at least two of them. More than one such patient
+ * (twins, a namesake born the same day) is nobody: the image waits for a
+ * person to choose.
+ */
+async function findPatientByNameAndBirth(
+  c: PoolClient,
+  clinicId: string,
+  name: string,
+  birthDate: string
+): Promise<{ id: string; full_name: string } | null> {
+  const words = nameWords(name);
+  if (words.length < 2 || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return null;
+  const r = await c.query(
+    `select id, full_name from patients where clinic_id = $1 and merged_into is null and birth_date = $2::date`,
+    [clinicId, birthDate]
+  );
+  const hits = r.rows.filter((p: { full_name: string }) => {
+    const theirs = new Set(nameWords(p.full_name));
+    return words.every((w) => theirs.has(w));
+  });
+  return hits.length === 1 ? { id: hits[0].id, full_name: hits[0].full_name } : null;
 }
 
 async function findPatientByNationalId(c: PoolClient, clinicId: string, raw: string) {
@@ -266,6 +309,31 @@ export async function ingestImage(input: IngestInput, run: Run): Promise<IngestR
       if (!patient && meta && (isUuid(meta.patient.id) || /^CLN-?\d{1,9}$/i.test(meta.patient.id))) {
         patient = await findPatientByRef(c, clinicId, meta.patient.id);
         matchedBy = "machine_id";
+      }
+      /*
+        Two identifiers, the way a nurse checks a wristband: the name the
+        machine's software holds and the birth date, together matching one
+        patient and only one. Every vendor's software writes both into its
+        DICOM, so an image exported from Carestream or Planmeca finds its
+        patient without anyone having set the machine up for Clinicti.
+      */
+      if (!patient && meta && meta.patient.birthDate && meta.patient.name) {
+        const found = await findPatientByNameAndBirth(c, clinicId, meta.patient.name, meta.patient.birthDate);
+        if (found) {
+          patient = found;
+          matchedBy = "name_birth";
+        }
+      }
+      // Filed by who it is: the doctor waiting on this patient has their image (a picture — never a scan file).
+      if (patient && !request && kind !== "other") {
+        const waiting = await c.query(
+          `select id, teeth, kind from imaging_requests
+            where clinic_id = $1 and patient_id = $2 and fulfilled_at is null and cancelled_at is null
+              and created_at > now() - interval '${IMAGING_REQUEST_OPEN_FOR}'
+            order by created_at limit 1 for update skip locked`,
+          [clinicId, patient.id]
+        );
+        if (waiting.rowCount) request = { id: waiting.rows[0].id, teeth: waiting.rows[0].teeth, kind: waiting.rows[0].kind };
       }
       if (!patient && input.useOpenRequest) {
         const r = await c.query(

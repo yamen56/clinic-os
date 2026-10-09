@@ -27,6 +27,14 @@ export type Config = {
   dicom: { enabled: boolean; port: number; aet: string };
   uiPort: number;
   autostart: boolean;
+  /** A Windows notification on this computer when a doctor asks for an x-ray. */
+  notify: boolean;
+  /**
+   * Run when a doctor asks for an x-ray — the imaging software, opened on the
+   * patient. A command line with {placeholders}; set by whoever installs the
+   * clinic, from the vendor's documented bridge command. Empty: nothing runs.
+   */
+  onRequest: string;
 };
 
 export type Paths = {
@@ -67,6 +75,8 @@ export function loadConfig(p: Paths, defaults: { server: string; uiPort: number 
     folders: [],
     dicom: { enabled: true, port: 11112, aet: "CLINICTI" },
     uiPort: defaults.uiPort,
+    notify: true,
+    onRequest: "",
     autostart: true,
   };
   try {

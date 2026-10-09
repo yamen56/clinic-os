@@ -15,6 +15,15 @@ export type WorkItem = {
   patient: { id: string; fileNo: number | null; name: string; birthDate: string | null; sex: "M" | "F" | null };
 };
 
+export type WaitingRequest = {
+  id: string;
+  kind: string;
+  teeth: string[];
+  createdAt: string;
+  requestedBy: string | null;
+  patient: WorkItem["patient"];
+};
+
 export class Api {
   constructor(
     public server: string,
@@ -76,6 +85,14 @@ export class Api {
     });
     const body = (await res.json().catch(() => ({}))) as { device?: { name: string; kind: string }; clinic?: { name: string } };
     return { status: res.status, device: body.device ?? null, clinic: body.clinic ?? null };
+  }
+
+  /** Who a doctor is waiting on an image for, oldest first. */
+  async requests(): Promise<WaitingRequest[]> {
+    const res = await fetch(this.url("/requests"), { headers: this.headers(), signal: AbortSignal.timeout(15_000) });
+    if (res.status === 401) throw Object.assign(new Error("unpaired"), { unpaired: true });
+    if (!res.ok) throw new Error(`requests_http_${res.status}`);
+    return ((await res.json()) as { requests: WaitingRequest[] }).requests;
   }
 
   /** Today's booked patients and anyone a doctor is waiting on an x-ray for. */

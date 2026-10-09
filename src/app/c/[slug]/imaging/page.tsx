@@ -18,7 +18,7 @@ export default async function ImagingStationPage({ params }: { params: Promise<{
   const devices = await inClinic(access, async (c) =>
     (
       await c.query(
-        `select id, name, kind, last_seen_at from clinic_devices
+        `select id, name, kind, method, paired_at, revoked_at, last_seen_at, bridge->>'host' as host from clinic_devices
           where clinic_id = $1 and revoked_at is null order by created_at`,
         [access.clinicId]
       )

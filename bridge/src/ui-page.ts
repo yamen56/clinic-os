@@ -59,6 +59,10 @@ export const PAGE = `<!doctype html>
   footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   footer .muted { margin-inline-start: auto; }
   label.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+  .card.wanted { border: 2px solid var(--warn); background: var(--warn-soft); }
+  .card.wanted h2 { color: #6b4a14; }
+  .card.wanted .list li { background: #fff; }
+  .pname { font-weight: 650; font-size: 16px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -76,6 +80,12 @@ export const PAGE = `<!doctype html>
   </section>
 
   <section id="connected" hidden>
+    <div class="card wanted" id="waitingCard" hidden style="margin-bottom:16px">
+      <h2>&#9673; X-ray wanted</h2>
+      <p class="sub">A doctor pressed <b>Take x-ray</b>. Take it on the machine; the picture goes to this patient by itself.</p>
+      <ul class="list" id="waiting"></ul>
+    </div>
+
     <div class="card" style="margin-bottom:16px">
       <h2><span class="step done">&#10003;</span> <span id="who"></span></h2>
       <p class="sub" style="margin:0" id="online"></p>
@@ -132,8 +142,21 @@ export const PAGE = `<!doctype html>
       </div>
     </div>
 
+    <div class="card" style="margin-bottom:16px">
+      <details id="adv">
+        <summary style="cursor:pointer;font-weight:650">When a doctor asks for an x-ray, also open… <span class="muted" style="font-weight:400">— optional, for whoever sets up the clinic</span></summary>
+        <p class="sub" style="margin-top:12px">A command that opens the imaging software on the patient, from the vendor's own bridge instructions. It can use {patientId} (CLN-12), {fileNo}, {fullName}, {firstName}, {lastName}, {birthDate} (YYYYMMDD), {birthDateIso}, {sex} and {teeth}. Leave it empty to only show the notification.</p>
+        <form class="row" id="cmdForm">
+          <input id="cmdInput" style="flex:1;min-width:280px;font-family:Consolas,monospace;font-size:13px" placeholder='"C:\\Program Files\\Vendor\\Imaging.exe" -patient {patientId}' aria-label="Command">
+          <button>Save</button>
+        </form>
+        <p class="muted" id="cmdStatus" style="margin:8px 0 0"></p>
+      </details>
+    </div>
+
     <footer>
       <button id="test">Send a test picture</button>
+      <label class="toggle"><input type="checkbox" id="notifyOn"> Notify me on this computer</label>
       <label class="toggle"><input type="checkbox" id="autostart"> Start with Windows</label>
       <button class="link" id="unpair">Disconnect</button>
       <span class="muted" id="version"></span>
@@ -219,6 +242,29 @@ export const PAGE = `<!doctype html>
     var fi = $("failed"); fi.innerHTML = "";
     s.failedItems.forEach(function (f) { var li = el("li"); li.appendChild(el("div", "grow", f.name)); li.appendChild(el("span", "badge bad", f.error || "refused")); fi.appendChild(li); });
     $("autostart").checked = s.autostart;
+    $("notifyOn").checked = s.notify;
+    if (document.activeElement !== $("cmdInput") && !cmdDirty) $("cmdInput").value = s.onRequest || "";
+    $("cmdStatus").textContent = s.lastCommand ? (s.lastCommand.ok ? "Last run " + ago(s.lastCommand.at) + "." : "Last run failed: " + (s.lastCommand.error || "")) : "";
+
+    var wl = $("waiting"); wl.innerHTML = "";
+    $("waitingCard").hidden = !(s.waiting && s.waiting.length);
+    (s.waiting || []).forEach(function (r) {
+      var p = r.patient;
+      var pid = p.fileNo != null ? "CLN-" + p.fileNo : "";
+      var li = el("li"); li.setAttribute("data-waiting", r.id);
+      var g = el("div", "grow");
+      g.appendChild(el("div", "pname", p.name));
+      g.appendChild(el("div", "muted", [pid, p.birthDate, r.teeth.length ? "Tooth " + r.teeth.join(" ") : "", r.requestedBy ? "asked by " + r.requestedBy : "", ago(Date.parse(r.createdAt))].filter(Boolean).join(" \\u00B7 ")));
+      li.appendChild(g);
+      var c1 = el("button", null, "Copy name"); c1.onclick = function () { copy(p.name, c1); }; li.appendChild(c1);
+      if (pid) { var c2 = el("button", null, "Copy " + pid); c2.onclick = function () { copy(pid, c2); }; li.appendChild(c2); }
+      wl.appendChild(li);
+    });
+  }
+  var cmdDirty = false;
+  function copy(text, b) {
+    var label = b.textContent;
+    navigator.clipboard.writeText(text).then(function () { b.textContent = "Copied \\u2713"; setTimeout(function () { b.textContent = label; }, 1500); });
   }
 
   function refresh() { return fetch("/api/state").then(function (r) { return r.json(); }).then(render).catch(function () { $("pill").textContent = "The Bridge is not running"; }); }
@@ -248,6 +294,9 @@ export const PAGE = `<!doctype html>
   $("test").onclick = function () { var b = this; post("/api/test").then(function () { b.textContent = "Test sent \\u2713 — look in Clinicti's Imaging page"; refresh(); }); };
   $("retry").onclick = function () { post("/api/retry").then(refresh); };
   $("autostart").onchange = function () { post("/api/autostart", { on: this.checked }).then(refresh); };
+  $("notifyOn").onchange = function () { post("/api/notify", { on: this.checked }).then(refresh); };
+  $("cmdInput").oninput = function () { cmdDirty = true; };
+  $("cmdForm").onsubmit = function (e) { e.preventDefault(); post("/api/on-request", { command: $("cmdInput").value }).then(function () { cmdDirty = false; $("cmdStatus").textContent = "Saved."; refresh(); }); };
   $("unpair").onclick = function () { if (confirm("Disconnect this computer from Clinicti? Machines will stop sending until you connect it again.")) post("/api/unpair").then(refresh); };
 
   refresh();

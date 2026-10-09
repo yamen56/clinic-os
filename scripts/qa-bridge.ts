@@ -118,6 +118,8 @@ async function main() {
   );
   const bridge: ChildProcess = spawn(process.execPath, [path.join("node_modules", "tsx", "dist", "cli.mjs"), "bridge/src/main.ts", "--foreground", "--data", data, "--server", BASE, "--ui-port", String(UI_PORT)], {
     stdio: "ignore",
+    // No Windows notifications popping up on the desktop of whoever runs this.
+    env: { ...process.env, CLINICTI_BRIDGE_NO_BROWSER: "1" },
     windowsHide: true,
   });
   const bridgeState = async () => {
@@ -247,6 +249,38 @@ async function main() {
     await sleep(2500);
     check((await bw.locator("#folders").innerText()).includes("Watching"), "the Bridge window shows the folder being watched");
     await bw.screenshot({ path: path.join(SHOTS, "4-bridge-window.png"), fullPage: true });
+
+    console.log("\nTake x-ray, at the imaging computer");
+    // A harmless program stands in for the imaging software: it writes down what it was opened with.
+    const echoScript = path.join(data, "opened-with.cjs");
+    const echoOut = path.join(data, "opened-with.json");
+    fs.writeFileSync(echoScript, `require("fs").writeFileSync(${JSON.stringify(echoOut)}, JSON.stringify(process.argv.slice(2)));`);
+    await bridgePost("/api/on-request", { command: `"${process.execPath}" "${echoScript}" {patientId} "{fullName}" {birthDate} {teeth}` });
+    const asked = await page.request.fetch(`${BASE}/api/c/${slug}/imaging/requests`, { method: "POST", data: { patientId: rana.id, teeth: ["46"] } });
+    const askedId = ((await asked.json()) as { request?: { id: string } }).request?.id;
+    const st = await until(bridgeState, (s) => !!s && ((s.waiting as { id: string }[]) ?? []).some((w) => w.id === askedId), 20000);
+    check(st?.waiting?.[0]?.patient?.name === "Rana Haddad", "the Bridge sees the doctor waiting, within seconds");
+    await bw.reload();
+    await bw.locator(`[data-waiting='${askedId}']`).waitFor({ timeout: 10000 });
+    check((await bw.locator(`[data-waiting='${askedId}']`).innerText()).includes(`CLN-${rana.file_no}`), "its window puts the patient at the top: name, file number, tooth");
+    const opened = await until(
+      async () => {
+        try {
+          return JSON.parse(fs.readFileSync(echoOut, "utf8")) as string[];
+        } catch {
+          return null;
+        }
+      },
+      (v) => !!v,
+      15000
+    );
+    check(
+      JSON.stringify(opened) === JSON.stringify([`CLN-${rana.file_no}`, "Rana Haddad", "19900502", "46"]),
+      "and opens the imaging software on that patient, with the clinic's own command",
+      JSON.stringify(opened)
+    );
+    await bw.screenshot({ path: path.join(SHOTS, "6-xray-wanted.png") });
+    await page.request.fetch(`${BASE}/api/c/${slug}/imaging/requests/${askedId}`, { method: "POST", data: { op: "cancel" } });
 
     console.log("\nwhen the clinic removes the machine");
     await page.request.fetch(`${BASE}/api/c/${slug}/devices/${dev.id}`, { method: "PATCH", data: { op: "revoke" } });

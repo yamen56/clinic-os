@@ -328,6 +328,46 @@ async function main() {
     check(((await found.json()).results as any[]).some((r) => r.id === omar.id), "searching #2 finds the patient by file number");
 
     /* ── Keys change and stop ────────────────────────────────────────── */
+    console.log("\nwho it is, by name and birth date");
+    // The machine's own number means nothing to Clinicti; its name and birth date do.
+    const byName = await upload(key, makeDicom({ sopUid: uid(), seriesUid: uid(), studyUid: uid(), patientId: "VENDOR-555", patientName: "HADDAD^RANA", birthDate: "19900502" }), "IM0100.dcm");
+    check(byName.json?.placed === "patient" && byName.json?.matchedBy === "name_birth" && byName.json?.patientId === rana.id, "an image whose name and birth date match one patient files itself", JSON.stringify(byName.json));
+    const wrongBirth = await upload(key, makeDicom({ sopUid: uid(), seriesUid: uid(), studyUid: uid(), patientId: "VENDOR-555", patientName: "HADDAD^RANA", birthDate: "19910101" }), "IM0101.dcm");
+    check(wrongBirth.json?.placed === "inbox", "the same name with another birth date does not");
+    await q(`insert into patients (clinic_id, full_name, birth_date, source) values ($1,'Rana Haddad','1990-05-02','staff')`, [clinic.id]);
+    const twin = await upload(key, makeDicom({ sopUid: uid(), seriesUid: uid(), studyUid: uid(), patientId: "VENDOR-556", patientName: "HADDAD^RANA", birthDate: "19900502" }), "IM0102.dcm");
+    check(twin.json?.placed === "inbox", "two patients with that name and birth date: nobody is guessed, it waits for a person");
+    const inboxNow = (await (await page.request.get(`${BASE}/api/c/${slug}/imaging/inbox`)).json()) as { items: { id: string; suggestions: { id: string; full_name: string }[] }[] };
+    const twinItem = inboxNow.items.find((i) => i.id === twin.json?.inboxId);
+    check(
+      (twinItem?.suggestions ?? []).filter((s) => s.full_name === "Rana Haddad").length === 2,
+      "and the inbox offers both of them as one-tap suggestions",
+      JSON.stringify(twinItem?.suggestions)
+    );
+    for (const it of inboxNow.items) await page.request.post(`${BASE}/api/c/${slug}/imaging/inbox/${it.id}`, { data: { op: "discard" } });
+
+    console.log("\nto the patient on WhatsApp");
+    const omarPic = (await filesOf(omar.id)).find((f) => f.mime_type === "image/png");
+    const [omarFile] = await q(`select id from patient_files where patient_id = $1 and mime_type = 'image/png' limit 1`, [omar.id]);
+    check(!!omarPic, "(fixture: a picture on a patient without a phone)");
+    const noPhone = await page.request.post(`${BASE}/api/c/${slug}/files/${omarFile.id}/whatsapp`, { data: { caption: "Hi" } });
+    check(noPhone.status() === 409 && (await noPhone.json()).error === "no_phone", "a patient without a phone number: it says so");
+    const [ranaPic] = await q(`select id from patient_files where patient_id = $1 and mime_type like 'image/%' order by created_at limit 1`, [rana.id]);
+    const notConnected = await page.request.post(`${BASE}/api/c/${slug}/files/${ranaPic.id}/whatsapp`, { data: { caption: "Hi" } });
+    check(notConnected.status() === 409 && (await notConnected.json()).error === "whatsapp_not_connected", "WhatsApp not connected: it says so");
+    await q(`update whatsapp_sessions set status = 'connected' where clinic_id = $1`, [clinic.id]);
+    const sentWa = await page.request.post(`${BASE}/api/c/${slug}/files/${ranaPic.id}/whatsapp`, { data: { caption: "Your x-ray from QA Imaging" } });
+    await q(`update whatsapp_sessions set status = 'disconnected' where clinic_id = $1`, [clinic.id]);
+    const sentBody = (await sentWa.json()) as { messageId?: string };
+    const [msg] = await q(`select msg_type, media_mime, body, status, sender_kind from messages where id = $1`, [sentBody.messageId ?? null]);
+    check(
+      sentWa.ok() && msg?.msg_type === "image" && msg?.media_mime === "image/jpeg" && msg?.body === "Your x-ray from QA Imaging" && msg?.sender_kind === "staff",
+      "otherwise the picture is queued to the patient's WhatsApp as a JPEG, with the doctor's words",
+      JSON.stringify(msg)
+    );
+    // Not for the local worker to try sending.
+    if (sentBody.messageId) await q(`delete from messages where id = $1`, [sentBody.messageId]);
+
     console.log("\nnew keys and revoking");
     const rekey = await fetchSession(page, `/api/c/${slug}/devices/${deviceId}`, "PATCH", { op: "rekey" });
     const fresh = rekey?.key as string;

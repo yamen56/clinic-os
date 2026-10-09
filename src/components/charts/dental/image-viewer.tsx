@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Contrast, Minus, Plus, RotateCcw, Sun, X, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Columns2, Contrast, MessageCircle, Minus, Plus, RotateCcw, Sun, X, ExternalLink } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDateOnly } from "@/lib/dates";
 import { PERMANENT_LOWER, PERMANENT_UPPER } from "@/lib/charts/dental/teeth";
@@ -40,6 +40,7 @@ export function ImageViewer({
   onIndex,
   onPin,
   onClose,
+  onSend,
 }: {
   images: ChartImage[];
   index: number;
@@ -48,6 +49,8 @@ export function ImageViewer({
   onIndex: (i: number) => void;
   onPin: (imageId: string, fdi: string) => void;
   onClose: () => void;
+  /** Offered when the patient can be messaged: the picture, to their WhatsApp. */
+  onSend?: (img: ChartImage) => void;
 }) {
   const { t, dir, locale } = useI18n();
   const T = t.dental;
@@ -58,6 +61,13 @@ export function ImageViewer({
   const [contrast, setContrast] = useState(100);
   const [invert, setInvert] = useState(false);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+  /*
+    Before and after: the same teeth, two dates, side by side — one zoom, one
+    pan, one exposure for both, so the same spot is compared at the same
+    scale. The other image defaults to the latest earlier one of these teeth.
+  */
+  const [comparing, setComparing] = useState(false);
+  const [otherId, setOtherId] = useState<string | null>(null);
 
   const reset = useCallback(() => {
     setZoom(1);
@@ -68,20 +78,34 @@ export function ImageViewer({
   }, []);
   // A new image opens fitted, at its own exposure.
   useEffect(reset, [index, reset]);
+  useEffect(() => setOtherId(null), [index]);
 
   const go = useCallback((d: number) => onIndex((index + d + images.length) % images.length), [index, images.length, onIndex]);
   useEffect(() => {
+    /*
+      Caught on the way down (capture), and kept: the chart beneath also
+      listens for Escape and the arrows, and once this viewer has closed it
+      would take the same Escape as "deselect the tooth" — closing the panel
+      the doctor came from. A layer above this one (the send box) listens on
+      window, earlier still.
+    */
     const onKey = (e: KeyboardEvent) => {
+      const handled = e.key === "Escape" || e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "+" || e.key === "=" || e.key === "-";
+      if (!handled) return;
+      // Typing in a box above the viewer (the WhatsApp message) is typing, not zooming.
+      const el = e.target as HTMLElement | null;
+      if (e.key !== "Escape" && el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      e.stopImmediatePropagation();
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowRight") go(1);
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "+" || e.key === "=") setZoom((z) => Math.min(6, z * 1.25));
-      else if (e.key === "-") setZoom((z) => Math.max(1, z / 1.25));
+      else setZoom((z) => Math.max(1, z / 1.25));
     };
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
       document.body.style.overflow = "";
     };
   }, [go, onClose]);
@@ -89,6 +113,17 @@ export function ImageViewer({
   if (!img || typeof document === "undefined") return null;
   const pinned = pins[img.id] ?? [];
   const btn = "grid h-9 w-9 place-items-center rounded-ctl text-white/85 hover:bg-white/10 disabled:opacity-35";
+  // What it can be compared with: pictures of the same teeth, or any picture if none share a tooth.
+  const pictures = images.filter((x) => x.id !== img.id && isPicture(x));
+  const sharing = pictures.filter((x) => (pins[x.id] ?? []).some((fdi) => pinned.includes(fdi)));
+  const candidates = sharing.length ? sharing : pictures;
+  const before = candidates.filter((x) => x.date <= img.date).sort((a, b) => b.date.localeCompare(a.date))[0];
+  const other = comparing ? (candidates.find((x) => x.id === otherId) ?? before ?? candidates[0] ?? null) : null;
+  const look = {
+    transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
+    filter: `brightness(${bright}%) contrast(${contrast}%)${invert ? " invert(1)" : ""}`,
+    transition: drag.current ? "none" : "transform 120ms ease-out",
+  };
 
   return createPortal(
     <div
@@ -140,6 +175,29 @@ export function ImageViewer({
             </button>
           </div>
         )}
+        {isPicture(img) && candidates.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setComparing((v) => !v)}
+            aria-pressed={comparing}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-ctl px-2.5 text-[12.5px] font-semibold ${comparing ? "bg-white text-black" : "text-white/85 hover:bg-white/10"}`}
+            data-compare
+          >
+            <Columns2 className="h-4 w-4" />
+            {T.compare}
+          </button>
+        )}
+        {onSend && isPicture(img) && !img.sample && (
+          <button
+            type="button"
+            onClick={() => onSend(img)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-ctl bg-st-confirmed px-3 text-[12.5px] font-semibold text-white hover:brightness-110"
+            data-send-patient
+          >
+            <MessageCircle className="h-4 w-4" />
+            {T.sendToPatient}
+          </button>
+        )}
         <button type="button" className={btn} onClick={onClose} aria-label={T.close}>
           <X className="h-5 w-5" />
         </button>
@@ -161,18 +219,34 @@ export function ImageViewer({
         }}
         onPointerUp={() => (drag.current = null)}
       >
-        {isPicture(img) ? (
+        {isPicture(img) && other ? (
+          <div className="absolute inset-0 grid grid-cols-1 gap-px bg-white/15 sm:grid-cols-2" data-compare-view>
+            {[img, other].map((x, k) => (
+              <div key={`${x.id}-${k}`} className="relative overflow-hidden bg-[rgb(6_8_12)]">
+                {
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={x.src}
+                    alt={x.name}
+                    draggable={false}
+                    className={`absolute inset-0 m-auto max-h-full max-w-full object-contain ${zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"}`}
+                    style={look}
+                  />
+                }
+                <span className="absolute start-2 top-2 rounded-full bg-black/65 px-2.5 py-0.5 text-[12px] font-semibold tabular-nums">
+                  {fmtDateOnly(x.date, locale)}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : isPicture(img) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={img.src}
             alt={img.name}
             draggable={false}
             className={`absolute inset-0 m-auto max-h-full max-w-full object-contain ${zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"}`}
-            style={{
-              transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
-              filter: `brightness(${bright}%) contrast(${contrast}%)${invert ? " invert(1)" : ""}`,
-              transition: drag.current ? "none" : "transform 120ms ease-out",
-            }}
+            style={look}
           />
         ) : (
           <div className="absolute inset-0 grid place-items-center">
@@ -182,7 +256,7 @@ export function ImageViewer({
             </a>
           </div>
         )}
-        {images.length > 1 && (
+        {images.length > 1 && !other && (
           <>
             <button type="button" onClick={() => go(-1)} aria-label={T.previous} className="absolute start-2 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-black/50 hover:bg-black/70">
               <ChevronLeft className="h-5 w-5" />
@@ -197,8 +271,33 @@ export function ImageViewer({
         )}
       </div>
 
+      {/* Comparing: which other image stands beside this one. */}
+      {comparing && (
+        <div className="border-t border-white/10 px-3 py-2.5 sm:px-4" data-compare-pick>
+          <div className="mb-1.5 text-[12px] font-semibold text-white/70">{T.compareWith}</div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {candidates.map((x) => (
+              <button
+                key={x.id}
+                type="button"
+                onClick={() => setOtherId(x.id)}
+                aria-pressed={other?.id === x.id}
+                className={`shrink-0 overflow-hidden rounded-md border-2 ${other?.id === x.id ? "border-white" : "border-transparent opacity-70 hover:opacity-100"}`}
+                data-compare-option={x.id}
+              >
+                {
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={x.src} alt="" className="h-14 w-20 bg-black object-cover" />
+                }
+                <span className="block bg-black/70 px-1 text-[11px] tabular-nums">{fmtDateOnly(x.date, locale)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* The teeth this image is of. */}
-      <div className="border-t border-white/10 px-3 py-2.5 sm:px-4" data-pins>
+      <div className={`border-t border-white/10 px-3 py-2.5 sm:px-4 ${comparing ? "hidden" : ""}`} data-pins>
         <div className="mb-1.5 text-[12px] font-semibold text-white/70">{canPin ? T.pinHint : T.pinnedTo}</div>
         <div className="grid gap-1 overflow-x-auto" dir="ltr">
           {[PERMANENT_UPPER, PERMANENT_LOWER].map((row, r) => (

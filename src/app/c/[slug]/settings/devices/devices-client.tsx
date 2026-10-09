@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AudioWaveform, Ban, Box, Camera, Check, Copy, Cpu, FolderOpen, KeyRound, Network, Pencil, Plus, Radiation, ScanLine, ScanText, Settings2, Terminal } from "lucide-react";
 import { BRIDGE_VERSION } from "@/lib/imaging/bridge-version";
 import { ConnectWizard } from "./connect-wizard";
+import { bridgeOffline } from "@/lib/imaging/offline";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtRelative } from "@/lib/dates";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -177,6 +178,13 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
   const { t, locale } = useI18n();
   const T = t.devices;
   const { toast } = useToast();
+  // The clock, read in the browser only: "offline" decided on the server would disagree with the page.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   const [devices, setDevices] = useState(initial);
   const [form, setForm] = useState<{ id: string | null; name: string; kind: Kind; matchBy: MatchBy } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -269,6 +277,10 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
                       <span className="text-xs text-ink-500">{T.kinds[d.kind]}</span>
                       {d.revoked_at ? (
                         <Badge status="danger">{T.revoked}</Badge>
+                      ) : bridgeOffline(d, now) ? (
+                        <Badge status="danger" dot>
+                          <span data-device-offline>{T.bridgeOffline.replace("{t}", fmtRelative(d.last_seen_at!, locale))}</span>
+                        </Badge>
                       ) : d.last_seen_at ? (
                         <Badge status="ok" dot>
                           {/* A clock-relative phrase: the server's second and the browser's differ. */}
@@ -459,3 +471,4 @@ function BridgeLine({ d }: { d: DeviceRow }) {
     </div>
   );
 }
+

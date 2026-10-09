@@ -86,6 +86,15 @@ export function startUi(bridge: Bridge, port: number): Promise<http.Server> {
         case "/api/retry":
           bridge.outbox.retryFailed();
           return json(200, { ok: true });
+        case "/api/notify":
+          bridge.cfg.notify = !!body.on;
+          bridge.save();
+          return json(200, { ok: true });
+        case "/api/on-request":
+          // Kept only on this computer: nothing Clinicti sends can set what runs here.
+          bridge.cfg.onRequest = String(body.command ?? "").slice(0, 1000);
+          bridge.save();
+          return json(200, { ok: true });
         case "/api/quit":
           // A newer copy being installed asks the running one to make way.
           json(200, { ok: true });

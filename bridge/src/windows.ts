@@ -120,3 +120,78 @@ export function lanAddresses(): string[] {
   }
   return out;
 }
+
+/**
+ * A Windows notification on the imaging computer — "an x-ray is wanted" —
+ * from a hidden PowerShell that shows it and goes away. Nothing to install.
+ */
+export function notify(title: string, text: string, iconFrom: string) {
+  if (!isWindows || process.env.CLINICTI_BRIDGE_NO_BROWSER) return;
+  const script = [
+    "Add-Type -AssemblyName System.Windows.Forms",
+    "Add-Type -AssemblyName System.Drawing",
+    "$n = New-Object System.Windows.Forms.NotifyIcon",
+    `try { $n.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon(${psQuote(iconFrom)}) } catch { $n.Icon = [System.Drawing.SystemIcons]::Information }`,
+    `$n.BalloonTipTitle = ${psQuote(title.slice(0, 60))}`,
+    `$n.BalloonTipText = ${psQuote(text.slice(0, 200))}`,
+    "$n.Visible = $true",
+    "$n.ShowBalloonTip(15000)",
+    "Start-Sleep -Seconds 16",
+    "$n.Dispose()",
+  ].join("; ");
+  spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", script], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  }).unref();
+}
+
+/**
+ * A command line as words, the way Windows reads it: spaces separate,
+ * double quotes keep a phrase (a path with spaces) together.
+ */
+export function splitCommand(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quoted = false;
+  let started = false;
+  for (const ch of line.trim()) {
+    if (ch === '"') {
+      quoted = !quoted;
+      started = true;
+    } else if (/\s/.test(ch) && !quoted) {
+      if (started) out.push(cur);
+      cur = "";
+      started = false;
+    } else {
+      cur += ch;
+      started = true;
+    }
+  }
+  if (started) out.push(cur);
+  return out;
+}
+
+/**
+ * Run the clinic's "open the imaging software on this patient" command.
+ *
+ * The placeholders are filled inside each word of the command, and the
+ * program is started directly — never through a shell — so a patient called
+ * `Rana & del *.*` is a name, not an instruction. The first word must be a
+ * program (.exe); Windows will not run a .bat this way, by design.
+ */
+export function runForRequest(template: string, values: Record<string, string>): { ok: boolean; error?: string } {
+  const words = splitCommand(template);
+  if (!words.length) return { ok: false, error: "empty" };
+  const fill = (w: string) => w.replace(/\{(\w+)\}/g, (m, k: string) => (k in values ? values[k] : m));
+  const [program, ...args] = words.map(fill);
+  try {
+    const child = spawn(program, args, { detached: true, stdio: "ignore", windowsHide: false });
+    child.on("error", (e) => log("request command failed", e));
+    child.unref();
+    return { ok: true };
+  } catch (e) {
+    log("request command failed", e);
+    return { ok: false, error: (e as Error).message };
+  }
+}

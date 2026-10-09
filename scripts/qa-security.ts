@@ -311,7 +311,8 @@ async function main() {
     console.log("\n[account] an owner is told why they cannot delete theirs");
     const page = await browser.newPage();
     await login(page, OWNER.email, OWNER.password);
-    await page.goto(`${BASE}/c/${SLUG}/profile`, { waitUntil: "domcontentloaded" });
+    // Ready, not just parsed: a click before the page has hydrated opens nothing, and the check then reads a closed dialog.
+    await page.goto(`${BASE}/c/${SLUG}/profile`, { waitUntil: "networkidle" });
 
     const open = page.locator("button").filter({ hasText: /حذف الحساب|Delete account/i }).first();
     ok((await open.count()) > 0, "the control is offered rather than hidden");

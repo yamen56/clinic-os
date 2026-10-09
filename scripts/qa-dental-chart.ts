@@ -137,7 +137,7 @@ async function main() {
     [dentalClinic.id, deskUser]
   );
   await q(`insert into clinic_members (clinic_id, user_id, role, is_owner, permissions) values ($1,$2,'doctor',true,'{"level":"full"}')`, [plainClinic.id, doctorUser]);
-  const [patient] = await q(`insert into patients (clinic_id, full_name, birth_date, source) values ($1,'Rami Khatib','1988-03-14','staff') returning id`, [dentalClinic.id]);
+  const [patient] = await q(`insert into patients (clinic_id, full_name, birth_date, phone_e164, source) values ($1,'Rami Khatib','1988-03-14','+962790000555','staff') returning id`, [dentalClinic.id]);
   const [plainPatient] = await q(`insert into patients (clinic_id, full_name, source) values ($1,'Skin Patient','staff') returning id`, [plainClinic.id]);
   const fileUrl = `${BASE}/c/qateeth${tag}/patients/${patient.id}?tab=dental`;
 
@@ -265,6 +265,29 @@ async function main() {
     await settle(page);
     rows = await q(`select kind, teeth, mime_type from patient_files where patient_id = $1 and kind = 'photo'`, [patient.id]);
     check(rows.length === 1 && rows[0].teeth.join() === "36" && rows[0].mime_type === "image/jpeg", "a photo from the camera is saved to the patient's files, labelled 36", JSON.stringify(rows));
+
+    /* ── Before and after, and the picture to the patient ───────────── */
+    await panel.locator("[data-image]").first().click();
+    const viewerEl = page.locator("[data-image-viewer]");
+    await viewerEl.waitFor({ timeout: 10000 });
+    await viewerEl.locator("[data-compare]").click();
+    await viewerEl.locator("[data-compare-view] img").nth(1).waitFor({ timeout: 10000 });
+    check((await viewerEl.locator("[data-compare-view] img").count()) === 2, "Compare puts two pictures of 36 side by side, each with its date");
+    await page.screenshot({ path: join(SHOTS, "compare.png") });
+    await viewerEl.locator("[data-compare]").click();
+    await viewerEl.locator("[data-send-patient]").click();
+    const sendDialog = page.locator("[data-send-dialog]");
+    await sendDialog.waitFor({ timeout: 10000 });
+    check((await sendDialog.locator("[data-send-caption]").inputValue()).includes("QA Teeth"), "Send to patient opens with a caption naming the clinic, ready to change");
+    await sendDialog.locator("[data-send-confirm]").click();
+    await page.getByText("WhatsApp is not connected").first().waitFor({ timeout: 10000 });
+    check(true, "with the clinic's WhatsApp not connected, it says so instead of pretending to send");
+    await page.keyboard.press("Escape");
+    await sendDialog.waitFor({ state: "detached", timeout: 5000 });
+    check((await viewerEl.count()) === 1, "Escape closes the send box and leaves the x-ray open");
+    await page.keyboard.press("Escape");
+    await viewerEl.waitFor({ state: "detached", timeout: 5000 });
+    check((await panelOf(page).count()) > 0, "and closing the x-ray leaves the tooth's panel where the doctor left it");
 
     /* ── "Take x-ray": the station sends the machine's next image ─────── */
     await panel.locator("[data-take-xray]").click();

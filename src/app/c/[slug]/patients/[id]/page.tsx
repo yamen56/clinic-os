@@ -296,6 +296,9 @@ export default async function PatientProfilePage({
                 doctors: d.dentalDoctors,
                 canWrite: can(access, "patients.charts"),
                 chart: d.dentalChart,
+                clinicName: access.clinic.name,
+                // Pictures to the patient go through the inbox: its switch, and a number to send to.
+                canMessage: can(access, "conversations") && !!d.patient.phone_e164,
               })
             )
           : null

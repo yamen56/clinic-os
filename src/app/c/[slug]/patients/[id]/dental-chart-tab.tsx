@@ -14,6 +14,7 @@
 */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { MousePointer2, Paintbrush, History as HistoryIcon, Undo2, ChevronDown, Radiation, X } from "lucide-react";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
@@ -221,6 +222,9 @@ export type DentalTabData = {
   /** May this member record on the chart (`patients.charts`)? */
   canWrite: boolean;
   chart: DentalChartData;
+  clinicName: string;
+  /** May this member send the patient a picture on WhatsApp, and has the patient a number? */
+  canMessage: boolean;
 };
 
 type TabProps = {
@@ -245,17 +249,20 @@ type TabProps = {
   dictionary is shipped to the browser.
 */
 export function DentalChartTab(props: TabProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  // Words for the patient are in the clinic's language, not the chart's English.
+  const caption = (dateIso: string) =>
+    t.devices.xrayCaption.replace("{clinic}", props.data.clinicName).replace("{date}", fmtDateOnly(dateIso, locale));
   return (
     <I18nProvider dict={t} locale="en">
       <div dir="ltr" lang="en" className="font-sans" data-latin-island>
-        <DentalChart {...props} />
+        <DentalChart {...props} caption={caption} />
       </div>
     </I18nProvider>
   );
 }
 
-function DentalChart({ slug, patientId, tz, birthDate, data, files }: TabProps) {
+function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: TabProps & { caption: (dateIso: string) => string }) {
   const { t, locale } = useI18n();
   const T = t.dental;
   const { toast } = useToast();
@@ -318,6 +325,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files }: TabProps) 
   );
   const [pins, setPins] = useState<Record<string, string[]>>(() => Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []])));
   const [viewer, setViewer] = useState<{ list: ChartImage[]; index: number } | null>(null);
+  const [sending, setSending] = useState<{ img: ChartImage; caption: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [camera, setCamera] = useState<{ tooth?: string } | null>(null);
   /** A "Take x-ray" request waiting on the imaging station. */
@@ -1179,6 +1187,29 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files }: TabProps) 
           onIndex={(i) => setViewer((v) => (v ? { ...v, index: i } : v))}
           onPin={togglePin}
           onClose={() => setViewer(null)}
+          onSend={data.canMessage ? (img) => setSending({ img, caption: caption(img.date) }) : undefined}
+        />
+      )}
+
+      {sending && (
+        <SendToPatient
+          img={sending.img}
+          initialCaption={sending.caption}
+          onClose={() => setSending(null)}
+          onSend={async (text) => {
+            const res = await fetch(`/api/c/${slug}/files/${sending.img.id}/whatsapp`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ caption: text }),
+            });
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            if (res.ok) {
+              toast(T.sentWhatsApp);
+              setSending(null);
+            } else {
+              toast(body.error === "no_phone" ? T.sendNoPhone : body.error === "whatsapp_not_connected" ? T.sendNoWhatsApp : T.saveFailed, "error");
+            }
+          }}
         />
       )}
 
@@ -1308,5 +1339,88 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files }: TabProps) 
         )}
       </Modal>
     </div>
+  );
+}
+
+/**
+ * The picture, the patient's WhatsApp, and a line of text — above the x-ray
+ * viewer, which is why it is its own layer rather than the app's Modal (that
+ * one sits beneath the viewer). The caption starts in the clinic's language
+ * and can be changed or emptied before it goes.
+ */
+function SendToPatient({
+  img,
+  initialCaption,
+  onClose,
+  onSend,
+}: {
+  img: ChartImage;
+  initialCaption: string;
+  onClose: () => void;
+  onSend: (caption: string) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const T = t.dental;
+  const [text, setText] = useState(initialCaption);
+  const [busy, setBusy] = useState(false);
+  // Escape closes this, not the viewer beneath it: caught on window, before the viewer (on document) hears it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopImmediatePropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={T.sendToPatient} data-send-dialog>
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative m-0 w-full max-w-md rounded-t-modal bg-surface p-5 text-ink-900 shadow-modal sm:m-4 sm:rounded-modal" dir="ltr">
+        <div className="mb-3 flex items-start gap-3">
+          {
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={img.src} alt="" className="h-16 w-24 shrink-0 rounded-md bg-black object-cover" />
+          }
+          <div className="min-w-0">
+            <h2 className="font-display text-lg font-semibold">{T.sendToPatient}</h2>
+            <p className="truncate text-[13px] text-ink-500">{img.name}</p>
+          </div>
+        </div>
+        <label className="block text-[13px] font-semibold">
+          {T.sendCaption}
+          <textarea
+            dir="auto"
+            value={text}
+            maxLength={1000}
+            onChange={(e) => setText(e.target.value)}
+            rows={3}
+            className="mt-1.5 block w-full rounded-ctl border border-line bg-surface px-3 py-2 text-base font-normal md:text-sm"
+            data-send-caption
+          />
+        </label>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            {T.cancel}
+          </Button>
+          <Button
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await onSend(text);
+              } finally {
+                setBusy(false);
+              }
+            }}
+            data-send-confirm
+          >
+            {T.send}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }

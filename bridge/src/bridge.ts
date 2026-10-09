@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import { deflateSync } from "node:zlib";
-import { Api, type WorkItem } from "./api";
+import { Api, type WaitingRequest, type WorkItem } from "./api";
 import { log, saveConfig, type Config, type Paths } from "./config";
 import { Outbox } from "./outbox";
 import { FolderWatcher } from "./folders";
 import { startDicom, type DicomState } from "./dicom-server";
-import { lanAddresses } from "./windows";
+import { lanAddresses, notify, runForRequest } from "./windows";
 
 /**
  * The Bridge's working parts in one place: the queue, the folder watcher,
@@ -34,6 +34,10 @@ export class Bridge {
   private worklistCache: { date: string | null; at: number; items: WorkItem[] } | null = null;
   lastBeat: { at: number; ok: boolean } | null = null;
   notice: string | null = null;
+  /** Who a doctor is waiting on an x-ray for — shown in the window, announced once each. */
+  waiting: WaitingRequest[] = [];
+  private announced = new Set<string>();
+  lastCommand: { at: number; ok: boolean; error?: string } | null = null;
 
   constructor(
     public p: Paths,
@@ -67,6 +71,7 @@ export class Bridge {
     this.timers.push(setInterval(() => void this.outbox.pump(!this.paired), 1000));
     this.timers.push(setInterval(() => this.paired && this.folders.look(), 3000));
     this.timers.push(setInterval(() => void this.heartbeat(), 30_000));
+    this.timers.push(setInterval(() => void this.watchRequests(), 3000));
     this.restartDicom();
     void this.heartbeat();
   }
@@ -122,6 +127,45 @@ export class Bridge {
     this.restartDicom();
     void this.heartbeat();
     return r;
+  }
+
+  /**
+   * "Take x-ray", pressed at the chair, reaching the computer beside the
+   * machine: a Windows notification with the patient and the tooth, the
+   * patient at the top of the Bridge window, and — if the clinic set one —
+   * the imaging software opened on that patient. Each request once.
+   */
+  private async watchRequests() {
+    if (!this.paired) return;
+    let list: WaitingRequest[];
+    try {
+      list = await this.api.requests();
+    } catch (e) {
+      if ((e as { unpaired?: boolean }).unpaired) this.lostKey();
+      return;
+    }
+    const before = this.waiting.map((r) => r.id).join();
+    this.waiting = list;
+    for (const r of list) {
+      if (this.announced.has(r.id)) continue;
+      this.announced.add(r.id);
+      const p = r.patient;
+      const id = p.fileNo != null ? `CLN-${p.fileNo}` : "";
+      const teeth = r.teeth.length ? ` · ${r.teeth.join(" ")}` : "";
+      if (this.cfg.notify) {
+        notify(`${r.kind === "photo" ? "Photo" : "X-ray"} for ${p.name}`, `${[id, p.birthDate].filter(Boolean).join(" · ")}${teeth}${r.requestedBy ? ` — asked by ${r.requestedBy}` : ""}`, process.execPath);
+      }
+      if (this.cfg.onRequest.trim()) {
+        const words = p.name.trim().split(/\s+/);
+        const result = runForRequest(this.cfg.onRequest, requestValues(r, words));
+        this.lastCommand = { at: Date.now(), ...result };
+        log("request command", result.ok ? "started" : result.error);
+      }
+      log("x-ray requested for", p.name, teeth);
+    }
+    // A request that has closed never reopens: forget it, so this set stays small.
+    for (const id of [...this.announced]) if (!list.some((r) => r.id === id)) this.announced.delete(id);
+    if (before !== list.map((r) => r.id).join()) this.changed();
   }
 
   /** Clinicti no longer knows this key (revoked, or paired again elsewhere): stop, keep the queue, ask to pair. */
@@ -232,6 +276,10 @@ export class Bridge {
       autostart: this.cfg.autostart,
       ...this.report(),
       recent: this.outbox.recent.slice(0, 12),
+      waiting: this.waiting,
+      notify: this.cfg.notify,
+      onRequest: this.cfg.onRequest,
+      lastCommand: this.lastCommand,
       failedItems: this.outbox.list("failed").slice(-12).map((i) => ({ name: i.name, error: i.lastError })),
     };
   }
@@ -280,4 +328,25 @@ function testPicture(): Buffer {
     chunk("IDAT", deflateSync(raw)),
     chunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+/**
+ * What a "when a doctor asks for an x-ray" command can use. Every vendor's
+ * bridge wants the patient in its own shape, so all the usual shapes are here.
+ */
+export function requestValues(r: WaitingRequest, words: string[]): Record<string, string> {
+  const p = r.patient;
+  return {
+    patientId: p.fileNo != null ? `CLN-${p.fileNo}` : p.id,
+    fileNo: p.fileNo != null ? String(p.fileNo) : "",
+    uuid: p.id,
+    fullName: p.name,
+    firstName: words[0] ?? "",
+    lastName: words.length > 1 ? words[words.length - 1] : "",
+    birthDate: (p.birthDate ?? "").replace(/-/g, ""),
+    birthDateIso: p.birthDate ?? "",
+    sex: p.sex ?? "O",
+    teeth: r.teeth.join(","),
+    requestId: r.id,
+  };
 }
