@@ -25,6 +25,7 @@ import { FEATURES, toFeatureSetting, type Feature, type FeatureMap } from "@/lib
 import { RESTORE_WINDOW_DAYS } from "@/lib/clinic-lifecycle";
 import { SPECIALTIES, asSpecialty, clinicSpecialties, isSpecialty, type Specialty } from "@/lib/specialties";
 import { provisionClinic, installRecipes, isReservedSlug } from "@/lib/clinic-provision";
+import { SPECIALTY_MODULES, modulesFor } from "@/lib/specialty-profile";
 import { z } from "zod";
 
 /**
@@ -90,10 +91,24 @@ export async function setClinicSpecialtyAction(
   // Everything it practises — what decides the charts on its patient files.
   const practises = clinicSpecialties(chosen, departments);
   return withSystem(async (c) => {
-    const clinic = await c.query(`select id from clinics where slug = $1`, [slug]);
+    const clinic = await c.query(`select id, specialty, specialties, features from clinics where slug = $1`, [slug]);
     if (!clinic.rowCount) return { error: "not_found" };
     const clinicId = clinic.rows[0].id as string;
-    await c.query(`update clinics set specialty = $2, specialties = $3 where id = $1`, [clinicId, chosen, practises]);
+    /*
+      The modules a specialty brings follow it: adding Dental switches the
+      dental chart on, and taking away the last field that needed a module
+      switches it off. A module no specialty change touched keeps whatever the
+      agency set by hand.
+    */
+    const before = modulesFor(clinicSpecialties(clinic.rows[0].specialty, clinic.rows[0].specialties ?? []));
+    const after = modulesFor(practises.length ? practises : [chosen]);
+    const features = { ...(clinic.rows[0].features ?? {}) } as Record<string, boolean>;
+    const switched: Record<string, boolean> = {};
+    for (const m of SPECIALTY_MODULES) {
+      if (after.includes(m) && !before.includes(m)) switched[m] = features[m] = true;
+      else if (before.includes(m) && !after.includes(m)) switched[m] = features[m] = false;
+    }
+    await c.query(`update clinics set specialty = $2, specialties = $3, features = $4::jsonb where id = $1`, [clinicId, chosen, practises, JSON.stringify(features)]);
     let installed = 0;
     for (const sp of practises.length ? practises : [chosen]) installed += await installRecipes(c, clinicId, sp);
     await audit(c, {
@@ -102,7 +117,7 @@ export async function setClinicSpecialtyAction(
       action: "admin.clinic.specialty",
       entity: "clinic",
       entityId: clinicId,
-      detail: { specialty: chosen, specialties: practises, installed },
+      detail: { specialty: chosen, specialties: practises, installed, modules: switched },
     });
     revalidatePath(`/admin/clinics/${slug}`);
     return { installed };

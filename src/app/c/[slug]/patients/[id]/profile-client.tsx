@@ -28,7 +28,6 @@ import {
   setNoteAppointmentAction,
   saveNoteCategoryAction,
   deleteNoteCategoryAction,
-  deletePatientFileAction,
   setPatientStatusAction,
   mergePatientsAction,
   openConversationAction,
@@ -42,6 +41,7 @@ import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-
 import type { DocumentListRow } from "@/lib/esign/queries";
 import type { PrescriptionRow } from "@/lib/prescriptions";
 import type { DentalTabData } from "./dental-chart-tab";
+import { FilesTab, type FilesHub } from "./files-tab";
 import { PrescriptionsTab } from "./prescriptions-tab";
 import { PrescriptionComposer, useComposerData, type RxDraft } from "./prescription-composer";
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
@@ -55,9 +55,6 @@ import {
   Send,
   X,
   Plus,
-  Upload,
-  FileText,
-  Image as ImageIcon,
   Trash2,
   Merge,
   Archive,
@@ -74,7 +71,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   ExternalLink,
-  Smile,
 } from "lucide-react";
 
 /*
@@ -268,6 +264,8 @@ export function PatientProfile(props: {
    * whether this member may record on it. Null hides the tab.
    */
   dental?: DentalTabData | null;
+  /** The Files hub: the clinic's machines, requests waiting, results that look like this patient's. */
+  filesHub?: FilesHub | null;
 }) {
   const { slug, tz, currency, caps } = props;
   const { t, locale } = useI18n();
@@ -962,7 +960,16 @@ export function PatientProfile(props: {
             )}
           </Card>
         )}
-        {tab === "files" && <FilesTab slug={slug} patientId={p.id} files={props.files} tz={tz} />}
+        {tab === "files" && (
+          <FilesTab
+            slug={slug}
+            patientId={p.id}
+            files={props.files}
+            tz={tz}
+            hub={props.filesHub ?? null}
+            dental={props.dental ? { canPin: props.dental.canWrite } : null}
+          />
+        )}
         {tab === "documents" && (
           <DocumentsTab
             slug={slug}
@@ -2097,154 +2104,6 @@ function NoteItem({
         )}
       </Modal>
     </Card>
-  );
-}
-
-
-function FilesTab({
-  slug,
-  patientId,
-  files,
-  tz,
-}: {
-  slug: string;
-  patientId: string;
-  files: PatientFileRow[];
-  tz: string;
-}) {
-  const { t, locale } = useI18n();
-  const router = useRouter();
-  const { toast } = useToast();
-  const [kind, setKind] = useState("other");
-  const [uploading, setUploading] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-
-  const upload = async (fileList: FileList | null) => {
-    if (!fileList?.length) return;
-    setUploading(true);
-    try {
-      for (const file of Array.from(fileList)) {
-        const fd = new FormData();
-        fd.set("file", file);
-        fd.set("kind", kind);
-        const res = await fetch(`/api/c/${slug}/patients/${patientId}/files`, {
-          method: "POST",
-          body: fd,
-        });
-        if (res.status === 413) {
-          toast(t.patients.files.tooLarge, "error");
-        } else if (!res.ok) {
-          toast(t.common.genericError, "error");
-        }
-      }
-      router.refresh();
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="grid gap-4">
-      <Card className="flex flex-wrap items-center gap-3 p-4">
-        <Select value={kind} onChange={(e) => setKind(e.target.value)} className="!w-auto">
-          {Object.entries(t.patients.files.kinds).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </Select>
-        <input
-          ref={fileInput}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            void upload(e.target.files);
-            e.target.value = "";
-          }}
-        />
-        <Button loading={uploading} onClick={() => fileInput.current?.click()}>
-          <Upload className="h-4 w-4" />
-          {t.patients.files.upload}
-        </Button>
-        <span className="text-[13px] text-ink-400">{t.patients.files.dropHint}</span>
-      </Card>
-
-      {files.length === 0 ? (
-        <EmptyState icon={<FileText />} title={t.patients.files.empty} body={t.patients.files.emptyBody} />
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {files.map((f) => (
-            <Card key={f.id} className="flex items-center gap-3 p-3.5">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-                {f.mime_type.startsWith("image/") ? <ImageIcon className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <a
-                  href={`/api/c/${slug}/files/${f.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block truncate text-sm font-medium hover:text-brand-700"
-                >
-                  {f.file_name}
-                </a>
-                <div className="text-[12px] text-ink-400">
-                  {(t.patients.files.kinds as Record<string, string>)[f.kind]} ·{" "}
-                  {(f.size_bytes / 1024).toFixed(0)} KB · {fmtDate(f.created_at, tz, locale)}
-                  {/* The teeth the dental chart pinned it to, in tooth numbers — read the same in any language. */}
-                  {f.teeth && f.teeth.length > 0 && (
-                    <span dir="ltr" className="ms-1.5 inline-flex items-center gap-1 rounded bg-brand-50 px-1.5 py-px font-semibold text-brand-700 tnum" data-file-teeth>
-                      <Smile className="h-3 w-3" />
-                      {f.teeth.join(" · ")}
-                    </span>
-                  )}
-                </div>
-                {(f.device_name || f.dicom) && (
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-ink-500">
-                    {f.device_name && <span data-file-device>{t.devices.fromDevice.replace("{device}", f.device_name)}</span>}
-                    {f.dicom && (
-                      <a
-                        href={`/api/c/${slug}/files/${f.id}/dicom`}
-                        className="inline-flex items-center gap-1 font-semibold text-brand-700 hover:underline"
-                        data-file-dicom={f.dicom.instances}
-                      >
-                        <Download className="h-3 w-3" />
-                        {f.dicom.instances > 1 ? t.devices.dicomImages.replace("{n}", String(f.dicom.instances)) : t.devices.dicomOriginal}
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => setDeleteId(f.id)}
-                className="text-ink-300 transition-colors hover:text-danger"
-                aria-label={t.common.delete}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <ConfirmDialog
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        title={t.common.confirmDeleteTitle}
-        body={t.common.confirmDeleteBody}
-        confirmLabel={t.common.delete}
-        cancelLabel={t.common.cancel}
-        onConfirm={async () => {
-          if (deleteId) {
-            await deletePatientFileAction(slug, deleteId);
-            toast(t.patients.files.deleted);
-            setDeleteId(null);
-            router.refresh();
-          }
-        }}
-      />
-    </div>
   );
 }
 

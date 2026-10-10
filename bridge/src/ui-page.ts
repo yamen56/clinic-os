@@ -81,8 +81,8 @@ export const PAGE = `<!doctype html>
 
   <section id="connected" hidden>
     <div class="card wanted" id="waitingCard" hidden style="margin-bottom:16px">
-      <h2>&#9673; X-ray wanted</h2>
-      <p class="sub">A doctor pressed <b>Take x-ray</b>. Take it on the machine; the picture goes to this patient by itself.</p>
+      <h2>&#9673; A doctor is waiting</h2>
+      <p class="sub">A doctor asked this machine for a result. Take it on the machine; it goes to this patient by itself.</p>
       <ul class="list" id="waiting"></ul>
     </div>
 
@@ -92,8 +92,8 @@ export const PAGE = `<!doctype html>
     </div>
 
     <div class="card" style="margin-bottom:16px">
-      <h2><span class="step" id="s2">2</span> Pictures your software saves to a folder</h2>
-      <p class="sub">For x-ray sensors, intraoral cameras and scanners whose software saves each picture to a folder on this computer (or the network). Choose that folder — every new picture goes to Clinicti.</p>
+      <h2><span class="step" id="s2">2</span> Results your software saves to a folder</h2>
+      <p class="sub">For x-ray sensors, cameras, ECG carts, eye scanners, ultrasounds and scanners whose software saves each picture or PDF to a folder on this computer (or the network). Choose that folder — every new file goes to Clinicti.</p>
       <ul class="list" id="folders"></ul>
       <div class="row" style="margin-top:12px">
         <button class="primary" id="pick">Choose folder…</button>
@@ -106,7 +106,7 @@ export const PAGE = `<!doctype html>
     </div>
 
     <div class="card" style="margin-bottom:16px">
-      <h2><span class="step" id="s3">3</span> Machines that send DICOM <span class="muted" style="font-weight:400">— OPG, CBCT, digital x-ray</span></h2>
+      <h2><span class="step" id="s3">3</span> Machines that send DICOM <span class="muted" style="font-weight:400">— OPG, CBCT, x-ray, ultrasound, eye OCT</span></h2>
       <p class="sub">In the machine's own software, open its DICOM settings (often called <b>DICOM node</b>, <b>PACS</b>, <b>Storage</b> or <b>Send to</b>) and add a destination with these details:</p>
       <div class="note bad" id="dicomNote" hidden></div>
       <dl class="dest">
@@ -144,7 +144,7 @@ export const PAGE = `<!doctype html>
 
     <div class="card" style="margin-bottom:16px">
       <details id="adv">
-        <summary style="cursor:pointer;font-weight:650">When a doctor asks for an x-ray, also open… <span class="muted" style="font-weight:400">— optional, for whoever sets up the clinic</span></summary>
+        <summary style="cursor:pointer;font-weight:650">When a doctor asks for a result, also open… <span class="muted" style="font-weight:400">— optional, for whoever sets up the clinic</span></summary>
         <p class="sub" style="margin-top:12px">A command that opens the imaging software on the patient, from the vendor's own bridge instructions. It can use {patientId} (CLN-12), {fileNo}, {fullName}, {firstName}, {lastName}, {birthDate} (YYYYMMDD), {birthDateIso}, {sex} and {teeth}. Leave it empty to only show the notification.</p>
         <form class="row" id="cmdForm">
           <input id="cmdInput" style="flex:1;min-width:280px;font-family:Consolas,monospace;font-size:13px" placeholder='"C:\\Program Files\\Vendor\\Imaging.exe" -patient {patientId}' aria-label="Command">
@@ -254,7 +254,8 @@ export const PAGE = `<!doctype html>
       var li = el("li"); li.setAttribute("data-waiting", r.id);
       var g = el("div", "grow");
       g.appendChild(el("div", "pname", p.name));
-      g.appendChild(el("div", "muted", [pid, p.birthDate, r.teeth.length ? "Tooth " + r.teeth.join(" ") : "", r.requestedBy ? "asked by " + r.requestedBy : "", ago(Date.parse(r.createdAt))].filter(Boolean).join(" \\u00B7 ")));
+      var what = r.kind === "xray" ? "X-ray" : r.kind === "photo" ? "Photo" : "Result";
+      g.appendChild(el("div", "muted", [what + (r.note ? ": " + r.note : ""), pid, p.birthDate, r.teeth.length ? "Tooth " + r.teeth.join(" ") : "", r.requestedBy ? "asked by " + r.requestedBy : "", ago(Date.parse(r.createdAt))].filter(Boolean).join(" \\u00B7 ")));
       li.appendChild(g);
       var c1 = el("button", null, "Copy name"); c1.onclick = function () { copy(p.name, c1); }; li.appendChild(c1);
       if (pid) { var c2 = el("button", null, "Copy " + pid); c2.onclick = function () { copy(pid, c2); }; li.appendChild(c2); }

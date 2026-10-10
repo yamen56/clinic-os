@@ -6,6 +6,7 @@ import { nationalIdOf } from "@/lib/patients";
 import { toAsciiDigits } from "@/lib/phone";
 import { dicomPreview, isDicom, modalityLabel, parseDicomFile, type DicomMeta, type ParsedDicom } from "./dicom";
 import type { MatchBy } from "./devices";
+import { isPictureKind, kindFor, type FileKind } from "./kinds";
 
 /**
  * Every image that reaches a patient by machine passes through here: a
@@ -40,7 +41,7 @@ export type DicomRecord = {
 };
 
 export type IngestSender =
-  | { device: { id: string; name: string; matchBy: MatchBy }; userId?: undefined; impersonatedBy?: undefined }
+  | { device: { id: string; name: string; matchBy: MatchBy; kind?: string }; userId?: undefined; impersonatedBy?: undefined }
   | { device?: undefined; userId: string; impersonatedBy?: string | null };
 
 export type IngestInput = {
@@ -49,7 +50,7 @@ export type IngestInput = {
   fileName: string;
   mime: string;
   data: Buffer;
-  kind?: "xray" | "photo" | "other";
+  kind?: FileKind;
   teeth?: string[];
   /** A doctor's "Take x-ray" this answers. */
   requestId?: string | null;
@@ -163,11 +164,14 @@ function dicomTitle(meta: DicomMeta, fallback: string): string {
 
 export async function ingestImage(input: IngestInput, run: Run): Promise<IngestResult> {
   const { clinicId } = input;
-  const kind = input.kind ?? "xray";
   const teeth = [...new Set((input.teeth ?? []).filter((t) => TEETH.test(t)))];
   const parsed: ParsedDicom | null = isDicom(input.data) ? parseDicomFile(input.data) : null;
   const meta = parsed?.meta ?? null;
   const device = input.from.device ?? null;
+  // What it is: the sender's word if given, else the machine, the DICOM inside, the file.
+  const kind: FileKind =
+    input.kind ??
+    kindFor({ deviceKind: device?.kind, modality: meta?.modality, mime: meta ? "application/dicom" : input.mime, picture: !!parsed || input.mime.startsWith("image/") });
   const userId = input.from.userId ?? null;
 
   /*
@@ -324,24 +328,34 @@ export async function ingestImage(input: IngestInput, run: Run): Promise<IngestR
           matchedBy = "name_birth";
         }
       }
-      // Filed by who it is: the doctor waiting on this patient has their image (a picture — never a scan file).
-      if (patient && !request && kind !== "other") {
+      /*
+        Which open requests this file may answer. One that names a machine is
+        that machine's alone. "Take x-ray" or "Take photo" wants a picture —
+        never an STL or a PDF; "Request from device" with no machine named
+        wants whatever result comes. Requests naming this machine go first.
+      */
+      const answerable = `(r.device_id is null or r.device_id = $D::uuid)
+        and (r.kind = 'file' or r.device_id = $D::uuid or $P::boolean)
+        and r.fulfilled_at is null and r.cancelled_at is null
+        and r.created_at > now() - interval '${IMAGING_REQUEST_OPEN_FOR}'`;
+      const answerParams = (n: number) => answerable.replaceAll("$D", `$${n}`).replaceAll("$P", `$${n + 1}`);
+      const picture = isPictureKind(kind);
+      // Filed by who it is: the request waiting on this patient is answered too.
+      if (patient && !request) {
         const waiting = await c.query(
-          `select id, teeth, kind from imaging_requests
-            where clinic_id = $1 and patient_id = $2 and fulfilled_at is null and cancelled_at is null
-              and created_at > now() - interval '${IMAGING_REQUEST_OPEN_FOR}'
-            order by created_at limit 1 for update skip locked`,
-          [clinicId, patient.id]
+          `select r.id, r.teeth, r.kind from imaging_requests r
+            where r.clinic_id = $1 and r.patient_id = $2 and ${answerParams(3)}
+            order by (r.device_id is not null) desc, r.created_at limit 1 for update skip locked`,
+          [clinicId, patient.id, device?.id ?? null, picture]
         );
         if (waiting.rowCount) request = { id: waiting.rows[0].id, teeth: waiting.rows[0].teeth, kind: waiting.rows[0].kind };
       }
       if (!patient && input.useOpenRequest) {
         const r = await c.query(
-          `select id, patient_id, teeth, kind from imaging_requests
-            where clinic_id = $1 and fulfilled_at is null and cancelled_at is null
-              and created_at > now() - interval '${IMAGING_REQUEST_OPEN_FOR}'
-            order by created_at limit 1 for update skip locked`,
-          [clinicId]
+          `select r.id, r.patient_id, r.teeth, r.kind from imaging_requests r
+            where r.clinic_id = $1 and ${answerParams(2)}
+            order by (r.device_id is not null) desc, r.created_at limit 1 for update skip locked`,
+          [clinicId, device?.id ?? null, picture]
         );
         if (r.rowCount) {
           request = { id: r.rows[0].id, teeth: r.rows[0].teeth, kind: r.rows[0].kind };
@@ -350,7 +364,8 @@ export async function ingestImage(input: IngestInput, run: Run): Promise<IngestR
         }
       }
 
-      const fileKind = request?.kind ?? kind;
+      // A picture asked for as an x-ray or a photo is filed as one; anything else keeps its own kind.
+      const fileKind: FileKind = request && request.kind !== "file" && picture ? request.kind : kind;
       const fileTeeth = [...new Set([...teeth, ...(request?.teeth ?? [])])].sort();
 
       if (!patient) {
@@ -408,7 +423,7 @@ export async function ingestImage(input: IngestInput, run: Run): Promise<IngestR
 }
 
 type PatientMatch = Extract<IngestResult, { placed: "patient" }>["matchedBy"];
-type OpenRequest = { id: string; teeth: string[]; kind: "xray" | "photo" };
+type OpenRequest = { id: string; teeth: string[]; kind: "xray" | "photo" | "file" };
 
 /**
  * The patient the sender names — through a "Take x-ray" or outright. With

@@ -11,6 +11,10 @@ import { PATIENT_PRESCRIPTIONS_JSON } from "@/lib/prescriptions";
 import { auditView } from "@/lib/audit";
 import { DateTime } from "luxon";
 import { loadDentalChart } from "@/lib/charts/dental/db";
+import type { PoolClient } from "pg";
+import { IMAGING_REQUEST_OPEN_FOR, nameWords } from "@/lib/imaging/ingest";
+import { clinicSpecialties } from "@/lib/specialties";
+import { profileFor } from "@/lib/specialty-profile";
 
 export default async function PatientProfilePage({
   params,
@@ -255,6 +259,7 @@ export default async function PatientProfilePage({
       dentalDoctors: dentalDoctors.rows as { id: string; name: string }[],
       // The saved chart: its entries and their history, the clinic's own treatments and favourites.
       dentalChart: dental ? await loadDentalChart(c, access.clinicId, id) : null,
+      filesHub: await loadFilesHub(c, access.clinicId, id, p.full_name as string, (p.birth_date as Date | null) ?? null),
     };
   });
 
@@ -287,6 +292,7 @@ export default async function PatientProfilePage({
       canSendDocuments={can(access, "documents.manage")}
       caps={caps}
       country={countryFromClinic(access.clinic)}
+      filesHub={d.filesHub ? JSON.parse(JSON.stringify({ ...d.filesHub, canMessage: can(access, "conversations") && !!d.patient.phone_e164, canManageDevices: can(access, "settings.clinic"), clinicName: access.clinic.name })) : null}
       dental={
         d.dentalChart
           ? JSON.parse(
@@ -305,4 +311,49 @@ export default async function PatientProfilePage({
       }
     />
   );
+}
+
+/**
+ * What the patient's Files need besides the files: the clinic's machines (to
+ * ask one for this patient's next result), the requests already waiting, and
+ * results a machine sent without saying whose that look like this patient's
+ * — so they can be filed from here, without going to the Devices page. One
+ * statement, one round trip; the likeness is scored in JS with the same rule
+ * the Devices inbox uses (birth date counts 2, each shared name word 1).
+ */
+async function loadFilesHub(c: PoolClient, clinicId: string, patientId: string, fullName: string, birth: Date | null) {
+  const r = (
+    await c.query(
+      `select
+         (select coalesce(json_agg(json_build_object('id', d.id, 'name', d.name, 'kind', d.kind) order by d.created_at), '[]')
+            from clinic_devices d where d.clinic_id = $2 and d.revoked_at is null) as devices,
+         (select coalesce(json_agg(json_build_object('id', r.id, 'kind', r.kind, 'note', r.note, 'device', d.name, 'createdAt', r.created_at, 'teeth', r.teeth) order by r.created_at), '[]')
+            from imaging_requests r left join clinic_devices d on d.id = r.device_id
+           where r.clinic_id = $2 and r.patient_id = $1 and r.fulfilled_at is null and r.cancelled_at is null
+             and r.created_at > now() - interval '${IMAGING_REQUEST_OPEN_FOR}') as waiting,
+         (select coalesce(json_agg(x order by x.received_at), '[]') from (
+            select i.id, i.file_name, i.mime_type, i.kind, i.received_at, d.name as device, i.hint->'machine' as machine
+              from imaging_inbox i left join clinic_devices d on d.id = i.device_id
+             where i.clinic_id = $2 and i.assigned_at is null and i.discarded_at is null and i.hint ? 'machine'
+             order by i.received_at desc limit 50) x) as inbox,
+         (select json_build_object('specialty', cl.specialty, 'specialties', cl.specialties) from clinics cl where cl.id = $2) as clinic`,
+      [patientId, clinicId]
+    )
+  ).rows[0];
+  const words = new Set(nameWords(fullName));
+  const birthIso = birth ? `${birth.getFullYear()}-${String(birth.getMonth() + 1).padStart(2, "0")}-${String(birth.getDate()).padStart(2, "0")}` : null;
+  type Inbox = { id: string; file_name: string; mime_type: string; kind: string; received_at: string; device: string | null; machine: { name?: string; birthDate?: string | null } | null };
+  const likely = (r.inbox as Inbox[]).filter((i) => {
+    const theirs = nameWords(i.machine?.name ?? "");
+    const score = (birthIso && i.machine?.birthDate === birthIso ? 2 : 0) + theirs.filter((w) => words.has(w)).length;
+    return score >= 2;
+  });
+  const practises = clinicSpecialties(r.clinic?.specialty, r.clinic?.specialties ?? []);
+  return {
+    devices: r.devices as { id: string; name: string; kind: string }[],
+    waiting: r.waiting as { id: string; kind: string; note: string; device: string | null; createdAt: string; teeth: string[] }[],
+    likely,
+    // The kinds of result this clinic's fields keep, in their order (lib/specialty-profile).
+    kinds: profileFor(practises).files,
+  };
 }

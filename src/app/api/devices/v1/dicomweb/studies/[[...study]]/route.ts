@@ -96,11 +96,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ study?: string
       const r = await ingestImage(
         {
           clinicId: device.clinicId,
-          from: { device: { id: device.id, name: device.name, matchBy: device.matchBy } },
+          from: { device: { id: device.id, name: device.name, matchBy: device.matchBy, kind: device.kind } },
           fileName: `${meta.sopUid}.dcm`,
           mime: "application/dicom",
           data: part.data,
-          kind: meta.modality === "XC" ? "photo" : "xray",
           useOpenRequest: true,
         },
         (fn) => inDeviceClinic(device, fn)

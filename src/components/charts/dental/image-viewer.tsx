@@ -21,7 +21,8 @@ export type ChartImage = {
   id: string;
   src: string;
   name: string;
-  kind: "xray" | "photo" | "other";
+  /** What it is — x-ray, photo, ECG, ultrasound… (lib/imaging/kinds). */
+  kind: string;
   mime: string;
   date: string;
   /** Drawn for the preview, not uploaded by anybody. */
@@ -41,6 +42,7 @@ export function ImageViewer({
   onPin,
   onClose,
   onSend,
+  showTeeth = true,
 }: {
   images: ChartImage[];
   index: number;
@@ -51,9 +53,11 @@ export function ImageViewer({
   onClose: () => void;
   /** Offered when the patient can be messaged: the picture, to their WhatsApp. */
   onSend?: (img: ChartImage) => void;
+  /** The tooth row beneath — for a clinic that charts teeth. */
+  showTeeth?: boolean;
 }) {
   const { t, dir, locale } = useI18n();
-  const T = t.dental;
+  const T = t.viewer;
   const img = images[index];
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -141,7 +145,7 @@ export function ImageViewer({
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14px] font-semibold">{img.name}</div>
           <div className="text-[12px] text-white/60">
-            {T.imageKinds[img.kind]} · {fmtDateOnly(img.date, locale)}
+            {(t.patients.files.kinds as Record<string, string>)[img.kind] ?? img.kind} · {fmtDateOnly(img.date, locale)}
             {img.sample ? ` · ${T.sampleImage}` : ""}
           </div>
         </div>
@@ -297,7 +301,7 @@ export function ImageViewer({
       )}
 
       {/* The teeth this image is of. */}
-      <div className={`border-t border-white/10 px-3 py-2.5 sm:px-4 ${comparing ? "hidden" : ""}`} data-pins>
+      <div className={`border-t border-white/10 px-3 py-2.5 sm:px-4 ${comparing || !showTeeth ? "hidden" : ""}`} data-pins>
         <div className="mb-1.5 text-[12px] font-semibold text-white/70">{canPin ? T.pinHint : T.pinnedTo}</div>
         <div className="grid gap-1 overflow-x-auto" dir="ltr">
           {[PERMANENT_UPPER, PERMANENT_LOWER].map((row, r) => (

@@ -24,6 +24,7 @@ import {
   Workflow,
   Sparkles,
   Hourglass,
+  Cable,
   Wallet,
   Settings,
   MoreHorizontal,
@@ -41,6 +42,7 @@ type NavKey =
   | "conversations"
   | "calendar"
   | "waitlist"
+  | "devices"
   /* Invoices, Earnings and Expenses, which are one subject and are now one
      entry with tabs inside it. See lib/finance. */
   | "finance"
@@ -56,6 +58,7 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   conversations: MessageCircle,
   calendar: CalendarDays,
   waitlist: Hourglass,
+  devices: Cable,
   finance: Wallet,
   patients: Users,
   campaigns: Megaphone,
@@ -83,6 +86,7 @@ export function Shell({
   pendingDocuments,
   hasEarnings,
   hasInsurers,
+  devices,
   fullControl,
   announcements,
   children,
@@ -112,6 +116,8 @@ export function Shell({
   hasEarnings: boolean;
   /** The clinic deals with at least one insurance company, so Claims is a tab. */
   hasInsurers: boolean;
+  /** A machine is connected, and how many of its results wait to be filed. */
+  devices: { connected: boolean; waiting: number };
   /** `hasFullControl(access)` — an owner, or somebody on `full` access. */
   fullControl: boolean;
   announcements: { id: string; title: string; body: string }[];
@@ -177,6 +183,10 @@ export function Shell({
     ...(caps.invoices ? [finance] : []),
     { key: "documents", href: `${base}/documents`, show: caps.documents, badge: pendingDocuments },
     { key: "waitlist", href: `${base}/waitlist`, show: caps.calendar },
+    /* Only once the clinic has a machine (or a result is still waiting from
+       one it unplugged): a clinic with none sets one up in Settings → Devices
+       and should not carry an empty page in its nav. The badge is the inbox. */
+    { key: "devices", href: `${base}/devices`, show: caps.patients && (devices.connected || devices.waiting > 0), badge: devices.waiting },
     ...(caps.invoices ? [] : [finance]),
     { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },

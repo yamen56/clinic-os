@@ -15,6 +15,7 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { FeaturePicker } from "../../feature-picker";
 import { DepartmentPicker } from "../../department-picker";
+import { SpecialtyAdds } from "../../specialty-adds";
 import { toFeatureSetting, type FeatureMap } from "@/lib/features";
 import type { AdminCapabilityMap } from "@/lib/admin-permissions";
 import { SUPPORT_REASON_MAX, SUPPORT_REASON_MIN } from "@/lib/support-visits";
@@ -233,6 +234,7 @@ export function ClinicAdminPanel({
             <p className="mb-2 text-[12px] text-ink-500">{t.admin.departmentsSub}</p>
             <DepartmentPicker value={departments} onChange={setDepartments} primary={specialty} disabled={specPending} />
           </div>
+          <SpecialtyAdds specialties={[specialty, ...departments.filter((d) => d !== specialty)]} />
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"

@@ -14,7 +14,6 @@
 */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { MousePointer2, Paintbrush, History as HistoryIcon, Undo2, ChevronDown, Radiation, X } from "lucide-react";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
@@ -32,6 +31,7 @@ import { Odontogram, neighbour, type RegionMark } from "@/components/charts/dent
 import { ImageViewer, type ChartImage } from "@/components/charts/dental/image-viewer";
 import { ImageStrip } from "@/components/charts/dental/image-strip";
 import { CameraCapture } from "@/components/charts/dental/camera-capture";
+import { SendToPatient, sendPictureToPatient } from "@/components/patient-files/send-to-patient";
 import { MouthGlyph, type MouthRegion } from "@/components/charts/dental/mouth-art";
 import { DockSheet, SHEET_SHARE } from "@/components/charts/dental/dock-sheet";
 import { iconFor } from "@/components/charts/dental/icons";
@@ -1026,7 +1026,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
               <span className="min-w-0 flex-1 text-[13px] font-semibold text-ink-900">
                 {pending.teeth.length ? T.waitingXray.replace("{teeth}", pending.teeth.join(" · ")) : T.waitingXrayMouth}
               </span>
-              <a href={`/c/${slug}/imaging`} target="_blank" rel="noreferrer" className={buttonClass({ variant: "outline", size: "sm" })}>
+              <a href={`/c/${slug}/devices`} target="_blank" rel="noreferrer" className={buttonClass({ variant: "outline", size: "sm" })}>
                 {T.openStation}
               </a>
               <button type="button" onClick={cancelXray} aria-label={T.cancel} className="grid h-8 w-8 place-items-center rounded-ctl text-ink-500 hover:bg-white">
@@ -1197,17 +1197,12 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
           initialCaption={sending.caption}
           onClose={() => setSending(null)}
           onSend={async (text) => {
-            const res = await fetch(`/api/c/${slug}/files/${sending.img.id}/whatsapp`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ caption: text }),
-            });
-            const body = (await res.json().catch(() => ({}))) as { error?: string };
-            if (res.ok) {
-              toast(T.sentWhatsApp);
+            const r = await sendPictureToPatient(slug, sending.img.id, text);
+            if (r === "ok") {
+              toast(t.viewer.sentWhatsApp);
               setSending(null);
             } else {
-              toast(body.error === "no_phone" ? T.sendNoPhone : body.error === "whatsapp_not_connected" ? T.sendNoWhatsApp : T.saveFailed, "error");
+              toast(r === "no_phone" ? t.viewer.sendNoPhone : r === "whatsapp_not_connected" ? t.viewer.sendNoWhatsApp : t.viewer.sendFailed, "error");
             }
           }}
         />
@@ -1339,88 +1334,5 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
         )}
       </Modal>
     </div>
-  );
-}
-
-/**
- * The picture, the patient's WhatsApp, and a line of text — above the x-ray
- * viewer, which is why it is its own layer rather than the app's Modal (that
- * one sits beneath the viewer). The caption starts in the clinic's language
- * and can be changed or emptied before it goes.
- */
-function SendToPatient({
-  img,
-  initialCaption,
-  onClose,
-  onSend,
-}: {
-  img: ChartImage;
-  initialCaption: string;
-  onClose: () => void;
-  onSend: (caption: string) => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const T = t.dental;
-  const [text, setText] = useState(initialCaption);
-  const [busy, setBusy] = useState(false);
-  // Escape closes this, not the viewer beneath it: caught on window, before the viewer (on document) hears it.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.stopImmediatePropagation();
-      onClose();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
-  if (typeof document === "undefined") return null;
-  return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={T.sendToPatient} data-send-dialog>
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative m-0 w-full max-w-md rounded-t-modal bg-surface p-5 text-ink-900 shadow-modal sm:m-4 sm:rounded-modal" dir="ltr">
-        <div className="mb-3 flex items-start gap-3">
-          {
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={img.src} alt="" className="h-16 w-24 shrink-0 rounded-md bg-black object-cover" />
-          }
-          <div className="min-w-0">
-            <h2 className="font-display text-lg font-semibold">{T.sendToPatient}</h2>
-            <p className="truncate text-[13px] text-ink-500">{img.name}</p>
-          </div>
-        </div>
-        <label className="block text-[13px] font-semibold">
-          {T.sendCaption}
-          <textarea
-            dir="auto"
-            value={text}
-            maxLength={1000}
-            onChange={(e) => setText(e.target.value)}
-            rows={3}
-            className="mt-1.5 block w-full rounded-ctl border border-line bg-surface px-3 py-2 text-base font-normal md:text-sm"
-            data-send-caption
-          />
-        </label>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            {T.cancel}
-          </Button>
-          <Button
-            loading={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await onSend(text);
-              } finally {
-                setBusy(false);
-              }
-            }}
-            data-send-confirm
-          >
-            {T.send}
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body
   );
 }

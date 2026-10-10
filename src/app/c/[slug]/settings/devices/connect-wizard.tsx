@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Camera, Circle, CircleCheck, Download, FolderOpen, LoaderCircle, ScanLine, ScanText, Usb } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
+import { orderedKinds } from "@/lib/imaging/kinds";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
@@ -23,15 +24,24 @@ import type { BridgeReport, DeviceRow, Kind } from "./devices-client";
 type Choice = "folder" | "dicom" | "files";
 type LastImage = { at: string; file_name: string; patient: string | null; inbox: boolean } | null;
 
-const DEFAULTS: Record<Choice, { kind: Kind }> = {
-  folder: { kind: "xray" },
-  dicom: { kind: "opg" },
-  files: { kind: "scanner" },
+/*
+  Which machine types each way of connecting usually means, in order; the
+  first one the clinic's specialties name is the default. A cardiology clinic
+  choosing "software that saves files" starts on ECG, a dental one on x-ray.
+*/
+const TYPICAL: Record<Choice, Kind[]> = {
+  folder: ["xray", "ecg", "eye", "ultrasound", "endoscope", "monitor", "lab", "scanner", "camera"],
+  dicom: ["opg", "cbct", "xray", "ultrasound", "eye", "ecg"],
+  files: ["scanner", "monitor", "lab", "endoscope", "other"],
 };
-const KINDS: Kind[] = ["xray", "opg", "cbct", "camera", "scanner", "ultrasound", "other"];
+const defaultKind = (c: Choice, usual: readonly Kind[]): Kind => TYPICAL[c].find((k) => usual.includes(k)) ?? TYPICAL[c][0];
 
 export function choiceFor(d: DeviceRow): Choice {
-  return d.kind === "opg" || d.kind === "cbct" || d.bridge?.dicom?.lastEcho || d.bridge?.dicom?.lastStore ? "dicom" : d.kind === "scanner" || d.kind === "ultrasound" || d.kind === "other" ? "files" : "folder";
+  return d.kind === "opg" || d.kind === "cbct" || d.bridge?.dicom?.lastEcho || d.bridge?.dicom?.lastStore
+    ? "dicom"
+    : d.kind === "scanner" || d.kind === "monitor" || d.kind === "lab" || d.kind === "other"
+      ? "files"
+      : "folder";
 }
 
 export function ConnectWizard({
@@ -42,8 +52,11 @@ export function ConnectWizard({
   onDevice,
   onClose,
   onApi,
+  usual,
 }: {
   slug: string;
+  /** The machines the clinic's specialties usually connect, offered first. */
+  usual: Kind[];
   base: string;
   /** Reopened from a device's Setup button, at its checklist. */
   existing: DeviceRow | null;
@@ -96,8 +109,9 @@ export function ConnectWizard({
 
   const pick = (c: Choice) => {
     setChoice(c);
-    setKind(DEFAULTS[c].kind);
-    setName(T.kinds[DEFAULTS[c].kind]);
+    const k = defaultKind(c, usual);
+    setKind(k);
+    setName(T.kinds[k]);
     setStep("name");
   };
 
@@ -224,7 +238,7 @@ export function ConnectWizard({
             </Field>
             <Field label={T.kind}>
               <Select value={kind} onChange={(e) => setKind(e.target.value as Kind)} data-wizard-kind>
-                {KINDS.map((k) => (
+                {orderedKinds(usual).map((k) => (
                   <option key={k} value={k}>
                     {T.kinds[k]}
                   </option>
@@ -312,7 +326,7 @@ export function ConnectWizard({
                   {!b?.folders?.length && <Status ok={false} hook="watching" text={T.waitingFolder} />}
                   <p className="text-[13px] text-ink-500">
                     {T.noInstall}{" "}
-                    <Link href={`/c/${slug}/imaging`} className="font-semibold text-brand-700 underline">
+                    <Link href={`/c/${slug}/devices`} className="font-semibold text-brand-700 underline">
                       {T.openImaging}
                     </Link>
                   </p>

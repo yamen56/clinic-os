@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { deviceAuth, inDeviceClinic } from "@/lib/imaging/devices";
 import { ingestImage } from "@/lib/imaging/ingest";
 import { isUuid } from "@/lib/uuid";
-import { isDicom } from "@/lib/imaging/dicom";
+import { FILE_KINDS, type FileKind } from "@/lib/imaging/kinds";
 
 /*
   A machine sends an image.
@@ -38,27 +38,19 @@ export async function POST(req: Request) {
   const requestId = String(form!.get("requestId") ?? "").trim();
   const data = Buffer.from(await file.arrayBuffer());
   const name = file.name || "image";
-  const mime = file.type || mimeFor(name);
+  // "application/octet-stream" is a sender saying it does not know — curl, most scripts — not a type.
+  const mime = file.type && file.type !== "application/octet-stream" ? file.type : mimeFor(name);
   /*
-    A picture or a DICOM is the device's kind of image; anything else — an
-    intraoral scanner's STL, an ultrasound's PDF — is kept as a file, and never
-    answers a doctor waiting on an x-ray: it waits to be filed unless the
-    sender named the patient.
+    What it is — an x-ray, an ECG, an ultrasound, a report — is the sender's
+    to say if it does, and otherwise worked out in ingest from the machine
+    type, the DICOM inside, and the file (lib/imaging/kinds).
   */
-  const picture = isDicom(data) || mime.startsWith("image/");
   const kindRaw = String(form!.get("kind") ?? "").trim();
-  const kind =
-    kindRaw === "photo" || kindRaw === "xray" || kindRaw === "other"
-      ? kindRaw
-      : !picture
-        ? "other"
-        : device.kind === "camera" || device.kind === "scanner"
-          ? "photo"
-          : "xray";
+  const kind = (FILE_KINDS as readonly string[]).includes(kindRaw) ? (kindRaw as FileKind) : undefined;
   const result = await ingestImage(
     {
       clinicId: device.clinicId,
-      from: { device: { id: device.id, name: device.name, matchBy: device.matchBy } },
+      from: { device: { id: device.id, name: device.name, matchBy: device.matchBy, kind: device.kind } },
       fileName: name,
       mime,
       data,
@@ -68,7 +60,7 @@ export async function POST(req: Request) {
         .filter(Boolean),
       requestId: isUuid(requestId) ? requestId : null,
       patientRef: String(form!.get("patient") ?? "").trim() || null,
-      useOpenRequest: kind !== "other",
+      useOpenRequest: true,
     },
     (fn) => inDeviceClinic(device, fn)
   );

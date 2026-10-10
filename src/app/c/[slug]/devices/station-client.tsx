@@ -1,30 +1,32 @@
 "use client";
 
 /*
-  The imaging station.
+  The Devices page: what the clinic's machines send, for every kind of clinic.
 
-  Most x-ray machines hand their images to the vendor's software on the PC
-  beside them, and that software saves each one into a folder. This page,
-  open on that PC, watches the folder: the browser is given read access to it
-  once (Chrome and Edge can; the choice is remembered on this computer), looks
-  every two seconds for files that were not there before, waits until a file
-  has stopped growing, and sends it.
+  Most machines — an x-ray sensor, an ECG cart, an eye scanner, an ultrasound —
+  hand their results to the vendor's software on the PC beside them, and that
+  software saves each one into a folder. The Clinicti Bridge watches that
+  folder from the PC itself. Where nothing can be installed, this page, open on
+  that PC, can do the same while it stays open: the browser is given read
+  access to the folder once (Chrome and Edge can; the choice is remembered on
+  this computer), looks every two seconds for files that were not there
+  before, waits until a file has stopped growing, and sends it.
 
-  Where it goes is decided by the doctor at the chair. "Take x-ray" on a tooth
-  leaves a request waiting here; the next image the machine saves goes into
-  that patient's files, labelled with that tooth, and opens on their chart. An
-  image saved with nobody waiting is held on this page — never guessed — until
-  somebody sends it to a patient or dismisses it.
+  Where a result goes is decided by the server, never by this browser:
+  "Request from device" in a patient's Files (or "Take x-ray" on a tooth)
+  leaves a request waiting here, and the next result answers it. A result
+  nobody asked for, and whose machine did not say whose it is, waits in the
+  clinic's one inbox below until somebody files it — never guessed.
 
-  Nothing is installed and no vendor software is changed. The x-ray software
-  is only asked to do what it already does: save the image.
+  Nothing is installed and no vendor software is changed. The machine's
+  software is only asked to do what it already does: save the result.
 */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FolderOpen, Inbox, Radiation, Send, Trash2, Upload, WifiOff, X } from "lucide-react";
+import { Cable, FolderOpen, Inbox, Radiation, Send, Trash2, Upload, WifiOff, X } from "lucide-react";
 import { bridgeOffline } from "@/lib/imaging/offline";
 import Link from "next/link";
-import { I18nProvider, useI18n } from "@/lib/i18n/client";
+import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -42,8 +44,17 @@ type DirHandle = {
 };
 type Picker = { showDirectoryPicker?: (o?: { id?: string; mode?: "read" }) => Promise<DirHandle> };
 
-type Request = { id: string; patient_id: string; patient_name: string; teeth: string[]; kind: "xray" | "photo"; created_at: string; requested_by_name: string | null };
-type Held = { key: string; file: File; at: number };
+type Request = {
+  id: string;
+  patient_id: string;
+  patient_name: string;
+  teeth: string[];
+  kind: "xray" | "photo" | "file";
+  created_at: string;
+  requested_by_name: string | null;
+  device_name: string | null;
+  note: string;
+};
 export type StationDevice = { id: string; name: string; kind: string; method: string; paired_at: string | null; revoked_at: string | null; last_seen_at: string | null; host: string | null };
 type InboxItem = {
   id: string;
@@ -117,28 +128,15 @@ async function* walk(dir: DirHandle, prefix = "", depth = 0): AsyncGenerator<{ p
   }
 }
 
-export function ImagingStation({ slug, devices, canManageDevices }: { slug: string; devices: StationDevice[]; canManageDevices: boolean }) {
-  const { t } = useI18n();
-  return (
-    <I18nProvider dict={t} locale="en">
-      <div dir="ltr" lang="en" className="font-sans" data-latin-island>
-        <Station slug={slug} devices={devices} canManageDevices={canManageDevices} />
-      </div>
-    </I18nProvider>
-  );
-}
-
-function Station({ slug, devices, canManageDevices }: { slug: string; devices: StationDevice[]; canManageDevices: boolean }) {
+export function DevicesStation({ slug, devices, canManageDevices }: { slug: string; devices: StationDevice[]; canManageDevices: boolean }) {
   const { t, locale } = useI18n();
-  const T = t.dental.station;
+  const T = t.station;
   const { toast } = useToast();
   const [supported, setSupported] = useState(true);
   const [folder, setFolder] = useState<DirHandle | null>(null);
   const [watching, setWatching] = useState(false);
   const [requests, setRequests] = useState<Request[]>([]);
-  const [held, setHeld] = useState<Held[]>([]);
   const [sent, setSent] = useState<Sent[]>([]);
-  const [busy, setBusy] = useState(false);
   const requestsRef = useRef<Request[]>([]);
   requestsRef.current = requests;
 
@@ -182,88 +180,40 @@ function Station({ slug, devices, canManageDevices }: { slug: string; devices: S
     return () => clearInterval(id);
   }, [poll]);
 
-  /* Into the patient's files, through the same route the Files tab uses; then the request is answered. */
-  const send = useCallback(
-    async (file: File, to: { patientId: string; patientName: string; kind: "xray" | "photo"; teeth: string[]; requestId?: string }) => {
-      const fd = new FormData();
-      fd.set("file", new File([file], file.name, { type: mimeOf(file), lastModified: file.lastModified }));
-      fd.set("kind", to.kind);
-      const res = await fetch(`/api/c/${slug}/patients/${to.patientId}/files`, { method: "POST", body: fd });
-      const body = (await res.json().catch(() => null)) as { file?: { id: string } } | null;
-      if (!res.ok || !body?.file) throw new Error("upload");
-      if (to.requestId) {
-        const r = await fetch(`/api/c/${slug}/imaging/requests/${to.requestId}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ op: "fulfil", fileId: body.file.id }),
-        });
-        if (!r.ok) throw new Error("fulfil");
-      }
-      setSent((prev) => [{ key: `${file.name}-${Date.now()}`, name: file.name, patient: to.patientName, teeth: to.teeth, at: Date.now() }, ...prev].slice(0, 30));
-      toast(T.sent.replace("{patient}", to.patientName));
-    },
-    [slug, toast, T.sent]
-  );
-
   /*
-    A DICOM says which series it belongs to, so the server decides: a slice
-    of a series already on file joins it (the rest of a CBCT, after the
-    first slice answered the doctor), a new one answers whoever has waited
-    longest, and one with nobody waiting goes to the clinic's inbox below.
+    Every file goes to the server, which decides — never this browser: a
+    DICOM slice joins its series, a file whose machine or DICOM says whose it
+    is goes to that patient, the next file answers whoever is waiting, and the
+    rest wait to be filed in the clinic's one inbox below.
   */
-  const receiveDicom = useCallback(
-    async (file: File) => {
-      const fd = new FormData();
-      fd.set("file", new File([file], file.name, { type: "application/dicom", lastModified: file.lastModified }));
-      const res = await fetch(`/api/c/${slug}/imaging/receive`, { method: "POST", body: fd });
-      const body = (await res.json().catch(() => null)) as
-        | { placed: "patient"; added: string; patientName: string; teeth: string[]; requestId: string | null }
-        | { placed: "inbox"; added: string }
-        | null;
-      if (!res.ok || !body) throw new Error("upload");
-      if (body.placed === "inbox") {
-        if (body.added === "new") toast(T.toInbox);
-        void loadInbox();
-        return;
-      }
-      if (body.requestId) setRequests((prev) => prev.filter((r) => r.id !== body.requestId));
-      setSent((prev) => [{ key: `${file.name}-${Date.now()}`, name: file.name, patient: body.patientName, teeth: body.teeth, at: Date.now() }, ...prev].slice(0, 30));
-      if (body.added === "new") toast(T.sent.replace("{patient}", body.patientName));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [slug, toast, T.toInbox, T.sent]
-  );
-
-  /* A new image: to whoever has been waiting longest, or held if nobody is. */
   const arrive = useCallback(
     async (file: File) => {
-      if (await isDicomFile(file)) {
-        try {
-          await receiveDicom(file);
-        } catch {
-          toast(T.failed, "error");
-          setHeld((prev) => [...prev, { key: `${file.name}-${file.lastModified}-${file.size}`, file, at: Date.now() }]);
-        }
-        void poll();
-        return;
-      }
-      // A file with no extension that is not DICOM is not an image at all.
-      if (!IMAGE.test(file.name)) return;
-      const req = requestsRef.current[0];
-      if (!req) {
-        setHeld((prev) => [...prev, { key: `${file.name}-${file.lastModified}-${file.size}`, file, at: Date.now() }]);
-        return;
-      }
-      setRequests((prev) => prev.filter((r) => r.id !== req.id));
+      const dicom = await isDicomFile(file);
+      // A file with no extension that is not DICOM is not a result at all.
+      if (!dicom && !IMAGE.test(file.name)) return;
+      const fd = new FormData();
+      fd.set("file", new File([file], file.name, { type: dicom ? "application/dicom" : mimeOf(file), lastModified: file.lastModified }));
       try {
-        await send(file, { patientId: req.patient_id, patientName: req.patient_name, kind: req.kind, teeth: req.teeth, requestId: req.id });
+        const res = await fetch(`/api/c/${slug}/imaging/receive`, { method: "POST", body: fd });
+        const body = (await res.json().catch(() => null)) as
+          | { placed: "patient"; added: string; patientName: string; teeth: string[]; requestId: string | null }
+          | { placed: "inbox"; added: string }
+          | null;
+        if (!res.ok || !body) throw new Error("upload");
+        if (body.placed === "inbox") {
+          if (body.added === "new") toast(T.toInbox);
+          void loadInbox();
+        } else {
+          if (body.requestId) setRequests((prev) => prev.filter((r) => r.id !== body.requestId));
+          setSent((prev) => [{ key: `${file.name}-${Date.now()}`, name: file.name, patient: body.patientName, teeth: body.teeth, at: Date.now() }, ...prev].slice(0, 30));
+          if (body.added === "new") toast(T.sent.replace("{patient}", body.patientName));
+        }
       } catch {
         toast(T.failed, "error");
-        setHeld((prev) => [...prev, { key: `${file.name}-${file.lastModified}-${file.size}`, file, at: Date.now() }]);
       }
       void poll();
     },
-    [send, poll, toast, T.failed, receiveDicom]
+    [slug, toast, T.toInbox, T.sent, T.failed, loadInbox, poll]
   );
 
   /*
@@ -417,13 +367,28 @@ function Station({ slug, devices, canManageDevices }: { slug: string; devices: S
           <ul className="grid gap-2" data-requests>
             {requests.map((r, i) => (
               <li key={r.id} className={`flex flex-wrap items-center gap-3 rounded-ctl border px-3 py-2.5 ${i === 0 ? "border-brand-300 bg-brand-50" : "border-line"}`} data-request={r.id}>
-                <Radiation className="h-4.5 w-4.5 shrink-0 text-brand-600" />
+                {r.kind === "xray" ? <Radiation className="h-4.5 w-4.5 shrink-0 text-brand-600" /> : <Cable className="h-4.5 w-4.5 shrink-0 text-brand-600" />}
                 <div className="min-w-0 flex-1">
                   <div className="text-[14px] font-semibold text-ink-900">
-                    {r.patient_name} · <span className="tnum">{r.teeth.length ? r.teeth.join(" · ") : T.mouth}</span>
+                    {r.patient_name}
+                    {r.teeth.length ? (
+                      <>
+                        {" · "}
+                        <span className="tnum">{r.teeth.join(" · ")}</span>
+                      </>
+                    ) : r.kind === "xray" ? (
+                      ` · ${T.mouth}`
+                    ) : null}
                   </div>
-                  <div className="text-[12.5px] text-ink-500">
-                    {r.requested_by_name ? T.askedBy.replace("{name}", r.requested_by_name) : ""} · {new Date(r.created_at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}
+                  <div className="text-[12.5px] text-ink-500" data-request-meta>
+                    {[
+                      r.device_name ?? T.anyMachine,
+                      r.note ? `“${r.note}”` : null,
+                      r.requested_by_name ? T.askedBy.replace("{name}", r.requested_by_name) : null,
+                      new Date(r.created_at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" }),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                 </div>
                 <button type="button" onClick={() => cancel(r.id)} aria-label={T.cancelRequest} className="grid h-8 w-8 place-items-center rounded-ctl text-ink-500 hover:bg-sunken">
@@ -434,36 +399,6 @@ function Station({ slug, devices, canManageDevices }: { slug: string; devices: S
           </ul>
         )}
       </Card>
-
-      {held.length > 0 && (
-        <Card className="p-4">
-          <h2 className="mb-3 text-[15px] font-semibold text-ink-900">{T.held}</h2>
-          <ul className="grid gap-2" data-held>
-            {held.map((h) => (
-              <HeldRow
-                key={h.key}
-                slug={slug}
-                item={h}
-                busy={busy}
-                waiting={requests[0] ?? null}
-                onSend={async (to) => {
-                  setBusy(true);
-                  try {
-                    await send(h.file, to);
-                    setHeld((prev) => prev.filter((x) => x.key !== h.key));
-                    if (to.requestId) setRequests((prev) => prev.filter((r) => r.id !== to.requestId));
-                  } catch {
-                    toast(T.failed, "error");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-                onDismiss={() => setHeld((prev) => prev.filter((x) => x.key !== h.key))}
-              />
-            ))}
-          </ul>
-        </Card>
-      )}
 
       <Card className="p-4">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink-900">
@@ -596,7 +531,7 @@ function InboxRow({
   onDone: (id: string, answeredRequest?: string) => void;
 }) {
   const { t, locale } = useI18n();
-  const T = t.dental.station;
+  const T = t.station;
   const { toast } = useToast();
   const [q, setQ] = useState("");
   const results = usePatientSearch(slug, q);
@@ -759,97 +694,3 @@ function InboxRow({
   );
 }
 
-/** An image nobody asked for: to the request now waiting, to a patient found by search, or away. */
-function HeldRow({
-  slug,
-  item,
-  busy,
-  waiting,
-  onSend,
-  onDismiss,
-}: {
-  slug: string;
-  item: Held;
-  busy: boolean;
-  waiting: Request | null;
-  onSend: (to: { patientId: string; patientName: string; kind: "xray" | "photo"; teeth: string[]; requestId?: string }) => void;
-  onDismiss: () => void;
-}) {
-  const { t } = useI18n();
-  const T = t.dental.station;
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<{ id: string; full_name: string; phone_e164: string | null }[]>([]);
-  const [url] = useState(() => (item.file.type.startsWith("image/") && !/tiff/.test(item.file.type) ? URL.createObjectURL(item.file) : null));
-  useEffect(() => () => void (url && URL.revokeObjectURL(url)), [url]);
-  useEffect(() => {
-    if (q.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-    const id = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/c/${slug}/patients/search?q=${encodeURIComponent(q.trim())}`);
-        const body = (await res.json()) as { results?: { id: string; full_name: string; phone_e164: string | null }[] };
-        setResults(body.results ?? []);
-      } catch {
-        setResults([]);
-      }
-    }, 250);
-    return () => clearTimeout(id);
-  }, [q, slug]);
-
-  return (
-    <li className="grid gap-2 rounded-ctl border border-line p-2.5">
-      <div className="flex items-center gap-3">
-        <span className="grid h-14 w-16 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900">
-          {
-            // eslint-disable-next-line @next/next/no-img-element
-            url ? <img src={url} alt="" className="h-full w-full object-cover" /> : <Radiation className="h-5 w-5 text-white/70" />
-          }
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink-900">{item.file.name}</span>
-        {waiting && (
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() => onSend({ patientId: waiting.patient_id, patientName: waiting.patient_name, kind: waiting.kind, teeth: waiting.teeth, requestId: waiting.id })}
-          >
-            <Send className="h-4 w-4" />
-            {waiting.patient_name}
-          </Button>
-        )}
-        <button type="button" onClick={onDismiss} aria-label={T.dismiss} className="grid h-8 w-8 place-items-center rounded-ctl text-ink-500 hover:bg-sunken">
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-      <div>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={T.search}
-          aria-label={T.sendTo}
-          className="h-9 w-full rounded-ctl border border-line bg-surface px-3 text-base md:text-sm"
-        />
-        {results.length > 0 && (
-          <ul className="mt-1 grid gap-1">
-            {results.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onSend({ patientId: p.id, patientName: p.full_name, kind: "xray", teeth: [] })}
-                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-[13.5px] hover:bg-sunken"
-                >
-                  <span className="font-semibold text-ink-900">{p.full_name}</span>
-                  <span dir="ltr" className="text-[12px] text-ink-500 tnum">
-                    {p.phone_e164 ?? ""}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </li>
-  );
-}

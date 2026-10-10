@@ -1,6 +1,8 @@
 import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { appUrl } from "@/lib/urls";
+import { clinicSpecialties } from "@/lib/specialties";
+import { profileFor } from "@/lib/specialty-profile";
 import { DevicesClient, type DeviceRow } from "./devices-client";
 
 /**
@@ -12,15 +14,19 @@ import { DevicesClient, type DeviceRow } from "./devices-client";
 export default async function DevicesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const access = await guardCap(slug, "settings.clinic");
-  const rows = await inClinic(access, async (c) =>
-    (
+  const { rows, practises } = await inClinic(access, async (c) => {
+    const cl = (await c.query(`select specialty, specialties from clinics where id = $1`, [access.clinicId])).rows[0];
+    const list = (
       await c.query(
         `select id, name, kind, match_by, method, key_hint, created_at, last_seen_at, images_received, revoked_at, paired_at, pair_expires_at, bridge
            from clinic_devices where clinic_id = $1
           order by revoked_at nulls first, created_at`,
         [access.clinicId]
       )
-    ).rows
-  );
-  return <DevicesClient slug={slug} base={appUrl()} initial={JSON.parse(JSON.stringify(rows)) as DeviceRow[]} />;
+    ).rows;
+    return { rows: list, practises: clinicSpecialties(cl?.specialty, cl?.specialties ?? []) };
+  });
+  // The machines its fields usually connect, first (lib/specialty-profile).
+  const usual = profileFor(practises).devices;
+  return <DevicesClient slug={slug} base={appUrl()} usual={usual} initial={JSON.parse(JSON.stringify(rows)) as DeviceRow[]} />;
 }

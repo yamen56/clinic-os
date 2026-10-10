@@ -7,7 +7,7 @@ import type { Item, UploadResult } from "./outbox";
  */
 
 export type WorkItem = {
-  /** The appointment or the doctor's "Take x-ray" this came from. */
+  /** The appointment or the doctor's request ("Take x-ray", "Request from device") this came from. */
   id: string;
   startsAt: string | null;
   doctor: string | null;
@@ -17,12 +17,20 @@ export type WorkItem = {
 
 export type WaitingRequest = {
   id: string;
+  /** xray and photo come from a tooth on the dental chart; file is "Request from device", any result. */
   kind: string;
   teeth: string[];
+  /** What the doctor wants, in their words — "12-lead ECG", "both eyes". Empty when they said nothing. */
+  note?: string;
   createdAt: string;
   requestedBy: string | null;
   patient: WorkItem["patient"];
 };
+
+/** What a waiting request is for, in the words the window and the notification use. */
+export function requestLabel(r: Pick<WaitingRequest, "kind">): string {
+  return r.kind === "xray" ? "X-ray" : r.kind === "photo" ? "Photo" : "Result";
+}
 
 export class Api {
   constructor(
@@ -95,7 +103,7 @@ export class Api {
     return ((await res.json()) as { requests: WaitingRequest[] }).requests;
   }
 
-  /** Today's booked patients and anyone a doctor is waiting on an x-ray for. */
+  /** Today's booked patients and anyone a doctor is waiting on a result for. */
   async worklist(date?: string): Promise<WorkItem[]> {
     const q = date ? `?date=${date}` : "";
     const [wl, rq] = await Promise.all([
@@ -104,14 +112,14 @@ export class Api {
     ]);
     if (!wl.ok || !rq.ok) throw new Error(`worklist_http_${wl.status}_${rq.status}`);
     const a = (await wl.json()) as { appointments: { id: string; startsAt: string; doctor: string | null; service: string | null; patient: WorkItem["patient"] }[] };
-    const r = (await rq.json()) as { requests: { id: string; createdAt: string; requestedBy: string | null; teeth: string[]; kind: string; patient: WorkItem["patient"] }[] };
+    const r = (await rq.json()) as { requests: WaitingRequest[] };
     const items: WorkItem[] = [
       // Somebody in the chair, waiting on the picture, first.
       ...r.requests.map((x) => ({
         id: x.id,
         startsAt: x.createdAt,
         doctor: x.requestedBy,
-        description: x.teeth.length ? `X-ray ${x.teeth.join(" ")}` : "X-ray",
+        description: [requestLabel(x), x.teeth.join(" "), x.note].filter(Boolean).join(" "),
         patient: x.patient,
       })),
       ...a.appointments.map((x) => ({ id: x.id, startsAt: x.startsAt, doctor: x.doctor, description: x.service ?? "Appointment", patient: x.patient })),

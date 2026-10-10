@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { openFile } from "@/lib/storage";
+import sharp from "sharp";
 import { fileResponseHeaders } from "@/lib/download";
 import { auditView } from "@/lib/audit";
 import { can } from "@/lib/auth";
@@ -46,6 +47,22 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string; f
 
   const f = await openFile(meta.storage_path);
   if (!f) return NextResponse.json({ error: "gone" }, { status: 410 });
+
+  /*
+    A tile for the Files gallery: 360 pixels, as JPEG. A panoramic x-ray is
+    several megabytes, and a patient's Files can hold dozens of them; the
+    full picture is fetched only when it is opened.
+  */
+  if (new URL(req.url).searchParams.has("thumb") && /^image\/(png|jpe?g|webp|gif|bmp|tiff)$/.test(meta.mime_type)) {
+    try {
+      const thumb = await sharp(f.data).rotate().resize({ width: 360, height: 360, fit: "inside", withoutEnlargement: true }).flatten({ background: "#0b0d12" }).jpeg({ quality: 80 }).toBuffer();
+      return new NextResponse(new Uint8Array(thumb), {
+        headers: { "Content-Type": "image/jpeg", "Content-Length": String(thumb.length), "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff" },
+      });
+    } catch {
+      // Not a picture sharp can read: the file itself, as before.
+    }
+  }
 
   // The stored mime came from the uploader's browser, so it decides nothing on
   // its own — see lib/download.

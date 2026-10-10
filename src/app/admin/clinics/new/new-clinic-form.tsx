@@ -9,6 +9,8 @@ import { FeaturePicker } from "../../feature-picker";
 import { allFeatures } from "@/lib/features";
 import { SPECIALTIES, type Specialty } from "@/lib/specialties";
 import { DepartmentPicker } from "../../department-picker";
+import { SPECIALTY_MODULES, modulesFor } from "@/lib/specialty-profile";
+import { SpecialtyAdds } from "../../specialty-adds";
 
 function slugify(s: string): string {
   return s
@@ -33,15 +35,31 @@ export function NewClinicForm() {
   const [features, setFeatures] = useState(allFeatures());
   const [specialty, setSpecialty] = useState<Specialty>("general");
   const [departments, setDepartments] = useState<Specialty[]>([]);
-  // Choosing dentistry switches the dental chart on below; it can still be switched off.
-  const dentalOn = () => setFeatures((f) => ({ ...f, dental: true }));
+  /*
+    What it practises switches on the modules that field needs (Dental → the
+    dental chart) and off the ones no field it still practises needs — the
+    same rule as changing it later (lib/specialty-profile). The switches below
+    stay the agency's to override.
+  */
+  const follow = (beforeFields: Specialty[], afterFields: Specialty[]) => {
+    const before = modulesFor(beforeFields);
+    const after = modulesFor(afterFields);
+    setFeatures((f) => {
+      const next = { ...f };
+      for (const m of SPECIALTY_MODULES) {
+        if (after.includes(m) && !before.includes(m)) next[m] = true;
+        else if (before.includes(m) && !after.includes(m)) next[m] = false;
+      }
+      return next;
+    });
+  };
   const pickSpecialty = (v: Specialty) => {
+    follow([specialty, ...departments], [v, ...departments]);
     setSpecialty(v);
-    if (v === "dental") dentalOn();
   };
   const pickDepartments = (v: Specialty[]) => {
+    follow([specialty, ...departments], [specialty, ...v]);
     setDepartments(v);
-    if (v.includes("dental")) dentalOn();
   };
 
   return (
@@ -115,6 +133,7 @@ export function NewClinicForm() {
         <DepartmentPicker value={departments} onChange={pickDepartments} primary={specialty} disabled={pending} />
         <input type="hidden" name="departments" value={departments.filter((d) => d !== specialty).join(",")} />
       </div>
+      <SpecialtyAdds specialties={[specialty, ...departments.filter((d) => d !== specialty)]} />
       <div className="my-1 border-t border-line" />
       <div>
         <div className="mb-1 text-sm font-medium text-ink-900">{t.admin.features}</div>

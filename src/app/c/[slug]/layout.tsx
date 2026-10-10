@@ -55,6 +55,10 @@ export default async function ClinicLayout({
          -- and for somebody with Insurance and nothing else in Finance it is
          -- the tab the sidebar entry has to point at.
          exists(select 1 from insurers where clinic_id = $1 and active) as has_insurers,
+         -- The Devices entry, and its badge: results no machine said whose they are.
+         exists(select 1 from clinic_devices where clinic_id = $1 and revoked_at is null) as has_devices,
+         (select count(*)::int from imaging_inbox
+           where clinic_id = $1 and assigned_at is null and discarded_at is null) as devices_waiting,
          coalesce((
            select json_agg(json_build_object('id', a.id, 'title', a.title, 'body', a.body))
            from (
@@ -72,6 +76,8 @@ export default async function ClinicLayout({
       server_now: Date;
       has_earnings: boolean;
       has_insurers: boolean;
+      has_devices: boolean;
+      devices_waiting: number;
       announcements: { id: string; title: string; body: string }[];
     };
   });
@@ -150,6 +156,7 @@ export default async function ClinicLayout({
       pendingDocuments={chrome.pending_documents}
       hasEarnings={!!chrome.has_earnings}
       hasInsurers={!!chrome.has_insurers}
+      devices={{ connected: !!chrome.has_devices, waiting: chrome.devices_waiting }}
       fullControl={hasFullControl(access)}
       announcements={chrome.announcements.filter((a) => !dismissed.includes(a.id))}
     >

@@ -4,16 +4,13 @@ import { ingestImage } from "@/lib/imaging/ingest";
 import { isDicom } from "@/lib/imaging/dicom";
 
 /*
-  The imaging station, with an image nobody is waiting for.
+  The browser station on a device computer, sending a file its folder got.
 
-  A DICOM series arrives as many files: the doctor's "Take x-ray" is answered
-  by the first slice, and the rest come in after the request is closed. Here
-  they join the series they belong to — and a DICOM that belongs to no series
-  and no request goes to the clinic's imaging inbox, rather than living only
-  in one browser tab until somebody closes it.
-
-  DICOM only. A plain JPEG carries nothing that says whose it is, so the
-  station keeps those in its own "held" list for a person to send.
+  Everything goes through ingest, so the station decides nothing itself: a
+  DICOM slice joins its series, a file whose machine or DICOM says whose it
+  is goes to that patient, the next file answers whoever is waiting on one,
+  and the rest go to the clinic's one inbox — never a list kept in one
+  browser tab until somebody closes it.
 */
 
 const MAX_SIZE = 100 * 1024 * 1024;
@@ -29,14 +26,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   if (!(file instanceof File)) return NextResponse.json({ error: "no_file" }, { status: 400 });
   if (file.size > MAX_SIZE) return NextResponse.json({ error: "too_large" }, { status: 413 });
   const data = Buffer.from(await file.arrayBuffer());
-  if (!isDicom(data)) return NextResponse.json({ error: "not_dicom" }, { status: 415 });
 
   const r = await ingestImage(
     {
       clinicId: access.clinicId,
       from: { userId: access.session.user.id, impersonatedBy: access.session.impersonatedBy },
       fileName: file.name,
-      mime: "application/dicom",
+      mime: isDicom(data) ? "application/dicom" : file.type || "application/octet-stream",
       data,
       // A slice of a series already on file joins it; a new series answers
       // whoever has waited longest — the same order the station uses.

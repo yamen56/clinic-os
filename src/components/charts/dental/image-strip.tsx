@@ -31,7 +31,7 @@ export function ImageThumb({ img, pinned, onOpen, size = "md" }: { img: ChartIma
             <FileText className="h-6 w-6" />
           </span>
         )}
-        <span className="absolute start-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">{T.imageKinds[img.kind]}</span>
+        <span className="absolute start-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">{(T.imageKinds as Record<string, string>)[img.kind] ?? img.kind}</span>
         {pinned.length > 0 && (
           <span className="absolute bottom-1 end-1 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-ink-900 tabular-nums">
             {pinned.length > 3 ? `${pinned.slice(0, 3).join(" ")}…` : pinned.join(" ")}

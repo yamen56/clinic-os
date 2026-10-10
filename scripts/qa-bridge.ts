@@ -147,7 +147,7 @@ async function main() {
     await page.waitForTimeout(400); // the dialog fades in
     await page.screenshot({ path: path.join(SHOTS, "1-choose.png") });
     await wizard.locator("[data-choice='camera']").click();
-    check((await wizard.innerText()).includes("Press Camera"), "a USB camera needs nothing installed: the steps say so");
+    check((await wizard.innerText()).includes("press Take photo"), "a USB camera needs nothing installed: the steps say so (Take photo, in any patient's Files)");
     await page.getByRole("button", { name: "Back" }).click();
     await wizard.locator("[data-choice='dicom']").click();
     await wizard.locator("[data-wizard-name]").fill("OPG room 2");

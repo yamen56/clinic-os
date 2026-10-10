@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AudioWaveform, Ban, Box, Camera, Check, Copy, Cpu, FolderOpen, KeyRound, Network, Pencil, Plus, Radiation, ScanLine, ScanText, Settings2, Terminal } from "lucide-react";
+import { AudioWaveform, FlaskConical, Gauge, HeartPulse, Microscope, ScanEye, Ban, Box, Camera, Check, Copy, Cpu, FolderOpen, KeyRound, Network, Pencil, Plus, Radiation, ScanLine, ScanText, Settings2, Terminal } from "lucide-react";
 import { BRIDGE_VERSION } from "@/lib/imaging/bridge-version";
 import { ConnectWizard } from "./connect-wizard";
 import { bridgeOffline } from "@/lib/imaging/offline";
+import { orderedKinds, type DeviceKind } from "@/lib/imaging/kinds";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtRelative } from "@/lib/dates";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -45,8 +46,7 @@ export type DeviceRow = {
   bridge: BridgeReport | null;
 };
 
-const KINDS = ["xray", "opg", "cbct", "camera", "scanner", "ultrasound", "other"] as const;
-export type Kind = (typeof KINDS)[number];
+export type Kind = DeviceKind;
 const MATCH = ["none", "clinicti", "national_id"] as const;
 type MatchBy = (typeof MATCH)[number];
 
@@ -57,6 +57,11 @@ const KIND_ICON: Record<Kind, typeof Radiation> = {
   camera: Camera,
   scanner: ScanText,
   ultrasound: AudioWaveform,
+  ecg: HeartPulse,
+  endoscope: Microscope,
+  eye: ScanEye,
+  monitor: Gauge,
+  lab: FlaskConical,
   other: Cpu,
 };
 
@@ -150,7 +155,7 @@ function Setup({ slug, base, keyText }: { slug: string; base: string; keyText: s
         {tab === "folder" && (
           <>
             <p>{T.setupFolderBody}</p>
-            <Link href={`/c/${slug}/imaging`} className={buttonClass({ variant: "soft", size: "sm", className: "mt-3" })}>
+            <Link href={`/c/${slug}/devices`} className={buttonClass({ variant: "soft", size: "sm", className: "mt-3" })}>
               <FolderOpen className="h-4 w-4" />
               {T.openImaging}
             </Link>
@@ -174,7 +179,7 @@ function Setup({ slug, base, keyText }: { slug: string; base: string; keyText: s
   );
 }
 
-export function DevicesClient({ slug, base, initial }: { slug: string; base: string; initial: DeviceRow[] }) {
+export function DevicesClient({ slug, base, initial, usual }: { slug: string; base: string; initial: DeviceRow[]; usual: DeviceKind[] }) {
   const { t, locale } = useI18n();
   const T = t.devices;
   const { toast } = useToast();
@@ -195,7 +200,7 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
   const openApiForm = () => {
     setWizard(null);
     setAdvanced(true);
-    setForm({ id: null, name: "", kind: "other", matchBy: "none" });
+    setForm({ id: null, name: "", kind: usual[0] ?? "other", matchBy: "none" });
   };
 
   async function call(url: string, method: string, body: unknown) {
@@ -351,6 +356,7 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
 
       {wizard && (
         <ConnectWizard
+          usual={usual}
           slug={slug}
           base={base}
           existing={wizard.existing}
@@ -389,7 +395,7 @@ export function DevicesClient({ slug, base, initial }: { slug: string; base: str
             {!form.id && (
               <Field label={T.kind}>
                 <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as Kind })} data-device-kind>
-                  {KINDS.map((k) => (
+                  {orderedKinds(usual).map((k) => (
                     <option key={k} value={k}>
                       {T.kinds[k]}
                     </option>

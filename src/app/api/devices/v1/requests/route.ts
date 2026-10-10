@@ -14,16 +14,18 @@ export async function GET(req: Request) {
   const rows = await inDeviceClinic(g.device, async (c) =>
     (
       await c.query(
-        `select r.id, r.teeth, r.kind, r.created_at,
+        `select r.id, r.teeth, r.kind, r.created_at, r.note,
                 p.id as patient_id, p.file_no, p.full_name, to_char(p.birth_date, 'YYYY-MM-DD') as birth_date, p.gender,
                 u.full_name as requested_by
            from imaging_requests r
            join patients p on p.id = r.patient_id
            left join users u on u.id = r.requested_by
           where r.clinic_id = $1 and r.fulfilled_at is null and r.cancelled_at is null
+            -- Asked of this machine, or of whichever sends next; never of another one.
+            and (r.device_id is null or r.device_id = $2)
             and r.created_at > now() - interval '${IMAGING_REQUEST_OPEN_FOR}'
           order by r.created_at`,
-        [g.device.clinicId]
+        [g.device.clinicId, g.device.id]
       )
     ).rows
   );
@@ -33,6 +35,7 @@ export async function GET(req: Request) {
         id: r.id,
         kind: r.kind,
         teeth: r.teeth,
+        note: r.note,
         createdAt: r.created_at,
         requestedBy: r.requested_by,
         patient: {

@@ -21,7 +21,7 @@ const KEY = "clinicti.camera";
 
 export function CameraCapture({ open, onClose, onPhoto }: { open: boolean; onClose: () => void; onPhoto: (f: File) => void }) {
   const { t } = useI18n();
-  const T = t.dental;
+  const T = t.viewer;
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);

@@ -294,7 +294,7 @@ async function main() {
     await page.locator("[data-xray-pending]").waitFor({ timeout: 10000 });
     ok("Take x-ray on 36 leaves the chart waiting on the imaging station");
     const station = await page.context().newPage();
-    await station.goto(`${BASE}/c/qateeth${tag}/imaging`, { timeout: 120000 });
+    await station.goto(`${BASE}/c/qateeth${tag}/devices`, { timeout: 120000 });
     await station.locator("[data-request]").first().waitFor({ timeout: 30000 });
     check(/Rami Khatib · 36/.test(await station.locator("[data-requests]").innerText()), "the station shows who is waiting: the patient and the tooth");
     await station.locator("[data-imaging-station] input[type='file']").setInputFiles({ name: "IMG_0042.png", mimeType: "image/png", buffer: PNG });

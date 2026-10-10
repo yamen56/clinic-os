@@ -283,7 +283,7 @@ async function main() {
 
     /* ── The inbox ───────────────────────────────────────────────────── */
     console.log("\nthe imaging inbox");
-    await page.goto(`${BASE}/c/${slug}/imaging`, { timeout: 120000 });
+    await page.goto(`${BASE}/c/${slug}/devices`, { timeout: 120000 });
     await page.waitForSelector("[data-inbox-item]", { timeout: 60000 });
     const items = page.locator("[data-inbox-item]");
     check((await items.count()) === 2, "the Imaging page lists the two images nobody could place", String(await items.count()));

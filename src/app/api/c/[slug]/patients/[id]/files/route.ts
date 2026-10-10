@@ -6,6 +6,7 @@ import { saveFile } from "@/lib/storage";
 import { can } from "@/lib/auth";
 import { isDicom } from "@/lib/imaging/dicom";
 import { ingestImage } from "@/lib/imaging/ingest";
+import { FILE_KINDS, type FileKind } from "@/lib/imaging/kinds";
 
 const MAX_SIZE = 25 * 1024 * 1024;
 
@@ -42,7 +43,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         fileName: file.name,
         mime: "application/dicom",
         data: buf,
-        kind: kind === "photo" ? "photo" : "xray",
+        kind: (FILE_KINDS as readonly string[]).includes(kind) && kind !== "other" ? (kind as FileKind) : undefined,
         patientRef: id,
       },
       (fn) => inClinic(access, fn)
@@ -81,7 +82,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         file.type || "application/octet-stream",
         sizeBytes,
         storagePath,
-        ["xray", "lab", "consent", "photo", "insurance_card", "other"].includes(kind) ? kind : "other",
+        [...FILE_KINDS, "consent", "insurance_card"].includes(kind as FileKind) ? kind : "other",
       ]
     );
     await audit(c, {

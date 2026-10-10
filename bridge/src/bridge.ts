@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import { deflateSync } from "node:zlib";
-import { Api, type WaitingRequest, type WorkItem } from "./api";
+import { Api, requestLabel, type WaitingRequest, type WorkItem } from "./api";
 import { log, saveConfig, type Config, type Paths } from "./config";
 import { Outbox } from "./outbox";
 import { FolderWatcher } from "./folders";
@@ -34,7 +34,7 @@ export class Bridge {
   private worklistCache: { date: string | null; at: number; items: WorkItem[] } | null = null;
   lastBeat: { at: number; ok: boolean } | null = null;
   notice: string | null = null;
-  /** Who a doctor is waiting on an x-ray for — shown in the window, announced once each. */
+  /** Who a doctor is waiting on a result for — shown in the window, announced once each. */
   waiting: WaitingRequest[] = [];
   private announced = new Set<string>();
   lastCommand: { at: number; ok: boolean; error?: string } | null = null;
@@ -153,7 +153,8 @@ export class Bridge {
       const id = p.fileNo != null ? `CLN-${p.fileNo}` : "";
       const teeth = r.teeth.length ? ` · ${r.teeth.join(" ")}` : "";
       if (this.cfg.notify) {
-        notify(`${r.kind === "photo" ? "Photo" : "X-ray"} for ${p.name}`, `${[id, p.birthDate].filter(Boolean).join(" · ")}${teeth}${r.requestedBy ? ` — asked by ${r.requestedBy}` : ""}`, process.execPath);
+        const note = r.note ? ` · ${r.note}` : "";
+        notify(`${requestLabel(r)} for ${p.name}`, `${[id, p.birthDate].filter(Boolean).join(" · ")}${teeth}${note}${r.requestedBy ? ` — asked by ${r.requestedBy}` : ""}`, process.execPath);
       }
       if (this.cfg.onRequest.trim()) {
         const words = p.name.trim().split(/\s+/);
@@ -161,7 +162,7 @@ export class Bridge {
         this.lastCommand = { at: Date.now(), ...result };
         log("request command", result.ok ? "started" : result.error);
       }
-      log("x-ray requested for", p.name, teeth);
+      log(`${requestLabel(r).toLowerCase()} requested for`, p.name, teeth);
     }
     // A request that has closed never reopens: forget it, so this set stays small.
     for (const id of [...this.announced]) if (!list.some((r) => r.id === id)) this.announced.delete(id);

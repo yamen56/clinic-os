@@ -15,8 +15,9 @@ import { rateLimitShared } from "@/lib/rate-limit-shared";
  * context with no user at all.
  */
 
-export const DEVICE_KINDS = ["xray", "opg", "cbct", "camera", "scanner", "ultrasound", "other"] as const;
-export type DeviceKind = (typeof DEVICE_KINDS)[number];
+// The machine types live with the file kinds (client-safe); re-exported for the server code here.
+import { DEVICE_KINDS, type DeviceKind } from "./kinds";
+export { DEVICE_KINDS, type DeviceKind };
 
 /**
  * What the machine's "Patient ID" means. A machine whose software keeps its
