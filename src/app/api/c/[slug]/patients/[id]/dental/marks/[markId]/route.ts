@@ -95,6 +95,34 @@ export async function PATCH(req: Request, ctx: Params) {
         event.reason ?? null,
       ]);
     }
+
+    /*
+      A whole-arch entry carries its teeth with it: an All-on-4 done is its
+      implants and bridge teeth done, and one voided is all of them voided,
+      each with its own line in its tooth's history.
+    */
+    let kids: string[] = [];
+    if ((b.op === "done" || b.op === "void") && cur.group_id && !/^[1-8][1-8]$/.test(cur.site)) {
+      const r = await c.query(
+        `select id from chart_marks
+          where group_id = $1 and id <> $2 and clinic_id = $3 and voided_at is null
+            ${b.op === "done" ? "and status = 'planned'" : ""}`,
+        [cur.group_id, markId, access.clinicId]
+      );
+      kids = r.rows.map((x) => x.id as string);
+      if (kids.length) {
+        if (b.op === "done") {
+          await c.query(`update chart_marks set status = 'done', done_at = now() where id = any($1::uuid[])`, [kids]);
+        } else {
+          await c.query(`update chart_marks set voided_at = now(), voided_by = $2, void_reason = $3 where id = any($1::uuid[])`, [kids, me, b.reason]);
+        }
+        await c.query(
+          `insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason)
+           select $1, k, $3, $4, $5 from unnest($2::uuid[]) as k`,
+          [access.clinicId, kids, b.op, me, b.op === "void" ? b.reason : null]
+        );
+      }
+    }
     await audit(c, {
       clinicId: access.clinicId,
       userId: me,
@@ -108,7 +136,17 @@ export async function PATCH(req: Request, ctx: Params) {
     const ev = event
       ? (await c.query(`select e.*, u.full_name as by_name from chart_mark_events e left join users u on u.id = e.by_user where e.id = $1`, [event.id])).rows[0]
       : null;
-    return { mark: toMark(mark), event: ev ? toEvent(ev) : null };
+    const also = kids.length ? (await c.query(`${MARK_SELECT} where m.id = any($1::uuid[])`, [kids])).rows.map(toMark) : [];
+    const alsoEvents = kids.length
+      ? (
+          await c.query(
+            `select e.*, u.full_name as by_name from chart_mark_events e left join users u on u.id = e.by_user
+              where e.mark_id = any($1::uuid[]) and e.action = $2 and e.at = now()`,
+            [kids, b.op]
+          )
+        ).rows.map(toEvent)
+      : [];
+    return { mark: toMark(mark), event: ev ? toEvent(ev) : null, also, alsoEvents };
   });
 
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.error === "not_found" ? 404 : 409 });

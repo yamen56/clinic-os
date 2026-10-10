@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
+import { addedByLabel, type AddedBy } from "@/lib/added-by";
 import { PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
@@ -30,6 +31,7 @@ type Row = {
   createdAt: string;
   nextAppointment: string | null;
   mutedFromAutomations: boolean;
+  addedBy: AddedBy | null;
 };
 
 export function PatientsList({
@@ -253,6 +255,9 @@ export function PatientsList({
 
   const sourceLabel = (s: string) =>
     (t.patients.sources as Record<string, string>)[s] ?? s;
+  // The person who typed the patient in, when one did; the source otherwise.
+  const originLabel = (p: { source: string; addedBy: AddedBy | null }) =>
+    p.addedBy ? addedByLabel(p.addedBy, t) : sourceLabel(p.source);
 
   return (
     <>
@@ -407,7 +412,7 @@ export function PatientsList({
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-ink-500">
                       {p.phone && <span className="num tnum">{formatPhone(p.phone)}</span>}
-                      <span>{sourceLabel(p.source)}</span>
+                      <span data-added-by={p.addedBy ? "person" : p.source}>{originLabel(p)}</span>
                       {p.lastVisitAt && (
                         <span>
                           {t.patients.lastVisit}: {fmtDate(p.lastVisitAt, tz, locale)}

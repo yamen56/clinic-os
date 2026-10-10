@@ -286,6 +286,7 @@ const ToothCell = memo(function ToothCell({
       aria-pressed={isSel}
       data-tooth={p.fdi}
       data-gone={st.gone || undefined}
+      data-looks={st.layers.map((l) => l.look).join(" ") || undefined}
       onClick={(e) => handlers.current.onTooth(p.fdi, e.shiftKey || e.metaKey || e.ctrlKey)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {

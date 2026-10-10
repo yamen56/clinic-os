@@ -50,12 +50,15 @@ export function EntryRow({
   onNote,
   onDetail,
   onPerformer,
+  extra,
 }: {
   m: Mark;
   custom: Treatment[];
   doctors: Person[];
   tz: string;
   canEdit: boolean;
+  /** A line of its own about the entry — where a full arch's implants are. */
+  extra?: string;
   onMarkDone: (id: string) => void;
   onVoid: (m: Mark) => void;
   onNote: (id: string, note: string) => void;
@@ -81,7 +84,7 @@ export function EntryRow({
             <PaintPill m={m} />
           </span>
           <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">
-            {[details.join(" · "), m.performedBy?.name, fmtDate(m.doneAt ?? m.createdAt, tz, locale)].filter(Boolean).join(" · ")}
+            {[extra ?? details.join(" · "), m.performedBy?.name, fmtDate(m.doneAt ?? m.createdAt, tz, locale)].filter(Boolean).join(" · ")}
           </span>
           {m.note && <span className="mt-1 block text-[12.5px] text-ink-700">{m.note}</span>}
         </button>
@@ -102,7 +105,7 @@ export function EntryRow({
       </div>
       {open && (
         <div className="grid gap-3 border-t border-line px-3 py-3">
-          {tr.details?.map((d) => (
+          {tr.details?.filter((d) => !(d.key === "implants" && m.groupId)).map((d) => (
             <div key={d.key}>
               <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{T.details[d.key]}</div>
               <div className="flex flex-wrap gap-1.5">

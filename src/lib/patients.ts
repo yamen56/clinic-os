@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { normalizePhone, toAsciiDigits, type CountryCode } from "./phone";
+import type { AddedBy } from "./added-by";
 
 /**
  * The patient identity rule: phone number is the single source of identity
@@ -38,6 +39,12 @@ export async function findOrCreatePatient(
      * comment at the call below for why this is the caller's decision.
      */
     restoreArchived?: boolean;
+    /**
+     * The person typing the patient in. Shown on the file as who added them —
+     * "Lina · Reception" rather than "staff". Absent for the paths no person
+     * stands behind: WhatsApp, the booking link, the AI receptionist.
+     */
+    createdBy?: string | null;
   }
 ): Promise<{ id: string; created: boolean; restored: boolean; phoneE164: string | null }> {
   const phoneE164 = normalizePhone(input.phone, input.defaultCountry ?? "JO");
@@ -79,8 +86,8 @@ export async function findOrCreatePatient(
   }
   const name = input.fullName?.trim() || input.whatsappName?.trim() || phoneE164 || input.phone;
   const r = await c.query(
-    `insert into patients (clinic_id, full_name, phone_e164, whatsapp_name, source, status)
-     values ($1, $2, $3, $4, $5, $6) returning id`,
+    `insert into patients (clinic_id, full_name, phone_e164, whatsapp_name, source, status, created_by)
+     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
     [
       clinicId,
       name,
@@ -88,6 +95,7 @@ export async function findOrCreatePatient(
       input.whatsappName ?? null,
       input.source,
       input.status ?? (input.source === "whatsapp" ? "lead" : "active"),
+      input.createdBy ?? null,
     ]
   );
   return { id: r.rows[0].id, created: true, restored: false, phoneE164 };
@@ -208,7 +216,11 @@ export function patientListRowsSql(where: string, cursorParam: number | null): s
                  (select a.starts_at from appointments a
                    where a.patient_id = p.id and a.starts_at > now()
                      and a.status not in ('cancelled')
-                   order by a.starts_at limit 1) as next_appointment
+                   order by a.starts_at limit 1) as next_appointment,
+                 -- Who typed them in: the row says "Lina · Reception", not "staff".
+                 (select json_build_object('name', u.full_name, 'title', cm.title, 'role', cm.role, 'owner', coalesce(cm.is_owner, false))
+                    from users u left join clinic_members cm on cm.user_id = u.id and cm.clinic_id = p.clinic_id
+                   where u.id = p.created_by) as added_by
             from patients p
            where ${where}${after}
            order by p.created_at desc, p.id desc
@@ -227,6 +239,8 @@ export type PatientListRow = {
   createdAt: string;
   nextAppointment: string | null;
   mutedFromAutomations: boolean;
+  /** Who typed them in or imported them; null when no person did. */
+  addedBy: AddedBy | null;
 };
 
 /** The one place a row from `patientListRowsSql` becomes a `PatientListRow`. */
@@ -242,6 +256,7 @@ export function toPatientListRow(r: Record<string, unknown>): PatientListRow {
     createdAt: String(r.created_at),
     nextAppointment: r.next_appointment ? String(r.next_appointment) : null,
     mutedFromAutomations: Boolean(r.automation_opt_out),
+    addedBy: (r.added_by as AddedBy | null) ?? null,
   };
 }
 

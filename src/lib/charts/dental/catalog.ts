@@ -90,7 +90,7 @@ export type Look =
 export const BORROWABLE_LOOKS: Look[] = ["filling", "crown", "veneer", "rct", "extraction", "implant", "gum", "bracket", "dot"];
 
 export type DetailOption = { key: string; en: string; ar: string };
-export type DetailField = { key: "material" | "canals" | "grade" | "type"; options: DetailOption[] };
+export type DetailField = { key: "material" | "canals" | "grade" | "type" | "implants"; options: DetailOption[] };
 
 export type Treatment = {
   key: string;
@@ -152,6 +152,18 @@ const CANALS: DetailField = {
     { key: "2", en: "2 canals", ar: "قناتان" },
     { key: "3", en: "3 canals", ar: "3 قنوات" },
     { key: "4", en: "4 canals", ar: "4 قنوات" },
+  ],
+};
+/** How many implants carry a full-arch bridge or denture: two for an overdenture, four or six for All-on-X. */
+const IMPLANT_COUNT: DetailField = {
+  key: "implants",
+  options: [
+    { key: "2", en: "2 implants", ar: "زرعتان" },
+    { key: "3", en: "3 implants", ar: "3 زرعات" },
+    { key: "4", en: "4 implants", ar: "4 زرعات" },
+    { key: "5", en: "5 implants", ar: "5 زرعات" },
+    { key: "6", en: "6 implants", ar: "6 زرعات" },
+    { key: "8", en: "8 implants", ar: "8 زرعات" },
   ],
 };
 const MOBILITY_GRADE: DetailField = {
@@ -254,7 +266,11 @@ export const BUILT_IN: Treatment[] = [
   { key: "implant_crown", kind: "procedure", category: "implant", en: "Implant crown", ar: "تاج على زرعة", scope: "tooth", look: "crown", details: [MATERIAL_CROWN], aliases: ["تلبيسة زراعة"] },
   { key: "bone_graft", kind: "procedure", category: "implant", en: "Bone graft", ar: "طعم عظمي", scope: "tooth", look: "graft", aliases: ["graft", "طعم"] },
   { key: "sinus_lift", kind: "procedure", category: "implant", en: "Sinus lift", ar: "رفع الجيب الأنفي", scope: "tooth", look: "graft", fits: { arch: "upper", kinds: BACK_TEETH }, aliases: ["رفع جيب"] },
-  { key: "implant_denture", kind: "procedure", category: "implant", en: "Implant-supported denture (All-on-4)", ar: "طقم على زرعات", scope: "arch", look: "denture", aliases: ["all on 4", "overdenture"] },
+  {
+    key: "implant_denture", kind: "procedure", category: "implant", en: "Full arch on implants (All-on-4 / 6)", ar: "فك كامل على زرعات (All-on-4)", abbr: "All-on-X",
+    scope: "arch", look: "denture", details: [IMPLANT_COUNT],
+    aliases: ["all on 4", "all-on-4", "all on 6", "all-on-6", "all on x", "overdenture", "hybrid", "طقم على زرعات", "جسر على زرعات", "اول اون فور"],
+  },
 
   // ── Preventive gum care and periodontics ────────────────────────────────────
   { key: "srp", kind: "procedure", category: "periodontic", en: "Deep scaling & root planing", ar: "تنظيف عميق وتسوية الجذور", abbr: "SRP", scope: "quadrant", look: "dot", aliases: ["deep cleaning", "تنظيف عميق"] },

@@ -29,7 +29,9 @@ const markSchema = z.object({
   role: z.enum(["abutment", "pontic"]).nullish(),
   performedBy: z.string().uuid().nullish(),
 });
-const bodySchema = z.object({ marks: z.array(markSchema).min(1).max(32) });
+// A full arch is the most one tap records: the arch, six implants, fourteen
+// bridge teeth and the teeth to take out first.
+const bodySchema = z.object({ marks: z.array(markSchema).min(1).max(48) });
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;

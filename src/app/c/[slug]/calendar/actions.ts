@@ -59,6 +59,7 @@ export async function createAppointmentAction(
         phone: input.newPatient.phone,
         fullName: input.newPatient.fullName,
         source: "staff",
+        createdBy: access.session.user.id,
       });
       patientId = r.id;
     }

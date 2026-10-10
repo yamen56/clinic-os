@@ -88,6 +88,7 @@ export async function createPatientFromConversationAction(
       source: "staff",
       status: "active",
       defaultCountry: countryFromClinic(access.clinic),
+      createdBy: access.session.user.id,
     });
     await c.query(`update conversations set patient_id = $2 where id = $1`, [conv.id, patient.id]);
 

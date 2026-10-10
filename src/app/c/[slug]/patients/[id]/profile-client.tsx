@@ -41,11 +41,13 @@ import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-
 import type { DocumentListRow } from "@/lib/esign/queries";
 import type { PrescriptionRow } from "@/lib/prescriptions";
 import type { DentalTabData } from "./dental-chart-tab";
+import { DentalProvider } from "@/components/charts/dental/store";
 import { FilesTab, type FilesHub } from "./files-tab";
 import { PrescriptionsTab } from "./prescriptions-tab";
 import { PrescriptionComposer, useComposerData, type RxDraft } from "./prescription-composer";
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
 import { coverState } from "@/lib/insurance";
+import { addedByLabel, type AddedBy } from "@/lib/added-by";
 import {
   MessageCircle,
   Phone as PhoneIcon,
@@ -82,6 +84,35 @@ const DentalChartTab = dynamic(() => import("./dental-chart-tab").then((m) => m.
   ssr: false,
   loading: () => <Spinner />,
 });
+
+/*
+  The chart's store, for a clinic that has the chart: held above the tabs so
+  the Treatment tab and the Dental chart tab draw the same entries, and so an
+  entry survives the tab being closed and opened again. Everything else in
+  the file renders exactly as it would without it.
+*/
+function MaybeDental({
+  slug,
+  patientId,
+  dental,
+  files,
+  renderedAt,
+  children,
+}: {
+  slug: string;
+  patientId: string;
+  dental: DentalTabData | null | undefined;
+  files: PatientFileRow[];
+  renderedAt: number;
+  children: React.ReactNode;
+}) {
+  if (!dental) return <>{children}</>;
+  return (
+    <DentalProvider slug={slug} patientId={patientId} chart={dental.chart} files={files} renderedAt={renderedAt}>
+      {children}
+    </DentalProvider>
+  );
+}
 
 export type NoteRow = {
   id: string;
@@ -147,6 +178,8 @@ type Patient = {
   created_at: string;
   /** The clinic's number for them: on paper folders, and the Patient ID an x-ray machine is given. */
   file_no: number | null;
+  /** Who typed them in or imported them; null for WhatsApp, the booking link and the AI. */
+  added_by: AddedBy | null;
 };
 
 export type PatientFileRow = {
@@ -266,6 +299,8 @@ export function PatientProfile(props: {
   dental?: DentalTabData | null;
   /** The Files hub: the clinic's machines, requests waiting, results that look like this patient's. */
   filesHub?: FilesHub | null;
+  /** When the server rendered this page — the chart store re-reads a page restored from history. */
+  renderedAt: number;
 }) {
   const { slug, tz, currency, caps } = props;
   const { t, locale } = useI18n();
@@ -424,7 +459,7 @@ export function PatientProfile(props: {
   const tab = tabs.some((x) => x.key === chosenTab) ? chosenTab : "overview";
 
   return (
-    <>
+    <MaybeDental slug={slug} patientId={p.id} dental={props.dental} files={props.files} renderedAt={props.renderedAt}>
       {/* Header */}
       <div className="relative mb-5 flex flex-wrap items-start gap-4">
         <Avatar name={p.full_name} size={52} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
@@ -491,9 +526,17 @@ export function PatientProfile(props: {
             {p.extra_phones?.map((ph) => (
               <span key={ph} className="num tnum text-ink-400">{formatPhone(ph)}</span>
             ))}
-            <span>
-              {(t.patients.sources as Record<string, string>)[p.source] ?? p.source} ·{" "}
-              {fmtDate(p.created_at, tz, locale)}
+            {/*
+              Who opened this file, by name and job — the doctor or the
+              receptionist — rather than "staff". The source is still what it
+              says for a patient no person typed in: WhatsApp, the booking
+              link, the AI receptionist.
+            */}
+            <span data-added-by={p.added_by ? "person" : p.source}>
+              {p.added_by
+                ? (p.source === "import" ? t.patients.importedBy : t.patients.addedBy).replace("{name}", addedByLabel(p.added_by, t))
+                : (t.patients.sources as Record<string, string>)[p.source] ?? p.source}{" "}
+              · {fmtDate(p.created_at, tz, locale)}
             </span>
           </div>
           <TagsRow
@@ -928,7 +971,7 @@ export function PatientProfile(props: {
           />
         )}
         {tab === "dental" && props.dental && (
-          <DentalChartTab slug={slug} patientId={p.id} tz={tz} birthDate={p.birth_date} data={props.dental} files={props.files} />
+          <DentalChartTab slug={slug} patientId={p.id} tz={tz} birthDate={p.birth_date} data={props.dental} />
         )}
         {tab === "appointments" && (
           <Card>
@@ -1177,7 +1220,7 @@ export function PatientProfile(props: {
           toast(next === "archived" ? t.patients.archived : t.common.saved);
         }}
       />
-    </>
+    </MaybeDental>
   );
 }
 

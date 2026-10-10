@@ -219,8 +219,8 @@ export async function commitImportAction(
 
       const ins = await c.query(
         `insert into patients (clinic_id, full_name, phone_e164, secondary_phone_e164, birth_date,
-                               gender, tags, insurance_no, source, status, import_batch_id)
-         values ($1, $2, $3, $4, $5::date, $6, $7, $8, 'import', 'active', $9) returning id`,
+                               gender, tags, insurance_no, source, status, import_batch_id, created_by)
+         values ($1, $2, $3, $4, $5::date, $6, $7, $8, 'import', 'active', $9, $10) returning id`,
         [
           access.clinicId,
           r.name.slice(0, 200),
@@ -231,6 +231,7 @@ export async function commitImportAction(
           tags,
           r.insurance.slice(0, 60),
           batchId,
+          access.session.user.id,
         ]
       );
       const newId = ins.rows[0].id as string;

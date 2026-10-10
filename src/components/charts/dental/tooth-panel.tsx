@@ -13,12 +13,13 @@ import { Image as ImageIcon, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import type { ChartImage } from "./image-viewer";
 import { AddImageButtons, ImageThumb } from "./image-strip";
-import type { Treatment } from "@/lib/charts/dental/catalog";
+import { findTreatment, type Treatment } from "@/lib/charts/dental/catalog";
 import { SURFACES, surfaceAt, surfaceLabel, tooth as toothOf, toothName, type Surface } from "@/lib/charts/dental/teeth";
-import { stateOf, type Mark, type MarkEvent, type Paint, type Person, type Status, type ToothState } from "@/lib/charts/dental/state";
+import { paintAt, stateOf, type Mark, type MarkEvent, type Paint, type Person, type Status, type ToothState } from "@/lib/charts/dental/state";
 import { OCC, SIDE_H, ToothSide, ToothTop, INK, SOFT, PaintSwatch } from "./tooth-art";
-import { TreatmentPicker, type Favorite } from "./treatment-picker";
-import { EntryRow, EventList } from "./history";
+import { TreatmentGlyph, TreatmentPicker, type Favorite } from "./treatment-picker";
+import { EntryRow, EventList, PaintPill } from "./history";
+import { markLabel, siteLabel } from "./labels";
 
 export type PanelActions = {
   onTogglePicked: (s: Surface) => void;
@@ -42,6 +43,8 @@ export type PanelActions = {
   onTakeXray: (fdi: string) => void;
   /** A photo of this tooth from a camera on this device. */
   onCamera: (fdi: string) => void;
+  /** Open an entry that is not on this tooth — the full arch a tooth's implant belongs to. */
+  onOpenEntry: (id: string) => void;
   onClose: () => void;
 };
 
@@ -90,6 +93,8 @@ export function ToothPanel({
   images,
   pins,
   uploading,
+  parentOf,
+  parentName,
   a,
 }: {
   teeth: string[];
@@ -116,6 +121,9 @@ export function ToothPanel({
   images: ChartImage[];
   pins: Record<string, string[]>;
   uploading: boolean;
+  /** The full arch an entry on this tooth is part of, if it is one of its teeth. */
+  parentOf: (m: Mark) => Mark | null;
+  parentName: (m: Mark) => string;
   a: PanelActions;
 }) {
   const { t, locale } = useI18n();
@@ -285,21 +293,49 @@ export function ToothPanel({
             {T.onTooth} <span className="ms-1 rounded-full bg-sunken px-2 py-0.5 text-[12px] font-semibold text-ink-500 tnum">{here.length}</span>
           </h4>
           <ul className="grid gap-2">
-            {here.map((m) => (
-              <EntryRow
-                key={m.id}
-                m={m}
-                custom={custom}
-                doctors={doctors}
-                tz={tz}
-                canEdit={!locked}
-                onMarkDone={a.onMarkDone}
-                onVoid={a.onVoid}
-                onNote={a.onNote}
-                onDetail={a.onDetail}
-                onPerformer={a.onEntryPerformer}
-              />
-            ))}
+            {here.map((m) => {
+              /*
+                One tooth of a full arch: done, voided and noted as the whole,
+                so it points there rather than offering its own controls.
+              */
+              const parent = parentOf(m);
+              if (parent) {
+                return (
+                  <li key={m.id} className={`flex items-center gap-2.5 rounded-ctl border border-line bg-surface p-2.5 ${m.voidedAt ? "opacity-60" : ""}`} data-mark={m.id} data-part-of={parent.id}>
+                    <TreatmentGlyph tr={findTreatment(m.treatmentKey, custom) ?? { key: m.treatmentKey, kind: m.kind, category: "implant", en: m.label, ar: m.labelAr, scope: "tooth", look: m.look }} paint={paintAt(m, null) ?? "existing"} context={tt} size={42} />
+                    <div className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className={`text-[13.5px] font-semibold text-ink-900 ${m.voidedAt ? "line-through" : ""}`}>{markLabel(m, locale)}</span>
+                        <PaintPill m={m} />
+                      </span>
+                      <span className="mt-0.5 block text-[12px] text-ink-500">{T.partOf.replace("{name}", `${parentName(parent)} · ${siteLabel(parent.site, T)}`)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => a.onOpenEntry(parent.id)}
+                      className="h-8 shrink-0 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+                    >
+                      {T.openWhole}
+                    </button>
+                  </li>
+                );
+              }
+              return (
+                <EntryRow
+                  key={m.id}
+                  m={m}
+                  custom={custom}
+                  doctors={doctors}
+                  tz={tz}
+                  canEdit={!locked}
+                  onMarkDone={a.onMarkDone}
+                  onVoid={a.onVoid}
+                  onNote={a.onNote}
+                  onDetail={a.onDetail}
+                  onPerformer={a.onEntryPerformer}
+                />
+              );
+            })}
           </ul>
         </section>
       )}

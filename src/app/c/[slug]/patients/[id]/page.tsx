@@ -75,7 +75,12 @@ export default async function PatientProfilePage({
       await c.query(
         // The cover's end date as text: a `date` read through node-pg is a JS Date in
         // the server's zone, which moves it by a day west of the clinic.
-        `select p.*, p.insurance_valid_until::text as cover_until, ${PATIENT_PRESCRIPTIONS_JSON} as __prescriptions
+        `select p.*, p.insurance_valid_until::text as cover_until, ${PATIENT_PRESCRIPTIONS_JSON} as __prescriptions,
+                -- Who typed this patient in, as the clinic knows them: the
+                -- header says "Lina · Reception", not "staff".
+                (select json_build_object('name', u.full_name, 'title', cm.title, 'role', cm.role, 'owner', coalesce(cm.is_owner, false))
+                   from users u left join clinic_members cm on cm.user_id = u.id and cm.clinic_id = p.clinic_id
+                  where u.id = p.created_by) as added_by
            from patients p where p.id = $1 and p.clinic_id = $2`,
         [id, access.clinicId]
       )
@@ -289,6 +294,7 @@ export default async function PatientProfilePage({
       noteCategories={JSON.parse(JSON.stringify(d.noteCategories))}
       prescriptions={JSON.parse(JSON.stringify(d.prescriptions ?? []))}
       initialTab={tab}
+      renderedAt={Date.now()}
       canSendDocuments={can(access, "documents.manage")}
       caps={caps}
       country={countryFromClinic(access.clinic)}

@@ -102,37 +102,46 @@ export type DentalChartData = {
   favorites: FavoriteRow[];
 };
 
-/** Everything the chart needs for one patient, in four round trips on one connection. */
+/**
+ * Everything the chart needs for one patient, in one round trip.
+ *
+ * One statement rather than one per kind of row: everything on a connection
+ * runs in series, so four queries were four round trips to the database, and
+ * the patient file waits on them before it can render. Timestamps come back
+ * through JSON as ISO strings, which `iso()` reads like the dates node-pg
+ * would have handed over.
+ */
 export async function loadDentalChart(c: PoolClient, clinicId: string, patientId: string): Promise<DentalChartData> {
-  const marks = await c.query(`${MARK_SELECT} where m.clinic_id = $1 and m.patient_id = $2 order by m.created_at`, [clinicId, patientId]);
-  const events = await c.query(
-    `select e.*, u.full_name as by_name
-       from chart_mark_events e
-       join chart_marks m on m.id = e.mark_id
-       left join users u on u.id = e.by_user
-      where m.clinic_id = $1 and m.patient_id = $2
-      order by e.at`,
-    [clinicId, patientId]
-  );
-  const custom = await c.query(
-    `select t.*, u.full_name as creator_name from chart_treatments t left join users u on u.id = t.created_by
-      where t.clinic_id = $1 and t.chart = 'dental' and t.archived_at is null order by t.created_at`,
-    [clinicId]
-  );
-  const favorites = await c.query(
-    `select f.treatment_key, f.added_at, f.added_by, u.full_name as added_name
-       from chart_treatment_favorites f left join users u on u.id = f.added_by
-      where f.clinic_id = $1 and f.chart = 'dental' order by f.sort, f.added_at`,
-    [clinicId]
-  );
+  const r = (
+    await c.query(
+      `select
+         (select coalesce(json_agg(x order by x.created_at), '[]'::json)
+            from (${MARK_SELECT} where m.clinic_id = $1 and m.patient_id = $2) x) as marks,
+         (select coalesce(json_agg(x order by x.at), '[]'::json)
+            from (select e.*, u.full_name as by_name
+                    from chart_mark_events e
+                    join chart_marks m on m.id = e.mark_id
+                    left join users u on u.id = e.by_user
+                   where m.clinic_id = $1 and m.patient_id = $2) x) as events,
+         (select coalesce(json_agg(x order by x.created_at), '[]'::json)
+            from (select t.*, u.full_name as creator_name
+                    from chart_treatments t left join users u on u.id = t.created_by
+                   where t.clinic_id = $1 and t.chart = 'dental' and t.archived_at is null) x) as custom,
+         (select coalesce(json_agg(x order by x.sort, x.added_at), '[]'::json)
+            from (select f.treatment_key, f.added_at, f.added_by, f.sort, u.full_name as added_name
+                    from chart_treatment_favorites f left join users u on u.id = f.added_by
+                   where f.clinic_id = $1 and f.chart = 'dental') x) as favorites`,
+      [clinicId, patientId]
+    )
+  ).rows[0] as Record<string, Record<string, unknown>[]>;
   return {
-    marks: marks.rows.map(toMark),
-    events: events.rows.map(toEvent),
-    custom: custom.rows.map(toCustomTreatment),
-    favorites: favorites.rows.map((r) => ({
-      key: r.treatment_key as string,
-      addedBy: { id: (r.added_by as string) ?? "", name: (r.added_name as string) ?? "" },
-      addedAt: iso(r.added_at)!,
+    marks: r.marks.map(toMark),
+    events: r.events.map(toEvent),
+    custom: r.custom.map(toCustomTreatment),
+    favorites: r.favorites.map((f) => ({
+      key: f.treatment_key as string,
+      addedBy: { id: (f.added_by as string) ?? "", name: (f.added_name as string) ?? "" },
+      addedAt: iso(f.added_at)!,
     })),
   };
 }

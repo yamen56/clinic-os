@@ -30,8 +30,8 @@ export async function createPatientAction(
   return inClinic(access, async (c) => {
     if (!data.phone.trim()) {
       const r = await c.query(
-        `insert into patients (clinic_id, full_name, source) values ($1, $2, 'staff') returning id`,
-        [access.clinicId, name]
+        `insert into patients (clinic_id, full_name, source, created_by) values ($1, $2, 'staff', $3) returning id`,
+        [access.clinicId, name, access.session.user.id]
       );
       await audit(c, {
         clinicId: access.clinicId,
@@ -59,6 +59,7 @@ export async function createPatientAction(
       // Somebody filling in this form for a number they archived means to have
       // that patient back, under the name they just typed.
       restoreArchived: true,
+      createdBy: access.session.user.id,
     });
     if (result.created) {
       await audit(c, {

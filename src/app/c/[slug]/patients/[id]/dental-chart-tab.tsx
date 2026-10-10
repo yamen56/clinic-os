@@ -22,11 +22,13 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
 import { fmtDateOnly } from "@/lib/dates";
-import { BORROWABLE_LOOKS, BUILT_IN, PROCEDURE_CATEGORIES, findTreatment, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
-import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
+import { BORROWABLE_LOOKS, BUILT_IN, BUILT_IN_BY_KEY, PROCEDURE_CATEGORIES, findTreatment, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
+import { groupParents, implantSitesOf, inChartOrder, isFullArch, onImplants, parentOf, prosthesisSites } from "@/lib/charts/dental/full-arch";
+import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Arch, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
 import { endOfDay, eventDays, isToothSite, paintAt, toothStates, type Mark, type MarkEvent, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
 import type { DentalChartData } from "@/lib/charts/dental/db";
 import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
+import { useDentalStore, type ChartFile } from "@/components/charts/dental/store";
 import { Odontogram, neighbour, type RegionMark } from "@/components/charts/dental/odontogram";
 import { ImageViewer, type ChartImage } from "@/components/charts/dental/image-viewer";
 import { ImageStrip } from "@/components/charts/dental/image-strip";
@@ -36,7 +38,8 @@ import { MouthGlyph, type MouthRegion } from "@/components/charts/dental/mouth-a
 import { DockSheet, SHEET_SHARE } from "@/components/charts/dental/dock-sheet";
 import { iconFor } from "@/components/charts/dental/icons";
 import { ToothPanel, type PanelActions } from "@/components/charts/dental/tooth-panel";
-import { TreatmentGlyph, TreatmentPicker, type Favorite } from "@/components/charts/dental/treatment-picker";
+import { FullArchSheet } from "@/components/charts/dental/full-arch-sheet";
+import { TreatmentGlyph, TreatmentPicker } from "@/components/charts/dental/treatment-picker";
 import { EntryRow, EventList } from "@/components/charts/dental/history";
 import { siteLabel } from "@/components/charts/dental/labels";
 
@@ -211,7 +214,7 @@ function CustomTreatmentModal({
   );
 }
 
-export type PatientFile = { id: string; file_name: string; mime_type: string; size_bytes: number; kind: string; created_at: string; teeth?: string[] };
+export type PatientFile = ChartFile;
 
 /** What the patient page hands the tab: the saved chart and who is charting. */
 export type DentalTabData = {
@@ -227,14 +230,17 @@ export type DentalTabData = {
   canMessage: boolean;
 };
 
+/*
+  The entries, the history, the clinic's treatments and the patient's images
+  come from the file's chart store (store.tsx), not from here: the tab is
+  unmounted whenever another one is opened, and the store is not.
+*/
 type TabProps = {
   slug: string;
   patientId: string;
   tz: string;
   birthDate: string | null;
   data: DentalTabData;
-  /** The patient's files, from which the x-rays and photos are shown. */
-  files: PatientFile[];
 };
 
 /*
@@ -262,17 +268,14 @@ export function DentalChartTab(props: TabProps) {
   );
 }
 
-function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: TabProps & { caption: (dateIso: string) => string }) {
+function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps & { caption: (dateIso: string) => string }) {
   const { t, locale } = useI18n();
   const T = t.dental;
   const { toast } = useToast();
   const { me, doctors: roster, canWrite } = data;
   const base = `/api/c/${slug}/patients/${patientId}/dental/marks`;
 
-  const [marks, setMarks] = useState<Mark[]>(data.chart.marks);
-  const [events, setEvents] = useState<MarkEvent[]>(data.chart.events);
-  const [favorites, setFavorites] = useState<Favorite[]>(data.chart.favorites);
-  const [custom, setCustom] = useState<Treatment[]>(data.chart.custom);
+  const { marks, setMarks, events, setEvents, favorites, setFavorites, custom, setCustom, files: allFiles, setFiles, pins, setPins, write } = useDentalStore();
   const [customBusy, setCustomBusy] = useState(false);
 
   const [selected, setSelected] = useState<string[]>([]);
@@ -292,6 +295,8 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
   const [customOpen, setCustomOpen] = useState(false);
   const [mouthOpen, setMouthOpen] = useState(false);
   const [scoped, setScoped] = useState<Treatment | null>(null);
+  /** A full arch being set up: which treatment, and the arch when a tooth already said it. */
+  const [fullArch, setFullArch] = useState<{ tr: Treatment; arch: Arch | null } | null>(null);
   const [voiding, setVoiding] = useState<Mark | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [lastAdded, setLastAdded] = useState<{ ids: string[]; text: string; key: number } | null>(null);
@@ -305,8 +310,6 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
     the same files the Files tab lists. Which teeth each shows is a label on
     the file (`patient_files.teeth`).
   */
-  const [uploaded, setUploaded] = useState<PatientFile[]>([]);
-  const allFiles = useMemo(() => [...uploaded, ...files].filter((f, i, all) => all.findIndex((x) => x.id === f.id) === i), [uploaded, files]);
   const images = useMemo<ChartImage[]>(
     () =>
       allFiles
@@ -323,7 +326,6 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
         })),
     [allFiles, slug]
   );
-  const [pins, setPins] = useState<Record<string, string[]>>(() => Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []])));
   const [viewer, setViewer] = useState<{ list: ChartImage[]; index: number } | null>(null);
   const [sending, setSending] = useState<{ img: ChartImage; caption: string } | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -445,6 +447,28 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
     shown. Memoised on purpose: the chart lays its bands out from this list,
     and a new list every render would redraw every tooth on every tap.
   */
+  const parents = useMemo(() => groupParents(marks), [marks]);
+  /** "All-on-4", "Overdenture on 2 implants": a full arch as dentists name it, from the implants it holds. */
+  const fullArchName = useCallback(
+    (m: Mark) => {
+      const n = implantSitesOf(m, marks).length || Number(m.detail.implants) || 0;
+      if (!n) return locale === "ar" ? m.labelAr : m.label;
+      return n >= 4 ? `All-on-${n}` : T.overdenture.replace("{n}", String(n));
+    },
+    [marks, locale, T]
+  );
+  /** The line under a full arch's name: how many implants and where, and the extractions it includes. */
+  const groupExtra = (m: Mark) => {
+    if (!isFullArch(m.treatmentKey) || !m.groupId) return undefined;
+    const sites = implantSitesOf(m, marks);
+    const out = marks.filter((x) => x.groupId === m.groupId && x.id !== m.id && !x.voidedAt && x.look === "extraction").length;
+    const parts = [
+      sites.length ? T.implantsAt.replace("{n}", String(sites.length)).replace("{list}", sites.join(" · ")) : "",
+      out ? T.withExtractions.replace("{n}", String(out)) : "",
+    ].filter(Boolean);
+    return parts.length ? parts.join(", ") : undefined;
+  };
+
   const regionMarks = useMemo<RegionMark[]>(
     () =>
       marks
@@ -452,11 +476,11 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
         .flatMap((m) => {
           const paint = paintAt(m, at);
           if (!paint || !visible(paint)) return [];
-          const label = locale === "ar" ? m.labelAr : m.label;
+          const label = m.treatmentKey === "implant_denture" && m.groupId ? fullArchName(m) : locale === "ar" ? m.labelAr : m.label;
           const when = fmtDateOnly(m.doneAt ?? m.createdAt, locale);
           return [{ id: m.id, site: m.site as MouthRegion, label, title: `${label} · ${siteLabel(m.site, T)} · ${T.status[paint]} · ${when}`, paint, category: categoryOf(m.treatmentKey) }];
         }),
-    [marks, at, visible, locale, categoryOf, T]
+    [marks, at, visible, locale, categoryOf, T, fullArchName]
   );
 
   /* ── X-rays and photos ───────────────────────────────────────────────── */
@@ -476,7 +500,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
     const before = pins[fileId] ?? [];
     setPins((prev) => ({ ...prev, [fileId]: teeth }));
     try {
-      await call(`/api/c/${slug}/files/${fileId}/teeth`, "PATCH", { teeth });
+      await write([], call(`/api/c/${slug}/files/${fileId}/teeth`, "PATCH", { teeth }));
     } catch {
       setPins((prev) => ({ ...prev, [fileId]: before }));
       toast(T.saveFailed, "error");
@@ -503,7 +527,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
       const body = (await res.json().catch(() => null)) as { ok?: boolean; file?: PatientFile } | null;
       if (!res.ok || !body?.file) throw new Error("upload");
       const row = body.file;
-      setUploaded((prev) => [row, ...prev]);
+      setFiles((prev) => [row, ...prev.filter((f) => f.id !== row.id)]);
       setPins((prev) => ({ ...prev, [row.id]: [] }));
       if (toTooth && canWrite) await setTeeth(row.id, [toTooth]);
       toast(T.savedToFiles);
@@ -547,7 +571,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
         }
         if (body.request?.fulfilledAt && body.file) {
           const f = body.file;
-          setUploaded((prev) => [f, ...prev]);
+          setFiles((prev) => [f, ...prev.filter((x) => x.id !== f.id)]);
           setPins((prev) => ({ ...prev, [f.id]: f.teeth ?? [] }));
           setPending(null);
           toast(T.xrayArrived);
@@ -589,38 +613,51 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
     setEvents((prev) => [...prev.filter((e) => !evIds.has(e.id)), ...evs]);
   };
 
-  const record = (tr: Treatment, sites: { site: string; surfaces: Surface[]; role?: Mark["role"] }[], groupId?: string) => {
+  /*
+    One tap can record more than one treatment: a full arch is the arch, an
+    implant on each tooth that carries one, a bridge tooth on each it
+    replaces, and the extractions that come first. A site may name its own
+    treatment and details, and stay out of the group (`group: false`).
+  */
+  type Site = { site: string; surfaces: Surface[]; role?: Mark["role"]; tr?: Treatment; detail?: Record<string, string>; group?: boolean };
+
+  const record = (tr: Treatment, sites: Site[], groupId?: string, text?: string) => {
     const now = new Date().toISOString();
-    const st: Status = tr.kind === "finding" ? "existing" : status;
-    const fresh: (Mark & { eventId: string })[] = sites.map((s) => ({
-      id: newId(),
-      eventId: newId(),
-      site: s.site,
-      surfaces: s.surfaces,
-      treatmentKey: tr.key,
-      label: tr.en,
-      labelAr: tr.ar,
-      abbr: tr.abbr,
-      look: tr.look,
-      kind: tr.kind,
-      detail: defaultsFor(tr, s.site),
-      status: st,
-      groupId,
-      role: s.role,
-      performedBy: performerPerson,
-      recordedBy: me,
-      createdAt: now,
-      doneAt: st === "done" ? now : null,
-      voidedAt: null,
-      voidedBy: null,
-      voidReason: null,
-      note: "",
-    }));
+    const fresh: (Mark & { eventId: string })[] = sites.map((s) => {
+      const t = s.tr ?? tr;
+      const st: Status = t.kind === "finding" ? "existing" : status;
+      return {
+        id: newId(),
+        eventId: newId(),
+        site: s.site,
+        surfaces: s.surfaces,
+        treatmentKey: t.key,
+        label: t.en,
+        labelAr: t.ar,
+        abbr: t.abbr,
+        look: t.look,
+        kind: t.kind,
+        detail: s.detail ?? defaultsFor(t, s.site),
+        status: st,
+        groupId: s.group === false ? undefined : groupId,
+        role: s.role,
+        performedBy: performerPerson,
+        recordedBy: me,
+        createdAt: now,
+        doneAt: st === "done" ? now : null,
+        voidedAt: null,
+        voidedBy: null,
+        voidReason: null,
+        note: "",
+      };
+    });
     setMarks((prev) => [...prev, ...fresh.map(({ eventId: _e, ...m }) => m)]);
     setEvents((prev) => [...prev, ...fresh.map((m) => ({ id: m.eventId, markId: m.id, action: "created" as const, at: now, by: me }))]);
     const where = sites.map((s) => (isToothSite(s.site) ? s.site : siteLabel(s.site, T))).join(" · ");
-    setLastAdded({ ids: fresh.map((m) => m.id), text: T.added.replace("{name}", locale === "ar" ? tr.ar : tr.en).replace("{site}", where), key: Date.now() });
-    call<{ marks: Mark[]; events: MarkEvent[] }>(base, "POST", {
+    setLastAdded({ ids: fresh.map((m) => m.id), text: text ?? T.added.replace("{name}", locale === "ar" ? tr.ar : tr.en).replace("{site}", where), key: Date.now() });
+    write(
+      fresh.map((m) => m.id),
+      call<{ marks: Mark[]; events: MarkEvent[] }>(base, "POST", {
       marks: fresh.map((m) => ({
         id: m.id,
         eventId: m.eventId,
@@ -633,7 +670,8 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
         role: m.role ?? null,
         performedBy: m.performedBy?.id ?? null,
       })),
-    })
+      })
+    )
       .then((r) => settle(r.marks, r.events))
       .catch(() => {
         removeLocal(new Set(fresh.map((m) => m.id)));
@@ -648,7 +686,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
     const evs = events.filter((e) => ids.includes(e.markId));
     removeLocal(new Set(ids));
     const failed: string[] = [];
-    for (const id of ids) await call(`${base}/${id}`, "DELETE").catch(() => failed.push(id));
+    for (const id of ids) await write([id], call(`${base}/${id}`, "DELETE")).catch(() => failed.push(id));
     if (failed.length) {
       setMarks((prev) => [...prev, ...gone.filter((m) => failed.includes(m.id))]);
       setEvents((prev) => [...prev, ...evs.filter((e) => failed.includes(e.markId))]);
@@ -668,12 +706,24 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
   */
   const change = (m: Mark, next: Mark, body: Record<string, unknown>, action?: MarkEvent["action"], reason?: string) => {
     const eventId = action ? newId() : null;
-    setMarks((prev) => prev.map((x) => (x.id === m.id ? next : x)));
+    // A whole-arch entry's teeth follow it when it is done or voided; the server does the same.
+    const op = body.op;
+    const kids =
+      (op === "done" || op === "void") && m.groupId && !isToothSite(m.site)
+        ? marks.filter((x) => x.groupId === m.groupId && x.id !== m.id && !x.voidedAt && (op === "void" || x.status === "planned"))
+        : [];
+    const kidIds = new Set(kids.map((x) => x.id));
+    const kidNext = (x: Mark): Mark =>
+      op === "done" ? { ...x, status: "done", doneAt: next.doneAt } : { ...x, voidedAt: next.voidedAt, voidedBy: next.voidedBy, voidReason: next.voidReason };
+    setMarks((prev) => prev.map((x) => (x.id === m.id ? next : kidIds.has(x.id) ? kidNext(x) : x)));
     if (action && eventId) setEvents((prev) => [...prev, { id: eventId, markId: m.id, action, at: new Date().toISOString(), by: me, reason }]);
-    call<{ mark: Mark; event: MarkEvent | null }>(`${base}/${m.id}`, "PATCH", eventId ? { ...body, eventId } : body)
-      .then((r) => settle([r.mark], r.event ? [r.event] : []))
+    write(
+      [m.id, ...kidIds],
+      call<{ mark: Mark; event: MarkEvent | null; also?: Mark[]; alsoEvents?: MarkEvent[] }>(`${base}/${m.id}`, "PATCH", eventId ? { ...body, eventId } : body)
+    )
+      .then((r) => settle([r.mark, ...(r.also ?? [])], [...(r.event ? [r.event] : []), ...(r.alsoEvents ?? [])]))
       .catch(() => {
-        setMarks((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+        setMarks((prev) => prev.map((x) => (x.id === m.id ? m : kids.find((k) => k.id === x.id) ?? x)));
         if (eventId) setEvents((prev) => prev.filter((e) => e.id !== eventId));
         toast(T.saveFailed, "error");
       });
@@ -699,8 +749,38 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
     setSpan(null);
   };
 
+  /*
+    A full arch: the arch itself, an implant on each tooth that carries one, a
+    bridge or denture tooth on each it replaces and — when it is still to come
+    — the extractions of the teeth standing in the arch. One group, so the
+    chart draws the work on the teeth, the lists show it once, and the day it
+    is done every part of it is: the extractions are that same surgery, not a
+    page of separate rows to tick off one by one.
+  */
+  const recordFullArch = (tr: Treatment, arch: Arch, implants: string[], extract: string[]) => {
+    const implantTr = BUILT_IN_BY_KEY.get("implant")!;
+    const extractionTr = BUILT_IN_BY_KEY.get("extraction")!;
+    const implanted = onImplants(tr.key);
+    const sites: Site[] = [
+      { site: arch, surfaces: [], detail: implanted ? { implants: String(implants.length) } : defaultsFor(tr, arch) },
+      ...implants.map((f) => ({ site: f, surfaces: [] as Surface[], role: "abutment" as const, tr: implantTr, detail: {} })),
+      ...prosthesisSites(tr.key, arch, implants.length).map((f) => ({ site: f, surfaces: [] as Surface[], role: "pontic" as const, detail: {} })),
+      ...extract.map((f) => ({ site: f, surfaces: [] as Surface[], tr: extractionTr, detail: {} })),
+    ];
+    const where = implanted
+      ? `${siteLabel(arch, T)} · ${T.implantsAt.replace("{n}", String(implants.length)).replace("{list}", inChartOrder(implants).join(" · "))}`
+      : siteLabel(arch, T);
+    record(tr, sites, newId(), T.added.replace("{name}", locale === "ar" ? tr.ar : tr.en).replace("{site}", where));
+    setFullArch(null);
+    closePanel();
+  };
+
   const pick = (tr: Treatment) => {
     if (locked || selected.length === 0) return;
+    if (isFullArch(tr.key)) {
+      setFullArch({ tr, arch: toothOf(selected[0]).arch });
+      return;
+    }
     if (tr.needsSurfaces && picked.length === 0) {
       setFlash(true);
       setTimeout(() => setFlash(false), 1200);
@@ -789,7 +869,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
     const on = !favorites.some((f) => f.key === key);
     const before = favorites;
     setFavorites(on ? [...favorites, { key, addedBy: me, addedAt: new Date().toISOString() }] : favorites.filter((f) => f.key !== key));
-    call(`/api/c/${slug}/dental/favorites`, "POST", { key, on }).catch(() => {
+    write([], call(`/api/c/${slug}/dental/favorites`, "POST", { key, on })).catch(() => {
       setFavorites(before);
       toast(T.saveFailed, "error");
     });
@@ -830,6 +910,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
     onUploadForTooth: (kind, file, fdi) => upload(kind, file, fdi),
     onTakeXray: (fdi) => void takeXray([fdi]),
     onCamera: (fdi) => setCamera({ tooth: fdi }),
+    onOpenEntry: (id) => setMouthEntry(id),
     onClose: closePanel,
   };
 
@@ -841,6 +922,12 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
   };
 
   const pickWholeMouth = (tr: Treatment, site?: string) => {
+    if (isFullArch(tr.key)) {
+      setScoped(null);
+      setMouthOpen(false);
+      setFullArch({ tr, arch: site === "upper" || site === "lower" ? site : null });
+      return;
+    }
     if (tr.scope === "mouth" || site) {
       record(tr, [{ site: site ?? "mouth", surfaces: [] }]);
       setScoped(null);
@@ -853,7 +940,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
   const addCustom = async (d: { name: string; abbr: string; category: Category; scope: Scope; look: Look }) => {
     setCustomBusy(true);
     try {
-      const r = await call<{ treatment: Treatment }>(`/api/c/${slug}/dental/treatments`, "POST", d);
+      const r = await write([], call<{ treatment: Treatment }>(`/api/c/${slug}/dental/treatments`, "POST", d));
       setCustom((prev) => [...prev, r.treatment]);
       setCustomOpen(false);
       toast(r.treatment.en);
@@ -867,8 +954,14 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
   /* ── What the screen shows ───────────────────────────────────────────── */
 
   const live = marks.filter((m) => !m.voidedAt);
-  const remaining = live.filter((m) => m.status === "planned").sort((a, b) => siteOrder(a.site) - siteOrder(b.site));
-  const historyEvents = historyDoctor ? events.filter((e) => marks.find((m) => m.id === e.markId)?.performedBy?.id === historyDoctor) : events;
+  const remaining = live.filter((m) => m.status === "planned" && !parentOf(m, parents)).sort((a, b) => siteOrder(a.site) - siteOrder(b.site));
+  // The mouth's history lists a full arch once; each of its teeth keeps its own lines in that tooth's history.
+  const byMark = new Map(marks.map((m) => [m.id, m]));
+  const historyEvents = events.filter((e) => {
+    const m = byMark.get(e.markId);
+    if (!m || parentOf(m, parents)) return false;
+    return !historyDoctor || m.performedBy?.id === historyDoctor;
+  });
 
   const panel = selected.length > 0 && mode === "tooth" && (
     <ToothPanel
@@ -892,6 +985,8 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
       images={images}
       pins={pins}
       uploading={uploading}
+      parentOf={(m) => parentOf(m, parents)}
+      parentName={(m) => (m.treatmentKey === "implant_denture" ? fullArchName(m) : locale === "ar" ? m.labelAr : m.label)}
       a={actions}
     />
   );
@@ -1171,6 +1266,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
                   onNote={actions.onNote}
                   onDetail={actions.onDetail}
                   onPerformer={actions.onEntryPerformer}
+                  extra={groupExtra(m)}
                 />
               </ul>
             </div>
@@ -1238,6 +1334,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
                       onNote={actions.onNote}
                       onDetail={actions.onDetail}
                       onPerformer={actions.onEntryPerformer}
+                      extra={groupExtra(m)}
                     />
                   </ul>
                 </li>
@@ -1306,6 +1403,22 @@ function DentalChart({ slug, patientId, tz, birthDate, data, files, caption }: T
               onAddCustom={() => setCustomOpen(true)}
             />
           </div>
+        )}
+      </Modal>
+
+      <Modal open={!!fullArch} onClose={() => setFullArch(null)} title={fullArch ? (locale === "ar" ? fullArch.tr.ar : fullArch.tr.en) : ""}>
+        {fullArch && (
+          <FullArchSheet
+            key={fullArch.tr.key + (fullArch.arch ?? "")}
+            tr={fullArch.tr}
+            initialArch={fullArch.arch}
+            states={states}
+            marks={marks}
+            status={status}
+            onStatus={setStatus}
+            onRecord={(arch, implants, extract) => recordFullArch(fullArch.tr, arch, implants, extract)}
+            onCancel={() => setFullArch(null)}
+          />
         )}
       </Modal>
 
