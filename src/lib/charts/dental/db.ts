@@ -250,7 +250,7 @@ export async function loadDentalChart(
             from appointment_items ai
            where $3 and ai.clinic_id = $1 and ai.patient_id = $2) as bookings,
          (select medical_history from patients where id = $2 and clinic_id = $1) as medical,
-         (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'variant', s.chart_variant, 'price', s.price, 'unit', s.price_unit)), '[]'::json)
+         (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'variant', s.chart_variant, 'price', s.price, 'unit', s.price_unit, 'name', s.name, 'nameAr', s.name_ar)), '[]'::json)
             from services s where s.clinic_id = $1 and s.chart_key is not null and s.active) as prices,
          (select coalesce(json_agg(x), '[]'::json)
             from (select iim.mark_id as "markId", sum(ii.qty)::float as qty,
@@ -286,6 +286,8 @@ export async function loadDentalChart(
       variant: (p.variant as string) ?? null,
       price: Number(p.price),
       unit: p.unit === "session" ? "session" : "item",
+      name: p.name as string,
+      nameAr: (p.nameAr as string) ?? null,
     })),
     billing: r.billing.map((b) => ({ markId: b.markId, qty: Number(b.qty), invoices: b.invoices ?? [] })),
     billingSince: iso(r.billing_since),

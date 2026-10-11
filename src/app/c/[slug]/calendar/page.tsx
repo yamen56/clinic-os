@@ -15,7 +15,7 @@ export default async function CalendarPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ patient?: string; new?: string; items?: string }>;
+  searchParams: Promise<{ patient?: string; new?: string; items?: string; open?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -68,7 +68,23 @@ export default async function CalendarPage({
         };
       }
     }
-    return { initialPatient, initialPlan };
+    /*
+      ?open=<appointment>: a link to one visit — a note about it, in the
+      patient's file — lands on its day with it open.
+    */
+    let initialOpen: { id: string; date: string } | null = null;
+    if (isUuid(sp.open)) {
+      const a = (
+        await c.query(
+          `select a.id, (a.starts_at at time zone cl.timezone)::date::text as day
+             from appointments a join clinics cl on cl.id = a.clinic_id
+            where a.id = $1 and a.clinic_id = $2`,
+          [sp.open, access.clinicId]
+        )
+      ).rows[0];
+      if (a) initialOpen = { id: a.id, date: a.day };
+    }
+    return { initialPatient, initialPlan, initialOpen };
   });
 
   return (
@@ -79,6 +95,7 @@ export default async function CalendarPage({
       selfMemberId={access.memberId}
       initialPatient={data.initialPatient}
       initialPlan={data.initialPlan}
+      initialOpen={data.initialOpen}
       /* ?new=1 — what the dashboard shortcut and its keyboard accelerator open. */
       openNew={sp.new === "1"}
       /*

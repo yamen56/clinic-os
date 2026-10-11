@@ -155,6 +155,12 @@ export function PlanPanel({
             )}
           </button>
           {/* What it costs this patient, and — for reception — whether it is billed. */}
+          {/* No price yet: amber, so the doctor prices it before reception meets a blank. */}
+          {cash?.amount == null && m.kind === "procedure" && m.status !== "existing" && !(store.canBill && cash?.billed) && (
+            <span className="shrink-0 self-center rounded-full bg-st-pending-soft px-2 py-0.5 text-[11.5px] font-semibold text-st-pending" data-plan-noprice={m.id}>
+              {P.noPriceChip}
+            </span>
+          )}
           {(cash?.amount != null || (store.canBill && cash?.billed)) && (
             <span className="shrink-0 self-center text-end" data-plan-price={cash?.amount ?? ""}>
               {cash?.amount != null && <span className="block text-[13px] font-semibold text-ink-900 tnum">{fmt(cash.amount)}</span>}
@@ -275,6 +281,13 @@ export function PlanPanel({
             </a>
           )}
         </div>
+      )}
+
+      {/* Work on the plan with no price, for someone who may set the clinic's prices: the place to set them. */}
+      {store.canPrice && items.some((m) => m.fee == null && m.kind === "procedure" && m.status !== "existing") && (
+        <a href={`/c/${store.slug}/settings/prices`} className="w-fit text-[12.5px] font-semibold text-brand-700 hover:underline" data-set-prices>
+          {P.setPrices} →
+        </a>
       )}
 
       {(canBook || canWrite) && (

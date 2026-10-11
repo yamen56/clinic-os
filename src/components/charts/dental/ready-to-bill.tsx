@@ -17,7 +17,7 @@ import { buttonClass } from "@/components/ui/button-class";
 import { fmtMoney } from "@/lib/dates";
 import { isToothSite } from "@/lib/charts/dental/state";
 import { groupLeads, inChartOrder, leadOf } from "@/lib/charts/dental/full-arch";
-import { lineDescription } from "@/lib/charts/dental/pricing";
+import { invoiceLineText } from "@/lib/charts/dental/pricing";
 import { useOptionalDentalStore } from "./store";
 import { moneyOf } from "./money";
 
@@ -62,7 +62,7 @@ export function ReadyToBill({ tz }: { tz: string }) {
           {items.map(({ m, cash }) => (
             <li key={m.id} className="flex items-center justify-between gap-3 py-2 text-[13px]" data-ready-item={m.id}>
               <span className="min-w-0">
-                {lineDescription(m, locale, t.invoices.chartLine, teethOf(m.groupId))}
+                {invoiceLineText(m, store.prices.find((p) => p.serviceId === m.serviceId), locale, t.invoices.chartLine, teethOf(m.groupId))}
                 {cash.dueUnits > 1 && <span className="text-ink-500 tnum"> × {cash.dueUnits}</span>}
               </span>
               <span className="shrink-0 font-semibold tnum">{cash.due != null ? fmt(cash.due) : "—"}</span>

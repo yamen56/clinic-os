@@ -8,13 +8,13 @@
  */
 
 import type { PoolClient } from "pg";
-import { lineDescription, type LineWords, type PriceRow } from "./pricing";
+import { invoiceLineText, type LineWords, type PriceRow } from "./pricing";
 import { EVERY_TOOTH, inChartOrder, leadIdOf } from "./full-arch";
 
 /** The clinic's dental prices: the services linked to a treatment, still in use. */
 export async function loadPrices(c: PoolClient, clinicId: string): Promise<PriceRow[]> {
   const r = await c.query(
-    `select id, chart_key, chart_variant, price, price_unit from services
+    `select id, chart_key, chart_variant, price, price_unit, name, name_ar from services
       where clinic_id = $1 and chart_key is not null and active`,
     [clinicId]
   );
@@ -24,6 +24,8 @@ export async function loadPrices(c: PoolClient, clinicId: string): Promise<Price
     variant: (x.chart_variant as string) ?? null,
     price: Number(x.price),
     unit: x.price_unit === "session" ? "session" : "item",
+    name: x.name as string,
+    nameAr: (x.name_ar as string) ?? null,
   }));
 }
 
@@ -94,7 +96,8 @@ export async function chartLines(
   if (!ids.length) return [];
   const marks = (
     await c.query(
-      `select m.id, m.site, m.label, m.label_ar, m.treatment_key, m.detail, m.group_id, m.fee, m.service_id, m.performed_by, s.price_unit
+      `select m.id, m.site, m.label, m.label_ar, m.treatment_key, m.detail, m.group_id, m.fee, m.service_id, m.performed_by,
+              s.price_unit, s.name as service_name, s.name_ar as service_name_ar, s.chart_variant as service_variant
          from chart_marks m left join services s on s.id = m.service_id
         where m.id = any($1::uuid[]) and m.clinic_id = $2 and m.patient_id = $3
           and m.voided_at is null and m.kind = 'procedure' and m.status <> 'existing'
@@ -145,8 +148,9 @@ export async function chartLines(
     lines.push({
       markId: m.id,
       serviceId: m.service_id ?? null,
-      description: lineDescription(
+      description: invoiceLineText(
         { label: m.label, labelAr: m.label_ar, treatmentKey: m.treatment_key, detail: m.detail ?? {}, site: m.site },
+        m.service_name ? { name: m.service_name, nameAr: m.service_name_ar ?? null, variant: m.service_variant ?? null } : null,
         locale,
         words,
         teeth

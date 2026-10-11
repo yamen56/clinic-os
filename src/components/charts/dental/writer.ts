@@ -210,16 +210,16 @@ export function useChartWriter() {
 
   /** A step taken back: voided with a reason, or — within two minutes, by whoever recorded it — undone. */
   const withdrawStep = useCallback(
-    async (step: StepRecord, how: { undo: true } | { reason: string }): Promise<boolean> => {
+    async (step: StepRecord, how: { undo: true } | { reason?: string }): Promise<boolean> => {
       const before = step;
       if ("undo" in how) setSteps((prev) => prev.filter((x) => x.id !== step.id));
-      else setSteps((prev) => prev.map((x) => (x.id === step.id ? { ...x, voidedAt: new Date().toISOString(), voidedBy: me, voidReason: how.reason } : x)));
+      else setSteps((prev) => prev.map((x) => (x.id === step.id ? { ...x, voidedAt: new Date().toISOString(), voidedBy: me, voidReason: how.reason ?? null } : x)));
       try {
         const r = await write(
           [step.markId],
           "undo" in how
             ? call<StepAnswer>(`${base}/dental/steps/${step.id}`, "DELETE")
-            : call<StepAnswer>(`${base}/dental/steps/${step.id}`, "PATCH", { op: "void", eventId: newId(), reason: how.reason })
+            : call<StepAnswer>(`${base}/dental/steps/${step.id}`, "PATCH", { op: "void", eventId: newId(), ...(how.reason ? { reason: how.reason } : {}) })
         );
         applySteps(step.markId, r);
         return true;

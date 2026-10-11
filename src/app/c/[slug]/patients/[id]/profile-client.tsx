@@ -45,6 +45,8 @@ import { DentalProvider, useOptionalDentalStore } from "@/components/charts/dent
 import { ReadyToBill } from "@/components/charts/dental/ready-to-bill";
 import { medicalAlerts } from "@/lib/medical-history";
 import { FilesTab, type FilesHub } from "./files-tab";
+import { OnFile, OtherNoteCard, SOURCE_ICON, useOtherNotes, type OtherSource } from "./notes-feed";
+import type { FeedItem } from "@/lib/note-feed";
 import { PrescriptionsTab } from "./prescriptions-tab";
 import { PrescriptionComposer, useComposerData, type RxDraft } from "./prescription-composer";
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
@@ -271,6 +273,8 @@ export function PatientProfile(props: {
   balanceDue: number;
   patient: Patient;
   notes: NoteRow[];
+  /** Notes written elsewhere in the file, for the Notes tab. */
+  noteFeed?: FeedItem[];
   noteCategories: NoteCategoryRow[];
   files: PatientFileRow[];
   appointments: { id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null }[];
@@ -980,6 +984,10 @@ export function PatientProfile(props: {
             visits={props.appointments}
             tz={tz}
             canManageCategories={caps.manageCategories}
+            feed={props.noteFeed ?? []}
+            summary={p.notes_summary}
+            tabKeys={tabs.map((x) => x.key)}
+            onTab={setTab}
           />
         )}
         {tab === "prescriptions" && (
@@ -1609,6 +1617,10 @@ function NotesTab({
   visits,
   tz,
   canManageCategories,
+  feed,
+  summary,
+  tabKeys,
+  onTab,
 }: {
   slug: string;
   patientId: string;
@@ -1618,6 +1630,13 @@ function NotesTab({
   tz: string;
   /** Whether this member may change the clinic's list, not just file against it. */
   canManageCategories: boolean;
+  /** Notes written elsewhere in the file: visits, invoices, prescriptions… */
+  feed: FeedItem[];
+  /** The Overview's summary: a note kept on the file. */
+  summary: string;
+  /** The tabs this member has, so a note points only at one that exists. */
+  tabKeys: string[];
+  onTab: (key: string) => void;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -1638,8 +1657,25 @@ function NotesTab({
   const catName_ = (c: NoteCategoryRow) => (locale === "ar" ? c.name_ar || c.name : c.name);
   const byId = new Map(categories.map((c) => [c.id, c]));
 
-  const shown = filter ? notes.filter((n) => n.category_id === filter) : notes;
+  /*
+    Every note about the patient, in one list: the ones written here, and the
+    ones written elsewhere in the file — each saying where it came from. The
+    filter is a category ("cat:…") of the notes written here, or a place
+    ("src:…"), "here" being this tab.
+  */
+  const others = useOtherNotes({ slug, feed, tabKeys, onTab });
+  const catOf = filter?.startsWith("cat:") ? filter.slice(4) : null;
+  const srcOf = filter?.startsWith("src:") ? filter.slice(4) : null;
+  const shown = catOf ? notes.filter((n) => n.category_id === catOf) : srcOf && srcOf !== "here" ? [] : notes;
+  const shownOthers = catOf || srcOf === "here" ? [] : srcOf ? others.filter((o) => o.source === srcOf) : others;
+  const rows = [
+    ...shown.map((n) => ({ key: n.id, at: n.created_at, note: n })),
+    ...shownOthers.map((o) => ({ key: o.key, at: o.at, other: o })),
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   const countFor = (id: string) => notes.filter((n) => n.category_id === id).length;
+  const sourceCounts = new Map<OtherSource, number>();
+  for (const o of others) sourceCounts.set(o.source, (sourceCounts.get(o.source) ?? 0) + 1);
+  const total = notes.length + others.length;
 
   /** A typed note. Server action, so it rides a transition like everything else. */
   const submit = () =>
@@ -1718,7 +1754,7 @@ function NotesTab({
       }
       // The composer may have been pointing at the category that just went.
       setCategoryId((cur) => (cur === cat.id ? null : cur));
-      setFilter((cur) => (cur === cat.id ? null : cur));
+      setFilter((cur) => (cur === `cat:${cat.id}` ? null : cur));
       setDeleteCat(null);
       toast(t.patients.notes.categoryDeleted);
     });
@@ -1806,8 +1842,8 @@ function NotesTab({
       </Card>
 
       {/* --------------------------------------------------------- filter */}
-      {notes.length > 0 && categories.length > 1 && (
-        <div className="-mt-1 flex flex-wrap items-center gap-1.5">
+      {(notes.length > 0 && categories.length > 1) || others.length > 0 ? (
+        <div className="-mt-1 flex flex-wrap items-center gap-1.5" data-notes-filter>
           <Filter className="h-3.5 w-3.5 shrink-0 text-ink-400" />
           <button
             onClick={() => setFilter(null)}
@@ -1815,20 +1851,32 @@ function NotesTab({
               filter === null ? "border-ink-900 bg-ink-900 text-white" : "border-line-strong text-ink-500"
             }`}
           >
-            {t.common.all} <span className="tnum opacity-70">{notes.length}</span>
+            {t.common.all} <span className="tnum opacity-70">{total}</span>
           </button>
+          {/* The notes written here, as one chip, when others are listed beside them. */}
+          {others.length > 0 && notes.length > 0 && (
+            <button
+              onClick={() => setFilter(filter === "src:here" ? null : "src:here")}
+              className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+                filter === "src:here" ? "border-ink-900 bg-ink-900 text-white" : "border-line-strong text-ink-500"
+              }`}
+              data-notes-source="here"
+            >
+              {t.patients.notes.sources.here} <span className="tnum opacity-70">{notes.length}</span>
+            </button>
+          )}
           {categories
             // A retired category still gets a chip while notes sit under it —
             // otherwise those notes are unreachable from the filter bar.
             .filter((c) => c.active || countFor(c.id) > 0)
             .map((c) => {
               const n = countFor(c.id);
-              if (!n) return null;
-              const on = filter === c.id;
+              if (!n || categories.length < 2) return null;
+              const on = filter === `cat:${c.id}`;
               return (
                 <button
                   key={c.id}
-                  onClick={() => setFilter(on ? null : c.id)}
+                  onClick={() => setFilter(on ? null : `cat:${c.id}`)}
                   className="rounded-full border px-3 py-1 text-[12px] font-medium transition-colors"
                   style={
                     on
@@ -1840,29 +1888,54 @@ function NotesTab({
                 </button>
               );
             })}
+          {/* The places other notes came from: a visit, an invoice, the chart… */}
+          {[...sourceCounts.entries()].map(([s, n]) => {
+            const Icon = SOURCE_ICON[s];
+            const on = filter === `src:${s}`;
+            return (
+              <button
+                key={s}
+                onClick={() => setFilter(on ? null : `src:${s}`)}
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+                  on ? "border-brand-600 bg-brand-600 text-white" : "border-line-strong text-ink-500"
+                }`}
+                data-notes-source={s}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t.patients.notes.sources[s]} <span className="tnum opacity-70">{n}</span>
+              </button>
+            );
+          })}
         </div>
-      )}
+      ) : null}
+
+      {/* Kept on the file rather than written on a day: above the list, whatever the filter. */}
+      <OnFile summary={summary} onSummary={() => onTab("overview")} onMedical={tabKeys.includes("treatment") ? () => onTab("treatment") : undefined} />
 
       {/* ---------------------------------------------------------- list */}
-      {shown.length === 0 ? (
+      {rows.length === 0 ? (
         <EmptyState
           icon={<StickyNote />}
-          title={notes.length ? t.patients.notes.noneInFilter : t.patients.notes.empty}
-          body={notes.length ? undefined : t.patients.notes.emptyBody}
+          title={total ? t.patients.notes.noneInFilter : t.patients.notes.empty}
+          body={total ? undefined : t.patients.notes.emptyBody}
         />
       ) : (
-        shown.map((n) => (
-          <NoteItem
-            key={n.id}
-            slug={slug}
-            note={n}
-            category={n.category_id ? byId.get(n.category_id) ?? null : null}
-            categories={active}
-            visits={visits}
-            tz={tz}
-            locale={locale}
-          />
-        ))
+        rows.map((r) =>
+          "note" in r && r.note ? (
+            <NoteItem
+              key={r.key}
+              slug={slug}
+              note={r.note}
+              category={r.note.category_id ? byId.get(r.note.category_id) ?? null : null}
+              categories={active}
+              visits={visits}
+              tz={tz}
+              locale={locale}
+            />
+          ) : "other" in r && r.other ? (
+            <OtherNoteCard key={r.key} o={r.other} tz={tz} />
+          ) : null
+        )
       )}
 
       {/* --------------------------------------------- manage the category list */}

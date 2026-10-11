@@ -85,6 +85,7 @@ export function CalendarClient({
   selfMemberId,
   initialPatient,
   initialPlan,
+  initialOpen,
   openNew,
   initialView = "week",
 }: {
@@ -95,6 +96,8 @@ export function CalendarClient({
   initialPatient: { id: string; name: string } | null;
   /** "Book next visit" from a patient's plan: what the visit is for, with whom, and a note to match. */
   initialPlan?: { items: PlannedItem[]; doctorId: string | null; notes: string } | null;
+  /** One visit to open on arrival, on its day — a link from a note about it. */
+  initialOpen?: { id: string; date: string } | null;
   /** Open an empty create panel on arrival — the dashboard shortcut. */
   openNew?: boolean;
   /** Day on a phone, where a week is seven columns wide on a 390px screen. */
@@ -103,7 +106,7 @@ export function CalendarClient({
   const { t, locale } = useI18n();
   const { toast } = useToast();
   const [view, setView] = useState<"day" | "week" | "month">(initialView);
-  const [anchor, setAnchor] = useState(() => DateTime.now().setZone(tz).toISODate()!);
+  const [anchor, setAnchor] = useState(() => initialOpen?.date ?? DateTime.now().setZone(tz).toISODate()!);
   const [doctorFilter, setDoctorFilter] = useState<string>(isDoctor ? (selfMemberId ?? "") : "");
   const [serviceFilter, setServiceFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
@@ -148,6 +151,16 @@ export function CalendarClient({
   useEffect(() => {
     void refetch();
   }, [refetch]);
+
+  // The visit the link pointed at opens once its day has loaded — once, so closing it stays closed.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!initialOpen || opened.current || !data) return;
+    const appt = data.appointments.find((x) => x.id === initialOpen.id);
+    if (!appt) return;
+    opened.current = true;
+    setPanel({ mode: "edit", appt });
+  }, [data, initialOpen]);
 
   useRealtimeRefresh(slug, ["appointments"], refetch);
 

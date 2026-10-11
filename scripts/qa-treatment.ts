@@ -511,7 +511,15 @@ async function main() {
         )
       )[0];
     await doc.goto(`${BASE}/c/${slug}/settings/services`, { timeout: 120000 });
+    await doc.waitForSelector("[data-prices-link]", { timeout: 120000 });
+    check(true, "Services points to the treatment prices");
+    await doc.goto(`${BASE}/c/${slug}/settings/prices`, { timeout: 120000 });
     await doc.waitForSelector("[data-dental-prices]", { timeout: 120000 });
+    check((await doc.locator("nav a", { hasText: "Treatment prices" }).count()) > 0, "Treatment prices has its own place in Settings");
+    check(
+      (await doc.locator("[data-needs-row='crown:zirconia']").count()) === 1 && (await doc.locator("[data-needs-row='rct:3']").count()) === 1,
+      "the price page opens on what was charted with no price: the zirconia crowns and the three-canal root canal"
+    );
     // A price box saves when it is left: Enter leaves it.
     const priceIn = async (box: string, value: string, key: string, variant: string | null) => {
       const input = doc.locator(box).first();
@@ -520,8 +528,18 @@ async function main() {
       return until(async () => (await servicePrice(key, variant))?.price === Number(value), 20000);
     };
     check(await priceIn("[data-price-row='crown'] [data-price-box='Crown']", "100", "crown", null), "the doctor prices a crown at 100");
+    check(
+      await until(async () => (await q(`select count(*)::int as n from chart_marks where clinic_id = $1 and treatment_key = 'crown' and fee = 100 and voided_at is null`, [clinic.id]))[0].n === 2),
+      "the two crowns already charted with no price take it"
+    );
+    check(
+      (await q(`select count(*)::int as n from chart_mark_events e join chart_marks m on m.id = e.mark_id where m.clinic_id = $1 and m.treatment_key = 'crown' and e.action = 'fee'`, [clinic.id]))[0].n === 2,
+      "each with a line in its history"
+    );
+    check(await until(async () => (await doc.locator("[data-needs-row='crown:zirconia']").count()) === 0), "and they leave Needs a price");
     check(await priceIn("[data-price-variant='crown:zirconia'] [data-price-box]", "120", "crown", "zirconia"), "a zirconia crown at 120");
     check(await priceIn("[data-price-variant='rct:3'] [data-price-box]", "90", "rct", "3"), "a root canal with three canals at 90");
+    check(await until(async () => (await q(`select fee::float as fee from chart_marks where id = $1`, [rct.id]))[0].fee === 90), "the root canal finished before there was a price takes it too");
     check(await priceIn("[data-price-row='scaling'] [data-price-box='Scaling & polishing']", "30", "scaling", null), "and a cleaning at 30");
     await doc.locator("[data-price-unit='scaling']:not([disabled])").selectOption("session");
     check(await until(async () => (await servicePrice("scaling", null))?.price_unit === "session", 20000), "the cleaning charged per visit");
@@ -531,6 +549,7 @@ async function main() {
       "each price is one of the clinic's services, named in both languages, not offered for booking",
       JSON.stringify(zirconia)
     );
+    check(((await doc.locator("[data-invoice-preview='crown']").innerText()) ?? "").includes("Crown — tooth 36"), "and each row says what the patient will read on the invoice");
 
     /* ── Prices on the plan ───────────────────────────────────────────── */
     console.log("Prices on the plan");
@@ -619,6 +638,16 @@ async function main() {
       "and the plan's footer says 200 to bill, nothing billed yet"
     );
 
+    // The names on the invoice are the clinic's: reception renames the E-max crown the way patients say it.
+    await doc.goto(`${BASE}/c/${slug}/settings/prices`, { timeout: 120000 });
+    await doc.waitForSelector("[data-rename-price='crown']", { timeout: 60000 });
+    await doc.locator("[data-rename-price='crown']").click();
+    const renameDialog = doc.locator("[data-rename-dialog]");
+    await renameDialog.waitFor({ timeout: 10000 });
+    await renameDialog.locator("div.grid", { hasText: "Crown · E-max" }).last().getByLabel("Arabic").fill("تلبيسة إي ماكس");
+    await renameDialog.locator("[data-save-names]").click();
+    check(await until(async () => (await servicePrice("crown", "emax"))?.name_ar === "تلبيسة إي ماكس"), "the E-max crown's Arabic name on the invoice is renamed");
+
     /* ── A doctor who does not bill ───────────────────────────────────── */
     console.log("A doctor without invoices");
     const doc2User = await user(`treat-doc2-${tag}@test.local`, "Yousef Haddad");
@@ -659,7 +688,7 @@ async function main() {
     await deskAr.goto(fileUrl(p3.id, "invoices"), { timeout: 120000 });
     await deskAr.waitForSelector("[data-ready-to-bill]", { timeout: 60000 });
     const readyAr = await deskAr.locator("[data-ready-to-bill]").innerText();
-    check(readyAr.includes("جاهز للفوترة") && readyAr.includes("تاج (تلبيسة) · إي ماكس — سن 16"), "and in Arabic for an Arabic reader", readyAr);
+    check(readyAr.includes("جاهز للفوترة") && readyAr.includes("تلبيسة إي ماكس — سن 16"), "and in Arabic, in the clinic's own words for it", readyAr);
 
     await desk.goto(`${BASE}/c/${slug}/invoices`, { timeout: 120000 });
     await desk.waitForSelector(`[data-desk-patient='${p3.id}']`, { timeout: 60000 });
@@ -677,7 +706,9 @@ async function main() {
     const billUrl = desk.url();
     // Two desks bill the same work at once: the second is told it is billed already.
     await deskAr.goto(billUrl, { timeout: 120000 });
-    check(await until(async () => (await lineValues(deskAr)).includes("تاج (تلبيسة) · إي ماكس — سن 16"), 60000), "the same Bill at a second desk, in Arabic, writes its lines in Arabic");
+    check(await until(async () => (await lineValues(deskAr)).includes("تلبيسة إي ماكس — سن 16"), 60000), "the same Bill at a second desk, in Arabic, writes its lines in Arabic");
+    // A note on the invoice: it shows in the patient's notes too.
+    await desk.getByPlaceholder("Shown at the bottom of the invoice…").fill("Half paid in cash, the rest at the next visit");
     await desk.getByRole("button", { name: "Create", exact: true }).click();
     await desk.waitForURL(/\/invoices\/[0-9a-f-]{36}$/, { timeout: 60000 });
     const invoiceId = new URL(desk.url()).pathname.split("/").pop()!;
@@ -767,6 +798,111 @@ async function main() {
       "and is billed as two visits at 30 — the billed crown and root canal are not offered",
       JSON.stringify(billable.lines)
     );
+
+    /* ── Notes from everywhere ───────────────────────────────────────── */
+    console.log("Notes from everywhere");
+    await desk.goto(fileUrl(p3.id, "notes"), { timeout: 120000 });
+    await desk.waitForSelector("[data-feed-source='invoice']", { timeout: 60000 });
+    const invNote = await desk.locator("[data-feed-source='invoice']").first().innerText();
+    check(invNote.includes("Half paid in cash") && /INV|-\d{4}-/.test(invNote) && invNote.includes("Invoice"), "an invoice's note is in the patient's notes, saying it is the invoice's, by number", invNote);
+    await deskAr.goto(fileUrl(p3.id, "notes"), { timeout: 120000 });
+    await deskAr.waitForSelector("[data-feed-source='invoice']", { timeout: 60000 });
+    check((await deskAr.locator("[data-feed-source='invoice']").first().innerText()).includes("فاتورة"), "and in Arabic it says فاتورة");
+
+    await q(`update patients set notes_summary = 'Anxious; prefers morning visits' where id = $1`, [p2.id]);
+    await doc.goto(fileUrl(p2.id, "notes"), { timeout: 120000 });
+    await doc.waitForSelector("[data-feed-source]", { timeout: 60000 });
+    const feedSources = await doc.locator("[data-feed-source]").evaluateAll((els) => els.map((e) => e.getAttribute("data-feed-source")));
+    check(
+      ["visit", "emergency", "case"].every((s) => feedSources.includes(s)),
+      "the Notes tab gathers the visit's note, the emergency and the case's history and diagnosis",
+      feedSources.join(",")
+    );
+    check(
+      (await doc.locator("[data-on-file-summary]").innerText()).includes("Anxious; prefers morning visits") && (await doc.locator("[data-on-file-medical]").innerText()).includes("Penicillin"),
+      "with the Overview's summary and the medical history kept on top"
+    );
+    check((await doc.locator("[data-feed-source='emergency']").innerText()).includes("Swelling overnight"), "the emergency reads as it was recorded");
+    // Open goes back to where the note lives.
+    await doc.locator("[data-feed-source='case'] [data-feed-open]").click();
+    check(
+      await until(async () => (await doc.locator("[data-case-header]").getAttribute("data-active-case")) === rct.case),
+      "Open on the case goes to the Treatment tab, on that case"
+    );
+    // A note written on the chart is in Notes the moment the tab is opened.
+    await doc.locator(`[data-plan-item='${rct.id}'] button`).first().click();
+    await card.waitFor({ timeout: 10000 });
+    const noteBox = card.locator("label").filter({ has: doc.locator("span", { hasText: /^Note$/ }) }).locator("textarea");
+    await noteBox.fill("Sensitive to cold after the filling");
+    await noteBox.blur();
+    await settle(doc);
+    await doc.getByRole("tab", { name: "Notes" }).click();
+    check(
+      await until(async () => (await doc.locator("[data-feed-source='chart']").allInnerTexts()).some((x) => x.includes("Sensitive to cold after the filling"))),
+      "a note written on the chart is in the Notes tab without a reload"
+    );
+    await doc.locator("[data-feed-source='visit'] [data-feed-open]").first().click();
+    await doc.waitForURL(/\/calendar\?open=/, { timeout: 60000 });
+    check(await until(async () => (await doc.locator("[data-planned-treatment]").count()) > 0 || (await doc.locator("aside").filter({ hasText: "Hala Nasser" }).count()) > 0, 30000), "Open on a visit's note opens that visit in the calendar");
+
+    /* ── No price, asked at the chair ─────────────────────────────────── */
+    console.log("No price, asked at the chair");
+    const [p4] = await q(
+      `insert into patients (clinic_id, full_name, birth_date, phone_e164, source, created_by) values ($1,'Nadia Saleh','1992-07-01','+962790007777','staff',$2) returning id`,
+      [clinic.id, doctorUser]
+    );
+    await doc.goto(fileUrl(p4.id, "treatment"), { timeout: 120000 });
+    await doc.waitForSelector("[data-treatment-tab] [data-start-case]", { timeout: 120000 });
+    await doc.locator("[data-start-complaint]").fill("Wisdom tooth pain");
+    await doc.locator("[data-start-case-go]").click();
+    await doc.waitForSelector("[data-case-field='diagnosis']", { timeout: 20000 });
+    await chart(doc).locator("[data-tooth='38']").first().click();
+    await panelOf(doc).waitFor({ timeout: 10000 });
+    await panelOf(doc).getByRole("radio", { name: "Planned" }).click();
+    await pickIn(panelOf(doc), "extraction_surgical", "surgical");
+    await settle(doc);
+    const [ext] = await q(`select id, fee from chart_marks where patient_id = $1 and site = '38' and voided_at is null`, [p4.id]);
+    check(ext && ext.fee === null, "a treatment with no price on the list is charted with none");
+    await panelOf(doc).locator("button[aria-label='Close']").first().click().catch(() => {});
+    check(
+      await until(async () => (await doc.locator(`[data-plan-noprice='${ext.id}']`).count()) === 1 && (await doc.locator("[data-set-prices]").count()) === 1),
+      "the plan says No price in amber, and offers the place to set prices"
+    );
+    await doc.locator(`[data-plan-item='${ext.id}'] button`).first().click();
+    await card.waitFor({ timeout: 10000 });
+    const askBox = card.locator("[data-fee]");
+    check((await askBox.getAttribute("class"))?.includes("border-st-pending") === true, "opened, it asks for a price");
+    await askBox.fill("40");
+    await askBox.press("Enter");
+    check(await until(async () => (await q(`select fee::float as fee from chart_marks where id = $1`, [ext.id]))[0].fee === 40), "the price typed there is this patient's");
+    await card.locator("[data-use-for-all]").click();
+    check(await until(async () => (await servicePrice("extraction_surgical", null))?.price === 40), "and “Use for every patient” puts it on the clinic's list");
+    await toPlan();
+    check(await until(async () => (await doc.locator(`[data-plan-noprice='${ext.id}']`).count()) === 0), "after which nothing on the plan asks for a price");
+
+    /* ── The tooth panel, small or big ────────────────────────────────── */
+    console.log("The tooth panel, small or big");
+    await openFile(doc, fileUrl(p4.id));
+    await tapTooth(doc, "25");
+    check(
+      (await doc.locator("[data-panel-size='compact']").count()) === 1 && (await doc.locator("[data-compact-tooth]").count()) === 1,
+      "a tooth opens the compact panel: a small tooth on one line, then the treatments"
+    );
+    await doc.locator("[data-expand-panel]").first().click();
+    const bigPanel = doc.locator("[role='dialog'] [data-panel-size='big']");
+    await bigPanel.waitFor({ timeout: 10000 });
+    check((await bigPanel.locator("[data-treatment]").count()) > 8, "Expand opens it in a window of its own, every treatment laid out");
+    await bigPanel.getByRole("radio", { name: "Done" }).click();
+    await pickIn(bigPanel, "extraction", "simple extraction");
+    // The undo lasts six seconds: looked for at once, before waiting on the save.
+    check(await until(() => doc.locator("[data-undo-pill]").isVisible(), 4000), "its undo shows over the window");
+    await settle(doc);
+    check((await q(`select count(*)::int as n from chart_marks where patient_id = $1 and site = '25' and treatment_key = 'extraction' and status = 'done'`, [p4.id]))[0].n === 1, "a treatment picked in the big window is recorded");
+    await doc.keyboard.press("Escape");
+    await tapTooth(doc, "24");
+    check((await doc.locator("[role='dialog'] [data-panel-size='big']").count()) === 1, "the choice is remembered: the next tooth opens big");
+    await doc.locator("[data-expand-panel]").first().click();
+    check(await until(async () => (await doc.locator("[data-panel-size='compact']").count()) === 1), "and Smaller puts it back beside the chart");
 
     // Reception reads the price and cannot change it.
     await desk.goto(fileUrl(p3.id, "treatment"), { timeout: 120000 });

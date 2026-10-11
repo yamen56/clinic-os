@@ -10,6 +10,7 @@ export function SettingsNav({
   slug,
   caps,
   hasEinvoicing,
+  hasDental = false,
 }: {
   slug: string;
   /**
@@ -21,6 +22,8 @@ export function SettingsNav({
   caps: CapabilityMap;
   /** The JoFotara tab only exists for a clinic licensed for it. */
   hasEinvoicing: boolean;
+  /** Treatment prices are the dental chart's: a clinic with the chart gets the tab. */
+  hasDental?: boolean;
 }) {
   const { t } = useI18n();
   const pathname = usePathname();
@@ -40,6 +43,7 @@ export function SettingsNav({
     { href: base, label: t.settings.profile },
     { href: `${base}/staff`, label: t.settings.staff, show: caps["settings.staff"] },
     { href: `${base}/services`, label: t.settings.services, show: caps["settings.services"] },
+    { href: `${base}/prices`, label: t.settings.treatmentPrices, show: hasDental && caps["settings.services"] },
     { href: `${base}/hours`, label: t.settings.workingHours },
     { href: `${base}/fields`, label: t.fields.title, show: caps["settings.clinic"] },
     { href: `${base}/tags`, label: t.tags.title, show: caps["settings.tags"] },

@@ -21,6 +21,7 @@ import { EMERGENCY_STEP, stepOf } from "@/lib/charts/dental/protocols";
 import { TreatmentGlyph } from "./treatment-picker";
 import { detailLabels, markLabel, siteLabel } from "./labels";
 import { INK, SOFT } from "./tooth-art";
+import { FeeEditor, priceable } from "./fee-editor";
 
 export function PaintPill({ m }: { m: Mark }) {
   const { t } = useI18n();
@@ -97,6 +98,12 @@ export function EntryRow({
             {[extra ?? details.join(" · "), money, m.performedBy?.name, fmtDate(m.doneAt ?? m.createdAt, tz, locale)].filter(Boolean).join(" · ")}
           </span>
           {m.note && <span className="mt-1 block text-[12.5px] text-ink-700">{m.note}</span>}
+          {/* Charted with no price: said where it is seen, and opening the entry asks for one. */}
+          {priceable(m) && m.fee == null && (
+            <span className="mt-1 inline-flex h-5 items-center rounded-full bg-st-pending-soft px-2 text-[11px] font-semibold text-st-pending" data-no-price={m.id}>
+              {T.treatment.noPriceChip}
+            </span>
+          )}
           {progress && m.status === "planned" && !m.voidedAt && (
             <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[12px]" data-entry-progress={`${progress.done}/${progress.total}`}>
               <span className="inline-flex gap-0.5" aria-hidden>
@@ -141,6 +148,7 @@ export function EntryRow({
       </div>
       {open && (
         <div className="grid gap-3 border-t border-line px-3 py-3">
+          {priceable(m) && <FeeEditor m={m} tz={tz} />}
           {tr.details?.filter((d) => !(d.key === "implants" && m.groupId)).map((d) => (
             <div key={d.key}>
               <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{T.details[d.key]}</div>

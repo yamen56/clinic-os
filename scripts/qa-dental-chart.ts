@@ -194,15 +194,15 @@ async function main() {
     rows = await q(`select 1 from chart_marks where patient_id = $1 and site = '44'`, [patient.id]);
     check(rows.length === 0, "undo removes the mis-tapped extraction from the patient's chart");
 
-    // Void with a reason: off the chart, kept in the record.
+    // Void: one tap to confirm, no reason asked — off the chart, kept in the record.
     await tapTooth(page, "47");
     await panel.locator("[data-mark] button").filter({ has: page.locator("svg.lucide-chevron-down") }).first().click();
     await panel.getByRole("button", { name: "Void" }).click();
-    await page.getByRole("dialog").locator("input").fill("Charted on the wrong tooth");
+    check((await page.getByRole("dialog").locator("input, textarea").count()) === 0, "voiding asks for no reason");
     await page.getByRole("dialog").getByRole("button", { name: "Void entry" }).click();
     await settle(page);
     rows = await q(`select voided_at, void_reason, voided_by from chart_marks where patient_id = $1 and site = '47'`, [patient.id]);
-    check(rows[0]?.voided_at && rows[0].void_reason === "Charted on the wrong tooth" && rows[0].voided_by === doctorUser, "voiding keeps the entry, with who voided it and why");
+    check(rows[0]?.voided_at && rows[0].void_reason === null && rows[0].voided_by === doctorUser, "voiding keeps the entry, with who voided it and when");
 
     // Favourites are the clinic's, with a name on them.
     await tapTooth(page, "26");

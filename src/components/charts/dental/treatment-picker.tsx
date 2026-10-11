@@ -72,6 +72,7 @@ function Chip({
   onStar,
   disabled,
   compact,
+  big,
 }: {
   tr: Treatment;
   paint: Paint;
@@ -82,6 +83,8 @@ function Chip({
   onStar: () => void;
   disabled?: boolean;
   compact?: boolean;
+  /** A tile for the big window: taller, with a larger drawing. */
+  big?: boolean;
 }) {
   const { locale } = useI18n();
   return (
@@ -92,10 +95,10 @@ function Chip({
         disabled={disabled}
         data-treatment={tr.key}
         className={`flex w-full touch-manipulation items-center gap-2.5 rounded-ctl border bg-surface text-start transition-[border-color,background-color,transform] duration-140 ease-out hover:border-line-strong hover:bg-brand-50 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 ${
-          compact ? "h-11 pe-7 ps-2" : "min-h-14 py-1.5 pe-8 ps-2"
+          compact ? "h-11 pe-7 ps-2" : big ? "min-h-16 py-2 pe-8 ps-2.5" : "min-h-14 py-1.5 pe-8 ps-2"
         } ${starred ? "border-brand-200" : "border-line"}`}
       >
-        <TreatmentGlyph tr={tr} paint={tr.kind === "finding" ? "finding" : paint} context={context} size={compact ? 26 : 34} />
+        <TreatmentGlyph tr={tr} paint={tr.kind === "finding" ? "finding" : paint} context={context} size={compact ? 26 : big ? 42 : 34} />
         <span className="min-w-0">
           <span className={`block font-semibold leading-tight text-ink-900 ${compact ? "truncate text-[13px]" : "line-clamp-2 text-[13px]"}`}>
             {treatmentLabel(tr, locale)}
@@ -130,6 +133,7 @@ export function TreatmentPicker({
   tz,
   disabled,
   mouthOnly,
+  wide,
   onPick,
   onToggleFavorite,
   onAddCustom,
@@ -145,6 +149,8 @@ export function TreatmentPicker({
   disabled?: boolean;
   /** The whole-mouth picker: only what is recorded on the mouth, an arch or a quadrant. */
   mouthOnly?: boolean;
+  /** Laid out for a big window: more columns, bigger tiles, every group in view at once. */
+  wide?: boolean;
   onPick: (tr: Treatment) => void;
   onToggleFavorite: (key: string) => void;
   onAddCustom: () => void;
@@ -189,8 +195,12 @@ export function TreatmentPicker({
       onStar={() => onToggleFavorite(tr.key)}
       disabled={disabled}
       compact={compact}
+      big={wide && !compact}
     />
   );
+  // Columns for the lists: two at most in a panel, up to four in the big window.
+  const cols = wide ? "grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4" : "grid grid-cols-1 gap-2 min-[420px]:grid-cols-2";
+  const recentCols = wide ? "grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5" : "grid grid-cols-2 gap-2 min-[420px]:grid-cols-3";
 
   return (
     <div className="grid gap-3">
@@ -207,7 +217,7 @@ export function TreatmentPicker({
 
       {q.trim() ? (
         results.length > 0 ? (
-          <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">{results.slice(0, 30).map((tr) => chip(tr))}</div>
+          <div className={cols}>{results.slice(0, 30).map((tr) => chip(tr))}</div>
         ) : (
           <button type="button" onClick={onAddCustom} className="rounded-ctl border border-dashed border-line-strong px-3 py-4 text-sm text-ink-500 hover:bg-sunken">
             {T.noResults}
@@ -221,13 +231,13 @@ export function TreatmentPicker({
                 <Star className="h-3.5 w-3.5 text-warning" fill="currentColor" />
                 {T.favourites}
               </h4>
-              <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">{favRow.map(({ tr }) => chip(tr))}</div>
+              <div className={cols}>{favRow.map(({ tr }) => chip(tr))}</div>
             </section>
           )}
           {recentRow.length > 0 && (
             <section>
               <h4 className="mb-1.5 text-[12px] font-semibold text-ink-500">{T.recent}</h4>
-              <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3">{recentRow.map((tr) => chip(tr, true))}</div>
+              <div className={recentCols}>{recentRow.map((tr) => chip(tr, true))}</div>
             </section>
           )}
 
@@ -251,7 +261,7 @@ export function TreatmentPicker({
           )}
 
           {kind === "procedure" && (
-            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+            <div className={wide ? "flex flex-wrap gap-1.5" : "-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"}>
               {shownCats.map((c) => (
                   <button
                     key={c}
@@ -267,7 +277,7 @@ export function TreatmentPicker({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">{inCat.map((tr) => chip(tr))}</div>
+          <div className={cols}>{inCat.map((tr) => chip(tr))}</div>
         </>
       )}
 

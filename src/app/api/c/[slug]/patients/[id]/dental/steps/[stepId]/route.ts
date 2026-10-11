@@ -19,7 +19,7 @@ import { afterStepWithdrawn } from "@/lib/charts/dental/server";
 */
 
 const bodySchema = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("void"), eventId: z.string().uuid(), reason: z.string().trim().min(1).max(300) }),
+  z.object({ op: z.literal("void"), eventId: z.string().uuid(), reason: z.string().trim().max(300).optional() }),
   z.object({ op: z.literal("data"), data: z.unknown() }),
   z.object({ op: z.literal("note"), note: z.string().max(2000) }),
 ]);
@@ -62,7 +62,7 @@ export async function PATCH(req: Request, ctx: Params) {
 
     switch (b.op) {
       case "void":
-        await c.query(`update chart_mark_steps set voided_at = now(), voided_by = $2, void_reason = $3 where id = $1`, [stepId, me, b.reason]);
+        await c.query(`update chart_mark_steps set voided_at = now(), voided_by = $2, void_reason = $3 where id = $1`, [stepId, me, b.reason || null]);
         await c.query(`insert into chart_mark_events (id, clinic_id, mark_id, action, by_user, reason) values ($1, $2, $3, 'step_void', $4, $5)`, [
           b.eventId,
           access.clinicId,

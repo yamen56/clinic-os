@@ -703,12 +703,13 @@ export async function voidDocument(
   ).rows[0];
   if (!doc) return { error: "not_found" };
   if (doc.status === "voided") return { error: "already_void" };
-  if (!args.reason.trim()) return { error: "reason_required" };
+  // A reason is welcome, not required: none is stored as none, and the record prints a dash.
+  const reason = args.reason.trim().slice(0, 500) || null;
 
   await c.query(
     `update documents set status = 'voided', void_reason = $3, voided_by = $4, voided_at = now()
      where id = $1 and clinic_id = $2`,
-    [args.documentId, args.clinicId, args.reason.trim().slice(0, 500), args.userId]
+    [args.documentId, args.clinicId, reason, args.userId]
   );
   await c.query(
     `update signing_tokens set revoked_at = coalesce(revoked_at, now()) where document_id = $1`,
@@ -720,7 +721,7 @@ export async function voidDocument(
     type: "voided",
     actorUserId: args.userId,
     actorKind: "staff",
-    metadata: { reason: args.reason.trim().slice(0, 500) },
+    metadata: { reason },
   });
   return {};
 }

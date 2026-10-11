@@ -11,6 +11,12 @@
 
   The handle lifts it to nearly full height for the long lists, and drops it
   back. It sits above the phone's bottom bar (z-40) and under real modals.
+
+  Centred on the page beside the sidebar, not on the window: from md the
+  sidebar is 248px on the page's start side (shell.tsx), and a sheet centred
+  on the whole window ran under it on an upright iPad. The page's direction,
+  not the chart's: the chart is a left-to-right island on an Arabic page,
+  whose sidebar is on the right.
 */
 
 import { useEffect, useState } from "react";
@@ -27,12 +33,13 @@ export function DockSheet({ open, label, children }: { open: boolean; label: str
     if (!open) setTall(false);
   }, [open]);
   if (!open || typeof document === "undefined") return null;
+  const besideSidebar = document.documentElement.dir === "rtl" ? "md:pr-[248px]" : "md:pl-[248px]";
   return createPortal(
     <div
       dir={dir}
       lang={locale}
       data-latin-island={dir === "ltr" || undefined}
-      className={`pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center ${dir === "ltr" ? "font-sans" : ""}`}
+      className={`pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center ${besideSidebar} ${dir === "ltr" ? "font-sans" : ""}`}
     >
       <div
         role="dialog"

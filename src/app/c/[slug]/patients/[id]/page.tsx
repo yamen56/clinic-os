@@ -11,6 +11,7 @@ import { PATIENT_PRESCRIPTIONS_JSON } from "@/lib/prescriptions";
 import { auditView } from "@/lib/audit";
 import { DateTime } from "luxon";
 import { loadDentalChart } from "@/lib/charts/dental/db";
+import { loadNoteFeed } from "@/lib/note-feed";
 import type { PoolClient } from "pg";
 import { IMAGING_REQUEST_OPEN_FOR, nameWords } from "@/lib/imaging/ingest";
 import { clinicSpecialties } from "@/lib/specialties";
@@ -265,6 +266,14 @@ export default async function PatientProfilePage({
       // The saved chart: its entries and their history, the clinic's own treatments and favourites.
       dentalChart: dental ? await loadDentalChart(c, access.clinicId, id, { visits: caps.calendar, billing: caps.invoices }) : null,
       filesHub: await loadFilesHub(c, access.clinicId, id, p.full_name as string, (p.birth_date as Date | null) ?? null),
+      // Notes written elsewhere in the file — visits, invoices, prescriptions… — for the Notes tab, each where its reader may look.
+      noteFeed: await loadNoteFeed(
+        c,
+        access.clinicId,
+        id,
+        { visits: caps.calendar, invoices: caps.invoices, claims: caps.invoices && caps.insurance },
+        invoiceScopeSql(access, "i", 6)
+      ),
     };
   });
 
@@ -281,6 +290,7 @@ export default async function PatientProfilePage({
       balanceDue={d.balanceDue}
       patient={JSON.parse(JSON.stringify(d.patient))}
       notes={JSON.parse(JSON.stringify(d.notes))}
+      noteFeed={d.noteFeed}
       files={JSON.parse(JSON.stringify(d.files))}
       appointments={JSON.parse(JSON.stringify(d.appointments))}
       invoices={JSON.parse(JSON.stringify(d.invoices))}

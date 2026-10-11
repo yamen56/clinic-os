@@ -13,6 +13,7 @@ export function Modal({
   children,
   footer,
   wide,
+  full,
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,6 +21,12 @@ export function Modal({
   children: React.ReactNode;
   footer?: React.ReactNode;
   wide?: boolean;
+  /**
+   * Nearly the whole screen, for work that needs the room: the whole phone, and
+   * on anything larger a dialog the size of the window. The children lay out
+   * and scroll themselves.
+   */
+  full?: boolean;
 }) {
   const { t, dir, locale } = useI18n();
   useEffect(() => {
@@ -53,8 +60,10 @@ export function Modal({
       <div
         role="dialog"
         aria-modal="true"
-        className={`relative m-0 max-h-[92dvh] w-full overflow-auto rounded-t-modal bg-surface shadow-modal animate-fade-up sm:m-4 sm:rounded-modal ${
-          wide ? "sm:max-w-3xl" : "sm:max-w-lg"
+        className={`relative m-0 w-full bg-surface shadow-modal animate-fade-up sm:m-4 sm:rounded-modal ${
+          full
+            ? "flex h-[100dvh] flex-col overflow-hidden sm:h-[92dvh] sm:max-w-[min(1240px,96vw)]"
+            : `max-h-[92dvh] overflow-auto rounded-t-modal ${wide ? "sm:max-w-3xl" : "sm:max-w-lg"}`
         }`}
       >
         {title && (
@@ -69,7 +78,7 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="px-5 py-4">{children}</div>
+        {full ? <div className="flex min-h-0 flex-1 flex-col">{children}</div> : <div className="px-5 py-4">{children}</div>}
         {footer && (
           <div className="sticky bottom-0 flex justify-end gap-2 border-t border-line bg-surface px-5 py-3.5">
             {footer}

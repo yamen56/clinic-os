@@ -2,9 +2,11 @@ import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { ServicesClient } from "./services-client";
 import { can } from "@/lib/auth";
-import { DentalPrices } from "./dental-prices";
-import { loadPrices } from "@/lib/charts/dental/billing-server";
-import { toCustomTreatment } from "@/lib/charts/dental/db";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { buttonClass } from "@/components/ui/button-class";
+import { dictForClinic } from "@/lib/i18n";
 
 export default async function ServicesSettingsPage({
   params,
@@ -54,30 +56,9 @@ export default async function ServicesSettingsPage({
         [access.clinicId]
       )
     ).rows;
-    /*
-      A dental clinic prices its chart's treatments here too: the prices are
-      services, the same list as above, seen by treatment.
-    */
-    const dental = access.clinic.features.dental
-      ? {
-          prices: await loadPrices(c, access.clinicId),
-          free: (
-            await c.query(
-              `select id, name, name_ar, price from services where clinic_id = $1 and active and chart_key is null order by sort, name`,
-              [access.clinicId]
-            )
-          ).rows,
-          custom: (
-            await c.query(
-              `select t.*, u.full_name as creator_name from chart_treatments t left join users u on u.id = t.created_by
-                where t.clinic_id = $1 and t.chart = 'dental' and t.archived_at is null order by t.created_at`,
-              [access.clinicId]
-            )
-          ).rows.map(toCustomTreatment),
-        }
-      : null;
-    return { services, doctors, sections, dental };
+    return { services, doctors, sections };
   });
+  const t = await dictForClinic(access.clinic.vocabulary);
 
   return (
     <>
@@ -89,15 +70,19 @@ export default async function ServicesSettingsPage({
       sections={JSON.parse(JSON.stringify(data.sections))}
       currency={access.clinic.currency}
     />
-    {data.dental && (
-      <div className="mt-5">
-        <DentalPrices
-          slug={slug}
-          currency={access.clinic.currency}
-          custom={JSON.parse(JSON.stringify(data.dental.custom))}
-          prices={data.dental.prices}
-          services={JSON.parse(JSON.stringify(data.dental.free))}
-        />
+    {/*
+      A dental clinic's treatment prices are services too, and have a page of
+      their own in Settings: said here, where somebody looking for prices goes.
+    */}
+    {access.clinic.features.dental && (
+      <div className="mt-5" data-prices-link>
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <p className="min-w-0 text-[13px] text-ink-700">{t.services.dental.servicesLink}</p>
+          <Link href={`/c/${slug}/settings/prices`} className={buttonClass({ variant: "outline", size: "sm" })}>
+            {t.services.dental.openPrices}
+            <ArrowUpRight className="h-4 w-4" />
+          </Link>
+        </Card>
       </div>
     )}
     </>

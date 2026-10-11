@@ -21,7 +21,7 @@ import { variantOf } from "@/lib/charts/dental/pricing";
 
 const bodySchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("done"), eventId: z.string().uuid() }),
-  z.object({ op: z.literal("void"), eventId: z.string().uuid(), reason: z.string().trim().min(1).max(300) }),
+  z.object({ op: z.literal("void"), eventId: z.string().uuid(), reason: z.string().trim().max(300).optional() }),
   z.object({ op: z.literal("note"), eventId: z.string().uuid(), note: z.string().max(2000) }),
   z.object({ op: z.literal("performer"), eventId: z.string().uuid(), performerId: z.string().uuid() }),
   z.object({ op: z.literal("detail"), key: z.string().max(24), value: z.string().max(24) }),
@@ -72,8 +72,8 @@ export async function PATCH(req: Request, ctx: Params) {
         break;
       }
       case "void":
-        await c.query(`update chart_marks set voided_at = now(), voided_by = $2, void_reason = $3 where id = $1`, [markId, me, b.reason]);
-        event = { id: b.eventId, action: "void", reason: b.reason };
+        await c.query(`update chart_marks set voided_at = now(), voided_by = $2, void_reason = $3 where id = $1`, [markId, me, b.reason || null]);
+        event = { id: b.eventId, action: "void", reason: b.reason || undefined };
         break;
       case "note":
         await c.query(`update chart_marks set note = $2 where id = $1`, [markId, b.note]);
@@ -139,7 +139,7 @@ export async function PATCH(req: Request, ctx: Params) {
     let kids: string[] = [];
     if (b.op === "done" || b.op === "void") {
       const members = await followersOf(c, access.clinicId, cur);
-      kids = await applyToMembers(c, access.clinicId, members.map((x) => x.id), b.op, me, b.op === "void" ? b.reason : null);
+      kids = await applyToMembers(c, access.clinicId, members.map((x) => x.id), b.op, me, b.op === "void" ? b.reason || null : null);
     }
     await audit(c, {
       clinicId: access.clinicId,

@@ -850,15 +850,15 @@ async function testGuardianAndEdgeCases(f: Fixture) {
     "it still files into the patient's record"
   );
 
-  // Voiding keeps the record and requires a reason.
+  // Voiding keeps the record. A reason is welcome, not required (Yamen, 2026-10-11).
   const voided = await sys(async (c) => {
-    const noReason = await voidDocument(c, {
+    const first = await voidDocument(c, {
       clinicId: f.clinicId,
       documentId: ownerOnly.id,
       userId: f.ownerId,
       reason: "   ",
     });
-    const withReason = await voidDocument(c, {
+    const again = await voidDocument(c, {
       clinicId: f.clinicId,
       documentId: ownerOnly.id,
       userId: f.ownerId,
@@ -869,17 +869,12 @@ async function testGuardianAndEdgeCases(f: Fixture) {
         ownerOnly.id,
       ])
     ).rows[0];
-    return { noReason, withReason, doc };
+    return { first, again, doc };
   });
-  check(voided.noReason.error === "reason_required", "voiding without a reason is refused");
-  check(
-    voided.withReason.error === undefined && voided.doc.status === "voided",
-    "voiding with a reason succeeds"
-  );
-  check(
-    !!voided.doc.content_snapshot && !!voided.doc.void_reason,
-    "a voided document keeps its content and its reason"
-  );
+  check(voided.first.error === undefined && voided.doc.status === "voided", "voiding without a reason succeeds");
+  check(voided.doc.void_reason === null, "and stores no reason, not an empty one");
+  check(voided.again.error === "already_void", "a voided document is not voided twice");
+  check(!!voided.doc.content_snapshot, "a voided document keeps its content");
 }
 
 async function testLockingAndResume(f: Fixture) {

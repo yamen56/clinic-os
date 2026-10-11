@@ -45,7 +45,8 @@ import { SendToPatient, sendPictureToPatient } from "@/components/patient-files/
 import { MouthGlyph, type MouthRegion } from "@/components/charts/dental/mouth-art";
 import { DockSheet, SHEET_SHARE } from "@/components/charts/dental/dock-sheet";
 import { iconFor } from "@/components/charts/dental/icons";
-import { ToothPanel, type PanelActions } from "@/components/charts/dental/tooth-panel";
+import { ToothPanel, type PanelActions, type PanelSize } from "@/components/charts/dental/tooth-panel";
+import { createPortal } from "react-dom";
 import { FullArchSheet } from "@/components/charts/dental/full-arch-sheet";
 import { TreatmentGlyph, TreatmentPicker } from "@/components/charts/dental/treatment-picker";
 import { EntryRow, EventList } from "@/components/charts/dental/history";
@@ -256,7 +257,7 @@ export function DentalChartTab(props: TabProps) {
 }
 
 export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mode: view = "chart" }: TabProps & { caption: (dateIso: string) => string }) {
-  const { t, locale } = useI18n();
+  const { t, locale, dir } = useI18n();
   const T = t.dental;
   const { toast } = useToast();
   const { me, doctors: roster, canWrite } = data;
@@ -287,12 +288,32 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
   /** A full arch being set up: which treatment, and the arch when a tooth already said it. */
   const [fullArch, setFullArch] = useState<{ tr: Treatment; arch: Arch | null } | null>(null);
   const [voiding, setVoiding] = useState<Mark | null>(null);
-  const [voidReason, setVoidReason] = useState("");
   const [lastAdded, setLastAdded] = useState<{ ids: string[]; text: string; key: number } | null>(null);
   const [historyDoctor, setHistoryDoctor] = useState("");
   /** A region label being pointed at, and the entry opened from one. */
   const [mouthHover, setMouthHover] = useState<MouthRegion | null>(null);
   const [mouthEntry, setMouthEntry] = useState<string | null>(null);
+  /*
+    The tooth panel's size: compact beside or under the chart, or big in a
+    window of its own. The doctor chooses with Expand, and the choice stays —
+    on this device, for every tooth after — until they make it small again.
+  */
+  const [panelSize, setPanelSize] = useState<PanelSize>("compact");
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("cos.dental.panel") === "big") setPanelSize("big");
+    } catch {
+      // Storage refused (a private window): the panel opens compact, as it would anyway.
+    }
+  }, []);
+  const choosePanelSize = useCallback((s: PanelSize) => {
+    setPanelSize(s);
+    try {
+      localStorage.setItem("cos.dental.panel", s);
+    } catch {
+      // Remembered for this visit only.
+    }
+  }, []);
 
   /*
     X-rays and photos: the patient's own files of those kinds, newest first —
@@ -395,7 +416,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     only when it is actually out of view, so moving along the arch does not
     make the page swim.
   */
-  const sheetOpen = !wide && selected.length > 0 && mode === "tooth";
+  const bigPanel = panelSize === "big" && selected.length > 0 && mode === "tooth" && !openItem;
+  const sheetOpen = !wide && !bigPanel && selected.length > 0 && mode === "tooth";
   useEffect(() => {
     if (!sheetOpen) return;
     const id = requestAnimationFrame(() => {
@@ -687,6 +709,15 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     void unrecord(lastAdded.ids);
     setLastAdded(null);
   };
+  const undoPill = lastAdded && (
+    <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-brand-600 py-1.5 ps-4 pe-1.5 text-[13px] text-white shadow-pop" data-undo-pill>
+      <span className="max-w-[60vw] truncate">{lastAdded.text}</span>
+      <button type="button" onClick={undo} className="inline-flex h-7 items-center gap-1 rounded-full bg-white/15 px-2.5 font-semibold hover:bg-white/25">
+        <Undo2 className="h-3.5 w-3.5" />
+        {T.undo}
+      </button>
+    </div>
+  );
 
   const change = w.change;
   const find = (id: string) => marks.find((m) => m.id === id);
@@ -852,10 +883,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       const m = find(id);
       if (m) change(m, { ...m, status: "done", doneAt: new Date().toISOString() }, { op: "done" }, "done");
     },
-    onVoid: (m) => {
-      setVoidReason("");
-      setVoiding(m);
-    },
+    onVoid: (m) => setVoiding(m),
     onNote: (id, note) => {
       const m = find(id);
       if (m) change(m, { ...m, note }, { op: "note", note }, "note");
@@ -927,10 +955,10 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     if (tr) record(tr, [{ site, surfaces: [] }], undefined, undefined, { status: "planned", open: false });
   };
 
+  // No reason asked: the history keeps who voided it and when, and a doctor at the chair has no time for an essay.
   const confirmVoid = () => {
-    if (!voiding || !voidReason.trim()) return;
-    const reason = voidReason.trim();
-    change(voiding, { ...voiding, voidedAt: new Date().toISOString(), voidedBy: me, voidReason: reason }, { op: "void", reason }, "void", reason);
+    if (!voiding) return;
+    change(voiding, { ...voiding, voidedAt: new Date().toISOString(), voidedBy: me, voidReason: null }, { op: "void" }, "void");
     setVoiding(null);
   };
 
@@ -986,10 +1014,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       backLabel={treatment ? T.treatment.back : T.close}
       onBack={() => setOpenItem(null)}
       onFinish={(m) => void change(m, { ...m, status: "done", doneAt: new Date().toISOString() }, { op: "done" }, "done", "finish")}
-      onVoid={(m) => {
-        setVoidReason("");
-        setVoiding(m);
-      }}
+      onVoid={(m) => setVoiding(m)}
       onNote={actions.onNote}
       onDetail={actions.onDetail}
       onPlan={planFollowUp}
@@ -1026,6 +1051,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       parentName={(m) => (m.treatmentKey === "implant_denture" ? fullArchName(m) : locale === "ar" ? m.labelAr : m.label)}
       progressFor={progressInfo}
       moneyFor={moneyLine}
+      size={panelSize}
+      onSize={choosePanelSize}
       a={actions}
     />
   );
@@ -1066,7 +1093,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
 
   const dayLabel = at === null ? T.today : fmtDateOnly(days[dayIdx!], locale);
   // What the column beside the chart holds: an open treatment, the tooth in hand, the brush's treatments, or the plan.
-  const side = card || (mode === "brush" && canWrite ? brushPickerBody : panel || plan || null);
+  // A big panel has a window of its own, and the column keeps the plan.
+  const side = card || (mode === "brush" && canWrite ? brushPickerBody : (bigPanel ? null : panel) || plan || null);
   const sideBySide = wide && !!side;
 
   return (
@@ -1251,22 +1279,26 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
           )}
 
           {/* "Recorded — undo": the last tap can be taken back for a few seconds. */}
-          {lastAdded && (
+          {lastAdded && !bigPanel && (
             <div
               key={lastAdded.key}
               // Above the docked panel when it is open, so the undo is never under it.
               className={`pointer-events-none z-[46] flex justify-center animate-fade-up ${sheetOpen ? "fixed inset-x-0" : "sticky bottom-3 mt-3"}`}
               style={sheetOpen ? { bottom: `calc(${SHEET_SHARE * 100}dvh + 10px)` } : undefined}
             >
-              <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-brand-600 py-1.5 ps-4 pe-1.5 text-[13px] text-white shadow-pop">
-                <span className="max-w-[60vw] truncate">{lastAdded.text}</span>
-                <button type="button" onClick={undo} className="inline-flex h-7 items-center gap-1 rounded-full bg-white/15 px-2.5 font-semibold hover:bg-white/25">
-                  <Undo2 className="h-3.5 w-3.5" />
-                  {T.undo}
-                </button>
-              </div>
+              {undoPill}
             </div>
           )}
+          {/* Over the big panel's window, which covers the chart: the undo is the one thing that must stay in reach. */}
+          {lastAdded &&
+            bigPanel &&
+            typeof document !== "undefined" &&
+            createPortal(
+              <div key={lastAdded.key} dir={dir} className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center animate-fade-up">
+                {undoPill}
+              </div>,
+              document.body
+            )}
         </Card>
 
         {sideBySide && (
@@ -1281,10 +1313,14 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       </div>
 
       {!wide && (
-        <DockSheet open={!!panel && !card} label={selected.length === 1 ? T.tooth.replace("{n}", selected[0]) : T.onTooth}>
-          {panel || null}
+        <DockSheet open={!!panel && !card && !bigPanel} label={selected.length === 1 ? T.tooth.replace("{n}", selected[0]) : T.onTooth}>
+          {bigPanel ? null : panel || null}
         </DockSheet>
       )}
+      {/* The tooth panel, big: a window the size of the screen, the tooth on one side and every treatment on the other. */}
+      <Modal open={bigPanel} onClose={closePanel} full>
+        {bigPanel ? panel : null}
+      </Modal>
       {/*
         A treatment's steps on a narrow screen: a tall sheet over the chart, not
         the half-height dock — the next steps need the room to be read.
@@ -1525,15 +1561,11 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
             <p className="text-[13px] font-semibold text-ink-900">
               {siteLabel(voiding.site, T)} · {locale === "ar" ? voiding.labelAr : voiding.label}
             </p>
-            <label className="block">
-              <span className="mb-1 block text-[13px] font-semibold">{T.voidReason}</span>
-              <input autoFocus value={voidReason} onChange={(e) => setVoidReason(e.target.value)} className="h-10 w-full rounded-ctl border border-line bg-surface px-3 text-base md:text-sm" maxLength={300} />
-            </label>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setVoiding(null)}>
                 {T.cancel}
               </Button>
-              <Button variant="danger" onClick={confirmVoid} disabled={!voidReason.trim()}>
+              <Button variant="danger" onClick={confirmVoid} autoFocus data-confirm-void>
                 {T.voidConfirm}
               </Button>
             </div>

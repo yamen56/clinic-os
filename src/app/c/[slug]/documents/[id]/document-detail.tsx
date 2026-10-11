@@ -1016,7 +1016,7 @@ export function DocumentDetailClient({
 
       <Modal open={voidOpen} onClose={() => setVoidOpen(false)} title={t.docs.voidTitle}>
         <p className="mb-3 text-[13px] text-ink-500">{t.docs.voidBody}</p>
-        <Field label={t.docs.voidReason} required>
+        <Field label={t.docs.voidReason} hint={t.common.optional}>
           <Textarea value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
         </Field>
         <div className="mt-4 flex justify-end gap-2">
@@ -1026,7 +1026,6 @@ export function DocumentDetailClient({
           <Button
             variant="danger"
             loading={pending}
-            disabled={!voidReason.trim()}
             onClick={() =>
               start(async () => {
                 const r = await voidDocumentAction(slug, doc.id, voidReason);

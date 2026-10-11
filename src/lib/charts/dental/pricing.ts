@@ -53,7 +53,8 @@ export function withVariant(name: string, variant: string | null): string {
   return /[()]/.test(name) ? `${name} · ${variant}` : `${name} (${variant})`;
 }
 
-export type PriceRow = { serviceId: string; chartKey: string; variant: string | null; price: number; unit: "item" | "session" };
+/** A price on the list: the service that is the price, and its names — what the patient reads on the invoice. */
+export type PriceRow = { serviceId: string; chartKey: string; variant: string | null; price: number; unit: "item" | "session"; name: string; nameAr: string | null };
 
 /** Is a treatment charged once, or per visit? From the price its fee came from. */
 export function unitOf(m: { serviceId: string | null }, prices: PriceRow[]): "item" | "session" {
@@ -86,12 +87,34 @@ export function lineDescription(
 ): string {
   const name = locale === "ar" ? m.labelAr || m.label : m.label;
   const variant = variantName(m.treatmentKey, variantOf(m.treatmentKey, m.detail), locale);
-  const what = withVariant(name, variant);
-  const where =
-    teeth.length > 1
-      ? words.teeth.replace("{list}", teeth.join(locale === "ar" ? "، " : ", "))
-      : /^[1-8][1-8]$/.test(m.site)
-        ? words.tooth.replace("{n}", m.site)
-        : (words.sites[m.site] ?? m.site);
-  return `${what} — ${where}`.slice(0, 200);
+  return `${withVariant(name, variant)} — ${whereText(m.site, teeth, locale, words)}`.slice(0, 200);
+}
+
+/** Where in the mouth, in an invoice's words: "tooth 36", "teeth 14, 15, 16", "upper arch". */
+export function whereText(site: string, teeth: string[], locale: string, words: LineWords): string {
+  return teeth.length > 1
+    ? words.teeth.replace("{list}", teeth.join(locale === "ar" ? "، " : ", "))
+    : /^[1-8][1-8]$/.test(site)
+      ? words.tooth.replace("{n}", site)
+      : (words.sites[site] ?? site);
+}
+
+/**
+ * The invoice line for chart work, as the patient reads it: the price list's
+ * name for it — the service it bills, so a clinic that renames "تاج (تلبيسة) ·
+ * زركون" to "تلبيسة زركون" sees the patient's invoice say so — then where in
+ * the mouth. A price for the treatment as a whole gets the variant after it,
+ * "Crown (E-max)"; work with no price on the list keeps the chart's own words.
+ */
+export function invoiceLineText(
+  m: { label: string; labelAr: string; treatmentKey: string; detail: Record<string, string>; site: string },
+  row: Pick<PriceRow, "name" | "nameAr" | "variant"> | null | undefined,
+  locale: string,
+  words: LineWords,
+  teeth: string[] = []
+): string {
+  if (!row) return lineDescription(m, locale, words, teeth);
+  const name = locale === "ar" ? row.nameAr || row.name : row.name;
+  const variant = row.variant ? null : variantName(m.treatmentKey, variantOf(m.treatmentKey, m.detail), locale);
+  return `${withVariant(name, variant)} — ${whereText(m.site, teeth, locale, words)}`.slice(0, 200);
 }
