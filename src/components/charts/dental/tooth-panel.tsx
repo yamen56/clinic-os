@@ -3,19 +3,28 @@
 /*
   The tooth in the doctor's hand.
 
-  Two sizes. The compact one opens beside the chart, or docked under it on a
-  tablet or a phone, and puts the treatments first: a small copy of the tooth
-  with its surfaces on one line, how and who on the next, then straight to the
-  list. A doctor who wants the room presses Expand, and the same panel opens
-  as a large window — the tooth drawn big on one side, every treatment laid
-  out wide on the other. The choice is remembered.
+  Two sizes.
+
+  The compact one opens beside the chart, or docked under it on a tablet or a
+  phone: a small copy of the tooth with its surfaces on one line, what is
+  still to be done on it, then how and who, then the treatments to choose
+  from, then what is already there.
+
+  The full view is the tooth's own window — Yamen: "I want to see what I need
+  to do with it, not just in a small screen; the full view of everything".
+  It opens on the tooth, not on the list of treatments: the tooth drawn big,
+  what is to be done on it with the next step of each, what was done and what
+  it came with, its findings, x-rays, notes and history. The treatments are
+  one button away (Add treatment), a treatment's steps open in the same
+  window, and the arrows walk to the next tooth without closing it. Which size
+  opens is the doctor's choice, and is remembered.
 
   Either way the drawing changes the moment a treatment is chosen, so the
   panel and the chart agree at every tap.
 */
 
-import { useEffect, useState } from "react";
-import { Image as ImageIcon, Maximize2, Minimize2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Maximize2, Minimize2, Plus, Siren, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import type { ChartImage } from "./image-viewer";
 import { AddImageButtons, ImageThumb } from "./image-strip";
@@ -127,7 +136,7 @@ function SurfaceChips({ fdi, picked, short, onToggle }: { fdi: string; picked: S
 
 /*
   The compact tooth: side and top a third of the size, the surfaces beside
-  them as letters. The whole strip is one line, so the treatments start
+  them as letters. The whole strip is one line, so what comes after starts
   where the big drawing used to end.
 */
 function CompactTooth({ fdi, st, picked, flash, hint, onToggle }: { fdi: string; st: ToothState; picked: Surface[]; flash: boolean; hint: string; onToggle: (s: Surface) => void }) {
@@ -151,6 +160,19 @@ function CompactTooth({ fdi, st, picked, flash, hint, onToggle }: { fdi: string;
       </div>
       {/* Said only when it matters: the treatment needs surfaces and none are chosen. */}
       {flash && <p className="mt-1.5 text-[12px] font-semibold text-danger">{hint}</p>}
+    </div>
+  );
+}
+
+/** A section heading with a count, and room for an action at the end. */
+function Heading({ title, count, children }: { title: string; count?: number; children?: React.ReactNode }) {
+  return (
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <h4 className="text-[13px] font-semibold text-ink-900">
+        {title}
+        {count !== undefined && <span className="ms-1.5 rounded-full bg-sunken px-2 py-0.5 text-[12px] font-semibold text-ink-500 tnum">{count}</span>}
+      </h4>
+      {children}
     </div>
   );
 }
@@ -182,6 +204,10 @@ export function ToothPanel({
   moneyFor,
   size = "compact",
   onSize,
+  card,
+  neighbours,
+  onGoTooth,
+  onEmergency,
   a,
 }: {
   teeth: string[];
@@ -215,10 +241,17 @@ export function ToothPanel({
   progressFor: (m: Mark) => { done: number; total: number; next: string | null } | null;
   /** Its price and billing, in a line. */
   moneyFor?: (m: Mark) => string | undefined;
-  /** Compact beside or under the chart, or big in a window of its own. */
+  /** Compact beside or under the chart, or the tooth's full view in a window of its own. */
   size?: PanelSize;
   /** Switch between the two; without it the panel stays as it is. */
   onSize?: (s: PanelSize) => void;
+  /** In the full view: a treatment's steps, opened from it, shown in its place. */
+  card?: React.ReactNode;
+  /** The teeth either side, for walking along the arch from the full view. */
+  neighbours?: { prev: string | null; next: string | null };
+  onGoTooth?: (fdi: string) => void;
+  /** An emergency on this tooth. */
+  onEmergency?: () => void;
   a: PanelActions;
 }) {
   const { t, locale } = useI18n();
@@ -239,52 +272,89 @@ export function ToothPanel({
   const toothImages = single ? images.filter((img) => (pins[img.id] ?? []).includes(single)) : [];
   const otherImages = single ? images.filter((img) => !(pins[img.id] ?? []).includes(single)) : [];
 
-  const header = (
-    <div className="flex items-start gap-3">
-      <div className="flex flex-wrap gap-1">
-        {teeth.map((f) => (
-          <span key={f} className="grid h-11 min-w-11 place-items-center rounded-xl bg-brand-600 px-2 font-display text-lg font-bold text-white tnum">
-            {f}
-          </span>
-        ))}
-      </div>
-      <div className="min-w-0 flex-1 pt-0.5">
-        {tt ? (
-          <div className="text-[15px] font-semibold leading-tight text-ink-900">{toothName(tt, locale)}</div>
-        ) : (
-          <div className="text-[15px] font-semibold text-ink-900">{T.teeth.replace("{list}", teeth.join(" · "))}</div>
-        )}
-        {toothImages.length > 0 && (
-          <button
-            type="button"
-            onClick={() => a.onOpenImages(toothImages, 0)}
-            data-open-tooth-images
-            className="mt-1.5 inline-flex h-7 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-2.5 text-[12px] font-semibold text-brand-700 hover:bg-brand-100"
-          >
-            <ImageIcon className="h-3.5 w-3.5" />
-            {T.imagesOfTooth} · {toothImages.length}
-          </button>
-        )}
-      </div>
-      {onSize && (
-        <button
-          type="button"
-          onClick={() => onSize(big ? "compact" : "big")}
-          aria-pressed={big}
-          aria-label={big ? T.panelSmaller : T.panelBigger}
-          title={big ? T.panelSmaller : T.panelBigger}
-          data-expand-panel={big ? "big" : "compact"}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
-        >
-          {big ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          <span className="hidden sm:inline">{big ? T.panelSmaller : T.panelBigger}</span>
-        </button>
-      )}
-      <button type="button" onClick={a.onClose} aria-label={T.close} className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl text-ink-500 hover:bg-sunken">
-        <X className="h-4.5 w-4.5" />
-      </button>
+  /*
+    What is on the tooth, by what it asks of the doctor: what is still to be
+    done (under way first), what was done or came with it, what was found,
+    and what was voided.
+  */
+  const live = here.filter((m) => !m.voidedAt);
+  const todo = live.filter((m) => m.kind === "procedure" && m.status === "planned").sort((x, y) => Number(!!y.startedAt) - Number(!!x.startedAt));
+  const doneList = live.filter((m) => m.kind === "procedure" && m.status !== "planned");
+  const findings = live.filter((m) => m.kind !== "procedure");
+  const voided = here.filter((m) => !!m.voidedAt);
+
+  // The full view opens on the tooth; the treatments are a pane of their own.
+  const [pane, setPane] = useState<"tooth" | "add">("tooth");
+  const toothKey = teeth.join(",");
+  const count = here.length;
+  const lastCount = useRef(count);
+  useEffect(() => {
+    setPane("tooth");
+    lastCount.current = count;
+    // Only a different tooth resets the pane; its count moves with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toothKey]);
+  // A treatment added from the list: back to the tooth, where it now is.
+  useEffect(() => {
+    if (count > lastCount.current && pane === "add") setPane("tooth");
+    lastCount.current = count;
+  }, [count, pane]);
+
+  // Walking along the arch from the full view: the arrow keys, as on the chart.
+  useEffect(() => {
+    if (!big || !single || !neighbours || !onGoTooth) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      const next = e.key === "ArrowLeft" ? neighbours.prev : e.key === "ArrowRight" ? neighbours.next : null;
+      if (!next) return;
+      e.preventDefault();
+      onGoTooth(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [big, single, neighbours, onGoTooth]);
+
+  const sizeButton = onSize && (
+    <button
+      type="button"
+      onClick={() => onSize(big ? "compact" : "big")}
+      aria-pressed={big}
+      aria-label={big ? T.panelSmaller : T.panelBigger}
+      title={big ? T.panelSmaller : T.panelBigger}
+      data-expand-panel={big ? "big" : "compact"}
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+    >
+      {big ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+      <span className="hidden sm:inline">{big ? T.panelSmaller : T.panelBigger}</span>
+    </button>
+  );
+  const closeButton = (
+    <button type="button" onClick={a.onClose} aria-label={T.close} className="grid h-9 w-9 shrink-0 place-items-center rounded-ctl text-ink-500 hover:bg-sunken">
+      <X className="h-4.5 w-4.5" />
+    </button>
+  );
+  const imagesChip = toothImages.length > 0 && (
+    <button
+      type="button"
+      onClick={() => a.onOpenImages(toothImages, 0)}
+      data-open-tooth-images
+      className="mt-1.5 inline-flex h-7 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-2.5 text-[12px] font-semibold text-brand-700 hover:bg-brand-100"
+    >
+      <ImageIcon className="h-3.5 w-3.5" />
+      {T.imagesOfTooth} · {toothImages.length}
+    </button>
+  );
+  const badges = (
+    <div className="flex flex-wrap gap-1">
+      {teeth.map((f) => (
+        <span key={f} className="grid h-11 min-w-11 place-items-center rounded-xl bg-brand-600 px-2 font-display text-lg font-bold text-white tnum">
+          {f}
+        </span>
+      ))}
     </div>
   );
+  const name = tt ? toothName(tt, locale) : T.teeth.replace("{list}", teeth.join(" · "));
 
   const spanBox = span && (
     <div className="rounded-ctl border border-brand-200 bg-brand-50 p-3">
@@ -305,7 +375,7 @@ export function ToothPanel({
     </div>
   );
 
-  // The big drawing where there is room for it beside the list; the one-line tooth everywhere else.
+  // The big drawing where there is room for it; the one-line tooth everywhere else.
   const toothBlock =
     single && st ? (
       twoColumns ? (
@@ -326,11 +396,7 @@ export function ToothPanel({
   const controls = locked ? (
     <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700" data-read-only>{past ? T.readOnlyPast : T.readOnly}</p>
   ) : (
-    /*
-      One line for "how" and "who", then straight to the treatments: the
-      doctor's next tap is a treatment, so nothing stands between the tooth
-      and the list of what can be done to it.
-    */
+    /* "How" and "who", in one line: then straight to the treatments. */
     <div className="flex flex-wrap items-center gap-2">
       <div className="inline-flex shrink-0 rounded-ctl bg-sunken p-0.5" role="radiogroup">
         {STATUSES.map((s) => (
@@ -383,60 +449,79 @@ export function ToothPanel({
     </section>
   );
 
-  const onTooth = here.length > 0 && (
-    <section>
-      <h4 className="mb-2 text-[13px] font-semibold text-ink-900">
-        {T.onTooth} <span className="ms-1 rounded-full bg-sunken px-2 py-0.5 text-[12px] font-semibold text-ink-500 tnum">{here.length}</span>
-      </h4>
-      <ul className="grid gap-2">
-        {here.map((m) => {
-          /*
-            One tooth of a full arch: done, voided and noted as the whole,
-            so it points there rather than offering its own controls.
-          */
-          const parent = parentOf(m);
-          if (parent) {
-            return (
-              <li key={m.id} className={`flex items-center gap-2.5 rounded-ctl border border-line bg-surface p-2.5 ${m.voidedAt ? "opacity-60" : ""}`} data-mark={m.id} data-part-of={parent.id}>
-                <TreatmentGlyph tr={findTreatment(m.treatmentKey, custom) ?? { key: m.treatmentKey, kind: m.kind, category: "implant", en: m.label, ar: m.labelAr, scope: "tooth", look: m.look }} paint={paintAt(m, null) ?? "existing"} context={tt} size={42} />
-                <div className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className={`text-[13.5px] font-semibold text-ink-900 ${m.voidedAt ? "line-through" : ""}`}>{markLabel(m, locale)}</span>
-                    <PaintPill m={m} />
-                  </span>
-                  <span className="mt-0.5 block text-[12px] text-ink-500">{T.partOf.replace("{name}", `${parentName(parent)} · ${siteLabel(parent.site, T)}`)}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => a.onOpenEntry(parent.id)}
-                  className="h-8 shrink-0 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
-                >
-                  {T.openWhole}
-                </button>
-              </li>
-            );
-          }
-          return (
-            <EntryRow
-              key={m.id}
-              m={m}
-              custom={custom}
-              doctors={doctors}
-              tz={tz}
-              canEdit={!locked}
-              onMarkDone={a.onMarkDone}
-              onVoid={a.onVoid}
-              onNote={a.onNote}
-              onDetail={a.onDetail}
-              onPerformer={a.onEntryPerformer}
-              progress={progressFor(m)}
-              onOpen={progressFor(m) ? () => a.onOpenItem(m.id) : undefined}
-              money={moneyFor?.(m)}
-            />
-          );
-        })}
-      </ul>
+  /*
+    One entry. A tooth of a full arch is done, voided and noted as the whole,
+    so it points there rather than offering its own controls.
+  */
+  const entry = (m: Mark) => {
+    const parent = parentOf(m);
+    if (parent) {
+      return (
+        <li key={m.id} className={`flex items-center gap-2.5 rounded-ctl border border-line bg-surface p-2.5 ${m.voidedAt ? "opacity-60" : ""}`} data-mark={m.id} data-part-of={parent.id}>
+          <TreatmentGlyph tr={findTreatment(m.treatmentKey, custom) ?? { key: m.treatmentKey, kind: m.kind, category: "implant", en: m.label, ar: m.labelAr, scope: "tooth", look: m.look }} paint={paintAt(m, null) ?? "existing"} context={tt} size={42} />
+          <div className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className={`text-[13.5px] font-semibold text-ink-900 ${m.voidedAt ? "line-through" : ""}`}>{markLabel(m, locale)}</span>
+              <PaintPill m={m} />
+            </span>
+            <span className="mt-0.5 block text-[12px] text-ink-500">{T.partOf.replace("{name}", `${parentName(parent)} · ${siteLabel(parent.site, T)}`)}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => a.onOpenEntry(parent.id)}
+            className="h-8 shrink-0 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+          >
+            {T.openWhole}
+          </button>
+        </li>
+      );
+    }
+    return (
+      <EntryRow
+        key={m.id}
+        m={m}
+        custom={custom}
+        doctors={doctors}
+        tz={tz}
+        canEdit={!locked}
+        onMarkDone={a.onMarkDone}
+        onVoid={a.onVoid}
+        onNote={a.onNote}
+        onDetail={a.onDetail}
+        onPerformer={a.onEntryPerformer}
+        progress={progressFor(m)}
+        onOpen={progressFor(m) ? () => a.onOpenItem(m.id) : undefined}
+        money={moneyFor?.(m)}
+      />
+    );
+  };
+  const list = (ms: Mark[]) => <ul className="grid gap-2">{ms.map(entry)}</ul>;
+
+  const todoSection = todo.length > 0 && (
+    <section data-tooth-todo={todo.length}>
+      <Heading title={T.todoTitle} count={todo.length} />
+      {list(todo)}
     </section>
+  );
+  const doneSection = doneList.length > 0 && (
+    <section data-tooth-done={doneList.length}>
+      <Heading title={T.doneTitle} count={doneList.length} />
+      {list(doneList)}
+    </section>
+  );
+  const findingsSection = findings.length > 0 && (
+    <section data-tooth-findings={findings.length}>
+      <Heading title={T.findingsTitle} count={findings.length} />
+      {list(findings)}
+    </section>
+  );
+  const voidedSection = voided.length > 0 && (
+    <details className="rounded-ctl border border-line bg-surface px-3 py-2">
+      <summary className="cursor-pointer list-none py-1 text-[13px] font-semibold text-ink-500">
+        {T.voidedTitle} <span className="tnum">· {voided.length}</span>
+      </summary>
+      <div className="pt-2">{list(voided)}</div>
+    </details>
   );
 
   const imageSection = single && (
@@ -481,55 +566,200 @@ export function ToothPanel({
     </details>
   );
 
-  // Big, on a wide screen: the tooth and what is on it on one side, every treatment on the other.
-  if (big && twoColumns) {
+  if (!big) {
+    // Compact: what is still to be done comes before the list of treatments.
+    return (
+      <div className="flex flex-col gap-4" data-panel-size="compact">
+        <div className="flex items-start gap-3">
+          {badges}
+          <div className="min-w-0 flex-1 pt-0.5">
+            <div className="text-[15px] font-semibold leading-tight text-ink-900">{name}</div>
+            {imagesChip}
+          </div>
+          {sizeButton}
+          {closeButton}
+        </div>
+        {spanBox}
+        {toothBlock}
+        {todoSection}
+        {controls}
+        {picker}
+        {doneSection}
+        {findingsSection}
+        {voidedSection}
+        {imageSection}
+        {history}
+      </div>
+    );
+  }
+
+  /* ── The tooth's full view ─────────────────────────────────────────── */
+  const summary = [
+    todo.length ? T.summaryTodo.replace("{n}", String(todo.length)) : null,
+    doneList.length ? T.summaryDone.replace("{n}", String(doneList.length)) : null,
+    findings.length ? T.summaryFindings.replace("{n}", String(findings.length)) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // On a phone the actions take a row of their own under the name, so the name is not squeezed into three lines.
+  const header = (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {badges}
+      <div className="min-w-0 flex-1">
+        <div className="text-[16px] font-semibold leading-tight text-ink-900">{name}</div>
+        <div className="mt-0.5 text-[12.5px] text-ink-500" data-tooth-summary>
+          {summary || T.nothingOnTooth}
+        </div>
+      </div>
+      <div className="sm:order-last">{closeButton}</div>
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+      {single && neighbours && onGoTooth && (
+        <div className="inline-flex items-center gap-1" dir="ltr">
+          <button
+            type="button"
+            disabled={!neighbours.prev}
+            onClick={() => neighbours.prev && onGoTooth(neighbours.prev)}
+            aria-label={T.prevTooth}
+            title={T.prevTooth}
+            className="inline-flex h-9 items-center gap-0.5 rounded-ctl border border-line bg-surface px-2 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken disabled:opacity-40"
+            data-go-tooth="prev"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span className="tnum">{neighbours.prev ?? ""}</span>
+          </button>
+          <button
+            type="button"
+            disabled={!neighbours.next}
+            onClick={() => neighbours.next && onGoTooth(neighbours.next)}
+            aria-label={T.nextTooth}
+            title={T.nextTooth}
+            className="inline-flex h-9 items-center gap-0.5 rounded-ctl border border-line bg-surface px-2 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken disabled:opacity-40"
+            data-go-tooth="next"
+          >
+            <span className="tnum">{neighbours.next ?? ""}</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      {onEmergency && !locked && (
+        <button
+          type="button"
+          onClick={onEmergency}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-danger/30 bg-danger-soft px-2.5 text-[12.5px] font-semibold text-danger hover:bg-danger/10"
+          data-tooth-emergency
+        >
+          <Siren className="h-4 w-4" />
+          <span className="hidden sm:inline">{T.treatment.emergency}</span>
+        </button>
+      )}
+      {sizeButton}
+      </div>
+    </div>
+  );
+
+  // Common treatments, one tap away, without the whole list: the clinic's favourites, then this doctor's recent ones.
+  const byKey = new Map(catalog.map((tr) => [tr.key, tr]));
+  const quick = [...favorites.map((f) => f.key), ...recent]
+    .filter((k, i, all) => all.indexOf(k) === i)
+    .map((k) => byKey.get(k))
+    .filter((tr): tr is Treatment => !!tr)
+    .slice(0, 8);
+  const addButton = !locked && (
+    <button
+      type="button"
+      onClick={() => setPane("add")}
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-white hover:bg-brand-700"
+      data-add-treatment
+    >
+      <Plus className="h-4 w-4" />
+      {T.addTreatment}
+    </button>
+  );
+  const quickRow = !locked && quick.length > 0 && (
+    <section data-quick-add>
+      <Heading title={T.quickAdd} />
+      <div className="flex flex-wrap gap-1.5">
+        {quick.map((tr) => (
+          <button
+            key={tr.key}
+            type="button"
+            onClick={() => a.onPick(tr)}
+            className="inline-flex h-10 items-center gap-2 rounded-ctl border border-line bg-surface ps-1.5 pe-3 text-[13px] font-semibold text-ink-900 hover:border-line-strong hover:bg-brand-50"
+            data-quick-treatment={tr.key}
+          >
+            <TreatmentGlyph tr={tr} paint={tr.kind === "finding" ? "finding" : paint} context={tt} size={26} />
+            {locale === "ar" ? tr.ar : tr.en}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+
+  // What the right side shows: a treatment's steps, the list of treatments, or the tooth.
+  const adding = pane === "add" || !single || !!span;
+  const main = card ? (
+    <div className="min-w-0" data-tooth-pane="card">
+      {card}
+    </div>
+  ) : adding ? (
+    <div className="grid gap-4" data-tooth-pane="add">
+      {single && !span && (
+        <button type="button" onClick={() => setPane("tooth")} className="inline-flex w-fit items-center gap-1 text-[13px] font-semibold text-ink-500 hover:text-ink-900" data-back-to-tooth>
+          <ArrowLeft className="h-4 w-4" />
+          {T.backToTooth.replace("{n}", single)}
+        </button>
+      )}
+      {spanBox}
+      {controls}
+      {picker}
+    </div>
+  ) : (
+    <div className="grid gap-5" data-tooth-pane="tooth">
+      <section data-tooth-todo={todo.length}>
+        <Heading title={T.todoTitle} count={todo.length}>
+          {addButton}
+        </Heading>
+        {todo.length ? list(todo) : <p className="rounded-ctl border border-dashed border-line-strong px-3 py-4 text-center text-[13px] text-ink-500">{T.nothingToDo}</p>}
+      </section>
+      {quickRow && (
+        <div className="grid gap-2">
+          {controls}
+          {quickRow}
+        </div>
+      )}
+      {doneSection}
+      {findingsSection}
+      {voidedSection}
+    </div>
+  );
+
+  if (twoColumns) {
     return (
       <div className="flex min-h-0 flex-1 flex-col" data-dental-panel="" data-panel-size="big">
         <div className="border-b border-line px-5 py-3">{header}</div>
         <div className="flex min-h-0 flex-1">
           {/* minmax(0, 1fr): a grid track sized by its widest child grew past the column and scrolled it sideways. */}
           <aside className="grid w-[360px] shrink-0 grid-cols-[minmax(0,1fr)] content-start gap-4 overflow-y-auto overflow-x-hidden border-e border-line p-4">
-            {spanBox}
             {toothBlock}
-            {controls}
-            {onTooth}
             {imageSection}
             {history}
           </aside>
-          <section className="min-w-0 flex-1 overflow-y-auto p-5">{picker}</section>
+          <section className="min-w-0 flex-1 overflow-y-auto p-5">{main}</section>
         </div>
       </div>
     );
   }
 
-  // Big on a phone or an upright tablet: the whole screen, one column, treatments first.
-  if (big) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col" data-dental-panel="" data-panel-size="big">
-        <div className="border-b border-line px-4 py-3">{header}</div>
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-4 overflow-y-auto overflow-x-hidden p-4">
-          {spanBox}
-          {toothBlock}
-          {controls}
-          {picker}
-          {onTooth}
-          {imageSection}
-          {history}
-        </div>
-      </div>
-    );
-  }
-
+  // On a phone or an upright tablet: the whole screen, one column, the tooth first.
   return (
-    <div className="flex flex-col gap-4" data-panel-size="compact">
-      {header}
-      {spanBox}
-      {toothBlock}
-      {controls}
-      {picker}
-      {onTooth}
-      {imageSection}
-      {history}
+    <div className="flex min-h-0 flex-1 flex-col" data-dental-panel="" data-panel-size="big">
+      <div className="border-b border-line px-4 py-3">{header}</div>
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-4 overflow-y-auto overflow-x-hidden p-4">
+        {toothBlock}
+        {main}
+        {imageSection}
+        {history}
+      </div>
     </div>
   );
 }

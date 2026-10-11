@@ -880,27 +880,63 @@ async function main() {
     await toPlan();
     check(await until(async () => (await doc.locator(`[data-plan-noprice='${ext.id}']`).count()) === 0), "after which nothing on the plan asks for a price");
 
-    /* ── The tooth panel, small or big ────────────────────────────────── */
-    console.log("The tooth panel, small or big");
+    /* ── The tooth, small or in full ──────────────────────────────────── */
+    console.log("The tooth, small or in full");
     await openFile(doc, fileUrl(p4.id));
-    await tapTooth(doc, "25");
+    // 38 has the surgical extraction planned above: the compact panel puts it before the treatments.
+    await tapTooth(doc, "38");
     check(
       (await doc.locator("[data-panel-size='compact']").count()) === 1 && (await doc.locator("[data-compact-tooth]").count()) === 1,
-      "a tooth opens the compact panel: a small tooth on one line, then the treatments"
+      "a tooth opens the compact panel: a small tooth on one line"
+    );
+    check(
+      await doc.locator("[data-panel-size='compact']").evaluate((root) => {
+        const todo = root.querySelector("[data-tooth-todo]");
+        const search = root.querySelector("input[type='search']");
+        return !!todo && !!search && !!(todo.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }),
+      "and what is to be done on the tooth comes before the list of treatments"
     );
     await doc.locator("[data-expand-panel]").first().click();
-    const bigPanel = doc.locator("[role='dialog'] [data-panel-size='big']");
-    await bigPanel.waitFor({ timeout: 10000 });
-    check((await bigPanel.locator("[data-treatment]").count()) > 8, "Expand opens it in a window of its own, every treatment laid out");
-    await bigPanel.getByRole("radio", { name: "Done" }).click();
-    await pickIn(bigPanel, "extraction", "simple extraction");
+    const full = doc.locator("[role='dialog'] [data-panel-size='big']");
+    await full.waitFor({ timeout: 10000 });
+    check(
+      (await full.locator("[data-tooth-pane='tooth']").count()) === 1 && (await full.locator("[data-tooth-pane='tooth'] [data-treatment]").count()) === 0,
+      "Expand opens the tooth's full view — the tooth, not the list of treatments"
+    );
+    check(
+      (await full.locator("[data-tooth-todo] [data-mark]").count()) === 1 && (await full.locator("[data-tooth-summary]").innerText()).includes("1 to do"),
+      "what is to be done on it comes first, and the header says how much"
+    );
+    check((await full.locator("[data-tooth-emergency]").count()) === 1, "an emergency on the tooth is one button away");
+    // Along the arch without closing: 38 is the last tooth, so the way is back, to 37.
+    check(await full.locator("[data-go-tooth='next']").isDisabled(), "past the last tooth there is nowhere to go");
+    await full.locator("[data-go-tooth='prev']").click();
+    check(await until(async () => (await full.innerText()).includes("Lower left second molar")), "the arrow walks to 37 without closing the window");
+    await full.locator("[data-add-treatment]").click();
+    check((await full.locator("[data-tooth-pane='add'] [data-treatment]").count()) > 8, "Add treatment lays every treatment out wide");
+    await full.getByRole("radio", { name: "Done" }).click();
+    await pickIn(full, "extraction", "simple extraction");
     // The undo lasts six seconds: looked for at once, before waiting on the save.
     check(await until(() => doc.locator("[data-undo-pill]").isVisible(), 4000), "its undo shows over the window");
+    check(await until(async () => (await full.locator("[data-tooth-pane='tooth']").count()) === 1), "and the window goes back to the tooth, where the extraction now is");
     await settle(doc);
-    check((await q(`select count(*)::int as n from chart_marks where patient_id = $1 and site = '25' and treatment_key = 'extraction' and status = 'done'`, [p4.id]))[0].n === 1, "a treatment picked in the big window is recorded");
+    check(
+      (await q(`select count(*)::int as n from chart_marks where patient_id = $1 and site = '37' and treatment_key = 'extraction' and status = 'done'`, [p4.id]))[0].n === 1,
+      "a treatment picked in the full view is recorded"
+    );
+    // A treatment with steps opens them in the same window, and goes back to the tooth.
+    await full.locator("[data-go-tooth='prev']").click();
+    check(await until(async () => (await full.innerText()).includes("Lower left first molar")), "on to 36");
+    await full.locator("[data-add-treatment]").click();
+    await full.getByRole("radio", { name: "Planned" }).click();
+    await pickIn(full, "rct", "root canal");
+    check(await until(async () => (await full.locator("[data-tooth-pane='card'] [data-procedure]").count()) === 1), "a root canal opens its steps in the same window");
+    await full.locator("[data-procedure] button", { hasText: "Tooth 36" }).first().click();
+    check(await until(async () => (await full.locator("[data-tooth-pane='tooth'] [data-tooth-todo] [data-mark]").count()) === 1), "and back on the tooth, it is the work to do");
     await doc.keyboard.press("Escape");
     await tapTooth(doc, "24");
-    check((await doc.locator("[role='dialog'] [data-panel-size='big']").count()) === 1, "the choice is remembered: the next tooth opens big");
+    check((await doc.locator("[role='dialog'] [data-panel-size='big']").count()) === 1, "the choice is remembered: the next tooth opens in full");
     await doc.locator("[data-expand-panel]").first().click();
     check(await until(async () => (await doc.locator("[data-panel-size='compact']").count()) === 1), "and Smaller puts it back beside the chart");
 

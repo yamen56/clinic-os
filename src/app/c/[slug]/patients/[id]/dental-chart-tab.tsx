@@ -368,9 +368,12 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     };
   }, [treatment]);
 
-  // A treatment opened from a list or a plan takes the place of the tooth in hand.
+  // A treatment opened from a list or a plan takes the place of the tooth in hand —
+  // unless it was opened from the tooth's full view, where its steps open in place.
+  const fullView = useRef(false);
+  fullView.current = panelSize === "big";
   useEffect(() => {
-    if (!openItem) return;
+    if (!openItem || fullView.current) return;
     setSelected([]);
     setPicked([]);
     setSpan(null);
@@ -416,7 +419,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     only when it is actually out of view, so moving along the arch does not
     make the page swim.
   */
-  const bigPanel = panelSize === "big" && selected.length > 0 && mode === "tooth" && !openItem;
+  // The tooth's full view: open while a tooth is in hand, and it holds a treatment's steps when one is opened from it.
+  const bigPanel = panelSize === "big" && selected.length > 0 && mode === "tooth";
   const sheetOpen = !wide && !bigPanel && selected.length > 0 && mode === "tooth";
   useEffect(() => {
     if (!sheetOpen) return;
@@ -689,10 +693,13 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       if (!ok) setLastAdded(null);
     });
     // A treatment with steps opens at once — on one tooth, or as the lead of its group.
+    // In the tooth's full view it opens there, so the tooth stays in hand.
     const lead = fresh[0];
     if ((opts.open ?? true) && lead && lead.kind === "procedure" && lead.status === "planned" && protocolFor(lead.treatmentKey) && (sites.length === 1 || groupId)) {
-      setSelected([]);
-      setPicked([]);
+      if (panelSize !== "big") {
+        setSelected([]);
+        setPicked([]);
+      }
       setOpenItem(lead.id);
     }
     return fresh;
@@ -855,6 +862,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     setSelected([]);
     setPicked([]);
     setSpan(null);
+    // A treatment's steps open inside the tooth's full view close with it.
+    if (panelSize === "big") setOpenItem(null);
   };
 
   /* ── Changing what is recorded ───────────────────────────────────────── */
@@ -1011,7 +1020,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       markId={openMark.id}
       tz={tz}
       performer={performerPerson}
-      backLabel={treatment ? T.treatment.back : T.close}
+      backLabel={bigPanel ? T.backToTooth.replace("{n}", selected.length === 1 ? selected[0] : "") : treatment ? T.treatment.back : T.close}
       onBack={() => setOpenItem(null)}
       onFinish={(m) => void change(m, { ...m, status: "done", doneAt: new Date().toISOString() }, { op: "done" }, "done", "finish")}
       onVoid={(m) => setVoiding(m)}
@@ -1053,6 +1062,18 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       moneyFor={moneyLine}
       size={panelSize}
       onSize={choosePanelSize}
+      card={bigPanel ? card : undefined}
+      neighbours={
+        selected.length === 1
+          ? { prev: neighbour(selected[0], "ArrowLeft", dentition), next: neighbour(selected[0], "ArrowRight", dentition) }
+          : undefined
+      }
+      onGoTooth={(fdi) => {
+        setOpenItem(null);
+        setSelected([fdi]);
+        setPicked([]);
+      }}
+      onEmergency={canWrite && !past && selected.length === 1 ? () => setEmergency({ site: selected[0] }) : undefined}
       a={actions}
     />
   );
@@ -1094,7 +1115,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
   const dayLabel = at === null ? T.today : fmtDateOnly(days[dayIdx!], locale);
   // What the column beside the chart holds: an open treatment, the tooth in hand, the brush's treatments, or the plan.
   // A big panel has a window of its own, and the column keeps the plan.
-  const side = card || (mode === "brush" && canWrite ? brushPickerBody : (bigPanel ? null : panel) || plan || null);
+  const side = (bigPanel ? null : card) || (mode === "brush" && canWrite ? brushPickerBody : (bigPanel ? null : panel) || plan || null);
   const sideBySide = wide && !!side;
 
   return (
@@ -1326,8 +1347,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
         the half-height dock — the next steps need the room to be read.
       */}
       {!wide && (
-        <Modal open={!!card} onClose={() => setOpenItem(null)} wide>
-          {card || null}
+        <Modal open={!!card && !bigPanel} onClose={() => setOpenItem(null)} wide>
+          {bigPanel ? null : card || null}
         </Modal>
       )}
 
