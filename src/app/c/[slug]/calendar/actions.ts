@@ -43,6 +43,8 @@ export type ApptInput = {
   startsAt: string; // UTC ISO
   endsAt: string;
   notes: string;
+  /** The patient's planned treatments this visit is for, from "Book next visit" on their plan. */
+  markIds?: string[];
 };
 
 export async function createAppointmentAction(
@@ -89,6 +91,22 @@ export async function createAppointmentAction(
       ]
     );
     const id = r.rows[0].id as string;
+    /*
+      What the visit is for, when it was booked from the plan. Only this
+      patient's own entries, still standing — an id from anywhere else is
+      dropped, not trusted.
+    */
+    const marks = (input.markIds ?? []).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 20);
+    if (marks.length) {
+      await c.query(
+        `insert into appointment_items (clinic_id, appointment_id, mark_id, patient_id, added_by)
+         select $1, $2, m.id, m.patient_id, $4
+           from chart_marks m
+          where m.id = any($3::uuid[]) and m.clinic_id = $1 and m.patient_id = $5 and m.voided_at is null
+         on conflict do nothing`,
+        [access.clinicId, id, marks, access.session.user.id, patientId]
+      );
+    }
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,

@@ -140,6 +140,9 @@
   --color-dental-existing-soft: #e3e7ec;
   --color-dental-finding: #a0560f;
   --color-dental-finding-soft: #f7e6d2;
+  /* Under way: between planned red and done blue, as the work is. */
+  --color-dental-progress: #7a4fd1;
+  --color-dental-progress-soft: #ebe3fb;
   --color-dental-caries: #4a2a12;
 
   --radius-card: 12px;

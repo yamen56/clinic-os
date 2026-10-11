@@ -12,8 +12,12 @@ import type { EntryKind, Look } from "./catalog";
 import type { Surface } from "./teeth";
 
 export type Status = "planned" | "done" | "existing";
-/** What the drawing is painted as: a procedure's status, or a finding. */
-export type Paint = Status | "finding";
+/**
+ * What the drawing is painted as: a procedure's status, or a finding — or
+ * "progress", a planned treatment whose first step has been done: a root canal
+ * between its visits.
+ */
+export type Paint = Status | "finding" | "progress";
 
 export type Person = { id: string; name: string };
 
@@ -43,12 +47,20 @@ export type Mark = {
   voidedBy: Person | null;
   voidReason: string | null;
   note: string;
+  /** The case — the problem it answers — this entry belongs to. */
+  caseId: string | null;
+  /** Done at an emergency visit. */
+  emergency: boolean;
+  /** When its first step was done; it is under way from then. Null for one-tap work and work not started. */
+  startedAt: string | null;
+  /** The visit it was done at, when it was done at one. */
+  appointmentId: string | null;
 };
 
 export type MarkEvent = {
   id: string;
   markId: string;
-  action: "created" | "done" | "void" | "note" | "performer";
+  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened";
   at: string;
   by: Person;
   reason?: string;
@@ -68,10 +80,12 @@ export function paintAt(m: Mark, at: number | null): Paint | null {
   if (Date.parse(m.createdAt) > now) return null;
   if (m.voidedAt && Date.parse(m.voidedAt) <= now) return null;
   if (m.kind === "finding") return "finding";
+  const started = m.startedAt !== null && Date.parse(m.startedAt) <= now;
   if (m.status === "done") {
-    if (m.doneAt && Date.parse(m.doneAt) > now) return "planned";
+    if (m.doneAt && Date.parse(m.doneAt) > now) return started ? "progress" : "planned";
     return "done";
   }
+  if (m.status === "planned" && started) return "progress";
   return m.status;
 }
 
@@ -150,6 +164,7 @@ export function eventDays(marks: Mark[], tz: string): string[] {
   for (const m of marks) {
     days.add(day(m.createdAt));
     if (m.doneAt) days.add(day(m.doneAt));
+    if (m.startedAt) days.add(day(m.startedAt));
     if (m.voidedAt) days.add(day(m.voidedAt));
   }
   return [...days].sort();

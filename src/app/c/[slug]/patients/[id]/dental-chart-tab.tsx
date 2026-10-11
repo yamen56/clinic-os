@@ -23,12 +23,18 @@ import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
 import { fmtDateOnly } from "@/lib/dates";
 import { BORROWABLE_LOOKS, BUILT_IN, BUILT_IN_BY_KEY, PROCEDURE_CATEGORIES, findTreatment, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
-import { groupParents, implantSitesOf, inChartOrder, isFullArch, onImplants, parentOf, prosthesisSites } from "@/lib/charts/dental/full-arch";
+import { groupLeads, implantSitesOf, inChartOrder, isFullArch, leadOf, onImplants, prosthesisSites } from "@/lib/charts/dental/full-arch";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Arch, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
 import { endOfDay, eventDays, isToothSite, paintAt, toothStates, type Mark, type MarkEvent, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
 import type { DentalChartData } from "@/lib/charts/dental/db";
 import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
-import { useDentalStore, type ChartFile } from "@/components/charts/dental/store";
+import { useDentalStore, type ChartFile, type DentalTabData } from "@/components/charts/dental/store";
+import { call, newId, useChartWriter, type FreshMark } from "@/components/charts/dental/writer";
+import { ProcedureCard } from "@/components/charts/dental/procedure-card";
+import { PlanPanel } from "@/components/charts/dental/plan-panel";
+import { EmergencySheet } from "@/components/charts/dental/emergency-sheet";
+import { EMERGENCY_STEP, progressOf, protocolFor, type EmergencyAction } from "@/lib/charts/dental/protocols";
+import { nextVisitOf } from "@/lib/charts/dental/treatment";
 import { Odontogram, neighbour, type RegionMark } from "@/components/charts/dental/odontogram";
 import { ImageViewer, type ChartImage } from "@/components/charts/dental/image-viewer";
 import { ImageStrip } from "@/components/charts/dental/image-strip";
@@ -49,24 +55,8 @@ const siteOrder = (s: string) => {
   return i === -1 ? -1 : i;
 };
 const uniq = <T,>(xs: T[]) => [...new Set(xs)];
-const newId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (Number(c) ^ (Math.random() * 16) >> (Number(c) / 4)).toString(16));
-const PAINTS: Paint[] = ["planned", "done", "existing", "finding"];
+const PAINTS: Paint[] = ["planned", "progress", "done", "existing", "finding"];
 const STATUSES: Status[] = ["planned", "done", "existing"];
-
-/** A JSON call to the chart's routes; throws with the server's error code. */
-async function call<T = Record<string, unknown>>(url: string, method: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method,
-    headers: body ? { "content-type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const json = (await res.json().catch(() => null)) as (T & { ok?: boolean; error?: string }) | null;
-  if (!res.ok || !json?.ok) throw new Error(json?.error ?? `http_${res.status}`);
-  return json;
-}
 
 function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { key: T; label: React.ReactNode }[]; onChange: (v: T) => void; label?: string }) {
   return (
@@ -216,19 +206,8 @@ function CustomTreatmentModal({
 
 export type PatientFile = ChartFile;
 
-/** What the patient page hands the tab: the saved chart and who is charting. */
-export type DentalTabData = {
-  me: Person;
-  /** The signed-in member, so "performed by" starts on the doctor at the chair. */
-  myMemberId: string | null;
-  doctors: Person[];
-  /** May this member record on the chart (`patients.charts`)? */
-  canWrite: boolean;
-  chart: DentalChartData;
-  clinicName: string;
-  /** May this member send the patient a picture on WhatsApp, and has the patient a number? */
-  canMessage: boolean;
-};
+/** What the patient page hands the chart: defined with the store that holds it. */
+export type { DentalTabData };
 
 /*
   The entries, the history, the clinic's treatments and the patient's images
@@ -241,6 +220,12 @@ type TabProps = {
   tz: string;
   birthDate: string | null;
   data: DentalTabData;
+  /**
+   * "chart" is the Dental chart tab: the mouth, everything on it, its history.
+   * "treatment" is the same chart in the Treatment tab, where the doctor works
+   * a case: the plan beside it in place of the history below it.
+   */
+  mode?: "chart" | "treatment";
 };
 
 /*
@@ -268,14 +253,16 @@ export function DentalChartTab(props: TabProps) {
   );
 }
 
-function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps & { caption: (dateIso: string) => string }) {
+export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mode: view = "chart" }: TabProps & { caption: (dateIso: string) => string }) {
   const { t, locale } = useI18n();
   const T = t.dental;
   const { toast } = useToast();
   const { me, doctors: roster, canWrite } = data;
-  const base = `/api/c/${slug}/patients/${patientId}/dental/marks`;
+  const treatment = view === "treatment";
 
-  const { marks, setMarks, events, setEvents, favorites, setFavorites, custom, setCustom, files: allFiles, setFiles, pins, setPins, write } = useDentalStore();
+  const store = useDentalStore();
+  const { marks, events, favorites, setFavorites, custom, setCustom, files: allFiles, setFiles, pins, setPins, write, steps, openItem, setOpenItem, emergency, setEmergency } = store;
+  const w = useChartWriter();
   const [customBusy, setCustomBusy] = useState(false);
 
   const [selected, setSelected] = useState<string[]>([]);
@@ -289,7 +276,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
   const [performer, setPerformer] = useState(() => roster.find((d) => d.id === data.myMemberId)?.id ?? roster[0]?.id ?? "");
   const [dentition, setDentition] = useState<Dentition>(() => dentitionForAge(birthDate));
   const [half, setHalf] = useState<"right" | "left">("right");
-  const [show, setShow] = useState<Record<Paint, boolean>>({ planned: true, done: true, existing: true, finding: true });
+  const [show, setShow] = useState<Record<Paint, boolean>>({ planned: true, progress: true, done: true, existing: true, finding: true });
   const [dayIdx, setDayIdx] = useState<number | null>(null);
   const [span, setSpan] = useState<Treatment | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
@@ -345,7 +332,8 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWide(e.contentRect.width >= 1040));
+    // The Treatment tab keeps its plan beside the chart from a narrower width — an iPad held sideways.
+    const ro = new ResizeObserver(([e]) => setWide(e.contentRect.width >= (treatment ? 900 : 1040)));
     ro.observe(el);
     const mq = window.matchMedia("(max-width: 639px)");
     const on = () => setPhone(mq.matches);
@@ -355,7 +343,15 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
       ro.disconnect();
       mq.removeEventListener("change", on);
     };
-  }, []);
+  }, [treatment]);
+
+  // A treatment opened from a list or a plan takes the place of the tooth in hand.
+  useEffect(() => {
+    if (!openItem) return;
+    setSelected([]);
+    setPicked([]);
+    setSpan(null);
+  }, [openItem]);
 
   useEffect(() => {
     if (!lastAdded) return;
@@ -447,7 +443,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
     shown. Memoised on purpose: the chart lays its bands out from this list,
     and a new list every render would redraw every tooth on every tap.
   */
-  const parents = useMemo(() => groupParents(marks), [marks]);
+  const parents = useMemo(() => groupLeads(marks), [marks]);
   /** "All-on-4", "Overdenture on 2 implants": a full arch as dentists name it, from the implants it holds. */
   const fullArchName = useCallback(
     (m: Mark) => {
@@ -601,31 +597,27 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
     return d;
   };
 
-  const removeLocal = (ids: Set<string>) => {
-    setMarks((prev) => prev.filter((m) => !ids.has(m.id)));
-    setEvents((prev) => prev.filter((e) => !ids.has(e.markId)));
-  };
-  /** Put the server's rows in place of the ones drawn ahead of it. */
-  const settle = (rows: Mark[], evs: MarkEvent[]) => {
-    const byId = new Map(rows.map((m) => [m.id, m]));
-    setMarks((prev) => prev.map((m) => byId.get(m.id) ?? m));
-    const evIds = new Set(evs.map((e) => e.id));
-    setEvents((prev) => [...prev.filter((e) => !evIds.has(e.id)), ...evs]);
-  };
-
   /*
     One tap can record more than one treatment: a full arch is the arch, an
     implant on each tooth that carries one, a bridge tooth on each it
     replaces, and the extractions that come first. A site may name its own
     treatment and details, and stay out of the group (`group: false`).
+
+    New work is filed under the case being worked: the one open in the
+    Treatment tab, else the latest still open. A treatment with steps is never
+    finished by one tap — tapped as done, it is started today and its steps
+    open, so the doctor records what was actually done and the next steps are
+    in front of them.
   */
   type Site = { site: string; surfaces: Surface[]; role?: Mark["role"]; tr?: Treatment; detail?: Record<string, string>; group?: boolean };
+  type RecordOpts = { status?: Status; emergency?: boolean; note?: string; open?: boolean };
 
-  const record = (tr: Treatment, sites: Site[], groupId?: string, text?: string) => {
+  const record = (tr: Treatment, sites: Site[], groupId?: string, text?: string, opts: RecordOpts = {}) => {
     const now = new Date().toISOString();
-    const fresh: (Mark & { eventId: string })[] = sites.map((s) => {
+    const fresh: FreshMark[] = sites.map((s) => {
       const t = s.tr ?? tr;
-      const st: Status = t.kind === "finding" ? "existing" : status;
+      const wanted = opts.status ?? status;
+      const st: Status = t.kind === "finding" ? "existing" : wanted === "done" && !opts.status && protocolFor(t.key) ? "planned" : wanted;
       return {
         id: newId(),
         eventId: newId(),
@@ -648,86 +640,41 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
         voidedAt: null,
         voidedBy: null,
         voidReason: null,
-        note: "",
+        note: opts.note ?? "",
+        caseId: store.activeCaseId,
+        emergency: !!opts.emergency,
+        startedAt: null,
+        appointmentId: null,
       };
     });
-    setMarks((prev) => [...prev, ...fresh.map(({ eventId: _e, ...m }) => m)]);
-    setEvents((prev) => [...prev, ...fresh.map((m) => ({ id: m.eventId, markId: m.id, action: "created" as const, at: now, by: me }))]);
     const where = sites.map((s) => (isToothSite(s.site) ? s.site : siteLabel(s.site, T))).join(" · ");
     setLastAdded({ ids: fresh.map((m) => m.id), text: text ?? T.added.replace("{name}", locale === "ar" ? tr.ar : tr.en).replace("{site}", where), key: Date.now() });
-    write(
-      fresh.map((m) => m.id),
-      call<{ marks: Mark[]; events: MarkEvent[] }>(base, "POST", {
-      marks: fresh.map((m) => ({
-        id: m.id,
-        eventId: m.eventId,
-        site: m.site,
-        surfaces: m.surfaces,
-        treatmentKey: m.treatmentKey,
-        detail: m.detail,
-        status: m.status,
-        groupId: m.groupId ?? null,
-        role: m.role ?? null,
-        performedBy: m.performedBy?.id ?? null,
-      })),
-      })
-    )
-      .then((r) => settle(r.marks, r.events))
-      .catch(() => {
-        removeLocal(new Set(fresh.map((m) => m.id)));
-        setLastAdded(null);
-        toast(T.saveFailed, "error");
-      });
+    void w.postMarks(fresh).then((ok) => {
+      if (!ok) setLastAdded(null);
+    });
+    // A treatment with steps opens at once — on one tooth, or as the lead of its group.
+    const lead = fresh[0];
+    if ((opts.open ?? true) && lead && lead.kind === "procedure" && lead.status === "planned" && protocolFor(lead.treatmentKey) && (sites.length === 1 || groupId)) {
+      setSelected([]);
+      setPicked([]);
+      setOpenItem(lead.id);
+    }
+    return fresh;
   };
 
   /** Take entries back: a mis-tap, within two minutes, by whoever made it. */
   const unrecord = async (ids: string[]) => {
-    const gone = marks.filter((m) => ids.includes(m.id));
-    const evs = events.filter((e) => ids.includes(e.markId));
-    removeLocal(new Set(ids));
-    const failed: string[] = [];
-    for (const id of ids) await write([id], call(`${base}/${id}`, "DELETE")).catch(() => failed.push(id));
-    if (failed.length) {
-      setMarks((prev) => [...prev, ...gone.filter((m) => failed.includes(m.id))]);
-      setEvents((prev) => [...prev, ...evs.filter((e) => failed.includes(e.markId))]);
-      toast(T.undoTooLate, "error");
-    }
+    const refused = await w.unrecord(ids);
+    if (refused.length) toast(T.undoTooLate, "error");
   };
   const undo = () => {
     if (!lastAdded) return;
+    if (openItem && lastAdded.ids.includes(openItem)) setOpenItem(null);
     void unrecord(lastAdded.ids);
     setLastAdded(null);
   };
 
-  /*
-    A change to an entry: drawn now, stored behind it, and put back exactly as
-    it was if the server says no. The history line, when the change has one,
-    is drawn too and replaced by the server's.
-  */
-  const change = (m: Mark, next: Mark, body: Record<string, unknown>, action?: MarkEvent["action"], reason?: string) => {
-    const eventId = action ? newId() : null;
-    // A whole-arch entry's teeth follow it when it is done or voided; the server does the same.
-    const op = body.op;
-    const kids =
-      (op === "done" || op === "void") && m.groupId && !isToothSite(m.site)
-        ? marks.filter((x) => x.groupId === m.groupId && x.id !== m.id && !x.voidedAt && (op === "void" || x.status === "planned"))
-        : [];
-    const kidIds = new Set(kids.map((x) => x.id));
-    const kidNext = (x: Mark): Mark =>
-      op === "done" ? { ...x, status: "done", doneAt: next.doneAt } : { ...x, voidedAt: next.voidedAt, voidedBy: next.voidedBy, voidReason: next.voidReason };
-    setMarks((prev) => prev.map((x) => (x.id === m.id ? next : kidIds.has(x.id) ? kidNext(x) : x)));
-    if (action && eventId) setEvents((prev) => [...prev, { id: eventId, markId: m.id, action, at: new Date().toISOString(), by: me, reason }]);
-    write(
-      [m.id, ...kidIds],
-      call<{ mark: Mark; event: MarkEvent | null; also?: Mark[]; alsoEvents?: MarkEvent[] }>(`${base}/${m.id}`, "PATCH", eventId ? { ...body, eventId } : body)
-    )
-      .then((r) => settle([r.mark, ...(r.also ?? [])], [...(r.event ? [r.event] : []), ...(r.alsoEvents ?? [])]))
-      .catch(() => {
-        setMarks((prev) => prev.map((x) => (x.id === m.id ? m : kids.find((k) => k.id === x.id) ?? x)));
-        if (eventId) setEvents((prev) => prev.filter((e) => e.id !== eventId));
-        toast(T.saveFailed, "error");
-      });
-  };
+  const change = w.change;
   const find = (id: string) => marks.find((m) => m.id === id);
 
   const sitesFor = (tr: Treatment, teeth: string[]) => {
@@ -770,7 +717,9 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
     const where = implanted
       ? `${siteLabel(arch, T)} · ${T.implantsAt.replace("{n}", String(implants.length)).replace("{list}", inChartOrder(implants).join(" · "))}`
       : siteLabel(arch, T);
-    record(tr, sites, newId(), T.added.replace("{name}", locale === "ar" ? tr.ar : tr.en).replace("{site}", where));
+    // Every part of a full arch shares one state: tapped as done, it is under way, its steps to follow.
+    const st: Status = status === "done" && protocolFor(tr.key) ? "planned" : status;
+    record(tr, sites, newId(), T.added.replace("{name}", locale === "ar" ? tr.ar : tr.en).replace("{site}", where), { status: st });
     setFullArch(null);
     closePanel();
   };
@@ -817,14 +766,14 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
         else change(prior, { ...prior, surfaces: next }, { op: "surfaces", surfaces: next });
         return;
       }
-      record(tr, [{ site: fdi, surfaces: [sf] }]);
+      record(tr, [{ site: fdi, surfaces: [sf] }], undefined, undefined, { open: false });
       return;
     }
     if (prior) {
       void unrecord([prior.id]);
       return;
     }
-    record(tr, [{ site: fdi, surfaces: [] }]);
+    record(tr, [{ site: fdi, surfaces: [] }], undefined, undefined, { open: false });
   };
 
   const onTooth = (fdi: string, additive: boolean) => {
@@ -833,6 +782,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
       else paint(fdi, null);
       return;
     }
+    if (openItem) setOpenItem(null);
     if (span || additive) {
       setSelected((prev) => (prev.includes(fdi) ? prev.filter((x) => x !== fdi) : [...prev, fdi]));
       return;
@@ -911,7 +861,46 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
     onTakeXray: (fdi) => void takeXray([fdi]),
     onCamera: (fdi) => setCamera({ tooth: fdi }),
     onOpenEntry: (id) => setMouthEntry(id),
+    onOpenItem: (id) => setOpenItem(id),
     onClose: closePanel,
+  };
+
+  /** How far a treatment with steps has come, for the lists that show it in a line. */
+  const progressInfo = (m: Mark) => {
+    const p = progressOf(m.treatmentKey, steps.filter((s) => s.markId === m.id));
+    return p ? { done: p.requiredDone, total: p.required, next: p.next?.en ?? null } : null;
+  };
+  const opener = (m: Mark) => (protocolFor(m.treatmentKey) ? () => setOpenItem(m.id) : undefined);
+
+  /*
+    An emergency visit. On a treatment under way it is a step of its own on
+    that treatment — a visit, but not one of its steps; anywhere else it is a
+    visit recorded on the tooth, with an extraction drawn when one was done.
+    Either way the plan and its booked visits are left exactly as they were.
+  */
+  const recordEmergency = async ({ site, complaint, done }: { site: string; complaint: string; done: EmergencyAction[] }) => {
+    const item = emergency?.markId ? find(emergency.markId) : null;
+    if (item && item.status === "planned") {
+      await w.recordStep(item, EMERGENCY_STEP, { done, complaint }, { performer: performerPerson });
+    } else {
+      const tr = BUILT_IN_BY_KEY.get("emergency_exam")!;
+      const what = done.map((k) => T.treatment.emergencyActions[k]).join(", ");
+      const sites: Site[] = [{ site, surfaces: [] }];
+      if (done.includes("extraction") && isToothSite(site)) sites.push({ site, surfaces: [], tr: BUILT_IN_BY_KEY.get("extraction")! });
+      record(tr, sites, undefined, T.added.replace("{name}", T.treatment.emergency).replace("{site}", isToothSite(site) ? site : siteLabel(site, T)), {
+        status: "done",
+        emergency: true,
+        note: [complaint, what].filter(Boolean).join(" — "),
+        open: false,
+      });
+    }
+    setEmergency(null);
+  };
+
+  /** What usually comes next — a crown after a root canal — planned on the same tooth. */
+  const planFollowUp = (key: string, site: string) => {
+    const tr = BUILT_IN_BY_KEY.get(key);
+    if (tr) record(tr, [{ site, surfaces: [] }], undefined, undefined, { status: "planned", open: false });
   };
 
   const confirmVoid = () => {
@@ -954,14 +943,38 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
   /* ── What the screen shows ───────────────────────────────────────────── */
 
   const live = marks.filter((m) => !m.voidedAt);
-  const remaining = live.filter((m) => m.status === "planned" && !parentOf(m, parents)).sort((a, b) => siteOrder(a.site) - siteOrder(b.site));
+  const remaining = live.filter((m) => m.status === "planned" && !leadOf(m, parents)).sort((a, b) => siteOrder(a.site) - siteOrder(b.site));
   // The mouth's history lists a full arch once; each of its teeth keeps its own lines in that tooth's history.
   const byMark = new Map(marks.map((m) => [m.id, m]));
   const historyEvents = events.filter((e) => {
     const m = byMark.get(e.markId);
-    if (!m || parentOf(m, parents)) return false;
+    if (!m || leadOf(m, parents)) return false;
     return !historyDoctor || m.performedBy?.id === historyDoctor;
   });
+
+  const openMark = openItem ? (marks.find((m) => m.id === openItem) ?? null) : null;
+  const card = openMark && (
+    <ProcedureCard
+      key={openMark.id}
+      markId={openMark.id}
+      tz={tz}
+      performer={performerPerson}
+      backLabel={treatment ? T.treatment.back : T.close}
+      onBack={() => setOpenItem(null)}
+      onFinish={(m) => void change(m, { ...m, status: "done", doneAt: new Date().toISOString() }, { op: "done" }, "done", "finish")}
+      onVoid={(m) => {
+        setVoidReason("");
+        setVoiding(m);
+      }}
+      onNote={actions.onNote}
+      onDetail={actions.onDetail}
+      onPlan={planFollowUp}
+      extra={groupExtra(openMark)}
+    />
+  );
+  // The plan, beside the chart in the Treatment tab — or above it, two to a row, where there is no room beside.
+  const plan = treatment && <PlanPanel tz={tz} extraOf={groupExtra} onDone={(m) => actions.onMarkDone(m.id)} />;
+  const planTop = treatment && <PlanPanel tz={tz} extraOf={groupExtra} onDone={(m) => actions.onMarkDone(m.id)} columns />;
 
   const panel = selected.length > 0 && mode === "tooth" && (
     <ToothPanel
@@ -985,8 +998,9 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
       images={images}
       pins={pins}
       uploading={uploading}
-      parentOf={(m) => parentOf(m, parents)}
+      parentOf={(m) => leadOf(m, parents)}
       parentName={(m) => (m.treatmentKey === "implant_denture" ? fullArchName(m) : locale === "ar" ? m.labelAr : m.label)}
+      progressFor={progressInfo}
       a={actions}
     />
   );
@@ -1026,18 +1040,27 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
   );
 
   const dayLabel = at === null ? T.today : fmtDateOnly(days[dayIdx!], locale);
-  const sideBySide = wide && ((mode === "brush" && canWrite) || !!panel);
+  // What the column beside the chart holds: an open treatment, the tooth in hand, the brush's treatments, or the plan.
+  const side = card || (mode === "brush" && canWrite ? brushPickerBody : panel || plan || null);
+  const sideBySide = wide && !!side;
 
   return (
     <div ref={wrapRef} className="grid gap-4" data-dental-chart data-can-write={canWrite || undefined}>
       <DentalDefs />
 
       {/*
-        The chart has the whole width until there is something to hold beside
-        it: a tooth being worked on, or the brush's treatments. An empty panel
-        would only make every tooth smaller.
+        On a narrow screen the plan comes first, above the chart: what is next
+        is the first thing the doctor sees, not something below the mouth.
       */}
-      <div className={sideBySide ? "grid grid-cols-[minmax(0,1fr)_360px] items-start gap-4" : "grid gap-4"}>
+      {!wide && planTop && <Card className="p-4">{planTop}</Card>}
+
+      {/*
+        The chart has the whole width until there is something to hold beside
+        it: a treatment open, a tooth being worked on, the brush's treatments,
+        or — in the Treatment tab — the plan. An empty panel would only make
+        every tooth smaller.
+      */}
+      <div className={sideBySide ? `grid ${treatment ? "grid-cols-[minmax(0,1fr)_380px]" : "grid-cols-[minmax(0,1fr)_360px]"} items-start gap-4` : "grid gap-4"}>
         <Card className="relative p-3 sm:p-4">
           {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-2">
@@ -1047,6 +1070,8 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
                 onChange={(m) => {
                   setMode(m);
                   closePanel();
+                  // Taking up the brush, or putting it down, is a decision about what comes next: the open treatment steps aside.
+                  setOpenItem(null);
                   if (m === "brush" && !brush && !wide) setBrushPicker(true);
                 }}
                 options={[
@@ -1220,17 +1245,46 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
         </Card>
 
         {sideBySide && (
-          <div className="sticky top-4 max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto rounded-card border border-line bg-surface p-4 shadow-card animate-fade-in" data-dental-panel>
-            {mode === "brush" ? brushPickerBody : panel}
+          <div
+            className="sticky top-4 max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto rounded-card border border-line bg-surface p-4 shadow-card animate-fade-in"
+            data-dental-panel={card ? undefined : ""}
+            data-dental-side={card ? "card" : panel ? "tooth" : mode === "brush" ? "brush" : "plan"}
+          >
+            {side}
           </div>
         )}
       </div>
 
       {!wide && (
-        <DockSheet open={!!panel} label={selected.length === 1 ? T.tooth.replace("{n}", selected[0]) : T.onTooth}>
+        <DockSheet open={!!panel && !card} label={selected.length === 1 ? T.tooth.replace("{n}", selected[0]) : T.onTooth}>
           {panel || null}
         </DockSheet>
       )}
+      {/*
+        A treatment's steps on a narrow screen: a tall sheet over the chart, not
+        the half-height dock — the next steps need the room to be read.
+      */}
+      {!wide && (
+        <Modal open={!!card} onClose={() => setOpenItem(null)} wide>
+          {card || null}
+        </Modal>
+      )}
+
+      <Modal open={!!emergency} onClose={() => setEmergency(null)} title={T.treatment.emergencyTitle}>
+        {emergency && (
+          <EmergencySheet
+            key={emergency.markId ?? emergency.site ?? "none"}
+            item={emergency.markId ? (find(emergency.markId) ?? null) : null}
+            site={emergency.site ?? (selected.length === 1 ? selected[0] : null)}
+            next={emergency.markId ? nextVisitOf(emergency.markId, store.bookings, store.visits) : null}
+            canBook={store.canBook}
+            slug={slug}
+            tz={tz}
+            onRecord={recordEmergency}
+            onCancel={() => setEmergency(null)}
+          />
+        )}
+      </Modal>
       {!wide && (
         <Modal open={brushPicker} onClose={() => setBrushPicker(false)} title={T.brushPick}>
           {brushPickerBody}
@@ -1267,6 +1321,15 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
                   onDetail={actions.onDetail}
                   onPerformer={actions.onEntryPerformer}
                   extra={groupExtra(m)}
+                  progress={progressInfo(m)}
+                  onOpen={
+                    opener(m)
+                      ? () => {
+                          setMouthEntry(null);
+                          setOpenItem(m.id);
+                        }
+                      : undefined
+                  }
                 />
               </ul>
             </div>
@@ -1309,6 +1372,8 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
       {/* Room to scroll the last of the page out from under the docked panel. */}
       {sheetOpen && <div aria-hidden style={{ height: `${SHEET_SHARE * 100}dvh` }} />}
 
+      {/* The overview's lists. The Treatment tab has its plan and its visits instead. */}
+      {!treatment && (
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-4">
           <h3 className="mb-3 font-display text-base font-semibold text-ink-900">
@@ -1335,6 +1400,8 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
                       onDetail={actions.onDetail}
                       onPerformer={actions.onEntryPerformer}
                       extra={groupExtra(m)}
+                      progress={progressInfo(m)}
+                      onOpen={opener(m)}
                     />
                   </ul>
                 </li>
@@ -1359,6 +1426,7 @@ function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps
           </div>
         </Card>
       </div>
+      )}
 
       {/* Whole mouth: the picker, then — for an arch or a quadrant — where. */}
       <Modal

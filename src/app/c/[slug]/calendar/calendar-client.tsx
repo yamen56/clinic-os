@@ -35,7 +35,12 @@ export type Appt = {
   service_section_id: string | null;
   doctor_color: string | null;
   doctor_name: string | null;
+  /** The planned treatments this visit is for. */
+  items?: PlannedItem[];
 };
+
+/** A treatment on the patient's plan, as a visit carries it. */
+export type PlannedItem = { markId: string; site: string; label: string; labelAr?: string; next?: string | null };
 
 export type Doctor = {
   id: string;
@@ -79,6 +84,7 @@ export function CalendarClient({
   isDoctor,
   selfMemberId,
   initialPatient,
+  initialPlan,
   openNew,
   initialView = "week",
 }: {
@@ -87,6 +93,8 @@ export function CalendarClient({
   isDoctor: boolean;
   selfMemberId: string | null;
   initialPatient: { id: string; name: string } | null;
+  /** "Book next visit" from a patient's plan: what the visit is for, with whom, and a note to match. */
+  initialPlan?: { items: PlannedItem[]; doctorId: string | null; notes: string } | null;
   /** Open an empty create panel on arrival — the dashboard shortcut. */
   openNew?: boolean;
   /** Day on a phone, where a week is seven columns wide on a 390px screen. */
@@ -109,7 +117,11 @@ export function CalendarClient({
     blockedDates: string[];
   } | null>(null);
   const [panel, setPanel] = useState<PanelState>(
-    initialPatient ? { mode: "create", patient: initialPatient } : openNew ? { mode: "create" } : null
+    initialPatient
+      ? { mode: "create", patient: initialPatient, items: initialPlan?.items, doctorId: initialPlan?.doctorId ?? undefined, notes: initialPlan?.notes }
+      : openNew
+        ? { mode: "create" }
+        : null
   );
 
   const anchorDt = useMemo(() => DateTime.fromISO(anchor, { zone: tz }), [anchor, tz]);

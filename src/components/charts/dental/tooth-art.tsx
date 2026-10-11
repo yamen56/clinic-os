@@ -37,12 +37,14 @@ export const INK: Record<Paint, string> = {
   done: "var(--color-dental-done)",
   existing: "var(--color-dental-existing)",
   finding: "var(--color-dental-finding)",
+  progress: "var(--color-dental-progress)",
 };
 export const SOFT: Record<Paint, string> = {
   planned: "var(--color-dental-planned-soft)",
   done: "var(--color-dental-done-soft)",
   existing: "var(--color-dental-existing-soft)",
   finding: "var(--color-dental-finding-soft)",
+  progress: "var(--color-dental-progress-soft)",
 };
 
 const LINE = "var(--color-tooth-line)";
@@ -216,7 +218,7 @@ function SidePatch({ t, s, sf }: { t: Tooth; s: Shape; sf: Surface }) {
 function SideLayer({ l, t, s, crown, roots, clip }: { l: Layer; t: Tooth; s: Shape; crown: string; roots: Roots; clip: string }) {
   const ink = INK[l.paint];
   const soft = SOFT[l.paint];
-  const solid = l.paint !== "planned";
+  const solid = l.paint !== "planned" && l.paint !== "progress";
   const dash = dashed(l.paint);
   switch (l.look) {
     case "filling":
@@ -573,7 +575,7 @@ function SurfaceFill({ t, outline, sf, style, dash }: { t: Tooth; outline: strin
 function TopLayer({ l, t, outline, clip }: { l: Layer; t: Tooth; outline: string; clip: string }) {
   const ink = INK[l.paint];
   const soft = SOFT[l.paint];
-  const solid = l.paint !== "planned";
+  const solid = l.paint !== "planned" && l.paint !== "progress";
   const dash = dashed(l.paint);
   switch (l.look) {
     case "filling":
@@ -769,7 +771,7 @@ export function PaintSwatch({ paint, size = 16 }: { paint: Paint; size?: number 
       ) : (
         <path
           d={crown}
-          style={{ fill: paint === "planned" ? SOFT.planned : ink, stroke: ink, strokeWidth: paint === "planned" ? 1.3 : 1 }}
+          style={{ fill: paint === "planned" || paint === "progress" ? SOFT[paint] : ink, stroke: ink, strokeWidth: paint === "planned" || paint === "progress" ? 1.3 : 1 }}
           strokeDasharray={paint === "planned" ? "2 1.4" : undefined}
         />
       )}

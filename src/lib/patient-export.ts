@@ -1,4 +1,6 @@
 import type { PoolClient } from "pg";
+import { EMERGENCY_STEP, stepOf, stepSummary } from "./charts/dental/protocols";
+import { readHistory, type MedicalHistory } from "./medical-history";
 
 /**
  * Everything that belongs in a patient's record when it leaves the clinic.
@@ -113,6 +115,17 @@ export type ExportedRecord = {
     note: string;
     voided: boolean;
   }[];
+  /**
+   * The treatment: each case — the problem, its history, examination and
+   * diagnosis — and every step of its treatments, with the data each step
+   * recorded (a canal's working length is clinical record). With the medical
+   * history kept for the patient. Empty for a clinic that does not chart.
+   */
+  treatment: {
+    cases: { id: string; title: string; complaint: string; history: string; exam: string; diagnosis: string; doctor: string | null; status: string; openedAt: string; closedAt: string | null }[];
+    steps: { caseId: string | null; site: string; label: string; step: string; summary: string; doctor: string | null; date: string; voided: boolean }[];
+    medical: MedicalHistory;
+  };
 };
 
 export type ExportedPatient = { clinic: ExportedClinic; generatedAt: string } & ExportedRecord;
@@ -310,6 +323,31 @@ export async function loadPatientExportBatch(
   ).rows;
   const filesBy = bucket(files);
   const dentalBy = bucket(dental);
+  const cases = (
+    await c.query(
+      `select tc.patient_id, tc.id, tc.title, tc.complaint, tc.history, tc.exam, tc.diagnosis, tc.status, tc.created_at, tc.closed_at, u.full_name as doctor
+         from treatment_cases tc
+         left join clinic_members cm on cm.id = tc.doctor_member_id
+         left join users u on u.id = cm.user_id
+        where tc.clinic_id = $1 and tc.patient_id = any($2::uuid[])
+        order by tc.created_at`,
+      scope
+    )
+  ).rows;
+  const steps = (
+    await c.query(
+      `select s.patient_id, s.step, s.data, s.done_at, s.voided_at, m.site, m.label, m.treatment_key, m.case_id, u.full_name as doctor
+         from chart_mark_steps s
+         join chart_marks m on m.id = s.mark_id
+         left join clinic_members cm on cm.id = s.performed_by
+         left join users u on u.id = cm.user_id
+        where s.clinic_id = $1 and s.patient_id = any($2::uuid[])
+        order by s.done_at`,
+      scope
+    )
+  ).rows;
+  const casesBy = bucket(cases);
+  const stepsBy = bucket(steps);
 
   const byId = new Map(patients.map((p) => [p.id as string, p]));
   const records: ExportedRecord[] = [];
@@ -403,6 +441,34 @@ export async function loadPatientExportBatch(
         note: m.note ?? "",
         voided: !!m.voided_at,
       })),
+      treatment: {
+        cases: (casesBy.get(id) ?? []).map((k) => ({
+          id: k.id,
+          title: k.title ?? "",
+          complaint: k.complaint ?? "",
+          history: k.history ?? "",
+          exam: k.exam ?? "",
+          diagnosis: k.diagnosis ?? "",
+          doctor: k.doctor ?? null,
+          status: k.status,
+          openedAt: String(k.created_at),
+          closedAt: k.closed_at ? String(k.closed_at) : null,
+        })),
+        steps: (stepsBy.get(id) ?? []).map((s) => {
+          const def = s.step === EMERGENCY_STEP ? null : stepOf(s.treatment_key, s.step);
+          return {
+            caseId: s.case_id ?? null,
+            site: s.site,
+            label: s.label,
+            step: s.step === EMERGENCY_STEP ? "Emergency" : (def?.en ?? s.step),
+            summary: stepSummary(def, s.data ?? {}),
+            doctor: s.doctor ?? null,
+            date: String(s.done_at),
+            voided: !!s.voided_at,
+          };
+        }),
+        medical: readHistory(p.medical_history),
+      },
     });
   }
 

@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { checkNationalId, nationalIdOf } from "@/lib/patients";
 import { can } from "@/lib/auth";
+import { cleanHistory } from "@/lib/medical-history";
 
 const TEXT_FIELDS = new Set(["full_name", "notes_summary", "whatsapp_name"]);
 /** Who covers this patient: the Insurance switch's, not the file's. */
@@ -127,6 +128,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
           asked after somebody misses an appointment.
         */
         push(key, raw === true);
+      } else if (key === "medical_history") {
+        /*
+          The conditions, allergies and medicines, kept once for the patient
+          and shown as an alert on the file. Only the known conditions and
+          trimmed text are kept, stamped with who changed it — "who wrote that
+          she is not on blood thinners" is asked after an extraction bleeds.
+        */
+        push(key, JSON.stringify({ ...cleanHistory(raw), updatedAt: new Date().toISOString(), updatedBy: access.session.user.fullName }));
       } else if (key === "insurance_no") {
         push(key, String(raw ?? "").slice(0, 60));
       } else if (key === "insurance_valid_until") {

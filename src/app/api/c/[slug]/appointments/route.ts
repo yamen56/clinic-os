@@ -24,7 +24,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
                 p.full_name as patient_name, p.phone_e164 as patient_phone,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
                 s.section_id as service_section_id,
-                cm.color as doctor_color, u.full_name as doctor_name
+                cm.color as doctor_color, u.full_name as doctor_name,
+                -- What the visit is for, when it was booked from the patient's treatment plan.
+                (select coalesce(json_agg(json_build_object('markId', m.id, 'site', m.site, 'label', m.label, 'labelAr', m.label_ar) order by m.created_at), '[]'::json)
+                   from appointment_items ai join chart_marks m on m.id = ai.mark_id
+                  where ai.appointment_id = a.id and m.voided_at is null) as items
          from appointments a
          join patients p on p.id = a.patient_id
          left join services s on s.id = a.service_id

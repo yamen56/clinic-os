@@ -17,12 +17,12 @@ import {
 } from "./actions";
 import { RequiredDocuments } from "@/components/esign/required-documents";
 import { AppointmentNotes } from "@/components/appointment-notes";
-import type { Appt, Doctor, Section, Service } from "./calendar-client";
+import type { Appt, Doctor, PlannedItem, Section, Service } from "./calendar-client";
 import { X, UserPlus, ClipboardList } from "lucide-react";
 
 export type PanelState =
   | null
-  | { mode: "create"; start?: string; doctorId?: string; patient?: { id: string; name: string } }
+  | { mode: "create"; start?: string; doctorId?: string; patient?: { id: string; name: string }; items?: PlannedItem[]; notes?: string }
   | { mode: "edit"; appt: Appt };
 
 const statusBadge: Record<string, StatusKey> = {
@@ -69,6 +69,8 @@ export function AppointmentPanel({
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState(30);
   const [notes, setNotes] = useState("");
+  /** The treatments on the patient's plan this visit is for. */
+  const [items, setItems] = useState<PlannedItem[]>([]);
 
   useEffect(() => {
     if (!state) return;
@@ -81,7 +83,8 @@ export function AppointmentPanel({
       setDate(s.toISODate()!);
       setTime(s.toFormat("HH:mm"));
       setDuration(30);
-      setNotes("");
+      setNotes(state.notes ?? "");
+      setItems(state.items ?? []);
     } else {
       const a = state.appt;
       const s = DateTime.fromISO(a.starts_at).setZone(tz);
@@ -94,6 +97,7 @@ export function AppointmentPanel({
       setTime(s.toFormat("HH:mm"));
       setDuration(Math.round(e.diff(s, "minutes").minutes));
       setNotes(a.notes ?? "");
+      setItems(a.items ?? []);
     }
   }, [state, tz]);
 
@@ -115,6 +119,7 @@ export function AppointmentPanel({
           startsAt: startsAt.toUTC().toISO()!,
           endsAt: endsAt.toUTC().toISO()!,
           notes,
+          markIds: items.map((i) => i.markId),
         });
         if (r.error === "conflict") {
           toast(`${t.calendar.conflict}${r.conflictWith ? ` (${r.conflictWith})` : ""}`, "error");
@@ -221,6 +226,42 @@ export function AppointmentPanel({
                 />
               )}
             </Field>
+
+            {/*
+              What the visit is for, when it was booked from the patient's
+              treatment plan — so the doctor and the assistant know before the
+              patient sits down.
+            */}
+            {items.length > 0 && (
+              <div className="grid gap-1.5 rounded-lg border border-line bg-canvas p-3" data-planned-treatment>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-semibold text-ink-500">{t.calendar.plannedTreatment}</span>
+                  {state.mode === "edit" && (
+                    <a href={`/c/${slug}/patients/${state.appt.patient_id}?tab=treatment`} className="text-[12px] font-semibold text-brand-600 hover:underline">
+                      {t.calendar.openTreatment}
+                    </a>
+                  )}
+                </div>
+                <ul className="grid gap-1">
+                  {items.map((i) => (
+                    <li key={i.markId} className="flex items-center gap-2 text-[13px]" data-planned-item={i.markId}>
+                      <span className="grid h-6 min-w-6 place-items-center rounded-md bg-surface px-1 text-[12px] font-bold tnum shadow-card" dir="ltr">
+                        {/^[1-8][1-8]$/.test(i.site) ? i.site : "·"}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {(locale === "ar" && i.labelAr) || i.label}
+                        {i.next && <span className="text-ink-500"> · {i.next}</span>}
+                      </span>
+                      {state.mode === "create" && (
+                        <button onClick={() => setItems((xs) => xs.filter((x) => x.markId !== i.markId))} aria-label={t.common.delete} className="text-ink-400 hover:text-danger">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <Field label={t.calendar.service}>

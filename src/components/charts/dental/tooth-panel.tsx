@@ -45,6 +45,8 @@ export type PanelActions = {
   onCamera: (fdi: string) => void;
   /** Open an entry that is not on this tooth — the full arch a tooth's implant belongs to. */
   onOpenEntry: (id: string) => void;
+  /** Open a treatment's steps. */
+  onOpenItem: (id: string) => void;
   onClose: () => void;
 };
 
@@ -95,6 +97,7 @@ export function ToothPanel({
   uploading,
   parentOf,
   parentName,
+  progressFor,
   a,
 }: {
   teeth: string[];
@@ -124,6 +127,8 @@ export function ToothPanel({
   /** The full arch an entry on this tooth is part of, if it is one of its teeth. */
   parentOf: (m: Mark) => Mark | null;
   parentName: (m: Mark) => string;
+  /** How far a treatment with steps has come; null for one-tap work. */
+  progressFor: (m: Mark) => { done: number; total: number; next: string | null } | null;
   a: PanelActions;
 }) {
   const { t, locale } = useI18n();
@@ -333,6 +338,8 @@ export function ToothPanel({
                   onNote={a.onNote}
                   onDetail={a.onDetail}
                   onPerformer={a.onEntryPerformer}
+                  progress={progressFor(m)}
+                  onOpen={progressFor(m) ? () => a.onOpenItem(m.id) : undefined}
                 />
               );
             })}

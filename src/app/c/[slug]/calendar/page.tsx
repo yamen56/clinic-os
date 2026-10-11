@@ -2,7 +2,9 @@ import { headers } from "next/headers";
 import { guardCap } from "@/lib/guard";
 import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
-import { CalendarClient } from "./calendar-client";
+import { CalendarClient, type PlannedItem } from "./calendar-client";
+import { STEP_SELECT, toStep } from "@/lib/charts/dental/db";
+import { progressOf } from "@/lib/charts/dental/protocols";
 
 function phoneUa(ua: string | null): boolean {
   return !!ua && /iPhone|iPod|Android.+Mobile|Mobile.+Firefox|Windows Phone/i.test(ua);
@@ -13,7 +15,7 @@ export default async function CalendarPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ patient?: string; new?: string }>;
+  searchParams: Promise<{ patient?: string; new?: string; items?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -30,7 +32,43 @@ export default async function CalendarPage({
       ).rows[0];
       if (p) initialPatient = { id: p.id, name: p.full_name };
     }
-    return { initialPatient };
+    /*
+      "Book next visit" from the patient's plan: the treatments the visit is
+      for, each with the step it is up to, the doctor of their case, and a
+      note that says the same — so the desk books the right length with the
+      right doctor and nobody retypes the plan.
+    */
+    let initialPlan: { items: PlannedItem[]; doctorId: string | null; notes: string } | null = null;
+    const ids = (sp.items ?? "").split(",").filter((x) => isUuid(x)).slice(0, 20);
+    if (initialPatient && ids.length) {
+      const marks = (
+        await c.query(
+          `select m.id, m.site, m.label, m.label_ar, m.treatment_key, m.performed_by, tc.doctor_member_id
+             from chart_marks m left join treatment_cases tc on tc.id = m.case_id
+            where m.id = any($1::uuid[]) and m.clinic_id = $2 and m.patient_id = $3 and m.voided_at is null
+            order by m.created_at`,
+          [ids, access.clinicId, initialPatient.id]
+        )
+      ).rows;
+      const steps = marks.length
+        ? (await c.query(`${STEP_SELECT} where s.mark_id = any($1::uuid[])`, [marks.map((m) => m.id)])).rows.map(toStep)
+        : [];
+      const items: PlannedItem[] = marks.map((m) => ({
+        markId: m.id,
+        site: m.site,
+        label: m.label,
+        labelAr: m.label_ar,
+        next: progressOf(m.treatment_key, steps.filter((s) => s.markId === m.id))?.next?.en ?? null,
+      }));
+      if (items.length) {
+        initialPlan = {
+          items,
+          doctorId: (marks.find((m) => m.doctor_member_id)?.doctor_member_id as string) ?? (marks.find((m) => m.performed_by)?.performed_by as string) ?? null,
+          notes: items.map((i) => `${/^[1-8][1-8]$/.test(i.site) ? `${i.site} ` : ""}${i.label}${i.next ? ` — ${i.next}` : ""}`).join("\n"),
+        };
+      }
+    }
+    return { initialPatient, initialPlan };
   });
 
   return (
@@ -40,6 +78,7 @@ export default async function CalendarPage({
       isDoctor={access.role === "doctor"}
       selfMemberId={access.memberId}
       initialPatient={data.initialPatient}
+      initialPlan={data.initialPlan}
       /* ?new=1 — what the dashboard shortcut and its keyboard accelerator open. */
       openNew={sp.new === "1"}
       /*

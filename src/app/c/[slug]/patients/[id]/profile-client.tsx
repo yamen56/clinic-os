@@ -41,7 +41,8 @@ import { NewDocumentModal, type PickableTemplate } from "@/components/esign/new-
 import type { DocumentListRow } from "@/lib/esign/queries";
 import type { PrescriptionRow } from "@/lib/prescriptions";
 import type { DentalTabData } from "./dental-chart-tab";
-import { DentalProvider } from "@/components/charts/dental/store";
+import { DentalProvider, useOptionalDentalStore } from "@/components/charts/dental/store";
+import { medicalAlerts } from "@/lib/medical-history";
 import { FilesTab, type FilesHub } from "./files-tab";
 import { PrescriptionsTab } from "./prescriptions-tab";
 import { PrescriptionComposer, useComposerData, type RxDraft } from "./prescription-composer";
@@ -84,6 +85,32 @@ const DentalChartTab = dynamic(() => import("./dental-chart-tab").then((m) => m.
   ssr: false,
   loading: () => <Spinner />,
 });
+// The same chart, worked as a treatment: shipped in the same chunk, fetched when its tab is.
+const TreatmentTab = dynamic(() => import("./treatment-tab").then((m) => m.TreatmentTab), {
+  ssr: false,
+  loading: () => <Spinner />,
+});
+
+/*
+  What the dentist must not miss before touching the patient: allergies, blood
+  thinners, bisphosphonates, pregnancy. In the header, in the clinic's own
+  language, for a clinic that keeps the medical history with the chart.
+*/
+function MedicalAlerts() {
+  const { locale } = useI18n();
+  const store = useOptionalDentalStore();
+  if (!store) return null;
+  return (
+    <>
+      {medicalAlerts(store.medical, locale).map((a) => (
+        <Badge key={a} status="danger">
+          <ShieldAlert className="h-3 w-3" />
+          {a}
+        </Badge>
+      ))}
+    </>
+  );
+}
 
 /*
   The chart's store, for a clinic that has the chart: held above the tabs so
@@ -108,7 +135,7 @@ function MaybeDental({
 }) {
   if (!dental) return <>{children}</>;
   return (
-    <DentalProvider slug={slug} patientId={patientId} chart={dental.chart} files={files} renderedAt={renderedAt}>
+    <DentalProvider slug={slug} patientId={patientId} data={dental} files={files} renderedAt={renderedAt}>
       {children}
     </DentalProvider>
   );
@@ -424,6 +451,8 @@ export function PatientProfile(props: {
   */
   const tabs = [
     { key: "overview", label: t.patients.tabs.overview },
+    // Between the overview and the notes: the case, its plan and the chart it is worked on.
+    props.dental && { key: "treatment", label: t.patients.tabs.treatment },
     { key: "notes", label: t.patients.tabs.notes, count: props.notes.length },
     /* Beside Notes: a prescription is written at the same moment, by the same
        person. Shown to anyone who can read the file once there is something
@@ -511,6 +540,7 @@ export function PatientProfile(props: {
                 {cover === "expired" ? ` · ${t.insurers.card.expiredShort}` : ""}
               </Badge>
             )}
+            <MedicalAlerts />
             <SaveIndicator state={state} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-500">
@@ -968,6 +998,16 @@ export function PatientProfile(props: {
               })
             }
             onUpdated={upsertRx}
+          />
+        )}
+        {tab === "treatment" && props.dental && (
+          <TreatmentTab
+            slug={slug}
+            patientId={p.id}
+            tz={tz}
+            birthDate={p.birth_date}
+            data={props.dental}
+            onPrescribe={caps.prescriptions ? (diagnosis) => openComposer({ diagnosis }) : undefined}
           />
         )}
         {tab === "dental" && props.dental && (

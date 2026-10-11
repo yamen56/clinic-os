@@ -169,14 +169,20 @@ async function main() {
     check(/Composite filling · MO/.test(await panel.innerText()), "after a reload the filling is still on 47");
     check((await chart(page).locator("[data-tooth='47'] .tooth-pop").count()) > 0, "and still drawn on the tooth");
 
-    // Planned, then done.
+    // Planned, then done. A root canal has steps: choosing it opens them, and
+    // "Finish now" marks it done without them, as a doctor recording old work would.
     await page.getByRole("radio", { name: "Planned" }).first().click();
     await tapTooth(page, "36");
     await pickIn(panel, "rct", "root canal");
     await settle(page);
-    await page.getByRole("radio", { name: "Done" }).first().click();
-    await panel.locator("[data-mark] button", { hasText: "Mark done" }).first().click();
+    check((await page.locator("[data-procedure]").getAttribute("data-procedure-status")) === "planned", "choosing a root canal opens its steps");
+    await page.locator("[data-procedure] [data-finish-now]").click();
+    await page.getByRole("dialog").getByRole("button", { name: "Finish now" }).click();
     await settle(page);
+    await page.locator("[data-procedure] button", { hasText: "Close" }).first().click();
+    // What follows records as done, as it did before the root canal had steps.
+    await tapTooth(page, "36");
+    await page.getByRole("radio", { name: "Done" }).first().click();
     rows = await q(`select status, done_at, (select array_agg(action order by at) from chart_mark_events e where e.mark_id = m.id) as actions from chart_marks m where patient_id = $1 and site = '36'`, [patient.id]);
     check(rows.length === 1 && rows[0].status === "done" && rows[0].done_at && rows[0].actions.join(",") === "created,done", "a planned root canal marked done is saved as done, with both history lines", JSON.stringify(rows));
 

@@ -4,6 +4,8 @@ import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { MARK_SELECT, resolveTreatment, toEvent, toMark } from "@/lib/charts/dental/db";
+import { protocolFor } from "@/lib/charts/dental/protocols";
+import { applyToMembers, followersOf, todaysVisit } from "@/lib/charts/dental/server";
 
 /*
   Changing an entry on the chart. Every change a reader would care about —
@@ -22,6 +24,8 @@ const bodySchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("performer"), eventId: z.string().uuid(), performerId: z.string().uuid() }),
   z.object({ op: z.literal("detail"), key: z.string().max(24), value: z.string().max(24) }),
   z.object({ op: z.literal("surfaces"), surfaces: z.array(z.enum(["M", "D", "O", "B", "L"])).min(1).max(5) }),
+  // Filed under a case, or under none.
+  z.object({ op: z.literal("case"), eventId: z.string().uuid(), caseId: z.string().uuid().nullable() }),
 ]);
 
 type Params = { params: Promise<{ slug: string; id: string; markId: string }> };
@@ -46,11 +50,23 @@ export async function PATCH(req: Request, ctx: Params) {
 
     let event: { id: string; action: string; reason?: string } | null = null;
     switch (b.op) {
-      case "done":
+      case "done": {
         if (cur.status !== "planned") return { error: "not_planned" as const };
-        await c.query(`update chart_marks set status = 'done', done_at = now() where id = $1`, [markId]);
-        event = { id: b.eventId, action: "done" };
+        const visit = await todaysVisit(c, access.clinicId, id, markId, cur.performed_by);
+        await c.query(`update chart_marks set status = 'done', done_at = now(), appointment_id = coalesce(appointment_id, $2) where id = $1`, [markId, visit]);
+        // A treatment with steps marked done by hand: "Finish now", whatever steps are missing.
+        event = { id: b.eventId, action: "done", reason: protocolFor(cur.treatment_key) ? "finish" : undefined };
         break;
+      }
+      case "case": {
+        if (b.caseId) {
+          const ok = await c.query(`select 1 from treatment_cases where id = $1 and patient_id = $2 and clinic_id = $3`, [b.caseId, id, access.clinicId]);
+          if (!ok.rowCount) return { error: "invalid_case" as const };
+        }
+        await c.query(`update chart_marks set case_id = $2 where id = $1`, [markId, b.caseId]);
+        event = { id: b.eventId, action: "case" };
+        break;
+      }
       case "void":
         await c.query(`update chart_marks set voided_at = now(), voided_by = $2, void_reason = $3 where id = $1`, [markId, me, b.reason]);
         event = { id: b.eventId, action: "void", reason: b.reason };
@@ -97,31 +113,15 @@ export async function PATCH(req: Request, ctx: Params) {
     }
 
     /*
-      A whole-arch entry carries its teeth with it: an All-on-4 done is its
-      implants and bridge teeth done, and one voided is all of them voided,
-      each with its own line in its tooth's history.
+      A group's lead carries its members with it: an All-on-4 done is its
+      implants, bridge teeth and extractions done, a bridge done is all its
+      teeth done, and either voided is all of them voided — each with its own
+      line in its tooth's history.
     */
     let kids: string[] = [];
-    if ((b.op === "done" || b.op === "void") && cur.group_id && !/^[1-8][1-8]$/.test(cur.site)) {
-      const r = await c.query(
-        `select id from chart_marks
-          where group_id = $1 and id <> $2 and clinic_id = $3 and voided_at is null
-            ${b.op === "done" ? "and status = 'planned'" : ""}`,
-        [cur.group_id, markId, access.clinicId]
-      );
-      kids = r.rows.map((x) => x.id as string);
-      if (kids.length) {
-        if (b.op === "done") {
-          await c.query(`update chart_marks set status = 'done', done_at = now() where id = any($1::uuid[])`, [kids]);
-        } else {
-          await c.query(`update chart_marks set voided_at = now(), voided_by = $2, void_reason = $3 where id = any($1::uuid[])`, [kids, me, b.reason]);
-        }
-        await c.query(
-          `insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason)
-           select $1, k, $3, $4, $5 from unnest($2::uuid[]) as k`,
-          [access.clinicId, kids, b.op, me, b.op === "void" ? b.reason : null]
-        );
-      }
+    if (b.op === "done" || b.op === "void") {
+      const members = await followersOf(c, access.clinicId, cur);
+      kids = await applyToMembers(c, access.clinicId, members.map((x) => x.id), b.op, me, b.op === "void" ? b.reason : null);
     }
     await audit(c, {
       clinicId: access.clinicId,

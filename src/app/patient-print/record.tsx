@@ -1,6 +1,7 @@
 import type { ExportedClinic, ExportedRecord } from "@/lib/patient-export";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
+import { medicalAlerts } from "@/lib/medical-history";
 import { dictFor } from "@/lib/i18n/client-dict";
 
 type Dict = ReturnType<typeof dictFor>;
@@ -164,6 +165,55 @@ export function PatientRecord({
               ))}
             </tbody>
           </table>
+        </Section>
+      )}
+
+      {(record.treatment.cases.length > 0 || record.treatment.steps.length > 0) && (
+        /* The treatment, case by case, in the chart's English: the problem, its diagnosis, and every step done. */
+        <Section title={t.patients.tabs.treatment} empty={false} t={t}>
+          <div dir="ltr">
+            {(medicalAlerts(record.treatment.medical, "en").length > 0 || record.treatment.medical.medications) && (
+              <p>
+                <strong>{t.dental.treatment.medical}:</strong> {[...medicalAlerts(record.treatment.medical, "en"), record.treatment.medical.medications].filter(Boolean).join(" · ")}
+              </p>
+            )}
+            {[...record.treatment.cases.map((c) => ({ c, id: c.id as string | null })), { c: null, id: null }].map(({ c, id }) => {
+              const steps = record.treatment.steps.filter((s) => s.caseId === id);
+              if (!c && !steps.length) return null;
+              return (
+                <div key={id ?? "none"} className="block">
+                  {c && (
+                    <>
+                      <p>
+                        <strong>{c.complaint || c.title || t.dental.treatment.complaint}</strong>
+                        <span className="muted"> — {fmtDate(c.openedAt, tz, "en")}{c.doctor ? ` · ${c.doctor}` : ""}{c.closedAt ? ` · ${t.dental.treatment.closed.replace("{date}", fmtDate(c.closedAt, tz, "en"))}` : ""}</span>
+                      </p>
+                      {c.history && <p><span className="muted">{t.dental.treatment.history}:</span> {c.history}</p>}
+                      {c.exam && <p><span className="muted">{t.dental.treatment.exam}:</span> {c.exam}</p>}
+                      {c.diagnosis && <p><span className="muted">{t.dental.treatment.diagnosis}:</span> {c.diagnosis}</p>}
+                    </>
+                  )}
+                  {steps.length > 0 && (
+                    <table className="grid">
+                      <tbody>
+                        {steps.map((s, i) => (
+                          <tr key={i} className={s.voided ? "muted" : undefined}>
+                            <td className="nowrap num">{/^[1-8][1-8]$/.test(s.site) ? s.site : (t.dental.sites as Record<string, string>)[s.site] ?? s.site}</td>
+                            <td>
+                              {s.voided ? <s>{`${s.label} — ${s.step}`}</s> : `${s.label} — ${s.step}`}
+                              {s.summary && <span className="muted"> · {s.summary}</span>}
+                            </td>
+                            <td className="nowrap">{s.doctor ?? "—"}</td>
+                            <td className="nowrap">{fmtDate(s.date, tz, "en")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </Section>
       )}
 

@@ -211,6 +211,7 @@ export const BUILT_IN: Treatment[] = [
   { key: "xray_bw", kind: "procedure", category: "diagnostic", en: "Bitewing X-ray", ar: "صورة أشعة مجنّحة", abbr: "BW", scope: "quadrant", look: "dot", aliases: ["xray", "صورة"] },
   { key: "xray_opg", kind: "procedure", category: "diagnostic", en: "Panoramic X-ray", ar: "صورة بانوراما", abbr: "OPG", scope: "mouth", look: "dot", aliases: ["panorama", "بانوراما", "صورة"] },
   { key: "cbct", kind: "procedure", category: "diagnostic", en: "CBCT scan", ar: "أشعة مقطعية ثلاثية الأبعاد", abbr: "CBCT", scope: "mouth", look: "dot", aliases: ["3d", "مقطعية"] },
+  { key: "emergency_exam", kind: "procedure", category: "diagnostic", en: "Emergency visit", ar: "زيارة طارئة", scope: "tooth", look: "dot", aliases: ["emergency", "pain", "urgent", "طوارئ", "ألم", "طارئ"] },
   { key: "vitality", kind: "procedure", category: "diagnostic", en: "Pulp vitality test", ar: "اختبار حيوية اللب", scope: "tooth", look: "dot", aliases: ["cold test", "EPT"] },
 
   // ── Preventive ──────────────────────────────────────────────────────────────

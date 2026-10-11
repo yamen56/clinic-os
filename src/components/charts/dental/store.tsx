@@ -10,9 +10,11 @@
   two tabs, the Treatment tab and the Dental chart, that would happen at every
   switch.
 
-  So the chart lives here, above the tabs, for as long as the file is open.
-  The tabs draw from it and write through it. It reads the chart again only
-  when the copy it holds may be old:
+  So the chart lives here, above the tabs, for as long as the file is open:
+  its entries and their history, the cases they are filed under, the steps of
+  each treatment, the visits, and the patient's medical history. The tabs draw
+  from it and write through it. It reads the chart again only when the copy it
+  holds may be old:
   - the page was brought back by the browser's Back button, which restores a
     snapshot of the page without asking the server;
   - a colleague changed this patient's chart on another screen — the
@@ -27,8 +29,11 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRealtimeRefresh, type RealtimeEvent } from "@/lib/use-realtime";
 import type { DentalChartData, FavoriteRow } from "@/lib/charts/dental/db";
-import type { Mark, MarkEvent } from "@/lib/charts/dental/state";
+import type { Mark, MarkEvent, Person } from "@/lib/charts/dental/state";
 import type { Treatment } from "@/lib/charts/dental/catalog";
+import type { StepRecord } from "@/lib/charts/dental/protocols";
+import type { Booking, TreatmentCase, Visit } from "@/lib/charts/dental/treatment";
+import type { MedicalHistory } from "@/lib/medical-history";
 
 /** A file of the patient's, as the chart reads it: x-rays and photos, and the teeth each shows. */
 export type ChartFile = {
@@ -41,9 +46,33 @@ export type ChartFile = {
   teeth?: string[];
 };
 
+/** What the patient page hands the chart: the saved chart, and who is charting. */
+export type DentalTabData = {
+  me: Person;
+  /** The signed-in member, so "performed by" starts on the doctor at the chair. */
+  myMemberId: string | null;
+  doctors: Person[];
+  /** May this member record on the chart (`patients.charts`)? */
+  canWrite: boolean;
+  /** May this member book visits (`calendar`)? */
+  canBook: boolean;
+  chart: DentalChartData;
+  clinicName: string;
+  /** May this member send the patient a picture on WhatsApp, and has the patient a number? */
+  canMessage: boolean;
+};
+
 type Setter<T> = React.Dispatch<React.SetStateAction<T>>;
 
 export type DentalStore = {
+  slug: string;
+  patientId: string;
+  me: Person;
+  myMemberId: string | null;
+  doctors: Person[];
+  canWrite: boolean;
+  canBook: boolean;
+
   marks: Mark[];
   setMarks: Setter<Mark[]>;
   events: MarkEvent[];
@@ -57,6 +86,25 @@ export type DentalStore = {
   /** Which teeth each file is pinned to, by file id. */
   pins: Record<string, string[]>;
   setPins: Setter<Record<string, string[]>>;
+  cases: TreatmentCase[];
+  setCases: Setter<TreatmentCase[]>;
+  steps: StepRecord[];
+  setSteps: Setter<StepRecord[]>;
+  visits: Visit[];
+  bookings: Booking[];
+  medical: MedicalHistory;
+  setMedical: Setter<MedicalHistory>;
+
+  /** The case new work is filed under: the one open in the Treatment tab, else the latest still open. */
+  activeCaseId: string | null;
+  setActiveCaseId: (id: string | null) => void;
+  /** The treatment whose steps are open, in either tab. */
+  openItem: string | null;
+  setOpenItem: (id: string | null) => void;
+  /** The emergency sheet, open: on a treatment under way, on a tooth, or on neither. */
+  emergency: { markId?: string; site?: string } | null;
+  setEmergency: (e: { markId?: string; site?: string } | null) => void;
+
   /**
    * Send a write through the store. While it is in flight a re-read waits —
    * a copy read mid-write could take back a tap already drawn — and the rows
@@ -85,31 +133,47 @@ export function useOptionalDentalStore(): DentalStore | null {
 const MINE_FOR_MS = 15_000;
 /** A page older than this when it mounts was restored from history, not freshly rendered. */
 const STALE_AFTER_MS = 30_000;
+/** The tables whose rows are this patient's chart. Each announces the patient it belongs to. */
+const TABLES = ["chart_marks", "chart_mark_steps", "treatment_cases", "appointment_items"];
 
 const pinsOf = (files: ChartFile[]) => Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []]));
+/** The latest case still open: where new work goes when nobody chose. */
+const latestOpen = (cases: TreatmentCase[]) => cases.find((c) => c.status === "open")?.id ?? null;
 
 export function DentalProvider({
   slug,
   patientId,
-  chart,
+  data,
   files: initialFiles,
   renderedAt,
   children,
 }: {
   slug: string;
   patientId: string;
-  chart: DentalChartData;
+  data: DentalTabData;
   files: ChartFile[];
   /** When the server rendered the page, in epoch milliseconds. */
   renderedAt: number;
   children: React.ReactNode;
 }) {
+  const chart = data.chart;
   const [marks, setMarks] = useState<Mark[]>(chart.marks);
   const [events, setEvents] = useState<MarkEvent[]>(chart.events);
   const [custom, setCustom] = useState<Treatment[]>(chart.custom);
   const [favorites, setFavorites] = useState<FavoriteRow[]>(chart.favorites);
   const [files, setFiles] = useState<ChartFile[]>(initialFiles);
   const [pins, setPins] = useState<Record<string, string[]>>(() => pinsOf(initialFiles));
+  const [cases, setCases] = useState<TreatmentCase[]>(chart.cases);
+  const [steps, setSteps] = useState<StepRecord[]>(chart.steps);
+  const [visits, setVisits] = useState<Visit[]>(chart.visits);
+  const [bookings, setBookings] = useState<Booking[]>(chart.bookings);
+  const [medical, setMedical] = useState<MedicalHistory>(chart.medical);
+  const [chosenCase, setChosenCase] = useState<string | null>(null);
+  const [openItem, setOpenItem] = useState<string | null>(null);
+  const [emergency, setEmergency] = useState<{ markId?: string; site?: string } | null>(null);
+
+  // A case chosen in the Treatment tab while it exists; otherwise the latest open one.
+  const activeCaseId = chosenCase && cases.some((c) => c.id === chosenCase) ? chosenCase : latestOpen(cases);
 
   const sync = useRef({
     inflight: 0,
@@ -138,10 +202,16 @@ export function DentalProvider({
       s.owed = true;
       return;
     }
-    setMarks(body.chart.marks);
-    setEvents(body.chart.events);
-    setCustom(body.chart.custom);
-    setFavorites(body.chart.favorites);
+    const c = body.chart;
+    setMarks(c.marks);
+    setEvents(c.events);
+    setCustom(c.custom);
+    setFavorites(c.favorites);
+    setCases(c.cases);
+    setSteps(c.steps);
+    setVisits(c.visits);
+    setBookings(c.bookings);
+    setMedical(c.medical);
     setFiles(body.files);
     setPins(pinsOf(body.files));
   }, [slug, patientId]);
@@ -175,11 +245,47 @@ export function DentalProvider({
     },
     [patientId]
   );
-  useRealtimeRefresh(slug, ["chart_marks"], reload, isOthers, { syncOnOpen: staleOnMount });
+  useRealtimeRefresh(slug, TABLES, reload, isOthers, { syncOnOpen: staleOnMount });
 
   const value = useMemo<DentalStore>(
-    () => ({ marks, setMarks, events, setEvents, custom, setCustom, favorites, setFavorites, files, setFiles, pins, setPins, write, reload }),
-    [marks, events, custom, favorites, files, pins, write, reload]
+    () => ({
+      slug,
+      patientId,
+      me: data.me,
+      myMemberId: data.myMemberId,
+      doctors: data.doctors,
+      canWrite: data.canWrite,
+      canBook: data.canBook,
+      marks,
+      setMarks,
+      events,
+      setEvents,
+      custom,
+      setCustom,
+      favorites,
+      setFavorites,
+      files,
+      setFiles,
+      pins,
+      setPins,
+      cases,
+      setCases,
+      steps,
+      setSteps,
+      visits,
+      bookings,
+      medical,
+      setMedical,
+      activeCaseId,
+      setActiveCaseId: setChosenCase,
+      openItem,
+      setOpenItem,
+      emergency,
+      setEmergency,
+      write,
+      reload,
+    }),
+    [slug, patientId, data, marks, events, custom, favorites, files, pins, cases, steps, visits, bookings, medical, activeCaseId, openItem, emergency, write, reload]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

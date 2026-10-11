@@ -13,7 +13,7 @@
  */
 
 import type { Arch } from "./teeth";
-import { PERMANENT_LOWER, PERMANENT_UPPER } from "./teeth";
+import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER } from "./teeth";
 import { isToothSite, type Mark, type ToothState } from "./state";
 
 /** Treatments recorded as a whole-arch group. */
@@ -75,18 +75,39 @@ export function standingTeeth(arch: Arch, states: Map<string, ToothState>, marks
   });
 }
 
-/** The parent of every group that has one: the member on the arch rather than on a tooth. */
-export function groupParents(marks: Mark[]): Map<string, Mark> {
+const EVERY_TOOTH = [...PERMANENT_UPPER, ...PRIMARY_UPPER, ...PRIMARY_LOWER, ...PERMANENT_LOWER];
+
+/**
+ * Which member a group is listed, done and voided as: a full arch's entry on
+ * the arch, otherwise the first tooth of a bridge, splint or partial denture
+ * in chart order. Shared by the screen and the server, so both agree which
+ * member carries the steps and the price.
+ */
+export function leadIdOf(members: { id: string; site: string }[]): string | null {
+  if (!members.length) return null;
+  const parent = members.find((m) => !isToothSite(m.site));
+  if (parent) return parent.id;
+  return [...members].sort((a, b) => EVERY_TOOTH.indexOf(a.site) - EVERY_TOOTH.indexOf(b.site) || a.id.localeCompare(b.id))[0].id;
+}
+
+/** The lead of every group. */
+export function groupLeads(marks: Mark[]): Map<string, Mark> {
+  const groups = new Map<string, Mark[]>();
+  for (const m of marks) if (m.groupId) groups.set(m.groupId, [...(groups.get(m.groupId) ?? []), m]);
+  const byId = new Map(marks.map((m) => [m.id, m]));
   const out = new Map<string, Mark>();
-  for (const m of marks) if (m.groupId && !isToothSite(m.site)) out.set(m.groupId, m);
+  for (const [g, ms] of groups) {
+    const id = leadIdOf(ms);
+    if (id) out.set(g, byId.get(id)!);
+  }
   return out;
 }
 
-/** The whole-arch entry this tooth's entry belongs to, if it is one of its teeth. */
-export function parentOf(m: Mark, parents: Map<string, Mark>): Mark | null {
+/** The entry this one is listed under, when it is one of a group's other members. */
+export function leadOf(m: Mark, leads: Map<string, Mark>): Mark | null {
   if (!m.groupId) return null;
-  const p = parents.get(m.groupId);
-  return p && p.id !== m.id ? p : null;
+  const l = leads.get(m.groupId);
+  return l && l.id !== m.id ? l : null;
 }
 
 const CHART_ORDER = [...PERMANENT_UPPER, ...PERMANENT_LOWER];

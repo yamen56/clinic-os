@@ -11,12 +11,13 @@
 */
 
 import { useState } from "react";
-import { Check, ChevronDown, Ban, Plus, Pencil, UserRound, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, type LucideIcon } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { findTreatment, type Treatment } from "@/lib/charts/dental/catalog";
 import { isToothSite, paintAt, type Mark, type MarkEvent, type Paint, type Person } from "@/lib/charts/dental/state";
 import { tooth as toothOf } from "@/lib/charts/dental/teeth";
+import { EMERGENCY_STEP, stepOf } from "@/lib/charts/dental/protocols";
 import { TreatmentGlyph } from "./treatment-picker";
 import { detailLabels, markLabel, siteLabel } from "./labels";
 import { INK, SOFT } from "./tooth-art";
@@ -51,6 +52,8 @@ export function EntryRow({
   onDetail,
   onPerformer,
   extra,
+  progress,
+  onOpen,
 }: {
   m: Mark;
   custom: Treatment[];
@@ -59,6 +62,10 @@ export function EntryRow({
   canEdit: boolean;
   /** A line of its own about the entry — where a full arch's implants are. */
   extra?: string;
+  /** How far a treatment with steps has come: its required steps done, and the next. */
+  progress?: { done: number; total: number; next: string | null } | null;
+  /** Open the treatment's steps. Given for a treatment that has them, in place of "Mark done". */
+  onOpen?: () => void;
   onMarkDone: (id: string) => void;
   onVoid: (m: Mark) => void;
   onNote: (id: string, note: string) => void;
@@ -87,8 +94,34 @@ export function EntryRow({
             {[extra ?? details.join(" · "), m.performedBy?.name, fmtDate(m.doneAt ?? m.createdAt, tz, locale)].filter(Boolean).join(" · ")}
           </span>
           {m.note && <span className="mt-1 block text-[12.5px] text-ink-700">{m.note}</span>}
+          {progress && m.status === "planned" && !m.voidedAt && (
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[12px]" data-entry-progress={`${progress.done}/${progress.total}`}>
+              <span className="inline-flex gap-0.5" aria-hidden>
+                {Array.from({ length: progress.total }, (_, i) => (
+                  <span key={i} className="h-2 w-2 rounded-full" style={{ background: i < progress.done ? INK.progress : "var(--color-line)" }} />
+                ))}
+              </span>
+              {progress.next && (
+                <span className="font-semibold" style={{ color: INK.progress }}>
+                  {T.treatment.nextStep.replace("{step}", progress.next)}
+                </span>
+              )}
+            </span>
+          )}
         </button>
-        {editable && m.status === "planned" && (
+        {onOpen && !m.voidedAt && (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl px-2.5 text-[12.5px] font-semibold"
+            style={{ background: SOFT.progress, color: INK.progress }}
+            data-open-item={m.id}
+          >
+            <span className="max-[420px]:sr-only">{T.treatment.open}</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {editable && m.status === "planned" && !onOpen && (
           <button
             type="button"
             onClick={() => onMarkDone(m.id)}
@@ -183,6 +216,10 @@ const EVENT_ICON: Record<MarkEvent["action"], LucideIcon> = {
   void: Ban,
   note: Pencil,
   performer: UserRound,
+  step: ListChecks,
+  step_void: Undo2,
+  case: FolderInput,
+  reopened: RotateCcw,
 };
 
 /** The ink of one line in the history: what the entry was at that moment. */
@@ -190,6 +227,8 @@ function eventPaint(e: MarkEvent, m: Mark): Paint | null {
   if (e.action === "void") return null;
   if (m.kind === "finding") return "finding";
   if (e.action === "done") return "done";
+  if (e.action === "step") return e.reason === EMERGENCY_STEP ? "planned" : "progress";
+  if (e.action === "reopened") return "progress";
   if (e.action === "created") return m.status === "existing" ? "existing" : m.doneAt === m.createdAt ? "done" : "planned";
   return paintAt(m, null);
 }
@@ -220,7 +259,15 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
             <div className="text-[13px] leading-snug text-ink-900">
               {showSite && <span className="font-semibold">{siteLabel(m.site, T)} · </span>}
               <span className={e.action === "void" ? "line-through" : ""}>{markLabel(m, locale)}</span>
-              <span className="text-ink-500"> — {T.events[e.action]}</span>
+              <span className="text-ink-500">
+                {" — "}
+                {e.action === "step"
+                  ? e.reason === EMERGENCY_STEP
+                    ? T.treatment.emergency
+                    : (stepOf(m.treatmentKey, e.reason ?? "")?.en ?? T.events.step)
+                  : T.events[e.action]}
+              </span>
+              {e.action === "step" && e.reason === EMERGENCY_STEP && <Siren className="ms-1 inline h-3 w-3 text-danger" />}
             </div>
             <div className="text-[12px] text-ink-500">
               {[
@@ -230,7 +277,10 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
               ]
                 .filter(Boolean)
                 .join(" · ")}
-              {e.reason ? ` — ${e.reason}` : ""}
+              {/* A step's line names its step above; "steps", "finish" and "undo" are how, not why. */}
+              {e.reason && e.action !== "step" && !(e.action === "done" && e.reason === "steps") && !(e.action === "step_void" && e.reason === "undo")
+                ? ` — ${e.action === "done" && e.reason === "finish" ? T.treatment.finishNow : e.reason}`
+                : ""}
             </div>
           </li>
         );
