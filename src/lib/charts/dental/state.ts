@@ -55,12 +55,18 @@ export type Mark = {
   startedAt: string | null;
   /** The visit it was done at, when it was done at one. */
   appointmentId: string | null;
+  /** What it costs this patient: the price list's when planned, unless a doctor changed it. Null when unpriced. */
+  fee: number | null;
+  /** Set by hand: a change of material or canals leaves it alone. */
+  feeManual: boolean;
+  /** The service its price came from — what an invoice line bills. */
+  serviceId: string | null;
 };
 
 export type MarkEvent = {
   id: string;
   markId: string;
-  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened";
+  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened" | "fee";
   at: string;
   by: Person;
   reason?: string;

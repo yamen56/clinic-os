@@ -6,6 +6,8 @@ import { audit } from "@/lib/audit";
 import { MARK_SELECT, resolveTreatment, toEvent, toMark } from "@/lib/charts/dental/db";
 import { protocolFor } from "@/lib/charts/dental/protocols";
 import { applyToMembers, followersOf, todaysVisit } from "@/lib/charts/dental/server";
+import { priceFor } from "@/lib/charts/dental/billing-server";
+import { variantOf } from "@/lib/charts/dental/pricing";
 
 /*
   Changing an entry on the chart. Every change a reader would care about —
@@ -26,6 +28,8 @@ const bodySchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("surfaces"), surfaces: z.array(z.enum(["M", "D", "O", "B", "L"])).min(1).max(5) }),
   // Filed under a case, or under none.
   z.object({ op: z.literal("case"), eventId: z.string().uuid(), caseId: z.string().uuid().nullable() }),
+  // What it costs this patient, set by the doctor; null takes the price away.
+  z.object({ op: z.literal("fee"), eventId: z.string().uuid(), fee: z.number().min(0).max(1_000_000).nullable() }),
 ]);
 
 type Params = { params: Promise<{ slug: string; id: string; markId: string }> };
@@ -88,6 +92,20 @@ export async function PATCH(req: Request, ctx: Params) {
         const field = tr?.details?.find((d) => d.key === b.key);
         if (!field || !field.options.some((o) => o.key === b.value)) return { error: "invalid_detail" as const };
         await c.query(`update chart_marks set detail = detail || jsonb_build_object($2::text, $3::text) where id = $1`, [markId, b.key, b.value]);
+        /*
+          A crown made zirconia instead of PFM costs what zirconia costs — unless
+          a doctor set this patient's price by hand, which a change of material
+          does not undo.
+        */
+        if (!cur.fee_manual && tr?.kind === "procedure" && cur.status !== "existing") {
+          const price = await priceFor(c, access.clinicId, cur.treatment_key, variantOf(cur.treatment_key, { ...(cur.detail ?? {}), [b.key]: b.value }));
+          if (price) await c.query(`update chart_marks set fee = $2, service_id = $3 where id = $1`, [markId, price.price, price.serviceId]);
+        }
+        break;
+      }
+      case "fee": {
+        await c.query(`update chart_marks set fee = $2, fee_manual = true where id = $1`, [markId, b.fee]);
+        event = { id: b.eventId, action: "fee", reason: b.fee == null ? undefined : String(b.fee) };
         break;
       }
       case "surfaces": {

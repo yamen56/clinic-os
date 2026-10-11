@@ -9,6 +9,19 @@
  * - the chart is the file's, not the tab's: an entry survives the tab being
  *   closed and opened again, and a colleague's change arrives without a reload.
  *
+ * Phase 2: the Treatment tab — cases, steps, visits, emergencies, booking.
+ *
+ * Phase 3: prices and billing —
+ * - the doctor prices treatments (and kinds of them) in Settings → Services,
+ *   or from the chair with "Use for every patient";
+ * - a planned treatment carries its price, a price set by hand survives a
+ *   change of material, and the plan adds them up;
+ * - reception bills what was started or done — from the plan, the patient's
+ *   Invoices tab, the Invoices page or a new invoice's "From the chart" — the
+ *   lines linked to the work, never billed twice, given back by a void;
+ * - a price per visit bills its visits; a doctor without invoices sees prices
+ *   and no billing.
+ *
  * Fixtures: a dental clinic, its doctor (owner, records on the chart), an
  * English receptionist and an Arabic one, and the patients they work on.
  * Screenshots go to scripts/qa-shots/treatment/.
@@ -113,8 +126,10 @@ async function main() {
   const q = async (sql: string, params: unknown[] = []) => (await db.query(sql, params)).rows;
 
   const slug = `qatreat${tag}`;
+  // Billing from the chart counts from a week back, so a step dated two days ago is billable.
   const [clinic] = await q(
-    `insert into clinics (name, name_ar, slug, specialty, specialties, features) values ('QA Treatment','عيادة العلاج',$1,'dental','{dental}','{"dental": true}') returning id`,
+    `insert into clinics (name, name_ar, slug, specialty, specialties, features, dental_billing_since)
+     values ('QA Treatment','عيادة العلاج',$1,'dental','{dental}','{"dental": true}', now() - interval '7 days') returning id`,
     [slug]
   );
   await q(`insert into whatsapp_sessions (clinic_id) values ($1)`, [clinic.id]);
@@ -143,6 +158,8 @@ async function main() {
      values ($1,$2,1,'INV-0001','partially_paid',50,50,20,current_date)`,
     [clinic.id, patient.id]
   );
+  // Numbers come from the clinic's counter: move it past the invoice written by hand.
+  await q(`update clinics set invoice_counter = 1 where id = $1`, [clinic.id]);
   const fileUrl = (id: string, tab = "dental") => `${BASE}/c/${slug}/patients/${id}?tab=${tab}`;
 
   const browser = await chromium.launch();
@@ -482,6 +499,284 @@ async function main() {
       appointments: { id: string; items: { markId: string }[] }[];
     };
     check(api.appointments.find((a) => a.id === appt.id)?.items?.[0]?.markId === rct.id, "the calendar's appointment carries the treatment it is for");
+
+    /* ── Phase 3: the clinic's prices ─────────────────────────────────── */
+    console.log("Prices");
+    const servicePrice = async (key: string, variant: string | null) =>
+      (
+        await q(
+          `select id, price::float as price, price_unit, bookable_online, name, name_ar from services
+            where clinic_id = $1 and chart_key = $2 and coalesce(chart_variant, '') = coalesce($3, '') and active`,
+          [clinic.id, key, variant]
+        )
+      )[0];
+    await doc.goto(`${BASE}/c/${slug}/settings/services`, { timeout: 120000 });
+    await doc.waitForSelector("[data-dental-prices]", { timeout: 120000 });
+    // A price box saves when it is left: Enter leaves it.
+    const priceIn = async (box: string, value: string, key: string, variant: string | null) => {
+      const input = doc.locator(box).first();
+      await input.fill(value);
+      await input.press("Enter");
+      return until(async () => (await servicePrice(key, variant))?.price === Number(value), 20000);
+    };
+    check(await priceIn("[data-price-row='crown'] [data-price-box='Crown']", "100", "crown", null), "the doctor prices a crown at 100");
+    check(await priceIn("[data-price-variant='crown:zirconia'] [data-price-box]", "120", "crown", "zirconia"), "a zirconia crown at 120");
+    check(await priceIn("[data-price-variant='rct:3'] [data-price-box]", "90", "rct", "3"), "a root canal with three canals at 90");
+    check(await priceIn("[data-price-row='scaling'] [data-price-box='Scaling & polishing']", "30", "scaling", null), "and a cleaning at 30");
+    await doc.locator("[data-price-unit='scaling']:not([disabled])").selectOption("session");
+    check(await until(async () => (await servicePrice("scaling", null))?.price_unit === "session", 20000), "the cleaning charged per visit");
+    const zirconia = await servicePrice("crown", "zirconia");
+    check(
+      zirconia?.bookable_online === false && zirconia.name === "Crown (Zirconia)" && zirconia.name_ar === "تاج (تلبيسة) · زركون",
+      "each price is one of the clinic's services, named in both languages, not offered for booking",
+      JSON.stringify(zirconia)
+    );
+
+    /* ── Prices on the plan ───────────────────────────────────────────── */
+    console.log("Prices on the plan");
+    const [p3] = await q(
+      `insert into patients (clinic_id, full_name, birth_date, phone_e164, source, created_by) values ($1,'Sami Khoury','1990-03-14','+962790009999','staff',$2) returning id`,
+      [clinic.id, doctorUser]
+    );
+    await doc.goto(fileUrl(p3.id, "treatment"), { timeout: 120000 });
+    await doc.waitForSelector("[data-treatment-tab] [data-start-case]", { timeout: 120000 });
+    await doc.locator("[data-start-complaint]").fill("Broken upper molar");
+    await doc.locator("[data-start-case-go]").click();
+    await doc.waitForSelector("[data-case-field='diagnosis']", { timeout: 20000 });
+    const toPlan = () => doc.locator("[data-procedure] button", { hasText: "Plan" }).first().click();
+    const planOn = async (fdi: string, key: string, query: string) => {
+      await chart(doc).locator(`[data-tooth='${fdi}']`).first().click();
+      await panelOf(doc).waitFor({ timeout: 10000 });
+      await panelOf(doc).getByRole("radio", { name: "Planned" }).click();
+      await pickIn(panelOf(doc), key, query);
+      await card.waitFor({ timeout: 10000 });
+      await settle(doc);
+    };
+    const markOf = async (site: string, key: string) =>
+      (
+        await q(
+          `select id, fee::float as fee, fee_manual, service_id, detail from chart_marks
+            where patient_id = $1 and site = $2 and treatment_key = $3 and voided_at is null`,
+          [p3.id, site, key]
+        )
+      )[0];
+    await planOn("16", "crown", "crown");
+    const crown16 = await markOf("16", "crown");
+    check(
+      crown16?.fee === 120 && crown16.detail?.material === "zirconia" && crown16.service_id === (await servicePrice("crown", "zirconia"))?.id,
+      "a crown planned on 16 — zirconia until another material is chosen — starts at the zirconia price",
+      JSON.stringify(crown16)
+    );
+    check((await card.locator("[data-fee]").inputValue()) === "120", "and its card shows 120");
+    await card.getByRole("button", { name: "Porcelain-fused-to-metal (PFM)" }).first().click();
+    check(await until(async () => (await markOf("16", "crown"))?.fee === 100), "porcelain-fused-to-metal, with no price of its own, costs what a crown does: 100");
+    check(await until(async () => (await card.locator("[data-fee]").inputValue()) === "100"), "and the card shows the new price");
+    await card.locator("[data-fee]").fill("110");
+    await card.locator("[data-fee]").press("Enter");
+    check(
+      await until(async () => {
+        const r = await markOf("16", "crown");
+        return r?.fee === 110 && r.fee_manual === true;
+      }),
+      "the doctor sets 110 for this patient by hand"
+    );
+    await card.getByRole("button", { name: "E-max" }).first().click();
+    check(await until(async () => (await markOf("16", "crown"))?.detail?.material === "emax"), "then changes the material to E-max");
+    check((await markOf("16", "crown"))?.fee === 110, "and the price set by hand stays 110");
+    await card.locator("[data-use-for-all]").click();
+    check(
+      await until(async () => {
+        const s = await servicePrice("crown", "emax");
+        return s?.price === 110 && (await markOf("16", "crown"))?.service_id === s.id;
+      }),
+      "“Use for every patient” makes 110 the clinic's E-max crown price, and this crown bills it"
+    );
+    check(await until(async () => (await card.locator("[data-use-for-all]").count()) === 0), "after which there is nothing left to save");
+
+    await toPlan();
+    await planOn("26", "rct", "root canal");
+    await card.getByRole("button", { name: "3 canals" }).click();
+    check(await until(async () => (await markOf("26", "rct"))?.fee === 90), "a root canal on 26 with three canals is priced 90");
+    const rct26 = await markOf("26", "rct");
+    await toPlan();
+    check(await until(async () => (await doc.locator("[data-plan-total]").getAttribute("data-plan-total")) === "200"), "the plan adds up to 200: the crown at 110, the root canal at 90");
+    check((await doc.locator("[data-bill]").count()) === 0, "and nothing is ready to bill before it is started");
+
+    // Started — the crown prepared, the canals opened: now reception can bill them.
+    await doc.locator(`[data-plan-item='${crown16.id}'] button`).first().click();
+    await card.waitFor({ timeout: 10000 });
+    await card.locator("[data-step-done='prep']").click();
+    await settle(doc);
+    await toPlan();
+    await doc.locator(`[data-plan-item='${rct26.id}'] button`).first().click();
+    await card.waitFor({ timeout: 10000 });
+    await card.locator("[data-step-done='access']").click();
+    await settle(doc);
+    await toPlan();
+    check(await until(async () => (await doc.locator("[data-bill]").getAttribute("data-bill")) === "2"), "once started, both are ready to bill from the plan");
+    check(
+      (await doc.locator("[data-plan-due]").getAttribute("data-plan-due")) === "200" && (await doc.locator("[data-plan-billed]").getAttribute("data-plan-billed")) === "0",
+      "and the plan's footer says 200 to bill, nothing billed yet"
+    );
+
+    /* ── A doctor who does not bill ───────────────────────────────────── */
+    console.log("A doctor without invoices");
+    const doc2User = await user(`treat-doc2-${tag}@test.local`, "Yousef Haddad");
+    await q(`insert into clinic_members (clinic_id, user_id, role, is_owner, title, permissions) values ($1,$2,'doctor',false,'Dr.',$3)`, [
+      clinic.id,
+      doc2User,
+      `{"level":"custom","caps":{"dashboard":true,"patients":true,"patients.charts":true,"calendar":true,"invoices":false}}`,
+    ]);
+    const doc2 = await signIn(browser, `treat-doc2-${tag}@test.local`);
+    doc2.on("pageerror", (e) => errors.push(`doctor2: ${e.message}`));
+    track(doc2);
+    await doc2.goto(fileUrl(p3.id, "treatment"), { timeout: 120000 });
+    await doc2.waitForSelector("[data-plan]", { timeout: 120000 });
+    check(
+      (await doc2.locator(`[data-plan-item='${crown16.id}'] [data-plan-price]`).getAttribute("data-plan-price")) === "110" && (await doc2.locator("[data-bill]").count()) === 0,
+      "a doctor without invoices sees the prices on the plan, and no Bill"
+    );
+    await doc2.locator(`[data-plan-item='${crown16.id}'] button`).first().click();
+    await doc2.locator("[data-procedure]").waitFor({ timeout: 10000 });
+    check(
+      (await doc2.locator("[data-procedure] [data-billed]").count()) === 0 && (await doc2.locator("[data-procedure] [data-fee]").count()) === 1,
+      "nor whether it is billed — and can still set this patient's price"
+    );
+    check((await doc2.request.get(`${BASE}/api/c/${slug}/patients/${p3.id}/dental/billable`)).status() === 403, "and cannot ask for the lines to bill");
+    await doc2.context().close();
+
+    /* ── Ready to bill ────────────────────────────────────────────────── */
+    console.log("Ready to bill");
+    await desk.goto(fileUrl(p3.id, "invoices"), { timeout: 120000 });
+    await desk.waitForSelector("[data-ready-to-bill]", { timeout: 60000 });
+    const ready = desk.locator("[data-ready-to-bill]");
+    check(
+      (await ready.getAttribute("data-ready-to-bill")) === "2" && (await ready.getAttribute("data-ready-total")) === "200",
+      "the patient's Invoices tab has the two treatments ready to bill, 200 in all"
+    );
+    const readyText = await ready.innerText();
+    check(readyText.includes("Crown (E-max) — tooth 16") && readyText.includes("Root canal treatment (3 canals) — tooth 26"), "each worded as its invoice line will be", readyText);
+    await deskAr.goto(fileUrl(p3.id, "invoices"), { timeout: 120000 });
+    await deskAr.waitForSelector("[data-ready-to-bill]", { timeout: 60000 });
+    const readyAr = await deskAr.locator("[data-ready-to-bill]").innerText();
+    check(readyAr.includes("جاهز للفوترة") && readyAr.includes("تاج (تلبيسة) · إي ماكس — سن 16"), "and in Arabic for an Arabic reader", readyAr);
+
+    await desk.goto(`${BASE}/c/${slug}/invoices`, { timeout: 120000 });
+    await desk.waitForSelector(`[data-desk-patient='${p3.id}']`, { timeout: 60000 });
+    const deskRow = await desk.locator(`[data-desk-patient='${p3.id}']`).innerText();
+    check(deskRow.includes("Sami Khoury") && deskRow.includes("2 treatments") && deskRow.includes("200"), "the Invoices page lists the patient for the desk: two treatments, 200", deskRow);
+    await desk.screenshot({ path: join(SHOTS, "ready-to-bill-desk.png"), fullPage: true });
+
+    /* ── Billing ──────────────────────────────────────────────────────── */
+    console.log("Billing");
+    const lineValues = (p: Page) => p.locator("input").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+    await desk.locator(`[data-desk-bill='${p3.id}']`).click();
+    await desk.waitForURL(/\/invoices\/new\?/, { timeout: 60000 });
+    check(await until(async () => (await lineValues(desk)).includes("Crown (E-max) — tooth 16"), 60000), "Bill opens a new invoice with the crown's line written");
+    check((await lineValues(desk)).includes("Root canal treatment (3 canals) — tooth 26"), "and the root canal's");
+    const billUrl = desk.url();
+    // Two desks bill the same work at once: the second is told it is billed already.
+    await deskAr.goto(billUrl, { timeout: 120000 });
+    check(await until(async () => (await lineValues(deskAr)).includes("تاج (تلبيسة) · إي ماكس — سن 16"), 60000), "the same Bill at a second desk, in Arabic, writes its lines in Arabic");
+    await desk.getByRole("button", { name: "Create", exact: true }).click();
+    await desk.waitForURL(/\/invoices\/[0-9a-f-]{36}$/, { timeout: 60000 });
+    const invoiceId = new URL(desk.url()).pathname.split("/").pop()!;
+    const billedLines = await q(
+      `select ii.qty::float as qty, ii.unit_price::float as price, iim.mark_id
+         from invoice_items ii left join invoice_item_marks iim on iim.invoice_item_id = ii.id
+        where ii.invoice_id = $1 order by ii.sort`,
+      [invoiceId]
+    );
+    check(
+      billedLines.length === 2 &&
+        billedLines.some((l) => l.mark_id === crown16.id && l.price === 110 && l.qty === 1) &&
+        billedLines.some((l) => l.mark_id === rct26.id && l.price === 90 && l.qty === 1),
+      "creating it bills the crown at 110 and the root canal at 90, each line linked to its treatment",
+      JSON.stringify(billedLines)
+    );
+    await deskAr.getByRole("button", { name: "إنشاء", exact: true }).click();
+    check(await until(async () => (await deskAr.locator("body").innerText()).includes("بعض هذه العلاجات موجود في فاتورة سابقة"), 30000), "the second desk is refused: it is on an invoice already");
+    check((await q(`select count(*)::int as n from invoices where patient_id = $1`, [p3.id]))[0].n === 1, "so the patient has one invoice, not two");
+
+    await desk.goto(fileUrl(p3.id, "invoices"), { timeout: 120000 });
+    await desk.waitForSelector(`a[href$='/invoices/${invoiceId}']`, { timeout: 60000 });
+    await desk.waitForTimeout(500);
+    check((await desk.locator("[data-ready-to-bill]").count()) === 0, "billed, the work leaves Ready to bill");
+    await doc.goto(fileUrl(p3.id, "treatment"), { timeout: 120000 });
+    await doc.waitForSelector("[data-plan]", { timeout: 60000 });
+    check(
+      (await doc.locator("[data-plan-billed]").getAttribute("data-plan-billed")) === "200" && (await doc.locator("[data-plan-due]").count()) === 0,
+      "the plan's footer says 200 billed, nothing left to bill"
+    );
+    await doc.locator(`[data-plan-item='${crown16.id}'] button`).first().click();
+    await card.waitFor({ timeout: 10000 });
+    check((await card.locator("[data-billed]").getAttribute("data-billed")) === "yes", "the doctor's card says the crown is billed");
+
+    // A void gives the work back, and the doctor's open screen hears of it.
+    await q(`update invoices set status = 'void' where id = $1`, [invoiceId]);
+    check(await until(async () => (await card.locator("[data-billed]").getAttribute("data-billed")) === "no", 20000), "voiding the invoice gives the crown back to not billed — on the doctor's open screen, without a reload");
+    await desk.goto(fileUrl(p3.id, "invoices"), { timeout: 120000 });
+    await desk.waitForSelector("[data-ready-to-bill]", { timeout: 60000 });
+    check((await desk.locator("[data-ready-to-bill]").getAttribute("data-ready-to-bill")) === "2", "and both are back on Ready to bill");
+
+    // A new invoice made the usual way offers the chart's work, linked.
+    const offered = desk.waitForResponse((r) => r.url().includes(`/patients/${p3.id}/dental/billable`), { timeout: 120000 });
+    await desk.goto(`${BASE}/c/${slug}/invoices/new?patient=${p3.id}`, { timeout: 120000 });
+    await offered;
+    await desk.waitForSelector("[data-chart-offer]", { timeout: 30000 });
+    check((await desk.locator("[data-chart-offer]").getAttribute("data-chart-offer")) === "2", "a new invoice for the patient offers both treatments From the chart");
+    await desk.locator("[data-offer-all]").click();
+    check(await until(async () => (await desk.locator("[data-chart-offer]").count()) === 0), "Add all writes both lines");
+    await desk.getByRole("button", { name: "Create", exact: true }).click();
+    await desk.waitForURL(/\/invoices\/[0-9a-f-]{36}$/, { timeout: 60000 });
+    const invoice2 = new URL(desk.url()).pathname.split("/").pop()!;
+    const linked2 = await q(`select iim.mark_id from invoice_item_marks iim join invoice_items ii on ii.id = iim.invoice_item_id where ii.invoice_id = $1`, [invoice2]);
+    check(linked2.length === 2, "and an invoice made that way is linked like Bill's");
+    const offeredAgain = desk.waitForResponse((r) => r.url().includes(`/patients/${p3.id}/dental/billable`), { timeout: 120000 });
+    await desk.goto(`${BASE}/c/${slug}/invoices/new?patient=${p3.id}&marks=${crown16.id}`, { timeout: 120000 });
+    await offeredAgain;
+    await desk.waitForTimeout(400);
+    check(
+      (await lineValues(desk)).every((v) => !v.includes("tooth 16")) && (await desk.locator(`[data-offer-line='${crown16.id}']`).count()) === 0,
+      "billed, the crown is offered nowhere again — not by Bill, not From the chart"
+    );
+
+    /* ── Charged per visit ────────────────────────────────────────────── */
+    console.log("Charged per visit");
+    await doc.goto(fileUrl(p3.id, "treatment"), { timeout: 120000 });
+    await doc.waitForSelector("[data-plan]", { timeout: 60000 });
+    await planOn("11", "scaling", "scaling");
+    const sc = await markOf("mouth", "scaling");
+    check(sc?.fee === 30, "a cleaning is planned at 30", JSON.stringify(sc));
+    await card.locator("[data-step-done='upper']").click();
+    await settle(doc);
+    await q(`update chart_mark_steps set done_at = now() - interval '2 days' where mark_id = $1 and step = 'upper'`, [sc.id]);
+    await doc.goto(fileUrl(p3.id, "treatment"), { timeout: 120000 });
+    await doc.waitForSelector("[data-plan]", { timeout: 60000 });
+    await doc.locator(`[data-plan-item='${sc.id}'] button`).first().click();
+    await card.waitFor({ timeout: 10000 });
+    if (!(await card.locator("[data-step-form='lower']").count())) await card.locator("[data-step='lower'] button").first().click();
+    await card.locator("[data-step-done='lower']").click();
+    await settle(doc);
+    check(await until(async () => (await card.locator("[data-price-row-card]").innerText()).includes("× 2")), "done over two visits, it costs 30 × 2");
+    const billable = (await (await desk.request.get(`${BASE}/api/c/${slug}/patients/${p3.id}/dental/billable`)).json()) as {
+      lines: { markId: string; qty: number; unitPrice: number }[];
+    };
+    check(
+      billable.lines.length === 1 && billable.lines[0].markId === sc.id && billable.lines[0].qty === 2 && billable.lines[0].unitPrice === 30,
+      "and is billed as two visits at 30 — the billed crown and root canal are not offered",
+      JSON.stringify(billable.lines)
+    );
+
+    // Reception reads the price and cannot change it.
+    await desk.goto(fileUrl(p3.id, "treatment"), { timeout: 120000 });
+    await desk.waitForSelector("[data-plan]", { timeout: 60000 });
+    await desk.locator(`[data-plan-item='${crown16.id}'] button`).first().click();
+    await desk.locator("[data-procedure]").waitFor({ timeout: 10000 });
+    check(
+      (await desk.locator("[data-procedure] [data-fee]").count()) === 0 && (await desk.locator("[data-procedure] [data-price-row-card]").innerText()).includes("110"),
+      "the receptionist reads the crown's price and cannot change it"
+    );
   } finally {
     if (errors.length) {
       for (const e of errors) fail(`page error: ${e}`);

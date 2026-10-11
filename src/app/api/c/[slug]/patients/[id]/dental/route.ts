@@ -29,7 +29,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
     const p = await c.query(`select 1 from patients where id = $1 and clinic_id = $2 and merged_into is null`, [id, access.clinicId]);
     if (!p.rowCount) return null;
     // When the patient comes is the calendar's to tell.
-    const chart = await loadDentalChart(c, access.clinicId, id, { visits: can(access, "calendar") });
+    // What was billed is the invoices' to tell.
+    const chart = await loadDentalChart(c, access.clinicId, id, { visits: can(access, "calendar"), billing: can(access, "invoices") });
     // Insurance cards stay with whoever handles insurance, as on the page itself.
     const files = await c.query(
       `select id, file_name, mime_type, size_bytes, kind, created_at, teeth

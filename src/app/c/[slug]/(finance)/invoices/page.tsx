@@ -2,6 +2,7 @@ import Link from "next/link";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
+import type { Dict } from "@/lib/i18n/client-dict";
 import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtMoney, fmtDate } from "@/lib/dates";
 import { PageHeader, Card } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button-class";
@@ -11,6 +12,7 @@ import { redirect } from "next/navigation";
 import { Plus, ReceiptText, Download } from "lucide-react";
 import { can } from "@/lib/auth";
 import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
+import { readyToBillDesk, type DeskRow } from "@/lib/charts/dental/billing-server";
 
 const invStatus: Record<string, StatusKey> = {
   draft: "neutral",
@@ -130,7 +132,16 @@ export default async function InvoicesPage({
         )
       ).rows;
     }
-    return { stats, invoices, payments };
+    /*
+      The desk's Ready to bill: dental clinics only, on the invoices list. A
+      doctor who sees only their own invoices sees only their own work here.
+    */
+    let ready: DeskRow[] = [];
+    if (tab === "invoices" && access.clinic.features.dental) {
+      const own = ownInvoicesOnly(access);
+      if (!own || access.memberId) ready = await readyToBillDesk(c, access.clinicId, own ? access.memberId! : null);
+    }
+    return { stats, invoices, payments, ready };
   });
 
   const base = `/c/${slug}/invoices`;
@@ -178,6 +189,8 @@ export default async function InvoicesPage({
           ))}
         </div>
       )}
+
+      {data.ready.length > 0 && <ReadyToBillDesk rows={data.ready} slug={slug} currency={access.clinic.currency} locale={locale} tz={tz} t={t.invoices} />}
 
       {/*
         Invoices and Payments used to be a strip of their own here. They are
@@ -371,5 +384,68 @@ export default async function InvoicesPage({
         </Card>
       )}
     </>
+  );
+}
+
+/*
+  The desk's Ready to bill: the patients whose chart work waits for an
+  invoice, the latest first, each with what it comes to and one button that
+  opens the invoice with the lines already written. The first few show; the
+  rest fold away, so a busy day does not push the invoices off the screen.
+*/
+function ReadyToBillDesk({
+  rows,
+  slug,
+  currency,
+  locale,
+  tz,
+  t,
+}: {
+  rows: DeskRow[];
+  slug: string;
+  currency: string;
+  locale: string;
+  tz: string;
+  t: Dict["invoices"];
+}) {
+  const shown = 5;
+  const row = (r: DeskRow) => (
+    <li key={r.patientId} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 sm:px-5" data-desk-patient={r.patientId}>
+      <Link href={`/c/${slug}/patients/${r.patientId}?tab=invoices`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-brand-700">
+        {r.name}
+      </Link>
+      <span className="text-[13px] text-ink-500">
+        {r.marks.length === 1 ? t.treatmentsOne : t.treatmentsN.replace("{n}", String(r.marks.length))}
+        {r.unpriced && <span className="text-st-pending"> · {t.unpriced}</span>}
+        <span className="hidden sm:inline"> · {fmtDate(r.lastAt, tz, locale)}</span>
+      </span>
+      <span className="w-24 shrink-0 text-end text-sm font-semibold tnum">{r.total > 0 ? fmtMoney(r.total, currency, locale) : "—"}</span>
+      <Link
+        href={`/c/${slug}/invoices/new?patient=${r.patientId}&marks=${r.marks.join(",")}`}
+        className={buttonClass({ size: "sm", variant: "outline" })}
+        data-desk-bill={r.patientId}
+      >
+        {t.billThese}
+      </Link>
+    </li>
+  );
+  return (
+    <div data-ready-desk={rows.length}>
+      <Card className="mb-4">
+        <div className="px-4 pt-3.5 pb-2 sm:px-5">
+          <h2 className="text-[15px] font-semibold">{t.readyToBill}</h2>
+          <p className="mt-0.5 text-[13px] text-ink-500">{t.readyToBillDesk}</p>
+        </div>
+        <ul className="divide-y divide-line border-t border-line">{rows.slice(0, shown).map(row)}</ul>
+        {rows.length > shown && (
+          <details className="border-t border-line">
+            <summary className="cursor-pointer px-4 py-2.5 text-[13px] font-medium text-brand-700 sm:px-5">
+              {t.showAllN.replace("{n}", String(rows.length))}
+            </summary>
+            <ul className="divide-y divide-line border-t border-line">{rows.slice(shown).map(row)}</ul>
+          </details>
+        )}
+      </Card>
+    </div>
   );
 }

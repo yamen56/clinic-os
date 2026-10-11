@@ -290,7 +290,13 @@ export function useChartWriter() {
     [base, me.name, s.medical, setMedical, write, failed]
   );
 
-  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, openCase, saveMedical };
+  /** What a treatment costs this patient, set by the doctor — a line in its history; a change of material leaves it be. */
+  const setFee = useCallback(
+    (m: Mark, fee: number | null) => change(m, { ...m, fee, feeManual: true }, { op: "fee", fee }, "fee", fee == null ? undefined : String(fee)),
+    [change]
+  );
+
+  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, openCase, saveMedical, setFee };
 }
 
 /** The members a group's lead carries, found the same way the server finds them. */

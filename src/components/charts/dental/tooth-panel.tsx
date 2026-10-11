@@ -98,6 +98,7 @@ export function ToothPanel({
   parentOf,
   parentName,
   progressFor,
+  moneyFor,
   a,
 }: {
   teeth: string[];
@@ -129,6 +130,8 @@ export function ToothPanel({
   parentName: (m: Mark) => string;
   /** How far a treatment with steps has come; null for one-tap work. */
   progressFor: (m: Mark) => { done: number; total: number; next: string | null } | null;
+  /** Its price and billing, in a line. */
+  moneyFor?: (m: Mark) => string | undefined;
   a: PanelActions;
 }) {
   const { t, locale } = useI18n();
@@ -340,6 +343,7 @@ export function ToothPanel({
                   onPerformer={a.onEntryPerformer}
                   progress={progressFor(m)}
                   onOpen={progressFor(m) ? () => a.onOpenItem(m.id) : undefined}
+                  money={moneyFor?.(m)}
                 />
               );
             })}

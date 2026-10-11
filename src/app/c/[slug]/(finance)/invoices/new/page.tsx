@@ -6,18 +6,22 @@ import { NewInvoiceClient } from "./new-invoice-client";
 import { can } from "@/lib/auth";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 import { loadServicesWithSections } from "@/lib/services";
+import { chartLines, type ChartLine } from "@/lib/charts/dental/billing-server";
+import { dictFor } from "@/lib/i18n/client-dict";
+import { getLocale } from "@/lib/i18n";
 
 export default async function NewInvoicePage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ patient?: string; appointment?: string }>;
+  searchParams: Promise<{ patient?: string; appointment?: string; marks?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
   const access = await guardClinic(slug);
   if (!can(access, "invoices")) redirect(`/c/${slug}`);
+  const locale = await getLocale();
 
   const data = await inClinic(access, async (c) => {
     const { services, sections } = await loadServicesWithSections(c, access.clinicId);
@@ -82,7 +86,18 @@ export default async function NewInvoicePage({
       access.clinic.features.einvoicing && isReady(settings)
         ? { fileByDefault: settings.fileByDefault }
         : null;
-    return { services, sections, doctors, clinic, patient, appointment, einvoice };
+    /*
+      "Bill" from a patient's treatment plan: the chart work it names becomes
+      the lines, priced as the plan quoted them, worded in the language the
+      services list gives its lines here — the patient reads the invoice, not
+      the chart's English.
+    */
+    let initialLines: ChartLine[] = [];
+    const markIds = (sp.marks ?? "").split(",").filter((x) => isUuid(x)).slice(0, 40);
+    if (patient && markIds.length && access.clinic.features.dental) {
+      initialLines = await chartLines(c, access.clinicId, patient.id, markIds, locale, dictFor(locale).invoices.chartLine);
+    }
+    return { services, sections, doctors, clinic, patient, appointment, einvoice, initialLines };
   });
 
   return (
@@ -99,6 +114,8 @@ export default async function NewInvoicePage({
       appointmentServiceId={data.appointment?.serviceId ?? null}
       appointmentDoctorId={data.appointment?.doctorMemberId ?? null}
       einvoice={data.einvoice}
+      initialLines={data.initialLines}
+      chartBilling={!!access.clinic.features.dental}
     />
   );
 }

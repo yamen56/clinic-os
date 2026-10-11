@@ -2,6 +2,9 @@ import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { ServicesClient } from "./services-client";
 import { can } from "@/lib/auth";
+import { DentalPrices } from "./dental-prices";
+import { loadPrices } from "@/lib/charts/dental/billing-server";
+import { toCustomTreatment } from "@/lib/charts/dental/db";
 
 export default async function ServicesSettingsPage({
   params,
@@ -51,10 +54,33 @@ export default async function ServicesSettingsPage({
         [access.clinicId]
       )
     ).rows;
-    return { services, doctors, sections };
+    /*
+      A dental clinic prices its chart's treatments here too: the prices are
+      services, the same list as above, seen by treatment.
+    */
+    const dental = access.clinic.features.dental
+      ? {
+          prices: await loadPrices(c, access.clinicId),
+          free: (
+            await c.query(
+              `select id, name, name_ar, price from services where clinic_id = $1 and active and chart_key is null order by sort, name`,
+              [access.clinicId]
+            )
+          ).rows,
+          custom: (
+            await c.query(
+              `select t.*, u.full_name as creator_name from chart_treatments t left join users u on u.id = t.created_by
+                where t.clinic_id = $1 and t.chart = 'dental' and t.archived_at is null order by t.created_at`,
+              [access.clinicId]
+            )
+          ).rows.map(toCustomTreatment),
+        }
+      : null;
+    return { services, doctors, sections, dental };
   });
 
   return (
+    <>
     <ServicesClient
       slug={slug}
       canEdit={can(access, "settings.services")}
@@ -63,5 +89,17 @@ export default async function ServicesSettingsPage({
       sections={JSON.parse(JSON.stringify(data.sections))}
       currency={access.clinic.currency}
     />
+    {data.dental && (
+      <div className="mt-5">
+        <DentalPrices
+          slug={slug}
+          currency={access.clinic.currency}
+          custom={JSON.parse(JSON.stringify(data.dental.custom))}
+          prices={data.dental.prices}
+          services={JSON.parse(JSON.stringify(data.dental.free))}
+        />
+      </div>
+    )}
+    </>
   );
 }

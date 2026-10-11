@@ -436,14 +436,18 @@ export function CaseHeader({ tz, onPrescribe }: { tz: string; onPrescribe?: (dia
 
   if (!cases.length || starting) {
     return (
-      <Card className="p-4" data-case-header>
-        {canWrite ? <StartCase onStarted={started} onCancel={cases.length ? () => setStarting(false) : undefined} /> : <p className="text-[13px] text-ink-500">{P.noCase}</p>}
-      </Card>
+      // The hooks sit on a wrapper: Card passes on no data-* attribute.
+      <div className="min-w-0" data-case-header>
+        <Card className="p-4">
+          {canWrite ? <StartCase onStarted={started} onCancel={cases.length ? () => setStarting(false) : undefined} /> : <p className="text-[13px] text-ink-500">{P.noCase}</p>}
+        </Card>
+      </div>
     );
   }
 
   return (
-    <Card className="grid gap-3 p-4" data-case-header data-active-case={active?.id ?? ""}>
+    <div className="min-w-0" data-case-header data-active-case={active?.id ?? ""}>
+    <Card className="grid gap-3 p-4">
       <div className="flex flex-wrap items-center gap-1.5">
         {open.map((c) => (
           <button
@@ -483,5 +487,6 @@ export function CaseHeader({ tz, onPrescribe }: { tz: string; onPrescribe?: (dia
       </div>
       {active ? <CaseFields key={active.id} c={active} tz={tz} onPrescribe={onPrescribe} /> : <p className="text-[13px] text-ink-500">{P.before}</p>}
     </Card>
+    </div>
   );
 }

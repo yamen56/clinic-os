@@ -21,7 +21,6 @@ import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
-import { fmtDateOnly } from "@/lib/dates";
 import { BORROWABLE_LOOKS, BUILT_IN, BUILT_IN_BY_KEY, PROCEDURE_CATEGORIES, findTreatment, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
 import { groupLeads, implantSitesOf, inChartOrder, isFullArch, leadOf, onImplants, prosthesisSites } from "@/lib/charts/dental/full-arch";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Arch, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
@@ -35,6 +34,9 @@ import { PlanPanel } from "@/components/charts/dental/plan-panel";
 import { EmergencySheet } from "@/components/charts/dental/emergency-sheet";
 import { EMERGENCY_STEP, progressOf, protocolFor, type EmergencyAction } from "@/lib/charts/dental/protocols";
 import { nextVisitOf } from "@/lib/charts/dental/treatment";
+import { priceFrom } from "@/lib/charts/dental/pricing";
+import { moneyOf } from "@/components/charts/dental/money";
+import { fmtDateOnly, fmtMoney } from "@/lib/dates";
 import { Odontogram, neighbour, type RegionMark } from "@/components/charts/dental/odontogram";
 import { ImageViewer, type ChartImage } from "@/components/charts/dental/image-viewer";
 import { ImageStrip } from "@/components/charts/dental/image-strip";
@@ -612,6 +614,14 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
   type Site = { site: string; surfaces: Surface[]; role?: Mark["role"]; tr?: Treatment; detail?: Record<string, string>; group?: boolean };
   type RecordOpts = { status?: Status; emergency?: boolean; note?: string; open?: boolean };
 
+  /** What a new treatment costs, as the server will price it: procedures only, a full arch's parts not one by one. */
+  const priced = (t: Treatment, s: Site, st: Status, groupId: string | undefined, sites: Site[]): number | null => {
+    if (t.kind !== "procedure" || st === "existing") return null;
+    const archPart = !!groupId && s.group !== false && isToothSite(s.site) && sites.some((x) => x.group !== false && !isToothSite(x.site));
+    if (archPart) return null;
+    return priceFrom(store.prices, t.key, s.detail ?? defaultsFor(t, s.site))?.price ?? null;
+  };
+
   const record = (tr: Treatment, sites: Site[], groupId?: string, text?: string, opts: RecordOpts = {}) => {
     const now = new Date().toISOString();
     const fresh: FreshMark[] = sites.map((s) => {
@@ -645,6 +655,10 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
         emergency: !!opts.emergency,
         startedAt: null,
         appointmentId: null,
+        // Drawn with its price at once; the server's answer is the same price, from the same list.
+        fee: priced(t, s, st, groupId, sites),
+        feeManual: false,
+        serviceId: null,
       };
     });
     const where = sites.map((s) => (isToothSite(s.site) ? s.site : siteLabel(s.site, T))).join(" · ");
@@ -871,6 +885,16 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     return p ? { done: p.requiredDone, total: p.required, next: p.next?.en ?? null } : null;
   };
   const opener = (m: Mark) => (protocolFor(m.treatmentKey) ? () => setOpenItem(m.id) : undefined);
+  /** "90 JOD · Billed": the treatment's price for this patient, and — for whoever bills — whether it is billed. */
+  const moneyLine = (m: Mark): string | undefined => {
+    if (m.kind !== "procedure" || m.status === "existing") return undefined;
+    const cash = moneyOf(m, { marks, steps, prices: store.prices, billing: store.billing, billingSince: store.billingSince, tz });
+    const parts = [
+      cash.amount != null ? fmtMoney(cash.amount, store.currency, locale) : null,
+      store.canBill ? (cash.billed ? T.treatment.billed : cash.toBill ? T.treatment.notBilled : null) : null,
+    ].filter(Boolean);
+    return parts.length ? parts.join(" · ") : undefined;
+  };
 
   /*
     An emergency visit. On a treatment under way it is a step of its own on
@@ -1001,6 +1025,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       parentOf={(m) => leadOf(m, parents)}
       parentName={(m) => (m.treatmentKey === "implant_denture" ? fullArchName(m) : locale === "ar" ? m.labelAr : m.label)}
       progressFor={progressInfo}
+      moneyFor={moneyLine}
       a={actions}
     />
   );
@@ -1402,6 +1427,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
                       extra={groupExtra(m)}
                       progress={progressInfo(m)}
                       onOpen={opener(m)}
+                      money={moneyLine(m)}
                     />
                   </ul>
                 </li>

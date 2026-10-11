@@ -32,8 +32,12 @@ type Item = {
   taxRate: number;
   /** Whose work this line was. Null when the clinic splits no revenue. */
   doctorMemberId: string | null;
+  /** The chart work this line bills, when it came from a treatment plan. */
+  markId?: string | null;
 };
 type Doctor = { id: string; full_name: string };
+/** A line the builder starts with: chart work from the patient's plan. */
+type StartLine = { markId: string; serviceId: string | null; description: string; qty: number; unitPrice: number; doctorMemberId: string | null };
 
 /** What was just added, said for a moment where the person is looking. */
 type Added = { uid: number; serviceId: string | null; name: string; amount: number; at: number };
@@ -51,6 +55,8 @@ export function NewInvoiceClient({
   appointmentServiceId,
   appointmentDoctorId,
   einvoice,
+  initialLines,
+  chartBilling = false,
 }: {
   slug: string;
   currency: string;
@@ -74,6 +80,10 @@ export function NewInvoiceClient({
    * `fileByDefault` is the clinic's standing answer and where this form starts.
    */
   einvoice: { fileByDefault: boolean } | null;
+  /** Chart work to bill, from "Bill" on a patient's plan. */
+  initialLines?: StartLine[];
+  /** A dental clinic: the patient's unbilled chart work is offered as lines. */
+  chartBilling?: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -115,6 +125,14 @@ export function NewInvoiceClient({
   });
 
   const [items, setItems] = useState<Item[]>(() => {
+    if (initialLines?.length) {
+      // The doctor stays on a line only when they share in what it earns, as on any other line.
+      return initialLines.map((l) => ({
+        ...newLine(l.serviceId, l.description, l.unitPrice, doctors.some((d) => d.id === l.doctorMemberId) ? l.doctorMemberId : invoiceDoctor),
+        qty: l.qty,
+        markId: l.markId,
+      }));
+    }
     const svc = services.find((s) => s.id === appointmentServiceId);
     return svc ? [newLine(svc.id, serviceLabel(svc, locale), Number(svc.price), startingDoctor)] : [];
   });
@@ -123,6 +141,46 @@ export function NewInvoiceClient({
   const [fileEinvoice, setFileEinvoice] = useState(einvoice?.fileByDefault ?? true);
   const [added, setAdded] = useState<Added | null>(null);
   const [pending, start] = useTransition();
+
+  /*
+    "From the chart": the patient's chart work not billed yet, offered as
+    lines. Reception's habit is a new invoice and the services list; a crown
+    typed that way bills the crown without the chart knowing, and a later
+    Bill would charge the patient for it again. The line offered here is the
+    linked one. Kept per patient, so another patient's offer never shows.
+  */
+  const patientId = patient?.id ?? null;
+  const [chartOffer, setChartOffer] = useState<{ patientId: string; lines: StartLine[] } | null>(null);
+  useEffect(() => {
+    if (!chartBilling || !patientId) return;
+    const ctl = new AbortController();
+    fetch(`/api/c/${slug}/patients/${patientId}/dental/billable`, { cache: "no-store", signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.lines) setChartOffer({ patientId, lines: j.lines });
+      })
+      .catch(() => {});
+    return () => ctl.abort();
+  }, [chartBilling, slug, patientId]);
+  const offer =
+    chartOffer && chartOffer.patientId === patientId ? chartOffer.lines.filter((l) => !items.some((it) => it.markId === l.markId)) : [];
+
+  const addChartLine = (l: StartLine) => {
+    // The doctor stays on a line only when they share in what it earns, as on any other line.
+    const line: Item = {
+      ...newLine(l.serviceId, l.description, l.unitPrice, doctors.some((d) => d.id === l.doctorMemberId) ? l.doctorMemberId : invoiceDoctor),
+      qty: l.qty,
+      markId: l.markId,
+    };
+    setItems((xs) => (xs.some((x) => x.markId === l.markId) ? xs : [...xs, line]));
+    setAdded({ uid: line.uid, serviceId: l.serviceId, name: line.description, amount: line.unitPrice * line.qty, at: Date.now() });
+  };
+
+  // Chart lines are the patient's own work: another patient's invoice cannot carry them.
+  const pickPatient = (p: { id: string; name: string } | null) => {
+    if (p?.id !== patient?.id) setItems((xs) => xs.filter((x) => !x.markId));
+    setPatient(p);
+  };
 
   // The note fades on its own; a second tap replaces it and restarts the clock.
   useEffect(() => {
@@ -182,7 +240,10 @@ export function NewInvoiceClient({
         ...(einvoice ? { fileEinvoice } : {}),
       });
       if (r.error || !r.id) {
-        toast(t.common.genericError, "error");
+        toast(
+          r.error === "already_billed" ? t.invoices.alreadyBilled : r.error === "invalid_mark" ? t.invoices.chartChanged : t.common.genericError,
+          "error"
+        );
         return;
       }
       toast(t.invoices.created);
@@ -218,7 +279,7 @@ export function NewInvoiceClient({
                   <Avatar name={patient.name} size={28} />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{patient.name}</span>
                   <button
-                    onClick={() => setPatient(null)}
+                    onClick={() => pickPatient(null)}
                     aria-label={t.common.delete}
                     className="grid h-8 w-8 shrink-0 touch-manipulation place-items-center rounded-full text-ink-400 hover:bg-danger-soft hover:text-danger"
                   >
@@ -226,13 +287,42 @@ export function NewInvoiceClient({
                   </button>
                 </div>
               ) : (
-                <PatientSearch slug={slug} onPick={setPatient} />
+                <PatientSearch slug={slug} onPick={pickPatient} />
               )}
             </Field>
           </Card>
 
           <Card className="grid grid-cols-1 gap-3 p-4 sm:p-5">
             <h3 className="text-[15px] font-semibold">{t.invoices.item}</h3>
+            {offer.length > 0 && (
+              <div className="grid gap-2 rounded-xl border border-brand-200 bg-brand-50/40 p-3" data-chart-offer={offer.length}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold">{t.invoices.fromChart}</div>
+                    <div className="text-[12px] text-ink-500">{t.invoices.fromChartHint}</div>
+                  </div>
+                  {offer.length > 1 && (
+                    <Button size="sm" variant="outline" onClick={() => offer.forEach(addChartLine)} data-offer-all>
+                      {t.invoices.addAll}
+                    </Button>
+                  )}
+                </div>
+                <ul className="grid gap-1.5">
+                  {offer.map((l) => (
+                    <li key={l.markId} className="flex items-center gap-2 text-[13px]" data-offer-line={l.markId}>
+                      <span className="min-w-0 flex-1">{l.description}</span>
+                      <span className="shrink-0 text-ink-500 tnum">
+                        {l.qty > 1 ? `${l.qty} × ` : ""}
+                        {money(l.unitPrice)}
+                      </span>
+                      <Button size="sm" variant="soft" onClick={() => addChartLine(l)}>
+                        {t.common.add}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {/*
               Every service, grouped by section and searchable — not the first
               six. The old row of chips was capped at six with no way past it,

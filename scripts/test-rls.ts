@@ -370,6 +370,23 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   await q(`insert into chart_treatment_favorites (clinic_id, treatment_key) values ($1, 'rct') returning id`, [clinic]);
   await q(`insert into imaging_requests (clinic_id, patient_id, teeth) values ($1, $2, '{36}') returning id`, [clinic, patient]);
 
+  // Treatment (migration 0073): a case, a root canal under it with a step
+  // done, and the root canal booked into a visit.
+  const tcase = (
+    await q(`insert into treatment_cases (clinic_id, patient_id, complaint, created_by) values ($1, $2, 'Pain', $3) returning id`, [clinic, patient, user])
+  ).id;
+  const rct = (
+    await q(
+      `insert into chart_marks (clinic_id, patient_id, site, treatment_key, label, label_ar, look, kind, status, recorded_by, case_id)
+       values ($1, $2, '36', 'rct', 'Root canal treatment', 'علاج عصب', 'rct', 'procedure', 'planned', $3, $4) returning id`,
+      [clinic, patient, user, tcase]
+    )
+  ).id;
+  await q(`insert into chart_mark_steps (clinic_id, mark_id, patient_id, step, recorded_by) values ($1, $2, $3, 'access', $4) returning id`, [clinic, rct, patient, user]);
+  await q(`insert into appointment_items (clinic_id, appointment_id, mark_id, patient_id) values ($1, $2, $3, $4) returning id`, [clinic, appointment, rct, patient]);
+  // Billing from the chart (migration 0074): the root canal on an invoice line.
+  await q(`insert into invoice_item_marks (invoice_item_id, mark_id, clinic_id) values ($1, $2, $3) returning mark_id`, [invoiceItem, rct, clinic]);
+
   // Imaging devices (migration 0069): a registered machine and an image it
   // sent for nobody in particular. patient_numbers fills itself — the patient
   // above was given file number 1 by its trigger.

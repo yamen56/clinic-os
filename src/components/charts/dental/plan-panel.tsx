@@ -26,6 +26,8 @@ import { useDentalStore } from "./store";
 import { detailLabels, markLabel, siteLabel } from "./labels";
 import { TreatmentGlyph } from "./treatment-picker";
 import { INK, SOFT } from "./tooth-art";
+import { moneyOf, type Money } from "./money";
+import { fmtMoney } from "@/lib/dates";
 
 const ORDER_OF_SITE = (s: string) => (isToothSite(s) ? Number(s) : 0);
 
@@ -89,8 +91,23 @@ export function PlanPanel({
       return n;
     });
 
+  const moneyCtx = { marks, steps, prices: store.prices, billing: store.billing, billingSince: store.billingSince, tz };
+  const money = new Map<string, Money>(items.map((m) => [m.id, moneyOf(m, moneyCtx)]));
+  const cost = (list: Mark[]) => list.reduce((sum, m) => sum + (money.get(m.id)?.amount ?? 0), 0);
+  const priced = items.some((m) => m.fee != null);
+  // What reception can bill now: started or done, and not yet on an invoice.
+  const toBill = store.canBill ? items.filter((m) => money.get(m.id)?.toBill) : [];
+  // Billed: each treatment's fee times the units on invoices that stand. To bill: what waits.
+  const billedSum = items.reduce((sum, m) => {
+    const c = money.get(m.id);
+    return sum + (c?.fee != null ? c.fee * c.billedQty : 0);
+  }, 0);
+  const dueSum = items.reduce((sum, m) => sum + (money.get(m.id)?.due ?? 0), 0);
+  const fmt = (n: number) => fmtMoney(n, store.currency, locale);
+
   const row = (m: Mark) => {
     const tr = findTreatment(m.treatmentKey, custom);
+    const cash = money.get(m.id);
     const own = stepsOf(m.id);
     const prog = progressOf(m.treatmentKey, own);
     const { sessions, emergencies } = sessionsOf(own, tz);
@@ -137,6 +154,13 @@ export function PlanPanel({
               </span>
             )}
           </button>
+          {/* What it costs this patient, and — for reception — whether it is billed. */}
+          {(cash?.amount != null || (store.canBill && cash?.billed)) && (
+            <span className="shrink-0 self-center text-end" data-plan-price={cash?.amount ?? ""}>
+              {cash?.amount != null && <span className="block text-[13px] font-semibold text-ink-900 tnum">{fmt(cash.amount)}</span>}
+              {store.canBill && cash?.billed && <span className="block text-[11px] font-semibold" style={{ color: INK.done }}>{P.billed}</span>}
+            </span>
+          )}
           {m.status === "planned" && !prog && canWrite && (
             <button
               type="button"
@@ -212,6 +236,45 @@ export function PlanPanel({
           {section(P.planned, planned, "planned")}
           {section(P.done, done, "done")}
         </>
+      )}
+
+      {/* The plan in money: what it all comes to, what is done, and what reception can bill now. */}
+      {(priced || toBill.length > 0) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card bg-canvas px-3 py-2.5 text-[13px]" data-plan-totals>
+          {priced && (
+            <>
+              <span>
+                <span className="text-ink-500">{P.planTotal} </span>
+                <span className="font-semibold text-ink-900 tnum" data-plan-total={cost(items)}>{fmt(cost(items))}</span>
+              </span>
+              <span>
+                <span className="text-ink-500">{P.doneTotal} </span>
+                <span className="font-semibold text-ink-900 tnum">{fmt(cost(done))}</span>
+              </span>
+              {store.canBill && (
+                <span>
+                  <span className="text-ink-500">{P.billed} </span>
+                  <span className="font-semibold text-ink-900 tnum" data-plan-billed={billedSum}>{fmt(billedSum)}</span>
+                </span>
+              )}
+              {store.canBill && dueSum > 0 && (
+                <span>
+                  <span className="text-ink-500">{P.dueTotal} </span>
+                  <span className="font-semibold text-st-pending tnum" data-plan-due={dueSum}>{fmt(dueSum)}</span>
+                </span>
+              )}
+            </>
+          )}
+          {toBill.length > 0 && (
+            <a
+              href={`/c/${store.slug}/invoices/new?patient=${store.patientId}&marks=${toBill.map((m) => m.id).join(",")}`}
+              className={buttonClass({ size: "sm", className: "ms-auto" })}
+              data-bill={toBill.length}
+            >
+              {P.bill} · {P.toBill.replace("{n}", String(toBill.length))}
+            </a>
+          )}
+        </div>
       )}
 
       {(canBook || canWrite) && (

@@ -5,6 +5,8 @@ import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { z } from "zod";
+import { resolveTreatment } from "@/lib/charts/dental/db";
+import { PRICE_BY, withVariant, type PriceRow } from "@/lib/charts/dental/pricing";
 
 const serviceSchema = z.object({
   id: z.string().uuid().optional(),
@@ -284,5 +286,134 @@ export async function moveSectionAction(
     );
     revalidatePath(`/c/${slug}/settings/services`);
     return {};
+  });
+}
+
+const dentalPriceSchema = z.object({
+  key: z.string().min(1).max(64),
+  variant: z.string().max(24).nullable(),
+  price: z.number().min(0).max(1_000_000).nullable(),
+  unit: z.enum(["item", "session"]),
+  /** Price it as one of the clinic's own services instead of making a new one. */
+  linkServiceId: z.string().uuid().nullable().default(null),
+  /** Set from a patient's treatment ("Use for every patient"): that treatment bills this price's service. */
+  markId: z.string().uuid().nullable().default(null),
+});
+
+/**
+ * A dental treatment's price, as a service.
+ *
+ * Typing a price makes the treatment's service — named from the catalog, in
+ * both languages, not offered on the booking page — or updates it. Linking
+ * one of the clinic's own services makes that service the price instead, so
+ * a cleaning the clinic already sells is not priced twice. Clearing the box
+ * lets the price go: a service the price list made is retired with it (its
+ * past invoices keep it); one the clinic had before is only let go, and is
+ * free to be linked again.
+ */
+export async function saveDentalPriceAction(
+  slug: string,
+  data: unknown
+): Promise<{ row?: PriceRow | null; released?: { id: string; name: string; name_ar: string | null; price: string }; error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "settings.services")) return { error: "forbidden" };
+  if (!access.clinic.features.dental) return { error: "forbidden" };
+  const parsed = dentalPriceSchema.safeParse(data);
+  if (!parsed.success) return { error: "invalid" };
+  const d = parsed.data;
+  // Pointing a patient's treatment at the price writes to the chart: that is the chart's capability.
+  if (d.markId && !can(access, "patients.charts")) return { error: "forbidden" };
+
+  return inClinic(access, async (c) => {
+    const tr = await resolveTreatment(c, access.clinicId, d.key);
+    if (!tr || tr.kind !== "procedure") return { error: "invalid" };
+    const field = PRICE_BY[tr.key] ? tr.details?.find((f) => f.key === PRICE_BY[tr.key]) : undefined;
+    const option = d.variant ? field?.options.find((o) => o.key === d.variant) : undefined;
+    if (d.variant && !option) return { error: "invalid" };
+
+    const cur = (
+      await c.query(
+        `select id, chart_owned, name, name_ar, price from services
+          where clinic_id = $1 and chart_key = $2 and coalesce(chart_variant, '') = coalesce($3, '')`,
+        [access.clinicId, d.key, d.variant]
+      )
+    ).rows[0];
+    const release = async () => {
+      if (!cur) return undefined;
+      if (cur.chart_owned) {
+        await c.query(`update services set active = false, chart_key = null, chart_variant = null where id = $1`, [cur.id]);
+        return undefined;
+      }
+      await c.query(`update services set chart_key = null, chart_variant = null where id = $1`, [cur.id]);
+      return { id: cur.id as string, name: cur.name as string, name_ar: (cur.name_ar as string) ?? null, price: String(cur.price) };
+    };
+
+    let row: PriceRow | null = null;
+    let released: Awaited<ReturnType<typeof release>>;
+    if (d.linkServiceId) {
+      const s = (await c.query(`select id, price from services where id = $1 and clinic_id = $2 and chart_key is null`, [d.linkServiceId, access.clinicId])).rows[0];
+      if (!s) return { error: "invalid" };
+      released = await release();
+      await c.query(`update services set chart_key = $2, chart_variant = $3, price_unit = $4, chart_owned = false, active = true where id = $1`, [
+        s.id,
+        d.key,
+        d.variant,
+        d.unit,
+      ]);
+      row = { serviceId: s.id, chartKey: d.key, variant: d.variant, price: Number(s.price), unit: d.unit };
+    } else if (d.price === null) {
+      released = await release();
+    } else if (cur) {
+      await c.query(`update services set price = $2, price_unit = $3, active = true where id = $1`, [cur.id, d.price, d.unit]);
+      row = { serviceId: cur.id, chartKey: d.key, variant: d.variant, price: d.price, unit: d.unit };
+    } else {
+      // Filed with the clinic's dental section when it keeps one; otherwise unfiled, like any new service.
+      const section =
+        (
+          await c.query(
+            `select id from service_sections
+              where clinic_id = $1 and active and (name ilike '%dent%' or coalesce(name_ar, '') like '%أسنان%')
+              order by sort limit 1`,
+            [access.clinicId]
+          )
+        ).rows[0]?.id ?? null;
+      const ins = await c.query(
+        `insert into services (clinic_id, name, name_ar, duration_min, price, bookable_online, section_id,
+                               chart_key, chart_variant, price_unit, chart_owned, sort)
+         values ($1, $2, $3, 30, $4, false, $5, $6, $7, $8, true,
+                 (select coalesce(max(sort), 0) + 1 from services where clinic_id = $1))
+         returning id`,
+        [
+          access.clinicId,
+          withVariant(tr.en, option?.en ?? null).slice(0, 80),
+          withVariant(tr.ar, option?.ar ?? null).slice(0, 80),
+          d.price,
+          section,
+          d.key,
+          d.variant,
+          d.unit,
+        ]
+      );
+      row = { serviceId: ins.rows[0].id, chartKey: d.key, variant: d.variant, price: d.price, unit: d.unit };
+    }
+    // The treatment it was set from bills this service: its line counts in the service's revenue.
+    if (d.markId && row) {
+      await c.query(
+        `update chart_marks set service_id = $1
+          where id = $2 and clinic_id = $3 and treatment_key = $4 and voided_at is null`,
+        [row.serviceId, d.markId, access.clinicId, d.key]
+      );
+    }
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "service.dental_price",
+      entity: "service",
+      entityId: row?.serviceId ?? cur?.id ?? "",
+      detail: { key: d.key, variant: d.variant, price: d.price, unit: d.unit, linked: !!d.linkServiceId },
+    });
+    revalidatePath(`/c/${slug}/settings/services`);
+    return { row, released };
   });
 }

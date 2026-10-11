@@ -22,6 +22,7 @@ import { enqueueEinvoiceSubmit, requeueEinvoiceSubmit } from "@/lib/einvoice/job
 import { coverHolds, insurerShareFor, ruleOf } from "@/lib/insurance";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 import { renderUrlToPdf } from "@/lib/pdf";
+import { loadBilled } from "@/lib/charts/dental/billing-server";
 import { saveFile } from "@/lib/storage";
 import { z } from "zod";
 
@@ -46,6 +47,8 @@ const createSchema = z.object({
           its doctor anything.
         */
         doctorMemberId: z.string().uuid().nullable().optional(),
+        /** The chart work this line bills, when it came from a patient's treatment plan. */
+        markId: z.string().uuid().nullable().optional(),
       })
     )
     .min(1),
@@ -93,6 +96,32 @@ export async function createInvoiceAction(
       )
     ).rows[0];
     if (!patient) return { error: "patient_not_found" };
+
+    /*
+      Chart work billed from the plan: this patient's own, still standing, and
+      — when it is charged once — not billed already, nor twice on this one.
+      Checked before anything is written, so a refused invoice leaves nothing
+      half-made. The rows are locked while this invoice is made: two desks
+      billing the same crown at once wait for each other, and the second finds
+      it billed.
+    */
+    const marked = [...new Set(d.items.map((it) => it.markId).filter((x): x is string => !!x))];
+    if (marked.length) {
+      const own = await c.query(
+        `select m.id, s.price_unit from chart_marks m left join services s on s.id = m.service_id
+          where m.id = any($1::uuid[]) and m.clinic_id = $2 and m.patient_id = $3 and m.voided_at is null
+          for update of m`,
+        [marked, access.clinicId, d.patientId]
+      );
+      if (own.rowCount !== marked.length) return { error: "invalid_mark" };
+      const perVisit = new Set(own.rows.filter((r) => r.price_unit === "session").map((r) => r.id as string));
+      for (const id of marked) {
+        if (!perVisit.has(id) && d.items.filter((it) => it.markId === id).length > 1) return { error: "already_billed" };
+      }
+      for (const b of await loadBilled(c, access.clinicId, marked)) {
+        if (b.qty > 0 && !perVisit.has(b.markId)) return { error: "already_billed" };
+      }
+    }
 
     const { seq, number } = await nextInvoiceNumber(c, access.clinicId);
     const totals = computeInvoice(d.items as InvoiceItemInput[]);
@@ -185,6 +214,14 @@ export async function createInvoiceAction(
           line.discount, line.taxCategory, line.taxRate, line.tax, sort++,
         ]
       );
+      // Which chart work the line bills: kept beside the line, never on it.
+      if (it.markId) {
+        await c.query(`insert into invoice_item_marks (invoice_item_id, mark_id, clinic_id) values ($1, $2, $3)`, [
+          item.rows[0].id,
+          it.markId,
+          access.clinicId,
+        ]);
+      }
       const rate = it.doctorMemberId ? rates.get(it.doctorMemberId) : undefined;
       if (it.doctorMemberId && rate !== undefined) {
         await c.query(

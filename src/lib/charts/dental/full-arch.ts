@@ -75,7 +75,8 @@ export function standingTeeth(arch: Arch, states: Map<string, ToothState>, marks
   });
 }
 
-const EVERY_TOOTH = [...PERMANENT_UPPER, ...PRIMARY_UPPER, ...PRIMARY_LOWER, ...PERMANENT_LOWER];
+/** Every tooth in the order a group picks its lead by — the server sorts by it too. */
+export const EVERY_TOOTH = [...PERMANENT_UPPER, ...PRIMARY_UPPER, ...PRIMARY_LOWER, ...PERMANENT_LOWER];
 
 /**
  * Which member a group is listed, done and voided as: a full arch's entry on

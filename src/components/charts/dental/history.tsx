@@ -11,7 +11,7 @@
 */
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, Banknote, type LucideIcon } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { findTreatment, type Treatment } from "@/lib/charts/dental/catalog";
@@ -54,6 +54,7 @@ export function EntryRow({
   extra,
   progress,
   onOpen,
+  money,
 }: {
   m: Mark;
   custom: Treatment[];
@@ -66,6 +67,8 @@ export function EntryRow({
   progress?: { done: number; total: number; next: string | null } | null;
   /** Open the treatment's steps. Given for a treatment that has them, in place of "Mark done". */
   onOpen?: () => void;
+  /** Its price for this patient, and whether it is billed — "90 JOD · Billed". */
+  money?: string;
   onMarkDone: (id: string) => void;
   onVoid: (m: Mark) => void;
   onNote: (id: string, note: string) => void;
@@ -91,7 +94,7 @@ export function EntryRow({
             <PaintPill m={m} />
           </span>
           <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">
-            {[extra ?? details.join(" · "), m.performedBy?.name, fmtDate(m.doneAt ?? m.createdAt, tz, locale)].filter(Boolean).join(" · ")}
+            {[extra ?? details.join(" · "), money, m.performedBy?.name, fmtDate(m.doneAt ?? m.createdAt, tz, locale)].filter(Boolean).join(" · ")}
           </span>
           {m.note && <span className="mt-1 block text-[12.5px] text-ink-700">{m.note}</span>}
           {progress && m.status === "planned" && !m.voidedAt && (
@@ -220,6 +223,7 @@ const EVENT_ICON: Record<MarkEvent["action"], LucideIcon> = {
   step_void: Undo2,
   case: FolderInput,
   reopened: RotateCcw,
+  fee: Banknote,
 };
 
 /** The ink of one line in the history: what the entry was at that moment. */

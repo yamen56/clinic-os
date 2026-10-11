@@ -12,6 +12,8 @@ import type { Mark, MarkEvent } from "./state";
 import type { StepRecord } from "./protocols";
 import type { Booking, TreatmentCase, Visit } from "./treatment";
 import { readHistory, type MedicalHistory } from "@/lib/medical-history";
+import type { PriceRow } from "./pricing";
+import type { Billed } from "./billing-server";
 
 const iso = (v: unknown): string | null => (v ? new Date(v as string).toISOString() : null);
 
@@ -53,6 +55,9 @@ export function toMark(r: Record<string, unknown>): Mark {
     emergency: !!r.emergency,
     startedAt: iso(r.started_at),
     appointmentId: (r.appointment_id as string) ?? null,
+    fee: r.fee == null ? null : Number(r.fee),
+    feeManual: !!r.fee_manual,
+    serviceId: (r.service_id as string) ?? null,
   };
 }
 
@@ -184,6 +189,16 @@ export type DentalChartData = {
   visits: Visit[];
   bookings: Booking[];
   medical: MedicalHistory;
+  /** The clinic's dental prices: what a treatment starts at. */
+  prices: PriceRow[];
+  /**
+   * What has been billed of each treatment, on invoices that still stand.
+   * Empty for a member who may not see invoices: what a patient was billed
+   * is the invoices' to tell.
+   */
+  billing: Billed[];
+  /** From when chart work counts as waiting to be billed (work before it was billed by hand). */
+  billingSince: string | null;
 };
 
 /**
@@ -199,7 +214,7 @@ export async function loadDentalChart(
   c: PoolClient,
   clinicId: string,
   patientId: string,
-  opts: { visits: boolean } = { visits: true }
+  opts: { visits: boolean; billing?: boolean } = { visits: true }
 ): Promise<DentalChartData> {
   const r = (
     await c.query(
@@ -234,10 +249,23 @@ export async function loadDentalChart(
          (select coalesce(json_agg(json_build_object('markId', ai.mark_id, 'appointmentId', ai.appointment_id)), '[]'::json)
             from appointment_items ai
            where $3 and ai.clinic_id = $1 and ai.patient_id = $2) as bookings,
-         (select medical_history from patients where id = $2 and clinic_id = $1) as medical`,
-      [clinicId, patientId, opts.visits]
+         (select medical_history from patients where id = $2 and clinic_id = $1) as medical,
+         (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'variant', s.chart_variant, 'price', s.price, 'unit', s.price_unit)), '[]'::json)
+            from services s where s.clinic_id = $1 and s.chart_key is not null and s.active) as prices,
+         (select coalesce(json_agg(x), '[]'::json)
+            from (select iim.mark_id as "markId", sum(ii.qty)::float as qty,
+                         json_agg(distinct jsonb_build_object('id', i.id, 'number', i.number, 'status', i.status)) as invoices
+                    from invoice_item_marks iim
+                    join chart_marks m on m.id = iim.mark_id
+                    join invoice_items ii on ii.id = iim.invoice_item_id
+                    join invoices i on i.id = ii.invoice_id
+                   where $4 and iim.clinic_id = $1 and m.patient_id = $2
+                     and i.status <> 'void' and i.credit_note_of is null
+                   group by iim.mark_id) x) as billing,
+         (select dental_billing_since from clinics where id = $1) as billing_since`,
+      [clinicId, patientId, opts.visits, opts.billing ?? false]
     )
-  ).rows[0] as Record<string, Record<string, unknown>[]> & { bookings: Booking[]; medical: unknown };
+  ).rows[0] as Record<string, Record<string, unknown>[]> & { bookings: Booking[]; medical: unknown; billing: Billed[]; billing_since: unknown };
   return {
     marks: r.marks.map(toMark),
     events: r.events.map(toEvent),
@@ -252,6 +280,15 @@ export async function loadDentalChart(
     visits: r.visits.map(toVisit),
     bookings: r.bookings,
     medical: readHistory(r.medical),
+    prices: r.prices.map((p) => ({
+      serviceId: p.serviceId as string,
+      chartKey: p.chartKey as string,
+      variant: (p.variant as string) ?? null,
+      price: Number(p.price),
+      unit: p.unit === "session" ? "session" : "item",
+    })),
+    billing: r.billing.map((b) => ({ markId: b.markId, qty: Number(b.qty), invoices: b.invoices ?? [] })),
+    billingSince: iso(r.billing_since),
   };
 }
 

@@ -34,6 +34,8 @@ import type { Treatment } from "@/lib/charts/dental/catalog";
 import type { StepRecord } from "@/lib/charts/dental/protocols";
 import type { Booking, TreatmentCase, Visit } from "@/lib/charts/dental/treatment";
 import type { MedicalHistory } from "@/lib/medical-history";
+import type { PriceRow } from "@/lib/charts/dental/pricing";
+import type { Billed } from "@/lib/charts/dental/billing-server";
 
 /** A file of the patient's, as the chart reads it: x-rays and photos, and the teeth each shows. */
 export type ChartFile = {
@@ -56,6 +58,12 @@ export type DentalTabData = {
   canWrite: boolean;
   /** May this member book visits (`calendar`)? */
   canBook: boolean;
+  /** May this member see what was billed and bill it (`invoices`)? */
+  canBill: boolean;
+  /** May this member set the clinic's prices (`settings.services`)? */
+  canPrice?: boolean;
+  /** The clinic's currency, for prices on the plan. */
+  currency: string;
   chart: DentalChartData;
   clinicName: string;
   /** May this member send the patient a picture on WhatsApp, and has the patient a number? */
@@ -72,6 +80,9 @@ export type DentalStore = {
   doctors: Person[];
   canWrite: boolean;
   canBook: boolean;
+  canBill: boolean;
+  canPrice: boolean;
+  currency: string;
 
   marks: Mark[];
   setMarks: Setter<Mark[]>;
@@ -94,6 +105,12 @@ export type DentalStore = {
   bookings: Booking[];
   medical: MedicalHistory;
   setMedical: Setter<MedicalHistory>;
+  /** The clinic's dental prices. */
+  prices: PriceRow[];
+  /** What has been billed of each treatment — empty for a member who may not see invoices. */
+  billing: Billed[];
+  /** From when chart work waits to be billed. */
+  billingSince: string | null;
 
   /** The case new work is filed under: the one open in the Treatment tab, else the latest still open. */
   activeCaseId: string | null;
@@ -135,6 +152,8 @@ const MINE_FOR_MS = 15_000;
 const STALE_AFTER_MS = 30_000;
 /** The tables whose rows are this patient's chart. Each announces the patient it belongs to. */
 const TABLES = ["chart_marks", "chart_mark_steps", "treatment_cases", "appointment_items"];
+/** And for a member who sees billing: an invoice raised or voided at the desk changes what is billed. */
+const TABLES_WITH_BILLING = [...TABLES, "invoices"];
 
 const pinsOf = (files: ChartFile[]) => Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []]));
 /** The latest case still open: where new work goes when nobody chose. */
@@ -168,6 +187,8 @@ export function DentalProvider({
   const [visits, setVisits] = useState<Visit[]>(chart.visits);
   const [bookings, setBookings] = useState<Booking[]>(chart.bookings);
   const [medical, setMedical] = useState<MedicalHistory>(chart.medical);
+  const [prices, setPrices] = useState<PriceRow[]>(chart.prices);
+  const [billing, setBilling] = useState<Billed[]>(chart.billing);
   const [chosenCase, setChosenCase] = useState<string | null>(null);
   const [openItem, setOpenItem] = useState<string | null>(null);
   const [emergency, setEmergency] = useState<{ markId?: string; site?: string } | null>(null);
@@ -212,6 +233,8 @@ export function DentalProvider({
     setVisits(c.visits);
     setBookings(c.bookings);
     setMedical(c.medical);
+    setPrices(c.prices);
+    setBilling(c.billing);
     setFiles(body.files);
     setPins(pinsOf(body.files));
   }, [slug, patientId]);
@@ -245,7 +268,7 @@ export function DentalProvider({
     },
     [patientId]
   );
-  useRealtimeRefresh(slug, TABLES, reload, isOthers, { syncOnOpen: staleOnMount });
+  useRealtimeRefresh(slug, data.canBill ? TABLES_WITH_BILLING : TABLES, reload, isOthers, { syncOnOpen: staleOnMount });
 
   const value = useMemo<DentalStore>(
     () => ({
@@ -256,6 +279,9 @@ export function DentalProvider({
       doctors: data.doctors,
       canWrite: data.canWrite,
       canBook: data.canBook,
+      canBill: data.canBill,
+      canPrice: !!data.canPrice,
+      currency: data.currency,
       marks,
       setMarks,
       events,
@@ -276,6 +302,9 @@ export function DentalProvider({
       bookings,
       medical,
       setMedical,
+      prices,
+      billing,
+      billingSince: chart.billingSince,
       activeCaseId,
       setActiveCaseId: setChosenCase,
       openItem,
@@ -285,7 +314,7 @@ export function DentalProvider({
       write,
       reload,
     }),
-    [slug, patientId, data, marks, events, custom, favorites, files, pins, cases, steps, visits, bookings, medical, activeCaseId, openItem, emergency, write, reload]
+    [slug, patientId, data, marks, events, custom, favorites, files, pins, cases, steps, visits, bookings, medical, prices, billing, chart.billingSince, activeCaseId, openItem, emergency, write, reload]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

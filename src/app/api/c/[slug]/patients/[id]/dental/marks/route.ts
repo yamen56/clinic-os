@@ -5,6 +5,8 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { MARK_SELECT, resolveTreatment, toEvent, toMark } from "@/lib/charts/dental/db";
 import { todaysVisit } from "@/lib/charts/dental/server";
+import { priceFor } from "@/lib/charts/dental/billing-server";
+import { variantOf } from "@/lib/charts/dental/pricing";
 
 /*
   Recording on the dental chart: one entry, or several at once (a bridge's
@@ -77,15 +79,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       resolved.push({ m, tr });
     }
 
+    /*
+      The price each treatment starts at, from the clinic's list — a snapshot,
+      so changing the list later never rewrites a quote. Findings and work done
+      elsewhere cost nothing here, and the parts of a full arch are priced as
+      the arch, not one by one.
+    */
+    const archGroups = new Set(parsed.data.marks.filter((m) => m.groupId && !/^[1-8][1-8]$/.test(m.site)).map((m) => m.groupId));
     const ids: string[] = [];
     for (const { m, tr } of resolved) {
       // A finding is what was found: it has no plan and no completion.
       const status = tr.kind === "finding" ? "existing" : m.status;
+      const archPart = !!m.groupId && archGroups.has(m.groupId) && /^[1-8][1-8]$/.test(m.site);
+      const price = tr.kind === "procedure" && status !== "existing" && !archPart ? await priceFor(c, access.clinicId, tr.key, variantOf(tr.key, m.detail)) : null;
       await c.query(
         `insert into chart_marks (id, clinic_id, patient_id, site, surfaces, treatment_key, label, label_ar, abbr, look, kind,
-                                  detail, status, group_id, role, performed_by, recorded_by, done_at, case_id, emergency, appointment_id)
+                                  detail, status, group_id, role, performed_by, recorded_by, done_at, case_id, emergency, appointment_id,
+                                  fee, service_id)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, case when $13 = 'done' then now() end, $18, $19,
-                 case when $13 = 'done' then $20::uuid end)`,
+                 case when $13 = 'done' then $20::uuid end, $21, $22)`,
         [
           m.id,
           access.clinicId,
@@ -107,6 +119,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
           m.caseId ?? null,
           m.emergency,
           visit,
+          price?.price ?? null,
+          price?.serviceId ?? null,
         ]
       );
       await c.query(`insert into chart_mark_events (id, clinic_id, mark_id, action, by_user) values ($1, $2, $3, 'created', $4)`, [

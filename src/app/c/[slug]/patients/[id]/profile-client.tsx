@@ -42,6 +42,7 @@ import type { DocumentListRow } from "@/lib/esign/queries";
 import type { PrescriptionRow } from "@/lib/prescriptions";
 import type { DentalTabData } from "./dental-chart-tab";
 import { DentalProvider, useOptionalDentalStore } from "@/components/charts/dental/store";
+import { ReadyToBill } from "@/components/charts/dental/ready-to-bill";
 import { medicalAlerts } from "@/lib/medical-history";
 import { FilesTab, type FilesHub } from "./files-tab";
 import { PrescriptionsTab } from "./prescriptions-tab";
@@ -1063,6 +1064,7 @@ export function PatientProfile(props: {
             canSend={props.canSendDocuments}
           />
         )}
+        {tab === "invoices" && <ReadyToBill tz={tz} />}
         {tab === "invoices" && (
           <Card>
             {props.invoices.length === 0 ? (

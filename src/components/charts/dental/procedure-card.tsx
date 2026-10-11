@@ -47,6 +47,11 @@ import { PaintPill } from "./history";
 import { siteLabel } from "./labels";
 import { TreatmentGlyph } from "./treatment-picker";
 import { INK, SOFT } from "./tooth-art";
+import { moneyOf } from "./money";
+import { fmtMoney } from "@/lib/dates";
+import { useToast } from "@/components/ui/toast";
+import { PER_SESSION_BY_DEFAULT, variantOf } from "@/lib/charts/dental/pricing";
+import { saveDentalPriceAction } from "@/app/c/[slug]/settings/services/actions";
 
 const UNDO_MS = 120_000;
 
@@ -71,6 +76,28 @@ function Decimal({ value, onChange, label, className = "" }: { value: number | n
 }
 
 const field = "h-9 w-full min-w-0 rounded-ctl border border-line bg-surface px-2 text-base focus:border-brand-600 focus:outline-none md:text-sm";
+
+/** This patient's price for the treatment, saved when the box is left. Emptied, the treatment has no price. */
+function FeeBox({ value, onSave, label }: { value: number | null; onSave: (v: number | null) => void; label: string }) {
+  const [text, setText] = useState(value == null ? "" : String(value));
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      dir="ltr"
+      aria-label={label}
+      value={text}
+      onChange={(e) => /^\d{0,7}(\.\d{0,3})?$/.test(e.target.value) && setText(e.target.value)}
+      onBlur={() => {
+        const v = text.trim() === "" ? null : Number(text);
+        if (v !== value) onSave(v);
+      }}
+      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+      className="h-9 w-28 rounded-ctl border border-line bg-surface px-2 text-end text-base font-semibold tnum focus:border-brand-600 focus:outline-none md:text-sm"
+      data-fee
+    />
+  );
+}
 
 /** What a step records, laid out for typing at the chair. */
 function StepForm({
@@ -274,6 +301,7 @@ export function ProcedureCard({
   const P = T.treatment;
   const store = useDentalStore();
   const w = useChartWriter();
+  const { toast } = useToast();
   const [openStep, setOpenStep] = useState<string | null>(null);
   const [voiding, setVoiding] = useState<StepRecord | null>(null);
   const [voidReason, setVoidReason] = useState("");
@@ -313,6 +341,26 @@ export function ProcedureCard({
     .filter((x): x is NonNullable<typeof x> => !!x)
     .filter((x) => !store.marks.some((o) => !o.voidedAt && o.site === m.site && o.treatmentKey === x.key));
   const details = tr?.details?.filter((d) => !(d.key === "implants" && m.groupId)) ?? [];
+  const money = moneyOf(m, { marks: store.marks, steps: store.steps, prices: store.prices, billing: store.billing, billingSince: store.billingSince, tz });
+  /*
+    "Use for every patient": a price typed here, for a treatment (or a kind of
+    it) the clinic has not priced, or priced otherwise, becomes the clinic's
+    price — for a doctor who may set prices. The dentist was not sure when
+    prices would be set; at the chair, the first time, is one answer.
+  */
+  const variant = variantOf(m.treatmentKey, m.detail);
+  const listed = store.prices.find((p) => p.chartKey === m.treatmentKey && p.variant === variant);
+  const canList = store.canPrice && editable && m.kind === "procedure" && m.fee != null && m.fee > 0 && listed?.price !== m.fee;
+  const listPrice = async () => {
+    const unit = store.prices.find((p) => p.chartKey === m.treatmentKey)?.unit ?? (PER_SESSION_BY_DEFAULT.has(m.treatmentKey) ? "session" : "item");
+    const r = await saveDentalPriceAction(store.slug, { key: m.treatmentKey, variant, price: m.fee, unit, linkServiceId: null, markId: m.id });
+    if (r.error) {
+      toast(P.useForAllFailed, "error");
+      return;
+    }
+    toast(P.useForAllDone);
+    void store.reload();
+  };
 
   const done = (def: StepDef) => async (data: StepData) => {
     const ok = await w.recordStep(m, def.key, data, { performer });
@@ -370,6 +418,43 @@ export function ProcedureCard({
           ))}
         </div>
       )}
+
+      {/* What it costs this patient — the clinic's price unless the doctor changed it — and whether it is billed. */}
+      <div className="grid gap-1" data-price-row-card>
+        <div className="flex flex-wrap items-center gap-2 text-[13px]">
+          <span className="text-[12px] font-semibold text-ink-500">{P.price}</span>
+          {editable ? (
+            // Keyed by the fee: a change of material re-prices it, and the box shows the new figure.
+            <FeeBox key={String(m.fee)} value={m.fee} onSave={(v) => w.setFee(m, v)} label={P.price} />
+          ) : (
+            <span className="font-semibold text-ink-900 tnum">{m.fee != null ? fmtMoney(m.fee, store.currency, locale) : P.noPrice}</span>
+          )}
+          {editable && <span className="text-[12px] text-ink-500">{store.currency}</span>}
+          {money.unit === "session" && <span className="text-[12px] text-ink-500">{P.perVisit}</span>}
+          {money.units > 1 && money.amount != null && (
+            <span className="text-[12px] text-ink-500 tnum">× {money.units} = {fmtMoney(money.amount, store.currency, locale)}</span>
+          )}
+          {store.canBill && (
+            <span
+              className="ms-auto rounded-full px-2 py-0.5 text-[11.5px] font-semibold"
+              style={money.billed ? { background: SOFT.done, color: INK.done } : { background: "var(--color-sunken)", color: "var(--color-ink-500)" }}
+              data-billed={money.billed ? "yes" : "no"}
+            >
+              {money.billed ? `${P.billed} · ${money.invoices.map((i) => i.number).join(", ")}` : P.notBilled}
+            </span>
+          )}
+        </div>
+        {editable && (
+          <p className="flex flex-wrap items-center gap-x-2 text-[11.5px] text-ink-400">
+            {P.priceHint}
+            {canList && (
+              <button type="button" onClick={() => void listPrice()} className="font-semibold text-brand-700 hover:underline" data-use-for-all>
+                {P.useForAll}
+              </button>
+            )}
+          </p>
+        )}
+      </div>
 
       {prog && (
         <div>

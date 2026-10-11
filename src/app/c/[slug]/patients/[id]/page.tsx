@@ -263,7 +263,7 @@ export default async function PatientProfilePage({
       noteCategories: noteCategories.rows,
       dentalDoctors: dentalDoctors.rows as { id: string; name: string }[],
       // The saved chart: its entries and their history, the clinic's own treatments and favourites.
-      dentalChart: dental ? await loadDentalChart(c, access.clinicId, id, { visits: caps.calendar }) : null,
+      dentalChart: dental ? await loadDentalChart(c, access.clinicId, id, { visits: caps.calendar, billing: caps.invoices }) : null,
       filesHub: await loadFilesHub(c, access.clinicId, id, p.full_name as string, (p.birth_date as Date | null) ?? null),
     };
   });
@@ -308,6 +308,9 @@ export default async function PatientProfilePage({
                 doctors: d.dentalDoctors,
                 canWrite: can(access, "patients.charts"),
                 canBook: caps.calendar,
+                canBill: caps.invoices,
+                canPrice: can(access, "settings.services"),
+                currency: access.clinic.currency,
                 chart: d.dentalChart,
                 clinicName: access.clinic.name,
                 // Pictures to the patient go through the inbox: its switch, and a number to send to.
