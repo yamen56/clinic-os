@@ -13,6 +13,7 @@ import { clinicLogoUrl } from "@/lib/clinic-logo";
 import { FINANCE_PREFIXES, firstFinanceHref } from "@/lib/finance";
 import { BrandLockup } from "@/components/brand-mark";
 import { NotificationPopups, useLiveNotifications, type InAppPrefs } from "@/components/live-notifications";
+import { BackLink, useBackHref } from "@/components/back-link";
 import type { CapabilityMap, MemberRole } from "@/lib/permissions";
 import {
   LayoutDashboard,
@@ -217,6 +218,53 @@ export function Shell({
     return item.href === base ? pathname === base : pathname.startsWith(item.href);
   };
 
+  /*
+    Back, on every page the nav does not lead to directly.
+
+    A section's own page — the patient list, the calendar, a Finance or a
+    Settings tab — is where the nav takes you, and a Back there would only
+    point at whichever section you happened to open before. Everything opened
+    from inside one gets it: a patient file, an invoice, a new invoice, a
+    campaign, an automation, a document, a template, the import, and the
+    pages reached from the avatar and the bell.
+
+    It goes to the page this tab was on before (lib/nav-trail), so a patient
+    opened from the calendar goes back to the calendar. With no such page — a
+    link from a notification email, a reload — it goes up one level instead.
+  */
+  const sections: Record<string, string> = {
+    patients: t.nav.patients,
+    calendar: t.nav.calendar,
+    waitlist: t.nav.waitlist,
+    devices: t.nav.devices,
+    conversations: t.nav.conversations,
+    campaigns: t.nav.campaigns,
+    documents: t.nav.documents,
+    automations: t.nav.automations,
+    ai: t.nav.aiAgent,
+    settings: t.nav.settings,
+    invoices: t.nav.invoices,
+    earnings: t.nav.earnings,
+    expenses: t.nav.expenses,
+    claims: t.claims.tab,
+  };
+  const segmentsOf = (href: string) => href.split(/[?#]/)[0].slice(base.length).split("/").filter(Boolean);
+  const here = segmentsOf(pathname);
+  const isInner =
+    here.length > 0 &&
+    !(here.length === 1 && here[0] in sections) &&
+    !(here[0] === "settings" && here.length === 2);
+  const upHref = here.length > 1 ? `${base}/${here.slice(0, -1).join("/")}` : (visible[0]?.href ?? base);
+  const backHref = useBackHref(upHref, base);
+  /* Named when it is a section, so the link says where it goes; "Back" for a patient, an invoice. */
+  const backLabel = (() => {
+    const to = segmentsOf(backHref);
+    if (to.length === 0) return t.nav.dashboard;
+    if (to.length === 1 && sections[to[0]]) return sections[to[0]];
+    if (to[0] === "settings" && to.length === 2) return t.nav.settings;
+    return t.common.back;
+  })();
+
   // Navigating away closes the sheet. The links close it themselves, but the
   // back button and in-page redirects don't go through them, and a sheet left
   // sitting over the screen it just opened reads as a stuck app.
@@ -379,6 +427,8 @@ export function Shell({
             and the suites that measure it find it as `nav.fixed`.
           */}
           <header className="flex h-14 items-center gap-1 border-b border-line px-4 md:hidden">
+            {/* Where a phone keeps Back: the top corner, pinned while the page scrolls. */}
+            {isInner && <BackLink icon href={backHref} label={backLabel} />}
             <Link
               href={visible[0]?.href ?? `${base}/profile`}
               className="me-auto flex min-w-0 touch-manipulation items-center gap-2.5"
@@ -439,7 +489,15 @@ export function Shell({
               </button>
             </div>
           ))}
-        <main className="mx-auto max-w-6xl px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-6">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-6">
+          {/* From a tablet up there is no top bar, so Back sits over the page title. */}
+          {isInner && (
+            <div className="-mt-2 mb-2 max-md:hidden">
+              <BackLink href={backHref} label={backLabel} />
+            </div>
+          )}
+          {children}
+        </main>
       </div>
 
       <NotificationPopups items={live.popups} onDismiss={live.dismiss} />

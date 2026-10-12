@@ -5,6 +5,7 @@ import { LanguageToggle } from "@/components/language-toggle";
 import { logoutAction } from "@/app/login/actions";
 import { BrandPlate } from "@/components/brand-mark";
 import { AdminNav } from "./admin-nav";
+import { AdminBack } from "./admin-back";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const s = await guardAdmin();
@@ -31,7 +32,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <AdminBack />
+        {children}
+      </main>
     </div>
   );
 }

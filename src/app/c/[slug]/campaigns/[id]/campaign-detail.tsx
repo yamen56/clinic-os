@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
@@ -14,7 +13,7 @@ import { ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { startCampaignAction, stopCampaignAction, deleteCampaignAction } from "../actions";
 import { campaignStatusColor, estimateDuration, formatInterval } from "../campaigns-client";
-import { ArrowLeft, Play, Square, Trash2, AlertTriangle } from "lucide-react";
+import { Play, Square, Trash2, AlertTriangle } from "lucide-react";
 
 type Campaign = {
   id: string;
@@ -101,14 +100,6 @@ export function CampaignDetail({
 
   return (
     <>
-      <Link
-        href={`/c/${slug}/campaigns`}
-        className="mb-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900"
-      >
-        <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-        {t.campaigns.title}
-      </Link>
-
       <PageHeader
         title={campaign.name}
         sub={`${formatInterval(campaign.interval_seconds, everyLabel)} · ${t.campaigns.window} ${String(

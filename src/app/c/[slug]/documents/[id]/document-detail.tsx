@@ -8,7 +8,6 @@ import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { Card, PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { buttonClass } from "@/components/ui/button-class";
 import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/misc";
@@ -33,7 +32,6 @@ import {
   type SendActionResult,
 } from "../actions";
 import {
-  ArrowLeft,
   Send,
   Tablet,
   Link2,
@@ -306,9 +304,6 @@ export function DocumentDetailClient({
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-2">
-            <Link href={`/c/${slug}/documents`} aria-label={t.common.back} className={buttonClass({ variant: "ghost", size: "icon" })}>
-              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            </Link>
             {doc.title}
             <Badge status={statusBadge}>
               {(t.docs.statuses as Record<string, string>)[doc.status] ?? doc.status}

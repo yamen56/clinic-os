@@ -17,7 +17,7 @@ import { RichText, insertTokenAtCaret } from "@/components/esign/rich-text";
 import { ServiceChips } from "@/components/ui/service-picker";
 import type { SectionRow, ServiceRow } from "@/lib/services";
 import { saveTemplateAction } from "../actions";
-import { ArrowLeft, Plus, Trash2, Eye, Braces, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Eye, Braces, ChevronUp, ChevronDown } from "lucide-react";
 
 type Def = {
   key: string;
@@ -230,12 +230,7 @@ export function TemplateEditor({
     <div className="grid gap-4">
       <PageHeader
         title={
-          <span className="flex items-center gap-2">
-            <Link href={`/c/${slug}/settings/documents`} aria-label={t.common.back} className={buttonClass({ variant: "ghost", size: "icon" })}>
-              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            </Link>
-            {template ? name || t.docTemplates.title : t.docTemplates.addTemplate}
-          </span>
+          template ? name || t.docTemplates.title : t.docTemplates.addTemplate
         }
         sub={
           template

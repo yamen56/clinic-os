@@ -32,7 +32,7 @@ import {
   UserRound,
   CalendarPlus,
   ReceiptText,
-  X,
+  ArrowLeft,
   Trash2,
   Search,
 } from "lucide-react";
@@ -372,8 +372,14 @@ export function InboxClient({
           <>
             {/* Thread header */}
             <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
-              <button className="lg:hidden" onClick={() => setOpenId(null)} aria-label={t.common.back}>
-                <X className="h-5 w-5 text-ink-400" />
+              {/* Back to the list on a phone: an arrow, not a cross, since nothing is being dismissed. */}
+              <button
+                className="-ms-2 grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full text-ink-700 transition-colors duration-140 ease-out active:bg-sunken lg:hidden"
+                onClick={() => setOpenId(null)}
+                aria-label={t.common.back}
+                data-back
+              >
+                <ArrowLeft className="h-5 w-5 rtl:rotate-180" strokeWidth={1.75} />
               </button>
               <Avatar name={displayName(cv)} size={36} />
               <div className="min-w-0 flex-1">

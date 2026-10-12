@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDateTime } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { buttonClass } from "@/components/ui/button-class";
 import { Select, Textarea } from "@/components/ui/input";
 import { IMPORT_ACCEPT } from "@/lib/import/sheet";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +16,7 @@ import {
   type ImportPreview,
 } from "./actions";
 import type { ImportField } from "@/lib/import/parse";
-import { Upload, ArrowLeft, Undo2 } from "lucide-react";
+import { Upload, Undo2 } from "lucide-react";
 
 const FIELDS: ImportField[] = [
   "ignore",
@@ -141,16 +139,7 @@ export function ImportClient({
 
   return (
     <>
-      <PageHeader
-        title={t.import.title}
-        sub={t.import.sub}
-        action={
-          <Link href={`/c/${slug}/patients`} className={buttonClass({ variant: "outline" })}>
-            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            {t.nav.patients}
-          </Link>
-        }
-      />
+      <PageHeader title={t.import.title} sub={t.import.sub} />
 
       {!preview && (
         <Card className="mb-4">

@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { appUrl } from "@/lib/urls";
 import "./globals.css";
 import { getDict, getLocale, dirFor } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/client";
 import { ToastProvider } from "@/components/ui/toast";
+import { NavTrailRecorder } from "@/components/back-link";
 
 export const metadata: Metadata = {
   /*
@@ -88,6 +90,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <I18nProvider dict={dict} locale={locale}>
           <ToastProvider>{children}</ToastProvider>
         </I18nProvider>
+        {/* Feeds the Back buttons: see lib/nav-trail. */}
+        <Suspense fallback={null}>
+          <NavTrailRecorder />
+        </Suspense>
       </body>
     </html>
   );
