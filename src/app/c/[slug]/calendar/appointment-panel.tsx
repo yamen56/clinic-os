@@ -18,6 +18,7 @@ import {
 import { RequiredDocuments } from "@/components/esign/required-documents";
 import { AppointmentNotes } from "@/components/appointment-notes";
 import type { Appt, Doctor, PlannedItem, Section, Service } from "./calendar-client";
+import { VisitLineView, whereOf } from "@/components/charts/dental/visit-work";
 import { X, UserPlus, ClipboardList } from "lucide-react";
 
 export type PanelState =
@@ -105,6 +106,21 @@ export function AppointmentPanel({
     () => (date && time ? DateTime.fromISO(`${date}T${time}`, { zone: tz }) : null),
     [date, time, tz]
   );
+
+  /*
+    The visit's dental work in one box: what was done at it, then what it is
+    still booked for. A treatment worked on at the visit is said once, as done.
+  */
+  const done = state?.mode === "edit" ? state.appt.done ?? [] : [];
+  const worked = new Set(done.map((d) => d.markId));
+  const planned = items.filter((i) => !worked.has(i.markId));
+  // Said once, on the box's first heading.
+  const chartLink =
+    state?.mode === "edit" ? (
+      <a href={`/c/${slug}/patients/${state.appt.patient_id}?tab=dental`} className="text-[12px] font-semibold text-brand-600 hover:underline">
+        {t.calendar.openTreatment}
+      </a>
+    ) : null;
 
   const submit = () =>
     start(async () => {
@@ -228,38 +244,54 @@ export function AppointmentPanel({
             </Field>
 
             {/*
-              What the visit is for, when it was booked from the patient's
-              treatment plan — so the doctor and the assistant know before the
-              patient sits down.
+              The visit's dental work: what was done at it, from the chart —
+              each treatment done here, each step of one — and what it was
+              booked for from the patient's plan, so the doctor and the
+              assistant know before the patient sits down.
             */}
-            {items.length > 0 && (
-              <div className="grid gap-1.5 rounded-lg border border-line bg-canvas p-3" data-planned-treatment>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12px] font-semibold text-ink-500">{t.calendar.plannedTreatment}</span>
-                  {state.mode === "edit" && (
-                    <a href={`/c/${slug}/patients/${state.appt.patient_id}?tab=treatment`} className="text-[12px] font-semibold text-brand-600 hover:underline">
-                      {t.calendar.openTreatment}
-                    </a>
-                  )}
-                </div>
-                <ul className="grid gap-1">
-                  {items.map((i) => (
-                    <li key={i.markId} className="flex items-center gap-2 text-[13px]" data-planned-item={i.markId}>
-                      <span className="grid h-6 min-w-6 place-items-center rounded-md bg-surface px-1 text-[12px] font-bold tnum shadow-card" dir="ltr">
-                        {/^[1-8][1-8]$/.test(i.site) ? i.site : "·"}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">
-                        {(locale === "ar" && i.labelAr) || i.label}
-                        {i.next && <span className="text-ink-500"> · {i.next}</span>}
-                      </span>
-                      {state.mode === "create" && (
-                        <button onClick={() => setItems((xs) => xs.filter((x) => x.markId !== i.markId))} aria-label={t.common.delete} className="text-ink-400 hover:text-danger">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+            {(done.length > 0 || planned.length > 0) && (
+              <div className="grid gap-3 rounded-lg border border-line bg-canvas p-3">
+                {done.length > 0 && (
+                  <div className="grid gap-1.5" data-done-at-visit={done.length}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[12px] font-semibold text-ink-500">{t.calendar.doneAtVisit}</span>
+                      {chartLink}
+                    </div>
+                    <ul className="grid gap-1">
+                      {done.map((d) => (
+                        <li key={d.markId} data-done-item={d.markId}>
+                          <VisitLineView line={d} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {planned.length > 0 && (
+                  <div className="grid gap-1.5" data-planned-treatment>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[12px] font-semibold text-ink-500">{t.calendar.plannedTreatment}</span>
+                      {done.length === 0 && chartLink}
+                    </div>
+                    <ul className="grid gap-1">
+                      {planned.map((i) => (
+                        <li key={i.markId} className="flex items-center gap-2 text-[13px]" data-planned-item={i.markId}>
+                          <span className="grid h-6 min-w-6 place-items-center rounded-md bg-surface px-1.5 text-[12px] font-bold tnum shadow-card" dir="ltr">
+                            {whereOf(i.site, t)}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {(locale === "ar" && i.labelAr) || i.label}
+                            {i.next && <span className="text-ink-500"> · {i.next}</span>}
+                          </span>
+                          {state.mode === "create" && (
+                            <button onClick={() => setItems((xs) => xs.filter((x) => x.markId !== i.markId))} aria-label={t.common.delete} className="text-ink-400 hover:text-danger">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 

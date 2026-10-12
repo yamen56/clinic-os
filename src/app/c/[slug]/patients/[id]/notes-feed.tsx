@@ -13,18 +13,15 @@
   answers, an invoice's note and its claim's, a prescription's diagnosis, a
   waitlist note, an x-ray request's. And the chart's, from the chart the file
   already holds, so a note written on a tooth a moment ago is here when the
-  tab is opened: an entry's note, a step's, an emergency, a case's history
-  and diagnosis. Kept on the file and not dated — the Overview's summary and
-  the medical history — sit above them all.
+  tab is opened: an entry's note, a step's, an emergency. Kept on the file
+  and not dated, the Overview's summary sits above them all.
 */
 
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   CalendarDays,
-  ClipboardList,
   FileText,
-  HeartPulse,
   Hourglass,
   ListChecks,
   Pill,
@@ -41,9 +38,8 @@ import type { FeedItem, FeedSource } from "@/lib/note-feed";
 import { useOptionalDentalStore } from "@/components/charts/dental/store";
 import { isToothSite, type Mark } from "@/lib/charts/dental/state";
 import { EMERGENCY_STEP, stepOf } from "@/lib/charts/dental/protocols";
-import { hasHistory, medicalAlerts } from "@/lib/medical-history";
 
-export type OtherSource = FeedSource | "chart" | "step" | "emergency" | "case";
+export type OtherSource = FeedSource | "chart" | "step" | "emergency";
 
 /** A note from elsewhere in the file, ready to show. */
 export type Other = {
@@ -68,7 +64,6 @@ export const SOURCE_ICON: Record<OtherSource, LucideIcon> = {
   chart: Smile,
   step: ListChecks,
   emergency: Siren,
-  case: ClipboardList,
 };
 
 type Answer = { label?: string; labelAr?: string; value?: unknown };
@@ -165,7 +160,7 @@ export function useOtherNotes({
   if (store) {
     const markName = (m: Mark) => `${isToothSite(m.site) ? `${m.site} · ` : ""}${locale === "ar" ? m.labelAr || m.label : m.label}`;
     const openItem = (markId: string) => () => {
-      onTab("treatment");
+      onTab("dental");
       store.setOpenItem(markId);
     };
     const byId = new Map(store.marks.map((m) => [m.id, m]));
@@ -181,7 +176,7 @@ export function useOtherNotes({
         title: markName(m),
         body: m.note,
         lines: [],
-        open: has("treatment") ? openItem(m.id) : undefined,
+        open: has("dental") ? openItem(m.id) : undefined,
       });
     }
     for (const s of store.steps) {
@@ -201,7 +196,7 @@ export function useOtherNotes({
           title: markName(m),
           body,
           lines: done.length ? [done.join(" · ")] : [],
-          open: has("treatment") ? openItem(m.id) : undefined,
+          open: has("dental") ? openItem(m.id) : undefined,
         });
         continue;
       }
@@ -215,35 +210,7 @@ export function useOtherNotes({
         title: `${markName(m)}${def ? ` · ${def.en}` : ""}`,
         body: s.note,
         lines: [],
-        open: has("treatment") ? openItem(m.id) : undefined,
-      });
-    }
-    for (const c of store.cases) {
-      const lines = (
-        [
-          ["complaint", c.complaint],
-          ["history", c.history],
-          ["exam", c.exam],
-          ["diagnosis", c.diagnosis],
-        ] as const
-      )
-        .filter(([, v]) => v.trim())
-        .map(([k, v]) => `${N.caseFields[k]}: ${v.trim()}`);
-      if (!lines.length) continue;
-      out.push({
-        key: `case:${c.id}`,
-        source: "case",
-        at: c.createdAt,
-        by: c.doctor?.name ?? c.createdBy.name,
-        title: c.title || c.complaint,
-        body: "",
-        lines,
-        open: has("treatment")
-          ? () => {
-              onTab("treatment");
-              store.setActiveCaseId(c.id);
-            }
-          : undefined,
+        open: has("dental") ? openItem(m.id) : undefined,
       });
     }
   }
@@ -304,69 +271,32 @@ export function OtherNoteCard({ o, tz }: { o: Other; tz: string }) {
   );
 }
 
-/** What is kept on the file rather than written on a day: the Overview's summary, the medical history. */
-export function OnFile({ summary, onSummary, onMedical }: { summary: string; onSummary: () => void; onMedical?: () => void }) {
-  const { t, locale } = useI18n();
+/**
+ * What is kept on the file rather than written on a day: the Overview's
+ * summary. The medical history is the Overview's own card, and its alerts
+ * head the file, so it is not repeated here.
+ */
+export function OnFile({ summary, onSummary }: { summary: string; onSummary: () => void }) {
+  const { t } = useI18n();
   const N = t.patients.notes;
-  const store = useOptionalDentalStore();
-  const medical = store?.medical ?? null;
-  const showMedical = !!medical && hasHistory(medical);
-  if (!summary.trim() && !showMedical) return null;
+  if (!summary.trim()) return null;
   return (
     <div className="grid gap-2" data-on-file>
       <h3 className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{N.onFile}</h3>
-      {summary.trim() && (
-        <div data-on-file-summary>
-          <Card className="p-4">
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px] text-ink-400">
-              <span className="inline-flex h-5 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-semibold text-ink-700">{N.sources.summary}</span>
-              <button type="button" onClick={onSummary} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-ink-500 hover:bg-ink-900/5 hover:text-ink-900">
-                {N.openSource}
-                <ArrowUpRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900" dir="auto">
-              {summary}
-            </p>
-          </Card>
-        </div>
-      )}
-      {showMedical && medical && (
-        <div data-on-file-medical>
-          <Card className="p-4">
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px] text-ink-400">
-              <span className="inline-flex h-5 items-center gap-1 rounded-full bg-danger-soft px-2 text-[11px] font-semibold text-danger">
-                <HeartPulse className="h-3 w-3" />
-                {N.sources.medical}
-              </span>
-              {onMedical && (
-                <button type="button" onClick={onMedical} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-ink-500 hover:bg-ink-900/5 hover:text-ink-900">
-                  {N.openSource}
-                  <ArrowUpRight className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {medicalAlerts(medical, locale).map((a) => (
-                <span key={a} className="rounded-full bg-danger-soft px-2 py-0.5 text-[12px] font-semibold text-danger">
-                  {a}
-                </span>
-              ))}
-            </div>
-            {medical.medications.trim() && (
-              <p className="mt-1.5 text-[13px] text-ink-900" dir="auto">
-                <span className="text-ink-500">{N.medications}: </span>
-                {medical.medications}
-              </p>
-            )}
-            {medical.notes.trim() && (
-              <p className="mt-1 whitespace-pre-wrap text-[13px] text-ink-900" dir="auto">
-                {medical.notes}
-              </p>
-            )}
-          </Card>
-        </div>
-      )}
+      <div data-on-file-summary>
+        <Card className="p-4">
+          <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px] text-ink-400">
+            <span className="inline-flex h-5 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-semibold text-ink-700">{N.sources.summary}</span>
+            <button type="button" onClick={onSummary} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-ink-500 hover:bg-ink-900/5 hover:text-ink-900">
+              {N.openSource}
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900" dir="auto">
+            {summary}
+          </p>
+        </Card>
+      </div>
     </div>
   );
 }

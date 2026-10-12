@@ -32,7 +32,7 @@ import type { DentalChartData, FavoriteRow } from "@/lib/charts/dental/db";
 import type { Mark, MarkEvent, Person } from "@/lib/charts/dental/state";
 import type { Treatment } from "@/lib/charts/dental/catalog";
 import type { StepRecord } from "@/lib/charts/dental/protocols";
-import type { Booking, TreatmentCase, Visit } from "@/lib/charts/dental/treatment";
+import type { Booking, Visit } from "@/lib/charts/dental/treatment";
 import type { MedicalHistory } from "@/lib/medical-history";
 import type { PriceRow } from "@/lib/charts/dental/pricing";
 import type { Billed } from "@/lib/charts/dental/billing-server";
@@ -60,8 +60,6 @@ export type DentalTabData = {
   canBook: boolean;
   /** May this member see what was billed and bill it (`invoices`)? */
   canBill: boolean;
-  /** May this member set the clinic's prices (`settings.services`)? */
-  canPrice?: boolean;
   /** The clinic's currency, for prices on the plan. */
   currency: string;
   chart: DentalChartData;
@@ -81,7 +79,6 @@ export type DentalStore = {
   canWrite: boolean;
   canBook: boolean;
   canBill: boolean;
-  canPrice: boolean;
   currency: string;
 
   marks: Mark[];
@@ -97,8 +94,6 @@ export type DentalStore = {
   /** Which teeth each file is pinned to, by file id. */
   pins: Record<string, string[]>;
   setPins: Setter<Record<string, string[]>>;
-  cases: TreatmentCase[];
-  setCases: Setter<TreatmentCase[]>;
   steps: StepRecord[];
   setSteps: Setter<StepRecord[]>;
   visits: Visit[];
@@ -112,10 +107,7 @@ export type DentalStore = {
   /** From when chart work waits to be billed. */
   billingSince: string | null;
 
-  /** The case new work is filed under: the one open in the Treatment tab, else the latest still open. */
-  activeCaseId: string | null;
-  setActiveCaseId: (id: string | null) => void;
-  /** The treatment whose steps are open, in either tab. */
+  /** The treatment whose steps are open. */
   openItem: string | null;
   setOpenItem: (id: string | null) => void;
   /** The emergency sheet, open: on a treatment under way, on a tooth, or on neither. */
@@ -151,13 +143,11 @@ const MINE_FOR_MS = 15_000;
 /** A page older than this when it mounts was restored from history, not freshly rendered. */
 const STALE_AFTER_MS = 30_000;
 /** The tables whose rows are this patient's chart. Each announces the patient it belongs to. */
-const TABLES = ["chart_marks", "chart_mark_steps", "treatment_cases", "appointment_items"];
+const TABLES = ["chart_marks", "chart_mark_steps", "appointment_items"];
 /** And for a member who sees billing: an invoice raised or voided at the desk changes what is billed. */
 const TABLES_WITH_BILLING = [...TABLES, "invoices"];
 
 const pinsOf = (files: ChartFile[]) => Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []]));
-/** The latest case still open: where new work goes when nobody chose. */
-const latestOpen = (cases: TreatmentCase[]) => cases.find((c) => c.status === "open")?.id ?? null;
 
 export function DentalProvider({
   slug,
@@ -182,19 +172,15 @@ export function DentalProvider({
   const [favorites, setFavorites] = useState<FavoriteRow[]>(chart.favorites);
   const [files, setFiles] = useState<ChartFile[]>(initialFiles);
   const [pins, setPins] = useState<Record<string, string[]>>(() => pinsOf(initialFiles));
-  const [cases, setCases] = useState<TreatmentCase[]>(chart.cases);
   const [steps, setSteps] = useState<StepRecord[]>(chart.steps);
   const [visits, setVisits] = useState<Visit[]>(chart.visits);
   const [bookings, setBookings] = useState<Booking[]>(chart.bookings);
   const [medical, setMedical] = useState<MedicalHistory>(chart.medical);
   const [prices, setPrices] = useState<PriceRow[]>(chart.prices);
   const [billing, setBilling] = useState<Billed[]>(chart.billing);
-  const [chosenCase, setChosenCase] = useState<string | null>(null);
   const [openItem, setOpenItem] = useState<string | null>(null);
   const [emergency, setEmergency] = useState<{ markId?: string; site?: string } | null>(null);
 
-  // A case chosen in the Treatment tab while it exists; otherwise the latest open one.
-  const activeCaseId = chosenCase && cases.some((c) => c.id === chosenCase) ? chosenCase : latestOpen(cases);
 
   const sync = useRef({
     inflight: 0,
@@ -228,7 +214,6 @@ export function DentalProvider({
     setEvents(c.events);
     setCustom(c.custom);
     setFavorites(c.favorites);
-    setCases(c.cases);
     setSteps(c.steps);
     setVisits(c.visits);
     setBookings(c.bookings);
@@ -280,7 +265,6 @@ export function DentalProvider({
       canWrite: data.canWrite,
       canBook: data.canBook,
       canBill: data.canBill,
-      canPrice: !!data.canPrice,
       currency: data.currency,
       marks,
       setMarks,
@@ -294,8 +278,6 @@ export function DentalProvider({
       setFiles,
       pins,
       setPins,
-      cases,
-      setCases,
       steps,
       setSteps,
       visits,
@@ -305,8 +287,6 @@ export function DentalProvider({
       prices,
       billing,
       billingSince: chart.billingSince,
-      activeCaseId,
-      setActiveCaseId: setChosenCase,
       openItem,
       setOpenItem,
       emergency,
@@ -314,7 +294,7 @@ export function DentalProvider({
       write,
       reload,
     }),
-    [slug, patientId, data, marks, events, custom, favorites, files, pins, cases, steps, visits, bookings, medical, prices, billing, chart.billingSince, activeCaseId, openItem, emergency, write, reload]
+    [slug, patientId, data, marks, events, custom, favorites, files, pins, steps, visits, bookings, medical, prices, billing, chart.billingSince, openItem, emergency, write, reload]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

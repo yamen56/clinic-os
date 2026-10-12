@@ -47,7 +47,6 @@ import { PaintPill } from "./history";
 import { siteLabel } from "./labels";
 import { TreatmentGlyph } from "./treatment-picker";
 import { INK, SOFT } from "./tooth-art";
-import { FeeEditor } from "./fee-editor";
 
 const UNDO_MS = 120_000;
 
@@ -323,7 +322,7 @@ export function ProcedureCard({
   return (
     <div className="flex flex-col gap-4" data-procedure={m.id} data-procedure-status={m.status}>
       <div className="flex items-start gap-3">
-        <button type="button" onClick={onBack} className="inline-flex h-9 shrink-0 items-center gap-1 rounded-ctl px-2 text-[13px] font-semibold text-ink-500 hover:bg-sunken">
+        <button type="button" onClick={onBack} className="inline-flex h-9 shrink-0 items-center gap-1 rounded-ctl px-2 text-[13px] font-semibold text-ink-500 hover:bg-sunken" data-card-back>
           <ArrowLeft className="h-4 w-4" />
           {backLabel}
         </button>
@@ -370,9 +369,6 @@ export function ProcedureCard({
           ))}
         </div>
       )}
-
-      {/* What it costs this patient — the clinic's price unless the doctor changed it — and whether it is billed. */}
-      <FeeEditor m={m} tz={tz} />
 
       {prog && (
         <div>

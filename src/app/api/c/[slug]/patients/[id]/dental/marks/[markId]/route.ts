@@ -26,10 +26,6 @@ const bodySchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("performer"), eventId: z.string().uuid(), performerId: z.string().uuid() }),
   z.object({ op: z.literal("detail"), key: z.string().max(24), value: z.string().max(24) }),
   z.object({ op: z.literal("surfaces"), surfaces: z.array(z.enum(["M", "D", "O", "B", "L"])).min(1).max(5) }),
-  // Filed under a case, or under none.
-  z.object({ op: z.literal("case"), eventId: z.string().uuid(), caseId: z.string().uuid().nullable() }),
-  // What it costs this patient, set by the doctor; null takes the price away.
-  z.object({ op: z.literal("fee"), eventId: z.string().uuid(), fee: z.number().min(0).max(1_000_000).nullable() }),
 ]);
 
 type Params = { params: Promise<{ slug: string; id: string; markId: string }> };
@@ -62,15 +58,6 @@ export async function PATCH(req: Request, ctx: Params) {
         event = { id: b.eventId, action: "done", reason: protocolFor(cur.treatment_key) ? "finish" : undefined };
         break;
       }
-      case "case": {
-        if (b.caseId) {
-          const ok = await c.query(`select 1 from treatment_cases where id = $1 and patient_id = $2 and clinic_id = $3`, [b.caseId, id, access.clinicId]);
-          if (!ok.rowCount) return { error: "invalid_case" as const };
-        }
-        await c.query(`update chart_marks set case_id = $2 where id = $1`, [markId, b.caseId]);
-        event = { id: b.eventId, action: "case" };
-        break;
-      }
       case "void":
         await c.query(`update chart_marks set voided_at = now(), voided_by = $2, void_reason = $3 where id = $1`, [markId, me, b.reason || null]);
         event = { id: b.eventId, action: "void", reason: b.reason || undefined };
@@ -101,11 +88,6 @@ export async function PATCH(req: Request, ctx: Params) {
           const price = await priceFor(c, access.clinicId, cur.treatment_key, variantOf(cur.treatment_key, { ...(cur.detail ?? {}), [b.key]: b.value }));
           if (price) await c.query(`update chart_marks set fee = $2, service_id = $3 where id = $1`, [markId, price.price, price.serviceId]);
         }
-        break;
-      }
-      case "fee": {
-        await c.query(`update chart_marks set fee = $2, fee_manual = true where id = $1`, [markId, b.fee]);
-        event = { id: b.eventId, action: "fee", reason: b.fee == null ? undefined : String(b.fee) };
         break;
       }
       case "surfaces": {

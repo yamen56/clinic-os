@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { rangesForDay, hmToMin, effectiveHours, type WeeklyHours } from "@/lib/hours";
 import type { IntakeAnswer } from "@/lib/booking-intake";
+import type { VisitLine } from "@/lib/charts/dental/treatment";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/misc";
@@ -37,10 +38,13 @@ export type Appt = {
   doctor_name: string | null;
   /** The planned treatments this visit is for. */
   items?: PlannedItem[];
+  /** What was done at this visit, from the dental chart: one line per treatment, with its steps done there. */
+  done?: VisitLine[];
 };
 
 /** A treatment on the patient's plan, as a visit carries it. */
 export type PlannedItem = { markId: string; site: string; label: string; labelAr?: string; next?: string | null };
+
 
 export type Doctor = {
   id: string;

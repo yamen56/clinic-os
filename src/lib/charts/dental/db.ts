@@ -10,7 +10,7 @@ import type { PoolClient } from "pg";
 import { BORROWABLE_LOOKS, BUILT_IN_BY_KEY, type Category, type Look, type Scope, type Treatment } from "./catalog";
 import type { Mark, MarkEvent } from "./state";
 import type { StepRecord } from "./protocols";
-import type { Booking, TreatmentCase, Visit } from "./treatment";
+import type { Booking, Visit } from "./treatment";
 import { readHistory, type MedicalHistory } from "@/lib/medical-history";
 import type { PriceRow } from "./pricing";
 import type { Billed } from "./billing-server";
@@ -51,7 +51,6 @@ export function toMark(r: Record<string, unknown>): Mark {
     voidedBy: r.voided_by ? { id: r.voided_by as string, name: (r.voider_name as string) ?? "" } : null,
     voidReason: (r.void_reason as string) ?? null,
     note: (r.note as string) ?? "",
-    caseId: (r.case_id as string) ?? null,
     emergency: !!r.emergency,
     startedAt: iso(r.started_at),
     appointmentId: (r.appointment_id as string) ?? null,
@@ -83,32 +82,6 @@ export function toStep(r: Record<string, unknown>): StepRecord {
     voidedAt: iso(r.voided_at),
     voidedBy: r.voided_by ? { id: r.voided_by as string, name: (r.voider_name as string) ?? "" } : null,
     voidReason: (r.void_reason as string) ?? null,
-  };
-}
-
-export const CASE_SELECT = `
-  select tc.*, du.full_name as doctor_name, cu.full_name as creator_name, mu.full_name as reviewer_name
-    from treatment_cases tc
-    left join clinic_members dm on dm.id = tc.doctor_member_id
-    left join users du on du.id = dm.user_id
-    left join users cu on cu.id = tc.created_by
-    left join users mu on mu.id = tc.medical_reviewed_by`;
-
-export function toCase(r: Record<string, unknown>): TreatmentCase {
-  return {
-    id: r.id as string,
-    title: (r.title as string) ?? "",
-    complaint: (r.complaint as string) ?? "",
-    history: (r.history as string) ?? "",
-    exam: (r.exam as string) ?? "",
-    diagnosis: (r.diagnosis as string) ?? "",
-    doctor: r.doctor_member_id ? { id: r.doctor_member_id as string, name: (r.doctor_name as string) ?? "" } : null,
-    status: r.status as TreatmentCase["status"],
-    medicalReviewedAt: iso(r.medical_reviewed_at),
-    medicalReviewedBy: r.medical_reviewed_by ? { id: r.medical_reviewed_by as string, name: (r.reviewer_name as string) ?? "" } : null,
-    createdBy: { id: (r.created_by as string) ?? "", name: (r.creator_name as string) ?? "" },
-    createdAt: iso(r.created_at)!,
-    closedAt: iso(r.closed_at),
   };
 }
 
@@ -177,8 +150,6 @@ export type DentalChartData = {
   events: MarkEvent[];
   custom: Treatment[];
   favorites: FavoriteRow[];
-  /** The patient's cases, newest first. */
-  cases: TreatmentCase[];
   /** Every step of every treatment, voided ones included — they are the record. */
   steps: StepRecord[];
   /**
@@ -235,8 +206,6 @@ export async function loadDentalChart(
             from (select f.treatment_key, f.added_at, f.added_by, f.sort, u.full_name as added_name
                     from chart_treatment_favorites f left join users u on u.id = f.added_by
                    where f.clinic_id = $1 and f.chart = 'dental') x) as favorites,
-         (select coalesce(json_agg(x order by x.created_at desc), '[]'::json)
-            from (${CASE_SELECT} where tc.clinic_id = $1 and tc.patient_id = $2) x) as cases,
          (select coalesce(json_agg(x order by x.done_at), '[]'::json)
             from (${STEP_SELECT} where s.clinic_id = $1 and s.patient_id = $2) x) as steps,
          (select coalesce(json_agg(x order by x.starts_at), '[]'::json)
@@ -275,7 +244,6 @@ export async function loadDentalChart(
       addedBy: { id: (f.added_by as string) ?? "", name: (f.added_name as string) ?? "" },
       addedAt: iso(f.added_at)!,
     })),
-    cases: r.cases.map(toCase),
     steps: r.steps.map(toStep),
     visits: r.visits.map(toVisit),
     bookings: r.bookings,

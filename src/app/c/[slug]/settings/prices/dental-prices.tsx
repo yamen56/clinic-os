@@ -119,8 +119,13 @@ export function DentalPrices({
   const pricedKeys = new Set(prices.map((p) => p.chartKey));
   const unitOf = (key: string) => priceOf(key, null)?.unit ?? prices.find((p) => p.chartKey === key)?.unit ?? (PER_SESSION_BY_DEFAULT.has(key) ? "session" : "item");
   // The doctor's name for it and the reception's, whichever the reader is.
-  const nameOf = (tr: Treatment) => (locale === "ar" ? tr.ar : tr.en);
-  const otherName = (tr: Treatment) => (locale === "ar" ? [tr.en, tr.abbr].filter(Boolean).join(" · ") : [tr.ar, tr.abbr].filter(Boolean).join(" · "));
+  /*
+    Treatments by their medical names, in English, whatever the page speaks —
+    the words the doctor charts in (Yamen, 2026-10-12). The abbreviation and the
+    Arabic name follow, smaller, for the reception.
+  */
+  const nameOf = (tr: Treatment) => tr.en;
+  const otherName = (tr: Treatment) => [tr.abbr, tr.ar].filter(Boolean).join(" · ");
 
   const save = async (key: string, variant: string | null, price: number | null, unit: "item" | "session", link?: string): Promise<boolean> => {
     const r = await saveDentalPriceAction(slug, { key, variant, price, unit, linkServiceId: link ?? null });
@@ -209,12 +214,14 @@ export function DentalPrices({
               {needs.map((n) => {
                 const tr = byKey.get(n.key);
                 if (!tr) return null;
-                const vName = variantName(n.key, n.variant, locale);
+                const vName = variantName(n.key, n.variant, "en");
                 const label = vName ? `${nameOf(tr)} · ${vName}` : nameOf(tr);
                 return (
                   <li key={`${n.key}:${n.variant ?? ""}`} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5" data-needs-row={`${n.key}:${n.variant ?? ""}`}>
                     <div className="min-w-[12rem] flex-1">
-                      <div className="text-[14px] font-medium">{label}</div>
+                      <div className="text-[14px] font-medium">
+                        <bdi>{label}</bdi>
+                      </div>
                       <div className="text-[12px] text-ink-500">
                         {otherName(tr)} · <span className="font-semibold text-st-pending">{S.unpricedN.replace("{n}", String(n.count))}</span>
                       </div>
@@ -291,7 +298,9 @@ export function DentalPrices({
                         <li key={tr.key} className="grid gap-2 px-4 py-3" data-price-row={tr.key}>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                             <div className="min-w-[12rem] flex-1">
-                              <div className="text-[14px] font-medium">{name}</div>
+                              <div className="text-[14px] font-medium" data-price-name>
+                                <bdi>{name}</bdi>
+                              </div>
                               <div className="flex flex-wrap items-center gap-x-2 text-[12px] text-ink-500">
                                 <span dir="auto">{otherName(tr)}</span>
                                 {use && use.used > 0 && <span className="tnum">· {S.usedN.replace("{n}", String(use.used))}</span>}
@@ -338,10 +347,10 @@ export function DentalPrices({
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 ps-0 sm:ps-4">
                               {field.options.map((o) => {
                                 const v = priceOf(tr.key, o.key);
-                                const label = locale === "ar" ? o.ar : o.en;
+                                const label = o.en;
                                 return (
                                   <label key={o.key} className="flex items-center gap-2 text-[13px]" data-price-variant={`${tr.key}:${o.key}`}>
-                                    <span className="text-ink-700">{label}</span>
+                                    <bdi className="text-ink-700">{label}</bdi>
                                     <PriceBox
                                       value={v?.price ?? null}
                                       placeholder={base ? String(base.price) : "—"}
@@ -386,7 +395,7 @@ export function DentalPrices({
               .filter((p) => p.chartKey === renaming.key)
               .map((p) => {
                 const v = names[p.serviceId] ?? { name: p.name, nameAr: p.nameAr ?? "" };
-                const kind = variantName(renaming.key, p.variant, locale);
+                const kind = variantName(renaming.key, p.variant, "en");
                 return (
                   <div key={p.serviceId} className="grid gap-2 rounded-ctl border border-line p-3">
                     <div className="text-[13px] font-semibold">{kind ? `${nameOf(renaming)} · ${kind}` : nameOf(renaming)}</div>

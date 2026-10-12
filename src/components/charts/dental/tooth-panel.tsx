@@ -201,7 +201,6 @@ export function ToothPanel({
   parentOf,
   parentName,
   progressFor,
-  moneyFor,
   size = "compact",
   onSize,
   card,
@@ -239,8 +238,6 @@ export function ToothPanel({
   parentName: (m: Mark) => string;
   /** How far a treatment with steps has come; null for one-tap work. */
   progressFor: (m: Mark) => { done: number; total: number; next: string | null } | null;
-  /** Its price and billing, in a line. */
-  moneyFor?: (m: Mark) => string | undefined;
   /** Compact beside or under the chart, or the tooth's full view in a window of its own. */
   size?: PanelSize;
   /** Switch between the two; without it the panel stays as it is. */
@@ -491,7 +488,6 @@ export function ToothPanel({
         onPerformer={a.onEntryPerformer}
         progress={progressFor(m)}
         onOpen={progressFor(m) ? () => a.onOpenItem(m.id) : undefined}
-        money={moneyFor?.(m)}
       />
     );
   };

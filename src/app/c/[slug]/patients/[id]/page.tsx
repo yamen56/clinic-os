@@ -319,7 +319,6 @@ export default async function PatientProfilePage({
                 canWrite: can(access, "patients.charts"),
                 canBook: caps.calendar,
                 canBill: caps.invoices,
-                canPrice: can(access, "settings.services"),
                 currency: access.clinic.currency,
                 chart: d.dentalChart,
                 clinicName: access.clinic.name,

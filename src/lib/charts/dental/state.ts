@@ -47,8 +47,6 @@ export type Mark = {
   voidedBy: Person | null;
   voidReason: string | null;
   note: string;
-  /** The case — the problem it answers — this entry belongs to. */
-  caseId: string | null;
   /** Done at an emergency visit. */
   emergency: boolean;
   /** When its first step was done; it is under way from then. Null for one-tap work and work not started. */

@@ -16,7 +16,6 @@ import { useToast } from "@/components/ui/toast";
 import type { Mark, MarkEvent, Person } from "@/lib/charts/dental/state";
 import { leadIdOf } from "@/lib/charts/dental/full-arch";
 import { EMERGENCY_STEP, type StepData, type StepRecord } from "@/lib/charts/dental/protocols";
-import type { TreatmentCase } from "@/lib/charts/dental/treatment";
 import type { MedicalHistory } from "@/lib/medical-history";
 import { useDentalStore } from "./store";
 
@@ -45,7 +44,7 @@ export function useChartWriter() {
   const s = useDentalStore();
   const { t } = useI18n();
   const { toast } = useToast();
-  const { slug, patientId, me, marks, setMarks, setEvents, setSteps, setCases, setMedical, write } = s;
+  const { slug, patientId, me, marks, setMarks, setEvents, setSteps, setMedical, write } = s;
   const base = `/api/c/${slug}/patients/${patientId}`;
   const failed = useCallback(() => toast(t.dental.saveFailed, "error"), [toast, t.dental.saveFailed]);
 
@@ -98,7 +97,6 @@ export function useChartWriter() {
               groupId: m.groupId ?? null,
               role: m.role ?? null,
               performedBy: m.performedBy?.id ?? null,
-              caseId: m.caseId,
               emergency: m.emergency,
             })),
           })
@@ -249,26 +247,6 @@ export function useChartWriter() {
     [base, setSteps, write, applySteps, failed]
   );
 
-  /** A new case. The patient's first takes in the work already planned. */
-  const openCase = useCallback(
-    async (fields: { complaint: string; doctorMemberId: string | null }): Promise<TreatmentCase | null> => {
-      const id = newId();
-      try {
-        const r = await write([id], call<{ case: TreatmentCase; adopted: string[] }>(`${base}/cases`, "POST", { id, ...fields }));
-        setCases((prev) => [r.case, ...prev.filter((c) => c.id !== id)]);
-        if (r.adopted.length) {
-          const adopted = new Set(r.adopted);
-          setMarks((prev) => prev.map((m) => (adopted.has(m.id) ? { ...m, caseId: id } : m)));
-        }
-        return r.case;
-      } catch {
-        failed();
-        return null;
-      }
-    },
-    [base, write, setCases, setMarks, failed]
-  );
-
   /** The patient's medical history, saved whole — it is one short form. */
   const saveMedical = useCallback(
     async (h: MedicalHistory): Promise<boolean> => {
@@ -290,13 +268,7 @@ export function useChartWriter() {
     [base, me.name, s.medical, setMedical, write, failed]
   );
 
-  /** What a treatment costs this patient, set by the doctor — a line in its history; a change of material leaves it be. */
-  const setFee = useCallback(
-    (m: Mark, fee: number | null) => change(m, { ...m, fee, feeManual: true }, { op: "fee", fee }, "fee", fee == null ? undefined : String(fee)),
-    [change]
-  );
-
-  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, openCase, saveMedical, setFee };
+  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical };
 }
 
 /** The members a group's lead carries, found the same way the server finds them. */

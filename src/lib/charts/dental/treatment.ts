@@ -1,32 +1,10 @@
 /**
- * A patient's treatment: the cases it is made of, the visits it took, and the
- * arithmetic both tabs and the printed record share.
- *
- * A case is one problem and what is done about it: what brought the patient
- * in, its history, the examination, the diagnosis, and the plan — the chart
- * entries filed under it. A new problem next year is a new case, with its own
- * history, diagnosis and plan; the old one stays as it was.
+ * A patient's treatment over time: the visits it took, and the arithmetic the
+ * chart and the printed record share.
  */
 
 import { DateTime } from "luxon";
-import type { Mark, Person } from "./state";
 import { EMERGENCY_STEP, type StepRecord } from "./protocols";
-
-export type TreatmentCase = {
-  id: string;
-  title: string;
-  complaint: string;
-  history: string;
-  exam: string;
-  diagnosis: string;
-  doctor: Person | null;
-  status: "open" | "closed";
-  medicalReviewedAt: string | null;
-  medicalReviewedBy: Person | null;
-  createdBy: Person;
-  createdAt: string;
-  closedAt: string | null;
-};
 
 /** A visit of the patient's, as the treatment needs it. */
 export type Visit = {
@@ -83,15 +61,47 @@ export function sessionsOf(steps: StepRecord[], tz: string): { sessions: number;
   return { sessions: own.size, emergencies: [...urgent].filter((k) => !own.has(k)).length };
 }
 
-/** The case's label when it has no title: what brought the patient in, shortened. */
-export function caseName(c: TreatmentCase): string {
-  const t = c.title.trim() || c.complaint.trim();
-  if (!t) return "";
-  const line = t.split(/\n/)[0];
-  return line.length > 48 ? `${line.slice(0, 46)}…` : line;
-}
 
-/** The entries of a case, or of none when the id is null — the work charted before cases existed. */
-export function marksOfCase(marks: Mark[], caseId: string | null): Mark[] {
-  return marks.filter((m) => m.caseId === caseId);
+/** A treatment as a visit lists it: what was done to it there, its steps in order. */
+export type VisitLine = {
+  markId: string;
+  site: string;
+  label: string;
+  labelAr: string | null;
+  treatmentKey: string;
+  /** The steps done at the visit, in order; empty for work done in one go. */
+  steps: string[];
+  at: string;
+};
+
+type Listed = { id: string; site: string; label: string; labelAr?: string | null; treatmentKey: string; groupId?: string | null };
+
+/**
+ * What was done at a visit, one line per treatment — a full arch or a bridge
+ * under its lead, as the chart lists it, with the steps done there after it.
+ * Not a line for every tooth of an arch, nor for every step of a root canal.
+ */
+export function visitLines(
+  work: { markId: string; step: string | null; at: string }[],
+  marks: Map<string, Listed>,
+  leadOfGroup: (groupId: string) => string | null
+): VisitLine[] {
+  const lines = new Map<string, VisitLine>();
+  for (const w of [...work].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
+    const m = marks.get(w.markId);
+    if (!m) continue;
+    const lead = (m.groupId && marks.get(leadOfGroup(m.groupId) ?? "")) || m;
+    const line = lines.get(lead.id) ?? {
+      markId: lead.id,
+      site: lead.site,
+      label: lead.label,
+      labelAr: lead.labelAr ?? null,
+      treatmentKey: lead.treatmentKey,
+      steps: [],
+      at: w.at,
+    };
+    if (w.step && !line.steps.includes(w.step)) line.steps.push(w.step);
+    lines.set(lead.id, line);
+  }
+  return [...lines.values()];
 }

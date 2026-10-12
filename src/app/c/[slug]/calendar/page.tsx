@@ -43,8 +43,8 @@ export default async function CalendarPage({
     if (initialPatient && ids.length) {
       const marks = (
         await c.query(
-          `select m.id, m.site, m.label, m.label_ar, m.treatment_key, m.performed_by, tc.doctor_member_id
-             from chart_marks m left join treatment_cases tc on tc.id = m.case_id
+          `select m.id, m.site, m.label, m.label_ar, m.treatment_key, m.performed_by
+             from chart_marks m
             where m.id = any($1::uuid[]) and m.clinic_id = $2 and m.patient_id = $3 and m.voided_at is null
             order by m.created_at`,
           [ids, access.clinicId, initialPatient.id]
@@ -63,7 +63,8 @@ export default async function CalendarPage({
       if (items.length) {
         initialPlan = {
           items,
-          doctorId: (marks.find((m) => m.doctor_member_id)?.doctor_member_id as string) ?? (marks.find((m) => m.performed_by)?.performed_by as string) ?? null,
+          // The doctor doing the work books the visit for it.
+          doctorId: (marks.find((m) => m.performed_by)?.performed_by as string) ?? null,
           notes: items.map((i) => `${/^[1-8][1-8]$/.test(i.site) ? `${i.site} ` : ""}${i.label}${i.next ? ` — ${i.next}` : ""}`).join("\n"),
         };
       }

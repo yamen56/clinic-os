@@ -32,7 +32,6 @@ const markSchema = z.object({
   role: z.enum(["abutment", "pontic"]).nullish(),
   performedBy: z.string().uuid().nullish(),
   /** The case it is part of: the problem it answers. */
-  caseId: z.string().uuid().nullish(),
   /** Done at an emergency visit. */
   emergency: z.boolean().default(false),
 });
@@ -61,12 +60,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       if (ok.rows[0].n !== performers.length) return { error: "invalid_performer" as const };
     }
 
-    // A case is this patient's, and this clinic's — the same hand check as the doctor.
-    const cases = [...new Set(parsed.data.marks.map((m) => m.caseId).filter((x): x is string => !!x))];
-    if (cases.length) {
-      const ok = await c.query(`select count(*)::int as n from treatment_cases where clinic_id = $1 and patient_id = $2 and id = any($3::uuid[])`, [access.clinicId, id, cases]);
-      if (ok.rows[0].n !== cases.length) return { error: "invalid_case" as const };
-    }
     // Work recorded as done is done at today's visit, when there is one.
     const visit = parsed.data.marks.some((m) => m.status === "done") ? await todaysVisit(c, access.clinicId, id, null, performers[0] ?? null) : null;
 
@@ -94,10 +87,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       const price = tr.kind === "procedure" && status !== "existing" && !archPart ? await priceFor(c, access.clinicId, tr.key, variantOf(tr.key, m.detail)) : null;
       await c.query(
         `insert into chart_marks (id, clinic_id, patient_id, site, surfaces, treatment_key, label, label_ar, abbr, look, kind,
-                                  detail, status, group_id, role, performed_by, recorded_by, done_at, case_id, emergency, appointment_id,
+                                  detail, status, group_id, role, performed_by, recorded_by, done_at, emergency, appointment_id,
                                   fee, service_id)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, case when $13 = 'done' then now() end, $18, $19,
-                 case when $13 = 'done' then $20::uuid end, $21, $22)`,
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, case when $13 = 'done' then now() end, $18,
+                 case when $13 = 'done' then $19::uuid end, $20, $21)`,
         [
           m.id,
           access.clinicId,
@@ -116,7 +109,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
           m.role ?? null,
           m.performedBy ?? null,
           access.session.user.id,
-          m.caseId ?? null,
           m.emergency,
           visit,
           price?.price ?? null,

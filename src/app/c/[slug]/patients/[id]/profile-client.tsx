@@ -43,6 +43,8 @@ import type { PrescriptionRow } from "@/lib/prescriptions";
 import type { DentalTabData } from "./dental-chart-tab";
 import { DentalProvider, useOptionalDentalStore } from "@/components/charts/dental/store";
 import { ReadyToBill } from "@/components/charts/dental/ready-to-bill";
+import { MedicalCard } from "@/components/charts/dental/medical-card";
+import { VisitWork, useVisitWorkCount } from "@/components/charts/dental/visit-work";
 import { medicalAlerts } from "@/lib/medical-history";
 import { FilesTab, type FilesHub } from "./files-tab";
 import { OnFile, OtherNoteCard, SOURCE_ICON, useOtherNotes, type OtherSource } from "./notes-feed";
@@ -77,6 +79,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   ExternalLink,
+  Smile,
 } from "lucide-react";
 
 /*
@@ -85,11 +88,6 @@ import {
   with every patient file.
 */
 const DentalChartTab = dynamic(() => import("./dental-chart-tab").then((m) => m.DentalChartTab), {
-  ssr: false,
-  loading: () => <Spinner />,
-});
-// The same chart, worked as a treatment: shipped in the same chunk, fetched when its tab is.
-const TreatmentTab = dynamic(() => import("./treatment-tab").then((m) => m.TreatmentTab), {
   ssr: false,
   loading: () => <Spinner />,
 });
@@ -456,8 +454,6 @@ export function PatientProfile(props: {
   */
   const tabs = [
     { key: "overview", label: t.patients.tabs.overview },
-    // Between the overview and the notes: the case, its plan and the chart it is worked on.
-    props.dental && { key: "treatment", label: t.patients.tabs.treatment },
     { key: "notes", label: t.patients.tabs.notes, count: props.notes.length },
     /* Beside Notes: a prescription is written at the same moment, by the same
        person. Shown to anyone who can read the file once there is something
@@ -868,6 +864,8 @@ export function PatientProfile(props: {
                   }}
                 />
               )}
+              {/* The medical history: a dental clinic's, held with its chart; its alerts head the file. */}
+              <MedicalCard tz={tz} />
               <Card className="p-5">
                 <h3 className="mb-3 text-[15px] font-semibold">{t.patients.overview.summary}</h3>
                 <Textarea
@@ -1009,16 +1007,6 @@ export function PatientProfile(props: {
             onUpdated={upsertRx}
           />
         )}
-        {tab === "treatment" && props.dental && (
-          <TreatmentTab
-            slug={slug}
-            patientId={p.id}
-            tz={tz}
-            birthDate={p.birth_date}
-            data={props.dental}
-            onPrescribe={caps.prescriptions ? (diagnosis) => openComposer({ diagnosis }) : undefined}
-          />
-        )}
         {tab === "dental" && props.dental && (
           <DentalChartTab slug={slug} patientId={p.id} tz={tz} birthDate={p.birth_date} data={props.dental} />
         )}
@@ -1046,6 +1034,7 @@ export function PatientProfile(props: {
                     categories={props.noteCategories}
                     tz={tz}
                     locale={locale}
+                    onOpenChart={() => setTab("dental")}
                   />
                 ))}
               </ul>
@@ -1419,6 +1408,7 @@ function AppointmentRow({
   categories,
   tz,
   locale,
+  onOpenChart,
 }: {
   slug: string;
   patientName: string;
@@ -1434,11 +1424,14 @@ function AppointmentRow({
   categories: NoteCategoryRow[];
   tz: string;
   locale: string;
+  /** Show the dental chart — a visit's chart work opens there. */
+  onOpenChart: () => void;
 }) {
   const { t } = useI18n();
   const router = useRouter();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const work = useVisitWorkCount(appointment.id);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -1464,7 +1457,7 @@ function AppointmentRow({
   };
 
   return (
-    <li>
+    <li data-appointment-row={appointment.id}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
@@ -1482,6 +1475,12 @@ function AppointmentRow({
             {appointment.doctor_name ? ` · ${appointment.doctor_name}` : ""}
           </div>
         </div>
+        {work > 0 && (
+          <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-medium text-ink-500" data-visit-work-count={work}>
+            <Smile className="h-3 w-3" />
+            <span className="tnum">{work}</span>
+          </span>
+        )}
         {notes.length > 0 && (
           <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-medium text-ink-500">
             <StickyNote className="h-3 w-3" />
@@ -1501,6 +1500,11 @@ function AppointmentRow({
             {patientName} · {fmtDateTime(appointment.starts_at, tz, locale)}
             {service ? ` · ${service}` : ""}
           </p>
+
+          {/* The visit's dental work — planned for it, done at it. */}
+          <div className="mb-3 empty:hidden">
+            <VisitWork appointmentId={appointment.id} onOpenChart={onOpenChart} />
+          </div>
 
           {notes.length === 0 ? (
             <p className="mb-2 text-[12px] text-ink-400">{t.patients.notes.noVisitNotes}</p>
@@ -1910,7 +1914,7 @@ function NotesTab({
       ) : null}
 
       {/* Kept on the file rather than written on a day: above the list, whatever the filter. */}
-      <OnFile summary={summary} onSummary={() => onTab("overview")} onMedical={tabKeys.includes("treatment") ? () => onTab("treatment") : undefined} />
+      <OnFile summary={summary} onSummary={() => onTab("overview")} />
 
       {/* ---------------------------------------------------------- list */}
       {rows.length === 0 ? (

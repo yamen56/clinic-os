@@ -24,19 +24,16 @@ import { buttonClass } from "@/components/ui/button-class";
 import { BORROWABLE_LOOKS, BUILT_IN, BUILT_IN_BY_KEY, PROCEDURE_CATEGORIES, findTreatment, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
 import { groupLeads, implantSitesOf, inChartOrder, isFullArch, leadOf, onImplants, prosthesisSites } from "@/lib/charts/dental/full-arch";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Arch, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
-import { endOfDay, eventDays, isToothSite, paintAt, toothStates, type Mark, type MarkEvent, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
-import type { DentalChartData } from "@/lib/charts/dental/db";
+import { endOfDay, eventDays, isToothSite, paintAt, toothStates, type Mark, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
 import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
 import { useDentalStore, type ChartFile, type DentalTabData } from "@/components/charts/dental/store";
 import { call, newId, useChartWriter, type FreshMark } from "@/components/charts/dental/writer";
 import { ProcedureCard } from "@/components/charts/dental/procedure-card";
-import { PlanPanel } from "@/components/charts/dental/plan-panel";
 import { EmergencySheet } from "@/components/charts/dental/emergency-sheet";
 import { EMERGENCY_STEP, progressOf, protocolFor, type EmergencyAction } from "@/lib/charts/dental/protocols";
 import { nextVisitOf } from "@/lib/charts/dental/treatment";
 import { priceFrom } from "@/lib/charts/dental/pricing";
-import { moneyOf } from "@/components/charts/dental/money";
-import { fmtDateOnly, fmtMoney } from "@/lib/dates";
+import { fmtDateOnly } from "@/lib/dates";
 import { Odontogram, neighbour, type RegionMark } from "@/components/charts/dental/odontogram";
 import { ImageViewer, type ChartImage } from "@/components/charts/dental/image-viewer";
 import { ImageStrip } from "@/components/charts/dental/image-strip";
@@ -223,12 +220,6 @@ type TabProps = {
   tz: string;
   birthDate: string | null;
   data: DentalTabData;
-  /**
-   * "chart" is the Dental chart tab: the mouth, everything on it, its history.
-   * "treatment" is the same chart in the Treatment tab, where the doctor works
-   * a case: the plan beside it in place of the history below it.
-   */
-  mode?: "chart" | "treatment";
 };
 
 /*
@@ -256,12 +247,11 @@ export function DentalChartTab(props: TabProps) {
   );
 }
 
-export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mode: view = "chart" }: TabProps & { caption: (dateIso: string) => string }) {
+export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: TabProps & { caption: (dateIso: string) => string }) {
   const { t, locale, dir } = useI18n();
   const T = t.dental;
   const { toast } = useToast();
   const { me, doctors: roster, canWrite } = data;
-  const treatment = view === "treatment";
 
   const store = useDentalStore();
   const { marks, events, favorites, setFavorites, custom, setCustom, files: allFiles, setFiles, pins, setPins, write, steps, openItem, setOpenItem, emergency, setEmergency } = store;
@@ -356,7 +346,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     const el = wrapRef.current;
     if (!el) return;
     // The Treatment tab keeps its plan beside the chart from a narrower width — an iPad held sideways.
-    const ro = new ResizeObserver(([e]) => setWide(e.contentRect.width >= (treatment ? 900 : 1040)));
+    const ro = new ResizeObserver(([e]) => setWide(e.contentRect.width >= 1040));
     ro.observe(el);
     const mq = window.matchMedia("(max-width: 639px)");
     const on = () => setPhone(mq.matches);
@@ -366,7 +356,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       ro.disconnect();
       mq.removeEventListener("change", on);
     };
-  }, [treatment]);
+  }, []);
 
   // A treatment opened from a list or a plan takes the place of the tooth in hand —
   // unless it was opened from the tooth's full view, where its steps open in place.
@@ -677,7 +667,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
         voidedBy: null,
         voidReason: null,
         note: opts.note ?? "",
-        caseId: store.activeCaseId,
         emergency: !!opts.emergency,
         startedAt: null,
         appointmentId: null,
@@ -922,16 +911,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     return p ? { done: p.requiredDone, total: p.required, next: p.next?.en ?? null } : null;
   };
   const opener = (m: Mark) => (protocolFor(m.treatmentKey) ? () => setOpenItem(m.id) : undefined);
-  /** "90 JOD · Billed": the treatment's price for this patient, and — for whoever bills — whether it is billed. */
-  const moneyLine = (m: Mark): string | undefined => {
-    if (m.kind !== "procedure" || m.status === "existing") return undefined;
-    const cash = moneyOf(m, { marks, steps, prices: store.prices, billing: store.billing, billingSince: store.billingSince, tz });
-    const parts = [
-      cash.amount != null ? fmtMoney(cash.amount, store.currency, locale) : null,
-      store.canBill ? (cash.billed ? T.treatment.billed : cash.toBill ? T.treatment.notBilled : null) : null,
-    ].filter(Boolean);
-    return parts.length ? parts.join(" · ") : undefined;
-  };
 
   /*
     An emergency visit. On a treatment under way it is a step of its own on
@@ -1020,7 +999,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       markId={openMark.id}
       tz={tz}
       performer={performerPerson}
-      backLabel={bigPanel ? T.backToTooth.replace("{n}", selected.length === 1 ? selected[0] : "") : treatment ? T.treatment.back : T.close}
+      backLabel={bigPanel ? T.backToTooth.replace("{n}", selected.length === 1 ? selected[0] : "") : T.close}
       onBack={() => setOpenItem(null)}
       onFinish={(m) => void change(m, { ...m, status: "done", doneAt: new Date().toISOString() }, { op: "done" }, "done", "finish")}
       onVoid={(m) => setVoiding(m)}
@@ -1031,8 +1010,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
     />
   );
   // The plan, beside the chart in the Treatment tab — or above it, two to a row, where there is no room beside.
-  const plan = treatment && <PlanPanel tz={tz} extraOf={groupExtra} onDone={(m) => actions.onMarkDone(m.id)} />;
-  const planTop = treatment && <PlanPanel tz={tz} extraOf={groupExtra} onDone={(m) => actions.onMarkDone(m.id)} columns />;
 
   const panel = selected.length > 0 && mode === "tooth" && (
     <ToothPanel
@@ -1059,7 +1036,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       parentOf={(m) => leadOf(m, parents)}
       parentName={(m) => (m.treatmentKey === "implant_denture" ? fullArchName(m) : locale === "ar" ? m.labelAr : m.label)}
       progressFor={progressInfo}
-      moneyFor={moneyLine}
       size={panelSize}
       onSize={choosePanelSize}
       card={bigPanel ? card : undefined}
@@ -1113,9 +1089,9 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
   );
 
   const dayLabel = at === null ? T.today : fmtDateOnly(days[dayIdx!], locale);
-  // What the column beside the chart holds: an open treatment, the tooth in hand, the brush's treatments, or the plan.
-  // A big panel has a window of its own, and the column keeps the plan.
-  const side = (bigPanel ? null : card) || (mode === "brush" && canWrite ? brushPickerBody : (bigPanel ? null : panel) || plan || null);
+  // What the column beside the chart holds: an open treatment, the tooth in hand, or the brush's treatments.
+  // A tooth's full view has a window of its own.
+  const side = (bigPanel ? null : card) || (mode === "brush" && canWrite ? brushPickerBody : (bigPanel ? null : panel) || null);
   const sideBySide = wide && !!side;
 
   return (
@@ -1123,18 +1099,11 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       <DentalDefs />
 
       {/*
-        On a narrow screen the plan comes first, above the chart: what is next
-        is the first thing the doctor sees, not something below the mouth.
-      */}
-      {!wide && planTop && <Card className="p-4">{planTop}</Card>}
-
-      {/*
         The chart has the whole width until there is something to hold beside
-        it: a treatment open, a tooth being worked on, the brush's treatments,
-        or — in the Treatment tab — the plan. An empty panel would only make
-        every tooth smaller.
+        it: a treatment open, a tooth being worked on, or the brush's
+        treatments. An empty panel would only make every tooth smaller.
       */}
-      <div className={sideBySide ? `grid ${treatment ? "grid-cols-[minmax(0,1fr)_380px]" : "grid-cols-[minmax(0,1fr)_360px]"} items-start gap-4` : "grid gap-4"}>
+      <div className={sideBySide ? "grid grid-cols-[minmax(0,1fr)_360px] items-start gap-4" : "grid gap-4"}>
         <Card className="relative p-3 sm:p-4">
           {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-2">
@@ -1454,8 +1423,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
       {/* Room to scroll the last of the page out from under the docked panel. */}
       {sheetOpen && <div aria-hidden style={{ height: `${SHEET_SHARE * 100}dvh` }} />}
 
-      {/* The overview's lists. The Treatment tab has its plan and its visits instead. */}
-      {!treatment && (
+      {/* What is still to do on the mouth, and everything that happened to it. */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-4">
           <h3 className="mb-3 font-display text-base font-semibold text-ink-900">
@@ -1484,7 +1452,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
                       extra={groupExtra(m)}
                       progress={progressInfo(m)}
                       onOpen={opener(m)}
-                      money={moneyLine(m)}
                     />
                   </ul>
                 </li>
@@ -1509,7 +1476,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption, mod
           </div>
         </Card>
       </div>
-      )}
 
       {/* Whole mouth: the picker, then — for an arch or a quadrant — where. */}
       <Modal
