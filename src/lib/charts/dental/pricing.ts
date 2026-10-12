@@ -7,6 +7,10 @@
  * crown's material, a root canal's canals, a full arch's implants), else the
  * treatment's own. A variant with no price of its own costs what the
  * treatment does.
+ *
+ * A treatment can have two prices: for the whole treatment ('item') and for
+ * each visit ('session'). A patient's treatment is charged one way, starting
+ * with the whole treatment when the list has that price.
  */
 
 import { BUILT_IN_BY_KEY } from "./catalog";
@@ -26,7 +30,10 @@ export const PRICE_BY: Record<string, "material" | "canals" | "type" | "implants
   implant_denture: "implants",
 };
 
-/** Charged each visit rather than once: what a new price starts as. */
+/** How a price charges: once for the whole treatment, or for each visit. */
+export type PriceUnit = "item" | "session";
+
+/** Charged each visit rather than once, unless the clinic prices the whole of it. */
 export const PER_SESSION_BY_DEFAULT = new Set(["ortho_adjust"]);
 
 /** The variant a treatment is priced by, as recorded on the entry, or null when it has none. */
@@ -54,21 +61,33 @@ export function withVariant(name: string, variant: string | null): string {
 }
 
 /** A price on the list: the service that is the price, and its names — what the patient reads on the invoice. */
-export type PriceRow = { serviceId: string; chartKey: string; variant: string | null; price: number; unit: "item" | "session"; name: string; nameAr: string | null };
+export type PriceRow = { serviceId: string; chartKey: string; variant: string | null; price: number; unit: PriceUnit; name: string; nameAr: string | null };
 
 /** Is a treatment charged once, or per visit? From the price its fee came from. */
-export function unitOf(m: { serviceId: string | null }, prices: PriceRow[]): "item" | "session" {
+export function unitOf(m: { serviceId: string | null }, prices: PriceRow[]): PriceUnit {
   return prices.find((p) => p.serviceId === m.serviceId)?.unit ?? "item";
 }
 
-/** The price of a treatment from the clinic's list: its variant's, else its own. */
-export function priceFrom(list: PriceRow[], treatmentKey: string, detail: Record<string, string>): PriceRow | null {
-  const variant = variantOf(treatmentKey, detail);
-  return (
-    (variant ? list.find((p) => p.chartKey === treatmentKey && p.variant === variant) : undefined) ??
-    list.find((p) => p.chartKey === treatmentKey && p.variant === null) ??
-    null
-  );
+/**
+ * The price for a treatment, from the clinic's list: charged the way asked —
+ * its variant's price, else the treatment's own — or, asked no way, the way
+ * it starts: the whole treatment when the list prices it, else per visit (an
+ * orthodontic adjustment the other way round). The server prices with this
+ * too, so what is drawn at once is what is stored.
+ */
+export function pickPrice(list: PriceRow[], treatmentKey: string, variant: string | null, unit: PriceUnit | null): PriceRow | null {
+  const by = (u: PriceUnit) =>
+    (variant ? list.find((p) => p.chartKey === treatmentKey && p.variant === variant && p.unit === u) : undefined) ??
+    list.find((p) => p.chartKey === treatmentKey && p.variant === null && p.unit === u) ??
+    null;
+  if (unit) return by(unit);
+  const first: PriceUnit = PER_SESSION_BY_DEFAULT.has(treatmentKey) ? "session" : "item";
+  return by(first) ?? by(first === "item" ? "session" : "item");
+}
+
+/** The price of a treatment as charted, from the clinic's list. */
+export function priceFrom(list: PriceRow[], treatmentKey: string, detail: Record<string, string>, unit: PriceUnit | null = null): PriceRow | null {
+  return pickPrice(list, treatmentKey, variantOf(treatmentKey, detail), unit);
 }
 
 /** Where on the mouth, in the words an invoice uses. */

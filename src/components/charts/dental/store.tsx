@@ -60,7 +60,9 @@ export type DentalTabData = {
   canBook: boolean;
   /** May this member see what was billed and bill it (`invoices`)? */
   canBill: boolean;
-  /** The clinic's currency, for prices on the plan. */
+  /** May this member set the clinic's prices (`settings.services`)? Then an unpriced treatment links to them. */
+  canPrice?: boolean;
+  /** The clinic's currency, for prices on the chart. */
   currency: string;
   chart: DentalChartData;
   clinicName: string;
@@ -79,6 +81,7 @@ export type DentalStore = {
   canWrite: boolean;
   canBook: boolean;
   canBill: boolean;
+  canPrice: boolean;
   currency: string;
 
   marks: Mark[];
@@ -265,6 +268,7 @@ export function DentalProvider({
       canWrite: data.canWrite,
       canBook: data.canBook,
       canBill: data.canBill,
+      canPrice: !!data.canPrice,
       currency: data.currency,
       marks,
       setMarks,

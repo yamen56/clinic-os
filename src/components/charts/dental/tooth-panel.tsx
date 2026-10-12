@@ -28,7 +28,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Maximize2, Mi
 import { useI18n } from "@/lib/i18n/client";
 import type { ChartImage } from "./image-viewer";
 import { AddImageButtons, ImageThumb } from "./image-strip";
-import { findTreatment, type Treatment } from "@/lib/charts/dental/catalog";
+import { findTreatment, type EntryKind, type Treatment } from "@/lib/charts/dental/catalog";
 import { SURFACES, surfaceAt, surfaceLabel, tooth as toothOf, toothName, type Surface } from "@/lib/charts/dental/teeth";
 import { paintAt, stateOf, type Mark, type MarkEvent, type Paint, type Person, type Status, type ToothState } from "@/lib/charts/dental/state";
 import { OCC, SIDE_H, ToothSide, ToothTop, INK, SOFT, PaintSwatch } from "./tooth-art";
@@ -280,8 +280,19 @@ export function ToothPanel({
   const findings = live.filter((m) => m.kind !== "procedure");
   const voided = here.filter((m) => !!m.voidedAt);
 
-  // The full view opens on the tooth; the treatments are a pane of their own.
+  /*
+    The full view opens on the tooth; adding is a pane of its own — for a
+    treatment, for work already there (done before, elsewhere), or for a
+    finding, each opened from its own section of the tooth.
+  */
   const [pane, setPane] = useState<"tooth" | "add">("tooth");
+  const [addAs, setAddAs] = useState<"treatment" | "existing" | "finding">("treatment");
+  const openAdd = (as: "treatment" | "existing" | "finding") => {
+    if (as === "existing") a.onStatus("existing");
+    else if (as === "treatment" && status === "existing") a.onStatus("planned");
+    setAddAs(as);
+    setPane("add");
+  };
   const toothKey = teeth.join(",");
   const count = here.length;
   const lastCount = useRef(count);
@@ -361,6 +372,7 @@ export function ToothPanel({
           type="button"
           disabled={teeth.length < 2}
           onClick={a.onSpanRecord}
+          data-span-record
           className="h-9 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-white disabled:opacity-45"
         >
           {T.spanRecord.replace("{n}", String(teeth.length))}
@@ -390,28 +402,32 @@ export function ToothPanel({
       )
     ) : null;
 
-  const controls = locked ? (
-    <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700" data-read-only>{past ? T.readOnlyPast : T.readOnly}</p>
-  ) : (
-    /* "How" and "who", in one line: then straight to the treatments. */
+  /* "How" and "who", in one line: then straight to the treatments. A finding is what was found — it has no "how". */
+  const statusGroup = (
+    <div className="inline-flex shrink-0 rounded-ctl bg-sunken p-0.5" role="radiogroup">
+      {STATUSES.map((s) => (
+        <button
+          key={s}
+          type="button"
+          role="radio"
+          aria-checked={status === s}
+          title={T.statusHint[s]}
+          onClick={() => a.onStatus(s)}
+          className="inline-flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-semibold transition-colors duration-140"
+          style={status === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
+        >
+          <PaintSwatch paint={s} size={14} />
+          {T.status[s]}
+        </button>
+      ))}
+    </div>
+  );
+  const controlsFor = (withStatus: boolean) =>
+    locked ? (
+      <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700" data-read-only>{past ? T.readOnlyPast : T.readOnly}</p>
+    ) : (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="inline-flex shrink-0 rounded-ctl bg-sunken p-0.5" role="radiogroup">
-        {STATUSES.map((s) => (
-          <button
-            key={s}
-            type="button"
-            role="radio"
-            aria-checked={status === s}
-            title={T.statusHint[s]}
-            onClick={() => a.onStatus(s)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-semibold transition-colors duration-140"
-            style={status === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
-          >
-            <PaintSwatch paint={s} size={14} />
-            {T.status[s]}
-          </button>
-        ))}
-      </div>
+      {withStatus && statusGroup}
       <label className="flex min-w-[11rem] flex-1 items-center gap-2">
         <span className="shrink-0 text-[12px] font-semibold text-ink-500">{T.performedBy}</span>
         <select
@@ -428,23 +444,28 @@ export function ToothPanel({
       </label>
     </div>
   );
+  const controls = controlsFor(true);
 
-  const picker = !locked && (
-    <section>
-      <TreatmentPicker
-        catalog={catalog}
-        context={tt}
-        favorites={favorites}
-        recent={recent}
-        paint={paint}
-        tz={tz}
-        wide={big}
-        onPick={a.onPick}
-        onToggleFavorite={a.onToggleFavorite}
-        onAddCustom={a.onAddCustom}
-      />
-    </section>
-  );
+  const pickerOf = (initialKind?: EntryKind) =>
+    !locked && (
+      <section>
+        <TreatmentPicker
+          key={initialKind ?? "any"}
+          catalog={catalog}
+          context={tt}
+          favorites={favorites}
+          recent={recent}
+          paint={paint}
+          tz={tz}
+          wide={big}
+          initialKind={initialKind}
+          onPick={a.onPick}
+          onToggleFavorite={a.onToggleFavorite}
+          onAddCustom={a.onAddCustom}
+        />
+      </section>
+    );
+  const picker = pickerOf();
 
   /*
     One entry. A tooth of a full arch is done, voided and noted as the whole,
@@ -593,7 +614,7 @@ export function ToothPanel({
   const summary = [
     todo.length ? T.summaryTodo.replace("{n}", String(todo.length)) : null,
     doneList.length ? T.summaryDone.replace("{n}", String(doneList.length)) : null,
-    findings.length ? T.summaryFindings.replace("{n}", String(findings.length)) : null,
+    findings.length ? (findings.length === 1 ? T.summaryFinding : T.summaryFindings.replace("{n}", String(findings.length))) : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -663,7 +684,7 @@ export function ToothPanel({
   const addButton = !locked && (
     <button
       type="button"
-      onClick={() => setPane("add")}
+      onClick={() => openAdd("treatment")}
       className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-white hover:bg-brand-700"
       data-add-treatment
     >
@@ -671,6 +692,20 @@ export function ToothPanel({
       {T.addTreatment}
     </button>
   );
+  // What is already on the tooth, and what was found on it: each with its own way in.
+  const addOther = (as: "existing" | "finding", label: string) =>
+    !locked && (
+      <button
+        type="button"
+        onClick={() => openAdd(as)}
+        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+        data-add-other={as}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        {label}
+      </button>
+    );
+  const empty = (text: string) => <p className="rounded-ctl border border-dashed border-line-strong px-3 py-3 text-center text-[13px] text-ink-500">{text}</p>;
   const quickRow = !locked && quick.length > 0 && (
     <section data-quick-add>
       <Heading title={T.quickAdd} />
@@ -706,8 +741,8 @@ export function ToothPanel({
         </button>
       )}
       {spanBox}
-      {controls}
-      {picker}
+      {controlsFor(addAs !== "finding")}
+      {pickerOf(addAs === "finding" ? "finding" : "procedure")}
     </div>
   ) : (
     <div className="grid gap-5" data-tooth-pane="tooth">
@@ -723,8 +758,19 @@ export function ToothPanel({
           {quickRow}
         </div>
       )}
-      {doneSection}
-      {findingsSection}
+      {/* Always shown in full: what is already there and what was found — each with its own Add. */}
+      <section data-tooth-done={doneList.length}>
+        <Heading title={T.doneTitle} count={doneList.length}>
+          {addOther("existing", T.addExisting)}
+        </Heading>
+        {doneList.length ? list(doneList) : empty(T.nothingDone)}
+      </section>
+      <section data-tooth-findings={findings.length}>
+        <Heading title={T.findingsTitle} count={findings.length}>
+          {addOther("finding", T.addFinding)}
+        </Heading>
+        {findings.length ? list(findings) : empty(T.noFindings)}
+      </section>
       {voidedSection}
     </div>
   );

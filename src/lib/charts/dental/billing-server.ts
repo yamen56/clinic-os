@@ -8,15 +8,15 @@
  */
 
 import type { PoolClient } from "pg";
-import { invoiceLineText, type LineWords, type PriceRow } from "./pricing";
+import { invoiceLineText, pickPrice, type LineWords, type PriceRow, type PriceUnit } from "./pricing";
 import { EVERY_TOOTH, inChartOrder, leadIdOf } from "./full-arch";
 
-/** The clinic's dental prices: the services linked to a treatment, still in use. */
-export async function loadPrices(c: PoolClient, clinicId: string): Promise<PriceRow[]> {
+/** The clinic's dental prices: the services linked to a treatment, still in use — or one treatment's. */
+export async function loadPrices(c: PoolClient, clinicId: string, treatmentKey: string | null = null): Promise<PriceRow[]> {
   const r = await c.query(
     `select id, chart_key, chart_variant, price, price_unit, name, name_ar from services
-      where clinic_id = $1 and chart_key is not null and active`,
-    [clinicId]
+      where clinic_id = $1 and chart_key is not null and active and ($2::text is null or chart_key = $2)`,
+    [clinicId, treatmentKey]
   );
   return r.rows.map((x) => ({
     serviceId: x.id as string,
@@ -50,22 +50,19 @@ export async function loadBilled(c: PoolClient, clinicId: string, markIds: strin
   return r.rows.map((x) => ({ markId: x.mark_id as string, qty: Number(x.qty), invoices: x.invoices ?? [] }));
 }
 
-/** The price a treatment starts with, from the list: its variant's, else its own. Null when the clinic has none. */
+/**
+ * A treatment's price from the list — charged the way asked, or the way it
+ * starts (pricing.ts pickPrice). Null when the clinic has no such price.
+ */
 export async function priceFor(
   c: PoolClient,
   clinicId: string,
   treatmentKey: string,
-  variant: string | null
-): Promise<{ serviceId: string; price: number } | null> {
-  const r = await c.query(
-    `select id, price from services
-      where clinic_id = $1 and chart_key = $2 and active
-        and (chart_variant = $3 or chart_variant is null)
-      order by (chart_variant is null)
-      limit 1`,
-    [clinicId, treatmentKey, variant]
-  );
-  return r.rows[0] ? { serviceId: r.rows[0].id as string, price: Number(r.rows[0].price) } : null;
+  variant: string | null,
+  unit: PriceUnit | null = null
+): Promise<{ serviceId: string; price: number; unit: PriceUnit } | null> {
+  const row = pickPrice(await loadPrices(c, clinicId, treatmentKey), treatmentKey, variant, unit);
+  return row ? { serviceId: row.serviceId, price: row.price, unit: row.unit } : null;
 }
 
 /** An invoice line for chart work, as the invoice builder starts it. */

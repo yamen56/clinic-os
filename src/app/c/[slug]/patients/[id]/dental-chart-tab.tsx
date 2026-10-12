@@ -29,11 +29,13 @@ import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/t
 import { useDentalStore, type ChartFile, type DentalTabData } from "@/components/charts/dental/store";
 import { call, newId, useChartWriter, type FreshMark } from "@/components/charts/dental/writer";
 import { ProcedureCard } from "@/components/charts/dental/procedure-card";
+import { ReadyToBill } from "@/components/charts/dental/ready-to-bill";
+import { cashOf, priceable } from "@/components/charts/dental/price-line";
 import { EmergencySheet } from "@/components/charts/dental/emergency-sheet";
 import { EMERGENCY_STEP, progressOf, protocolFor, type EmergencyAction } from "@/lib/charts/dental/protocols";
 import { nextVisitOf } from "@/lib/charts/dental/treatment";
 import { priceFrom } from "@/lib/charts/dental/pricing";
-import { fmtDateOnly } from "@/lib/dates";
+import { fmtDateOnly, fmtMoney } from "@/lib/dates";
 import { Odontogram, neighbour, type RegionMark } from "@/components/charts/dental/odontogram";
 import { ImageViewer, type ChartImage } from "@/components/charts/dental/image-viewer";
 import { ImageStrip } from "@/components/charts/dental/image-strip";
@@ -284,26 +286,26 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const [mouthHover, setMouthHover] = useState<MouthRegion | null>(null);
   const [mouthEntry, setMouthEntry] = useState<string | null>(null);
   /*
-    The tooth panel's size: compact beside or under the chart, or big in a
-    window of its own. The doctor chooses with Expand, and the choice stays —
-    on this device, for every tooth after — until they make it small again.
+    The tooth panel's size. A tooth opens in full — the tooth's own window,
+    everything on it in view (Yamen, 2026-10-12: "better they get auto
+    expanded, then he can press to have it smaller or go back"). Smaller puts
+    it beside or under the chart, and it stays so while the doctor works on
+    this page; the next visit to the chart opens in full again.
   */
-  const [panelSize, setPanelSize] = useState<PanelSize>("compact");
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("cos.dental.panel") === "big") setPanelSize("big");
-    } catch {
-      // Storage refused (a private window): the panel opens compact, as it would anyway.
+  const [panelSize, setPanelSize] = useState<PanelSize>("big");
+  const choosePanelSize = useCallback((s: PanelSize) => setPanelSize(s), []);
+  /*
+    A bridge's other teeth are tapped on the chart, which the full view
+    covers: it steps aside while they are chosen, and comes back after.
+  */
+  const spanFromFull = useRef(false);
+  const endSpan = () => {
+    setSpan(null);
+    if (spanFromFull.current) {
+      spanFromFull.current = false;
+      setPanelSize("big");
     }
-  }, []);
-  const choosePanelSize = useCallback((s: PanelSize) => {
-    setPanelSize(s);
-    try {
-      localStorage.setItem("cos.dental.panel", s);
-    } catch {
-      // Remembered for this visit only.
-    }
-  }, []);
+  };
 
   /*
     X-rays and photos: the patient's own files of those kinds, newest first —
@@ -358,15 +360,29 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     };
   }, []);
 
-  // A treatment opened from a list or a plan takes the place of the tooth in hand —
-  // unless it was opened from the tooth's full view, where its steps open in place.
+  /*
+    A treatment opened — from a list, a visit or a note — opens on its tooth,
+    in full, its steps in place of the tooth's list. One on the mouth or an
+    arch has no tooth to open: it takes the place of the tooth in hand. In the
+    compact panel it always does.
+  */
   const fullView = useRef(false);
   fullView.current = panelSize === "big";
   useEffect(() => {
-    if (!openItem || fullView.current) return;
+    if (!openItem) return;
+    if (fullView.current) {
+      const m = marks.find((x) => x.id === openItem);
+      if (m && isToothSite(m.site) && !(selected.length === 1 && selected[0] === m.site)) {
+        setSelected([m.site]);
+        setPicked([]);
+      }
+      return;
+    }
     setSelected([]);
     setPicked([]);
-    setSpan(null);
+    endSpan();
+    // Only a newly opened treatment moves the tooth in hand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openItem]);
 
   useEffect(() => {
@@ -388,7 +404,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       if (e.key === "Escape" && selected.length) {
         setSelected([]);
         setPicked([]);
-        setSpan(null);
+        endSpan();
         return;
       }
       if (mode !== "tooth" || selected.length !== 1) return;
@@ -631,11 +647,13 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   type RecordOpts = { status?: Status; emergency?: boolean; note?: string; open?: boolean };
 
   /** What a new treatment costs, as the server will price it: procedures only, a full arch's parts not one by one. */
-  const priced = (t: Treatment, s: Site, st: Status, groupId: string | undefined, sites: Site[]): number | null => {
-    if (t.kind !== "procedure" || st === "existing") return null;
+  /** Its price from the list, the way it starts — the whole treatment when the list prices it — or none. */
+  const priced = (t: Treatment, s: Site, st: Status, groupId: string | undefined, sites: Site[]): { fee: number | null; serviceId: string | null } => {
+    if (t.kind !== "procedure" || st === "existing") return { fee: null, serviceId: null };
     const archPart = !!groupId && s.group !== false && isToothSite(s.site) && sites.some((x) => x.group !== false && !isToothSite(x.site));
-    if (archPart) return null;
-    return priceFrom(store.prices, t.key, s.detail ?? defaultsFor(t, s.site))?.price ?? null;
+    if (archPart) return { fee: null, serviceId: null };
+    const row = priceFrom(store.prices, t.key, s.detail ?? defaultsFor(t, s.site));
+    return { fee: row?.price ?? null, serviceId: row?.serviceId ?? null };
   };
 
   const record = (tr: Treatment, sites: Site[], groupId?: string, text?: string, opts: RecordOpts = {}) => {
@@ -671,9 +689,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
         startedAt: null,
         appointmentId: null,
         // Drawn with its price at once; the server's answer is the same price, from the same list.
-        fee: priced(t, s, st, groupId, sites),
+        ...priced(t, s, st, groupId, sites),
         feeManual: false,
-        serviceId: null,
       };
     });
     const where = sites.map((s) => (isToothSite(s.site) ? s.site : siteLabel(s.site, T))).join(" · ");
@@ -734,7 +751,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       ordered.map((f) => ({ site: f, surfaces: [], role: bridge ? (states.get(f)?.gone ? ("pontic" as const) : ("abutment" as const)) : undefined })),
       newId()
     );
-    setSpan(null);
+    endSpan();
   };
 
   /*
@@ -762,7 +779,10 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     const st: Status = status === "done" && protocolFor(tr.key) ? "planned" : status;
     record(tr, sites, newId(), T.added.replace("{name}", locale === "ar" ? tr.ar : tr.en).replace("{site}", where), { status: st });
     setFullArch(null);
-    closePanel();
+    // The tooth is put down; the arch's steps, just opened, stay open — an arch has no one tooth to open in full.
+    setSelected([]);
+    setPicked([]);
+    endSpan();
   };
 
   const pick = (tr: Treatment) => {
@@ -779,7 +799,13 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     }
     if (tr.scope === "span") {
       if (selected.length >= 2) recordSpan(tr, selected);
-      else setSpan(tr);
+      else {
+        setSpan(tr);
+        if (panelSize === "big") {
+          spanFromFull.current = true;
+          setPanelSize("compact");
+        }
+      }
       return;
     }
     record(tr, sitesFor(tr, selected));
@@ -850,7 +876,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const closePanel = () => {
     setSelected([]);
     setPicked([]);
-    setSpan(null);
+    endSpan();
     // A treatment's steps open inside the tooth's full view close with it.
     if (panelSize === "big") setOpenItem(null);
   };
@@ -876,7 +902,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     onToggleFavorite: toggleFavorite,
     onAddCustom: () => setCustomOpen(true),
     onSpanRecord: () => span && recordSpan(span, selected),
-    onSpanCancel: () => setSpan(null),
+    onSpanCancel: endSpan,
     onMarkDone: (id) => {
       const m = find(id);
       if (m) change(m, { ...m, status: "done", doneAt: new Date().toISOString() }, { op: "done" }, "done");
@@ -984,6 +1010,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
 
   const live = marks.filter((m) => !m.voidedAt);
   const remaining = live.filter((m) => m.status === "planned" && !leadOf(m, parents)).sort((a, b) => siteOrder(a.site) - siteOrder(b.site));
+  // What the work still to do comes to, at the list's prices.
+  const remainingTotal = remaining.reduce((sum, m) => sum + (priceable(m, marks) ? (cashOf(m, store, tz).amount ?? 0) : 0), 0);
   // The mouth's history lists a full arch once; each of its teeth keeps its own lines in that tooth's history.
   const byMark = new Map(marks.map((m) => [m.id, m]));
   const historyEvents = events.filter((e) => {
@@ -1007,9 +1035,17 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       onDetail={actions.onDetail}
       onPlan={planFollowUp}
       extra={groupExtra(openMark)}
+      onExpand={
+        !bigPanel && isToothSite(openMark.site)
+          ? () => {
+              setPanelSize("big");
+              setSelected([openMark.site]);
+              setPicked([]);
+            }
+          : undefined
+      }
     />
   );
-  // The plan, beside the chart in the Treatment tab — or above it, two to a row, where there is no room beside.
 
   const panel = selected.length > 0 && mode === "tooth" && (
     <ToothPanel
@@ -1423,12 +1459,20 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       {/* Room to scroll the last of the page out from under the docked panel. */}
       {sheetOpen && <div aria-hidden style={{ height: `${SHEET_SHARE * 100}dvh` }} />}
 
+      {/* For whoever bills: the work done or under way and not on an invoice yet, billed from here. */}
+      <ReadyToBill tz={tz} className="p-4" />
+
       {/* What is still to do on the mouth, and everything that happened to it. */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-4">
-          <h3 className="mb-3 font-display text-base font-semibold text-ink-900">
+          <h3 className="mb-3 flex flex-wrap items-center gap-x-2 font-display text-base font-semibold text-ink-900">
             {T.remaining}
-            {remaining.length > 0 && <span className="ms-2 rounded-full bg-sunken px-2 py-0.5 text-[12px] text-ink-500 tnum">{remaining.length}</span>}
+            {remaining.length > 0 && <span className="rounded-full bg-sunken px-2 py-0.5 text-[12px] text-ink-500 tnum">{remaining.length}</span>}
+            {remainingTotal > 0 && (
+              <span className="ms-auto font-sans text-[13px] font-semibold text-ink-500 tnum" data-remaining-total={remainingTotal}>
+                {T.price.inAll.replace("{amount}", fmtMoney(remainingTotal, store.currency, locale))}
+              </span>
+            )}
           </h3>
           {remaining.length === 0 ? (
             <p className="text-[13px] text-ink-500">{T.noRemaining}</p>

@@ -3,13 +3,15 @@
 /*
   Treatment prices: what each treatment on the dental chart costs.
 
-  The dentist said each treatment has its price — each kind of crown its own —
-  and that the doctor sets them. They are set here, once, and every treatment
-  charted on a patient starts at this price (the doctor can still change it
-  for one patient). A price is a service: the invoice builder, the booking
-  page and the chart read the same list, so the same cleaning never costs two
-  different amounts. A treatment the clinic already sells as a service is
-  linked to it rather than priced twice.
+  The dentist said each treatment has its price — each kind of crown its own.
+  They are set here, once, and every treatment charted on a patient takes its
+  price from here: the doctor never types one. A treatment can cost a price
+  for the whole of it, a price per visit, or have both; which one a patient
+  pays is chosen on that patient's treatment (Yamen, 2026-10-12). A price is a
+  service: the invoice builder, the booking page and the chart read the same
+  list, so the same cleaning never costs two different amounts. A treatment
+  the clinic already sells as a service is linked to it rather than priced
+  twice.
 
   Three people read this list, so every row says it three ways: the English
   the doctor charts in, the Arabic the reception works in, and the line the
@@ -31,7 +33,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, SearchInput } from "@/components/ui/input";
 import { BUILT_IN, PROCEDURE_CATEGORIES, matchesQuery, type Treatment } from "@/lib/charts/dental/catalog";
-import { PER_SESSION_BY_DEFAULT, PRICE_BY, invoiceLineText, variantName, type PriceRow } from "@/lib/charts/dental/pricing";
+import { PER_SESSION_BY_DEFAULT, PRICE_BY, invoiceLineText, variantName, type PriceRow, type PriceUnit } from "@/lib/charts/dental/pricing";
 import { renameDentalPricesAction, saveDentalPriceAction } from "../services/actions";
 
 export type DentalPrice = PriceRow;
@@ -115,9 +117,10 @@ export function DentalPrices({
 
   const treatments = useMemo(() => [...BUILT_IN, ...custom].filter((tr) => tr.kind === "procedure"), [custom]);
   const byKey = useMemo(() => new Map(treatments.map((tr) => [tr.key, tr])), [treatments]);
-  const priceOf = (key: string, variant: string | null) => prices.find((p) => p.chartKey === key && p.variant === variant) ?? null;
+  const priceOf = (key: string, variant: string | null, unit: PriceUnit) => prices.find((p) => p.chartKey === key && p.variant === variant && p.unit === unit) ?? null;
   const pricedKeys = new Set(prices.map((p) => p.chartKey));
-  const unitOf = (key: string) => priceOf(key, null)?.unit ?? prices.find((p) => p.chartKey === key)?.unit ?? (PER_SESSION_BY_DEFAULT.has(key) ? "session" : "item");
+  // How a price typed under "Needs a price" charges: the way the treatment starts.
+  const firstUnit = (key: string): PriceUnit => (PER_SESSION_BY_DEFAULT.has(key) ? "session" : "item");
   // The doctor's name for it and the reception's, whichever the reader is.
   /*
     Treatments by their medical names, in English, whatever the page speaks —
@@ -133,7 +136,7 @@ export function DentalPrices({
       toast(S.failed, "error");
       return false;
     }
-    setPrices((prev) => [...prev.filter((p) => !(p.chartKey === key && p.variant === variant)), ...(r.row ? [r.row] : [])]);
+    setPrices((prev) => [...prev.filter((p) => !(p.chartKey === key && p.variant === variant && p.unit === unit)), ...(r.row ? [r.row] : [])]);
     if (link) setFree((prev) => prev.filter((s) => s.id !== link));
     if (r.released) setFree((prev) => [...prev, r.released!]);
     if (r.row) {
@@ -226,7 +229,7 @@ export function DentalPrices({
                         {otherName(tr)} · <span className="font-semibold text-st-pending">{S.unpricedN.replace("{n}", String(n.count))}</span>
                       </div>
                     </div>
-                    <PriceBox value={null} label={label} hook={`needs:${n.key}:${n.variant ?? ""}`} onSave={(v) => (v == null ? Promise.resolve(true) : save(n.key, n.variant, v, unitOf(n.key)))} />
+                    <PriceBox value={null} label={label} hook={`needs:${n.key}:${n.variant ?? ""}`} onSave={(v) => (v == null ? Promise.resolve(true) : save(n.key, n.variant, v, firstUnit(n.key)))} />
                     <span className="text-[12px] text-ink-500">{currency}</span>
                   </li>
                 );
@@ -278,14 +281,25 @@ export function DentalPrices({
                 {isOpen && (
                   <ul className="divide-y divide-line border-t border-line">
                     {list.map((tr) => {
-                      const base = priceOf(tr.key, null);
-                      const unit = unitOf(tr.key);
+                      const base = priceOf(tr.key, null, "item");
+                      const baseVisit = priceOf(tr.key, null, "session");
                       const field = PRICE_BY[tr.key] ? tr.details?.find((d) => d.key === PRICE_BY[tr.key]) : undefined;
                       const name = nameOf(tr);
                       const use = usage[tr.key];
                       const mine = prices.filter((p) => p.chartKey === tr.key);
                       // The line the patient reads: the treatment's own price if it has one, else its first priced kind.
-                      const shown = base ?? mine[0] ?? null;
+                      const shown = base ?? baseVisit ?? mine[0] ?? null;
+                      // One price box: whole or per visit, for the treatment or one kind of it.
+                      const box = (variant: string | null, unit: PriceUnit, label: string, hook: string, placeholder?: string) => (
+                        <PriceBox
+                          key={`${variant ?? ""}:${unit}`}
+                          value={priceOf(tr.key, variant, unit)?.price ?? null}
+                          placeholder={placeholder}
+                          label={label}
+                          hook={hook}
+                          onSave={(p) => save(tr.key, variant, p, unit)}
+                        />
+                      );
                       const preview = shown
                         ? invoiceLineText(
                             { label: tr.en, labelAr: tr.ar, treatmentKey: tr.key, detail: shown.variant && field ? { [field.key]: shown.variant } : {}, site: sampleSite(tr) },
@@ -306,29 +320,27 @@ export function DentalPrices({
                                 {use && use.used > 0 && <span className="tnum">· {S.usedN.replace("{n}", String(use.used))}</span>}
                               </div>
                             </div>
-                            <PriceBox value={base?.price ?? null} label={name} hook={tr.en} onSave={(v) => save(tr.key, null, v, unit)} />
-                            <span className="text-[12px] text-ink-500">{currency}</span>
-                            <select
-                              value={unit}
-                              onChange={(e) => {
-                                const u = e.target.value as "item" | "session";
-                                // The unit belongs to the treatment: every price of it moves together.
-                                for (const p of prices.filter((x) => x.chartKey === tr.key)) void save(tr.key, p.variant, p.price, u);
-                              }}
-                              disabled={!mine.length}
-                              className="select-chevron h-9 appearance-none rounded-ctl border border-line bg-surface ps-2.5 pe-8 text-[13px] disabled:opacity-50"
-                              aria-label={S.unit}
-                              data-price-unit={tr.key}
-                            >
-                              <option value="item">{S.perItem}</option>
-                              <option value="session">{S.perSession}</option>
-                            </select>
+                            {/* Two prices: the whole treatment, and each visit — either, or both. */}
+                            <label className="grid gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="item">
+                              {S.whole}
+                              <span className="flex items-center gap-1.5">
+                                {box(null, "item", `${name} · ${S.whole}`, tr.en)}
+                                <span className="text-[12px] font-normal">{currency}</span>
+                              </span>
+                            </label>
+                            <label className="grid gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="session">
+                              {S.perVisit}
+                              <span className="flex items-center gap-1.5">
+                                {box(null, "session", `${name} · ${S.perVisit}`, `${tr.en} · ${S.perSession}`)}
+                                <span className="text-[12px] font-normal">{currency}</span>
+                              </span>
+                            </label>
                             {!base && free.length > 0 && (
-                              <label className="flex items-center gap-1.5 text-[12px] text-ink-500">
+                              <label className="flex items-center gap-1.5 self-end text-[12px] text-ink-500">
                                 <Link2 className="h-3.5 w-3.5" />
                                 <select
                                   value=""
-                                  onChange={(e) => e.target.value && void save(tr.key, null, null, unit, e.target.value)}
+                                  onChange={(e) => e.target.value && void save(tr.key, null, null, "item", e.target.value)}
                                   className="select-chevron h-9 max-w-[12rem] appearance-none rounded-ctl border border-line bg-surface ps-2.5 pe-8 text-[13px]"
                                   aria-label={S.sameAs}
                                   data-same-as={tr.key}
@@ -343,25 +355,20 @@ export function DentalPrices({
                               </label>
                             )}
                           </div>
+                          {/* Each kind of it — a material, a canal count — priced both ways too, in a small table. */}
                           {field && (
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 ps-0 sm:ps-4">
-                              {field.options.map((o) => {
-                                const v = priceOf(tr.key, o.key);
-                                const label = o.en;
-                                return (
-                                  <label key={o.key} className="flex items-center gap-2 text-[13px]" data-price-variant={`${tr.key}:${o.key}`}>
-                                    <bdi className="text-ink-700">{label}</bdi>
-                                    <PriceBox
-                                      value={v?.price ?? null}
-                                      placeholder={base ? String(base.price) : "—"}
-                                      label={`${name} · ${label}`}
-                                      hook={`${tr.en} · ${o.en}`}
-                                      onSave={(p) => save(tr.key, o.key, p, unit)}
-                                    />
-                                  </label>
-                                );
-                              })}
-                              <span className="text-[12px] text-ink-400">{S.variantHint}</span>
+                            <div className="grid w-fit grid-cols-[minmax(7rem,auto)_6rem_6rem] items-center gap-x-3 gap-y-1.5 ps-0 text-[13px] sm:ps-4">
+                              <span />
+                              <span className="text-[11.5px] font-semibold text-ink-500">{S.whole}</span>
+                              <span className="text-[11.5px] font-semibold text-ink-500">{S.perVisit}</span>
+                              {field.options.map((o) => (
+                                <div key={o.key} className="contents" data-price-variant={`${tr.key}:${o.key}`}>
+                                  <bdi className="text-ink-700">{o.en}</bdi>
+                                  {box(o.key, "item", `${name} · ${o.en}`, `${tr.en} · ${o.en}`, base ? String(base.price) : "—")}
+                                  {box(o.key, "session", `${name} · ${o.en} · ${S.perSession}`, `${tr.en} · ${o.en} · ${S.perSession}`, baseVisit ? String(baseVisit.price) : "—")}
+                                </div>
+                              ))}
+                              <span className="col-span-3 text-[12px] text-ink-400">{S.variantHint}</span>
                             </div>
                           )}
                           {/* What the patient will read, and the way to change it. */}
@@ -396,9 +403,10 @@ export function DentalPrices({
               .map((p) => {
                 const v = names[p.serviceId] ?? { name: p.name, nameAr: p.nameAr ?? "" };
                 const kind = variantName(renaming.key, p.variant, "en");
+                const title = [nameOf(renaming), kind, p.unit === "session" ? S.perSession : null].filter(Boolean).join(" · ");
                 return (
                   <div key={p.serviceId} className="grid gap-2 rounded-ctl border border-line p-3">
-                    <div className="text-[13px] font-semibold">{kind ? `${nameOf(renaming)} · ${kind}` : nameOf(renaming)}</div>
+                    <div className="text-[13px] font-semibold">{title}</div>
                     <label className="grid gap-1 text-[12px] font-semibold text-ink-500">
                       {S.nameEn}
                       <Input dir="ltr" value={v.name} maxLength={80} onChange={(e) => setNames((prev) => ({ ...prev, [p.serviceId]: { ...v, name: e.target.value } }))} />

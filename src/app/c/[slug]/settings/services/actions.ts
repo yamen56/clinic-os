@@ -6,7 +6,8 @@ import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { z } from "zod";
 import { resolveTreatment } from "@/lib/charts/dental/db";
-import { PRICE_BY, withVariant, type PriceRow } from "@/lib/charts/dental/pricing";
+import { PRICE_BY, pickPrice, variantOf, withVariant, type PriceRow } from "@/lib/charts/dental/pricing";
+import { loadPrices } from "@/lib/charts/dental/billing-server";
 
 const serviceSchema = z.object({
   id: z.string().uuid().optional(),
@@ -293,15 +294,18 @@ const dentalPriceSchema = z.object({
   key: z.string().min(1).max(64),
   variant: z.string().max(24).nullable(),
   price: z.number().min(0).max(1_000_000).nullable(),
+  /** Which of the treatment's two prices: for the whole treatment, or per visit. */
   unit: z.enum(["item", "session"]),
   /** Price it as one of the clinic's own services instead of making a new one. */
   linkServiceId: z.string().uuid().nullable().default(null),
-  /** Set from a patient's treatment ("Use for every patient"): that treatment bills this price's service. */
-  markId: z.string().uuid().nullable().default(null),
 });
 
+/** A per-visit price's name on the invoice, after the treatment's: "Root canal treatment (3 canals) · per visit". */
+const PER_VISIT = { en: "per visit", ar: "لكل زيارة" };
+
 /**
- * A dental treatment's price, as a service.
+ * A dental treatment's price, as a service — its price for the whole
+ * treatment, or per visit: a treatment may have both, each its own service.
  *
  * Typing a price makes the treatment's service — named from the catalog, in
  * both languages, not offered on the booking page — or updates it. Linking
@@ -321,8 +325,6 @@ export async function saveDentalPriceAction(
   const parsed = dentalPriceSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
-  // Pointing a patient's treatment at the price writes to the chart: that is the chart's capability.
-  if (d.markId && !can(access, "patients.charts")) return { error: "forbidden" };
 
   return inClinic(access, async (c) => {
     const tr = await resolveTreatment(c, access.clinicId, d.key);
@@ -334,8 +336,8 @@ export async function saveDentalPriceAction(
     const cur = (
       await c.query(
         `select id, chart_owned, name, name_ar, price from services
-          where clinic_id = $1 and chart_key = $2 and coalesce(chart_variant, '') = coalesce($3, '')`,
-        [access.clinicId, d.key, d.variant]
+          where clinic_id = $1 and chart_key = $2 and coalesce(chart_variant, '') = coalesce($3, '') and price_unit = $4`,
+        [access.clinicId, d.key, d.variant, d.unit]
       )
     ).rows[0];
     const release = async () => {
@@ -377,7 +379,11 @@ export async function saveDentalPriceAction(
             [access.clinicId]
           )
         ).rows[0]?.id ?? null;
-      const names = { en: withVariant(tr.en, option?.en ?? null).slice(0, 80), ar: withVariant(tr.ar, option?.ar ?? null).slice(0, 80) };
+      const each = d.unit === "session";
+      const names = {
+        en: `${withVariant(tr.en, option?.en ?? null)}${each ? ` · ${PER_VISIT.en}` : ""}`.slice(0, 80),
+        ar: `${withVariant(tr.ar, option?.ar ?? null)}${each ? ` · ${PER_VISIT.ar}` : ""}`.slice(0, 80),
+      };
       const ins = await c.query(
         `insert into services (clinic_id, name, name_ar, duration_min, price, bookable_online, section_id,
                                chart_key, chart_variant, price_unit, chart_owned, sort)
@@ -397,52 +403,49 @@ export async function saveDentalPriceAction(
       );
       row = { serviceId: ins.rows[0].id, chartKey: d.key, variant: d.variant, price: d.price, unit: d.unit, name: names.en, nameAr: names.ar };
     }
-    // The treatment it was set from bills this service: its line counts in the service's revenue.
-    if (d.markId && row) {
-      await c.query(
-        `update chart_marks set service_id = $1
-          where id = $2 and clinic_id = $3 and treatment_key = $4 and voided_at is null`,
-        [row.serviceId, d.markId, access.clinicId, d.key]
-      );
-    }
     /*
-      The treatments already charted with no price take this one: priced once,
-      the ones waiting are priced too. Only what is still the clinic's to bill —
-      planned, or done since billing from the chart began, on no invoice, its
-      price never set by hand — and never a part of a full arch, which is
-      priced as the whole. A price for the treatment as a whole reaches the
-      kinds of it with no price of their own; each change is a line in the
-      entry's history.
+      The treatments already charted with no price take one now: priced once,
+      the ones waiting are priced too — each the way a new one would be (the
+      whole treatment when the list prices it, its own kind's price before the
+      treatment's). Only what is still the clinic's to bill — planned, or done
+      since billing from the chart began, on no invoice, its price never set
+      by hand — and never a part of a full arch, which is priced as the whole.
     */
     let priced = 0;
     if (row) {
-      const fieldKey = field ? field.key : null;
-      const r = await c.query(
-        `with upd as (
-           update chart_marks m set fee = $3, service_id = $4
-             from clinics cl
-            where cl.id = m.clinic_id and m.clinic_id = $1 and m.treatment_key = $2
+      const list = await loadPrices(c, access.clinicId, d.key);
+      const waiting = (
+        await c.query(
+          `select m.id, m.detail from chart_marks m join clinics cl on cl.id = m.clinic_id
+            where m.clinic_id = $1 and m.treatment_key = $2
               and m.fee is null and not m.fee_manual and m.voided_at is null
               and m.kind = 'procedure' and m.status <> 'existing'
               and (m.status = 'planned' or m.done_at >= cl.dental_billing_since)
               and not (m.group_id is not null and m.site ~ '^[1-8][1-8]$'
                        and exists (select 1 from chart_marks p where p.group_id = m.group_id and p.site !~ '^[1-8][1-8]$'))
-              and not exists (select 1 from invoice_item_marks iim where iim.mark_id = m.id)
-              and (
-                $5::text is null
-                or ($6::text is not null and m.detail->>$5 = $6)
-                or ($6::text is null and not exists (
-                      select 1 from services s
-                       where s.clinic_id = $1 and s.chart_key = $2 and s.active
-                         and s.chart_variant = m.detail->>$5))
-              )
-           returning m.id, m.clinic_id
-         )
-         insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason)
-         select clinic_id, id, 'fee', $7, $8 from upd`,
-        [access.clinicId, d.key, row.price, row.serviceId, fieldKey, d.variant, access.session.user.id, String(row.price)]
-      );
-      priced = r.rowCount ?? 0;
+              and not exists (select 1 from invoice_item_marks iim where iim.mark_id = m.id)`,
+          [access.clinicId, d.key]
+        )
+      ).rows as { id: string; detail: Record<string, string> | null }[];
+      const byPrice = new Map<string, { price: number; ids: string[] }>();
+      for (const m of waiting) {
+        const p = pickPrice(list, d.key, variantOf(d.key, m.detail ?? {}), null);
+        if (!p) continue;
+        const g = byPrice.get(p.serviceId) ?? { price: p.price, ids: [] };
+        g.ids.push(m.id);
+        byPrice.set(p.serviceId, g);
+      }
+      for (const [serviceId, g] of byPrice) {
+        await c.query(
+          `with upd as (
+             update chart_marks set fee = $1, service_id = $2 where id = any($3::uuid[]) and clinic_id = $4 returning id, clinic_id
+           )
+           insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason)
+           select clinic_id, id, 'fee', $5, $6 from upd`,
+          [g.price, serviceId, g.ids, access.clinicId, access.session.user.id, String(g.price)]
+        );
+        priced += g.ids.length;
+      }
     }
     await audit(c, {
       clinicId: access.clinicId,

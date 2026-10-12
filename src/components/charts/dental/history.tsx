@@ -21,6 +21,7 @@ import { EMERGENCY_STEP, stepOf } from "@/lib/charts/dental/protocols";
 import { TreatmentGlyph } from "./treatment-picker";
 import { detailLabels, markLabel, siteLabel } from "./labels";
 import { INK, SOFT } from "./tooth-art";
+import { PriceLine, useEntryMoney } from "./price-line";
 
 export function PaintPill({ m }: { m: Mark }) {
   const { t } = useI18n();
@@ -80,6 +81,8 @@ export function EntryRow({
   const details = detailLabels(m, custom, locale);
   const ctx = isToothSite(m.site) ? toothOf(m.site) : null;
   const editable = canEdit && !m.voidedAt;
+  // Its price from the clinic's list, as soon as it is charted — and, for whoever bills, whether it is billed.
+  const money = useEntryMoney(tz)(m);
 
   return (
     <li className={`rounded-ctl border border-line bg-surface ${m.voidedAt ? "opacity-60" : ""}`} data-mark={m.id}>
@@ -93,6 +96,11 @@ export function EntryRow({
           <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">
             {[extra ?? details.join(" · "), m.performedBy?.name, fmtDate(m.doneAt ?? m.createdAt, tz, locale)].filter(Boolean).join(" · ")}
           </span>
+          {money && (
+            <span className="mt-0.5 block text-[12px] font-semibold text-ink-700 tnum" data-entry-price={m.id}>
+              {money}
+            </span>
+          )}
           {m.note && <span className="mt-1 block text-[12.5px] text-ink-700">{m.note}</span>}
           {progress && m.status === "planned" && !m.voidedAt && (
             <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[12px]" data-entry-progress={`${progress.done}/${progress.total}`}>
@@ -138,6 +146,7 @@ export function EntryRow({
       </div>
       {open && (
         <div className="grid gap-3 border-t border-line px-3 py-3">
+          <PriceLine m={m} tz={tz} />
           {tr.details?.filter((d) => !(d.key === "implants" && m.groupId)).map((d) => (
             <div key={d.key}>
               <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{T.details[d.key]}</div>

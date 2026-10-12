@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "./button";
@@ -29,14 +29,26 @@ export function Modal({
   full?: boolean;
 }) {
   const { t, dir, locale } = useI18n();
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    /*
+      Escape closes the window on top. A dialog opened over another — an entry
+      opened from the tooth's full view — closes first, and the one under it
+      stays until Escape again.
+    */
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const open = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      if (box.current && open.length && open[open.length - 1] !== box.current) return;
+      onClose();
+    };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      // The page scrolls again only when no other window is still open over it.
+      if (!document.querySelector('[role="dialog"][aria-modal="true"]')) document.body.style.overflow = "";
     };
   }, [open, onClose]);
 
@@ -58,6 +70,7 @@ export function Modal({
     >
       <div className="absolute inset-0 bg-[rgb(11_18_32/0.55)] animate-fade-in" onClick={onClose} />
       <div
+        ref={box}
         role="dialog"
         aria-modal="true"
         className={`relative m-0 w-full bg-surface shadow-modal animate-fade-up sm:m-4 sm:rounded-modal ${

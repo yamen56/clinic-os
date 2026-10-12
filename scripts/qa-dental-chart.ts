@@ -65,9 +65,24 @@ async function openChart(page: Page, url: string) {
 }
 /** The tooth panel, beside the chart on a desktop. */
 const panelOf = (p: Page) => p.locator("[data-dental-panel]").first();
+/*
+  A tooth opens in full, in a window of its own (2026-10-12). This suite
+  records beside the chart, so a tap that opens the full view makes it
+  smaller — which holds until the page is loaded again.
+*/
+let fullSeen = false;
 async function tapTooth(page: Page, fdi: string) {
   await chart(page).locator(`[data-tooth='${fdi}']`).first().click();
   await panelOf(page).waitFor({ timeout: 10000 });
+  const full = page.locator("[role='dialog'] [data-panel-size='big']");
+  if (await full.count()) {
+    if (!fullSeen) {
+      fullSeen = true;
+      ok("a tooth opens in full, in a window of its own");
+    }
+    await full.locator("[data-expand-panel]").click();
+    await page.locator("[data-panel-size='compact']").waitFor({ timeout: 10000 });
+  }
 }
 /** Find a treatment by name in a picker, tap it, and clear the search. */
 async function pickIn(scope: ReturnType<Page["locator"]>, key: string, query: string) {
@@ -348,10 +363,15 @@ async function main() {
     await openChart(other, fileUrl);
     await other.getByRole("radio", { name: "Patient's left" }).click();
     await chart(other).locator("[data-tooth='36']").first().click();
+    const phoneFull = other.locator("[role='dialog'] [data-panel-size='big']");
+    await phoneFull.waitFor({ timeout: 10000 });
+    await other.screenshot({ path: join(SHOTS, "saved-phone-tooth36-full.png") });
+    ok("on a phone a tooth opens full-screen");
+    await phoneFull.locator("[data-expand-panel]").click();
     await other.locator("[data-dental-sheet]").waitFor({ timeout: 10000 });
     await other.waitForTimeout(600);
     await other.screenshot({ path: join(SHOTS, "saved-phone-tooth36.png") });
-    ok("on a phone the saved chart opens the docked panel");
+    ok("and Smaller docks it under the chart, the tooth in view");
     await other.context().close();
 
     /* ── The agency's switch ─────────────────────────────────────────── */

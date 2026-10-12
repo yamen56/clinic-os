@@ -6,8 +6,8 @@ import { audit } from "@/lib/audit";
 import { MARK_SELECT, resolveTreatment, toEvent, toMark } from "@/lib/charts/dental/db";
 import { protocolFor } from "@/lib/charts/dental/protocols";
 import { applyToMembers, followersOf, todaysVisit } from "@/lib/charts/dental/server";
-import { priceFor } from "@/lib/charts/dental/billing-server";
-import { variantOf } from "@/lib/charts/dental/pricing";
+import { loadPrices } from "@/lib/charts/dental/billing-server";
+import { pickPrice, variantOf } from "@/lib/charts/dental/pricing";
 
 /*
   Changing an entry on the chart. Every change a reader would care about —
@@ -81,11 +81,16 @@ export async function PATCH(req: Request, ctx: Params) {
         await c.query(`update chart_marks set detail = detail || jsonb_build_object($2::text, $3::text) where id = $1`, [markId, b.key, b.value]);
         /*
           A crown made zirconia instead of PFM costs what zirconia costs — unless
-          a doctor set this patient's price by hand, which a change of material
-          does not undo.
+          a price was set by hand, which a change of material does not undo.
+          Charged the way it started (the whole treatment when the list prices
+          it), it is priced again the way a new one would be; charged the other
+          way because someone chose so, it stays charged that way.
         */
         if (!cur.fee_manual && tr?.kind === "procedure" && cur.status !== "existing") {
-          const price = await priceFor(c, access.clinicId, cur.treatment_key, variantOf(cur.treatment_key, { ...(cur.detail ?? {}), [b.key]: b.value }));
+          const list = await loadPrices(c, access.clinicId, cur.treatment_key);
+          const was = list.find((p) => p.serviceId === cur.service_id)?.unit ?? null;
+          const chosen = !!was && pickPrice(list, cur.treatment_key, variantOf(cur.treatment_key, cur.detail ?? {}), null)?.unit !== was;
+          const price = pickPrice(list, cur.treatment_key, variantOf(cur.treatment_key, { ...(cur.detail ?? {}), [b.key]: b.value }), chosen ? was : null);
           if (price) await c.query(`update chart_marks set fee = $2, service_id = $3 where id = $1`, [markId, price.price, price.serviceId]);
         }
         break;

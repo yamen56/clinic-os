@@ -5,10 +5,11 @@
   way and not on an invoice yet.
 
   The dentist asked that reception see what the patient had and bill it. This
-  card sits at the top of the patient's Invoices tab, in the reader's
-  language — each line reads as the invoice builder will write it — with what
-  is still owed and the total, and one button that opens the invoice with
-  those lines already written.
+  card sits at the top of the patient's Invoices tab and on the Dental chart
+  tab (Yamen, 2026-10-12: bill from the chart), in the reader's language —
+  each line reads as the invoice builder will write it — with what is still
+  owed and the total, and one button that opens the invoice with those lines
+  already written.
 */
 
 import { useI18n } from "@/lib/i18n/client";
@@ -21,7 +22,7 @@ import { invoiceLineText } from "@/lib/charts/dental/pricing";
 import { useOptionalDentalStore } from "./store";
 import { moneyOf } from "./money";
 
-export function ReadyToBill({ tz }: { tz: string }) {
+export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; className?: string }) {
   const { t, locale } = useI18n();
   const store = useOptionalDentalStore();
   if (!store || !store.canBill) return null;
@@ -43,7 +44,7 @@ export function ReadyToBill({ tz }: { tz: string }) {
 
   return (
     <div data-ready-to-bill={items.length} data-ready-total={total}>
-      <Card className="mb-4 p-4">
+      <Card className={className}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-[15px] font-semibold">{t.invoices.readyToBill}</h3>

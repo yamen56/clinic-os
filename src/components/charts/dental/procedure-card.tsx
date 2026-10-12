@@ -16,7 +16,7 @@
 */
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, Check, ChevronDown, Plus, Siren, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Maximize2, Plus, Siren, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
@@ -47,6 +47,7 @@ import { PaintPill } from "./history";
 import { siteLabel } from "./labels";
 import { TreatmentGlyph } from "./treatment-picker";
 import { INK, SOFT } from "./tooth-art";
+import { PriceLine } from "./price-line";
 
 const UNDO_MS = 120_000;
 
@@ -254,6 +255,7 @@ export function ProcedureCard({
   onDetail,
   onPlan,
   extra,
+  onExpand,
 }: {
   markId: string;
   tz: string;
@@ -268,6 +270,8 @@ export function ProcedureCard({
   /** Plan what usually comes next, on the same tooth. */
   onPlan: (treatmentKey: string, site: string) => void;
   extra?: string;
+  /** Open its tooth in full, the steps in place — given where the card stands on its own. */
+  onExpand?: () => void;
 }) {
   const { t, locale } = useI18n();
   const T = t.dental;
@@ -326,6 +330,18 @@ export function ProcedureCard({
           <ArrowLeft className="h-4 w-4" />
           {backLabel}
         </button>
+        {onExpand && (
+          <button
+            type="button"
+            onClick={onExpand}
+            title={T.expandCard}
+            className="ms-auto inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+            data-expand-card
+          >
+            <Maximize2 className="h-4 w-4" />
+            {T.panelBigger}
+          </button>
+        )}
       </div>
 
       <div className="flex items-start gap-3">
@@ -369,6 +385,9 @@ export function ProcedureCard({
           ))}
         </div>
       )}
+
+      {/* Its price, from the list: and how this patient pays for it, the whole treatment or each visit. */}
+      <PriceLine m={m} tz={tz} />
 
       {prog && (
         <div>

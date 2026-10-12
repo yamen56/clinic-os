@@ -134,6 +134,7 @@ export function TreatmentPicker({
   disabled,
   mouthOnly,
   wide,
+  initialKind,
   onPick,
   onToggleFavorite,
   onAddCustom,
@@ -151,6 +152,8 @@ export function TreatmentPicker({
   mouthOnly?: boolean;
   /** Laid out for a big window: more columns, bigger tiles, every group in view at once. */
   wide?: boolean;
+  /** Open on the findings rather than the treatments — "Add finding". */
+  initialKind?: EntryKind;
   onPick: (tr: Treatment) => void;
   onToggleFavorite: (key: string) => void;
   onAddCustom: () => void;
@@ -158,7 +161,7 @@ export function TreatmentPicker({
   const { t, locale } = useI18n();
   const T = t.dental;
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<EntryKind>("procedure");
+  const [kind, setKind] = useState<EntryKind>(initialKind ?? "procedure");
   const [cat, setCat] = useState<Category>("restorative");
 
   const usable = useMemo(

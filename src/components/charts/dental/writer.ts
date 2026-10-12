@@ -17,6 +17,7 @@ import type { Mark, MarkEvent, Person } from "@/lib/charts/dental/state";
 import { leadIdOf } from "@/lib/charts/dental/full-arch";
 import { EMERGENCY_STEP, type StepData, type StepRecord } from "@/lib/charts/dental/protocols";
 import type { MedicalHistory } from "@/lib/medical-history";
+import { priceFrom, type PriceUnit } from "@/lib/charts/dental/pricing";
 import { useDentalStore } from "./store";
 
 export const newId = () =>
@@ -268,7 +269,30 @@ export function useChartWriter() {
     [base, me.name, s.medical, setMedical, write, failed]
   );
 
-  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical };
+  /*
+    How this patient pays for a treatment: the whole of it, or each visit — at
+    the list's price for that. Shown at once; put back if the server refuses
+    (it does once any of it is billed).
+  */
+  const chargeBy = useCallback(
+    async (m: Mark, unit: PriceUnit): Promise<boolean> => {
+      const row = priceFrom(s.prices, m.treatmentKey, m.detail, unit);
+      if (!row) return false;
+      setMarks((prev) => prev.map((x) => (x.id === m.id ? { ...x, fee: row.price, serviceId: row.serviceId, feeManual: false } : x)));
+      try {
+        const r = await write([m.id], call<{ mark: Mark }>(`${base}/dental/marks/${m.id}/charge`, "POST", { unit }));
+        settle([r.mark], []);
+        return true;
+      } catch (e) {
+        setMarks((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+        toast((e as Error).message === "billed" ? t.dental.price.billedLocked : t.dental.price.failed, "error");
+        return false;
+      }
+    },
+    [s.prices, base, setMarks, write, settle, toast, t.dental.price]
+  );
+
+  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical, chargeBy };
 }
 
 /** The members a group's lead carries, found the same way the server finds them. */
