@@ -2036,6 +2036,7 @@ export const ar: Dict = {
     paidFilter: "مدفوعة",
     allFilter: "الكل",
     ofTotal: "من {total}",
+    firstLineAndMore: "{name} + {n} أخرى",
     leftToPay: "المستحق {amount}",
     settled: "سدّدت الفاتورة",
     leftBalance: "ما زال مستحقاً {amount}",

@@ -145,9 +145,15 @@ export default async function PatientProfilePage({
           : none,
         caps.invoices
           ? c.query(
-              `select i.id, i.number, i.status, i.total, i.amount_paid, i.created_at,
-                      i.insurer_amount, i.claim_status, i.issue_date::text as issue_day, ins.name as insurer_name
+              `select i.id, i.number, i.title, i.status, i.total, i.amount_paid, i.created_at,
+                      i.insurer_amount, i.claim_status, i.issue_date::text as issue_day, ins.name as insurer_name,
+                      -- What the invoice is for when nobody gave it a title: its first line, and how many follow.
+                      it.first_item, coalesce(it.item_count, 0) as item_count
                from invoices i left join insurers ins on ins.id = i.insurer_id
+               left join lateral (
+                 select (array_agg(ii.description order by ii.sort, ii.id))[1] as first_item, count(*)::int as item_count
+                 from invoice_items ii where ii.invoice_id = i.id
+               ) it on true
                where i.patient_id = $1 and i.clinic_id = $2${invScope.sql}
                order by i.created_at desc limit 50`,
               [id, access.clinicId, ...invScope.params]

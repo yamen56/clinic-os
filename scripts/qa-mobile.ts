@@ -237,6 +237,24 @@ async function main() {
   await noSideScroll(page, "calendar");
   await page.screenshot({ path: join(SHOTS, "mobile-calendar.png") });
 
+  // ---- Treatment prices: the kinds table (Ceramic, Zirconia…) once pushed the
+  //      page 9px past the screen, and the phone zoomed the whole page out.
+  await go(page, `/c/${SLUG}/settings/prices`);
+  await page.waitForSelector("[data-price-variant]", { timeout: 60000 });
+  await noSideScroll(page, "treatment prices");
+  const priceCols = (await page.evaluate(`(() => {
+    const row = document.querySelector("[data-price-variant]").closest("[data-price-row]");
+    const a = row.querySelector("[data-price-col=item] input").getBoundingClientRect();
+    const b = row.querySelector("[data-price-col=session] input").getBoundingClientRect();
+    return { item: Math.round(a.width), visit: Math.round(b.width), sameLine: Math.abs(a.top - b.top) < 2 };
+  })()`)) as { item: number; visit: number; sameLine: boolean };
+  check(
+    priceCols.sameLine && priceCols.item >= 90 && priceCols.visit >= 90,
+    "a treatment's two prices sit side by side, each wide enough to type in",
+    JSON.stringify(priceCols)
+  );
+  await page.screenshot({ path: join(SHOTS, "mobile-treatment-prices.png") });
+
   check(errors.length === 0, "no page errors", errors[0]);
 
   await browser.close();

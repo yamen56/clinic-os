@@ -45,8 +45,12 @@ export type NeedsPrice = { key: string; variant: string | null; count: number };
 
 type Filter = "all" | "priced" | "unpriced" | "used";
 
-/** A price box: the figure as typed, saved when it is left. */
-function PriceBox({ value, placeholder, label, hook, onSave }: { value: number | null; placeholder?: string; label: string; hook?: string; onSave: (v: number | null) => Promise<boolean> }) {
+/**
+ * A price box: the figure as typed, saved when it is left. `className` sets its
+ * width: a fixed 6rem beside other boxes from a tablet up, the room it is given
+ * on a phone.
+ */
+function PriceBox({ value, placeholder, label, hook, onSave, className = "w-24" }: { value: number | null; placeholder?: string; label: string; hook?: string; onSave: (v: number | null) => Promise<boolean>; className?: string }) {
   const [text, setText] = useState(value == null ? "" : String(value));
   const [saving, setSaving] = useState(false);
   const commit = async () => {
@@ -69,7 +73,7 @@ function PriceBox({ value, placeholder, label, hook, onSave }: { value: number |
       onChange={(e) => /^\d{0,7}(\.\d{0,3})?$/.test(e.target.value) && setText(e.target.value)}
       onBlur={() => void commit()}
       onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-      className={`h-9 w-24 rounded-ctl border bg-surface px-2 text-end text-base tnum focus:border-brand-600 focus:outline-none md:text-sm ${saving ? "border-brand-300" : "border-line"}`}
+      className={`h-9 min-w-0 rounded-ctl border bg-surface px-2 text-end text-base tnum focus:border-brand-600 focus:outline-none md:text-sm ${className} ${saving ? "border-brand-300" : "border-line"}`}
       data-price-box={hook ?? label}
     />
   );
@@ -239,7 +243,7 @@ export function DentalPrices({
         </div>
       )}
 
-      <Card className="p-5">
+      <Card className="p-3 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <SearchInput className="w-full sm:w-72" placeholder={S.search} value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="flex flex-wrap gap-1">
@@ -264,7 +268,10 @@ export function DentalPrices({
           {groups.map(({ cat, list }) => {
             const isOpen = open.has(cat) || !!q || filter !== "all";
             return (
-              <section key={cat} className="rounded-card border border-line" data-price-group={cat}>
+              /* min-w-0: a grid item otherwise grows to its widest row, and on a
+                 phone that row was the kinds table — the card, then the whole
+                 page, went 9px wider than the screen and the phone zoomed out. */
+              <section key={cat} className="min-w-0 rounded-card border border-line" data-price-group={cat}>
                 <button
                   type="button"
                   onClick={() => setOpen((prev) => {
@@ -290,7 +297,7 @@ export function DentalPrices({
                       // The line the patient reads: the treatment's own price if it has one, else its first priced kind.
                       const shown = base ?? baseVisit ?? mine[0] ?? null;
                       // One price box: whole or per visit, for the treatment or one kind of it.
-                      const box = (variant: string | null, unit: PriceUnit, label: string, hook: string, placeholder?: string) => (
+                      const box = (variant: string | null, unit: PriceUnit, label: string, hook: string, placeholder?: string, width?: string) => (
                         <PriceBox
                           key={`${variant ?? ""}:${unit}`}
                           value={priceOf(tr.key, variant, unit)?.price ?? null}
@@ -298,6 +305,7 @@ export function DentalPrices({
                           label={label}
                           hook={hook}
                           onSave={(p) => save(tr.key, variant, p, unit)}
+                          className={width}
                         />
                       );
                       const preview = shown
@@ -309,9 +317,16 @@ export function DentalPrices({
                           )
                         : null;
                       return (
-                        <li key={tr.key} className="grid gap-2 px-4 py-3" data-price-row={tr.key}>
+                        <li key={tr.key} className="grid gap-2 px-3 py-3 sm:px-4" data-price-row={tr.key}>
+                          {/*
+                            On a phone: the name across the top, the two prices
+                            side by side at half the width each, then "same as".
+                            From a tablet up the wrapper around the prices
+                            dissolves (`contents`) and all of it shares one line,
+                            as it always did.
+                          */}
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                            <div className="min-w-[12rem] flex-1">
+                            <div className="min-w-0 basis-full sm:min-w-[12rem] sm:flex-1 sm:basis-auto">
                               <div className="text-[14px] font-medium" data-price-name>
                                 <bdi>{name}</bdi>
                               </div>
@@ -321,27 +336,29 @@ export function DentalPrices({
                               </div>
                             </div>
                             {/* Two prices: the whole treatment, and each visit — either, or both. */}
-                            <label className="grid gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="item">
-                              {S.whole}
-                              <span className="flex items-center gap-1.5">
-                                {box(null, "item", `${name} · ${S.whole}`, tr.en)}
-                                <span className="text-[12px] font-normal">{currency}</span>
-                              </span>
-                            </label>
-                            <label className="grid gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="session">
-                              {S.perVisit}
-                              <span className="flex items-center gap-1.5">
-                                {box(null, "session", `${name} · ${S.perVisit}`, `${tr.en} · ${S.perSession}`)}
-                                <span className="text-[12px] font-normal">{currency}</span>
-                              </span>
-                            </label>
+                            <div className="grid w-full grid-cols-2 gap-3 sm:contents">
+                              <label className="grid min-w-0 gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="item">
+                                {S.whole}
+                                <span className="flex items-center gap-1.5">
+                                  {box(null, "item", `${name} · ${S.whole}`, tr.en, undefined, "w-full flex-1 sm:w-24 sm:flex-none")}
+                                  <span className="text-[12px] font-normal">{currency}</span>
+                                </span>
+                              </label>
+                              <label className="grid min-w-0 gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="session">
+                                {S.perVisit}
+                                <span className="flex items-center gap-1.5">
+                                  {box(null, "session", `${name} · ${S.perVisit}`, `${tr.en} · ${S.perSession}`, undefined, "w-full flex-1 sm:w-24 sm:flex-none")}
+                                  <span className="text-[12px] font-normal">{currency}</span>
+                                </span>
+                              </label>
+                            </div>
                             {!base && free.length > 0 && (
-                              <label className="flex items-center gap-1.5 self-end text-[12px] text-ink-500">
-                                <Link2 className="h-3.5 w-3.5" />
+                              <label className="flex w-full items-center gap-1.5 self-end text-[12px] text-ink-500 sm:w-auto">
+                                <Link2 className="h-3.5 w-3.5 shrink-0" />
                                 <select
                                   value=""
                                   onChange={(e) => e.target.value && void save(tr.key, null, null, "item", e.target.value)}
-                                  className="select-chevron h-9 max-w-[12rem] appearance-none rounded-ctl border border-line bg-surface ps-2.5 pe-8 text-[13px]"
+                                  className="select-chevron h-9 min-w-0 flex-1 appearance-none rounded-ctl border border-line bg-surface ps-2.5 pe-8 text-[13px] sm:max-w-[12rem] sm:flex-none"
                                   aria-label={S.sameAs}
                                   data-same-as={tr.key}
                                 >
@@ -357,15 +374,17 @@ export function DentalPrices({
                           </div>
                           {/* Each kind of it — a material, a canal count — priced both ways too, in a small table. */}
                           {field && (
-                            <div className="grid w-fit grid-cols-[minmax(7rem,auto)_6rem_6rem] items-center gap-x-3 gap-y-1.5 ps-0 text-[13px] sm:ps-4">
+                            /* On a phone the kind's name takes what the two boxes leave; it had a 7rem floor that pushed the table off the screen. */
+                            <div className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] items-center gap-x-2 gap-y-1.5 text-[13px] sm:w-fit sm:grid-cols-[minmax(7rem,auto)_6rem_6rem] sm:gap-x-3 sm:ps-4">
                               <span />
-                              <span className="text-[11.5px] font-semibold text-ink-500">{S.whole}</span>
-                              <span className="text-[11.5px] font-semibold text-ink-500">{S.perVisit}</span>
+                              {/* Bottom-aligned: on a phone "Whole treatment" wraps and "Per visit" does not. */}
+                              <span className="self-end text-[11.5px] font-semibold leading-tight text-ink-500">{S.whole}</span>
+                              <span className="self-end text-[11.5px] font-semibold leading-tight text-ink-500">{S.perVisit}</span>
                               {field.options.map((o) => (
                                 <div key={o.key} className="contents" data-price-variant={`${tr.key}:${o.key}`}>
-                                  <bdi className="text-ink-700">{o.en}</bdi>
-                                  {box(o.key, "item", `${name} · ${o.en}`, `${tr.en} · ${o.en}`, base ? String(base.price) : "—")}
-                                  {box(o.key, "session", `${name} · ${o.en} · ${S.perSession}`, `${tr.en} · ${o.en} · ${S.perSession}`, baseVisit ? String(baseVisit.price) : "—")}
+                                  <bdi className="min-w-0 break-words text-ink-700">{o.en}</bdi>
+                                  {box(o.key, "item", `${name} · ${o.en}`, `${tr.en} · ${o.en}`, base ? String(base.price) : "—", "w-full")}
+                                  {box(o.key, "session", `${name} · ${o.en} · ${S.perSession}`, `${tr.en} · ${o.en} · ${S.perSession}`, baseVisit ? String(baseVisit.price) : "—", "w-full")}
                                 </div>
                               ))}
                               <span className="col-span-3 text-[12px] text-ink-400">{S.variantHint}</span>

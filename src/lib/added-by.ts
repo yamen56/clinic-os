@@ -22,7 +22,16 @@ type Words = {
 
 export function addedByName(a: AddedBy): string {
   const title = a.title?.trim();
-  return title ? `${title} ${a.name}` : a.name;
+  const name = a.name.trim();
+  if (!title) return name;
+  /*
+    Often typed into both boxes: "د." as the title and "د. سارة" as the name,
+    or the whole name as the title. Prefixed blindly it read "د. د. سارة",
+    and "د.يامن بطارسه د.يامن بطارسه" on a patient file.
+  */
+  if (name === title || name.startsWith(`${title} `) || (title.endsWith(".") && name.startsWith(title))) return name;
+  if (title.includes(name)) return title;
+  return `${title} ${name}`;
 }
 
 export function addedByRole(a: AddedBy, t: Words): string | null {

@@ -276,7 +276,17 @@ export function PatientProfile(props: {
   noteCategories: NoteCategoryRow[];
   files: PatientFileRow[];
   appointments: { id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null }[];
-  invoices: ({ id: string; number: string; status: string; total: string; amount_paid: string; created_at: string } & PatientClaim)[];
+  invoices: ({
+    id: string;
+    number: string;
+    title: string;
+    first_item: string | null;
+    item_count: number;
+    status: string;
+    total: string;
+    amount_paid: string;
+    created_at: string;
+  } & PatientClaim)[];
   conversation: { id: string; msgs: { id: string; direction: string; sender_kind: string; body: string; msg_type: string; created_at: string }[] | null } | null;
   defs: FieldDef[];
   activity: { action: string; created_at: string; detail: Record<string, unknown>; actor: string | null }[];
@@ -557,18 +567,6 @@ export function PatientProfile(props: {
             {p.extra_phones?.map((ph) => (
               <span key={ph} className="num tnum text-ink-400">{formatPhone(ph)}</span>
             ))}
-            {/*
-              Who opened this file, by name and job — the doctor or the
-              receptionist — rather than "staff". The source is still what it
-              says for a patient no person typed in: WhatsApp, the booking
-              link, the AI receptionist.
-            */}
-            <span data-added-by={p.added_by ? "person" : p.source}>
-              {p.added_by
-                ? (p.source === "import" ? t.patients.importedBy : t.patients.addedBy).replace("{name}", addedByLabel(p.added_by, t))
-                : (t.patients.sources as Record<string, string>)[p.source] ?? p.source}{" "}
-              · {fmtDate(p.created_at, tz, locale)}
-            </span>
           </div>
           <TagsRow
             slug={slug}
@@ -838,6 +836,23 @@ export function PatientProfile(props: {
                     </div>
                   </>
                 )}
+                {/*
+                  Who opened this file, by name and job — the doctor or the
+                  receptionist — rather than "staff". The source is still what
+                  it says for a patient no person typed in: WhatsApp, the
+                  booking link, the AI receptionist.
+
+                  Here at the foot of the details, not under the patient's
+                  name: the header is what the desk reads every time the file
+                  opens, and who typed the patient in is not part of that
+                  (Yamen, 2026-10-13).
+                */}
+                <p className="mt-5 border-t border-line pt-3 text-[12px] text-ink-400" data-added-by={p.added_by ? "person" : p.source}>
+                  {p.added_by
+                    ? (p.source === "import" ? t.patients.importedBy : t.patients.addedBy).replace("{name}", addedByLabel(p.added_by, t))
+                    : (t.patients.sources as Record<string, string>)[p.source] ?? p.source}{" "}
+                  · {fmtDate(p.created_at, tz, locale)}
+                </p>
               </Card>
               {/*
                 Insurance has a card of its own. Hidden entirely until the clinic
@@ -1079,19 +1094,39 @@ export function PatientProfile(props: {
                 {props.invoices.map((inv) => {
                   const partial = inv.status === "partially_paid";
                   const left = Number(inv.total) - Number(inv.amount_paid);
+                  /*
+                    What the invoice is for, not only its number: a column of
+                    INV-0041, INV-0042 told reception nothing about which was
+                    the crown. The title the clinic gave it, else its first
+                    line and how many follow; the number moves underneath.
+                  */
+                  const name =
+                    inv.title?.trim() ||
+                    (inv.first_item
+                      ? inv.item_count > 1
+                        ? t.invoices.firstLineAndMore.replace("{name}", inv.first_item).replace("{n}", String(inv.item_count - 1))
+                        : inv.first_item
+                      : null);
                   return (
                     <li key={inv.id}>
                       <Link
                         href={`/c/${slug}/invoices/${inv.id}`}
-                        className="flex items-center gap-4 px-5 py-3 hover:bg-sunken"
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-sunken sm:gap-4 sm:px-5"
                       >
-                        <span className="flex-1 text-sm font-medium" dir="ltr">
-                          {inv.number}
+                        <span className="min-w-0 flex-1" data-invoice-name={inv.id}>
+                          <span className="block truncate text-sm font-medium" dir="auto">
+                            {name ?? <span dir="ltr">{inv.number}</span>}
+                          </span>
+                          <span className="block truncate text-[12px] text-ink-400">
+                            {name && <span dir="ltr" className="tnum">{inv.number}</span>}
+                            {name && " · "}
+                            {fmtDate(inv.created_at, tz, locale)}
+                          </span>
                         </span>
                         {/* On a partly paid invoice the total alone is the least
                             useful number — what was paid and what is left are
                             what anyone opening this file wants. */}
-                        <span className="text-end">
+                        <span className="shrink-0 text-end">
                           <span className="block text-sm tnum">
                             {fmtMoney(
                               partial ? Number(inv.amount_paid) : Number(inv.total),
@@ -1108,7 +1143,7 @@ export function PatientProfile(props: {
                             </span>
                           )}
                         </span>
-                        <span className="text-end">
+                        <span className="shrink-0 text-end">
                           <Badge
                             status={
                               inv.status === "paid"

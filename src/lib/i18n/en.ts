@@ -2095,6 +2095,8 @@ export const en = {
     paidFilter: "Paid",
     allFilter: "All",
     ofTotal: "of {total}",
+    /* An untitled invoice, named by its first line: "Crown + 2 more". */
+    firstLineAndMore: "{name} + {n} more",
     leftToPay: "{amount} due",
     settled: "Settled the invoice",
     leftBalance: "{amount} still due",
