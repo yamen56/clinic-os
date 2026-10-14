@@ -164,3 +164,17 @@ export async function refreshInvoiceStatus(c: PoolClient, invoiceId: string): Pr
     [invoiceId]
   );
 }
+
+/**
+ * Which invoices may be deleted, as a predicate on an invoice aliased `i`.
+ *
+ * Only a cancelled one: an invoice still owed or paid is cancelled first, a
+ * decision with its own record. Never a credit note, and never one filed with
+ * JoFotara (or on its way there) — the tax authority holds it and a credit note
+ * points at it, and the pair stays on the books (see `voidInvoiceAction`). The
+ * `not exists` repeats that last point for the foreign key's sake: deleting an
+ * original that a credit note references would fail anyway.
+ */
+export const DELETABLE_INVOICE_SQL = `(i.status = 'void' and i.credit_note_of is null
+  and i.einvoice_status not in ('submitted', 'pending')
+  and not exists (select 1 from invoices cn where cn.credit_note_of = i.id))`;

@@ -13,6 +13,8 @@ import { Plus, ReceiptText, Download } from "lucide-react";
 import { can } from "@/lib/auth";
 import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { readyToBillDesk, type DeskRow } from "@/lib/charts/dental/billing-server";
+import { DELETABLE_INVOICE_SQL } from "@/lib/invoices";
+import { DeleteCancelled } from "./delete-cancelled";
 
 const invStatus: Record<string, StatusKey> = {
   draft: "neutral",
@@ -36,6 +38,7 @@ export default async function InvoicesPage({
   const t = await dictForClinic(access.clinic.vocabulary);
   const locale = await getLocale();
   const tab = sp.tab === "payments" ? "payments" : "invoices";
+  const cancelledView = tab === "invoices" && sp.status === "cancelled";
 
   const tz = access.clinic.timezone;
   /*
@@ -74,16 +77,28 @@ export default async function InvoicesPage({
       branches should not have to notice that.
     */
     const chipScope = invoiceScopeSql(access, "i", showTotals ? 8 : 2);
+    /*
+      The chips' counts: part-paid, cancelled, and how many of the cancelled
+      may be deleted — the ones never filed with JoFotara (DELETABLE_INVOICE_SQL).
+    */
+    const chipCounts = `
+      (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'partially_paid'${chipScope.sql})::int as partial_count,
+      (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'void'${chipScope.sql})::int as cancelled_count,
+      (select count(*) from invoices i where i.clinic_id = $1 and ${DELETABLE_INVOICE_SQL}${chipScope.sql})::int as deletable_count`;
     const [stats] = (
       await c.query(
         showTotals
-          ? `select
-               (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $2 and paid_at < $3) as today,
-               (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $4 and paid_at < $5) as week,
-               (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $6 and paid_at < $7) as month,
+          ? /* Takings leave out a cancelled invoice's payments: that money is not the clinic's (Yamen, 2026-10-14). */
+            `select
+               (select coalesce(sum(p.amount), 0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
+                 where p.clinic_id = $1 and p.paid_at >= $2 and p.paid_at < $3) as today,
+               (select coalesce(sum(p.amount), 0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
+                 where p.clinic_id = $1 and p.paid_at >= $4 and p.paid_at < $5) as week,
+               (select coalesce(sum(p.amount), 0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
+                 where p.clinic_id = $1 and p.paid_at >= $6 and p.paid_at < $7) as month,
                (select coalesce(sum(total - amount_paid), 0) from invoices where clinic_id = $1 and status in ('sent', 'partially_paid')) as outstanding,
-               (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'partially_paid'${chipScope.sql})::int as partial_count`
-          : `select (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'partially_paid'${chipScope.sql})::int as partial_count`,
+               ${chipCounts}`
+          : `select ${chipCounts}`,
         showTotals
           ? [access.clinicId, today.start, today.end, week.start, week.end, month.start, month.end, ...chipScope.params]
           : [access.clinicId, ...chipScope.params]
@@ -102,6 +117,13 @@ export default async function InvoicesPage({
       if (sp.status === "unpaid") conds.push(`i.status in ('sent', 'partially_paid')`);
       else if (sp.status === "partial") conds.push(`i.status = 'partially_paid'`);
       else if (sp.status === "paid") conds.push(`i.status = 'paid'`);
+      /*
+        Cancelled invoices have a chip of their own and are left out of "All":
+        they are off the books, and in the working list they were only in the
+        way (Yamen, 2026-10-14). Under "Cancelled" they can be deleted.
+      */
+      else if (sp.status === "cancelled") conds.push(`i.status = 'void'`);
+      else conds.push(`i.status <> 'void'`);
       const scope = invoiceScopeSql(access, "i", 2);
       invoices = (
         await c.query(
@@ -115,7 +137,8 @@ export default async function InvoicesPage({
       ).rows;
     } else {
       // Payments hang off invoices, so the same filter reaches them through the
-      // join rather than needing one of its own.
+      // join rather than needing one of its own. A cancelled invoice's payments
+      // are not listed: they no longer count as money taken.
       const scope = invoiceScopeSql(access, "i", 2);
       payments = (
         await c.query(
@@ -126,7 +149,7 @@ export default async function InvoicesPage({
            join invoices i on i.id = pay.invoice_id
            join patients p on p.id = pay.patient_id
            left join users u on u.id = pay.recorded_by
-           where pay.clinic_id = $1${scope.sql}
+           where pay.clinic_id = $1 and i.status <> 'void'${scope.sql}
            order by pay.paid_at desc limit 100`,
           [access.clinicId, ...scope.params]
         )
@@ -207,6 +230,7 @@ export default async function InvoicesPage({
               ["unpaid", t.invoices.unpaidFilter, 0],
               ["partial", t.invoices.partlyPaidFilter, Number(data.stats.partial_count)],
               ["paid", t.invoices.paidFilter, 0],
+              ["cancelled", t.invoices.cancelledFilter, Number(data.stats.cancelled_count)],
             ] as [string, string, number][]
           ).map(([key, label, count]) => {
             const on = (sp.status ?? "") === key;
@@ -223,19 +247,35 @@ export default async function InvoicesPage({
               </Link>
             );
           })}
+          {/* Under Cancelled: clear them away, all at once. */}
+          {cancelledView && Number(data.stats.deletable_count) > 0 && can(access, "invoices.void") && (
+            <span className="ms-auto">
+              <DeleteCancelled slug={slug} count={Number(data.stats.deletable_count)} />
+            </span>
+          )}
         </div>
+      )}
+      {/* Why some cancelled invoices cannot be deleted, said where they are listed. */}
+      {cancelledView && Number(data.stats.cancelled_count) > Number(data.stats.deletable_count) && (
+        <p className="-mt-2 mb-4 text-[12px] text-ink-500" data-filed-stay>
+          {t.invoices.filedStays}
+        </p>
       )}
 
       {tab === "invoices" ? (
         data.invoices.length === 0 ? (
-          <EmptyState
-            icon={<ReceiptText />}
-            title={t.invoices.empty}
-            body={t.invoices.emptyBody}
-            action={
-              <Link href={`${base}/new`} className={buttonClass()}>{t.invoices.newInvoice}</Link>
-            }
-          />
+          cancelledView ? (
+            <EmptyState icon={<ReceiptText />} title={t.invoices.noCancelled} />
+          ) : (
+            <EmptyState
+              icon={<ReceiptText />}
+              title={t.invoices.empty}
+              body={t.invoices.emptyBody}
+              action={
+                <Link href={`${base}/new`} className={buttonClass()}>{t.invoices.newInvoice}</Link>
+              }
+            />
+          )
         ) : (
           <Card>
             <ul className="divide-y divide-line">

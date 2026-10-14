@@ -9,7 +9,6 @@ import {
   earningsDetailForDoctor,
   earningsForDoctor,
   memberHasEarnings,
-  voidedButPaid,
   type DoctorEarnings,
   type EarningsLine,
 } from "@/lib/earnings";
@@ -72,7 +71,6 @@ export default async function EarningsPage({
     clinicId: access.clinicId,
     from: new Date(start),
     to: new Date(end),
-    includeVoided: true,
   };
 
   const data = await inClinic(access, async (c) => {
@@ -105,7 +103,6 @@ export default async function EarningsPage({
       hasOwn && access.memberId ? await earningsDetailForDoctor(c, scope, access.memberId) : [];
 
     const team = clinicWide && hasCommission ? await earningsByDoctor(c, scope) : [];
-    const flagged = clinicWide && hasCommission ? await voidedButPaid(c, scope) : [];
 
     /*
       The profit chain. Expenses are only subtracted for somebody who may see
@@ -128,7 +125,7 @@ export default async function EarningsPage({
     // Names for the payout table, and the viewer's own rate. Only the rate of
     // the person reading is selected — `members_access` would happily return
     // everybody's, and what a colleague is paid is not this screen's business.
-    const ids = [...new Set([...team.map((t) => t.doctorMemberId), ...flagged.map((f) => f.doctorMemberId)])];
+    const ids = [...new Set(team.map((t) => t.doctorMemberId))];
     const names: Record<string, string> = {};
     if (ids.length) {
       const r = await c.query(
@@ -138,7 +135,7 @@ export default async function EarningsPage({
       );
       for (const row of r.rows) names[row.id as string] = row.full_name as string;
     }
-    return { hasCommission, self, detail, team, net, flagged, names, showSpend };
+    return { hasCommission, self, detail, team, net, names, showSpend };
   });
 
   const myRate = await inClinic(access, async (c) => {
@@ -164,7 +161,6 @@ export default async function EarningsPage({
       team={data.team}
       net={data.net}
       showSpend={data.showSpend}
-      flagged={data.flagged}
       names={data.names}
       showTeam={clinicWide}
       canOpenInvoices={can(access, "invoices")}

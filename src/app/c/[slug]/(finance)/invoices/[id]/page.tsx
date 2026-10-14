@@ -6,6 +6,7 @@ import { InvoiceDetailClient } from "./invoice-detail-client";
 import { can } from "@/lib/auth";
 import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
+import { DELETABLE_INVOICE_SQL } from "@/lib/invoices";
 
 export default async function InvoiceDetailPage({
   params,
@@ -36,6 +37,7 @@ export default async function InvoiceDetailPage({
                 ins.name as insurer_name,
                 orig.number as corrects_number,
                 fix.id as credit_note_id, fix.number as credit_note_number,
+                ${DELETABLE_INVOICE_SQL} as deletable,
                 coalesce(ws.status = 'connected', false) as wa_connected
          from invoices i
          join patients p on p.id = i.patient_id

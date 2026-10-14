@@ -149,9 +149,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
               statement requires 3"), so leaving them bound to keep the numbering
               tidy took the whole dashboard down for everybody without revenue.
             */
+            /* A cancelled invoice's payments are not revenue (Yamen, 2026-10-14). */
             showRevenue
-              ? `(select coalesce(sum(amount),0) from payments where clinic_id=$1 and paid_at >= $4 and paid_at < $5) as rev_this,
-          (select coalesce(sum(amount),0) from payments where clinic_id=$1 and paid_at >= $6 and paid_at < $7) as rev_last,`
+              ? `(select coalesce(sum(p.amount),0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
+             where p.clinic_id=$1 and p.paid_at >= $4 and p.paid_at < $5) as rev_this,
+          (select coalesce(sum(p.amount),0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
+             where p.clinic_id=$1 and p.paid_at >= $6 and p.paid_at < $7) as rev_last,`
               : `0::numeric as rev_this, 0::numeric as rev_last,`
           }
           (select count(*) from appointments where clinic_id=$1 and starts_at >= $2 and starts_at < $3 and status='no_show')::int as noshow,
@@ -216,9 +219,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
            ${
              showRevenue
                ? `left join (
-             select (paid_at at time zone $2)::date as day, sum(amount) as amount
-               from payments
-              where clinic_id = $1 and paid_at >= now() - interval '15 days'
+             select (pay.paid_at at time zone $2)::date as day, sum(pay.amount) as amount
+               from payments pay
+               join invoices v on v.id = pay.invoice_id and v.status <> 'void'
+              where pay.clinic_id = $1 and pay.paid_at >= now() - interval '15 days'
               group by 1
            ) p on p.day = d.day`
                : ""

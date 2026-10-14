@@ -19,7 +19,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   const to = url.searchParams.get("to");
 
   const rows = await inClinic(g.access, async (c) => {
-    const conds = ["pay.clinic_id = $1"];
+    // A cancelled invoice's payments are not money taken, so they are not exported as such.
+    const conds = ["pay.clinic_id = $1", "i.status <> 'void'"];
     const vals: unknown[] = [g.access.clinicId];
     if (from) {
       vals.push(from);

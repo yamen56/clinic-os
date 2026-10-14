@@ -551,7 +551,9 @@ export async function sendDigest(c: PoolClient, alert: DigestAlert, now: DateTim
            (select count(*) from appointments where clinic_id = $1 and starts_at >= $2 and starts_at < $3 and status = 'no_show')::int as no_show,
            (select count(*) from appointments where clinic_id = $1 and starts_at >= $2 and starts_at < $3 and status = 'cancelled')::int as cancelled,
            (select count(*) from patients where clinic_id = $1 and created_at >= $2 and created_at < $3)::int as new_patients,
-           (select coalesce(sum(amount), 0) from payments where clinic_id = $1 and paid_at >= $2 and paid_at < $3) as revenue`,
+           -- A cancelled invoice's payments are not takings.
+           (select coalesce(sum(p.amount), 0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
+             where p.clinic_id = $1 and p.paid_at >= $2 and p.paid_at < $3) as revenue`,
         [alert.clinic_id, from.toUTC().toISO(), to.toUTC().toISO()]
       )
     ).rows;

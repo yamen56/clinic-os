@@ -18,6 +18,7 @@ import {
   sendInvoiceAction,
   recordPaymentAction,
   voidInvoiceAction,
+  deleteInvoiceAction,
   setInvoiceInsuranceAction,
   retryEinvoiceAction,
   setInvoiceTitleAction,
@@ -34,6 +35,7 @@ import {
   UserRound,
   TriangleAlert,
   Landmark,
+  Trash2,
 } from "lucide-react";
 
 const invStatus: Record<string, StatusKey> = {
@@ -83,6 +85,8 @@ type Invoice = {
   corrects_number: string | null;
   credit_note_id: string | null;
   credit_note_number: string | null;
+  /** Cancelled and never filed, so it may be deleted (`DELETABLE_INVOICE_SQL`). */
+  deletable: boolean;
 };
 
 const einvStatus: Record<string, StatusKey> = {
@@ -126,6 +130,8 @@ export function InvoiceDetailClient({
   const inv = invoice;
   const [payOpen, setPayOpen] = useState(false);
   const [voidOpen, setVoidOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const due = Number(inv.total) - Number(inv.amount_paid);
   const [amount, setAmount] = useState(due > 0 ? String(due) : "");
   const [method, setMethod] = useState("cash");
@@ -333,6 +339,13 @@ export function InvoiceDetailClient({
               <Button variant="ghost" size="sm" className="!text-danger" onClick={() => setVoidOpen(true)}>
                 <Ban className="h-4 w-4" />
                 {t.invoices.voidInvoice}
+              </Button>
+            )}
+            {/* Once cancelled, it can go altogether — unless JoFotara holds it. */}
+            {canVoid && inv.status === "void" && inv.deletable && (
+              <Button variant="ghost" size="sm" className="!text-danger" onClick={() => setDeleteOpen(true)} data-delete-invoice>
+                <Trash2 className="h-4 w-4" />
+                {t.invoices.deleteInvoice}
               </Button>
             )}
           </div>
@@ -717,10 +730,16 @@ export function InvoiceDetailClient({
             <p className="px-5 py-6 text-center text-sm text-ink-400">{t.common.none}</p>
           ) : (
             <ul className="divide-y divide-line">
+              {/* A cancelled invoice's payments are kept here as history and counted nowhere. */}
+              {inv.status === "void" && (
+                <li className="px-5 py-2.5 text-[12px] text-ink-500" data-void-payments-note>
+                  {t.invoices.voidPaymentsNote}
+                </li>
+              )}
               {payments.map((p) => (
-                <li key={p.id} className="px-5 py-3">
+                <li key={p.id} className={`px-5 py-3 ${inv.status === "void" ? "opacity-60" : ""}`}>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold tnum">
+                    <span className={`text-sm font-semibold tnum ${inv.status === "void" ? "line-through" : ""}`}>
                       {fmtMoney(Number(p.amount), inv.currency, locale)}
                     </span>
                     <Badge status="brand">
@@ -795,6 +814,29 @@ export function InvoiceDetailClient({
           </Field>
         )}
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title={t.invoices.deleteConfirm}
+        body={t.invoices.deleteBody}
+        confirmLabel={t.invoices.deleteInvoice}
+        cancelLabel={t.common.cancel}
+        loading={deleting}
+        onConfirm={async () => {
+          setDeleting(true);
+          const r = await deleteInvoiceAction(slug, inv.id);
+          if (r.error) {
+            setDeleting(false);
+            setDeleteOpen(false);
+            toast(r.error === "filed" ? t.invoices.filedStays : t.common.genericError, "error");
+            return;
+          }
+          toast(t.invoices.deleted);
+          // The page it was on no longer exists: back to the cancelled ones it came from.
+          router.replace(`/c/${slug}/invoices?status=cancelled`);
+        }}
+      />
     </>
   );
 }

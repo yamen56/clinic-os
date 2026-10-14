@@ -7,9 +7,7 @@ import { fmtDateOnly, fmtMoney, monthLabel } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/misc";
 import type { DoctorEarnings, EarningsLine } from "@/lib/earnings";
-import { ChevronLeft, ChevronRight, Wallet, AlertTriangle } from "lucide-react";
-
-type Flagged = { invoiceId: string; number: string; doctorMemberId: string; earned: number };
+import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 
 export function EarningsClient({
   slug,
@@ -23,7 +21,6 @@ export function EarningsClient({
   team,
   net,
   showSpend,
-  flagged,
   names,
   showTeam,
   canOpenInvoices,
@@ -47,7 +44,6 @@ export function EarningsClient({
   } | null;
   /** Whether this reader may also see what the clinic spent. */
   showSpend: boolean;
-  flagged: Flagged[];
   names: Record<string, string>;
   showTeam: boolean;
   /*
@@ -273,37 +269,6 @@ export function EarningsClient({
                 </table>
               </div>
             )}
-          </Card>
-        )}
-
-        {/*
-          Voided, and yet paid. Rare enough that nobody would go looking, and
-          exactly the row somebody has to decide about: the doctor has been
-          credited for money the clinic may or may not have given back, and only
-          a person knows which.
-        */}
-        {showTeam && flagged.length > 0 && (
-          <Card className="border-warning/40 p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" />
-              <h3 className="text-[14px] font-semibold">{t.earnings.voidedTitle}</h3>
-            </div>
-            <p className="mb-3 text-[12px] leading-relaxed text-ink-500">{t.earnings.voidedBody}</p>
-            <ul className="grid gap-1.5">
-              {flagged.map((f) => (
-                <li key={`${f.invoiceId}-${f.doctorMemberId}`} className="flex items-center justify-between gap-3 text-[13px]">
-                  {canOpenInvoices ? (
-                    <Link href={`/c/${slug}/invoices/${f.invoiceId}`} className="text-brand-700 hover:underline">
-                      {f.number}
-                    </Link>
-                  ) : (
-                    <span>{f.number}</span>
-                  )}
-                  <span className="text-ink-500">{names[f.doctorMemberId] ?? "—"}</span>
-                  <span className="tabular-nums font-medium">{money(f.earned)}</span>
-                </li>
-              ))}
-            </ul>
           </Card>
         )}
       </div>

@@ -4,16 +4,18 @@ import { revalidatePath } from "next/cache";
 import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
-import { mayTouchInvoice, ownInvoicesOnly } from "@/lib/invoice-scope";
+import { invoiceScopeSql, mayTouchInvoice, ownInvoicesOnly } from "@/lib/invoice-scope";
 import {
   nextInvoiceNumber,
   nextReceiptNumber,
   computeInvoice,
   refreshInvoiceStatus,
   round2,
+  DELETABLE_INVOICE_SQL,
   TAX_CATEGORIES,
   type InvoiceItemInput,
 } from "@/lib/invoices";
+import { isUuid } from "@/lib/uuid";
 import type { PoolClient } from "pg";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
@@ -905,6 +907,87 @@ export async function voidInvoiceAction(
     });
     revalidatePath(`/c/${slug}/invoices`);
     return { creditNoteId };
+  });
+}
+
+/**
+ * Deleting a cancelled invoice, for good.
+ *
+ * Asked for by the clinic (Yamen, 2026-10-14): cancelled invoices crowd the
+ * list long after anybody needs them. What may go is `DELETABLE_INVOICE_SQL` —
+ * cancelled, never filed. The same capability as cancelling: whoever may take
+ * an invoice off the books may clear it away once it is off them.
+ *
+ * Its lines, payments and the chart's link to them go with it (the foreign keys
+ * cascade). A cancelled invoice's payments already counted for nothing, so no
+ * figure moves. The audit row keeps what it was, since the invoice itself is gone.
+ */
+export async function deleteInvoiceAction(slug: string, invoiceId: string): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices.void")) return { error: "forbidden" };
+  if (!isUuid(invoiceId)) return { error: "not_found" };
+
+  return inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
+    const inv = (
+      await c.query(
+        `select i.number, i.total, i.patient_id, i.status, ${DELETABLE_INVOICE_SQL} as deletable
+           from invoices i where i.id = $1 and i.clinic_id = $2 for update`,
+        [invoiceId, access.clinicId]
+      )
+    ).rows[0];
+    if (!inv) return { error: "not_found" };
+    if (inv.status !== "void") return { error: "not_cancelled" };
+    if (!inv.deletable) return { error: "filed" };
+    const paid = (
+      await c.query(`select coalesce(sum(amount), 0) as paid, count(*)::int as n from payments where invoice_id = $1`, [invoiceId])
+    ).rows[0];
+
+    await c.query(`delete from invoices where id = $1 and clinic_id = $2`, [invoiceId, access.clinicId]);
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "invoice.delete",
+      entity: "invoice",
+      entityId: invoiceId,
+      detail: { number: inv.number, total: inv.total, patientId: inv.patient_id, payments: paid.n, paid: paid.paid },
+    });
+    revalidatePath(`/c/${slug}/invoices`);
+    revalidatePath(`/c/${slug}/patients/${inv.patient_id}`);
+    return {};
+  });
+}
+
+/**
+ * Every cancelled invoice this member may touch, at once — the list's "Delete
+ * cancelled invoices". Filed ones stay, by `DELETABLE_INVOICE_SQL`; a doctor
+ * who sees only their own invoices clears only their own.
+ */
+export async function deleteCancelledInvoicesAction(slug: string): Promise<{ error?: string; deleted?: number }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices.void")) return { error: "forbidden" };
+
+  return inClinic(access, async (c) => {
+    const scope = invoiceScopeSql(access, "i", 2);
+    const gone = await c.query(
+      `delete from invoices i
+        where i.clinic_id = $1 and ${DELETABLE_INVOICE_SQL}${scope.sql}
+        returning i.id, i.number, i.total`,
+      [access.clinicId, ...scope.params]
+    );
+    if (gone.rowCount) {
+      await audit(c, {
+        clinicId: access.clinicId,
+        userId: access.session.user.id,
+        impersonatedBy: access.session.impersonatedBy,
+        action: "invoice.delete_cancelled",
+        entity: "invoice",
+        detail: { count: gone.rowCount, invoices: gone.rows.map((r) => ({ id: r.id, number: r.number, total: r.total })) },
+      });
+    }
+    revalidatePath(`/c/${slug}/invoices`);
+    return { deleted: gone.rowCount ?? 0 };
   });
 }
 

@@ -121,25 +121,20 @@ export type EarningsScope = {
   clinicId: string;
   from: Date;
   to: Date;
-  /**
-   * Voided invoices.
-   *
-   * A void does not delete the payments behind it and this product has no
-   * refunds, so the cash is still in the clinic's drawer. Taking the doctor's
-   * share back off them for money nobody returned is the worse error, so *what
-   * a doctor is owed* counts it and the payout report flags those invoices for
-   * the owner to settle by hand.
-   *
-   * The clinic's own "after commission" tile passes `false`, because the gross
-   * it subtracts from excludes voided invoices too — both sides of a
-   * subtraction have to be on one basis or the difference means nothing.
-   */
-  includeVoided: boolean;
 };
 
+/**
+ * Cancelled invoices earn nobody anything.
+ *
+ * The payments on a cancelled invoice are not the clinic's money (Yamen,
+ * 2026-10-14): they leave every takings figure, so they leave every doctor's
+ * share too. This used to count them toward what a doctor was owed — on the
+ * theory that the cash was still in the drawer — and list them for the owner to
+ * settle by hand; the owner has said the cash is not real, so there is nothing
+ * left to settle.
+ */
 function scopeSql(scope: EarningsScope): { sql: string; params: unknown[] } {
-  const sql = scope.includeVoided ? LEDGER_SQL : `${LEDGER_SQL} and i.status <> 'void'`;
-  return { sql, params: [scope.clinicId, scope.from, scope.to] };
+  return { sql: `${LEDGER_SQL} and i.status <> 'void'`, params: [scope.clinicId, scope.from, scope.to] };
 }
 
 export type DoctorEarnings = {
@@ -239,40 +234,11 @@ export async function earningsByDoctor(
 }
 
 /**
- * The invoices a payout conversation has to start with: voided, and yet paid.
- *
- * Rare — voiding a settled invoice implies a refund, which this product does
- * not do — and precisely because it is rare it is the row nobody notices. The
- * doctor has been credited for money the clinic may or may not have given back,
- * and only a human can say which.
- */
-export async function voidedButPaid(
-  c: PoolClient,
-  scope: EarningsScope
-): Promise<{ invoiceId: string; number: string; doctorMemberId: string; earned: number }[]> {
-  const r = await c.query(
-    `select invoice_id, invoice_number, doctor_member_id,
-            coalesce(sum(earned), 0) as earned
-       from (${LEDGER_SQL} and i.status = 'void') e
-      group by invoice_id, invoice_number, doctor_member_id
-     having coalesce(sum(earned), 0) <> 0
-      order by earned desc`,
-    [scope.clinicId, scope.from, scope.to]
-  );
-  return r.rows.map((row) => ({
-    invoiceId: row.invoice_id as string,
-    number: row.invoice_number as string,
-    doctorMemberId: row.doctor_member_id as string,
-    earned: Number(row.earned),
-  }));
-}
-
-/**
  * What the clinic collected, and what is left after the doctors' shares.
  *
- * `gross` is the same figure the revenue tiles have always shown — the sum of
- * payments — and both sides here exclude voided invoices so the subtraction is
- * between two numbers measured the same way.
+ * `gross` is the same figure the revenue tiles show — the sum of payments on
+ * invoices that were not cancelled — and the commission side excludes cancelled
+ * invoices too, so the subtraction is between two numbers measured the same way.
  *
  * The commission is aggregated **per payment before joining back**, which is
  * the whole reason this is not one query: joining `invoice_items` multiplies
@@ -285,7 +251,7 @@ export async function voidedButPaid(
  */
 export async function clinicNetRevenue(
   c: PoolClient,
-  scope: Omit<EarningsScope, "includeVoided">
+  scope: EarningsScope
 ): Promise<{ gross: number; tax: number; commission: number; afterCommission: number }> {
   const params = [scope.clinicId, scope.from, scope.to];
   const r = await c.query(

@@ -12,8 +12,8 @@
  *
  * After that: the rate frozen at billing does not move when the member's rate
  * changes; the clinic's own total does not multiply by the number of lines on
- * an invoice; and a voided invoice that was paid still owes its doctor, because
- * nobody refunded the patient.
+ * an invoice; and a cancelled invoice earns nobody anything, paid or not — its
+ * payments are not the clinic's money (Yamen, 2026-10-14).
  *
  *   npx tsx scripts/qa-doctor-earnings.ts
  */
@@ -27,7 +27,6 @@ import {
   earningsByDoctor,
   clinicNetRevenue,
   clinicHasCommission,
-  voidedButPaid,
 } from "../src/lib/earnings";
 import { computeInvoice, nextInvoiceNumber, refreshInvoiceStatus, round2 } from "../src/lib/invoices";
 import { sendDigest } from "../worker/notifications";
@@ -185,7 +184,7 @@ async function main() {
   check("the fixture settles in full", status.status === "paid", `${instalments.length} payments, status ${status.status}`);
 
   // ---- the exactness property -------------------------------------------
-  const scope = { clinicId: clinic.id as string, from: FROM, to: TO, includeVoided: true };
+  const scope = { clinicId: clinic.id as string, from: FROM, to: TO };
   const a = await earningsForDoctor(c, scope, drA);
   const b = await earningsForDoctor(c, scope, drB);
 
@@ -225,19 +224,18 @@ async function main() {
   check("the report is ordered by what is owed", by[0].doctorMemberId === drA, "Dr A first");
   check("the clinic is flagged as sharing revenue", await clinicHasCommission(c, clinic.id));
 
-  // ---- a voided invoice that was paid ------------------------------------
+  // ---- a cancelled invoice that was paid ---------------------------------
+  // Its payments are not the clinic's money, so nobody earns on them.
   await db.query(`update invoices set status = 'void', voided_at = now() where id = $1`, [inv.id]);
   const afterVoid = await earningsForDoctor(c, scope, drA);
-  check("a voided-but-paid invoice still owes its doctor",
-    afterVoid.earned === trueA, `${afterVoid.earned} vs ${trueA}`);
+  check("a cancelled invoice earns its doctor nothing, though it was paid",
+    afterVoid.earned === 0 && afterVoid.produced === 0, `${afterVoid.earned} earned, ${afterVoid.produced} produced`);
+  const byAfterVoid = await earningsByDoctor(c, scope);
+  check("and it leaves the payout report", byAfterVoid.length === 0, `${byAfterVoid.length} rows`);
   const netAfterVoid = await clinicNetRevenue(c, { clinicId: clinic.id, from: FROM, to: TO });
-  check("the clinic's own total drops the voided invoice from both sides",
+  check("the clinic's own total drops the cancelled invoice from both sides",
     netAfterVoid.gross === 0 && netAfterVoid.commission === 0,
     `gross ${netAfterVoid.gross}, commission ${netAfterVoid.commission}`);
-  const flagged = await voidedButPaid(c, scope);
-  check("the voided-but-paid invoice is flagged for the owner",
-    flagged.length === 2 && flagged.every((f) => f.number === first.number),
-    `${flagged.length} rows, ${flagged.map((f) => f.number).join(",")}`);
 
   // ---- what each person actually sees -------------------------------------
   /*
