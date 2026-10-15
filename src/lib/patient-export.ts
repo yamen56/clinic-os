@@ -434,7 +434,7 @@ export async function loadPatientExportBatch(
             site: s.site,
             label: s.label,
             step: s.step === EMERGENCY_STEP ? "Emergency" : (def?.en ?? s.step),
-            summary: stepSummary(def, s.data ?? {}),
+            summary: stepSummary(def, s.data ?? {}, s.treatment_key),
             doctor: s.doctor ?? null,
             date: String(s.done_at),
             voided: !!s.voided_at,

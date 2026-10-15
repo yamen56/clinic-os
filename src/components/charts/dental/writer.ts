@@ -17,7 +17,7 @@ import type { Mark, MarkEvent, Person } from "@/lib/charts/dental/state";
 import { leadIdOf } from "@/lib/charts/dental/full-arch";
 import { EMERGENCY_STEP, type StepData, type StepRecord } from "@/lib/charts/dental/protocols";
 import type { MedicalHistory } from "@/lib/medical-history";
-import { priceFrom, type PriceUnit } from "@/lib/charts/dental/pricing";
+import { priceFrom, unitOf, type PriceUnit } from "@/lib/charts/dental/pricing";
 import { useDentalStore } from "./store";
 
 export const newId = () =>
@@ -99,6 +99,8 @@ export function useChartWriter() {
               role: m.role ?? null,
               performedBy: m.performedBy?.id ?? null,
               emergency: m.emergency,
+              redoOf: m.redoOf ?? null,
+              note: m.note,
             })),
           })
         );
@@ -292,7 +294,29 @@ export function useChartWriter() {
     [s.prices, base, setMarks, write, settle, toast, t.dental.price]
   );
 
-  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical, chargeBy };
+  /*
+    This patient's price for a treatment, set by hand — or, with null, back to
+    the list's. Shown at once, put back if the server refuses (it does once
+    any of it is billed). The list itself is not touched.
+  */
+  const setFee = useCallback(
+    async (m: Mark, fee: number | null): Promise<boolean> => {
+      const list = fee === null ? priceFrom(s.prices, m.treatmentKey, m.detail, unitOf(m, s.prices)) : null;
+      setMarks((prev) => prev.map((x) => (x.id === m.id ? { ...x, fee: fee ?? list?.price ?? null, feeManual: fee !== null } : x)));
+      try {
+        const r = await write([m.id], call<{ mark: Mark; event: MarkEvent }>(`${base}/dental/marks/${m.id}/fee`, "POST", { fee }));
+        settle([r.mark], [r.event]);
+        return true;
+      } catch (e) {
+        setMarks((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+        toast((e as Error).message === "billed" ? t.dental.price.editLocked : t.dental.price.failed, "error");
+        return false;
+      }
+    },
+    [s.prices, base, setMarks, write, settle, toast, t.dental.price]
+  );
+
+  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical, chargeBy, setFee };
 }
 
 /** The members a group's lead carries, found the same way the server finds them. */

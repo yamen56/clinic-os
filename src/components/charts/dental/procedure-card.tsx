@@ -16,7 +16,7 @@
 */
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, Check, ChevronDown, Maximize2, Plus, Siren, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Maximize2, Pencil, Plus, Repeat, Siren, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
@@ -27,9 +27,12 @@ import { isToothSite, paintAt, type Mark, type Person } from "@/lib/charts/denta
 import { tooth as toothOf, type Tooth } from "@/lib/charts/dental/teeth";
 import {
   EMERGENCY_STEP,
+  FILE_SIZES,
   FOLLOW_UPS,
   canalNames,
   defaultReference,
+  detailOptions,
+  filesOf,
   progressOf,
   stepSummary,
   type CanalRow,
@@ -48,6 +51,7 @@ import { siteLabel } from "./labels";
 import { TreatmentGlyph } from "./treatment-picker";
 import { INK, SOFT } from "./tooth-art";
 import { PriceLine } from "./price-line";
+import { attemptOf, redoable, redoneBy } from "@/lib/charts/dental/redo";
 
 const UNDO_MS = 120_000;
 
@@ -81,6 +85,10 @@ function StepForm({
   previous,
   implantSites,
   canWrite,
+  initial,
+  submitLabel,
+  onCancel,
+  onDetail,
   onDone,
 }: {
   def: StepDef;
@@ -90,13 +98,26 @@ function StepForm({
   previous: CanalRow[] | null;
   implantSites: string[];
   canWrite: boolean;
+  /** A step already recorded, being corrected: what it holds. */
+  initial?: StepData;
+  submitLabel?: string;
+  onCancel?: () => void;
+  /**
+   * The treatment's own detail chosen in the step — a crown's type — set on
+   * the treatment at the tap, as the chips on the card used to: the price
+   * follows at once, before the step is recorded.
+   */
+  onDetail?: (key: string, value: string) => void;
   onDone: (data: StepData) => Promise<boolean>;
 }) {
   const { t } = useI18n();
   const P = t.dental.treatment;
   const canalField = def.fields?.find((f): f is Extract<StepField, { kind: "canals" }> => f.kind === "canals");
   const [data, setData] = useState<StepData>(() => {
+    if (initial) return JSON.parse(JSON.stringify(initial)) as StepData;
     const d: StepData = {};
+    // The treatment's own detail starts as it is on the treatment: the crown's type as planned.
+    for (const f of def.fields ?? []) if (f.kind === "detail" && mark.detail[f.key]) d[f.key] = mark.detail[f.key];
     if (canalField) {
       const names = previous?.map((c) => c.name) ?? canalNames(tooth, Number(mark.detail.canals) || tooth?.roots || 1);
       d.canals = names.map((name) => ({
@@ -134,9 +155,31 @@ function StepForm({
                   {cols.includes("length") && <Decimal value={c.length} onChange={(v) => setCanal(i, { length: v })} label={`${c.name} ${P.length}`} />}
                   {cols.includes("ref") && <input value={c.ref ?? ""} onChange={(e) => setCanal(i, { ref: e.target.value.slice(0, 40) })} aria-label={`${c.name} ${P.reference}`} className={field} />}
                   {cols.includes("file") && (
-                    <div className="relative">
-                      <input value={c.file ?? ""} onChange={(e) => setCanal(i, { file: e.target.value.slice(0, 24) })} aria-label={`${c.name} ${P.file}`} placeholder="25/.06" className={field} />
-                      {lengthOf(c.name) != null && <span className="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2 text-[11px] text-ink-400 tnum">{lengthOf(c.name)} mm</span>}
+                    /* The files used on this canal: tapped, as many as were used, in the order of the list. */
+                    <div className="flex flex-wrap items-center gap-1" role="group" aria-label={`${c.name} ${P.file}`} data-canal-files={c.name}>
+                      {[...FILE_SIZES, ...filesOf(c.file).filter((x) => !(FILE_SIZES as readonly string[]).includes(x))].map((size) => {
+                        const used = filesOf(c.file);
+                        const on = used.includes(size);
+                        return (
+                          <button
+                            key={size}
+                            type="button"
+                            aria-pressed={on}
+                            data-file-size={size}
+                            onClick={() => {
+                              const next = on ? used.filter((x) => x !== size) : [...used, size];
+                              const ordered = [...FILE_SIZES.filter((x) => next.includes(x)), ...next.filter((x) => !(FILE_SIZES as readonly string[]).includes(x))];
+                              setCanal(i, { file: ordered.join(", ") });
+                            }}
+                            className={`h-8 rounded-full border px-2.5 text-[12.5px] font-semibold tnum transition-colors duration-140 ${
+                              on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+                            }`}
+                          >
+                            {size}
+                          </button>
+                        );
+                      })}
+                      {lengthOf(c.name) != null && <span className="ps-1 text-[11.5px] text-ink-400 tnum">{lengthOf(c.name)} mm</span>}
                     </div>
                   )}
                   {(data.canals?.length ?? 0) > 1 ? (
@@ -186,6 +229,38 @@ function StepForm({
             </div>
           );
         }
+        if (f.kind === "detail") {
+          // The treatment's own detail — a crown's type — with the treatment's own options.
+          const v = data[f.key];
+          return (
+            <div key={fi} data-step-detail={f.key}>
+              <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{f.en}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {detailOptions(mark.treatmentKey, f.key).map((o) => {
+                  const on = v === o.key;
+                  return (
+                    <button
+                      key={o.key}
+                      type="button"
+                      aria-pressed={on}
+                      data-choice={`${f.key}:${o.key}`}
+                      onClick={() => {
+                        // One type is always chosen: a tap chooses, it never empties.
+                        set({ [f.key]: o.key });
+                        if (!initial && onDetail && mark.detail[f.key] !== o.key) onDetail(f.key, o.key);
+                      }}
+                      className={`h-9 rounded-full border px-3 text-[13px] font-semibold transition-colors duration-140 ${
+                        on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+                      }`}
+                    >
+                      {o.en}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
         if (f.kind === "choice") {
           const v = data[f.key];
           const chosen = new Set(Array.isArray(v) ? (v as string[]) : typeof v === "string" ? [v] : []);
@@ -225,19 +300,27 @@ function StepForm({
         );
       })}
       {canWrite && (
-        <Button
-          className="h-11 w-full text-[15px]"
-          loading={busy}
-          data-step-done={def.key}
-          onClick={async () => {
-            setBusy(true);
-            await onDone(data);
-            setBusy(false);
-          }}
-        >
-          <Check className="h-4.5 w-4.5" />
-          {P.doneToday}
-        </Button>
+        <div className="flex gap-2">
+          {onCancel && (
+            <Button variant="outline" className="h-11 text-[15px]" onClick={onCancel}>
+              {P.cancelEdit}
+            </Button>
+          )}
+          <Button
+            className="h-11 flex-1 text-[15px]"
+            loading={busy}
+            data-step-done={initial ? undefined : def.key}
+            data-step-save={initial ? def.key : undefined}
+            onClick={async () => {
+              setBusy(true);
+              await onDone(data);
+              setBusy(false);
+            }}
+          >
+            <Check className="h-4.5 w-4.5" />
+            {submitLabel ?? P.doneToday}
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -254,6 +337,7 @@ export function ProcedureCard({
   onNote,
   onDetail,
   onPlan,
+  onRedo,
   extra,
   onExpand,
 }: {
@@ -269,6 +353,8 @@ export function ProcedureCard({
   onDetail: (id: string, key: string, value: string) => void;
   /** Plan what usually comes next, on the same tooth. */
   onPlan: (treatmentKey: string, site: string) => void;
+  /** Do this work again: the patient is back with a problem in it. */
+  onRedo?: (m: Mark) => void;
   extra?: string;
   /** Open its tooth in full, the steps in place — given where the card stands on its own. */
   onExpand?: () => void;
@@ -279,6 +365,8 @@ export function ProcedureCard({
   const store = useDentalStore();
   const w = useChartWriter();
   const [openStep, setOpenStep] = useState<string | null>(null);
+  // A recorded step being corrected.
+  const [editing, setEditing] = useState<string | null>(null);
   const [voiding, setVoiding] = useState<StepRecord | null>(null);
   const [finishing, setFinishing] = useState(false);
   const m = store.marks.find((x) => x.id === markId);
@@ -315,7 +403,23 @@ export function ProcedureCard({
     .map((k) => BUILT_IN_BY_KEY.get(k))
     .filter((x): x is NonNullable<typeof x> => !!x)
     .filter((x) => !store.marks.some((o) => !o.voidedAt && o.site === m.site && o.treatmentKey === x.key));
-  const details = tr?.details?.filter((d) => !(d.key === "implants" && m.groupId)) ?? [];
+  /*
+    A detail a step chooses — the crown's type, at its preparation — is
+    chosen there, not here: one place for it. Work already there, which has
+    no steps of its own, keeps it here.
+  */
+  const carried = (prog?.steps ?? []).flatMap((s) => s.fields ?? []).filter((f): f is Extract<StepField, { kind: "detail" }> => f.kind === "detail");
+  const details = (tr?.details?.filter((d) => !(d.key === "implants" && m.groupId)) ?? []).filter((d) => m.status === "existing" || !carried.some((f) => f.key === d.key));
+  const carriedText = carried
+    .map((f) => {
+      const o = detailOptions(m.treatmentKey, f.key).find((x) => x.key === m.detail[f.key]);
+      return o ? `${f.en}: ${o.en}` : null;
+    })
+    .filter(Boolean);
+  // Done again: the work this redoes, and the redo of this one.
+  const original = m.redoOf ? (store.marks.find((x) => x.id === m.redoOf) ?? null) : null;
+  const redo = redoneBy(m, store.marks);
+  const attempt = attemptOf(m, store.marks);
 
   const done = (def: StepDef) => async (data: StepData) => {
     const ok = await w.recordStep(m, def.key, data, { performer });
@@ -354,11 +458,40 @@ export function ProcedureCard({
             <span className="text-[16px] font-semibold leading-tight text-ink-900">{locale === "ar" ? m.labelAr : m.label}</span>
             <PaintPill m={m} />
           </div>
-          <div className="mt-1 text-[12.5px] text-ink-500">
-            {[tt ? null : siteLabel(m.site, T), extra, m.performedBy?.name].filter(Boolean).join(" · ")}
+          <div className="mt-1 text-[12.5px] text-ink-500" data-card-meta>
+            {[tt ? null : siteLabel(m.site, T), extra, ...carriedText, m.performedBy?.name].filter(Boolean).join(" · ")}
           </div>
         </div>
       </div>
+
+      {(original || redo) && (
+        <div className="grid gap-1.5" data-redo-links>
+          {original && (
+            <button
+              type="button"
+              onClick={() => store.setOpenItem(original.id)}
+              className="flex w-full items-center gap-2 rounded-ctl border border-line bg-canvas px-3 py-2 text-start text-[12.5px] text-ink-700 hover:bg-sunken"
+              data-redo-of={original.id}
+            >
+              <Repeat className="h-4 w-4 shrink-0 text-brand-600" />
+              <span className="min-w-0 flex-1">{P.redoOf.replace("{name}", locale === "ar" ? original.labelAr : original.label).replace("{date}", fmtDate(original.doneAt ?? original.createdAt, tz, locale))}</span>
+              {attempt > 1 && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11.5px] font-semibold text-brand-700">{P.redoTimes.replace("{n}", String(attempt - 1))}</span>}
+            </button>
+          )}
+          {redo && (
+            <button
+              type="button"
+              onClick={() => store.setOpenItem(redo.id)}
+              className="flex w-full items-center gap-2 rounded-ctl border border-line bg-canvas px-3 py-2 text-start text-[12.5px] text-ink-700 hover:bg-sunken"
+              data-redone-by={redo.id}
+            >
+              <Repeat className="h-4 w-4 shrink-0 text-ink-400" />
+              <span className="min-w-0 flex-1">{P.redoneOn.replace("{date}", fmtDate(redo.createdAt, tz, locale))}</span>
+              <span className="shrink-0 font-semibold text-brand-700">{P.redoOpen}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {details.length > 0 && (
         <div className="grid gap-2">
@@ -459,34 +592,73 @@ export function ProcedureCard({
                         ]
                           .filter(Boolean)
                           .join(" · ")}
-                        {stepSummary(def, r.data) && <span className="block text-[12.5px] font-medium text-ink-700" data-step-summary>{stepSummary(def, r.data)}</span>}
+                        {stepSummary(def, r.data, m.treatmentKey) && (
+                          <span className="block text-[12.5px] font-medium text-ink-700" data-step-summary>
+                            {stepSummary(def, r.data, m.treatmentKey)}
+                          </span>
+                        )}
                       </span>
                     ))}
                   </span>
                   {editable && (!isDone || def.repeatable) && <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-ink-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />}
                 </button>
-                {/* A step's records can be taken back: undone just after, voided with a reason later. */}
+                {/* A step's records can be corrected, and taken back: undone just after, voided later. */}
                 {editable && recs.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-3 ps-9">
-                    {recs.map((r) =>
-                      r.recordedBy.id === store.me.id && Date.now() - Date.parse(r.doneAt) < UNDO_MS ? (
-                        <button key={r.id} type="button" onClick={() => void w.withdrawStep(r, { undo: true })} className="text-[12px] font-semibold text-brand-600 hover:underline" data-step-undo={def.key}>
-                          {P.stepUndo}
-                        </button>
-                      ) : (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => setVoiding(r)}
-                          className="text-[12px] font-semibold text-ink-400 hover:text-danger"
-                        >
-                          {P.stepVoid}
-                        </button>
-                      )
-                    )}
+                  <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 ps-9">
+                    {/* Each time the step was done, its own pair: correct it, or take it back. */}
+                    {recs.map((r) => (
+                      <span key={r.id} className="inline-flex items-center gap-3">
+                        {(def.fields?.length ?? 0) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenStep("");
+                              setEditing(editing === r.id ? null : r.id);
+                            }}
+                            aria-expanded={editing === r.id}
+                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-600 hover:underline"
+                            data-step-edit={def.key}
+                          >
+                            <Pencil className="h-3 w-3" />
+                            {P.editStep}
+                          </button>
+                        )}
+                        {r.recordedBy.id === store.me.id && Date.now() - Date.parse(r.doneAt) < UNDO_MS ? (
+                          <button type="button" onClick={() => void w.withdrawStep(r, { undo: true })} className="text-[12px] font-semibold text-brand-600 hover:underline" data-step-undo={def.key}>
+                            {P.stepUndo}
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => setVoiding(r)} className="text-[12px] font-semibold text-ink-400 hover:text-danger">
+                            {P.stepVoid}
+                          </button>
+                        )}
+                      </span>
+                    ))}
                   </div>
                 )}
-                {isOpen && editable && (
+                {editable &&
+                  recs
+                    .filter((r) => r.id === editing)
+                    .map((r) => (
+                      <StepForm
+                        key={`edit-${r.id}`}
+                        def={def}
+                        mark={m}
+                        tooth={tt}
+                        previous={lastCanals(def.key)}
+                        implantSites={implantSites}
+                        canWrite={editable}
+                        initial={r.data}
+                        submitLabel={P.saveChanges}
+                        onCancel={() => setEditing(null)}
+                        onDone={async (data) => {
+                          const ok = await w.editStep(r, data);
+                          if (ok) setEditing(null);
+                          return ok;
+                        }}
+                      />
+                    ))}
+                {isOpen && editable && !editing && (
                   <StepForm
                     // A new canal count is a new set of canals to fill in.
                     key={`${def.key}-${recs.length}-${m.detail.canals ?? ""}`}
@@ -496,6 +668,7 @@ export function ProcedureCard({
                     previous={lastCanals(def.key)}
                     implantSites={implantSites}
                     canWrite={editable}
+                    onDetail={(key, value) => onDetail(m.id, key, value)}
                     onDone={done(def)}
                   />
                 )}
@@ -571,6 +744,12 @@ export function ProcedureCard({
             {planned && prog && !prog.complete && (
               <Button variant="outline" size="sm" onClick={() => setFinishing(true)} data-finish-now>
                 {P.finishNow}
+              </Button>
+            )}
+            {!planned && onRedo && redoable(m, store.marks) && (
+              <Button variant="outline" size="sm" onClick={() => onRedo(m)} data-redo-item>
+                <Repeat className="h-4 w-4" />
+                {P.redo}
               </Button>
             )}
             <Button variant="ghost" size="sm" className="ms-auto text-danger" onClick={() => onVoid(m)}>

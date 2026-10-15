@@ -6,7 +6,8 @@
 
 import type { PoolClient } from "pg";
 import { leadIdOf } from "./full-arch";
-import { EMERGENCY_STEP, protocolFor, type StepDef } from "./protocols";
+import { EMERGENCY_STEP, protocolFor, type StepData, type StepDef } from "./protocols";
+import { setDetail, type DetailRow } from "./billing-server";
 
 /**
  * Today's visit for this patient, which work done now belongs to.
@@ -164,4 +165,25 @@ export async function afterStepWithdrawn(c: PoolClient, clinicId: string, markId
   await c.query(`update chart_marks set status = 'planned', done_at = null where id = $1`, [markId]);
   await c.query(`insert into chart_mark_events (clinic_id, mark_id, action, by_user) values ($1, $2, 'reopened', $3)`, [clinicId, markId, by]);
   return true;
+}
+
+/**
+ * The treatment's own details a step chose — a crown's type at its
+ * preparation — set on the treatment, which re-prices it unless its price was
+ * set by hand. A bridge's type is the bridge's: every tooth of it takes it.
+ */
+export async function carryDetails(c: PoolClient, clinicId: string, m: DetailRow & { group_id?: string | null }, def: StepDef | null, data: StepData): Promise<void> {
+  for (const f of def?.fields ?? []) {
+    if (f.kind !== "detail") continue;
+    const v = data[f.key];
+    if (typeof v !== "string" || (m.detail ?? {})[f.key] === v) continue;
+    await setDetail(c, clinicId, m, f.key, v);
+    if (!m.group_id) continue;
+    const mates = await c.query(
+      `select id, treatment_key, detail, fee_manual, kind, status, service_id from chart_marks
+        where group_id = $1 and clinic_id = $2 and id <> $3 and voided_at is null and treatment_key = $4`,
+      [m.group_id, clinicId, m.id, m.treatment_key]
+    );
+    for (const x of mates.rows as DetailRow[]) await setDetail(c, clinicId, x, f.key, v);
+  }
 }

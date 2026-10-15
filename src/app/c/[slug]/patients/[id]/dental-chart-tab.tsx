@@ -34,6 +34,9 @@ import { cashOf, priceable } from "@/components/charts/dental/price-line";
 import { EmergencySheet } from "@/components/charts/dental/emergency-sheet";
 import { EMERGENCY_STEP, progressOf, protocolFor, type EmergencyAction } from "@/lib/charts/dental/protocols";
 import { nextVisitOf } from "@/lib/charts/dental/treatment";
+import { resolutions } from "@/lib/charts/dental/resolve";
+import { redoCandidates, redoKey } from "@/lib/charts/dental/redo";
+import { RedoSheet } from "@/components/charts/dental/redo-sheet";
 import { priceFrom } from "@/lib/charts/dental/pricing";
 import { fmtDateOnly, fmtMoney } from "@/lib/dates";
 import { Odontogram, neighbour, type RegionMark } from "@/components/charts/dental/odontogram";
@@ -280,6 +283,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   /** A full arch being set up: which treatment, and the arch when a tooth already said it. */
   const [fullArch, setFullArch] = useState<{ tr: Treatment; arch: Arch | null } | null>(null);
   const [voiding, setVoiding] = useState<Mark | null>(null);
+  // Doing work again: on a tooth (pick which), or one treatment from its card.
+  const [redo, setRedo] = useState<{ site: string | null; markId: string | null } | null>(null);
   const [lastAdded, setLastAdded] = useState<{ ids: string[]; text: string; key: number } | null>(null);
   const [historyDoctor, setHistoryDoctor] = useState("");
   /** A region label being pointed at, and the entry opened from one. */
@@ -461,7 +466,9 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const at = dayIdx === null || dayIdx >= days.length ? null : endOfDay(days[dayIdx], tz);
   const past = at !== null;
   const locked = past || !canWrite;
-  const states = useMemo(() => toothStates(marks, at), [marks, at]);
+  // Findings later work answered — caries under a filling — are drawn no more (resolve.ts).
+  const resolved = useMemo(() => resolutions(marks, at), [marks, at]);
+  const states = useMemo(() => toothStates(marks, at, resolved), [marks, at, resolved]);
   const visible = useCallback((p: Paint) => show[p], [show]);
   const catalog = useMemo(() => [...BUILT_IN, ...custom], [custom]);
   const categoryOf = useCallback((key: string) => findTreatment(key, custom)?.category, [custom]);
@@ -643,7 +650,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     open, so the doctor records what was actually done and the next steps are
     in front of them.
   */
-  type Site = { site: string; surfaces: Surface[]; role?: Mark["role"]; tr?: Treatment; detail?: Record<string, string>; group?: boolean };
+  type Site = { site: string; surfaces: Surface[]; role?: Mark["role"]; tr?: Treatment; detail?: Record<string, string>; group?: boolean; redoOf?: string };
   type RecordOpts = { status?: Status; emergency?: boolean; note?: string; open?: boolean };
 
   /** What a new treatment costs, as the server will price it: procedures only, a full arch's parts not one by one. */
@@ -691,6 +698,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
         // Drawn with its price at once; the server's answer is the same price, from the same list.
         ...priced(t, s, st, groupId, sites),
         feeManual: false,
+        redoOf: s.redoOf ?? null,
       };
     });
     const where = sites.map((s) => (isToothSite(s.site) ? s.site : siteLabel(s.site, T))).join(" · ");
@@ -963,6 +971,32 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     setEmergency(null);
   };
 
+  /*
+    Work done again. The redo is the same treatment — a root canal's is a
+    retreatment — on the same tooth and surfaces, with the same type, each
+    entry pointing at the one it redoes; a bridge is redone as the bridge, on
+    all its teeth. With steps it starts and opens them; without, it can be
+    recorded as done today. What is wrong goes in its note.
+  */
+  const recordRedo = async ({ original, as, why, now }: { original: Mark; as: Treatment; why: string; now: boolean }) => {
+    const mates = original.groupId ? marks.filter((x) => x.groupId === original.groupId && !x.voidedAt) : [original];
+    const ordered = [...mates].sort((a, b) => siteOrder(a.site) - siteOrder(b.site));
+    const sites: Site[] = ordered.map((x) => ({
+      site: x.site,
+      surfaces: x.surfaces,
+      role: x.role,
+      detail: { ...x.detail },
+      tr: findTreatment(redoKey(x.treatmentKey), custom) ?? as,
+      redoOf: x.id,
+    }));
+    const where = ordered.map((x) => (isToothSite(x.site) ? x.site : siteLabel(x.site, T))).join(" · ");
+    record(as, sites, ordered.length > 1 ? newId() : undefined, `${T.treatment.redo} · ${locale === "ar" ? as.ar : as.en} · ${where}`, {
+      status: now ? "done" : "planned",
+      note: why ? T.treatment.redoNote.replace("{why}", why) : "",
+    });
+    setRedo(null);
+  };
+
   /** What usually comes next — a crown after a root canal — planned on the same tooth. */
   const planFollowUp = (key: string, site: string) => {
     const tr = BUILT_IN_BY_KEY.get(key);
@@ -1034,6 +1068,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       onNote={actions.onNote}
       onDetail={actions.onDetail}
       onPlan={planFollowUp}
+      onRedo={canWrite && !past ? (m) => setRedo({ site: isToothSite(m.site) ? m.site : null, markId: m.id }) : undefined}
       extra={groupExtra(openMark)}
       onExpand={
         !bigPanel && isToothSite(openMark.site)
@@ -1086,6 +1121,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
         setPicked([]);
       }}
       onEmergency={canWrite && !past && selected.length === 1 ? () => setEmergency({ site: selected[0] }) : undefined}
+      onRedo={canWrite && !past && selected.length === 1 ? () => setRedo({ site: selected[0], markId: null }) : undefined}
+      resolved={resolved}
       a={actions}
     />
   );
@@ -1357,6 +1394,25 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
         </Modal>
       )}
 
+      <Modal open={!!redo} onClose={() => setRedo(null)} title={T.treatment.redoTitle}>
+        {redo && (
+          <RedoSheet
+            key={`${redo.site ?? ""}-${redo.markId ?? ""}`}
+            candidates={(() => {
+              const onTooth = redo.site ? redoCandidates([redo.site], marks) : [];
+              const own = redo.markId ? find(redo.markId) : undefined;
+              return own && !onTooth.some((x) => x.id === own.id || (!!x.groupId && x.groupId === own.groupId)) ? [own, ...onTooth] : onTooth;
+            })()}
+            marks={marks}
+            custom={custom}
+            initial={redo.markId}
+            tz={tz}
+            onRedo={recordRedo}
+            onCancel={() => setRedo(null)}
+          />
+        )}
+      </Modal>
+
       <Modal open={!!emergency} onClose={() => setEmergency(null)} title={T.treatment.emergencyTitle}>
         {emergency && (
           <EmergencySheet
@@ -1480,7 +1536,9 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
             <ul className="grid gap-2">
               {remaining.map((m) => (
                 <li key={m.id} className="grid grid-cols-[2.75rem_1fr] items-start gap-2">
-                  <span className="mt-2.5 text-center text-[13px] font-bold text-ink-700 tnum">{isToothSite(m.site) ? m.site : "—"}</span>
+                  <span className={`mt-2.5 text-center font-bold tnum ${isToothSite(m.site) ? "text-[13px] text-ink-700" : "text-[11.5px] text-ink-500"}`} title={siteLabel(m.site, T)}>
+                    {isToothSite(m.site) ? m.site : ((T.sitesShort as Record<string, string>)[m.site] ?? m.site)}
+                  </span>
                   <ul>
                     <EntryRow
                       m={m}

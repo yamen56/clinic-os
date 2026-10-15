@@ -57,6 +57,7 @@ export function toMark(r: Record<string, unknown>): Mark {
     fee: r.fee == null ? null : Number(r.fee),
     feeManual: !!r.fee_manual,
     serviceId: (r.service_id as string) ?? null,
+    redoOf: (r.redo_of as string) ?? null,
   };
 }
 

@@ -19,8 +19,23 @@
  */
 
 import type { Tooth } from "./teeth";
+import { BUILT_IN_BY_KEY, type DetailOption } from "./catalog";
 
 export type Choice = { key: string; en: string };
+
+/**
+ * The rotary files a canal is shaped with, size/taper, as the dentist asked
+ * for them (2026-10-15): tapped, as many as were used on that canal.
+ */
+export const FILE_SIZES = ["20/.04", "20/.06", "25/.04", "25/.06", "30/.04", "30/.06"] as const;
+
+/** A canal's files, as stored ("20/.04, 25/.06"), back into the list. */
+export function filesOf(file: string | undefined): string[] {
+  return (file ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 export type StepField =
   /** One row per canal: what the step measures on each. */
@@ -28,7 +43,14 @@ export type StepField =
   /** One row per implant: where, which, how big, how tight. */
   | { kind: "implants" }
   | { kind: "choice"; key: string; en: string; options: Choice[]; multi?: boolean }
-  | { kind: "text"; key: string; en: string; placeholder?: string };
+  | { kind: "text"; key: string; en: string; placeholder?: string }
+  /**
+   * The treatment's own detail, chosen at this step: a crown's type at its
+   * preparation. Its options are the treatment's (catalog.ts), and choosing
+   * one sets the treatment's detail too — which is what prices it and names
+   * it on the invoice.
+   */
+  | { kind: "detail"; key: "material"; en: string };
 
 export type StepDef = {
   key: string;
@@ -37,6 +59,11 @@ export type StepDef = {
   optional?: boolean;
   /** Recorded as often as it happens: a medicament change, a healing review. */
   repeatable?: boolean;
+  /**
+   * No longer offered: kept so the treatments that recorded it still show it.
+   * Irrigation went on 2026-10-15 — "the irrigation is in every step".
+   */
+  retired?: boolean;
   fields?: StepField[];
   /**
    * On a full arch: which of its teeth this step finishes. Placing the
@@ -95,6 +122,8 @@ const RCT_STEPS: StepDef[] = [
   {
     key: "irrigation",
     en: "Irrigation",
+    optional: true,
+    retired: true,
     fields: [
       {
         kind: "choice",
@@ -219,8 +248,13 @@ const PLACEMENT_FIELDS: StepField[] = [
   },
 ];
 
-const INDIRECT_STEPS: StepDef[] = [
-  { key: "prep", en: "Preparation & impression", fields: [IMPRESSION, { kind: "text", key: "shade", en: "Shade", placeholder: "A2" }] },
+/** A crown, a veneer or an inlay, step by step — its type chosen at the preparation, where the dentist decides it. */
+const indirectSteps = (typeLabel: string): StepDef[] => [
+  {
+    key: "prep",
+    en: "Preparation & impression",
+    fields: [{ kind: "detail", key: "material", en: typeLabel }, IMPRESSION, { kind: "text", key: "shade", en: "Shade", placeholder: "A2" }],
+  },
   { key: "temp", en: "Temporary", optional: true },
   { key: "tryin", en: "Try-in", optional: true },
   {
@@ -241,6 +275,9 @@ const INDIRECT_STEPS: StepDef[] = [
     ],
   },
 ];
+const CROWN_STEPS = indirectSteps("Crown type");
+const VENEER_STEPS = indirectSteps("Veneer type");
+const INLAY_STEPS = indirectSteps("Material");
 
 const DENTURE_STEPS: StepDef[] = [
   { key: "primary", en: "Primary impression", optional: true },
@@ -299,7 +336,7 @@ export const PROTOCOLS: Record<string, StepDef[]> = {
     { key: "uncovering", en: "Second stage (healing abutment)", optional: true },
   ],
   implant_crown: [
-    { key: "impression", en: "Impression / scan", fields: [IMPRESSION] },
+    { key: "impression", en: "Impression / scan", fields: [{ kind: "detail", key: "material", en: "Crown type" }, IMPRESSION] },
     {
       key: "abutment",
       en: "Abutment",
@@ -363,12 +400,12 @@ export const PROTOCOLS: Record<string, StepDef[]> = {
   ],
   denture_complete: DENTURE_STEPS,
   denture_partial: DENTURE_STEPS.map((s) => ({ ...s, finishes: undefined })),
-  crown: INDIRECT_STEPS,
-  bridge: INDIRECT_STEPS,
-  veneer: INDIRECT_STEPS,
-  hollywood_smile: INDIRECT_STEPS,
-  inlay: INDIRECT_STEPS,
-  onlay: INDIRECT_STEPS,
+  crown: CROWN_STEPS,
+  bridge: CROWN_STEPS,
+  veneer: VENEER_STEPS,
+  hollywood_smile: VENEER_STEPS,
+  inlay: INLAY_STEPS,
+  onlay: INLAY_STEPS,
   scaling: [
     { key: "upper", en: "Upper arch scaled" },
     { key: "lower", en: "Lower arch scaled" },
@@ -436,11 +473,13 @@ export type Progress = {
 };
 
 export function progressOf(treatmentKey: string, records: StepRecord[]): Progress | null {
-  const steps = protocolFor(treatmentKey);
-  if (!steps) return null;
+  const all = protocolFor(treatmentKey);
+  if (!all) return null;
   const live = records.filter((r) => !r.voidedAt).sort((a, b) => Date.parse(a.doneAt) - Date.parse(b.doneAt));
   const done = new Map<string, StepRecord[]>();
   for (const r of live) done.set(r.step, [...(done.get(r.step) ?? []), r]);
+  // A retired step shows only where it was recorded.
+  const steps = all.filter((s) => !s.retired || done.has(s.key));
   const required = steps.filter((s) => !s.optional);
   const requiredDone = required.filter((s) => done.has(s.key)).length;
   // Forward from the furthest step recorded; a repeatable step is never "next" on its own account.
@@ -492,18 +531,27 @@ export function defaultReference(t: Tooth | null, canal: string): string {
 export function canalSummary(rows: CanalRow[] | undefined, column: "length" | "file"): string {
   if (!rows?.length) return "";
   const parts = rows
-    .map((r) => (column === "length" ? (r.length != null ? `${r.name} ${r.length}` : "") : r.file ? `${r.name} ${r.file}` : ""))
+    .map((r) => (column === "length" ? (r.length != null ? `${r.name} ${r.length}` : "") : filesOf(r.file).length ? `${r.name} ${filesOf(r.file).join(" + ")}` : ""))
     .filter(Boolean);
   if (!parts.length) return "";
   return column === "length" ? `${parts.join(" · ")} mm` : parts.join(" · ");
 }
 
+/** The options of a treatment's own detail — a crown's types — or none. */
+export function detailOptions(treatmentKey: string, key: string): DetailOption[] {
+  return BUILT_IN_BY_KEY.get(treatmentKey)?.details?.find((d) => d.key === key)?.options ?? [];
+}
+
 /** One line for what a step recorded: canal lengths, the choices made, the implants placed. */
-export function stepSummary(def: StepDef | null, data: StepData): string {
+export function stepSummary(def: StepDef | null, data: StepData, treatmentKey = ""): string {
   if (!def) return [data.complaint, ...(data.done ?? [])].filter(Boolean).join(" · ");
   const out: string[] = [];
   for (const f of def.fields ?? []) {
-    if (f.kind === "canals") {
+    if (f.kind === "detail") {
+      const v = data[f.key];
+      const o = typeof v === "string" ? detailOptions(treatmentKey, f.key).find((x) => x.key === v) : undefined;
+      if (o) out.push(o.en);
+    } else if (f.kind === "canals") {
       if (f.columns.includes("length")) out.push(canalSummary(data.canals, "length"));
       if (f.columns.includes("file")) out.push(canalSummary(data.canals, "file"));
     } else if (f.kind === "implants") {

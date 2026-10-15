@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 import { MARK_SELECT, STEP_SELECT, toEvent, toMark, toStep } from "@/lib/charts/dental/db";
 import { EMERGENCY_STEP, stepOf } from "@/lib/charts/dental/protocols";
 import { parseStepData } from "@/lib/charts/dental/step-data";
-import { afterStep, todaysVisit } from "@/lib/charts/dental/server";
+import { afterStep, carryDetails, todaysVisit } from "@/lib/charts/dental/server";
 
 /*
   A step of a treatment, done: the access cavity, the working length of each
@@ -54,12 +54,13 @@ export async function POST(req: Request, ctx: Params) {
 
     const emergency = b.step === EMERGENCY_STEP;
     const def = emergency ? null : stepOf(m.treatment_key, b.step);
-    if (!emergency && !def) return { error: "unknown_step" as const };
+    // A retired step (irrigation) is read where it was recorded, never recorded again.
+    if (!emergency && (!def || def.retired)) return { error: "unknown_step" as const };
     if (def && !def.repeatable) {
       const again = await c.query(`select 1 from chart_mark_steps where mark_id = $1 and step = $2 and voided_at is null`, [markId, b.step]);
       if (again.rowCount) return { error: "already_done" as const };
     }
-    const data = parseStepData(def, b.data);
+    const data = parseStepData(def, b.data, m.treatment_key);
     if (!data) return { error: "invalid_data" as const };
 
     // A foreign key does not see row security: the doctor is checked against this clinic by hand.
@@ -84,6 +85,9 @@ export async function POST(req: Request, ctx: Params) {
       b.step,
     ]);
 
+    // A crown's type chosen at its preparation is the crown's: it names it and prices it.
+    await carryDetails(c, access.clinicId, m, def, data);
+
     const { completed, changed } = emergency ? { completed: false, changed: [] as string[] } : await afterStep(c, access.clinicId, m, def, me, visit);
 
     await audit(c, {
@@ -96,7 +100,11 @@ export async function POST(req: Request, ctx: Params) {
       detail: { mark: markId, site: m.site, treatment: m.treatment_key, step: b.step, completed },
     });
 
-    const ids = [markId, ...changed];
+    // A bridge's teeth too, when its type was chosen: each was priced again.
+    const mates = m.group_id
+      ? (await c.query(`select id from chart_marks where group_id = $1 and clinic_id = $2 and id <> $3`, [m.group_id, access.clinicId, markId])).rows.map((r) => r.id as string)
+      : [];
+    const ids = [...new Set([markId, ...changed, ...mates])];
     const marks = (await c.query(`${MARK_SELECT} where m.id = any($1::uuid[])`, [ids])).rows.map(toMark);
     const steps = (await c.query(`${STEP_SELECT} where s.mark_id = $1 order by s.done_at`, [markId])).rows.map(toStep);
     // Every line this transaction wrote, on the treatment and on the teeth it finished.

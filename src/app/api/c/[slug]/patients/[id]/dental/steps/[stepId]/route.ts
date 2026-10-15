@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 import { MARK_SELECT, STEP_SELECT, toEvent, toMark, toStep } from "@/lib/charts/dental/db";
 import { EMERGENCY_STEP, stepOf } from "@/lib/charts/dental/protocols";
 import { parseStepData } from "@/lib/charts/dental/step-data";
-import { afterStepWithdrawn } from "@/lib/charts/dental/server";
+import { afterStepWithdrawn, carryDetails } from "@/lib/charts/dental/server";
 
 /*
   A step, corrected.
@@ -26,16 +26,22 @@ const bodySchema = z.discriminatedUnion("op", [
 
 type Params = { params: Promise<{ slug: string; id: string; stepId: string }> };
 
-/** The step, its treatment, and the lines just written — the shape every answer here takes. */
+/** The step, its treatment (with a bridge's other teeth), and the lines just written — the shape every answer here takes. */
 async function answer(c: import("pg").PoolClient, markId: string) {
-  const mark = toMark((await c.query(`${MARK_SELECT} where m.id = $1`, [markId])).rows[0]);
+  const marks = (
+    await c.query(
+      `${MARK_SELECT} where m.id = $1
+          or (m.group_id is not null and m.group_id = (select group_id from chart_marks where id = $1))`,
+      [markId]
+    )
+  ).rows.map(toMark);
   const steps = (await c.query(`${STEP_SELECT} where s.mark_id = $1 order by s.done_at`, [markId])).rows.map(toStep);
   const events = (
     await c.query(`select e.*, u.full_name as by_name from chart_mark_events e left join users u on u.id = e.by_user where e.mark_id = $1 and e.at = now()`, [
       markId,
     ])
   ).rows.map(toEvent);
-  return { marks: [mark], steps, events };
+  return { marks, steps, events };
 }
 
 export async function PATCH(req: Request, ctx: Params) {
@@ -74,9 +80,19 @@ export async function PATCH(req: Request, ctx: Params) {
         break;
       case "data": {
         const def = s.step === EMERGENCY_STEP ? null : stepOf(s.treatment_key, s.step);
-        const data = parseStepData(def, b.data);
+        const data = parseStepData(def, b.data, s.treatment_key);
         if (!data) return { error: "invalid_data" as const };
         await c.query(`update chart_mark_steps set data = $2 where id = $1`, [stepId, JSON.stringify(data)]);
+        // A line in the treatment's history: what was recorded was corrected, by whom and when.
+        await c.query(`insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason) values ($1, $2, 'step_edit', $3, $4)`, [
+          access.clinicId,
+          s.mark_id,
+          me,
+          s.step,
+        ]);
+        // The crown's type corrected at its preparation is the crown's, and prices it.
+        const m = (await c.query(`select * from chart_marks where id = $1`, [s.mark_id])).rows[0];
+        if (m && !m.voided_at) await carryDetails(c, access.clinicId, m, def, data);
         break;
       }
       case "note":

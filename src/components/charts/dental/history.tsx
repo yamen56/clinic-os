@@ -11,17 +11,22 @@
 */
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, Banknote, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, Banknote, Repeat, type LucideIcon } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { findTreatment, type Treatment } from "@/lib/charts/dental/catalog";
 import { isToothSite, paintAt, type Mark, type MarkEvent, type Paint, type Person } from "@/lib/charts/dental/state";
 import { tooth as toothOf } from "@/lib/charts/dental/teeth";
-import { EMERGENCY_STEP, stepOf } from "@/lib/charts/dental/protocols";
+import { EMERGENCY_STEP, protocolFor, stepOf } from "@/lib/charts/dental/protocols";
 import { TreatmentGlyph } from "./treatment-picker";
 import { detailLabels, markLabel, siteLabel } from "./labels";
 import { INK, SOFT } from "./tooth-art";
 import { PriceLine, useEntryMoney } from "./price-line";
+
+/** Does one of the treatment's steps choose this detail? A crown's type is chosen at its preparation. */
+function stepCarries(treatmentKey: string, key: string): boolean {
+  return (protocolFor(treatmentKey) ?? []).some((s) => (s.fields ?? []).some((f) => f.kind === "detail" && f.key === key));
+}
 
 export function PaintPill({ m }: { m: Mark }) {
   const { t } = useI18n();
@@ -147,7 +152,8 @@ export function EntryRow({
       {open && (
         <div className="grid gap-3 border-t border-line px-3 py-3">
           <PriceLine m={m} tz={tz} />
-          {tr.details?.filter((d) => !(d.key === "implants" && m.groupId)).map((d) => (
+          {/* A detail a step chooses (a crown's type, at its preparation) is chosen there, unless the work was already there. */}
+          {tr.details?.filter((d) => !(d.key === "implants" && m.groupId) && (m.status === "existing" || !stepCarries(m.treatmentKey, d.key))).map((d) => (
             <div key={d.key}>
               <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{T.details[d.key]}</div>
               <div className="flex flex-wrap gap-1.5">
@@ -230,6 +236,8 @@ const EVENT_ICON: Record<MarkEvent["action"], LucideIcon> = {
   case: FolderInput,
   reopened: RotateCcw,
   fee: Banknote,
+  redone: Repeat,
+  step_edit: Pencil,
 };
 
 /** The ink of one line in the history: what the entry was at that moment. */
@@ -276,7 +284,9 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
                   ? e.reason === EMERGENCY_STEP
                     ? T.treatment.emergency
                     : (stepOf(m.treatmentKey, e.reason ?? "")?.en ?? T.events.step)
-                  : T.events[e.action]}
+                  : e.action === "step_edit"
+                    ? `${T.events.step_edit}: ${stepOf(m.treatmentKey, e.reason ?? "")?.en ?? e.reason ?? ""}`
+                    : T.events[e.action]}
               </span>
               {e.action === "step" && e.reason === EMERGENCY_STEP && <Siren className="ms-1 inline h-3 w-3 text-danger" />}
             </div>
@@ -289,7 +299,7 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
                 .filter(Boolean)
                 .join(" · ")}
               {/* A step's line names its step above; "steps", "finish" and "undo" are how, not why. */}
-              {e.reason && e.action !== "step" && !(e.action === "done" && e.reason === "steps") && !(e.action === "step_void" && e.reason === "undo")
+              {e.reason && e.action !== "step" && e.action !== "step_edit" && e.action !== "redone" && !(e.action === "done" && e.reason === "steps") && !(e.action === "step_void" && e.reason === "undo")
                 ? ` — ${e.action === "done" && e.reason === "finish" ? T.treatment.finishNow : e.reason}`
                 : ""}
             </div>

@@ -31,9 +31,12 @@ const markSchema = z.object({
   groupId: z.string().uuid().nullish(),
   role: z.enum(["abutment", "pontic"]).nullish(),
   performedBy: z.string().uuid().nullish(),
-  /** The case it is part of: the problem it answers. */
   /** Done at an emergency visit. */
   emergency: z.boolean().default(false),
+  /** Said when it was recorded: what brought them in, what is wrong with the work redone. */
+  note: z.string().max(2000).default(""),
+  /** The earlier work on this patient it does again: a crown remade, a root canal re-treated. */
+  redoOf: z.string().uuid().nullish(),
 });
 // A full arch is the most one tap records: the arch, six implants, fourteen
 // bridge teeth and the teeth to take out first.
@@ -58,6 +61,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     if (performers.length) {
       const ok = await c.query(`select count(*)::int as n from clinic_members where clinic_id = $1 and id = any($2::uuid[])`, [access.clinicId, performers]);
       if (ok.rows[0].n !== performers.length) return { error: "invalid_performer" as const };
+    }
+
+    /*
+      A redo points at work of this patient's that stands: done here or
+      already there, not voided. Checked by hand — a foreign key does not see
+      row security, and another patient's crown is not this one's to redo.
+    */
+    const redoOf = [...new Set(parsed.data.marks.map((m) => m.redoOf).filter((x): x is string => !!x))];
+    if (redoOf.length) {
+      const ok = await c.query(
+        `select count(*)::int as n from chart_marks
+          where id = any($1::uuid[]) and patient_id = $2 and clinic_id = $3
+            and voided_at is null and kind = 'procedure' and status <> 'planned'`,
+        [redoOf, id, access.clinicId]
+      );
+      if (ok.rows[0].n !== redoOf.length) return { error: "invalid_redo" as const };
     }
 
     // Work recorded as done is done at today's visit, when there is one.
@@ -88,9 +107,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       await c.query(
         `insert into chart_marks (id, clinic_id, patient_id, site, surfaces, treatment_key, label, label_ar, abbr, look, kind,
                                   detail, status, group_id, role, performed_by, recorded_by, done_at, emergency, appointment_id,
-                                  fee, service_id)
+                                  fee, service_id, redo_of, note)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, case when $13 = 'done' then now() end, $18,
-                 case when $13 = 'done' then $19::uuid end, $20, $21)`,
+                 case when $13 = 'done' then $19::uuid end, $20, $21, $22, $23)`,
         [
           m.id,
           access.clinicId,
@@ -113,8 +132,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
           visit,
           price?.price ?? null,
           price?.serviceId ?? null,
+          m.redoOf ?? null,
+          m.note,
         ]
       );
+      // The old work's history says it was taken up again, and when.
+      if (m.redoOf) {
+        await c.query(`insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason) values ($1, $2, 'redone', $3, $4)`, [
+          access.clinicId,
+          m.redoOf,
+          access.session.user.id,
+          m.id,
+        ]);
+      }
       await c.query(`insert into chart_mark_events (id, clinic_id, mark_id, action, by_user) values ($1, $2, $3, 'created', $4)`, [
         m.eventId,
         access.clinicId,
@@ -130,13 +160,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       action: "dental.mark.create",
       entity: "patient",
       entityId: id,
-      detail: { marks: parsed.data.marks.map((m) => ({ site: m.site, treatment: m.treatmentKey, status: m.status })) },
+      detail: { marks: parsed.data.marks.map((m) => ({ site: m.site, treatment: m.treatmentKey, status: m.status, ...(m.redoOf ? { redoOf: m.redoOf } : {}) })) },
     });
     const marks = await c.query(`${MARK_SELECT} where m.id = any($1::uuid[]) and m.clinic_id = $2 order by m.created_at`, [ids, access.clinicId]);
+    // Its own lines, and the "redone" line on the work it redoes.
     const events = await c.query(
       `select e.*, u.full_name as by_name from chart_mark_events e left join users u on u.id = e.by_user
-        where e.mark_id = any($1::uuid[]) and e.clinic_id = $2`,
-      [ids, access.clinicId]
+        where e.clinic_id = $2 and (e.mark_id = any($1::uuid[]) or (e.action = 'redone' and e.reason = any($3::text[])))`,
+      [ids, access.clinicId, ids]
     );
     return { marks: marks.rows.map(toMark), events: events.rows.map(toEvent) };
   });

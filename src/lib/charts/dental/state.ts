@@ -59,12 +59,14 @@ export type Mark = {
   feeManual: boolean;
   /** The service its price came from — what an invoice line bills. */
   serviceId: string | null;
+  /** The earlier work this redoes: a crown made again, a root canal re-treated. */
+  redoOf: string | null;
 };
 
 export type MarkEvent = {
   id: string;
   markId: string;
-  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened" | "fee";
+  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened" | "fee" | "redone" | "step_edit";
   at: string;
   by: Person;
   reason?: string;
@@ -121,13 +123,17 @@ const EMPTY: ToothState = { gone: false, buried: null, layers: [], badges: [] };
  * Order matters only for drawing: layers come out in the order they were
  * recorded, so a crown recorded after a filling sits on top of it.
  */
-export function toothStates(marks: Mark[], at: number | null): Map<string, ToothState> {
+export function toothStates(marks: Mark[], at: number | null, resolved?: Map<string, { left: Surface[] }>): Map<string, ToothState> {
   const out = new Map<string, ToothState>();
   const sorted = [...marks].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-  for (const m of sorted) {
-    if (!isToothSite(m.site)) continue;
-    const paint = paintAt(m, at);
+  for (const entry of sorted) {
+    if (!isToothSite(entry.site)) continue;
+    const paint = paintAt(entry, at);
     if (!paint) continue;
+    // A finding later work answered (resolve.ts) is drawn no more — or only on the surfaces still showing.
+    const r = resolved?.get(entry.id);
+    if (r && r.left.length === 0) continue;
+    const m = r ? { ...entry, surfaces: r.left } : entry;
     const s = out.get(m.site) ?? { gone: false, buried: null, layers: [], badges: [] };
     out.set(m.site, s);
     if (m.look === "missing") {

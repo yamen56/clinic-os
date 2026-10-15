@@ -399,12 +399,12 @@ async function main() {
       JSON.stringify(lengthRows[0]?.data)
     );
     check((await card.locator("[data-step='length'] [data-step-summary]").innerText()).includes("MB 21 · ML 20.5 · D 22 mm"), "and reads back as MB 21 · ML 20.5 · D 22 mm");
-    check((await card.locator("[data-progress]").getAttribute("data-progress")) === "2/5", "two of its five required steps are done");
+    check((await card.locator("[data-progress]").getAttribute("data-progress")) === "2/4", "two of its four required steps are done (irrigation is no longer one)");
     const filed = await q(`select step, appointment_id from chart_mark_steps where mark_id = $1 and voided_at is null`, [rct.id]);
     check(filed.length === 2 && filed.every((s) => s.appointment_id === visitToday.id), "each step is filed under today's visit", JSON.stringify(filed));
     await card.locator("[data-card-back]").click();
     check(
-      await until(async () => (await remainingOf(doc).locator(`[data-mark='${rct.id}'] [data-entry-progress]`).first().getAttribute("data-entry-progress")) === "2/5"),
+      await until(async () => (await remainingOf(doc).locator(`[data-mark='${rct.id}'] [data-entry-progress]`).first().getAttribute("data-entry-progress")) === "2/4"),
       "the chart's remaining work shows the root canal, two steps in"
     );
 
@@ -505,16 +505,33 @@ async function main() {
     await openCard(doc, rct.id);
     check((await card.locator("[data-sessions]").getAttribute("data-sessions")) === "2", "steps done on two days count as two visits");
 
-    // The rest of it: shaping, irrigation, obturation — then it is finished, and a crown is offered.
+    // The rest of it: shaping (the files used on each canal, tapped), obturation — then it is finished, and a crown is offered.
+    check((await card.locator("[data-step='irrigation']").count()) === 0, "irrigation is no longer a step of its own");
     await card.locator("[data-step-form='shaping']").waitFor({ timeout: 10000 });
-    await card.locator("[data-step-form='shaping']").getByLabel("MB Master file").fill("25/.06");
+    const mbFiles = card.locator("[data-step-form='shaping'] [data-canal-files='MB']");
+    check(
+      (await mbFiles.locator("[data-file-size]").evaluateAll((els) => els.map((e) => e.getAttribute("data-file-size")))).join(" ") === "20/.04 20/.06 25/.04 25/.06 30/.04 30/.06",
+      "each canal offers the six files, size and taper"
+    );
+    await mbFiles.locator("[data-file-size='20/.04']").click();
+    await mbFiles.locator("[data-file-size='25/.06']").click();
     await card.locator("[data-step-done='shaping']").click();
     await settle(doc);
-    await card.locator("[data-step-form='irrigation'] [data-choice='irrigants:naocl25']").click();
-    await card.locator("[data-step-form='irrigation'] [data-choice='irrigants:edta']").click();
-    await card.locator("[data-step-done='irrigation']").click();
+    const fileOf = async () => ((await q(`select data from chart_mark_steps where mark_id = $1 and step = 'shaping'`, [rct.id]))[0]?.data.canals ?? []).find((c: { name: string }) => c.name === "MB")?.file;
+    check((await fileOf()) === "20/.04, 25/.06", "the files used on a canal are tapped, as many as were used", String(await fileOf()));
+    // Corrected afterwards: one more file on MB, one taken off.
+    await card.locator("[data-step-edit='shaping']").click();
+    const editFiles = card.locator("[data-step-form='shaping'] [data-canal-files='MB']");
+    check((await editFiles.locator("[data-file-size='25/.06']").getAttribute("aria-pressed")) === "true", "Edit opens the step as it was recorded");
+    await editFiles.locator("[data-file-size='20/.04']").click();
+    await editFiles.locator("[data-file-size='30/.04']").click();
+    await card.locator("[data-step-save='shaping']").click();
     await settle(doc);
-    // After irrigation the next step in order is the optional medicament; the obturation is opened by hand.
+    check((await fileOf()) === "25/.06, 30/.04", "and saving it corrects what was recorded", String(await fileOf()));
+    check((await card.locator("[data-step='shaping'] [data-step-summary]").innerText()).includes("MB 25/.06 + 30/.04"), "the step reads the files used");
+    const edits = await q(`select 1 from chart_mark_events where mark_id = $1 and action = 'step_edit'`, [rct.id]);
+    check(edits.length === 1, "and the correction is a line in its history");
+    // After shaping the next step in order is the obturation (the medicament is optional and repeatable).
     if (!(await card.locator("[data-step-form='obturation']").count())) await card.locator("[data-step='obturation'] button").first().click();
     await card.locator("[data-step-form='obturation'] [data-choice='technique:warm']").click();
     await card.locator("[data-step-done='obturation']").click();

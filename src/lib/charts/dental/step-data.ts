@@ -6,13 +6,14 @@
  */
 
 import { z } from "zod";
-import { EMERGENCY_ACTIONS, type StepDef, type StepData } from "./protocols";
+import { EMERGENCY_ACTIONS, detailOptions, type StepDef, type StepData } from "./protocols";
 
 const canal = z.object({
   name: z.string().trim().min(1).max(8),
   length: z.number().min(0).max(60).nullable().optional(),
   ref: z.string().trim().max(40).optional(),
-  file: z.string().trim().max(24).optional(),
+  // The files used on it, "20/.04, 25/.06": every size on the list fits.
+  file: z.string().trim().max(80).optional(),
 });
 
 const implant = z.object({
@@ -29,8 +30,12 @@ const emergency = z.object({
   complaint: z.string().trim().max(300).default(""),
 });
 
-/** The data a step may carry, or null when it is not acceptable. `def` null is an emergency visit. */
-export function parseStepData(def: StepDef | null, raw: unknown): StepData | null {
+/**
+ * The data a step may carry, or null when it is not acceptable. `def` null is
+ * an emergency visit. `treatmentKey` gives a detail field (a crown's type) its
+ * options: the treatment's own.
+ */
+export function parseStepData(def: StepDef | null, raw: unknown, treatmentKey = ""): StepData | null {
   if (!def) {
     const r = emergency.safeParse(raw ?? {});
     return r.success ? r.data : null;
@@ -42,6 +47,9 @@ export function parseStepData(def: StepDef | null, raw: unknown): StepData | nul
     else if (f.kind === "choice") {
       const keys = f.options.map((o) => o.key) as [string, ...string[]];
       shape[f.key] = f.multi ? z.array(z.enum(keys)).max(keys.length).optional() : z.enum(keys).optional();
+    } else if (f.kind === "detail") {
+      const keys = detailOptions(treatmentKey, f.key).map((o) => o.key);
+      if (keys.length) shape[f.key] = z.enum(keys as [string, ...string[]]).optional();
     } else if (f.kind === "text") shape[f.key] = z.string().trim().max(60).optional();
   }
   const r = z.object(shape).strip().safeParse(raw ?? {});

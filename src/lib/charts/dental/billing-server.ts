@@ -8,7 +8,7 @@
  */
 
 import type { PoolClient } from "pg";
-import { invoiceLineText, pickPrice, type LineWords, type PriceRow, type PriceUnit } from "./pricing";
+import { invoiceLineText, pickPrice, variantOf, type LineWords, type PriceRow, type PriceUnit } from "./pricing";
 import { EVERY_TOOTH, inChartOrder, leadIdOf } from "./full-arch";
 
 /** The clinic's dental prices: the services linked to a treatment, still in use — or one treatment's. */
@@ -63,6 +63,38 @@ export async function priceFor(
 ): Promise<{ serviceId: string; price: number; unit: PriceUnit } | null> {
   const row = pickPrice(await loadPrices(c, clinicId, treatmentKey), treatmentKey, variant, unit);
   return row ? { serviceId: row.serviceId, price: row.price, unit: row.unit } : null;
+}
+
+/** A chart_marks row, as much of it as a change of detail reads. */
+export type DetailRow = {
+  id: string;
+  treatment_key: string;
+  detail: Record<string, string> | null;
+  fee_manual: boolean;
+  kind: string;
+  status: string;
+  service_id: string | null;
+};
+
+/**
+ * A treatment's detail set — a crown made zirconia — and its price with it.
+ *
+ * A crown made zirconia instead of PFM costs what zirconia costs, unless a
+ * price was set by hand for this patient, which a change of material does not
+ * undo. Charged the way it started (the whole treatment when the list prices
+ * it), it is priced again the way a new one would be; charged the other way
+ * because someone chose so, it stays charged that way. The chart's detail
+ * chips and a step that carries the detail (a crown's preparation) both come
+ * through here.
+ */
+export async function setDetail(c: PoolClient, clinicId: string, cur: DetailRow, key: string, value: string): Promise<void> {
+  await c.query(`update chart_marks set detail = detail || jsonb_build_object($2::text, $3::text) where id = $1`, [cur.id, key, value]);
+  if (cur.fee_manual || cur.kind !== "procedure" || cur.status === "existing") return;
+  const list = await loadPrices(c, clinicId, cur.treatment_key);
+  const was = list.find((p) => p.serviceId === cur.service_id)?.unit ?? null;
+  const chosen = !!was && pickPrice(list, cur.treatment_key, variantOf(cur.treatment_key, cur.detail ?? {}), null)?.unit !== was;
+  const price = pickPrice(list, cur.treatment_key, variantOf(cur.treatment_key, { ...(cur.detail ?? {}), [key]: value }), chosen ? was : null);
+  if (price) await c.query(`update chart_marks set fee = $2, service_id = $3 where id = $1`, [cur.id, price.price, price.serviceId]);
 }
 
 /** An invoice line for chart work, as the invoice builder starts it. */

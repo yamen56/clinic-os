@@ -63,7 +63,7 @@ export function AddImageButtons({
   const xray = useRef<HTMLInputElement>(null);
   const photo = useRef<HTMLInputElement>(null);
   const tile = `flex shrink-0 snap-start flex-col items-center justify-center gap-1 rounded-ctl border border-dashed border-line-strong bg-surface text-[11.5px] font-semibold text-ink-700 transition-colors hover:bg-sunken disabled:opacity-50 ${
-    compact ? "h-16 w-20" : "h-[4.5rem] w-24"
+    compact ? "h-16 w-[4.5rem] px-1 text-center leading-tight" : "h-[4.5rem] w-24"
   }`;
   return (
     <>

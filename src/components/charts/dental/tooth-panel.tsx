@@ -24,7 +24,8 @@
 */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Maximize2, Minimize2, Plus, Siren, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Maximize2, Minimize2, Plus, Repeat, Siren, X } from "lucide-react";
+import type { Resolution } from "@/lib/charts/dental/resolve";
 import { useI18n } from "@/lib/i18n/client";
 import type { ChartImage } from "./image-viewer";
 import { AddImageButtons, ImageThumb } from "./image-strip";
@@ -167,7 +168,7 @@ function CompactTooth({ fdi, st, picked, flash, hint, onToggle }: { fdi: string;
 /** A section heading with a count, and room for an action at the end. */
 function Heading({ title, count, children }: { title: string; count?: number; children?: React.ReactNode }) {
   return (
-    <div className="mb-2 flex items-center justify-between gap-2">
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
       <h4 className="text-[13px] font-semibold text-ink-900">
         {title}
         {count !== undefined && <span className="ms-1.5 rounded-full bg-sunken px-2 py-0.5 text-[12px] font-semibold text-ink-500 tnum">{count}</span>}
@@ -207,6 +208,8 @@ export function ToothPanel({
   neighbours,
   onGoTooth,
   onEmergency,
+  onRedo,
+  resolved,
   a,
 }: {
   teeth: string[];
@@ -249,6 +252,10 @@ export function ToothPanel({
   onGoTooth?: (fdi: string) => void;
   /** An emergency on this tooth. */
   onEmergency?: () => void;
+  /** Work on this tooth done again: the patient is back with a problem in it. */
+  onRedo?: () => void;
+  /** Findings later work answered (resolve.ts): drawn no more, listed as resolved. */
+  resolved?: Map<string, Resolution>;
   a: PanelActions;
 }) {
   const { t, locale } = useI18n();
@@ -277,7 +284,20 @@ export function ToothPanel({
   const live = here.filter((m) => !m.voidedAt);
   const todo = live.filter((m) => m.kind === "procedure" && m.status === "planned").sort((x, y) => Number(!!y.startedAt) - Number(!!x.startedAt));
   const doneList = live.filter((m) => m.kind === "procedure" && m.status !== "planned");
-  const findings = live.filter((m) => m.kind !== "procedure");
+  // A finding the work answered in full is resolved; one answered on some surfaces still shows, with what was treated.
+  const allFindings = live.filter((m) => m.kind !== "procedure");
+  const fixedBy = (m: Mark) => resolved?.get(m.id) ?? null;
+  const findings = allFindings.filter((m) => (fixedBy(m)?.left.length ?? 1) > 0);
+  const resolvedFindings = allFindings.filter((m) => fixedBy(m)?.left.length === 0);
+  const resolution = (m: Mark): string | undefined => {
+    const r = fixedBy(m);
+    if (!r) return undefined;
+    // The row adds the day it was found; the work's own day is on the work.
+    const by = locale === "ar" ? r.by.labelAr : r.by.label;
+    if (r.left.length === 0) return T.resolvedBy.replace("{name}", by);
+    const treated = m.surfaces.filter((x) => !r.left.includes(x)).join("");
+    return T.partlyResolved.replace("{surfaces}", treated).replace("{name}", by);
+  };
   const voided = here.filter((m) => !!m.voidedAt);
 
   /*
@@ -509,6 +529,7 @@ export function ToothPanel({
         onPerformer={a.onEntryPerformer}
         progress={progressFor(m)}
         onOpen={progressFor(m) ? () => a.onOpenItem(m.id) : undefined}
+        extra={m.kind === "finding" ? resolution(m) : undefined}
       />
     );
   };
@@ -531,6 +552,15 @@ export function ToothPanel({
       <Heading title={T.findingsTitle} count={findings.length} />
       {list(findings)}
     </section>
+  );
+  // What treatment answered: kept, out of the way, with what answered it.
+  const resolvedSection = resolvedFindings.length > 0 && (
+    <details className="rounded-ctl border border-line bg-surface px-3 py-2" data-tooth-resolved={resolvedFindings.length}>
+      <summary className="cursor-pointer list-none py-1 text-[13px] font-semibold text-ink-500">
+        {T.resolvedTitle} <span className="tnum">· {resolvedFindings.length}</span>
+      </summary>
+      <div className="pt-2">{list(resolvedFindings)}</div>
+    </details>
   );
   const voidedSection = voided.length > 0 && (
     <details className="rounded-ctl border border-line bg-surface px-3 py-2">
@@ -603,6 +633,7 @@ export function ToothPanel({
         {picker}
         {doneSection}
         {findingsSection}
+        {resolvedSection}
         {voidedSection}
         {imageSection}
         {history}
@@ -662,11 +693,27 @@ export function ToothPanel({
         <button
           type="button"
           onClick={onEmergency}
+          aria-label={T.treatment.emergency}
+          title={T.treatment.emergency}
           className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-danger/30 bg-danger-soft px-2.5 text-[12.5px] font-semibold text-danger hover:bg-danger/10"
           data-tooth-emergency
         >
           <Siren className="h-4 w-4" />
           <span className="hidden sm:inline">{T.treatment.emergency}</span>
+        </button>
+      )}
+      {/* Beside the emergency: the patient is back with a problem in work done before. */}
+      {onRedo && !locked && (
+        <button
+          type="button"
+          onClick={onRedo}
+          aria-label={T.treatment.redo}
+          title={T.treatment.redoTitle}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+          data-tooth-redo
+        >
+          <Repeat className="h-4 w-4" />
+          <span className="hidden sm:inline">{T.treatment.redo}</span>
         </button>
       )}
       {sizeButton}
@@ -771,6 +818,7 @@ export function ToothPanel({
         </Heading>
         {findings.length ? list(findings) : empty(T.noFindings)}
       </section>
+      {resolvedSection}
       {voidedSection}
     </div>
   );
