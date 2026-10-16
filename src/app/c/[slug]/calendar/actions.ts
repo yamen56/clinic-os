@@ -5,35 +5,7 @@ import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { emitTrigger } from "@/lib/triggers";
 import { findOrCreatePatient } from "@/lib/patients";
-import { lockClinicSchedule } from "@/lib/appointments";
-import type { PoolClient } from "pg";
-
-const ACTIVE = `('pending_approval', 'scheduled', 'confirmed')`;
-
-async function conflictFor(
-  c: PoolClient,
-  clinicId: string,
-  doctorMemberId: string | null,
-  startsAt: string,
-  endsAt: string,
-  excludeId?: string
-): Promise<{ id: string; patient: string } | null> {
-  // Held until this transaction commits, so the answer is still true when the
-  // caller acts on it. See lockClinicSchedule.
-  await lockClinicSchedule(c, clinicId);
-  if (!doctorMemberId) return null;
-  const r = await c.query(
-    `select a.id, p.full_name as patient from appointments a
-     join patients p on p.id = a.patient_id
-     where a.clinic_id = $1 and a.doctor_member_id = $2
-       and a.status in ${ACTIVE}
-       and a.starts_at < $4 and a.ends_at > $3
-       and ($5::uuid is null or a.id <> $5)
-     limit 1`,
-    [clinicId, doctorMemberId, startsAt, endsAt, excludeId ?? null]
-  );
-  return r.rows[0] ?? null;
-}
+import { scheduleCheck } from "@/lib/schedule-check";
 
 export type ApptInput = {
   patientId?: string;
@@ -45,12 +17,22 @@ export type ApptInput = {
   notes: string;
   /** The patient's planned treatments this visit is for, from "Book next visit" on their plan. */
   markIds?: string[];
+  /** A room, null to pick one, absent to keep the current one when it still works. See scheduleCheck. */
+  roomId?: string | null;
 };
 
-export async function createAppointmentAction(
-  slug: string,
-  input: ApptInput
-): Promise<{ id?: string; error?: string; conflictWith?: string }> {
+export type ApptResult = {
+  id?: string;
+  ok?: boolean;
+  error?: string;
+  conflictWith?: string;
+  /** The room it ended up in, when rooms apply. */
+  roomName?: string;
+  /** Kept the time but moved rooms — the toast says where. */
+  roomChanged?: boolean;
+};
+
+export async function createAppointmentAction(slug: string, input: ApptInput): Promise<ApptResult> {
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
@@ -67,18 +49,18 @@ export async function createAppointmentAction(
     }
     if (!patientId) return { error: "patient_required" };
 
-    const conflict = await conflictFor(
-      c,
-      access.clinicId,
-      input.doctorMemberId,
-      input.startsAt,
-      input.endsAt
-    );
-    if (conflict) return { error: "conflict", conflictWith: conflict.patient };
+    const check = await scheduleCheck(c, access.clinicId, {
+      doctorMemberId: input.doctorMemberId,
+      serviceId: input.serviceId,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      roomId: input.roomId ?? null,
+    });
+    if (check.error) return { error: check.error, conflictWith: check.conflictWith };
 
     const r = await c.query(
-      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, notes, source, created_by)
-       values ($1, $2, $3, $4, $5, $6, $7, 'staff', $8) returning id`,
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, notes, source, created_by, room_id)
+       values ($1, $2, $3, $4, $5, $6, $7, 'staff', $8, $9) returning id`,
       [
         access.clinicId,
         patientId,
@@ -88,6 +70,7 @@ export async function createAppointmentAction(
         input.endsAt,
         input.notes.slice(0, 2000),
         access.session.user.id,
+        check.roomId,
       ]
     );
     const id = r.rows[0].id as string;
@@ -114,7 +97,7 @@ export async function createAppointmentAction(
       action: "appointment.create",
       entity: "appointment",
       entityId: id,
-      detail: { patientId, startsAt: input.startsAt },
+      detail: { patientId, startsAt: input.startsAt, roomId: check.roomId },
     });
     // Who booked it travels with the event, so the doctor's "new appointment"
     // alert is not also sent to the person who just made it.
@@ -124,15 +107,15 @@ export async function createAppointmentAction(
       source: "staff",
       actorUserId: access.session.user.id,
     });
-    return { id };
+    return { id, roomName: check.roomName };
   });
 }
 
 export async function updateAppointmentAction(
   slug: string,
   id: string,
-  input: Partial<Pick<ApptInput, "doctorMemberId" | "serviceId" | "startsAt" | "endsAt" | "notes">>
-): Promise<{ ok?: boolean; error?: string; conflictWith?: string }> {
+  input: Partial<Pick<ApptInput, "doctorMemberId" | "serviceId" | "startsAt" | "endsAt" | "notes" | "roomId">>
+): Promise<ApptResult> {
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
@@ -148,13 +131,22 @@ export async function updateAppointmentAction(
     const endsAt = input.endsAt ?? new Date(cur.ends_at).toISOString();
     const doctor =
       input.doctorMemberId !== undefined ? input.doctorMemberId : cur.doctor_member_id;
+    const serviceId = input.serviceId === undefined ? cur.service_id : input.serviceId ?? cur.service_id;
 
-    const conflict = await conflictFor(c, access.clinicId, doctor, startsAt, endsAt, id);
-    if (conflict) return { error: "conflict", conflictWith: conflict.patient };
+    const check = await scheduleCheck(c, access.clinicId, {
+      doctorMemberId: doctor,
+      serviceId,
+      startsAt,
+      endsAt,
+      excludeId: id,
+      roomId: input.roomId,
+      currentRoomId: cur.room_id,
+    });
+    if (check.error) return { error: check.error, conflictWith: check.conflictWith };
 
     await c.query(
       `update appointments set starts_at = $3, ends_at = $4, doctor_member_id = $5,
-         service_id = coalesce($6, service_id), notes = coalesce($7, notes)
+         service_id = coalesce($6, service_id), notes = coalesce($7, notes), room_id = $8
        where id = $1 and clinic_id = $2`,
       [
         id,
@@ -164,6 +156,7 @@ export async function updateAppointmentAction(
         doctor,
         input.serviceId === undefined ? null : input.serviceId,
         input.notes === undefined ? null : input.notes.slice(0, 2000),
+        check.roomId,
       ]
     );
     await audit(c, {
@@ -173,7 +166,7 @@ export async function updateAppointmentAction(
       action: "appointment.update",
       entity: "appointment",
       entityId: id,
-      detail: { startsAt, endsAt },
+      detail: { startsAt, endsAt, roomId: check.roomId },
     });
 
     /*
@@ -186,6 +179,9 @@ export async function updateAppointmentAction(
       where the appointment is *now*, so the doctor is told once, about the
       final place, and not at all if it ended up back where it started. The
       worker frees the key as it runs, so the next move is its own event.
+
+      A room change alone is not a reschedule: the patient comes at the same
+      time to the same doctor, and rooms are never in what the patient is told.
     */
     const moved =
       new Date(cur.starts_at).getTime() !== new Date(startsAt).getTime() ||
@@ -206,7 +202,7 @@ export async function updateAppointmentAction(
         60
       );
     }
-    return { ok: true };
+    return { ok: true, roomName: check.roomName, roomChanged: check.roomChanged };
   });
 }
 
@@ -220,11 +216,19 @@ export async function setAppointmentStatusAction(
   return inClinic(access, async (c) => {
     // The status it had before, read under the same row lock, so cancelling an
     // appointment that was already cancelled is not a second cancellation.
+    /*
+      `finished_at` follows `completed` both ways: set when it becomes
+      completed here (the panel's button is a Finish too), cleared when it is
+      put back to anything else, so the board never shows a "finished" visit
+      whose status says otherwise.
+    */
     const r = await c.query(
       `with prev as (
          select status from appointments where id = $1 and clinic_id = $2 for update
        )
-       update appointments set status = $3 where id = $1 and clinic_id = $2
+       update appointments set status = $3::text, flow_prev_status = null,
+              finished_at = case when $3::text = 'completed' then coalesce(finished_at, now()) else null end
+        where id = $1 and clinic_id = $2
        returning patient_id, starts_at, (select status from prev) as previous_status`,
       [id, access.clinicId, status]
     );

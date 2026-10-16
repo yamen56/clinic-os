@@ -124,7 +124,7 @@ async function main() {
     await page.waitForSelector("nav", { timeout: 20000 });
     const navAfter = (await page.textContent("nav")) ?? "";
     if (navAfter.includes("Campaigns")) fail("Campaigns still in the nav after the module was removed");
-    if (!navAfter.includes("Calendar")) fail("removing one module removed others too");
+    if (!navAfter.includes("Appointments")) fail("removing one module removed others too");
     ok("a disabled module disappears from the workspace nav");
 
     // And the route itself, not only the link to it.

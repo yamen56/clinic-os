@@ -35,6 +35,7 @@ const ROUTES = [
   "/settings",
   "/settings/staff",
   "/settings/services",
+  "/settings/rooms",
   "/settings/prices",
   "/settings/hours",
   "/settings/fields",

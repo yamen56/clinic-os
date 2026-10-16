@@ -139,7 +139,7 @@ export function useOtherNotes({
         title: svc ?? "",
         body: f.body,
         lines: [],
-        open: () => router.push(`/c/${slug}/waitlist`),
+        open: () => router.push(`/c/${slug}/calendar?tab=waitlist`),
       });
     } else if (f.source === "xray") {
       const teeth = Array.isArray(f.extra) ? (f.extra as string[]) : [];

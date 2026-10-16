@@ -13,6 +13,7 @@ import { clinicLogoUrl } from "@/lib/clinic-logo";
 import { FINANCE_PREFIXES, firstFinanceHref } from "@/lib/finance";
 import { BrandLockup } from "@/components/brand-mark";
 import { NotificationPopups, useLiveNotifications, type InAppPrefs } from "@/components/live-notifications";
+import { ArrivalAlerts } from "@/components/appointments/arrival-alerts";
 import { BackLink, useBackHref } from "@/components/back-link";
 import type { CapabilityMap, MemberRole } from "@/lib/permissions";
 import {
@@ -24,7 +25,6 @@ import {
   FileSignature,
   Workflow,
   Sparkles,
-  Hourglass,
   Cable,
   Wallet,
   Settings,
@@ -42,7 +42,6 @@ type NavKey =
   | "dashboard"
   | "conversations"
   | "calendar"
-  | "waitlist"
   | "devices"
   /* Invoices, Earnings and Expenses, which are one subject and are now one
      entry with tabs inside it. See lib/finance. */
@@ -58,7 +57,6 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   dashboard: LayoutDashboard,
   conversations: MessageCircle,
   calendar: CalendarDays,
-  waitlist: Hourglass,
   devices: Cable,
   finance: Wallet,
   patients: Users,
@@ -183,7 +181,6 @@ export function Shell({
     { key: "calendar", href: `${base}/calendar`, show: caps.calendar },
     ...(caps.invoices ? [finance] : []),
     { key: "documents", href: `${base}/documents`, show: caps.documents, badge: pendingDocuments },
-    { key: "waitlist", href: `${base}/waitlist`, show: caps.calendar },
     /* Only once the clinic has a machine (or a result is still waiting from
        one it unplugged): a clinic with none sets one up in Settings → Devices
        and should not carry an empty page in its nav. The badge is the inbox. */
@@ -235,7 +232,6 @@ export function Shell({
   const sections: Record<string, string> = {
     patients: t.nav.patients,
     calendar: t.nav.calendar,
-    waitlist: t.nav.waitlist,
     devices: t.nav.devices,
     conversations: t.nav.conversations,
     campaigns: t.nav.campaigns,
@@ -501,6 +497,9 @@ export function Shell({
       </div>
 
       <NotificationPopups items={live.popups} onDismiss={live.dismiss} />
+      {/* A doctor hears their patient arrive, on any screen. The waitlist used
+          to sit here as a nav entry of its own; it is a tab of Appointments now. */}
+      {role === "doctor" && caps.calendar && memberId && <ArrivalAlerts slug={clinic.slug} push={live.push} />}
 
       {/* Mobile bottom nav */}
       {moreOpen && (

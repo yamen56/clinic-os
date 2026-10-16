@@ -5,6 +5,9 @@ export type StatusKey =
   | "no_show"
   | "cancelled"
   | "pending"
+  | "waiting"
+  | "in_room"
+  | "late"
   | "ok"
   | "danger"
   | "neutral"
@@ -17,6 +20,9 @@ export const statusColors: Record<StatusKey, { fg: string; bg: string }> = {
   no_show: { fg: "var(--color-st-noshow)", bg: "var(--color-st-noshow-soft)" },
   cancelled: { fg: "var(--color-st-cancelled)", bg: "var(--color-st-cancelled-soft)" },
   pending: { fg: "var(--color-st-pending)", bg: "var(--color-st-pending-soft)" },
+  waiting: { fg: "var(--color-st-waiting)", bg: "var(--color-st-waiting-soft)" },
+  in_room: { fg: "var(--color-st-inroom)", bg: "var(--color-st-inroom-soft)" },
+  late: { fg: "var(--color-st-late)", bg: "var(--color-st-late-soft)" },
   ok: { fg: "var(--color-st-confirmed)", bg: "var(--color-st-confirmed-soft)" },
   danger: { fg: "var(--color-danger)", bg: "var(--color-danger-soft)" },
   neutral: { fg: "var(--color-ink-700)", bg: "var(--color-st-completed-soft)" },

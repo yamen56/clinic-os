@@ -58,7 +58,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ bslug: string }
         linkDoctorIds: data.link.doctor_member_ids,
       })
     );
-    return NextResponse.json({ slots });
+    // The room a slot would take is the clinic's business, and it is picked
+    // again under the lock when the booking is made.
+    return NextResponse.json({ slots: slots.map(({ startISO, doctorMemberId }) => ({ startISO, doctorMemberId })) });
   } finally {
     lease.release();
   }

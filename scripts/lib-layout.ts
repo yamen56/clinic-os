@@ -29,8 +29,11 @@ export function workspacePages(ids: PageIds): [string, string][] {
   const pages: [string, string][] = [
     ["dashboard", s],
     ["patients list", `${s}/patients`],
-    ["calendar", `${s}/calendar`],
-    ["waitlist", `${s}/waitlist`],
+    // Appointments opens on the board of today's patients; Schedule and the
+    // waitlist are its other two tabs (0078).
+    ["appointments · today", `${s}/calendar`],
+    ["appointments · schedule", `${s}/calendar?tab=schedule`],
+    ["appointments · waitlist", `${s}/calendar?tab=waitlist`],
     ["conversations", `${s}/conversations`],
     // The finance section, all four tabs. Absent from both suites until the
     // expenses header shipped broken.
@@ -52,6 +55,7 @@ export function workspacePages(ids: PageIds): [string, string][] {
     ["settings · clinic", `${s}/settings`],
     ["settings · staff", `${s}/settings/staff`],
     ["settings · services", `${s}/settings/services`],
+    ["settings · rooms", `${s}/settings/rooms`],
     ["settings · hours", `${s}/settings/hours`],
     ["settings · whatsapp", `${s}/settings/whatsapp`],
     ["settings · tags", `${s}/settings/tags`],

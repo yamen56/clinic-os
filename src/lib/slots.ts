@@ -1,11 +1,13 @@
 import { DateTime } from "luxon";
 import type { PoolClient } from "pg";
 import { effectiveHours, rangesForDay, hmToMin, type WeeklyHours } from "./hours";
+import { freeRoom, loadActiveRooms, suitableRooms, type Room } from "./rooms";
 
-export type SlotResult = { startISO: string; doctorMemberId: string | null };
+/** `roomId` is the room the slot would take — null when rooms do not limit this booking. */
+export type SlotResult = { startISO: string; doctorMemberId: string | null; roomId: string | null };
 
-type Candidate = { id: string | null; working_hours: WeeklyHours | null };
-type Busy = { doctor_member_id: string | null; starts_at: Date; ends_at: Date };
+type Candidate = { id: string | null; working_hours: WeeklyHours | null; default_room_id?: string | null };
+type Busy = { doctor_member_id: string | null; room_id: string | null; starts_at: Date; ends_at: Date };
 
 type Inputs = {
   durMin: number;
@@ -13,6 +15,8 @@ type Inputs = {
   candidates: Candidate[];
   useUnassigned: boolean;
   busy: Busy[];
+  /** Rooms that can host the service. Empty = rooms do not limit it. */
+  rooms: Room[];
 };
 
 export type AvailabilityOpts = {
@@ -45,14 +49,14 @@ async function loadInputs(
 
   const service = (
     await c.query(
-      `select duration_min, buffer_after_min from services where id = $1 and clinic_id = $2 and active`,
+      `select duration_min, buffer_after_min, location_kind from services where id = $1 and clinic_id = $2 and active`,
       [serviceId, clinicId]
     )
   ).rows[0];
   if (!service) return null;
 
   // Candidate doctors: explicit > link restriction > doctors assigned to the service > any active doctor
-  let doctors: { id: string; working_hours: WeeklyHours | null }[];
+  let doctors: { id: string; working_hours: WeeklyHours | null; default_room_id: string | null }[];
   /*
     The patient's own pick, else whoever the link names. A link naming several
     is the same restriction as a link naming one, only wider — so both take the
@@ -63,7 +67,7 @@ async function loadInputs(
   if (restricted.length) {
     doctors = (
       await c.query(
-        `select id, working_hours from clinic_members
+        `select id, working_hours, default_room_id from clinic_members
           where id = any($1::uuid[]) and clinic_id = $2 and role = 'doctor' and active
           order by created_at`,
         [restricted, clinicId]
@@ -72,7 +76,7 @@ async function loadInputs(
   } else {
     doctors = (
       await c.query(
-        `select cm.id, cm.working_hours from clinic_members cm
+        `select cm.id, cm.working_hours, cm.default_room_id from clinic_members cm
          where cm.clinic_id = $1 and cm.role = 'doctor' and cm.active
            and (exists (select 1 from service_doctors sd where sd.service_id = $2 and sd.member_id = cm.id)
                 or not exists (select 1 from service_doctors sd2 where sd2.service_id = $2))
@@ -86,12 +90,16 @@ async function loadInputs(
 
   const busy = (
     await c.query(
-      `select doctor_member_id, starts_at, ends_at from appointments
+      `select doctor_member_id, room_id, starts_at, ends_at from appointments
        where clinic_id = $1 and status in ('pending_approval', 'scheduled', 'confirmed')
          and starts_at < $3 and ends_at > $2`,
       [clinicId, fromUTC, toUTC]
     )
   ).rows as Busy[];
+
+  // A slot needs a free room as well as a free doctor — when rooms limit this
+  // service at all (see suitableRooms).
+  const rooms = suitableRooms(await loadActiveRooms(c, clinicId), serviceId, service.location_kind ?? null);
 
   return {
     durMin: service.duration_min as number,
@@ -99,6 +107,7 @@ async function loadInputs(
     candidates: useUnassigned ? [{ id: null, working_hours: null }] : doctors,
     useUnassigned,
     busy,
+    rooms,
   };
 }
 
@@ -111,10 +120,17 @@ function slotsForDay(
 ): SlotResult[] {
   if (opts.blockedDates.includes(day.toISODate()!)) return [];
 
-  const { durMin, bufMin, candidates, useUnassigned, busy } = input;
+  const { durMin, bufMin, candidates, useUnassigned, busy, rooms } = input;
   const dayStart = day.startOf("day");
   const results: SlotResult[] = [];
   const seen = new Set<string>();
+  /*
+    A clinic with no doctors used to have a capacity of one: any overlap was a
+    conflict. With rooms the rooms are the capacity — two rooms, two patients
+    at ten o'clock — so the any-overlap rule only stands when rooms do not
+    limit this service.
+  */
+  const roomsAreCapacity = useUnassigned && rooms.length > 0;
 
   for (const doc of candidates) {
     const hours = effectiveHours(opts.clinicHours, doc.working_hours);
@@ -125,16 +141,21 @@ function slotsForDay(
         const slotEnd = cursor.plus({ minutes: durMin + bufMin });
         const key = cursor.toISO()!;
         if (cursor >= earliest && !seen.has(key)) {
-          const conflict = busy.some((b) => {
-            if (!useUnassigned && b.doctor_member_id && b.doctor_member_id !== doc.id) return false;
-            if (!useUnassigned && !b.doctor_member_id) return false;
-            const bs = DateTime.fromJSDate(new Date(b.starts_at));
-            const be = DateTime.fromJSDate(new Date(b.ends_at));
-            return cursor.toUTC() < be && slotEnd.toUTC() > bs;
-          });
-          if (!conflict) {
+          const conflict =
+            !roomsAreCapacity &&
+            busy.some((b) => {
+              if (!useUnassigned && b.doctor_member_id && b.doctor_member_id !== doc.id) return false;
+              if (!useUnassigned && !b.doctor_member_id) return false;
+              const bs = DateTime.fromJSDate(new Date(b.starts_at));
+              const be = DateTime.fromJSDate(new Date(b.ends_at));
+              return cursor.toUTC() < be && slotEnd.toUTC() > bs;
+            });
+          const roomId = conflict || !rooms.length
+            ? null
+            : freeRoom(rooms, busy, cursor.toMillis(), slotEnd.toMillis(), [doc.default_room_id]);
+          if (!conflict && (!rooms.length || roomId)) {
             seen.add(key);
-            results.push({ startISO: cursor.toUTC().toISO()!, doctorMemberId: doc.id });
+            results.push({ startISO: cursor.toUTC().toISO()!, doctorMemberId: doc.id, roomId });
           }
         }
         cursor = cursor.plus({ minutes: opts.granularityMin });

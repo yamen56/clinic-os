@@ -1,9 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { can, requireClinic } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
+import { isUuid } from "@/lib/uuid";
 
 /**
  * The waitlist: who would take an earlier appointment if one came free.
@@ -11,6 +11,10 @@ import { audit } from "@/lib/audit";
  * Entries are matched against cancelled slots by worker/waitlist.ts. Nothing
  * here sends anything — adding somebody to the list is a note about what they
  * want, not a message to them.
+ *
+ * No revalidatePath: the list lives in a tab of the Appointments page, which
+ * re-reads it when realtime says `waitlist_entries` changed. Revalidating would
+ * re-render the whole calendar page on the server for every click.
  */
 
 export type WaitlistInput = {
@@ -22,13 +26,20 @@ export type WaitlistInput = {
   note?: string;
 };
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 export async function addToWaitlistAction(
   slug: string,
   data: WaitlistInput
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
-  if (!data.patientId) return { error: "patient_required" };
+  if (!isUuid(data.patientId)) return { error: "patient_required" };
+  if (data.doctorMemberId && !isUuid(data.doctorMemberId)) return { error: "bad_doctor" };
+  if (data.serviceId && !isUuid(data.serviceId)) return { error: "bad_service" };
+  const earliest = data.earliestDate && DAY.test(data.earliestDate) ? data.earliestDate : null;
+  const latest = data.latestDate && DAY.test(data.latestDate) ? data.latestDate : null;
+  if (earliest && latest && earliest > latest) return { error: "bad_window" };
 
   return inClinic(access, async (c) => {
     const p = await c.query(
@@ -61,8 +72,8 @@ export async function addToWaitlistAction(
         data.patientId,
         data.doctorMemberId || null,
         data.serviceId || null,
-        data.earliestDate || null,
-        data.latestDate || null,
+        earliest,
+        latest,
         (data.note ?? "").slice(0, 300),
         access.session.user.id,
       ]
@@ -75,7 +86,6 @@ export async function addToWaitlistAction(
       entity: "patient",
       entityId: data.patientId,
     });
-    revalidatePath(`/c/${slug}/waitlist`);
     return { id: r.rows[0].id as string };
   });
 }
@@ -87,6 +97,7 @@ export async function setWaitlistStatusAction(
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
+  if (!isUuid(id) || !["waiting", "cancelled", "booked"].includes(status)) return { error: "bad_request" };
 
   await inClinic(access, async (c) => {
     await c.query(
@@ -94,6 +105,5 @@ export async function setWaitlistStatusAction(
       [id, access.clinicId, status]
     );
   });
-  revalidatePath(`/c/${slug}/waitlist`);
   return {};
 }

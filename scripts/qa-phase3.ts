@@ -74,7 +74,8 @@ async function main() {
   console.log("✓ hours page renders");
 
   // 4. Calendar: create appointment with inline new patient
-  await page.goto(`${BASE}/c/${slug}/calendar`);
+  // The Schedule tab: Appointments opens on the patients-today board since 0078.
+  await page.goto(`${BASE}/c/${slug}/calendar?tab=schedule`);
   await page.waitForSelector("text=New appointment", { timeout: 15000 });
   await page.waitForLoadState("networkidle");
   await page.click("text=New appointment");
@@ -134,7 +135,7 @@ async function main() {
   const ctx2 = await browser.newContext();
   const p2 = await ctx2.newPage();
   await login(p2, `owner-${slug}@test.local`, "password123");
-  await p2.goto(`${BASE}/c/${slug}/calendar`);
+  await p2.goto(`${BASE}/c/${slug}/calendar?tab=schedule`);
   await p2.waitForSelector("div[data-appt]", { timeout: 15000 });
   // create in page 1
   await page.click("text=New appointment");

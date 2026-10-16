@@ -7,6 +7,7 @@ import { landingPathIn } from "@/lib/permissions";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtTime, fmtMoney, fmtLongToday } from "@/lib/dates";
+import { flowStage } from "@/lib/patient-flow";
 import { Card, CardHeader, PageHeader } from "@/components/ui/card";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
@@ -113,7 +114,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
 
     const appts = (
       await c.query(
-        `select ap.id, ap.starts_at, ap.status, p.full_name as patient_name,
+        `select ap.id, ap.starts_at, ap.status, ap.arrived_at, ap.seated_at, p.full_name as patient_name,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
                 du.full_name as doctor_name
          from appointments ap
@@ -540,6 +541,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
                 href={`${base}/calendar`}
                 className="flex items-center gap-1 text-[13px] font-medium text-brand-700 hover:text-brand-800"
               >
+                {/* The board of today's patients opens first on that page. */}
                 {t.dashboard.viewCalendar}
                 <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" />
               </Link>
@@ -574,9 +576,23 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
                       {ap.doctor_name ? ` · ${ap.doctor_name}` : ""}
                     </div>
                   </div>
-                  <Badge status={apptStatus[ap.status] ?? "neutral"}>
-                    {(t.calendar.statuses as Record<string, string>)[ap.status] ?? ap.status}
-                  </Badge>
+                  {/*
+                    Where they are today, once that is more than the booking
+                    says: in the waiting room, or with the doctor.
+                  */}
+                  {(() => {
+                    const stage = flowStage(
+                      { status: ap.status, starts_at: new Date(ap.starts_at).toISOString(), arrived_at: ap.arrived_at, seated_at: ap.seated_at },
+                      Date.now()
+                    );
+                    return stage === "waiting" || stage === "in_room" || stage === "late" ? (
+                      <Badge status={stage}>{t.flow.stages[stage]}</Badge>
+                    ) : (
+                      <Badge status={apptStatus[ap.status] ?? "neutral"}>
+                        {(t.calendar.statuses as Record<string, string>)[ap.status] ?? ap.status}
+                      </Badge>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>

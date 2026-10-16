@@ -262,13 +262,14 @@ async function main() {
     });
     check("the More tab is the size of the tabs beside it", !!tabs.more && tabs.more === tabs.link, `${tabs.more} vs ${tabs.link}`);
 
-    await pp.goto(`${BASE}/c/${slug}/calendar`, { waitUntil: "domcontentloaded", timeout: 120_000 });
-    await pp.getByRole("button", { name: "Day", exact: true }).waitFor({ timeout: 60_000 });
+    // Since 0078 the phone opens the Schedule as a list of the day, not a one-column grid.
+    await pp.goto(`${BASE}/c/${slug}/calendar?tab=schedule`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    await pp.getByRole("button", { name: "List", exact: true }).waitFor({ timeout: 60_000 });
     const dayActive = await pp.evaluate(() => {
-      const b = [...document.querySelectorAll("button")].find((x) => x.textContent?.trim() === "Day");
+      const b = [...document.querySelectorAll("button")].find((x) => x.textContent?.trim() === "List");
       return b?.className.includes("shadow-card") ?? false;
     });
-    check("a phone opens the calendar on the day", dayActive);
+    check("a phone opens the schedule as the day's list", dayActive);
   } finally {
     await phone.close();
     await browser.close();

@@ -28,6 +28,7 @@ const SUITES = [
   ["insurance: terms, lapsed cover, claims, the monthly statement", "scripts/qa-insurance-desk.ts"],
   ["adding somebody back after removing them", "scripts/qa-readd.ts"],
   ["phase 3: calendar", "scripts/qa-phase3.ts"],
+  ["appointments: rooms, patients today, the arrival chime, walk-ins, the waitlist tab", "scripts/qa-appointments-flow.ts"],
   ["phase 4: public booking", "scripts/qa-phase4.ts"],
   ["phase 5: WhatsApp inbox", "scripts/qa-phase5.ts"],
   ["phase 6: invoicing", "scripts/qa-phase6.ts"],

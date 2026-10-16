@@ -428,14 +428,91 @@ import would destroy work. Patients carry `import_batch_id` and `source = 'impor
 - **Status**: `pending_approval` | `scheduled` | `confirmed` | `completed` | `no_show` | `cancelled`
 - **Source**: `staff` | `booking_link` | `ai_agent`
 
-### Views and controls
+### The Appointments page: three tabs
 
-- Day / Week / Month views.
-- Filter by doctor and by service; **colour by service or by doctor**.
-- Create/edit panel with patient search-or-create (by name or phone), service, doctor
-  (or "Any doctor"), start, duration.
-- **Conflict detection**: "This time overlaps another appointment for this doctor."
-- **Outside working hours** warning.
+`/c/{slug}/calendar` (nav: **Appointments**). Tabs, not routes — switching keeps each
+view's state, and `?tab=today|schedule|waitlist` follows along so a reload or a link
+lands in the right place. `?open`, `?new=1`, `?patient`, `?items` open the Schedule.
+`/c/{slug}/waitlist` redirects to the Waitlist tab.
+
+- **Patients today** (opens first) — the desk's and the doctors' board. See *The
+  patient's day* below.
+- **Schedule** — the calendar. Day / Week / Month and **List** (the phone default: a
+  week strip and the day as rows, with an inline *Arrived* on today's). Day view
+  groups columns **by doctor or by room**; dragging into another room's column moves
+  the visit there. Overlapping visits sit **side by side** in lanes. The grid shows
+  the clinic's hours ±1h (widened to whatever is booked outside them) and opens on
+  now. Touch: a 350 ms long-press lifts a visit to drag it, so a finger can scroll.
+- **Waitlist** — see §7.
+
+Booking panel (shared by all three): patient search-or-create, service, doctor, **room**
+(Automatic, or a named room, with a "busy" hint), start, duration, **Suggest times**
+(`GET /api/c/{slug}/free-slots`, the booking engine with no notice and a 15-minute
+step), and for today's visits the flow step (Arrived / Call in / Finish / Undo).
+
+- Filter by doctor, section and service; **colour by service or by doctor**.
+- **Conflict detection**: the doctor ("This time overlaps another appointment for this
+  doctor"), and the room ("That room is taken at this time (name)" / "No room is free at
+  this time").
+
+### Rooms (migration `0078`)
+
+`clinic_rooms` (name, `name_ar`, colour, sort, active) and `clinic_room_services`
+(no rows = any service, the `service_doctors` rule). `clinic_members.default_room_id`
+is the doctor's usual room. `appointments.room_id`. Managed at **Settings → Rooms**
+(`settings.services`): rooms, the services each hosts, each doctor's usual room, and
+**Place upcoming appointments** for visits booked before rooms existed.
+
+- **Rooms block double-booking**, by the same rule as doctors (an active appointment
+  in the room over the window), under the same `lockClinicSchedule`.
+- **Picked automatically** (`pickRoom`, `src/lib/rooms.ts`): the room asked for → the
+  doctor's usual room → the room the doctor is working in nearest that time → the
+  clinic's order. Staff can name a room; a named room that is taken is refused with
+  who has it.
+- Every booking path is room-aware: the staff panel and drag (`scheduleCheck`,
+  `src/lib/schedule-check.ts`), the public booking finaliser, and the AI receptionist
+  (whose `computeSlots` re-check now returns the room). `computeSlots` only offers a
+  time when a suitable room is free.
+- **No rooms = no change.** A clinic with no active room is checked against the
+  doctor's diary exactly as before. A service no room hosts, and every online service,
+  takes no room and is not limited by rooms.
+- A clinic with no doctors and N rooms has a capacity of N. Without rooms it is one —
+  and the public finaliser now enforces that too (it used to check nothing).
+- Rooms never appear in what the patient is told (messages, `.ics`).
+
+### The patient's day (Patients today)
+
+The stage is **derived, not stored in `status`** (`src/lib/patient-flow.ts`):
+`arrived_at` → in the waiting room, `seated_at` → with the doctor, `completed` →
+finished, `no_show` → didn't come, and *late* once `LATE_GRACE_MIN` (10) minutes past
+the start with no arrival. Arriving never changes `status`, so it never sends a
+confirmation or consent form to somebody already in the waiting room.
+
+- Columns: Coming · Waiting room · With the doctor · Finished, plus Didn't come
+  (collapsed). Phone: one column at a time behind a switcher with counts. Tablet: two
+  by two, the waiting room and the doctor on top. Desk: four side by side.
+- Summary: expected, waiting (average wait), in rooms x/y, finished, didn't come, late.
+- Rooms strip: free, or who is in each room, with whom, for how long (red once over
+  its time), and who is next.
+- One action per card: **Arrived → Call in ▾** (the room menu names who is in an
+  occupied room) **→ Finish**. More: Didn't come, Undo, open, patient file, WhatsApp,
+  call, create invoice, book next visit.
+- `setFlowAction` (`calendar/flow-actions.ts`) — today's visits only, row-locked,
+  audited as `appointment.flow`. Finish and Didn't come raise
+  `appointment_status_changed` like the panel; **Undo raises nothing** (re-raising would
+  re-send consent forms) and keeps `last_visit_at` — `flow_prev_status` is what it
+  restores.
+- **Walk-in** (`walkInAction`): starts now, already arrived, `walk_in = true`, no slot
+  check (they wait for whoever is free). It does **not** raise `appointment_created`, so
+  no "your appointment is booked" WhatsApp, no booking alert, and their waitlist entry
+  stays open.
+- **The doctor is told** on any screen: `ArrivalAlerts` (mounted by the shell for
+  doctors) re-reads `GET /api/c/{slug}/appointments/arrivals` on every appointment
+  change and plays the notification chime with a pop-up. The first read is silent
+  (except arrivals in the last minute); each arrival is claimed in localStorage so one
+  tab of several chimes; Undo + Arrived again chimes again.
+- Reminders before an appointment are not sent to a patient who has arrived.
+- The dashboard's today list shows *Waiting* / *With the doctor* / *Late*.
 
 ### Working hours
 
@@ -459,6 +536,11 @@ scan.
 
 `waitlist_entries`: patient, optional doctor, optional service, an optional date window
 (`earliest_date` / `latest_date`, null on either side meaning no bound), a note, and a status.
+
+A tab of Appointments since `0078` (the nav entry is gone). Each entry offers **Find a
+free time** (the next free times for its service and doctor, within its window) and
+**Book**, which opens the booking panel with the patient, doctor and service — and the
+time, when one was picked — filled in. Booking closes the entry as before.
 
 - **Status**: `waiting` | `offered` | `booked` | `cancelled` | `expired`.
 - **One live entry per patient per doctor** (unique index over `waiting`/`offered`). Adding

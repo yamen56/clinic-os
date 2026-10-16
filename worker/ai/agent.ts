@@ -400,12 +400,13 @@ export async function respondToConversation(conversationId: string): Promise<voi
         }
 
         const appt = await c.query(
-          `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes)
-           values ($1, $2, $3, $4, $5, $6, 'scheduled', 'ai_agent', 'Booked by the AI receptionist on WhatsApp')
+          // The room the re-check found free, under the same lock (migration 0078).
+          `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, room_id)
+           values ($1, $2, $3, $4, $5, $6, 'scheduled', 'ai_agent', 'Booked by the AI receptionist on WhatsApp', $7)
            returning id`,
           [
             cfg.clinicId, patientId, match.doctorMemberId, svc.id,
-            start.toUTC().toISO(), end.toUTC().toISO(),
+            start.toUTC().toISO(), end.toUTC().toISO(), match.roomId,
           ]
         );
         await c.query(

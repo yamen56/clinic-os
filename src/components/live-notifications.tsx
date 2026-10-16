@@ -11,6 +11,7 @@ import {
   CalendarPlus,
   CalendarX,
   ChartColumn,
+  DoorOpen,
   FileSignature,
   MessageCircle,
   Pill,
@@ -155,10 +156,28 @@ export function useLiveNotifications(
 
   const dismiss = useCallback((id: string) => setPopups((xs) => xs.filter((x) => x.id !== id)), []);
 
-  return { unread, popups, dismiss };
+  /*
+    A pop-up raised on this screen rather than read from the notifications
+    table — a doctor's patient arriving (components/appointments/arrival-alerts).
+    Same preferences, same chime, same corner; its id starts `local:` so opening
+    it does not try to mark a stored notification read. It sounds even when the
+    tab is in the background: that is the point of a chime for somebody whose
+    patient is waiting.
+  */
+  const push = useCallback((n: LiveNotif) => {
+    if (shown.current.has(n.id)) return;
+    shown.current.add(n.id);
+    const { prefs: p } = live.current;
+    if (p.sound) chime();
+    if (!p.popups) return;
+    setPopups((cur) => [...cur.filter((x) => x.id !== n.id), n].slice(-MAX_POPUPS));
+  }, []);
+
+  return { unread, popups, dismiss, push };
 }
 
 function iconFor(kind: string) {
+  if (kind === "patient_arrived") return DoorOpen;
   if (kind === "appointment_cancelled") return CalendarX;
   if (kind === "appointment_rescheduled" || kind === "doctor_reminder") return CalendarClock;
   const pref = prefKeyFor(kind);
@@ -208,11 +227,14 @@ export function NotificationPopups({
 
   const open = (n: LiveNotif) => {
     onDismiss(n.id);
-    void fetch("/api/me/notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: n.id }),
-    }).catch(() => {});
+    // A local pop-up has no stored row to mark read.
+    if (!n.id.startsWith("local:")) {
+      void fetch("/api/me/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: n.id }),
+      }).catch(() => {});
+    }
     if (n.url) router.push(n.url);
   };
 

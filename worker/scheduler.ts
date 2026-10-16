@@ -98,6 +98,8 @@ async function appointmentReminders() {
         where ap.status in ('scheduled', 'confirmed')
           -- Redundant above unless somebody sets a lead time under 90 seconds.
           and ap.starts_at > now()
+          -- Already in the waiting room: "see you in an hour" would be read there.
+          and ap.arrived_at is null
         limit 500`
     );
     for (const row of due.rows) {

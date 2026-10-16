@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import { withSystem } from "@/lib/db";
 import { findOrCreatePatient } from "@/lib/patients";
 import { lockClinicSchedule } from "@/lib/appointments";
+import { loadActiveRooms, pickRoom, suitableRooms } from "@/lib/rooms";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { notifyClinicStaff } from "@/lib/notify";
@@ -85,22 +86,59 @@ export async function finalizeBooking(
       : data.doctors.length
         ? data.doctors.map((d) => d.id)
         : [null];
+    /*
+      A slot needs a room as well as a doctor (migration 0078). Rooms are
+      loaded once; `suitable` is empty when rooms do not limit this service, and
+      then nothing below changes from before.
+    */
+    const rooms = await loadActiveRooms(c, data.clinic.id);
+    const suitable = suitableRooms(rooms, service.id, service.location_kind ?? null);
+    const startUtc = start.toUTC().toISO()!;
+    const endUtc = end.toUTC().toISO()!;
     let chosen: string | null | undefined;
+    let roomId: string | null = null;
     for (const cand of candidates) {
       if (cand === null) {
-        chosen = null;
-        break;
+        /*
+          No doctors: the rooms are the capacity when there are any. Without
+          rooms this used to check nothing at all, so two people could take the
+          same slot at once — the slots scan treats any overlap as taken, and
+          now the insert does too.
+        */
+        if (!suitable.length) {
+          const any = await c.query(
+            `select 1 from appointments where clinic_id = $1
+               and status in ('pending_approval', 'scheduled', 'confirmed')
+               and starts_at < $3 and ends_at > $2 limit 1`,
+            [data.clinic.id, startUtc, endUtc]
+          );
+          if (any.rowCount) break;
+        }
+      } else {
+        const busy = await c.query(
+          `select 1 from appointments where clinic_id = $1 and doctor_member_id = $2
+             and status in ('pending_approval', 'scheduled', 'confirmed')
+             and starts_at < $4 and ends_at > $3 limit 1`,
+          [data.clinic.id, cand, startUtc, endUtc]
+        );
+        if (busy.rowCount) continue;
       }
-      const busy = await c.query(
-        `select 1 from appointments where clinic_id = $1 and doctor_member_id = $2
-           and status in ('pending_approval', 'scheduled', 'confirmed')
-           and starts_at < $4 and ends_at > $3 limit 1`,
-        [data.clinic.id, cand, start.toUTC().toISO(), end.toUTC().toISO()]
-      );
-      if (!busy.rowCount) {
-        chosen = cand;
-        break;
+      if (suitable.length) {
+        const pick = await pickRoom(c, {
+          clinicId: data.clinic.id,
+          serviceId: service.id,
+          doctorMemberId: cand,
+          startsAt: startUtc,
+          endsAt: endUtc,
+          rooms,
+          locationKind: service.location_kind ?? null,
+        });
+        // No room is free for anybody at this time, whichever doctor it is.
+        if (pick.reason === "none_free") break;
+        roomId = pick.roomId;
       }
+      chosen = cand;
+      break;
     }
     if (chosen === undefined) return { error: "slot_taken" };
 
@@ -146,21 +184,22 @@ export async function finalizeBooking(
         : null;
 
     const appt = await c.query(
-      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, intake_answers, meeting_url, booking_consent)
-       values ($1, $2, $3, $4, $5, $6, $7, 'booking_link', $8, $9::jsonb, $10, $11::jsonb) returning id`,
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, intake_answers, meeting_url, booking_consent, room_id)
+       values ($1, $2, $3, $4, $5, $6, $7, 'booking_link', $8, $9::jsonb, $10, $11::jsonb, $12) returning id`,
       [
         data.clinic.id,
         patient.id,
         chosen,
         service.id,
-        start.toUTC().toISO(),
-        end.toUTC().toISO(),
+        startUtc,
+        endUtc,
         status,
         phoneCheck === "verified" ? "" : UNVERIFIED_NOTE[phoneCheck],
         // Stringified, or a JS array reaches jsonb as a Postgres array literal.
         JSON.stringify(answers),
         meetingUrl,
         p.consent ? JSON.stringify(p.consent) : null,
+        roomId,
       ]
     );
     const appointmentId = appt.rows[0].id as string;

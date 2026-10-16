@@ -13,9 +13,10 @@ import { setDetail, type DetailRow } from "./billing-server";
  * Today's visit for this patient, which work done now belongs to.
  *
  * Today in the clinic's own timezone, not cancelled and not a no-show. With
- * more than one, the visit this item was booked into comes first, then the
- * doctor's own, then the one nearest now. A walk-in has none, and its work
- * counts by the day instead.
+ * more than one, the visit the patient is in the chair for right now comes
+ * first, then the visit this item was booked into, then the doctor's own, then
+ * the one nearest now. A walk-in entered at the desk has one; one that never
+ * was has none, and its work counts by the day instead.
  */
 export async function todaysVisit(
   c: PoolClient,
@@ -31,7 +32,8 @@ export async function todaysVisit(
       where a.clinic_id = $1 and a.patient_id = $2
         and a.status not in ('cancelled', 'no_show')
         and (a.starts_at at time zone cl.timezone)::date = (now() at time zone cl.timezone)::date
-      order by (exists (select 1 from appointment_items ai where ai.appointment_id = a.id and ai.mark_id = $3::uuid)) desc,
+      order by (a.seated_at is not null and a.finished_at is null) desc,
+               (exists (select 1 from appointment_items ai where ai.appointment_id = a.id and ai.mark_id = $3::uuid)) desc,
                (a.doctor_member_id = $4::uuid) desc nulls last,
                abs(extract(epoch from (a.starts_at - now())))
       limit 1`,

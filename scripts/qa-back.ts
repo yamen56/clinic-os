@@ -113,7 +113,7 @@ async function main() {
     await go(page, patientHref!);
     b = await back(page, "main");
     check(b?.path === `${C}/calendar`, "patient file from the calendar: Back goes to the calendar", b?.href);
-    check(b?.text === "Calendar", "…and is labelled Calendar", b?.text);
+    check(b?.text === "Appointments", "…and is labelled Appointments", b?.text);
 
     // Patient → new invoice: Back returns to that patient, not the invoice list.
     const patientId = patientHref!.split("/").pop();

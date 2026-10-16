@@ -36,7 +36,7 @@ function merge<T>(base: T, patch: unknown): T {
 type Patch = Record<string, unknown>;
 
 const AGENCY_EN: Patch = {
-  nav: { patients: "Clinics", documents: "Contracts", waitlist: "Pipeline" },
+  nav: { patients: "Clinics", documents: "Contracts", waitlist: "Pipeline", calendar: "Meetings" },
   patients: {
     title: "Clinics",
     newPatient: "New clinic",
@@ -239,7 +239,7 @@ const AGENCY_EN: Patch = {
 */
 
 const AGENCY_AR: Patch = {
-  nav: { patients: "العيادات", documents: "العقود", waitlist: "العملاء المحتملون" },
+  nav: { patients: "العيادات", documents: "العقود", waitlist: "العملاء المحتملون", calendar: "الاجتماعات" },
   patients: {
     title: "العيادات",
     newPatient: "عيادة جديدة",

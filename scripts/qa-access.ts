@@ -307,7 +307,7 @@ async function main() {
   const ownerNav = await navLabels();
   check(
     "owner sees every section",
-    ["Conversations", "Calendar", "Patients", "Documents", "Finance", "Settings"].every((l) =>
+    ["Conversations", "Appointments", "Patients", "Documents", "Finance", "Settings"].every((l) =>
       ownerNav.some((n) => n.includes(l))
     ),
     ownerNav.join(", ")

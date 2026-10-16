@@ -40,15 +40,23 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
                  ) x) as done`
     : "";
 
+  /*
+    One after another, not Promise.all: node-pg runs one query at a time per
+    connection, so "parallel" on one client was a queue with a warning.
+  */
   const data = await inClinic(access, async (c) => {
-    const [appts, doctors, services, sections, clinic] = await Promise.all([
-      c.query(
+    const appts = await c.query(
         `select a.id, a.patient_id, a.doctor_member_id, a.service_id, a.starts_at, a.ends_at,
                 a.status, a.source, a.notes, a.intake_answers,
+                a.room_id, a.arrived_at, a.seated_at, a.finished_at, a.walk_in, a.flow_prev_status,
                 p.full_name as patient_name, p.phone_e164 as patient_phone,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
-                s.section_id as service_section_id,
+                s.section_id as service_section_id, s.location_kind as service_location,
                 cm.color as doctor_color, u.full_name as doctor_name,
+                rm.name as room_name, rm.name_ar as room_name_ar, rm.color as room_color,
+                -- Never seen before this visit: reception greets a first visit differently.
+                not exists (select 1 from appointments a2
+                             where a2.patient_id = a.patient_id and a2.status = 'completed' and a2.starts_at < a.starts_at) as first_visit,
                 -- What the visit is for, when it was booked from the patient's treatment plan —
                 -- while it is still to do: a treatment finished is in what was done, at its own visit.
                 (select coalesce(json_agg(json_build_object('markId', m.id, 'site', m.site, 'label', m.label, 'labelAr', m.label_ar) order by m.created_at), '[]'::json)
@@ -59,34 +67,52 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
          left join services s on s.id = a.service_id
          left join clinic_members cm on cm.id = a.doctor_member_id
          left join users u on u.id = cm.user_id
+         left join clinic_rooms rm on rm.id = a.room_id
          where a.clinic_id = $1 and a.starts_at < $3 and a.ends_at > $2
          order by a.starts_at`,
         [access.clinicId, from, to]
-      ),
-      c.query(
-        `select cm.id, cm.color, cm.title, cm.specialty, cm.working_hours, u.full_name as name
+      );
+    const doctors = await c.query(
+        `select cm.id, cm.color, cm.title, cm.specialty, cm.working_hours, cm.default_room_id, u.full_name as name
          from clinic_members cm join users u on u.id = cm.user_id
          where cm.clinic_id = $1 and cm.role = 'doctor' and cm.active
          order by u.full_name`,
         [access.clinicId]
-      ),
-      c.query(
+      );
+    const services = await c.query(
         `select s.id, s.name, s.name_ar, s.duration_min, s.price, s.color, s.buffer_after_min,
-                s.bookable_online, s.active, s.section_id
+                s.bookable_online, s.active, s.section_id, s.location_kind
          from services s
          left join service_sections sec on sec.id = s.section_id
          where s.clinic_id = $1 and s.active
          order by (s.section_id is null), sec.sort, sec.name, s.sort, s.name`,
         [access.clinicId]
-      ),
-      c.query(
+      );
+    const sections = await c.query(
         `select id, name, name_ar from service_sections where clinic_id = $1 order by sort, name`,
         [access.clinicId]
-      ),
-      c.query(`select working_hours, blocked_dates, timezone from clinics where id = $1`, [
-        access.clinicId,
-      ]),
-    ]);
+      );
+    /*
+      The clinic's hours, its rooms (each with the services it can host), and
+      how many upcoming in-person visits still have no room — the ones booked
+      before the clinic added rooms, which block nothing until they are placed.
+    */
+    const clinic = await c.query(
+        `select cl.working_hours, cl.blocked_dates, cl.timezone,
+                coalesce((select json_agg(json_build_object(
+                           'id', r.id, 'name', r.name, 'name_ar', r.name_ar, 'color', r.color,
+                           'serviceIds', coalesce((select json_agg(rs.service_id) from clinic_room_services rs where rs.room_id = r.id), '[]'::json))
+                         order by r.sort, r.name)
+                   from clinic_rooms r where r.clinic_id = cl.id and r.active), '[]'::json) as rooms,
+                (select count(*)::int from appointments a
+                   left join services s on s.id = a.service_id
+                  where a.clinic_id = cl.id and a.room_id is null and a.starts_at > now()
+                    and a.status in ('pending_approval', 'scheduled', 'confirmed')
+                    and coalesce(s.location_kind, 'in_person') <> 'online'
+                    and exists (select 1 from clinic_rooms r where r.clinic_id = cl.id and r.active)) as unroomed
+           from clinics cl where cl.id = $1`,
+        [access.clinicId]
+      );
     /*
       One line per treatment at each visit. A full arch's implants, extractions
       and bridge teeth, or a bridge's teeth, are listed under the group's lead —
@@ -120,6 +146,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       clinicHours: clinic.rows[0].working_hours,
       blockedDates: clinic.rows[0].blocked_dates,
       tz: clinic.rows[0].timezone,
+      rooms: clinic.rows[0].rooms,
+      unroomed: clinic.rows[0].unroomed,
+      /* The board's clock: elapsed and waiting times are measured against the
+         server, not a laptop that is four minutes fast. */
+      serverNow: new Date().toISOString(),
     };
   });
   return NextResponse.json(data);

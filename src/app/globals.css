@@ -116,6 +116,14 @@
   --color-st-cancelled-soft: #f7ecec;
   --color-st-pending: #c98a2b;
   --color-st-pending-soft: #f9f0e2;
+  /* The patient's day (patient-flow.ts): in the waiting room, with the
+     doctor, and past their time without having arrived. */
+  --color-st-waiting: #2b7fb8;
+  --color-st-waiting-soft: #e3f0f8;
+  --color-st-inroom: #7056a8;
+  --color-st-inroom-soft: #efeaf7;
+  --color-st-late: #c2593a;
+  --color-st-late-soft: #fbece6;
 
   /*
     The dental chart. A tooth is drawn in ivory on a pink gum, and everything

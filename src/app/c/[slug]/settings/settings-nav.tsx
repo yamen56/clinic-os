@@ -43,6 +43,7 @@ export function SettingsNav({
     { href: base, label: t.settings.profile },
     { href: `${base}/staff`, label: t.settings.staff, show: caps["settings.staff"] },
     { href: `${base}/services`, label: t.settings.services, show: caps["settings.services"] },
+    { href: `${base}/rooms`, label: t.rooms.title, show: caps["settings.services"] },
     { href: `${base}/prices`, label: t.settings.treatmentPrices, show: hasDental && caps["settings.services"] },
     { href: `${base}/hours`, label: t.settings.workingHours },
     { href: `${base}/fields`, label: t.fields.title, show: caps["settings.clinic"] },
