@@ -16,8 +16,9 @@ import { DoorOpen, Plus, Pencil, Trash2, ChevronUp, ChevronDown, AlertTriangle, 
 type Room = { id: string; name: string; name_ar: string | null; color: string; service_ids: string[] };
 type Doctor = { id: string; name: string; color: string | null; default_room_id: string | null };
 
-/** Distinct at a glance on a crowded board, and readable with white text. */
-const SWATCHES = ["#4a6b8a", "#2b7fb8", "#3f9e79", "#7056a8", "#c2593a", "#b0487a", "#8a6d3b", "#2a2d33"];
+/* Rooms carry no colour of their own on screen — a room is its name. The
+   column stays in the table with its default. */
+const DEFAULT_COLOR = "#4a6b8a";
 
 export function RoomsClient({
   slug,
@@ -65,7 +66,7 @@ export function RoomsClient({
         id: editing.id,
         name,
         nameAr: editing.name_ar ?? null,
-        color: editing.color ?? SWATCHES[0],
+        color: editing.color ?? DEFAULT_COLOR,
         serviceIds: editing.service_ids ?? [],
       });
       if (r.error) {
@@ -94,7 +95,7 @@ export function RoomsClient({
           }
           sub={t.rooms.sub}
           action={
-            <Button size="sm" onClick={() => setEditing({ color: SWATCHES[rooms.length % SWATCHES.length], service_ids: [] })}>
+            <Button size="sm" onClick={() => setEditing({ service_ids: [] })}>
               <Plus className="h-4 w-4" />
               {t.rooms.add}
             </Button>
@@ -109,7 +110,7 @@ export function RoomsClient({
               title={t.rooms.empty}
               body={t.rooms.emptyBody}
               action={
-                <Button onClick={() => setEditing({ color: SWATCHES[0], service_ids: [] })}>
+                <Button onClick={() => setEditing({ service_ids: [] })}>
                   <Plus className="h-4 w-4" />
                   {t.rooms.add}
                 </Button>
@@ -120,10 +121,7 @@ export function RoomsClient({
           <ul className="divide-y divide-line" data-rooms-list>
             {rooms.map((room, i) => (
               <li key={room.id} className="flex items-center gap-3 px-4 py-3 sm:px-5" data-room={room.name}>
-                <span
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-white"
-                  style={{ background: room.color }}
-                >
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sunken text-ink-500">
                   <DoorOpen className="h-4.5 w-4.5" />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -264,24 +262,6 @@ export function RoomsClient({
                   onChange={(e) => setEditing({ ...editing, name_ar: e.target.value })}
                 />
               </Field>
-            </div>
-
-            <div>
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{t.rooms.color}</span>
-              <div className="flex flex-wrap gap-2">
-                {SWATCHES.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    aria-label={c}
-                    onClick={() => setEditing({ ...editing, color: c })}
-                    style={{ background: c }}
-                    className={`h-8 w-8 touch-manipulation rounded-full transition-transform duration-140 ease-out ${
-                      editing.color === c ? "ring-2 ring-ink-900 ring-offset-2" : "hover:scale-110"
-                    }`}
-                  />
-                ))}
-              </div>
             </div>
 
             {services.length > 0 && (

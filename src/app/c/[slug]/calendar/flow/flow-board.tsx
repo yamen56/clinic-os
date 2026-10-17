@@ -9,7 +9,7 @@ import type { FlowStep } from "../flow-actions";
 import type { Appt, CalendarData, PageCaps } from "../types";
 import { FlowCard } from "./flow-card";
 import { RoomsStrip } from "./rooms-strip";
-import { CalendarCheck, ChevronDown } from "lucide-react";
+import { CalendarCheck, ChevronDown, CalendarClock, Armchair, DoorOpen, CheckCheck, UserX, Clock } from "lucide-react";
 
 type Column = "coming" | "waiting" | "in_room" | "finished";
 const COLUMNS: Column[] = ["coming", "waiting", "in_room", "finished"];
@@ -32,11 +32,16 @@ const tabletOrder: Record<Column, string> = {
   coming: "md:order-3 xl:order-none",
   finished: "md:order-4 xl:order-none",
 };
-const dotOf: Record<Column, string> = {
-  coming: "var(--color-st-scheduled)",
-  waiting: "var(--color-st-waiting)",
-  in_room: "var(--color-st-inroom)",
-  finished: "var(--color-st-confirmed)",
+/*
+  Each stage is named and drawn, never colour-coded: a row of coloured dots
+  was a legend nobody had been given. Colour is kept for what needs
+  somebody's attention — late, a long wait, a visit over its time.
+*/
+const iconOf: Record<Column, typeof Clock> = {
+  coming: CalendarClock,
+  waiting: Armchair,
+  in_room: DoorOpen,
+  finished: CheckCheck,
 };
 
 /**
@@ -166,7 +171,6 @@ export function FlowBoard({
           {!isDoctor &&
             doctors.map((d) => (
               <button key={d.id} type="button" aria-pressed={doctorFilter === d.id} className={chip(doctorFilter === d.id)} onClick={() => setDoctorFilter(d.id)}>
-                <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
                 {d.name}
               </button>
             ))}
@@ -175,21 +179,21 @@ export function FlowBoard({
 
       {/* The day in six numbers. */}
       <div className="grid grid-cols-3 gap-2 lg:grid-cols-6" data-flow-summary>
-        <Stat label={t.flow.expected} value={cols.coming.length} color={dotOf.coming} />
+        <Stat label={t.flow.expected} value={cols.coming.length} icon={CalendarClock} />
         <Stat
           label={t.flow.waitingNow}
           value={cols.waiting.length}
-          color={dotOf.waiting}
+          icon={Armchair}
           sub={cols.waiting.length ? t.flow.avgWait.replace("{n}", String(avgWait)) : undefined}
         />
         <Stat
           label={t.flow.inRooms}
           value={rooms.length ? `${occupants.size}/${rooms.length}` : cols.in_room.length}
-          color={dotOf.in_room}
+          icon={DoorOpen}
         />
-        <Stat label={t.flow.finished} value={cols.finished.length} color={dotOf.finished} />
-        <Stat label={t.flow.didntCome} value={noShows.length} color="var(--color-st-noshow)" />
-        <Stat label={t.flow.late} value={late} color="var(--color-st-late)" alert={late > 0} title={t.flow.lateNote.replace("{n}", String(LATE_GRACE_MIN))} />
+        <Stat label={t.flow.finished} value={cols.finished.length} icon={CheckCheck} />
+        <Stat label={t.flow.didntCome} value={noShows.length} icon={UserX} />
+        <Stat label={t.flow.late} value={late} icon={Clock} alert={late > 0} title={t.flow.lateNote.replace("{n}", String(LATE_GRACE_MIN))} />
       </div>
 
       <RoomsStrip slug={slug} rooms={rooms} appts={today} nowMs={nowMs} tz={tz} canSetUp={caps.settingsRooms} />
@@ -211,7 +215,7 @@ export function FlowBoard({
                   activeCol === c ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"
                 }`}
               >
-                <span className="text-[15px] font-bold tnum" style={{ color: cols[c].length ? dotOf[c] : undefined }}>
+                <span className="text-[15px] font-bold tnum">
                   {cols[c].length}
                 </span>
                 <span className="max-w-full truncate">{t.flow.columnsShort[c]}</span>
@@ -227,7 +231,10 @@ export function FlowBoard({
                 className={`min-w-0 flex-col rounded-card bg-sunken/70 p-2 ${tabletOrder[c]} ${activeCol === c ? "flex" : "max-md:hidden md:flex"}`}
               >
                 <header className="flex items-center gap-2 px-1.5 pb-2 pt-1">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: dotOf[c] }} />
+                  {(() => {
+                    const Icon = iconOf[c];
+                    return <Icon className="h-4 w-4 shrink-0 text-ink-500" strokeWidth={1.75} aria-hidden />;
+                  })()}
                   <h3 className="font-display text-[13.5px] font-semibold text-ink-900">{t.flow.columns[c]}</h3>
                   <span className="ms-auto rounded-full bg-surface px-2 text-[12px] font-semibold text-ink-500 tnum shadow-card">
                     {cols[c].length}
@@ -270,7 +277,7 @@ export function FlowBoard({
                 aria-expanded={showNoShows}
                 className="flex w-full items-center gap-2 px-4 py-3 text-start"
               >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--color-st-noshow)" }} />
+                <UserX className="h-4 w-4 shrink-0 text-ink-500" strokeWidth={1.75} aria-hidden />
                 <span className="font-display text-[13.5px] font-semibold text-ink-900">{t.flow.columns.no_show}</span>
                 <span className="rounded-full bg-sunken px-2 text-[12px] font-semibold text-ink-500 tnum">{noShows.length}</span>
                 <ChevronDown className={`ms-auto h-4 w-4 text-ink-400 transition-transform ${showNoShows ? "rotate-180" : ""}`} />
@@ -304,17 +311,21 @@ export function FlowBoard({
   );
 }
 
+/*
+  A figure, its name, and an icon that says the same — in ink, not a colour
+  to decode. Only Late turns orange, and only when somebody is.
+*/
 function Stat({
   label,
   value,
-  color,
+  icon: Icon,
   sub,
   alert,
   title,
 }: {
   label: string;
   value: number | string;
-  color: string;
+  icon: typeof Clock;
   sub?: string;
   alert?: boolean;
   title?: string;
@@ -322,15 +333,24 @@ function Stat({
   return (
     <div
       title={title}
-      className={`min-w-0 rounded-card border bg-surface px-2.5 py-2 shadow-card sm:px-3 sm:py-2.5 ${alert ? "border-st-late/40" : "border-line"}`}
+      data-stat-alert={alert ? "1" : undefined}
+      className={`flex min-w-0 items-center gap-2.5 rounded-card border px-2.5 py-2 shadow-card sm:px-3 sm:py-2.5 ${
+        alert ? "border-st-late/40 bg-st-late-soft" : "border-line bg-surface"
+      }`}
     >
-      <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-ink-500">
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="mt-0.5 flex items-baseline gap-1.5">
-        <span className="font-display text-[18px] font-bold leading-none text-ink-900 tnum sm:text-[20px]">{value}</span>
-        {sub && <span className="truncate text-[11px] text-ink-400 tnum">{sub}</span>}
+      <span
+        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg max-sm:hidden ${
+          alert ? "bg-surface text-st-late" : "bg-sunken text-ink-500"
+        }`}
+      >
+        <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <div className={`truncate text-[11.5px] font-medium ${alert ? "text-st-late" : "text-ink-500"}`}>{label}</div>
+        <div className="mt-0.5 flex items-baseline gap-1.5">
+          <span className="font-display text-[18px] font-bold leading-none text-ink-900 tnum sm:text-[20px]">{value}</span>
+          {sub && <span className="truncate text-[11px] text-ink-400 tnum">{sub}</span>}
+        </div>
       </div>
     </div>
   );

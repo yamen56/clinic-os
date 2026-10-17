@@ -233,7 +233,7 @@ export function AppointmentsClient({
 
   const tabs: { key: Tab; label: string; short: string; icon: React.ReactNode; count?: number; tone?: string }[] = [
     ...(showBoard
-      ? [{ key: "today" as const, label: t.calendar.tabs.today, short: t.calendar.tabs.todayShort, icon: <Armchair className="h-4 w-4" />, count: waitingCount, tone: "bg-st-waiting text-white" }]
+      ? [{ key: "today" as const, label: t.calendar.tabs.today, short: t.calendar.tabs.todayShort, icon: <Armchair className="h-4 w-4" />, count: waitingCount }]
       : []),
     { key: "schedule", label: t.calendar.tabs.schedule, short: t.calendar.tabs.scheduleShort, icon: <CalendarDays className="h-4 w-4" /> },
     { key: "waitlist", label: t.nav.waitlist, short: t.calendar.tabs.waitlistShort, icon: <Hourglass className="h-4 w-4" />, count: waitlistCount },

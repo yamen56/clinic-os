@@ -38,7 +38,6 @@ export function AgendaList({
   anchor,
   tz,
   appts,
-  colorOf,
   nowMs,
   onPickDay,
   onOpen,
@@ -49,7 +48,6 @@ export function AgendaList({
   anchor: DateTime;
   tz: string;
   appts: Appt[];
-  colorOf: (a: Appt) => string;
   nowMs: number;
   onPickDay: (d: DateTime) => void;
   onOpen: (a: Appt) => void;
@@ -131,7 +129,7 @@ export function AgendaList({
                       <span className="block text-[14px] font-bold leading-tight text-ink-900 tnum">{s.toFormat("H:mm")}</span>
                       <span className="block text-[11px] text-ink-400 tnum">{e.toFormat("H:mm")}</span>
                     </span>
-                    <span className="h-10 w-1 shrink-0 rounded-full" style={{ background: colorOf(a) }} />
+                    <span className="h-10 w-px shrink-0 bg-line" />
                     <span className="min-w-0 flex-1">
                       <span className={`block truncate text-[14px] font-semibold ${a.status === "no_show" ? "text-ink-400 line-through" : "text-ink-900"}`}>
                         {a.patient_name}

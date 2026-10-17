@@ -22,6 +22,9 @@ import {
   ReceiptText,
   CalendarPlus,
   Clock,
+  Stethoscope,
+  DoorClosed,
+  Minus,
 } from "lucide-react";
 
 /**
@@ -82,10 +85,11 @@ export function FlowCard({
         ? { text: t.flow.overBy.replace("{n}", String(Math.floor(over / 60_000))), tone: "over" }
         : { text: t.flow.inFor.replace("{n}", String(minutesBetween(appt.seated_at, nowMs))), tone: "in_room" };
   }
+  /* Ink while all is well; orange or red only when the clock is a problem. */
   const toneClass = {
     late: "bg-st-late-soft text-st-late",
-    waiting: "bg-st-waiting-soft text-st-waiting",
-    in_room: "bg-st-inroom-soft text-st-inroom",
+    waiting: "bg-sunken text-ink-700",
+    in_room: "bg-sunken text-ink-700",
     over: "bg-danger-soft text-danger",
   };
 
@@ -100,7 +104,8 @@ export function FlowCard({
     stage === "waiting" || stage === "in_room" || ((stage === "finished" || stage === "no_show") && !!appt.flow_prev_status);
   const phoneDigits = appt.patient_phone?.replace(/[^\d+]/g, "");
 
-  const primary = "inline-flex h-9 touch-manipulation items-center justify-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold text-white shadow-card transition-opacity active:opacity-80 disabled:opacity-60";
+  /* One colour for the one next step, whatever it is; the label and icon say which. */
+  const primary = "inline-flex h-9 touch-manipulation items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-[13px] font-semibold text-white shadow-card transition-opacity hover:bg-brand-700 active:opacity-80 disabled:opacity-60";
 
   return (
     <div
@@ -130,8 +135,8 @@ export function FlowCard({
 
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ink-500">
         {service && (
-          <span className="inline-flex min-w-0 items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: appt.service_color ?? "var(--color-ink-300)" }} />
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <Stethoscope className="h-3.5 w-3.5 shrink-0 text-ink-400" />
             <span className="truncate">{service}</span>
           </span>
         )}
@@ -142,10 +147,7 @@ export function FlowCard({
           </span>
         )}
         {room && (
-          <span
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-700"
-            style={{ background: `color-mix(in oklab, ${appt.room_color ?? "#4a6b8a"} 16%, var(--color-surface))` }}
-          >
+          <span className="inline-flex items-center gap-1 rounded-md bg-sunken px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-700">
             <DoorOpen className="h-3 w-3" />
             {room}
           </span>
@@ -169,14 +171,14 @@ export function FlowCard({
 
       <div className="mt-3 flex items-center gap-2">
         {(stage === "expected" || stage === "late") && (
-          <button type="button" disabled={busy} onClick={() => onStep("arrived")} className={`${primary} flex-1 bg-st-waiting`} data-flow-action="arrived">
+          <button type="button" disabled={busy} onClick={() => onStep("arrived")} className={`${primary} flex-1`} data-flow-action="arrived">
             <Armchair className="h-4 w-4" />
             {t.flow.arrived}
           </button>
         )}
         {stage === "waiting" &&
           (rooms.length === 0 ? (
-            <button type="button" disabled={busy} onClick={() => onStep("seated")} className={`${primary} flex-1 bg-st-inroom`} data-flow-action="seated">
+            <button type="button" disabled={busy} onClick={() => onStep("seated")} className={`${primary} flex-1`} data-flow-action="seated">
               <DoorOpen className="h-4 w-4" />
               {t.flow.callIn}
             </button>
@@ -186,7 +188,7 @@ export function FlowCard({
               label={t.flow.callIn}
               align="start"
               className="flex-1"
-              buttonClassName={`${primary} w-full bg-st-inroom`}
+              buttonClassName={`${primary} w-full`}
               trigger={() => (
                 <>
                   <DoorOpen className="h-4 w-4" />
@@ -206,7 +208,7 @@ export function FlowCard({
                         <MenuItem
                           key={r.id}
                           disabled={!!occ}
-                          icon={<span className="h-3 w-3 rounded-[4px]" style={{ background: r.color }} />}
+                          icon={occ ? <DoorClosed /> : <DoorOpen />}
                           hint={occ ? t.flow.occupiedBy.replace("{name}", occ.name) : r.id === appt.room_id ? t.calendar.bookedIn.replace("{room}", roomName(r)) : t.flow.roomFree}
                           onClick={() => {
                             close();
@@ -218,7 +220,7 @@ export function FlowCard({
                       );
                     })}
                   <MenuItem
-                    icon={<span className="h-3 w-3 rounded-[4px] border border-dashed border-line-strong" />}
+                    icon={<Minus />}
                     onClick={() => {
                       close();
                       onStep("seated", null);
@@ -231,7 +233,7 @@ export function FlowCard({
             </Menu>
           ))}
         {stage === "in_room" && (
-          <button type="button" disabled={busy} onClick={() => onStep("finished")} className={`${primary} flex-1 bg-st-confirmed`} data-flow-action="finished">
+          <button type="button" disabled={busy} onClick={() => onStep("finished")} className={`${primary} flex-1`} data-flow-action="finished">
             <CheckCheck className="h-4 w-4" />
             {t.flow.finish}
           </button>

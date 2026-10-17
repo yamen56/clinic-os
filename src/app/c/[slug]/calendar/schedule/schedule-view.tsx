@@ -322,7 +322,6 @@ export function ScheduleView({
           anchor={anchorDt}
           tz={tz}
           appts={visible}
-          colorOf={colorOf}
           nowMs={nowMs}
           onPickDay={(d) => setState({ anchor: d.toISODate()! })}
           onOpen={onOpen}

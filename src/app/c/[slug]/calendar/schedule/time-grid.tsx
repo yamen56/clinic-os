@@ -5,7 +5,8 @@ import { DateTime } from "luxon";
 import { hmToMin, rangesForDay, type WeeklyHours } from "@/lib/hours";
 import { useI18n } from "@/lib/i18n/client";
 import { ApptCard } from "./appt-card";
-import { layoutLanes, visibleRange, PX, SNAP, tint } from "./grid-layout";
+import { layoutLanes, visibleRange, PX, SNAP } from "./grid-layout";
+import { DoorOpen } from "lucide-react";
 import type { Appt } from "../types";
 
 export type GridColumn = {
@@ -289,11 +290,8 @@ export function TimeGrid({
                     </>
                   ) : (
                     <>
-                      {col.color && (
-                        <span
-                          className={col.kind === "room" ? "h-3 w-3 shrink-0 rounded-[4px]" : "h-2.5 w-2.5 shrink-0 rounded-full"}
-                          style={{ background: col.color }}
-                        />
+                      {col.kind === "room" && col.ownerId && (
+                        <DoorOpen className="h-3.5 w-3.5 shrink-0 text-ink-400" strokeWidth={1.75} aria-hidden />
                       )}
                       <span className="truncate font-semibold text-ink-900">{col.label}</span>
                       {count > 0 && (
@@ -305,7 +303,7 @@ export function TimeGrid({
                 {/* body */}
                 <div
                   className={`relative ${blocked ? "bg-[repeating-linear-gradient(135deg,var(--color-danger-soft)_0_6px,transparent_6px_12px)]" : ""}`}
-                  style={{ height: totalH, ...(col.kind === "room" && col.color ? { backgroundColor: tint(col.color, 3) } : {}) }}
+                  style={{ height: totalH }}
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("[data-appt]")) return;
                     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
