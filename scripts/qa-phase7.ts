@@ -235,14 +235,16 @@ async function main() {
   console.log("✓ automations list renders");
 
   await page.click("text=Confirm");
-  await page.waitForSelector("text=When this happens", { timeout: 15000 });
-  await page.waitForSelector("text=Send WhatsApp message", { timeout: 10000 });
+  // The canvas: the trigger node, and the step drawn under it.
+  await page.waitForSelector(".react-flow__node-trigger", { timeout: 30000 });
+  await page.waitForSelector(".react-flow__node-step >> text=Send WhatsApp message", { timeout: 15000 });
   console.log("✓ flow builder loads trigger + steps");
 
   // add a step and save
-  await page.click("text=Add step");
-  await page.click("button:has-text('Add tag')");
-  await page.locator('input').last().fill("qa-added-step");
+  // From the "+" under the last step, then the tag in the step's settings panel.
+  await page.locator('button[aria-label="Add step"]').first().click();
+  await page.click('[data-pick="add_tag"]');
+  await page.locator("[data-inspector] input").first().fill("qa-added-step");
   await page.click("button:has-text('Save')");
   await page.waitForSelector("text=Automation saved", { timeout: 15000 });
   const stepCount = await db.query(

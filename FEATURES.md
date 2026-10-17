@@ -996,110 +996,120 @@ details), staff are notified rather than it failing silently.
 
 *"Messages that go out on their own, so nobody has to remember."*
 
+One catalog — `src/lib/automation/catalog.ts` — defines every trigger, step and condition
+rule with its zod schema. The builder, the save action and the worker all read it, so the
+three can no longer disagree (they did: the builder offered seven document triggers the save
+action's enum had never heard of, so those flows could not be saved).
+
 ### Triggers
 
-| Trigger | Fires on |
+| Trigger | Fires on | Filters |
+|---|---|---|
+| `appointment_created` | Appointment is booked | services, doctors, booked by (team / online / AI), first visit only |
+| `before_appointment` | X hours before (`hours`, default 24) | services, doctors |
+| `appointment_status_changed` | Confirmed / finished / cancelled / no-show. The picker offers these as "Visit is finished", "Appointment is cancelled"… | status, services, doctors |
+| `appointment_rescheduled` | Moved to another time or doctor | services, doctors |
+| `patient_arrived` | Marked arrived on the board, walk-ins included (once per appointment) | services, doctors |
+| `booking_submitted` | Booked through the online link | only those waiting for approval |
+| `waitlist_booked` | A waitlist offer turned into a booking | |
+| `patient_created` | New patient file | source |
+| `tag_added` / `tag_removed` | Tag change — from the desk **or** a flow (the desk used to fire nothing) | one tag, or any |
+| `birthday` | Patient's birthday, 09:00 | |
+| `after_last_visit` | X days after the last finished visit (`days`, default 180) | |
+| `prescription_sent` | A prescription is sent (once per prescription) | |
+| `inbound_message` | A patient writes | any message / keywords (whole words, Arabic-normalised, ١٢٣ = 123) / first message from a new number |
+| `conversation_unanswered` | A patient waited N minutes for a reply (only inside the sending window) | minutes |
+| `invoice_sent` | Invoice sent (now carries the patient — it used to carry none, so nothing was ever sent) | |
+| `invoice_unpaid` | Unpaid X days after sending | |
+| `payment_received` | A payment is recorded at the desk (insurer payments are not) | fully paid only |
+| `document_*` | sent / viewed / signed / completed / declined / unsigned (X days) / expired | |
+
+### Steps (18)
+
+| Group | Steps |
 |---|---|
-| `appointment_created` | Appointment is booked |
-| `appointment_status_changed` | Status changes (optionally filtered to one status) |
-| `before_appointment` | X hours before (config `hours`, default 24) |
-| `after_last_visit` | X days after last visit (config `days`, default 180) |
-| `patient_created` | New patient added |
-| `tag_added` / `tag_removed` | Tag change (optionally filtered to one tag) |
-| `birthday` | Patient's birthday |
-| `invoice_sent` | Invoice is sent |
-| `invoice_unpaid` | Invoice stays unpaid X days (config `days`, default 3) |
-| `inbound_message` | Message contains a keyword |
-| `booking_submitted` | Someone books online |
-| `document_sent` / `document_viewed` / `document_signed` / `document_completed` / `document_declined` / `document_expired` | Document lifecycle |
-| `document_unsigned` | Document stays unsigned X days (config `days`, default 3) |
-| `waitlist_booked` | A waitlist offer turned into a booking |
+| Send | `send_whatsapp` (text + optional photo/PDF, replies in the thread that started the run) · `send_document` |
+| Timing | `wait` (for a while · until a time of day, optionally on chosen weekdays · X before/after the appointment) · `wait_for_reply` (one way out per expected answer, plus "anything else" and "no reply") |
+| Logic | `condition` (all/any of up to 10 rules, each negatable) · `goto_automation` · `stop` |
+| Patient file | `add_tag` · `remove_tag` · `update_patient` (status or a custom field) · `add_note` |
+| Appointment | `update_appointment` (confirm / cancel — through `applyAppointmentStatus`, the desk's own path, so consent forms, the waitlist offer and doctor alerts all follow) |
+| Chat | `assign_conversation` · `set_ai` (pause for a while / off / on) · `flag_conversation` · `close_conversation` |
+| Team | `create_task` (assign to a member or the appointment's doctor) · `notify_staff` (roles, named people, the appointment's doctor) |
 
-### Steps
+Condition rules: tag · gender · age range · patient source / status · custom field · has an
+upcoming appointment · finished visits ≥ N · first visit · appointment status / service /
+doctor · replied · reply contains · invoice paid · balance above · document status · weekday ·
+time window.
 
-`send_whatsapp` · `wait` · `condition` (if/else with yes/no branches) · `add_tag` ·
-`remove_tag` · `create_task` · `notify_staff` · `goto_automation` · `send_document` · `stop`
+### The graph (migration 0079)
 
-- **Wait** supports both "wait N minutes" and "…then wait until HH:MM" (clinic-local, rolls
-  to the next day if already past).
-- **Conditions**: `has_tag` · `appointment_status` · `replied` (did the patient reply since
-  the run started) · `invoice_paid`.
-- **notify_staff** targets roles, defaulting to owner + receptionist.
-- **send_document** creates and sends a template; the document's creator is recorded as the
-  clinic owner, because a document must always name a real person and an automation isn't one.
-- Steps form a tree (`parent_step_id` + `branch`), walked with sibling-then-parent-sibling
-  ordering, with a 100-step guard per advance.
+A flow is steps plus **edges** (`automation_edges`: from step + output handle → to step; a
+null `from` is the trigger). Steps keep their ids across saves, so a run waiting three hours
+resumes at the same edge whatever was edited meanwhile; a step that is removed cancels the
+runs standing on it (`step_removed`) instead of restarting them. The backfill drew every
+existing tree as edges, reproducing the old sibling-then-parent walk exactly, and a flow that
+is still written as a tree (no edges, `canvas` without `trigger`) is read as one at run time.
+`validateFlow` (`src/lib/automation/graph.ts`) refuses loops, outputs a step does not have,
+steps whose context the trigger cannot provide; a flow with errors can be saved as a draft but
+not switched on.
 
 ### Merge variables
 
-`{{patient.first_name}}`, `{{patient.name}}`, `{{appointment.time}}`, `{{clinic.name}}`,
-`{{clinic.phone}}`, `{{doctor.name}}`, `{{invoice.link}}` and the patient field definitions.
+`patient.first_name · name · phone · file_no · age` · `appointment.date · time · day ("today"
+/ "tomorrow") · end_time · service · doctor` · `next_appointment.date · time · service` ·
+`doctor.name` · `clinic.name · phone · address · map_link · booking_link · review_link` ·
+`invoice.number · total · paid · balance · link` · `document.title · status · expires` ·
+`reply.text`. A line whose variables all come back empty is dropped, as in system messages.
+`clinic.review_link` is `clinics.google_review_url`, set on the automations page.
 
 ### Runs, idempotency and history
 
-- `automation_runs` status: `running` | `waiting` | `completed` | `failed` | `cancelled`.
-- **One active run per `(automation, patient, appointment, invoice, document)`**, enforced
-  by a partial unique index with `NULLS NOT DISTINCT` — NULLs must not defeat the guarantee.
-- Idempotency is scoped to the *context*, not the run: a replayed trigger creates a new run,
-  so run-scoped deduplication would have let the same reminder go out twice.
-- **A send is additionally deduplicated by body**: the same automation never sends the same
-  text twice for the same patient/appointment/invoice, across both retries and replays.
-- `automation_run_logs` records every step with `ok` | `skipped` | `failed` | `waiting` and
-  a detail payload — the History tab shows exactly what happened and why a step was skipped.
-- Automated sends land inside the clinic's **sending window**; overnight traffic queues.
-- Deactivating an automation cancels its in-flight runs.
-- **Test run**: runs the flow against a patient you pick, sending real messages.
+- `automation_runs` status: `running` | `waiting` | `completed` | `failed` | `cancelled`;
+  `waiting_for` is `time` or `reply`.
+- **One active run per `(automation, patient, appointment, invoice, document, conversation)`**,
+  `NULLS NOT DISTINCT` again (0010 had silently dropped it). Two unknown numbers writing at
+  once are two runs.
+- Every run passes `startRun`: clinic live and licensed, patient not opted out, the flow's
+  **re-entry** setting (every time / once ever / once per N days) and a **chain limit** of 3,
+  so flows that trigger each other cannot loop.
+- **Early stops** (`settings.exit_on`): appointment cancelled, patient booked again, invoice
+  paid, document signed, patient replied — checked whenever a run resumes.
+- Each step runs in a savepoint: a step that throws is rolled back alone and the run is marked
+  `failed`; a job that exhausts its retries marks its run failed too, and an hourly sweep fails
+  runs left `running` with nothing to move them. (Runs used to stay `running` for ever and block
+  the patient through the dedupe index.)
+- **Replies**: an inbound message first goes to runs waiting for one — claimed with a
+  conditional update so a reply and a timeout cannot both win. An answered message does not
+  start message flows and does not wake the AI receptionist (it would answer a bare "1").
+- **A send is additionally deduplicated by body + attachment** per context.
+- Automated sends land inside the clinic's **sending window**.
+- **Test run** uses the patient's own next appointment, open invoice, latest document and thread.
 
-### Shipped recipes ("starting points")
+### The builder
 
-Copied into every new clinic, editable, each a normal automation afterwards:
+A drag-and-drop canvas (`@xyflow/react`, laid out with `@dagrejs/dagre`): steps drawn under
+the trigger, a "+" on every edge and every free output, drag from a dot to connect, drop on
+empty canvas to add there, undo/redo, Tidy up, a settings panel (a bottom sheet on phones),
+per-step 30-day counts, a list of problems that pans to the step. Tabs: Flow · Activity
+(filter, stop a run, stop all waiting) · Settings (description, re-entry, early stops).
 
-| Key | What it does | Default |
-|---|---|---|
-| `confirm_on_booking` | Confirmation as soon as an appointment is created | off |
-| `reminder_24h` | Reminds a day ahead, asks them to confirm | off |
-| `reminder_2h` | Short nudge on the day | off |
-| `no_show_followup` | Reaches out when a patient misses their appointment | off |
-| `post_visit_review` | Thanks the patient, asks for a Google review | off |
-| `birthday` | Warm birthday message | off |
-| `recall_6_months` | Invites them back for a routine check | off |
-| `unpaid_invoice` | Follows up on an unpaid invoice | off |
-| `document_expired_alert` | Task when a signing link expires unsigned | **on** |
-| `document_unsigned_escalate` | After 5 days, hands it to reception to chase by phone | **on** |
-| `document_declined_alert` | Notifies staff and opens a task on a decline | **on** |
-| `welcome_new_patient` | Greets a new patient, which is also what opens the WhatsApp window so staff can message them first | **on** |
+### Templates
 
-`RECIPES_ON_BY_DEFAULT` (`src/lib/esign/constants.ts`) is the single answer to "which of
-these start switched on", read by both the seed script and clinic creation — so a clinic
-created today and a clinic created by the seeder get the same defaults.
+`recipe_templates`, seeded from `scripts/seed-recipes.ts` (19 general) and
+`scripts/specialty-recipes.ts` (37 across 14 specialties), offered in the **New automation**
+gallery — the clinic's own field first. New clinics install only `RECIPES_ON_BY_DEFAULT`
+(`welcome_new_patient` and the three document alerts, switched on); everything else is a
+choice, not an inheritance. Clinics created before keep the copies they already have.
+
+Notable general templates: a day-before reminder where "1" confirms the appointment and "2"
+flags the chat for reception; a post-visit 1–5 rating that sends happy patients to Google and
+unhappy ones to the clinic admin; no-show and cancellation rebooking with the booking link,
+skipped if they have already rebooked; the doctor told when their patient arrives; reception
+told when a chat has waited 15 minutes; a check-in three days after a prescription.
 
 The two **patient-facing document reminders (24h / 72h) are built in, not recipes** — they
 run off the clinic's own "first reminder after" setting so they're hour-accurate and can't be
 switched off by accident, and duplicating them as automations would nudge every patient twice.
-What ships as recipes is what a flow can do that a fixed reminder cannot: escalate, chase an
-expiry, open a task on a decline.
-
-### Specialty packs
-
-A clinic is asked what it practises when it is created (`clinics.specialty`, admin →
-**New clinic**, changeable later from the clinic's admin page). It gets the `general`
-library **plus** the pack for its own field — the specialty adds, it never replaces.
-
-`general` · `dental` · `dermatology` · `ophthalmology` · `obgyn` · `pediatrics` ·
-`orthopedics` · `physiotherapy` · `ent` · `cardiology` · `nutrition` · `psychiatry` ·
-`plastic_surgery` · `urology` · `internal_medicine` (`src/lib/specialties.ts`)
-
-37 recipes across the 14 packs (`scripts/specialty-recipes.ts`) — post-extraction aftercare,
-laser prep, telling an eye patient they will not be able to drive home, a 40-day postpartum
-check, a discreet psychiatry reminder that names no clinic, cast-removal follow-up. They
-arrive **off**, like the rest of the library: the specialty decides what is on the shelf,
-never what is running. Tag-triggered ones name the tag in Arabic, because that is what
-reception types.
-
-Installing is additive and re-runnable — a recipe the clinic already holds a copy of is
-skipped, so correcting a wrongly chosen specialty never touches flows they have edited. The
-clinic's copies remember their pack in `automations.recipe_specialty`, which is what groups
-them under their own heading on the automations page.
 
 ### System messages (`clinic_system_messages`)
 

@@ -7,6 +7,7 @@ import { can, requireClinic, type ClinicAccess } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { withSystem } from "@/lib/db";
 import { audit } from "@/lib/audit";
+import { emitTrigger } from "@/lib/triggers";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
 import { notifyUser } from "@/lib/notify";
@@ -308,6 +309,9 @@ async function queueSend(c: PoolClient, access: ClinicAccess, id: string): Promi
     entityId: id,
     detail: { number: rx.number, messageId },
   });
+  // For the follow-ups that hang off a prescription ("how are you feeling?").
+  // Once per prescription: sending it again is a resend, not a new course.
+  await emitTrigger(c, access.clinicId, "prescription_sent", { patientId: rx.patient_id }, `prescription_sent:${id}`);
   return undefined;
 }
 

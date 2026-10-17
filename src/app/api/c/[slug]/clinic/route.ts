@@ -10,6 +10,8 @@ const TEXT_COLS: Record<string, number> = {
   address: 300,
   address_ar: 300,
   google_maps_url: 500,
+  // Where a happy patient is sent to leave a review: {{clinic.review_link}}.
+  google_review_url: 500,
   moh_license_no: 40,
   invoice_prefix: 12,
   invoice_footer: 1000,

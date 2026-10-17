@@ -9,7 +9,8 @@ import { SPECIALTY_RECIPES } from "./specialty-recipes";
 export type RecipeStep = {
   step_type: string;
   config?: Record<string, unknown>;
-  children?: { yes?: RecipeStep[]; no?: RecipeStep[] };
+  /** Branches by output: yes / no, or a reply step's opt:0, other, timeout… */
+  children?: Record<string, RecipeStep[] | undefined>;
 };
 
 export type Recipe = {
@@ -25,25 +26,15 @@ export type Recipe = {
   specialty?: string;
 };
 
+/*
+  Words that mean "yes, I'll come" and "I need to change it", as patients in
+  Jordan actually type them. Matching ignores tashkeel, alef and taa-marbuta
+  spelling and reads ١ as 1, so one spelling of each is enough.
+*/
+const CONFIRM_WORDS = ["1", "نعم", "اكيد", "تمام", "موافق", "تأكيد", "ok", "yes", "confirm", "👍"];
+const CHANGE_WORDS = ["2", "تغيير", "تأجيل", "الغاء", "لا", "مش رح اقدر", "change", "cancel", "no"];
+
 export const RECIPES: Recipe[] = [
-  {
-    key: "confirm_on_booking",
-    name: "Appointment confirmation",
-    name_ar: "تأكيد الحجز",
-    description: "Sends a confirmation as soon as an appointment is created.",
-    trigger_type: "appointment_created",
-    trigger_config: {},
-    sort: 1,
-    steps: [
-      {
-        step_type: "send_whatsapp",
-        config: {
-          message:
-            "مرحباً {{patient.first_name}} 👋\nتم تأكيد موعدك في {{clinic.name}}:\n📅 {{appointment.date}}\n🕐 {{appointment.time}}\n{{appointment.service}}\n\nلأي استفسار راسلنا هنا.",
-        },
-      },
-    ],
-  },
   {
     key: "welcome_new_patient",
     name: "Welcome a new patient",
@@ -70,19 +61,121 @@ export const RECIPES: Recipe[] = [
     ],
   },
   {
-    key: "reminder_24h",
-    name: "Reminder — 24 hours before",
-    name_ar: "تذكير قبل 24 ساعة",
-    description: "Reminds the patient a day ahead and asks them to confirm.",
-    trigger_type: "before_appointment",
-    trigger_config: { hours: 24 },
-    sort: 2,
+    key: "confirm_on_booking",
+    name: "Appointment confirmation",
+    name_ar: "تأكيد الحجز",
+    description: "Sends a confirmation as soon as an appointment is created.",
+    trigger_type: "appointment_created",
+    trigger_config: {},
+    sort: 1,
     steps: [
       {
         step_type: "send_whatsapp",
         config: {
           message:
-            "تذكير بموعدك غداً في {{clinic.name}} 🦷\n🕐 {{appointment.time}}\n{{appointment.service}}\n\nإذا احتجت تعديل الموعد راسلنا.",
+            "مرحباً {{patient.first_name}} 👋\nتم تأكيد موعدك في {{clinic.name}}:\n📅 {{appointment.date}}\n🕐 {{appointment.time}}\n{{appointment.service}}\n\nلأي استفسار راسلنا هنا.",
+        },
+      },
+    ],
+  },
+  {
+    key: "first_visit_welcome",
+    name: "First visit — how to find us",
+    name_ar: "الزيارة الأولى — كيف تصل إلينا",
+    description: "A patient's first appointment: the address, the map and what to bring.",
+    trigger_type: "appointment_created",
+    trigger_config: { first_visit: true },
+    sort: 2,
+    steps: [
+      { step_type: "wait", config: { mode: "duration", amount: 10, unit: "minutes" } },
+      {
+        step_type: "send_whatsapp",
+        config: {
+          message:
+            "أهلاً {{patient.first_name}}، سعيدون بزيارتك الأولى لـ{{clinic.name}} 🌟\n📍 {{clinic.address}}\n{{clinic.map_link}}\n\nيُفضّل الحضور قبل الموعد بعشر دقائق، وإحضار الهوية وأي تقارير أو صور أشعة سابقة.",
+        },
+      },
+    ],
+  },
+  {
+    key: "reminder_24h",
+    name: "Reminder the day before — reply to confirm",
+    name_ar: "تذكير قبل يوم — التأكيد بالرد",
+    description:
+      "Reminds the patient a day ahead. A reply of 1 confirms the appointment; 2 tells reception to rebook; no reply gets a second nudge.",
+    trigger_type: "before_appointment",
+    trigger_config: { hours: 24 },
+    sort: 3,
+    steps: [
+      {
+        step_type: "send_whatsapp",
+        config: {
+          message:
+            "مرحباً {{patient.first_name}} 👋\nتذكير بموعدك {{appointment.day}} في {{clinic.name}}\n🕐 {{appointment.time}}\n{{appointment.service}}\n\nللتأكيد أرسل 1 ✅\nلتغيير الموعد أرسل 2",
+        },
+      },
+      {
+        step_type: "wait_for_reply",
+        config: {
+          amount: 12,
+          unit: "hours",
+          options: [
+            { label: "تأكيد", keywords: CONFIRM_WORDS },
+            { label: "تغيير", keywords: CHANGE_WORDS },
+          ],
+        },
+        children: {
+          "opt:0": [
+            { step_type: "update_appointment", config: { status: "confirmed" } },
+            {
+              step_type: "send_whatsapp",
+              config: { message: "تم تأكيد موعدك ✅\nبانتظارك {{appointment.day}} الساعة {{appointment.time}} 🌷" },
+            },
+          ],
+          "opt:1": [
+            { step_type: "flag_conversation", config: { reason: "يريد تغيير موعده" } },
+            {
+              step_type: "notify_staff",
+              config: {
+                title: "{{patient.name}} يريد تغيير موعده",
+                body: "{{appointment.date}} — {{appointment.time}}",
+                roles: ["receptionist", "owner"],
+              },
+            },
+            {
+              step_type: "send_whatsapp",
+              config: { message: "ولا يهمك 🙏 سيتواصل معك فريقنا قريباً لترتيب موعد جديد." },
+            },
+          ],
+          other: [
+            { step_type: "flag_conversation", config: { reason: "ردّ على تذكير الموعد" } },
+            {
+              step_type: "notify_staff",
+              config: {
+                title: "ردّ على تذكير موعد: {{patient.name}}",
+                body: "«{{reply.text}}»",
+                roles: ["receptionist"],
+              },
+            },
+          ],
+          timeout: [
+            {
+              step_type: "condition",
+              config: { match: "all", rules: [{ kind: "appointment_status", values: ["confirmed"] }] },
+              children: {
+                no: [
+                  {
+                    step_type: "notify_staff",
+                    config: {
+                      title: "لم يؤكد {{patient.name}} موعده",
+                      body: "{{appointment.day}} · {{appointment.time}} — يُفضّل الاتصال به",
+                      roles: ["receptionist"],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
         },
       },
     ],
@@ -94,54 +187,202 @@ export const RECIPES: Recipe[] = [
     description: "Short nudge on the day of the appointment.",
     trigger_type: "before_appointment",
     trigger_config: { hours: 2 },
-    sort: 3,
+    sort: 4,
     steps: [
       {
         step_type: "send_whatsapp",
         config: {
-          message: "موعدك اليوم الساعة {{appointment.time}} في {{clinic.name}}. بانتظارك! 🌟",
+          message: "موعدك اليوم الساعة {{appointment.time}} في {{clinic.name}}. بانتظارك! 🌟\n{{clinic.map_link}}",
+        },
+      },
+    ],
+  },
+  {
+    key: "rescheduled_notice",
+    name: "Appointment moved",
+    name_ar: "إبلاغ بتغيير الموعد",
+    description: "Tells the patient their appointment's new time as soon as it is moved.",
+    trigger_type: "appointment_rescheduled",
+    trigger_config: {},
+    sort: 5,
+    steps: [
+      {
+        step_type: "send_whatsapp",
+        config: {
+          message:
+            "مرحباً {{patient.first_name}}، تم تعديل موعدك في {{clinic.name}} ليصبح:\n📅 {{appointment.date}}\n🕐 {{appointment.time}}\n{{doctor.name}}\n\nإذا الوقت غير مناسب راسلنا هنا.",
+        },
+      },
+    ],
+  },
+  {
+    key: "arrival_tell_doctor",
+    name: "Tell the doctor the patient has arrived",
+    name_ar: "إبلاغ الطبيب بوصول المريض",
+    description: "The moment reception marks a patient as arrived, their doctor is told in the app.",
+    trigger_type: "patient_arrived",
+    trigger_config: {},
+    sort: 6,
+    steps: [
+      {
+        step_type: "notify_staff",
+        config: {
+          title: "وصل {{patient.name}}",
+          body: "{{appointment.time}} · {{appointment.service}}",
+          appointment_doctor: true,
         },
       },
     ],
   },
   {
     key: "no_show_followup",
-    name: "No-show follow-up",
-    name_ar: "متابعة عدم الحضور",
-    description: "Reaches out when a patient misses their appointment.",
+    name: "No-show — offer another time",
+    name_ar: "عدم الحضور — اقتراح موعد آخر",
+    description: "Reaches out after a missed appointment with the booking link, unless they have already rebooked.",
     trigger_type: "appointment_status_changed",
     trigger_config: { status: "no_show" },
-    sort: 4,
+    sort: 7,
     steps: [
+      { step_type: "add_tag", config: { tag: "لم يحضر" } },
+      { step_type: "wait", config: { mode: "duration", amount: 1, unit: "hours" } },
       {
-        step_type: "send_whatsapp",
-        config: {
-          message:
-            "مرحباً {{patient.first_name}}، افتقدناك في موعدك اليوم 🌸\nحاب نحجزلك موعد جديد؟ راسلنا وبنرتبلك أقرب وقت مناسب.",
+        step_type: "condition",
+        config: { match: "all", rules: [{ kind: "has_upcoming_appointment" }] },
+        children: {
+          yes: [{ step_type: "stop", config: {} }],
+          no: [
+            {
+              step_type: "send_whatsapp",
+              config: {
+                message:
+                  "مرحباً {{patient.first_name}}، افتقدناك في موعدك اليوم 🌸\nحاب نحجزلك موعد جديد؟ اختر الوقت المناسب من هنا:\n{{clinic.booking_link}}\n\nأو راسلنا وبنرتبلك أقرب وقت.",
+              },
+            },
+            {
+              step_type: "notify_staff",
+              config: {
+                title: "لم يحضر: {{patient.name}}",
+                body: "{{appointment.date}} — تحتاج متابعة",
+                roles: ["receptionist"],
+              },
+            },
+          ],
         },
       },
-      { step_type: "add_tag", config: { tag: "لم يحضر" } },
+    ],
+  },
+  {
+    key: "cancelled_rebook",
+    name: "Cancelled — invite to rebook",
+    name_ar: "موعد ملغي — دعوة لإعادة الحجز",
+    description: "An hour after a cancellation, offers the booking link — unless another appointment is already booked.",
+    trigger_type: "appointment_status_changed",
+    trigger_config: { status: "cancelled" },
+    sort: 8,
+    steps: [
+      { step_type: "wait", config: { mode: "duration", amount: 1, unit: "hours" } },
       {
-        step_type: "notify_staff",
-        config: { title: "لم يحضر: {{patient.name}}", body: "{{appointment.date}} — تحتاج متابعة" },
+        step_type: "condition",
+        config: { match: "all", rules: [{ kind: "has_upcoming_appointment" }] },
+        children: {
+          yes: [{ step_type: "stop", config: {} }],
+          no: [
+            {
+              step_type: "send_whatsapp",
+              config: {
+                message:
+                  "مرحباً {{patient.first_name}}، تم إلغاء موعدك في {{clinic.name}}.\nمتى ما كان مناسباً لك، احجز موعداً جديداً من هنا:\n{{clinic.booking_link}}",
+              },
+            },
+          ],
+        },
       },
     ],
   },
   {
     key: "post_visit_review",
-    name: "Thank you + review request",
-    name_ar: "شكر وطلب تقييم",
-    description: "Thanks the patient after a completed visit and asks for a Google review.",
+    name: "Thank you + rating, then a review",
+    name_ar: "شكر وتقييم ثم مراجعة على Google",
+    description:
+      "Thanks the patient after a finished visit and asks for a 1–5 rating. Happy patients get your Google review link; unhappy ones reach the clinic admin first.",
     trigger_type: "appointment_status_changed",
     trigger_config: { status: "completed" },
-    sort: 5,
+    sort: 9,
     steps: [
-      { step_type: "wait", config: { minutes: 180 } },
+      { step_type: "wait", config: { mode: "duration", amount: 3, unit: "hours" } },
       {
         step_type: "send_whatsapp",
         config: {
           message:
-            "شكراً لزيارتك {{clinic.name}} اليوم 🌟\nنتمنى تكون تجربتك كانت ممتازة.\nإذا حابب تشاركنا رأيك، تقييمك بيفرق كتير معنا 🙏",
+            "شكراً لزيارتك {{clinic.name}} اليوم 🌟\nكيف كانت تجربتك معنا؟ أرسل رقماً من 1 إلى 5 (5 = ممتازة).",
+        },
+      },
+      {
+        step_type: "wait_for_reply",
+        config: {
+          amount: 1,
+          unit: "days",
+          options: [
+            { label: "راضٍ", keywords: ["5", "4", "ممتاز", "ممتازه", "رائع", "حلو", "excellent", "great"] },
+            { label: "غير راضٍ", keywords: ["1", "2", "3", "سيئ", "سيء", "مش منيح", "bad"] },
+          ],
+        },
+        children: {
+          "opt:0": [
+            {
+              step_type: "send_whatsapp",
+              config: {
+                message:
+                  "يسعدنا هذا كثيراً 🙏\nلو عندك دقيقة، تقييمك على Google بيساعد غيرك يلاقينا:\n{{clinic.review_link}}",
+              },
+            },
+          ],
+          "opt:1": [
+            {
+              step_type: "send_whatsapp",
+              config: {
+                message: "نأسف أن تجربتك لم تكن كما يجب 🙏 سيتواصل معك مسؤول العيادة شخصياً لنفهم ما حدث.",
+              },
+            },
+            {
+              step_type: "notify_staff",
+              config: { title: "تقييم منخفض من {{patient.name}}", body: "«{{reply.text}}»", roles: ["owner"] },
+            },
+            {
+              step_type: "create_task",
+              config: {
+                title: "اتصل بـ{{patient.name}} بخصوص تقييمه",
+                body: "قيّم زيارته بـ«{{reply.text}}».",
+                due_amount: 1,
+                due_unit: "days",
+                assignee: "nobody",
+              },
+            },
+          ],
+
+        },
+      },
+    ],
+  },
+  {
+    key: "recall_6_months",
+    name: "Recall — 6 months since last visit",
+    name_ar: "تذكير مراجعة بعد 6 أشهر",
+    description: "Invites the patient back for a routine check, unless they already have an appointment.",
+    trigger_type: "after_last_visit",
+    trigger_config: { days: 180 },
+    sort: 10,
+    steps: [
+      {
+        step_type: "condition",
+        config: { match: "all", rules: [{ kind: "has_upcoming_appointment" }] },
+        children: { yes: [{ step_type: "stop", config: {} }] },
+      },
+      {
+        step_type: "send_whatsapp",
+        config: {
+          message:
+            "مرحباً {{patient.first_name}} 👋\nمر 6 أشهر على آخر زيارة لك في {{clinic.name}}.\nوقت الفحص الدوري! احجز من هنا:\n{{clinic.booking_link}}\nأو راسلنا ونرتبلك موعد.",
         },
       },
     ],
@@ -153,7 +394,7 @@ export const RECIPES: Recipe[] = [
     description: "Sends a warm birthday message.",
     trigger_type: "birthday",
     trigger_config: {},
-    sort: 6,
+    sort: 11,
     steps: [
       {
         step_type: "send_whatsapp",
@@ -164,20 +405,77 @@ export const RECIPES: Recipe[] = [
     ],
   },
   {
-    key: "recall_6_months",
-    name: "Recall — 6 months since last visit",
-    name_ar: "تذكير مراجعة بعد 6 أشهر",
-    description: "Invites the patient back for a routine check.",
-    trigger_type: "after_last_visit",
-    trigger_config: { days: 180 },
-    sort: 7,
+    key: "prescription_check_in",
+    name: "Check in after a prescription",
+    name_ar: "الاطمئنان بعد وصفة طبية",
+    description: "Three days after a prescription, asks how the patient is doing and tells the doctors if they answer.",
+    trigger_type: "prescription_sent",
+    trigger_config: {},
+    sort: 12,
     steps: [
+      { step_type: "wait", config: { mode: "until_time", amount: 3, unit: "days", time: "11:00" } },
       {
         step_type: "send_whatsapp",
         config: {
-          message:
-            "مرحباً {{patient.first_name}} 👋\nمر 6 أشهر على آخر زيارة لك في {{clinic.name}}.\nوقت التنظيف والفحص الدوري! حاب نحجزلك موعد؟",
+          message: "مرحباً {{patient.first_name}} 🌷\nنطمئن عليك من {{clinic.name}} — كيف حالك مع العلاج؟ إذا عندك أي سؤال راسلنا هنا.",
         },
+      },
+      {
+        step_type: "wait_for_reply",
+        config: { amount: 2, unit: "days", options: [] },
+        children: {
+          replied: [
+            { step_type: "flag_conversation", config: { reason: "ردّ على متابعة الوصفة" } },
+            {
+              step_type: "notify_staff",
+              config: { title: "{{patient.name}} ردّ على متابعة الوصفة", body: "«{{reply.text}}»", roles: ["doctor"] },
+            },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    key: "unanswered_alert",
+    name: "A patient is waiting for a reply",
+    name_ar: "مريض ينتظر الرد",
+    description: "When a WhatsApp message has gone 15 minutes without an answer, reception is told.",
+    trigger_type: "conversation_unanswered",
+    trigger_config: { minutes: 15 },
+    sort: 13,
+    steps: [
+      {
+        step_type: "notify_staff",
+        config: {
+          title: "رسالة بانتظار الرد منذ 15 دقيقة",
+          body: "{{patient.name}}",
+          roles: ["receptionist"],
+        },
+      },
+    ],
+  },
+  {
+    key: "booking_needs_approval",
+    name: "Online booking waiting for approval",
+    name_ar: "حجز إلكتروني بانتظار الموافقة",
+    description: "A booking from your link that needs approving becomes a task for reception, so it is not left waiting.",
+    trigger_type: "booking_submitted",
+    trigger_config: { needs_approval: true },
+    sort: 14,
+    steps: [
+      {
+        step_type: "create_task",
+        config: {
+          title: "راجع طلب حجز {{patient.name}}",
+          body: "{{appointment.date}} — {{appointment.time}} · {{appointment.service}}",
+          due_amount: 1,
+          due_unit: "hours",
+          assignee: "nobody",
+        },
+      },
+      {
+        step_type: "notify_staff",
+        config: { title: "حجز جديد بانتظار موافقتك", body: "{{patient.name}} · {{appointment.date}}", roles: ["receptionist", "owner"] },
       },
     ],
   },
@@ -185,21 +483,21 @@ export const RECIPES: Recipe[] = [
     key: "unpaid_invoice",
     name: "Unpaid invoice reminder",
     name_ar: "تذكير فاتورة غير مدفوعة",
-    description: "Follows up on an invoice that stayed unpaid.",
+    description: "Follows up on an invoice that stayed unpaid, and stops the moment it is paid.",
     trigger_type: "invoice_unpaid",
     trigger_config: { days: 3 },
-    sort: 8,
+    sort: 15,
     steps: [
       {
         step_type: "condition",
-        config: { kind: "invoice_paid" },
+        config: { match: "all", rules: [{ kind: "invoice_paid" }] },
         children: {
           no: [
             {
               step_type: "send_whatsapp",
               config: {
                 message:
-                  "مرحباً {{patient.first_name}}، تذكير بفاتورة {{invoice.number}} بقيمة {{invoice.total}}.\n{{invoice.link}}\n\nشكراً لك 🌷",
+                  "مرحباً {{patient.first_name}}، تذكير بفاتورة {{invoice.number}} — المتبقي {{invoice.balance}}.\n{{invoice.link}}\n\nشكراً لك 🌷",
               },
             },
           ],
@@ -227,7 +525,7 @@ export const RECIPES: Recipe[] = [
     description: "Raises a task when a signing link expires with no signature.",
     trigger_type: "document_expired",
     trigger_config: {},
-    sort: 9,
+    sort: 16,
     steps: [
       {
         step_type: "notify_staff",
@@ -257,7 +555,7 @@ export const RECIPES: Recipe[] = [
     // two WhatsApp messages have already gone unanswered and the next step is a
     // person picking up the phone.
     trigger_config: { days: 5 },
-    sort: 10,
+    sort: 17,
     steps: [
       {
         step_type: "create_task",
@@ -276,7 +574,7 @@ export const RECIPES: Recipe[] = [
     description: "Notifies staff and opens a task when a patient declines.",
     trigger_type: "document_declined",
     trigger_config: {},
-    sort: 11,
+    sort: 18,
     steps: [
       {
         step_type: "create_task",

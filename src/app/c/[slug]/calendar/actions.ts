@@ -5,6 +5,7 @@ import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { emitTrigger } from "@/lib/triggers";
 import { findOrCreatePatient } from "@/lib/patients";
+import { applyAppointmentStatus } from "@/lib/appointments";
 import { scheduleCheck } from "@/lib/schedule-check";
 
 export type ApptInput = {
@@ -214,33 +215,21 @@ export async function setAppointmentStatusAction(
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
   return inClinic(access, async (c) => {
-    // The status it had before, read under the same row lock, so cancelling an
-    // appointment that was already cancelled is not a second cancellation.
     /*
-      `finished_at` follows `completed` both ways: set when it becomes
-      completed here (the panel's button is a Finish too), cleared when it is
-      put back to anything else, so the board never shows a "finished" visit
-      whose status says otherwise.
+      The status it had before is read under the same row lock, so cancelling
+      an appointment that was already cancelled is not a second cancellation.
+      `finished_at` follows `completed` both ways, so the board never shows a
+      "finished" visit whose status says otherwise. Both live in
+      applyAppointmentStatus, which an automation confirming from a patient's
+      reply goes through too.
     */
-    const r = await c.query(
-      `with prev as (
-         select status from appointments where id = $1 and clinic_id = $2 for update
-       )
-       update appointments set status = $3::text, flow_prev_status = null,
-              finished_at = case when $3::text = 'completed' then coalesce(finished_at, now()) else null end
-        where id = $1 and clinic_id = $2
-       returning patient_id, starts_at, (select status from prev) as previous_status`,
-      [id, access.clinicId, status]
-    );
-    if (!r.rowCount) return { error: "not_found" };
-    const { patient_id } = r.rows[0];
-    if (status === "completed") {
-      await c.query(
-        `update patients set last_visit_at = greatest(coalesce(last_visit_at, 'epoch'::timestamptz), $2::timestamptz), status = 'active'
-         where id = $1`,
-        [patient_id, r.rows[0].starts_at]
-      );
-    }
+    const r = await applyAppointmentStatus(c, {
+      clinicId: access.clinicId,
+      appointmentId: id,
+      status,
+      actorUserId: access.session.user.id,
+    });
+    if (!r.ok) return { error: "not_found" };
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,
@@ -249,13 +238,6 @@ export async function setAppointmentStatusAction(
       entity: "appointment",
       entityId: id,
       detail: { status },
-    });
-    await emitTrigger(c, access.clinicId, "appointment_status_changed", {
-      appointmentId: id,
-      patientId: patient_id,
-      status,
-      previousStatus: r.rows[0].previous_status,
-      actorUserId: access.session.user.id,
     });
     return { ok: true };
   });

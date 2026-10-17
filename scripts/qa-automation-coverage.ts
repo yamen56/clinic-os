@@ -553,14 +553,24 @@ async function main() {
     const flows = await visible();
     check(
       "the flows tab still lists the automations",
-      flows.includes(ar.automations.recipes) && flows.includes(ar.automations.sendingWindow),
+      flows.includes(ar.automations.flow.offSection) && flows.includes(ar.automations.sendingWindow),
       ""
     );
+    /*
+      The specialty pack is offered rather than installed now: the gallery
+      behind "New automation" leads with the clinic's own field. Read from the
+      body, because the gallery is a dialog portalled outside <main>.
+    */
+    await page.getByRole("button", { name: ar.automations.newAutomation }).first().click();
+    await page.waitForSelector("[data-template]", { timeout: 30_000 });
+    const gallery = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+    const dentalName = SPECIALTY_RECIPES.find((r) => r.specialty === "dental")!.name_ar;
     check(
-      "and groups the specialty pack under its own heading",
-      flows.includes(ar.automations.specialtyPack.replace("{specialty}", ar.specialties.dental)),
-      ""
+      "and offers the specialty pack in the gallery, under the clinic's own suggestions",
+      gallery.includes(ar.automations.flow.forYou) && gallery.includes(dentalName),
+      dentalName
     );
+    await page.keyboard.press("Escape");
 
     await page.getByRole("tab", { name: ar.automations.tabMessages }).click();
     await page.waitForTimeout(300);

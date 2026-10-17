@@ -256,7 +256,7 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
     if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
     const inv = (
       await c.query(
-        `select i.id, i.number, i.total, i.currency, i.public_token, i.pdf_path,
+        `select i.id, i.patient_id, i.number, i.total, i.currency, i.public_token, i.pdf_path,
                 i.status, i.amount_paid, i.einvoice_status,
                 p.phone_e164, p.full_name, cl.name, cl.name_ar, cl.default_locale,
                 coalesce(ws.status = 'connected', false) as wa_connected
@@ -362,7 +362,9 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
       money already received — which is newly possible now that the button stays
       after payment.
     */
-    if (!settled) await emitTrigger(c, access.clinicId, "invoice_sent", { invoiceId });
+    // The patient travels with it: without them the flow had nobody to message,
+    // and every "invoice sent" automation skipped its sends as "no phone".
+    if (!settled) await emitTrigger(c, access.clinicId, "invoice_sent", { invoiceId, patientId: pre.patient_id });
     revalidatePath(`/c/${slug}/invoices`);
     return {};
   });
@@ -406,6 +408,13 @@ export async function recordPaymentAction(
       can take money from the person in front of them.
     */
     await enqueueEinvoiceSubmit(c, access.clinicId, data.invoiceId, "paid");
+    const after = (await c.query(`select status from invoices where id = $1`, [data.invoiceId])).rows[0];
+    await emitTrigger(c, access.clinicId, "payment_received", {
+      invoiceId: data.invoiceId,
+      patientId: inv.patient_id,
+      amount,
+      fullyPaid: after?.status === "paid",
+    });
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,

@@ -74,6 +74,19 @@ export async function setFlowAction(
     if (step === "arrived") {
       if (!active || cur.arrived_at) return { error: "bad_state" };
       row = (await c.query(`update appointments set arrived_at = now() where id = $1 ${RETURNING}`, [id])).rows[0];
+      /*
+        For the flows that start at the desk: the doctor told their patient is
+        here, the forms sent to the phone in the waiting room. Once per
+        appointment — keyed, so an arrival undone and marked again does not
+        greet the patient twice.
+      */
+      await emitTrigger(
+        c,
+        access.clinicId,
+        "patient_arrived",
+        { appointmentId: id, patientId: cur.patient_id, actorUserId: access.session.user.id },
+        `patient_arrived:${id}`
+      );
     } else if (step === "seated") {
       if (!active || cur.seated_at) return { error: "bad_state" };
       let roomId: string | null = opts.roomId === undefined ? cur.room_id : opts.roomId;
@@ -266,6 +279,14 @@ export async function walkInAction(
       entityId: id,
       detail: { patientId },
     });
+    // Not a booking (see above), but very much an arrival.
+    await emitTrigger(
+      c,
+      access.clinicId,
+      "patient_arrived",
+      { appointmentId: id, patientId, actorUserId: access.session.user.id, walkIn: true },
+      `patient_arrived:${id}`
+    );
     return { id };
   });
 }

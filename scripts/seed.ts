@@ -7,6 +7,9 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { DateTime } from "luxon";
 import { seedAgencyDefaults } from "./seed-recipes";
+import { defaultSettingsFor, normalizeTriggerConfig } from "../src/lib/automation/catalog";
+import { treeToGraph, type RecipeStep } from "../src/lib/automation/graph";
+import { writeFlowGraph } from "../src/lib/automation/store";
 import { seedStaffAlerts } from "../src/lib/staff-alerts";
 import { ROLE_DEFAULTS, type MemberRole } from "../src/lib/permissions";
 
@@ -434,30 +437,19 @@ async function main() {
   for (const r of recipes.rows) {
     const enable = r.key === "confirm_on_booking" || r.key === "reminder_24h";
     const a = await c.query(
-      `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key, recipe_specialty)
-       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+      `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key,
+                                recipe_specialty, settings, canvas)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, '{"trigger": null}') returning id`,
       [
         clinicId, r.name_ar || r.name, r.description, r.trigger_type,
-        JSON.stringify(r.trigger_config ?? {}), enable, r.key, r.specialty ?? "general",
+        JSON.stringify(normalizeTriggerConfig(r.trigger_type, r.trigger_config ?? {})), enable, r.key,
+        r.specialty ?? "general", JSON.stringify(defaultSettingsFor(r.trigger_type)),
       ]
     );
-    const writeSteps = async (
-      steps: { step_type: string; config?: Record<string, unknown>; children?: { yes?: unknown[]; no?: unknown[] } }[],
-      parentId: string | null,
-      branch: string | null
-    ) => {
-      let sort = 0;
-      for (const st of steps) {
-        const s = await c.query(
-          `insert into automation_steps (clinic_id, automation_id, parent_step_id, branch, sort, step_type, config)
-           values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-          [clinicId, a.rows[0].id, parentId, branch, sort++, st.step_type, JSON.stringify(st.config ?? {})]
-        );
-        if (st.children?.yes?.length) await writeSteps(st.children.yes as never[], s.rows[0].id, "yes");
-        if (st.children?.no?.length) await writeSteps(st.children.no as never[], s.rows[0].id, "no");
-      }
-    };
-    await writeSteps(Array.isArray(r.steps) ? r.steps : [], null, null);
+    // As a graph, the way the builder writes one: a reply step's answers are
+    // outputs, which the old parent-and-branch tree had no way to hold.
+    const graph = treeToGraph((Array.isArray(r.steps) ? r.steps : []) as RecipeStep[], () => randomUUID());
+    await writeFlowGraph(c as never, clinicId, a.rows[0].id, graph.nodes, graph.edges);
   }
 
   // ---- Patients

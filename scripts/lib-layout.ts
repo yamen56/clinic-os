@@ -96,7 +96,10 @@ export type Spill = {
  * scrolled and nothing was readable either.
  *
  * Containers that scroll on purpose are skipped: a wide table inside its own
- * `overflow-x: auto` wrapper is the fix, not the bug.
+ * `overflow-x: auto` wrapper is the fix, not the bug. So is what is drawn on a
+ * pan-and-zoom canvas (`data-pannable`, the automation builder): its content
+ * extends past the frame by design and is reached by dragging. The frame
+ * itself is still checked like anything else.
  */
 export async function spills(page: Page, root = "main"): Promise<Spill[]> {
   return page.evaluate((sel) => {
@@ -104,6 +107,7 @@ export async function spills(page: Page, root = "main"): Promise<Spill[]> {
     if (!host) return [];
     const out: Spill[] = [];
     for (const el of Array.from(host.querySelectorAll<HTMLElement>("*"))) {
+      if (el.parentElement?.closest("[data-pannable]")) continue;
       const r = el.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) continue;
       const p = el.parentElement;

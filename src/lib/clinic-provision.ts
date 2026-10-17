@@ -3,6 +3,10 @@ import { RECIPES_ON_BY_DEFAULT } from "./esign/constants";
 import { seedStaffAlerts } from "./staff-alerts";
 import { toFeatureSetting, allFeatures, type FeatureMap } from "./features";
 import { clinicSpecialties, type Specialty } from "./specialties";
+import { randomUUID } from "node:crypto";
+import { defaultSettingsFor, normalizeTriggerConfig } from "./automation/catalog";
+import { treeToGraph, type RecipeStep } from "./automation/graph";
+import { writeFlowGraph } from "./automation/store";
 
 /**
  * Everything a clinic needs to exist, in one place.
@@ -45,48 +49,22 @@ export function isReservedSlug(slug: string): boolean {
   return RESERVED_SLUGS.has(slug.trim().toLowerCase());
 }
 
-type RecipeStep = {
-  step_type: string;
-  config?: Record<string, unknown>;
-  children?: { yes?: RecipeStep[]; no?: RecipeStep[] };
-};
-
-/** Copies a recipe's step tree (including condition branches) into a clinic. */
-async function copySteps(
-  c: PoolClient,
-  clinicId: string,
-  automationId: string,
-  steps: unknown[],
-  parentId: string | null,
-  branch: "yes" | "no" | null
-) {
-  let sort = 0;
-  for (const raw of steps as RecipeStep[]) {
-    const r = await c.query(
-      `insert into automation_steps (clinic_id, automation_id, parent_step_id, branch, sort, step_type, config)
-       values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-      [clinicId, automationId, parentId, branch, sort++, raw.step_type, JSON.stringify(raw.config ?? {})]
-    );
-    const stepId = r.rows[0].id as string;
-    if (raw.children?.yes?.length) {
-      await copySteps(c, clinicId, automationId, raw.children.yes, stepId, "yes");
-    }
-    if (raw.children?.no?.length) {
-      await copySteps(c, clinicId, automationId, raw.children.no, stepId, "no");
-    }
-  }
-}
-
 /**
- * Gives a clinic the recipe library for its field: the general one everybody
- * gets, plus its own specialty's pack.
+ * Gives a clinic the automations it should have on its first day.
+ *
+ * Only the ones that are switched on from the start — the welcome, and the
+ * three that tell the team about documents nobody has signed. Every other
+ * recipe used to be copied in as well, switched off, which left a new clinic
+ * with a list of a dozen-odd flows it had not made and did not know whether to
+ * trust. They are offered from the template gallery now, where picking one is
+ * a decision rather than an inheritance.
  *
  * Additive and re-runnable. A recipe the clinic already holds a copy of is
  * skipped rather than duplicated, which is what makes this safe to call again
- * when the agency corrects a specialty that was chosen wrongly — the clinic's
- * own edits to the copies it already has are never touched.
+ * when the agency corrects a specialty — the clinic's own edits to the copies
+ * it already has are never touched.
  *
- * Returns how many were newly installed, because "nothing happened" and "eleven
+ * Returns how many were newly installed, because "nothing happened" and "four
  * flows appeared in their workspace" should not look the same to whoever
  * pressed the button.
  */
@@ -97,27 +75,29 @@ export async function installRecipes(
 ): Promise<number> {
   const recipes = await c.query(
     `select * from recipe_templates
-      where active and specialty in ('general', $1)
+      where active and specialty in ('general', $1) and key = any($3::text[])
         and key not in (select recipe_key from automations where clinic_id = $2 and recipe_key is not null)
       order by sort`,
-    [specialty, clinicId]
+    [specialty, clinicId, [...RECIPES_ON_BY_DEFAULT]]
   );
   for (const r of recipes.rows) {
+    const graph = treeToGraph((Array.isArray(r.steps) ? r.steps : []) as RecipeStep[], () => randomUUID());
     const a = await c.query(
-      `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key, recipe_specialty)
-       values ($1, $2, $3, $4, $5, $7, $6, $8) returning id`,
+      `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key,
+                                recipe_specialty, settings, canvas)
+       values ($1, $2, $3, $4, $5, true, $6, $7, $8, '{"trigger": null}') returning id`,
       [
         clinicId,
         r.name_ar || r.name,
         r.description,
         r.trigger_type,
-        JSON.stringify(r.trigger_config ?? {}),
+        JSON.stringify(normalizeTriggerConfig(r.trigger_type, r.trigger_config ?? {})),
         r.key,
-        RECIPES_ON_BY_DEFAULT.has(r.key as string),
         r.specialty ?? "general",
+        JSON.stringify(defaultSettingsFor(r.trigger_type)),
       ]
     );
-    await copySteps(c, clinicId, a.rows[0].id, Array.isArray(r.steps) ? r.steps : [], null, null);
+    await writeFlowGraph(c, clinicId, a.rows[0].id, graph.nodes, graph.edges);
   }
   return recipes.rowCount ?? 0;
 }

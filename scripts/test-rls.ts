@@ -222,6 +222,11 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     )
   ).id;
   await q(`insert into automation_run_logs (clinic_id, run_id, step_id, status) values ($1, $2, $3, 'ok') returning id`, [clinic, run, step]);
+  // The trigger's edge into the step (migration 0079).
+  await q(
+    `insert into automation_edges (clinic_id, automation_id, from_step_id, handle, to_step_id) values ($1, $2, null, 'next', $3) returning id`,
+    [clinic, automation, step]
+  );
   /*
     An override, because the table is sparse by design: a clinic that has never
     reworded a built-in message has no row here at all, and the sweep below

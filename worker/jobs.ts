@@ -1,5 +1,5 @@
 import { withSystem } from "./db";
-import { advanceRun, handleTrigger } from "./automations";
+import { advanceRun, failRun, handleTrigger, resumeOnReply } from "./automations";
 import { respondToConversation } from "./ai/agent";
 import { autoSendServiceDocuments } from "./esign";
 import { offerFreedSlot, closeWaitlistOnBooking } from "./waitlist";
@@ -29,8 +29,18 @@ type JobHandler = (
 ) => Promise<void>;
 
 const handlers: Record<string, JobHandler> = {
-  "automation:advance": async (payload) => {
-    await advanceRun(String(payload.runId));
+  "automation:advance": async (payload, _clinicId, attempt) => {
+    try {
+      await advanceRun(String(payload.runId));
+    } catch (e) {
+      /*
+        Out of retries: say so on the run. Left "running", it would sit in the
+        dedupe index for ever and quietly stop this flow from ever reaching
+        that patient again, with nothing on any screen to say why.
+      */
+      if (attempt.isLastAttempt) await failRun(String(payload.runId), (e as Error).message);
+      throw e;
+    }
   },
   "ai:respond": async (payload) => {
     await respondToConversation(String(payload.conversationId));
@@ -94,7 +104,16 @@ async function runOne(slow: boolean): Promise<boolean> {
     if (job.kind.startsWith("trigger:")) {
       const kind = job.kind.slice("trigger:".length);
       if (!job.clinic_id) throw new Error("trigger job without clinic");
-      await handleTrigger(kind, job.clinic_id, job.payload ?? {});
+
+      /*
+        A patient answering a flow that asked them something ("reply 1 to
+        confirm") is an answer, not a new conversation: it goes to the runs
+        waiting for it, and neither the message flows nor the AI receptionist
+        start on it as well. Without this the AI would reply to a bare "1".
+      */
+      const answered =
+        kind === "inbound_message" ? await resumeOnReply(job.clinic_id, job.payload ?? {}) : 0;
+      if (!answered) await handleTrigger(kind, job.clinic_id, job.payload ?? {});
 
       /*
         The team's own alerts about the appointment — its doctor hearing it was
@@ -166,7 +185,7 @@ async function runOne(slow: boolean): Promise<boolean> {
       }
 
       // An inbound patient message also wakes the AI receptionist.
-      if (kind === "inbound_message" && job.payload?.conversationId) {
+      if (kind === "inbound_message" && job.payload?.conversationId && !answered) {
         await withSystem((c) =>
           c.query(
             `insert into jobs (clinic_id, kind, payload, run_at) values ($1, 'ai:respond', $2, now() + interval '4 seconds')`,

@@ -44,7 +44,17 @@ async function wakeSleepingRuns() {
        limit 200`
     );
     for (const r of due.rows) {
-      await c.query(`update automation_runs set status = 'running', wake_at = null where id = $1`, [r.id]);
+      /*
+        Conditional on still waiting: a reply may have woken this run a moment
+        ago (resumeOnReply), and the clock must not wake it a second time and
+        send it down "no reply" as well.
+      */
+      const woke = await c.query(
+        `update automation_runs set status = 'running', wake_at = null, waiting_for = null
+          where id = $1 and status = 'waiting'`,
+        [r.id]
+      );
+      if (!woke.rowCount) continue;
       await c.query(
         `insert into jobs (clinic_id, kind, payload, dedupe_key) values ($1, 'automation:advance', $2, $3)
          on conflict (dedupe_key) do nothing`,
@@ -75,7 +85,11 @@ async function appointmentReminders() {
       `with reminder as (
          select a.id, a.clinic_id,
                 case when a.trigger_config->>'hours' ~ '^[0-9]+(\\.[0-9]+)?$'
-                     then (a.trigger_config->>'hours')::numeric else 24 end as hours
+                     then (a.trigger_config->>'hours')::numeric else 24 end as hours,
+                case when jsonb_typeof(a.trigger_config->'services') = 'array'
+                     then a.trigger_config->'services' else '[]'::jsonb end as services,
+                case when jsonb_typeof(a.trigger_config->'doctors') = 'array'
+                     then a.trigger_config->'doctors' else '[]'::jsonb end as doctors
            from automations a
            join clinics cl on cl.id = a.clinic_id
           where a.active and a.trigger_type = 'before_appointment' and ${licensed("automations")}
@@ -100,6 +114,9 @@ async function appointmentReminders() {
           and ap.starts_at > now()
           -- Already in the waiting room: "see you in an hour" would be read there.
           and ap.arrived_at is null
+          -- Only the services and doctors this reminder is for, when it names any.
+          and (jsonb_array_length(r.services) = 0 or r.services ? ap.service_id::text)
+          and (jsonb_array_length(r.doctors) = 0 or r.doctors ? ap.doctor_member_id::text)
         limit 500`
     );
     for (const row of due.rows) {
@@ -189,6 +206,84 @@ async function birthdays() {
         }
       }
     }
+  });
+}
+
+/**
+ * "A patient has been waiting N minutes for a reply."
+ *
+ * Every minute, for each such flow: threads whose last message is the
+ * patient's, older than the flow's N minutes but by no more than ten more — a
+ * missed tick is made up, a thread from last week is not news. Only while the
+ * clinic's sending window is open, because a 2am message waiting fifteen
+ * minutes is not something to wake reception about; the morning digest has it.
+ * Once per message: a run already started since that message counts.
+ */
+async function unansweredConversations() {
+  await withSystem(async (c) => {
+    const due = await c.query(
+      `with flow as (
+         select a.id, a.clinic_id, cl.timezone, cl.message_window_start as ws, cl.message_window_end as we,
+                case when a.trigger_config->>'minutes' ~ '^[0-9]+$'
+                     then (a.trigger_config->>'minutes')::int else 15 end as minutes
+           from automations a
+           join clinics cl on cl.id = a.clinic_id
+          where a.active and a.trigger_type = 'conversation_unanswered' and ${licensed("automations")}
+       )
+       select f.id as automation_id, f.clinic_id, cv.id as conversation_id, cv.patient_id
+         from flow f
+         join conversations cv on cv.clinic_id = f.clinic_id
+        where cv.status = 'open' and cv.last_message_direction = 'in'
+          and cv.last_message_at <= now() - (f.minutes * interval '1 minute')
+          and cv.last_message_at >  now() - (f.minutes * interval '1 minute') - interval '10 minutes'
+          and case when f.ws < f.we
+                   then (now() at time zone f.timezone)::time >= f.ws and (now() at time zone f.timezone)::time < f.we
+                   else (now() at time zone f.timezone)::time >= f.ws or (now() at time zone f.timezone)::time < f.we
+              end
+          and not exists (
+            select 1 from automation_runs r
+             where r.automation_id = f.id and r.conversation_id = cv.id and r.started_at >= cv.last_message_at
+          )
+        limit 500`
+    );
+    for (const row of due.rows) {
+      const runId = await startRun(c, row.clinic_id, row.automation_id, {
+        patientId: row.patient_id,
+        conversationId: row.conversation_id,
+      });
+      if (runId) {
+        await c.query(`insert into jobs (clinic_id, kind, payload) values ($1, 'automation:advance', $2)`, [
+          row.clinic_id,
+          JSON.stringify({ runId }),
+        ]);
+      }
+    }
+  });
+}
+
+/**
+ * Runs stuck "running" with nothing left to move them.
+ *
+ * A run is only ever running while an advance job for it is queued or in hand.
+ * One that has sat there for six hours with no such job lost it — a worker
+ * killed at the wrong moment — and would otherwise hold its place in the
+ * dedupe index for ever, quietly keeping this flow from that patient. Marked
+ * failed so the history says so. Hourly.
+ */
+async function sweepStalledRuns() {
+  if (new Date().getUTCMinutes() !== 37) return;
+  await withSystem(async (c) => {
+    const r = await c.query(
+      `update automation_runs r set status = 'failed', error = 'stalled', finished_at = now()
+        where r.status = 'running' and r.updated_at < now() - interval '6 hours'
+          and not exists (
+            select 1 from jobs j
+             where j.kind = 'automation:advance' and j.status in ('pending', 'running')
+               and j.payload->>'runId' = r.id::text
+          )
+        returning r.id`
+    );
+    if (r.rowCount) console.log(`[automations] marked ${r.rowCount} stalled run(s) failed`);
   });
 }
 
@@ -462,6 +557,8 @@ export function startScheduler() {
       recallReminders,
       birthdays,
       unpaidInvoices,
+      unansweredConversations,
+      sweepStalledRuns,
       sweepEinvoices,
       sweepExpiredDocuments,
       sweepUnsignedDocuments,

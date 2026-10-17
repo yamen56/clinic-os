@@ -36,6 +36,7 @@ const SUITES = [
   ["invoices & patients: a title, filing one at a time, muting somebody", "scripts/qa-invoice-title-opt-outs.ts"],
   ["phase 7: automations", "scripts/qa-phase7.ts"],
   ["automations: built-in messages, team alerts, specialty packs", "scripts/qa-automation-coverage.ts"],
+  ["automations: the canvas, replies, early stops, editing while running", "scripts/qa-automations-v2.ts"],
   ["phase 8: AI receptionist", "scripts/qa-phase8.ts"],
   ["phase 9: PWA & notifications", "scripts/qa-phase9.ts"],
   ["notifications: on time, by role, and in the app", "scripts/qa-notifications.ts"],

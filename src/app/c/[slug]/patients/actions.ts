@@ -133,11 +133,18 @@ export async function addTagAction(slug: string, patientId: string, tag: string)
   const clean = tag.trim().replace(/\s+/g, " ").slice(0, 40);
   if (!clean) return;
   await inClinic(access, async (c) => {
-    await c.query(
+    const added = await c.query(
       `update patients set tags = array_append(tags, $2)
        where id = $1 and clinic_id = $3 and not ($2 = any(tags))`,
       [patientId, clean, access.clinicId]
     );
+    /*
+      Tagging a patient is how a clinic tells its flows "this one had an
+      implant", and a dozen of the specialty flows start on exactly that. Only
+      the automations' own tag steps used to announce it, so a tag typed at the
+      desk started nothing at all. Announced only when the tag is new to the file.
+    */
+    if (added.rowCount) await emitTrigger(c, access.clinicId, "tag_added", { patientId, tag: clean });
     /*
       Typing a tag on a patient file is how most of them get created, so the
       catalogue has to adopt it here. Skip this and Settings → Tags shows a
@@ -157,13 +164,13 @@ export async function addTagAction(slug: string, patientId: string, tag: string)
 export async function removeTagAction(slug: string, patientId: string, tag: string) {
   const access = await requireClinic(slug);
   if (!can(access, "patients")) return;
-  await inClinic(access, (c) =>
-    c.query(`update patients set tags = array_remove(tags, $2) where id = $1 and clinic_id = $3`, [
-      patientId,
-      tag,
-      access.clinicId,
-    ])
-  );
+  await inClinic(access, async (c) => {
+    const removed = await c.query(
+      `update patients set tags = array_remove(tags, $2) where id = $1 and clinic_id = $3 and $2 = any(tags)`,
+      [patientId, tag, access.clinicId]
+    );
+    if (removed.rowCount) await emitTrigger(c, access.clinicId, "tag_removed", { patientId, tag });
+  });
   revalidatePath(`/c/${slug}/patients`);
 }
 
