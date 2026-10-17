@@ -40,6 +40,8 @@ export type Appt = {
   items?: PlannedItem[];
   /** What was done at this visit, from the dental chart: one line per treatment, with its steps done there. */
   done?: VisitLine[];
+  /** What the patient still owes on their invoices — sent only to a member who may see invoices, and only when above 0. */
+  balance_due?: number;
 };
 
 /** A treatment on the patient's plan, as a visit carries it. */
@@ -81,6 +83,8 @@ export type CalendarData = {
   blockedDates: string[];
   /** Upcoming in-person visits with no room, in a clinic that has rooms. */
   unroomed: number;
+  /** The clinic's currency, for what a patient owes on the board. */
+  currency?: string;
   serverNow: string;
 };
 

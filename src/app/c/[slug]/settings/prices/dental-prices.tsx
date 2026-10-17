@@ -5,9 +5,9 @@
 
   The dentist said each treatment has its price — each kind of crown its own.
   They are set here, once, and every treatment charted on a patient takes its
-  price from here: the doctor never types one. A treatment can cost a price
-  for the whole of it, a price per visit, or have both; which one a patient
-  pays is chosen on that patient's treatment (Yamen, 2026-10-12). A price is a
+  price from here. A price is for the whole treatment, however many visits it
+  takes: the patient pays it off over the visits (Yamen, 2026-10-17 — the
+  per-visit prices of 2026-10-12 are gone). A price is a
   service: the invoice builder, the booking page and the chart read the same
   list, so the same cleaning never costs two different amounts. A treatment
   the clinic already sells as a service is linked to it rather than priced
@@ -33,7 +33,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, SearchInput } from "@/components/ui/input";
 import { BUILT_IN, PROCEDURE_CATEGORIES, matchesQuery, type Treatment } from "@/lib/charts/dental/catalog";
-import { PER_SESSION_BY_DEFAULT, PRICE_BY, invoiceLineText, variantName, type PriceRow, type PriceUnit } from "@/lib/charts/dental/pricing";
+import { PRICE_BY, invoiceLineText, variantName, type PriceRow } from "@/lib/charts/dental/pricing";
 import { renameDentalPricesAction, saveDentalPriceAction } from "../services/actions";
 
 export type DentalPrice = PriceRow;
@@ -121,10 +121,8 @@ export function DentalPrices({
 
   const treatments = useMemo(() => [...BUILT_IN, ...custom].filter((tr) => tr.kind === "procedure"), [custom]);
   const byKey = useMemo(() => new Map(treatments.map((tr) => [tr.key, tr])), [treatments]);
-  const priceOf = (key: string, variant: string | null, unit: PriceUnit) => prices.find((p) => p.chartKey === key && p.variant === variant && p.unit === unit) ?? null;
+  const priceOf = (key: string, variant: string | null) => prices.find((p) => p.chartKey === key && p.variant === variant) ?? null;
   const pricedKeys = new Set(prices.map((p) => p.chartKey));
-  // How a price typed under "Needs a price" charges: the way the treatment starts.
-  const firstUnit = (key: string): PriceUnit => (PER_SESSION_BY_DEFAULT.has(key) ? "session" : "item");
   // The doctor's name for it and the reception's, whichever the reader is.
   /*
     Treatments by their medical names, in English, whatever the page speaks —
@@ -134,13 +132,13 @@ export function DentalPrices({
   const nameOf = (tr: Treatment) => tr.en;
   const otherName = (tr: Treatment) => [tr.abbr, tr.ar].filter(Boolean).join(" · ");
 
-  const save = async (key: string, variant: string | null, price: number | null, unit: "item" | "session", link?: string): Promise<boolean> => {
-    const r = await saveDentalPriceAction(slug, { key, variant, price, unit, linkServiceId: link ?? null });
+  const save = async (key: string, variant: string | null, price: number | null, link?: string): Promise<boolean> => {
+    const r = await saveDentalPriceAction(slug, { key, variant, price, linkServiceId: link ?? null });
     if (r.error) {
       toast(S.failed, "error");
       return false;
     }
-    setPrices((prev) => [...prev.filter((p) => !(p.chartKey === key && p.variant === variant && p.unit === unit)), ...(r.row ? [r.row] : [])]);
+    setPrices((prev) => [...prev.filter((p) => !(p.chartKey === key && p.variant === variant)), ...(r.row ? [r.row] : [])]);
     if (link) setFree((prev) => prev.filter((s) => s.id !== link));
     if (r.released) setFree((prev) => [...prev, r.released!]);
     if (r.row) {
@@ -233,7 +231,7 @@ export function DentalPrices({
                         {otherName(tr)} · <span className="font-semibold text-st-pending">{S.unpricedN.replace("{n}", String(n.count))}</span>
                       </div>
                     </div>
-                    <PriceBox value={null} label={label} hook={`needs:${n.key}:${n.variant ?? ""}`} onSave={(v) => (v == null ? Promise.resolve(true) : save(n.key, n.variant, v, firstUnit(n.key)))} />
+                    <PriceBox value={null} label={label} hook={`needs:${n.key}:${n.variant ?? ""}`} onSave={(v) => (v == null ? Promise.resolve(true) : save(n.key, n.variant, v))} />
                     <span className="text-[12px] text-ink-500">{currency}</span>
                   </li>
                 );
@@ -288,23 +286,22 @@ export function DentalPrices({
                 {isOpen && (
                   <ul className="divide-y divide-line border-t border-line">
                     {list.map((tr) => {
-                      const base = priceOf(tr.key, null, "item");
-                      const baseVisit = priceOf(tr.key, null, "session");
+                      const base = priceOf(tr.key, null);
                       const field = PRICE_BY[tr.key] ? tr.details?.find((d) => d.key === PRICE_BY[tr.key]) : undefined;
                       const name = nameOf(tr);
                       const use = usage[tr.key];
                       const mine = prices.filter((p) => p.chartKey === tr.key);
                       // The line the patient reads: the treatment's own price if it has one, else its first priced kind.
-                      const shown = base ?? baseVisit ?? mine[0] ?? null;
-                      // One price box: whole or per visit, for the treatment or one kind of it.
-                      const box = (variant: string | null, unit: PriceUnit, label: string, hook: string, placeholder?: string, width?: string) => (
+                      const shown = base ?? mine[0] ?? null;
+                      // One price box, for the treatment or one kind of it.
+                      const box = (variant: string | null, label: string, hook: string, placeholder?: string, width?: string) => (
                         <PriceBox
-                          key={`${variant ?? ""}:${unit}`}
-                          value={priceOf(tr.key, variant, unit)?.price ?? null}
+                          key={variant ?? ""}
+                          value={priceOf(tr.key, variant)?.price ?? null}
                           placeholder={placeholder}
                           label={label}
                           hook={hook}
-                          onSave={(p) => save(tr.key, variant, p, unit)}
+                          onSave={(p) => save(tr.key, variant, p)}
                           className={width}
                         />
                       );
@@ -319,11 +316,10 @@ export function DentalPrices({
                       return (
                         <li key={tr.key} className="grid gap-2 px-3 py-3 sm:px-4" data-price-row={tr.key}>
                           {/*
-                            On a phone: the name across the top, the two prices
-                            side by side at half the width each, then "same as".
-                            From a tablet up the wrapper around the prices
-                            dissolves (`contents`) and all of it shares one line,
-                            as it always did.
+                            On a phone: the name across the top, the price
+                            under it, then "same as". From a tablet up the
+                            wrapper around the price dissolves (`contents`) and
+                            all of it shares one line, as it always did.
                           */}
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                             <div className="min-w-0 basis-full sm:min-w-[12rem] sm:flex-1 sm:basis-auto">
@@ -335,19 +331,12 @@ export function DentalPrices({
                                 {use && use.used > 0 && <span className="tnum">· {S.usedN.replace("{n}", String(use.used))}</span>}
                               </div>
                             </div>
-                            {/* Two prices: the whole treatment, and each visit — either, or both. */}
+                            {/* The price for the whole treatment, however many visits it takes. */}
                             <div className="grid w-full grid-cols-2 gap-3 sm:contents">
-                              <label className="grid min-w-0 gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="item">
-                                {S.whole}
+                              <label className="grid min-w-0 gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="price">
+                                {S.price}
                                 <span className="flex items-center gap-1.5">
-                                  {box(null, "item", `${name} · ${S.whole}`, tr.en, undefined, "w-full flex-1 sm:w-24 sm:flex-none")}
-                                  <span className="text-[12px] font-normal">{currency}</span>
-                                </span>
-                              </label>
-                              <label className="grid min-w-0 gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="session">
-                                {S.perVisit}
-                                <span className="flex items-center gap-1.5">
-                                  {box(null, "session", `${name} · ${S.perVisit}`, `${tr.en} · ${S.perSession}`, undefined, "w-full flex-1 sm:w-24 sm:flex-none")}
+                                  {box(null, `${name} · ${S.price}`, tr.en, undefined, "w-full flex-1 sm:w-24 sm:flex-none")}
                                   <span className="text-[12px] font-normal">{currency}</span>
                                 </span>
                               </label>
@@ -357,7 +346,7 @@ export function DentalPrices({
                                 <Link2 className="h-3.5 w-3.5 shrink-0" />
                                 <select
                                   value=""
-                                  onChange={(e) => e.target.value && void save(tr.key, null, null, "item", e.target.value)}
+                                  onChange={(e) => e.target.value && void save(tr.key, null, null, e.target.value)}
                                   className="select-chevron h-9 min-w-0 flex-1 appearance-none rounded-ctl border border-line bg-surface ps-2.5 pe-8 text-[13px] sm:max-w-[12rem] sm:flex-none"
                                   aria-label={S.sameAs}
                                   data-same-as={tr.key}
@@ -372,22 +361,19 @@ export function DentalPrices({
                               </label>
                             )}
                           </div>
-                          {/* Each kind of it — a material, a canal count — priced both ways too, in a small table. */}
+                          {/* Each kind of it — a material, a canal count — priced too, in a small table. */}
                           {field && (
-                            /* On a phone the kind's name takes what the two boxes leave; it had a 7rem floor that pushed the table off the screen. */
-                            <div className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] items-center gap-x-2 gap-y-1.5 text-[13px] sm:w-fit sm:grid-cols-[minmax(7rem,auto)_6rem_6rem] sm:gap-x-3 sm:ps-4">
+                            /* On a phone the kind's name takes what the box leaves; it had a 7rem floor that pushed the table off the screen. */
+                            <div className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-x-2 gap-y-1.5 text-[13px] sm:w-fit sm:grid-cols-[minmax(7rem,auto)_6rem] sm:gap-x-3 sm:ps-4">
                               <span />
-                              {/* Bottom-aligned: on a phone "Whole treatment" wraps and "Per visit" does not. */}
-                              <span className="self-end text-[11.5px] font-semibold leading-tight text-ink-500">{S.whole}</span>
-                              <span className="self-end text-[11.5px] font-semibold leading-tight text-ink-500">{S.perVisit}</span>
+                              <span className="self-end text-[11.5px] font-semibold leading-tight text-ink-500">{S.price}</span>
                               {field.options.map((o) => (
                                 <div key={o.key} className="contents" data-price-variant={`${tr.key}:${o.key}`}>
                                   <bdi className="min-w-0 break-words text-ink-700">{o.en}</bdi>
-                                  {box(o.key, "item", `${name} · ${o.en}`, `${tr.en} · ${o.en}`, base ? String(base.price) : "—", "w-full")}
-                                  {box(o.key, "session", `${name} · ${o.en} · ${S.perSession}`, `${tr.en} · ${o.en} · ${S.perSession}`, baseVisit ? String(baseVisit.price) : "—", "w-full")}
+                                  {box(o.key, `${name} · ${o.en}`, `${tr.en} · ${o.en}`, base ? String(base.price) : "—", "w-full")}
                                 </div>
                               ))}
-                              <span className="col-span-3 text-[12px] text-ink-400">{S.variantHint}</span>
+                              <span className="col-span-2 text-[12px] text-ink-400">{S.variantHint}</span>
                             </div>
                           )}
                           {/* What the patient will read, and the way to change it. */}
@@ -422,7 +408,7 @@ export function DentalPrices({
               .map((p) => {
                 const v = names[p.serviceId] ?? { name: p.name, nameAr: p.nameAr ?? "" };
                 const kind = variantName(renaming.key, p.variant, "en");
-                const title = [nameOf(renaming), kind, p.unit === "session" ? S.perSession : null].filter(Boolean).join(" · ");
+                const title = [nameOf(renaming), kind].filter(Boolean).join(" · ");
                 return (
                   <div key={p.serviceId} className="grid gap-2 rounded-ctl border border-line p-3">
                     <div className="text-[13px] font-semibold">{title}</div>

@@ -43,6 +43,7 @@ import type { PrescriptionRow } from "@/lib/prescriptions";
 import type { DentalTabData } from "./dental-chart-tab";
 import { DentalProvider, useOptionalDentalStore } from "@/components/charts/dental/store";
 import { ReadyToBill } from "@/components/charts/dental/ready-to-bill";
+import { TakePayment } from "@/components/take-payment";
 import { MedicalCard } from "@/components/charts/dental/medical-card";
 import { VisitWork, useVisitWorkCount } from "@/components/charts/dental/visit-work";
 import { medicalAlerts } from "@/lib/medical-history";
@@ -938,6 +939,12 @@ export function PatientProfile(props: {
                   <div className={`mt-1 text-2xl font-semibold tnum ${props.balanceDue > 0 ? "text-st-pending" : ""}`}>
                     {fmtMoney(props.balanceDue, currency, locale)}
                   </div>
+                  {/* Paid off over the visits: what the patient hands over goes on the oldest invoices first. */}
+                  {props.balanceDue > 0 && (
+                    <div className="mt-3">
+                      <TakePayment slug={slug} patientId={p.id} balance={props.balanceDue} currency={currency} />
+                    </div>
+                  )}
                 </Card>
               )}
               {caps.calendar && (

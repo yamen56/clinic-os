@@ -17,9 +17,9 @@ import { pickPrice, variantOf } from "@/lib/charts/dental/pricing";
   the canal count changes, and goes back to the list's on "Use the list price"
   (fee: null).
 
-  Charged per visit, the price set is each visit's. The doctor at the chair or
-  the reception at the desk may set it, until any of it is on an invoice that
-  stands: after that, the invoice decides.
+  The price is for the whole treatment, however many visits it takes. The
+  doctor at the chair or the reception at the desk may set it, until it is on
+  an invoice that stands: after that, the invoice decides.
 */
 
 const bodySchema = z.object({ fee: z.number().min(0).max(1_000_000).nullable() });
@@ -60,10 +60,9 @@ export async function POST(req: Request, ctx: Params) {
 
     let reason: string;
     if (fee === null) {
-      // Back to the list's price, charged the way it is charged now.
+      // Back to the list's price.
       const list = await loadPrices(c, access.clinicId, cur.treatment_key);
-      const unit = list.find((p) => p.serviceId === cur.service_id)?.unit ?? null;
-      const price = pickPrice(list, cur.treatment_key, variantOf(cur.treatment_key, cur.detail ?? {}), unit);
+      const price = pickPrice(list, cur.treatment_key, variantOf(cur.treatment_key, cur.detail ?? {}));
       await c.query(`update chart_marks set fee = $2, service_id = coalesce($3, service_id), fee_manual = false where id = $1`, [
         markId,
         price?.price ?? null,
@@ -71,7 +70,7 @@ export async function POST(req: Request, ctx: Params) {
       ]);
       reason = `list price ${price?.price ?? "none"}`;
     } else {
-      // The service stays: it names the invoice line and says whether it is per visit.
+      // The service stays: it names the invoice line.
       await c.query(`update chart_marks set fee = $2, fee_manual = true where id = $1`, [markId, fee]);
       reason = `set ${fee}${cur.fee == null ? "" : ` (was ${Number(cur.fee)})`}`;
     }

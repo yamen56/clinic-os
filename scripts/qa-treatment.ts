@@ -13,18 +13,19 @@
  * - a treatment's visits are the patient's appointments: what was done at a
  *   visit shows under it, in the Appointments tab and in the calendar;
  * - prices come from the clinic's list (Settings → Treatment prices, by their
- *   English medical names): shown on the treatment as soon as it is charted,
- *   never typed at the chair; a treatment can cost a price for the whole of
- *   it, a price per visit, or both, and a patient's treatment is charged one
- *   way — switched by the doctor or the desk until it is billed;
+ *   English medical names): shown on the treatment as soon as it is charted;
+ *   one price for the whole treatment, however many visits it takes (per-visit
+ *   prices went on 2026-10-17);
  * - a tooth opens in full: what is to do, what is already there and what was
  *   found, each with its own Add; Smaller puts it beside the chart;
  * - reception bills what was started or done — from the patient's Invoices
  *   tab or Dental chart tab, the Invoices page or a new invoice's "From the
  *   chart" — the lines
  *   linked to the work, never billed twice, given back by a void;
- * - a price per visit bills its visits; a doctor without invoices cannot ask
- *   for the lines to bill.
+ * - a treatment is billed once, whole, and paid off over the visits: Take
+ *   payment puts what the patient hands over on the oldest invoices first, and
+ *   each treatment says how much of it is paid; a doctor without invoices
+ *   cannot ask for the lines to bill.
  *
  * Fixtures: a dental clinic, its doctor (owner, records on the chart), an
  * English receptionist and an Arabic one, an Arabic manager, and the patients
@@ -617,12 +618,12 @@ async function main() {
 
     /* ── Phase 3: the clinic's prices ─────────────────────────────────── */
     console.log("Prices");
-    const servicePrice = async (key: string, variant: string | null, unit: "item" | "session" = "item") =>
+    const servicePrice = async (key: string, variant: string | null) =>
       (
         await q(
           `select id, price::float as price, price_unit, bookable_online, name, name_ar from services
-            where clinic_id = $1 and chart_key = $2 and coalesce(chart_variant, '') = coalesce($3, '') and price_unit = $4 and active`,
-          [clinic.id, key, variant, unit]
+            where clinic_id = $1 and chart_key = $2 and coalesce(chart_variant, '') = coalesce($3, '') and active`,
+          [clinic.id, key, variant]
         )
       )[0];
     await doc.goto(`${BASE}/c/${slug}/settings/services`, { timeout: 120000 });
@@ -636,11 +637,11 @@ async function main() {
       "the price page opens on what was charted with no price: the zirconia crowns and the three-canal root canal"
     );
     // A price box saves when it is left: Enter leaves it.
-    const priceIn = async (box: string, value: string, key: string, variant: string | null, unit: "item" | "session" = "item") => {
+    const priceIn = async (box: string, value: string, key: string, variant: string | null) => {
       const input = doc.locator(box).first();
       await input.fill(value);
       await input.press("Enter");
-      return until(async () => (await servicePrice(key, variant, unit))?.price === Number(value), 20000);
+      return until(async () => (await servicePrice(key, variant))?.price === Number(value), 20000);
     };
     check(await priceIn("[data-price-row='crown'] [data-price-box='Crown']", "100", "crown", null), "a crown is priced at 100");
     check(
@@ -652,18 +653,13 @@ async function main() {
     check(await priceIn("[data-price-variant='crown:emax'] [data-price-box]", "110", "crown", "emax"), "an E-max crown at 110");
     check(await priceIn("[data-price-variant='rct:3'] [data-price-box]", "90", "rct", "3"), "a root canal with three canals at 90");
     check(await until(async () => (await q(`select fee::float as fee from chart_marks where id = $1`, [rct.id]))[0].fee === 90), "the root canal finished before there was a price takes it too");
-    // Two prices for a treatment: for the whole of it, and for each visit.
-    check(await priceIn("[data-price-row='scaling'] [data-price-box='Scaling & polishing · per visit']", "30", "scaling", null, "session"), "a cleaning at 30 a visit — priced per visit only");
+    // One price for the whole treatment, however many visits it takes: no per-visit column.
     check(
-      await priceIn("[data-price-row='rct'] [data-price-box='Root canal treatment · per visit']", "30", "rct", null, "session"),
-      "and a root canal can cost 30 a visit beside its price for the whole treatment"
+      (await doc.locator("[data-price-col='session']").count()) === 0 && (await doc.locator("[data-price-row='rct'] [data-price-col='price']").count()) === 1,
+      "each treatment has one price — for the whole of it — and no price per visit"
     );
-    const rctVisit = await servicePrice("rct", null, "session");
-    check(
-      rctVisit?.name === "Root canal treatment · per visit" && rctVisit.name_ar === "علاج عصب · لكل زيارة" && (await servicePrice("rct", "3"))?.price === 90,
-      "the per-visit price is a service of its own, named so on the invoice in both languages; the whole treatment's stays",
-      JSON.stringify(rctVisit)
-    );
+    check(await priceIn("[data-price-row='scaling'] [data-price-box='Scaling & polishing']", "30", "scaling", null), "a cleaning at 30, however many visits it takes");
+    check((await servicePrice("scaling", null))?.price_unit === "item", "and the price is the whole treatment's");
     check((await q(`select fee::float as fee from chart_marks where id = $1`, [rct.id]))[0].fee === 90, "the root canal already charted keeps the price it took");
     const zirconia = await servicePrice("crown", "zirconia");
     check(
@@ -741,10 +737,7 @@ async function main() {
     await card.getByRole("button", { name: "3 canals" }).click();
     check(await until(async () => (await markOf("26", "rct"))?.fee === 90), "a root canal on 26 with three canals is priced 90");
     const rct26 = await markOf("26", "rct");
-    check(
-      await until(async () => (await card.locator("[data-charge='item']").getAttribute("aria-checked")) === "true") && (await card.locator("[data-charge='session']").count()) === 1,
-      "priced both ways on the list, it is charged for the whole treatment, per visit one tap away"
-    );
+    check((await card.locator("[data-charge-by], [data-charge]").count()) === 0, "charged for the whole treatment, with nothing to switch per visit");
     const billableLines = async () =>
       ((await (await desk.request.get(`${BASE}/api/c/${slug}/patients/${p3.id}/dental/billable`)).json()) as { lines: { markId: string; qty: number; unitPrice: number }[] }).lines;
     check((await billableLines()).length === 0, "nothing is ready to bill before it is started");
@@ -891,60 +884,89 @@ async function main() {
       "billed, the crown is offered nowhere again — not by Bill, not From the chart"
     );
 
-    /* ── Charged per visit ────────────────────────────────────────────── */
-    console.log("Charged per visit");
+    /* ── Paid off over the visits ─────────────────────────────────────── */
+    console.log("Paid off over the visits");
     await openFile(doc, fileUrl(p3.id));
     await planOn("11", "scaling", "scaling");
     const sc = await markOf("mouth", "scaling");
-    check(sc?.fee === 30 && sc.service_id === (await servicePrice("scaling", null, "session"))?.id, "a cleaning, priced only per visit, is charged per visit: 30", JSON.stringify(sc));
+    check(sc?.fee === 30 && sc.service_id === (await servicePrice("scaling", null))?.id, "a cleaning takes the list's price for the whole of it: 30", JSON.stringify(sc));
     await card.locator("[data-step-done='upper']").click();
     await settle(doc);
     await q(`update chart_mark_steps set done_at = now() - interval '2 days' where mark_id = $1 and step = 'upper'`, [sc.id]);
-    // A root canal: with two canals the list prices it only per visit; with three, the whole treatment too.
-    await planOn("46", "rct", "root canal");
-    const rct46 = await markOf("46", "rct");
-    check(rct46?.fee === 30 && rct46.service_id === rctVisit?.id, "a two-canal root canal, priced only per visit, starts at 30 a visit", JSON.stringify(rct46));
-    await card.getByRole("button", { name: "3 canals" }).click();
-    check(await until(async () => (await markOf("46", "rct"))?.fee === 90), "three canals cost the whole treatment's 90, as a new one would");
-    await card.locator("[data-charge='session']").click();
-    check(
-      await until(async () => {
-        const r = await markOf("46", "rct");
-        return r?.fee === 30 && r.service_id === rctVisit?.id;
-      }),
-      "the doctor charges this patient per visit instead, at one tap: 30 a visit"
-    );
-    check(await until(async () => (await card.locator("[data-price-line]").innerText()).includes("a visit")), "and its price says so");
-    await card.locator("[data-step-done='access']").click();
-    await settle(doc);
-    await q(`update chart_mark_steps set done_at = now() - interval '2 days' where mark_id = $1 and step = 'access'`, [rct46.id]);
     await openFile(doc, fileUrl(p3.id));
     await openCard(doc, sc.id);
     if (!(await card.locator("[data-step-form='lower']").count())) await card.locator("[data-step='lower'] button").first().click();
     await card.locator("[data-step-done='lower']").click();
     await settle(doc);
-    await openCard(doc, rct46.id);
-    await card.locator("[data-step-form='length']").waitFor({ timeout: 10000 });
-    await card.locator("[data-step-form='length']").getByLabel("MB Length mm").fill("20");
-    await card.locator("[data-step-done='length']").click();
-    await settle(doc);
-    const perVisit = await billableLines();
-    const scLine = perVisit.find((l) => l.markId === sc.id);
-    const rctLine = perVisit.find((l) => l.markId === rct46.id);
-    check(scLine?.qty === 2 && scLine.unitPrice === 30, "the cleaning, done over two visits, is billed as two visits at 30", JSON.stringify(perVisit));
-    check(rctLine?.qty === 2 && rctLine.unitPrice === 30, "the root canal charged per visit is billed as its two visits at 30");
-    check(!perVisit.some((l) => l.markId === crown16.id || l.markId === rct26.id), "and the billed crown and root canal are not offered again");
-    // Billed, how it is charged stays as it is — on the card and at the server.
+    const toBill = await billableLines();
+    const scLine = toBill.find((l) => l.markId === sc.id);
+    check(scLine?.qty === 1 && scLine.unitPrice === 30, "done over two visits, it is billed once, whole: one line at 30", JSON.stringify(toBill));
+    check(!toBill.some((l) => l.markId === crown16.id || l.markId === rct26.id), "and the billed crown and root canal are not offered again");
     await openCard(doc, rct26.id);
+    check((await card.locator("[data-billed]").getAttribute("data-billed")) === "yes", "a treatment already billed says so on its card");
+
+    // The crown and root canal's invoice — 200, not sent yet — is paid off at this visit and the next.
+    const owedOn = async () => desk.locator(`[data-take-payment='${p3.id}']`).getAttribute("data-owed");
+    const takePayment = async (amount: string) => {
+      await desk.locator(`[data-take-payment='${p3.id}'] button`).click();
+      const form = desk.locator("[data-take-payment-form]");
+      await form.waitFor({ timeout: 10000 });
+      await form.locator("[data-take-payment-amount]").fill(amount);
+      await form.locator("[data-take-payment-save]").click();
+      await form.waitFor({ state: "detached", timeout: 20000 });
+    };
+    const paidOn = async (id: string) => (await q(`select coalesce(sum(amount), 0)::float as n from payments where invoice_id = $1`, [id]))[0].n;
+    await desk.goto(fileUrl(p3.id, "overview"), { timeout: 120000 });
+    await desk.waitForSelector(`[data-take-payment='${p3.id}']`, { timeout: 60000 });
+    check((await owedOn()) === "200", "the patient file says 200 is owed: an invoice not sent yet still counts", String(await owedOn()));
+    await desk.locator(`[data-take-payment='${p3.id}'] button`).click();
+    const payForm = desk.locator("[data-take-payment-form]");
+    await payForm.waitFor({ timeout: 10000 });
+    check((await payForm.locator("[data-take-payment-amount]").inputValue()) === "200", "Take payment starts at all of it");
+    await payForm.locator("[data-take-payment-amount]").fill("250");
+    check(await payForm.locator("[data-take-payment-save]").isDisabled(), "and will not take more than is owed");
+    await desk.keyboard.press("Escape");
+    await payForm.waitFor({ state: "detached", timeout: 10000 });
+    await takePayment("50");
+    check(await until(async () => (await paidOn(invoice2)) === 50), "the patient pays 50 of it at this visit: recorded on that invoice");
+    check(await until(async () => (await owedOn()) === "150"), "and what they owe drops to 150 at once");
+    await desk.screenshot({ path: join(SHOTS, "take-payment.png"), fullPage: true });
+
+    await openFile(desk, fileUrl(p3.id));
+    await openCard(desk, crown16.id);
+    const paidLine = await desk.locator(`[data-paid-line='${crown16.id}']`).innerText();
     check(
-      (await card.locator("[data-charge='session']").isDisabled()) && (await card.locator("[data-billed]").getAttribute("data-billed")) === "yes",
-      "a treatment already billed cannot be switched to per visit, and its card says it is billed"
+      paidLine.includes("Paid") && paidLine.includes("27.5") && paidLine.includes("82.5"),
+      "the crown says how much of it is paid: 27.50 of its 110, 82.50 left — its share of what came in",
+      paidLine
     );
-    const refused = await doc.request.post(`${BASE}/api/c/${slug}/patients/${p3.id}/dental/marks/${rct26.id}/charge`, { data: { unit: "session" } });
-    check(refused.status() === 409 && (await refused.json()).error === "billed", "and the server refuses it too");
-    // The desk chooses too: reception puts the other root canal back on the whole treatment.
-    const deskSwitch = await desk.request.post(`${BASE}/api/c/${slug}/patients/${p3.id}/dental/marks/${rct46.id}/charge`, { data: { unit: "item" } });
-    check(deskSwitch.status() === 200 && (await markOf("46", "rct"))?.fee === 90, "the reception may choose it too: back to the whole treatment, 90");
+
+    // The cleaning is billed too; at the next visit the patient pays 160, and the older invoice is settled first.
+    await desk.goto(`${BASE}/c/${slug}/invoices/new?patient=${p3.id}&marks=${sc.id}`, { timeout: 120000 });
+    check(await until(async () => (await lineValues(desk)).some((v) => v.includes("Scaling")), 60000), "the cleaning is billed, whole");
+    await desk.getByRole("button", { name: "Create", exact: true }).click();
+    await desk.waitForURL(/\/invoices\/[0-9a-f-]{36}$/, { timeout: 60000 });
+    const invoice3 = new URL(desk.url()).pathname.split("/").pop()!;
+    await desk.goto(fileUrl(p3.id, "overview"), { timeout: 120000 });
+    await desk.waitForSelector(`[data-take-payment='${p3.id}']`, { timeout: 60000 });
+    check((await owedOn()) === "180", "now 180 is owed, across the two invoices", String(await owedOn()));
+    await takePayment("160");
+    check(
+      await until(async () => (await paidOn(invoice2)) === 200 && (await paidOn(invoice3)) === 10),
+      "160 settles the older invoice's last 150, and the other 10 goes on the cleaning's"
+    );
+    const statuses = await q(`select id, status from invoices where id = any($1::uuid[])`, [[invoice2, invoice3]]);
+    check(
+      statuses.find((s) => s.id === invoice2)?.status === "paid" && statuses.find((s) => s.id === invoice3)?.status === "partially_paid",
+      "the first is paid, the second part-paid",
+      JSON.stringify(statuses)
+    );
+    await openFile(desk, fileUrl(p3.id));
+    await openCard(desk, crown16.id);
+    check((await desk.locator(`[data-paid-line='${crown16.id}']`).innerText()).includes("Paid in full"), "the crown is paid in full");
+    await openCard(desk, sc.id);
+    const scPaid = await desk.locator(`[data-paid-line='${sc.id}']`).innerText();
+    check(scPaid.includes("Paid") && scPaid.includes("10") && scPaid.includes("20"), "and the cleaning has 10 of its 30 paid, 20 left", scPaid);
 
     /* ── Notes from everywhere ───────────────────────────────────────── */
     console.log("Notes from everywhere");

@@ -294,18 +294,14 @@ const dentalPriceSchema = z.object({
   key: z.string().min(1).max(64),
   variant: z.string().max(24).nullable(),
   price: z.number().min(0).max(1_000_000).nullable(),
-  /** Which of the treatment's two prices: for the whole treatment, or per visit. */
-  unit: z.enum(["item", "session"]),
   /** Price it as one of the clinic's own services instead of making a new one. */
   linkServiceId: z.string().uuid().nullable().default(null),
 });
 
-/** A per-visit price's name on the invoice, after the treatment's: "Root canal treatment (3 canals) · per visit". */
-const PER_VISIT = { en: "per visit", ar: "لكل زيارة" };
-
 /**
- * A dental treatment's price, as a service — its price for the whole
- * treatment, or per visit: a treatment may have both, each its own service.
+ * A dental treatment's price, as a service: what the whole treatment costs,
+ * however many visits it takes. (The per-visit prices of 0076 were retired by
+ * 0080; `price_unit` stays 'item' for every price written here.)
  *
  * Typing a price makes the treatment's service — named from the catalog, in
  * both languages, not offered on the booking page — or updates it. Linking
@@ -336,8 +332,8 @@ export async function saveDentalPriceAction(
     const cur = (
       await c.query(
         `select id, chart_owned, name, name_ar, price from services
-          where clinic_id = $1 and chart_key = $2 and coalesce(chart_variant, '') = coalesce($3, '') and price_unit = $4`,
-        [access.clinicId, d.key, d.variant, d.unit]
+          where clinic_id = $1 and chart_key = $2 and coalesce(chart_variant, '') = coalesce($3, '') and price_unit = 'item'`,
+        [access.clinicId, d.key, d.variant]
       )
     ).rows[0];
     const release = async () => {
@@ -356,18 +352,17 @@ export async function saveDentalPriceAction(
       const s = (await c.query(`select id, price, name, name_ar from services where id = $1 and clinic_id = $2 and chart_key is null`, [d.linkServiceId, access.clinicId])).rows[0];
       if (!s) return { error: "invalid" };
       released = await release();
-      await c.query(`update services set chart_key = $2, chart_variant = $3, price_unit = $4, chart_owned = false, active = true where id = $1`, [
+      await c.query(`update services set chart_key = $2, chart_variant = $3, price_unit = 'item', chart_owned = false, active = true where id = $1`, [
         s.id,
         d.key,
         d.variant,
-        d.unit,
       ]);
-      row = { serviceId: s.id, chartKey: d.key, variant: d.variant, price: Number(s.price), unit: d.unit, name: s.name, nameAr: s.name_ar ?? null };
+      row = { serviceId: s.id, chartKey: d.key, variant: d.variant, price: Number(s.price), name: s.name, nameAr: s.name_ar ?? null };
     } else if (d.price === null) {
       released = await release();
     } else if (cur) {
-      await c.query(`update services set price = $2, price_unit = $3, active = true where id = $1`, [cur.id, d.price, d.unit]);
-      row = { serviceId: cur.id, chartKey: d.key, variant: d.variant, price: d.price, unit: d.unit, name: cur.name, nameAr: cur.name_ar ?? null };
+      await c.query(`update services set price = $2, active = true where id = $1`, [cur.id, d.price]);
+      row = { serviceId: cur.id, chartKey: d.key, variant: d.variant, price: d.price, name: cur.name, nameAr: cur.name_ar ?? null };
     } else {
       // Filed with the clinic's dental section when it keeps one; otherwise unfiled, like any new service.
       const section =
@@ -379,15 +374,14 @@ export async function saveDentalPriceAction(
             [access.clinicId]
           )
         ).rows[0]?.id ?? null;
-      const each = d.unit === "session";
       const names = {
-        en: `${withVariant(tr.en, option?.en ?? null)}${each ? ` · ${PER_VISIT.en}` : ""}`.slice(0, 80),
-        ar: `${withVariant(tr.ar, option?.ar ?? null)}${each ? ` · ${PER_VISIT.ar}` : ""}`.slice(0, 80),
+        en: withVariant(tr.en, option?.en ?? null).slice(0, 80),
+        ar: withVariant(tr.ar, option?.ar ?? null).slice(0, 80),
       };
       const ins = await c.query(
         `insert into services (clinic_id, name, name_ar, duration_min, price, bookable_online, section_id,
                                chart_key, chart_variant, price_unit, chart_owned, sort)
-         values ($1, $2, $3, 30, $4, false, $5, $6, $7, $8, true,
+         values ($1, $2, $3, 30, $4, false, $5, $6, $7, 'item', true,
                  (select coalesce(max(sort), 0) + 1 from services where clinic_id = $1))
          returning id`,
         [
@@ -398,16 +392,15 @@ export async function saveDentalPriceAction(
           section,
           d.key,
           d.variant,
-          d.unit,
         ]
       );
-      row = { serviceId: ins.rows[0].id, chartKey: d.key, variant: d.variant, price: d.price, unit: d.unit, name: names.en, nameAr: names.ar };
+      row = { serviceId: ins.rows[0].id, chartKey: d.key, variant: d.variant, price: d.price, name: names.en, nameAr: names.ar };
     }
     /*
       The treatments already charted with no price take one now: priced once,
-      the ones waiting are priced too — each the way a new one would be (the
-      whole treatment when the list prices it, its own kind's price before the
-      treatment's). Only what is still the clinic's to bill — planned, or done
+      the ones waiting are priced too — each the way a new one would be (its
+      own kind's price before the treatment's). Only what is still the clinic's
+      to bill — planned, or done
       since billing from the chart began, on no invoice, its price never set
       by hand — and never a part of a full arch, which is priced as the whole.
     */
@@ -429,7 +422,7 @@ export async function saveDentalPriceAction(
       ).rows as { id: string; detail: Record<string, string> | null }[];
       const byPrice = new Map<string, { price: number; ids: string[] }>();
       for (const m of waiting) {
-        const p = pickPrice(list, d.key, variantOf(d.key, m.detail ?? {}), null);
+        const p = pickPrice(list, d.key, variantOf(d.key, m.detail ?? {}));
         if (!p) continue;
         const g = byPrice.get(p.serviceId) ?? { price: p.price, ids: [] };
         g.ids.push(m.id);
@@ -454,7 +447,7 @@ export async function saveDentalPriceAction(
       action: "service.dental_price",
       entity: "service",
       entityId: row?.serviceId ?? cur?.id ?? "",
-      detail: { key: d.key, variant: d.variant, price: d.price, unit: d.unit, linked: !!d.linkServiceId, priced },
+      detail: { key: d.key, variant: d.variant, price: d.price, linked: !!d.linkServiceId, priced },
     });
     revalidatePath(`/c/${slug}/settings/prices`);
     return { row, released, priced };

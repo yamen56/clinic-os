@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireClinic, can } from "@/lib/auth";
+import { requireClinic, can, type ClinicAccess } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { invoiceScopeSql, mayTouchInvoice, ownInvoicesOnly } from "@/lib/invoice-scope";
@@ -100,28 +100,27 @@ export async function createInvoiceAction(
     if (!patient) return { error: "patient_not_found" };
 
     /*
-      Chart work billed from the plan: this patient's own, still standing, and
-      — when it is charged once — not billed already, nor twice on this one.
-      Checked before anything is written, so a refused invoice leaves nothing
-      half-made. The rows are locked while this invoice is made: two desks
-      billing the same crown at once wait for each other, and the second finds
-      it billed.
+      Chart work billed from the plan: this patient's own, still standing, not
+      billed already, nor twice on this one — a treatment is billed once, whole,
+      and paid off over the visits. Checked before anything is written, so a
+      refused invoice leaves nothing half-made. The rows are locked while this
+      invoice is made: two desks billing the same crown at once wait for each
+      other, and the second finds it billed.
     */
     const marked = [...new Set(d.items.map((it) => it.markId).filter((x): x is string => !!x))];
     if (marked.length) {
       const own = await c.query(
-        `select m.id, s.price_unit from chart_marks m left join services s on s.id = m.service_id
+        `select m.id from chart_marks m
           where m.id = any($1::uuid[]) and m.clinic_id = $2 and m.patient_id = $3 and m.voided_at is null
           for update of m`,
         [marked, access.clinicId, d.patientId]
       );
       if (own.rowCount !== marked.length) return { error: "invalid_mark" };
-      const perVisit = new Set(own.rows.filter((r) => r.price_unit === "session").map((r) => r.id as string));
       for (const id of marked) {
-        if (!perVisit.has(id) && d.items.filter((it) => it.markId === id).length > 1) return { error: "already_billed" };
+        if (d.items.filter((it) => it.markId === id).length > 1) return { error: "already_billed" };
       }
       for (const b of await loadBilled(c, access.clinicId, marked)) {
-        if (b.qty > 0 && !perVisit.has(b.markId)) return { error: "already_billed" };
+        if (b.qty > 0) return { error: "already_billed" };
       }
     }
 
@@ -370,13 +369,57 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
   });
 }
 
+const PAYMENT_METHODS = ["cash", "cliq", "card", "transfer"];
+
+/**
+ * One payment landing on one invoice, and all that follows from it. Taking
+ * money for one invoice and for a patient's whole balance do exactly the same
+ * thing per invoice, so both come through here.
+ */
+async function applyPayment(
+  c: PoolClient,
+  access: ClinicAccess,
+  inv: { id: string; patient_id: string },
+  p: { amount: number; method: string; reference: string; paidAt: string | null }
+): Promise<void> {
+  await c.query(
+    `insert into payments (clinic_id, invoice_id, patient_id, amount, method, reference, paid_at, recorded_by)
+     values ($1, $2, $3, $4, $5, $6, coalesce($7::timestamptz, now()), $8)`,
+    [access.clinicId, inv.id, inv.patient_id, p.amount, p.method, p.reference.slice(0, 100), p.paidAt, access.session.user.id]
+  );
+  await refreshInvoiceStatus(c, inv.id);
+  /*
+    The moment the sale is real, and the moment cash-versus-receivable becomes
+    knowable — which is why it is the primary trigger. It queues a job and
+    returns: whether ISTD is reachable has no bearing on whether this clinic
+    can take money from the person in front of them.
+  */
+  await enqueueEinvoiceSubmit(c, access.clinicId, inv.id, "paid");
+  const after = (await c.query(`select status from invoices where id = $1`, [inv.id])).rows[0];
+  await emitTrigger(c, access.clinicId, "payment_received", {
+    invoiceId: inv.id,
+    patientId: inv.patient_id,
+    amount: p.amount,
+    fullyPaid: after?.status === "paid",
+  });
+  await audit(c, {
+    clinicId: access.clinicId,
+    userId: access.session.user.id,
+    impersonatedBy: access.session.impersonatedBy,
+    action: "payment.record",
+    entity: "invoice",
+    entityId: inv.id,
+    detail: { amount: p.amount, method: p.method },
+  });
+}
+
 export async function recordPaymentAction(
   slug: string,
   data: { invoiceId: string; amount: number; method: string; reference: string; paidAt?: string }
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "invoices")) return { error: "forbidden" };
-  if (!["cash", "cliq", "card", "transfer"].includes(data.method)) return { error: "invalid" };
+  if (!PAYMENT_METHODS.includes(data.method)) return { error: "invalid" };
   const amount = round2(Number(data.amount));
   if (!(amount > 0)) return { error: "invalid" };
 
@@ -392,40 +435,68 @@ export async function recordPaymentAction(
     if (!inv || inv.status === "void") return { error: "not_found" };
     if (amount > Number(inv.total) - Number(inv.amount_paid) + 0.001) return { error: "overpay" };
 
-    await c.query(
-      `insert into payments (clinic_id, invoice_id, patient_id, amount, method, reference, paid_at, recorded_by)
-       values ($1, $2, $3, $4, $5, $6, coalesce($7::timestamptz, now()), $8)`,
-      [
-        access.clinicId, data.invoiceId, inv.patient_id, amount, data.method,
-        data.reference.slice(0, 100), data.paidAt ?? null, access.session.user.id,
-      ]
-    );
-    await refreshInvoiceStatus(c, data.invoiceId);
-    /*
-      The moment the sale is real, and the moment cash-versus-receivable becomes
-      knowable — which is why it is the primary trigger. It queues a job and
-      returns: whether ISTD is reachable has no bearing on whether this clinic
-      can take money from the person in front of them.
-    */
-    await enqueueEinvoiceSubmit(c, access.clinicId, data.invoiceId, "paid");
-    const after = (await c.query(`select status from invoices where id = $1`, [data.invoiceId])).rows[0];
-    await emitTrigger(c, access.clinicId, "payment_received", {
-      invoiceId: data.invoiceId,
-      patientId: inv.patient_id,
-      amount,
-      fullyPaid: after?.status === "paid",
-    });
-    await audit(c, {
-      clinicId: access.clinicId,
-      userId: access.session.user.id,
-      impersonatedBy: access.session.impersonatedBy,
-      action: "payment.record",
-      entity: "invoice",
-      entityId: data.invoiceId,
-      detail: { amount, method: data.method },
-    });
+    await applyPayment(c, access, inv, { amount, method: data.method, reference: data.reference, paidAt: data.paidAt ?? null });
     revalidatePath(`/c/${slug}/invoices`);
     return {};
+  });
+}
+
+/**
+ * A payment from the patient, toward whatever they owe.
+ *
+ * A treatment is billed once, whole, and paid off over the visits (Yamen,
+ * 2026-10-17: "the patient can pay on multiple visits from the whole treatment
+ * price"). At each visit the desk takes what the patient hands over, without
+ * hunting for the invoice it belongs to: it goes on the patient's open
+ * invoices, the oldest first, as one payment row per invoice it reaches —
+ * every payment belongs to an invoice, and each is recorded exactly as a
+ * payment on that invoice would be. More than they owe is refused before
+ * anything is written.
+ *
+ * Only the invoices this member may act on: a doctor who sees their own
+ * invoices takes payments toward those alone.
+ */
+export async function recordPatientPaymentAction(
+  slug: string,
+  data: { patientId: string; amount: number; method: string; reference: string }
+): Promise<{ error?: string; paid?: { invoiceId: string; number: string; amount: number }[] }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices")) return { error: "forbidden" };
+  if (!isUuid(data.patientId)) return { error: "not_found" };
+  if (!PAYMENT_METHODS.includes(data.method)) return { error: "invalid" };
+  const amount = round2(Number(data.amount));
+  if (!(amount > 0)) return { error: "invalid" };
+
+  return inClinic(access, async (c) => {
+    const scope = invoiceScopeSql(access, "i", 3);
+    const open = (
+      await c.query(
+        `select i.id, i.number, i.patient_id, i.total, i.amount_paid from invoices i
+          where i.clinic_id = $1 and i.patient_id = $2
+            and i.status in ('draft', 'sent', 'partially_paid') and i.credit_note_of is null
+            and i.total > i.amount_paid${scope.sql}
+          order by i.issue_date, i.created_at, i.id
+          for update of i`,
+        [access.clinicId, data.patientId, ...scope.params]
+      )
+    ).rows as { id: string; number: string; patient_id: string; total: string; amount_paid: string }[];
+    const owed = round2(open.reduce((s, i) => s + Number(i.total) - Number(i.amount_paid), 0));
+    if (!open.length) return { error: "nothing_due" };
+    if (amount > owed + 0.001) return { error: "overpay" };
+
+    const paid: { invoiceId: string; number: string; amount: number }[] = [];
+    let left = amount;
+    for (const inv of open) {
+      if (left <= 0) break;
+      const slice = Math.min(left, round2(Number(inv.total) - Number(inv.amount_paid)));
+      if (slice <= 0) continue;
+      await applyPayment(c, access, inv, { amount: slice, method: data.method, reference: data.reference, paidAt: null });
+      paid.push({ invoiceId: inv.id, number: inv.number, amount: slice });
+      left = round2(left - slice);
+    }
+    revalidatePath(`/c/${slug}/invoices`);
+    revalidatePath(`/c/${slug}/patients/${data.patientId}`);
+    return { paid };
   });
 }
 

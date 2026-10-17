@@ -191,8 +191,14 @@ export default async function PatientProfilePage({
         ),
         caps.invoices
           ? c.query(
+              /*
+                What the patient still owes, drafts included: an invoice not
+                sent yet is still the whole price of a treatment being paid
+                off over the visits (recordPatientPaymentAction pays it too).
+              */
               `select coalesce(sum(i.total - i.amount_paid), 0) as due from invoices i
-               where i.patient_id = $1 and i.clinic_id = $2 and i.status in ('sent', 'partially_paid')${invScope.sql}`,
+               where i.patient_id = $1 and i.clinic_id = $2 and i.status in ('draft', 'sent', 'partially_paid')
+                 and i.credit_note_of is null${invScope.sql}`,
               [id, access.clinicId, ...invScope.params]
             )
           : { rows: [{ due: 0 }] },

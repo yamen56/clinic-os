@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
+import { can } from "@/lib/auth";
+import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { leadIdOf } from "@/lib/charts/dental/full-arch";
 import { visitLines } from "@/lib/charts/dental/treatment";
 
@@ -138,6 +140,27 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       appointments = appointments.map((a) => (a.done ? { ...a, done: visitLines(a.done as WorkRow[], marks, (g) => leads.get(g) ?? null) } : a));
     }
 
+    /*
+      What each patient still owes, for whoever takes money at the desk: a
+      treatment is billed whole and paid off over the visits, so the visit is
+      when it is asked for. Only for a member who may see invoices, and only
+      the invoices they may see — a figure nobody may see is not computed.
+    */
+    if (can(access, "invoices") && appointments.length) {
+      const scope = invoiceScopeSql(access, "i", 3);
+      const owed = await c.query(
+        `select i.patient_id, sum(i.total - i.amount_paid)::float as due
+           from invoices i
+          where i.clinic_id = $1 and i.patient_id = any($2::uuid[])
+            and i.status in ('draft', 'sent', 'partially_paid') and i.credit_note_of is null${scope.sql}
+          group by i.patient_id
+         having sum(i.total - i.amount_paid) > 0`,
+        [access.clinicId, [...new Set(appointments.map((a) => a.patient_id as string))], ...scope.params]
+      );
+      const due = new Map(owed.rows.map((r) => [r.patient_id as string, Number(r.due)]));
+      appointments = appointments.map((a) => (due.has(a.patient_id) ? { ...a, balance_due: due.get(a.patient_id) } : a));
+    }
+
     return {
       appointments,
       doctors: doctors.rows,
@@ -148,6 +171,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       tz: clinic.rows[0].timezone,
       rooms: clinic.rows[0].rooms,
       unroomed: clinic.rows[0].unroomed,
+      currency: access.clinic.currency,
       /* The board's clock: elapsed and waiting times are measured against the
          server, not a laptop that is four minutes fast. */
       serverNow: new Date().toISOString(),

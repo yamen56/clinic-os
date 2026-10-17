@@ -257,6 +257,7 @@ export function FlowBoard({
                         rooms={rooms}
                         occupants={occupants}
                         caps={caps}
+                        currency={data?.currency ?? ""}
                         busy={busyIds.has(a.id)}
                         onStep={(step, roomId) => onStep(a, step, roomId)}
                         onOpen={() => onOpen(a)}
@@ -295,6 +296,7 @@ export function FlowBoard({
                       rooms={rooms}
                       occupants={occupants}
                       caps={caps}
+                      currency={data?.currency ?? ""}
                       busy={busyIds.has(a.id)}
                       onStep={(step, roomId) => onStep(a, step, roomId)}
                       onOpen={() => onOpen(a)}

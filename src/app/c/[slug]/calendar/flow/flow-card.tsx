@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { DateTime } from "luxon";
 import { useI18n } from "@/lib/i18n/client";
+import { fmtMoney } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
+import { TakePayment } from "@/components/take-payment";
 import { minutesBetween, type FlowStage } from "@/lib/patient-flow";
 import type { FlowStep } from "../flow-actions";
 import type { Appt, PageCaps, Room } from "../types";
@@ -45,6 +48,7 @@ export function FlowCard({
   rooms,
   occupants,
   caps,
+  currency,
   busy,
   onStep,
   onOpen,
@@ -59,6 +63,7 @@ export function FlowCard({
   /** Who is in each room right now. */
   occupants: Map<string, { id: string; name: string }>;
   caps: PageCaps;
+  currency: string;
   /** A step for this card is on its way. */
   busy: boolean;
   onStep: (step: FlowStep, roomId?: string | null) => void;
@@ -66,6 +71,9 @@ export function FlowCard({
   onBookNext: () => void;
 }) {
   const { t, locale } = useI18n();
+  // Taken here since the board last read: payments do not move the board, so it is counted off at once.
+  const [paidHere, setPaidHere] = useState(0);
+  useEffect(() => setPaidHere(0), [appt.balance_due]);
   const s = DateTime.fromISO(appt.starts_at).setZone(tz);
   const e = DateTime.fromISO(appt.ends_at).setZone(tz);
   const service = (locale === "ar" ? appt.service_name_ar : null) || appt.service_name;
@@ -99,6 +107,9 @@ export function FlowCard({
   else if (appt.source === "booking_link") tags.push({ key: "online", text: t.flow.bookedOnline, status: "neutral" });
   else if (appt.source === "ai_agent") tags.push({ key: "ai", text: t.flow.bookedByAi, status: "neutral" });
   if (appt.status === "pending_approval") tags.push({ key: "pending", text: t.flow.awaitingApproval, status: "pending" });
+  // A treatment is paid off over the visits: the desk sees what is still owed when the patient walks in.
+  const owed = caps.invoices && currency ? Math.max(0, Math.round(((appt.balance_due ?? 0) - paidHere) * 100) / 100) : 0;
+  if (owed > 0) tags.push({ key: "owes", text: t.invoices.owes.replace("{amount}", fmtMoney(owed, currency, locale)), status: "pending" });
 
   const canUndo =
     stage === "waiting" || stage === "in_room" || ((stage === "finished" || stage === "no_show") && !!appt.flow_prev_status);
@@ -248,6 +259,15 @@ export function FlowCard({
                 <ReceiptText className="h-3.5 w-3.5" />
                 {t.flow.createInvoice}
               </a>
+            )}
+            {owed > 0 && (
+              <TakePayment
+                slug={slug}
+                patientId={appt.patient_id}
+                balance={appt.balance_due ?? 0}
+                currency={currency}
+                onPaid={(n) => setPaidHere((x) => Math.round((x + n) * 100) / 100)}
+              />
             )}
             <button
               type="button"
