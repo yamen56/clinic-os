@@ -271,7 +271,7 @@ export function TreatmentPicker({
                     type="button"
                     onClick={() => setCat(c)}
                     className={`h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-semibold transition-colors duration-140 ${
-                      activeCat === c ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+                      activeCat === c ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                     }`}
                   >
                     {T.categories[c]}

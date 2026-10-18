@@ -299,7 +299,7 @@ export function AppointmentsClient({
           type="button"
           onClick={newAppointment}
           aria-label={t.calendar.newAppointment}
-          className="grid h-14 w-14 touch-manipulation place-items-center rounded-full bg-brand-600 text-white shadow-pop active:opacity-85"
+          className="grid h-14 w-14 touch-manipulation place-items-center rounded-full bg-brand-600 text-on-brand shadow-pop active:opacity-85"
         >
           <Plus className="h-6 w-6" />
         </button>

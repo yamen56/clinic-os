@@ -429,7 +429,7 @@ const TriggerNode = memo(function TriggerNode({ selected }: NodeProps) {
     <div
       dir={dir}
       style={{ width: TRIGGER_W }}
-      className={`relative rounded-xl bg-brand-600 text-start text-white shadow-pop ring-offset-2 ring-offset-canvas ${
+      className={`relative rounded-xl bg-brand-600 text-start text-on-brand shadow-pop ring-offset-2 ring-offset-canvas ${
         selected ? "ring-2 ring-brand-400" : ""
       }`}
     >

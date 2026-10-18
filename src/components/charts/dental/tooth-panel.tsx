@@ -123,7 +123,7 @@ function SurfaceChips({ fdi, picked, short, onToggle }: { fdi: string; picked: S
             aria-label={short ? l.long : undefined}
             data-surface-chip={s}
             className={`h-9 rounded-ctl border text-[12.5px] font-semibold transition-colors duration-140 ${short ? "min-w-9 px-2" : "px-2.5"} ${
-              on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+              on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
             }`}
           >
             <span className="latin">{l.short}</span>
@@ -376,7 +376,7 @@ export function ToothPanel({
   const badges = (
     <div className="flex flex-wrap gap-1">
       {teeth.map((f) => (
-        <span key={f} className="grid h-11 min-w-11 place-items-center rounded-xl bg-brand-600 px-2 font-display text-lg font-bold text-white tnum">
+        <span key={f} className="grid h-11 min-w-11 place-items-center rounded-xl bg-brand-600 px-2 font-display text-lg font-bold text-on-brand tnum">
           {f}
         </span>
       ))}
@@ -393,7 +393,7 @@ export function ToothPanel({
           disabled={teeth.length < 2}
           onClick={a.onSpanRecord}
           data-span-record
-          className="h-9 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-white disabled:opacity-45"
+          className="h-9 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-on-brand disabled:opacity-45"
         >
           {T.spanRecord.replace("{n}", String(teeth.length))}
         </button>
@@ -732,7 +732,7 @@ export function ToothPanel({
     <button
       type="button"
       onClick={() => openAdd("treatment")}
-      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-white hover:bg-brand-hover"
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-on-brand hover:bg-brand-hover"
       data-add-treatment
     >
       <Plus className="h-4 w-4" />

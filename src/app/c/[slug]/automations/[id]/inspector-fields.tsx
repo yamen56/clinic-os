@@ -56,7 +56,7 @@ export function Chips<T extends string>({
             aria-pressed={on}
             onClick={() => onChange(single ? [o.value] : on ? value.filter((v) => v !== o.value) : [...value, o.value])}
             className={`rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors ${
-              on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:border-line-strong"
+              on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:border-line-strong"
             }`}
           >
             {o.label}

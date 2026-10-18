@@ -521,7 +521,7 @@ function AccessEditor({
                       <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5">
                         <span
                           className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors duration-140 ease-out ${
-                            on ? "bg-brand-600 text-white" : "bg-sunken text-ink-500"
+                            on ? "bg-brand-600 text-on-brand" : "bg-sunken text-ink-500"
                           }`}
                         >
                           <Icon className="h-4 w-4" strokeWidth={1.9} />
@@ -618,7 +618,7 @@ function AccessEditor({
         </div>
       ) : (
         <div className="flex items-start gap-3 px-4 py-4">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-white">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-on-brand">
             <ShieldCheck className="h-4 w-4" strokeWidth={1.9} />
           </span>
           <p className="text-[13px] leading-relaxed text-ink-700">{t.staff.fullAccessHint}</p>

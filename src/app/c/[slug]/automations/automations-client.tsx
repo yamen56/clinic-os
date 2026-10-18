@@ -327,7 +327,7 @@ export function AutomationsClient({
                         aria-pressed={cat === c}
                         onClick={() => setCat(c)}
                         className={`rounded-full border px-3 py-1 text-[12px] font-medium ${
-                          cat === c ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:border-line-strong"
+                          cat === c ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:border-line-strong"
                         }`}
                       >
                         {c ? (f.triggerCategories as Record<string, string>)[c] : f.all}
@@ -563,7 +563,7 @@ function TemplateGallery({
         data-template="scratch"
         className="mb-5 flex items-center gap-3 rounded-xl border border-dashed border-brand-400 bg-brand-50/40 p-4 transition-colors hover:border-brand-600 hover:bg-brand-50"
       >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-600 text-white">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-600 text-on-brand">
           <Plus className="h-5 w-5" />
         </span>
         <span>

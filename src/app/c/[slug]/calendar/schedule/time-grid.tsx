@@ -281,7 +281,7 @@ export function TimeGrid({
                       <span>{col.day.setLocale(fmt).toFormat("ccc")}</span>
                       <span
                         className={`grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12.5px] font-semibold tnum ${
-                          isToday ? "bg-brand-600 text-white" : "text-ink-900"
+                          isToday ? "bg-brand-600 text-on-brand" : "text-ink-900"
                         }`}
                       >
                         {col.day.day}

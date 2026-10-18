@@ -74,32 +74,36 @@
   --color-graphite: #2a2f38;
 
   /*
-    Brand: the navy of the Clinicti mark, lifted until it reads as a colour.
+    Brand: the navy of the Clinicti mark, #0b1220, and white. Nothing else.
 
-    600 used to be the night surface itself, #0b1220, so a primary button was
-    the same near-black as a heading and nothing on a screen said "this one you
-    can press". It is the same hue now with enough chroma to separate from ink:
-    8.5:1 under white text, so the buttons are as legible as before and
-    obviously the actionable thing on the page.
+    600 is the primary — buttons, active tabs, toggles, the selected thing — and
+    it is the same value as --color-night below, so the accent and the dark
+    chrome are one colour and the mark sits in the sidebar as if printed there.
+    50–500 are the grays that go with it: cool, low-chroma steps of the same
+    hue for backgrounds, borders and quiet icons. There is deliberately no blue
+    in the ramp; Yamen asked for the navy and white and nothing else (10-18).
 
     The roles, which the dark theme depends on:
-      600   a fill — buttons, active tabs, toggles, focus borders
-      700   accent *text* and icons, including on 50/100 chips
-      hover the pressed/hovered state of a 600 fill (`bg-brand-hover`)
-    In light 700 and hover are the same value. In dark they part: text has to
-    get lighter to read on night, and a button under white text cannot.
+      600      a fill — buttons, active tabs, toggles, focus borders
+      on-brand the ink on a 600 fill (`text-on-brand`): white here, navy in dark
+      700      accent *text* and icons, including on 50/100 chips
+      hover    the pressed/hovered state of a 600 fill (`bg-brand-hover`)
+    In dark the fill turns white and its ink turns navy — the button inverts,
+    it does not change colour — which is why nothing may write `text-white` on
+    a brand fill.
   */
-  --color-brand-50: #f0f4fa;
-  --color-brand-100: #dfe8f5;
-  --color-brand-200: #c0d1ea;
-  --color-brand-300: #94b0da;
-  --color-brand-400: #6489c4;
-  --color-brand-500: #3d68ad;
-  --color-brand-600: #1d4b91;
-  --color-brand-700: #163b75;
-  --color-brand-800: #112e5c;
-  --color-brand-900: #0c2144;
-  --color-brand-hover: #163b75;
+  --color-brand-50: #f3f5f8;
+  --color-brand-100: #e2e7ee;
+  --color-brand-200: #c7d0dc;
+  --color-brand-300: #a4b1c3;
+  --color-brand-400: #7d8da4;
+  --color-brand-500: #4a5a72;
+  --color-brand-600: #0b1220;
+  --color-brand-700: #0b1220;
+  --color-brand-800: #050810;
+  --color-brand-900: #010204;
+  --color-brand-hover: #222b3b;
+  --color-on-brand: #ffffff;
 
   /* Night surface — auth, splash, sidebar */
   --color-night: #0b1220;
@@ -119,8 +123,8 @@
     step clears the floor at 0.106 and holds 4.3:1 against the surface, so a
     label sitting on it is still legible.
   */
-  --color-chart: #3a6ea5;
-  --color-chart-soft: #e6edf5;
+  --color-chart: #34445e;
+  --color-chart-soft: #e2e7ee;
 
   /* Chart / accent series (§5) */
   --color-cyan: #5bc6e3;
@@ -260,7 +264,7 @@
     --sh-b: rgb(11 18 32 / 0.045);
     --sh-c: rgb(11 18 32 / 0.09);
     --sh-d: rgb(11 18 32 / 0.14);
-    --focus-ring: rgb(61 104 173 / 0.4);
+    --focus-ring: rgb(125 141 164 / 0.45);
   }
 
   /*
@@ -282,13 +286,18 @@
     --sh-b: rgb(0 0 0 / 0.24);
     --sh-c: rgb(0 0 0 / 0.42);
     --sh-d: rgb(0 0 0 / 0.55);
-    --focus-ring: rgb(124 159 214 / 0.5);
+    --focus-ring: rgb(255 255 255 / 0.32);
 
-    --color-paper: #0c111a;
-    --color-surface: #131a26;
-    --color-canvas: #0c111a;
-    --color-subtle: #161e2b;
-    --color-sunken: #1b2432;
+    /*
+      The sidebar stays the brand navy exactly — the mark's artwork carries
+      #0b1220 and any other panel colour shows a box around it — so the page
+      sits a shade deeper and the cards come forward a step from both.
+    */
+    --color-paper: #080d17;
+    --color-surface: #121a29;
+    --color-canvas: #080d17;
+    --color-subtle: #151d2c;
+    --color-sunken: #1a2333;
     --color-ink-900: #e9edf3;
     --color-ink-700: #c0c8d4;
     --color-ink-500: #94a0b0;
@@ -298,21 +307,25 @@
     --color-line-strong: #354357;
     --color-graphite: #d5dbe4;
 
-    /* 600 under white text at 4.7:1; 700 is the readable accent on night. */
-    --color-brand-50: #142239;
-    --color-brand-100: #1a2d4b;
-    --color-brand-200: #23406a;
-    --color-brand-300: #31578c;
-    --color-brand-400: #4d75b3;
-    --color-brand-500: #7c9fd6;
-    --color-brand-600: #3a71d4;
-    --color-brand-700: #a9c4f0;
-    --color-brand-800: #c9daf6;
-    --color-brand-900: #e3ecfb;
-    --color-brand-hover: #2f62c0;
+    /*
+      The primary inverts: a white fill with navy ink, the way the mark itself
+      is white on navy. 50–500 are the same cool grays, sunk for night.
+    */
+    --color-brand-50: #151d2c;
+    --color-brand-100: #1d2738;
+    --color-brand-200: #283346;
+    --color-brand-300: #374357;
+    --color-brand-400: #566275;
+    --color-brand-500: #a3adbb;
+    --color-brand-600: #eef1f6;
+    --color-brand-700: #e9edf3;
+    --color-brand-800: #f3f5f8;
+    --color-brand-900: #ffffff;
+    --color-brand-hover: #d3d9e2;
+    --color-on-brand: #0b1220;
 
-    --color-chart: #6b9bd6;
-    --color-chart-soft: #1c2b40;
+    --color-chart: #a3adbb;
+    --color-chart-soft: #1d2738;
     --color-cyan-ink: #6cc6df;
     --color-deep-blue: #9db8e8;
 
@@ -374,10 +387,17 @@
     --color-ink-300: #c3cad4;
     --color-line: #e2e6ec;
     --color-line-strong: #c6cdd7;
-    --color-brand-50: #f0f4fa;
-    --color-brand-100: #dfe8f5;
-    --color-brand-600: #1d4b91;
-    --color-brand-700: #163b75;
+    --color-brand-50: #f3f5f8;
+    --color-brand-100: #e2e7ee;
+    --color-brand-200: #c7d0dc;
+    --color-brand-300: #a4b1c3;
+    --color-brand-400: #7d8da4;
+    --color-brand-500: #4a5a72;
+    --color-brand-600: #0b1220;
+    --color-brand-700: #0b1220;
+    --color-brand-hover: #222b3b;
+    --color-on-brand: #ffffff;
+    --color-night: #0b1220;
     --color-danger: #c24a4a;
     --color-st-noshow-soft: #f9f0e2;
     color: var(--color-ink-900);
@@ -406,7 +426,7 @@
     --color-chart-soft: var(--clinic-chart-soft);
   }
   :root[data-theme="dark"] .clinic-chart-vars {
-    --color-chart: color-mix(in oklab, var(--clinic-chart) 72%, white);
+    --color-chart: color-mix(in oklab, var(--clinic-chart) 62%, white);
     --color-chart-soft: color-mix(in oklab, var(--clinic-chart) 24%, var(--color-surface));
   }
 
@@ -754,8 +774,8 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
 
   Deliberately a mid-tone rather than the brand fill. A focus ring has to be
   seen on the login page and the sidebar as well as on the page, and a dark
-  ring at 30% is invisible on night. `--focus-ring` is a mid blue in light and a
-  lighter one in dark (see the base layer), so it reads on every surface.
+  ring at 30% is invisible on night. `--focus-ring` is a mid gray in light and
+  white at a third in dark (see the base layer), so it reads on every surface.
 */
 :focus-visible {
   outline: none;

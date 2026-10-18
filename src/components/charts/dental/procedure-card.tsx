@@ -173,7 +173,7 @@ function StepForm({
                               setCanal(i, { file: ordered.join(", ") });
                             }}
                             className={`h-8 rounded-full border px-2.5 text-[12.5px] font-semibold tnum transition-colors duration-140 ${
-                              on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+                              on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                             }`}
                           >
                             {size}
@@ -251,7 +251,7 @@ function StepForm({
                         if (!initial && onDetail && mark.detail[f.key] !== o.key) onDetail(f.key, o.key);
                       }}
                       className={`h-9 rounded-full border px-3 text-[13px] font-semibold transition-colors duration-140 ${
-                        on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+                        on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                       }`}
                     >
                       {o.en}
@@ -282,7 +282,7 @@ function StepForm({
                         else set({ [f.key]: on ? undefined : o.key });
                       }}
                       className={`h-9 rounded-full border px-3 text-[13px] font-semibold transition-colors duration-140 ${
-                        on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+                        on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                       }`}
                     >
                       {o.en}
@@ -453,7 +453,7 @@ export function ProcedureCard({
         {tr && <TreatmentGlyph tr={tr} paint={paintAt(m, null) ?? "existing"} context={tt} size={52} />}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="grid h-8 min-w-8 place-items-center rounded-lg bg-brand-600 px-1.5 font-display text-[15px] font-bold text-white tnum">
+            <span className="grid h-8 min-w-8 place-items-center rounded-lg bg-brand-600 px-1.5 font-display text-[15px] font-bold text-on-brand tnum">
               {isToothSite(m.site) ? m.site : siteLabel(m.site, T).split(" ")[0]}
             </span>
             <span className="text-[16px] font-semibold leading-tight text-ink-900">{locale === "ar" ? m.labelAr : m.label}</span>
@@ -508,7 +508,7 @@ export function ProcedureCard({
                     disabled={!editable}
                     onClick={() => onDetail(m.id, d.key, o.key)}
                     className={`h-8 rounded-full border px-3 text-[12.5px] font-semibold transition-colors duration-140 disabled:opacity-60 ${
-                      on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+                      on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                     }`}
                   >
                     {locale === "ar" ? o.ar : o.en}

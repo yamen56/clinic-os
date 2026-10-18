@@ -63,7 +63,7 @@ export function MonthGrid({
               <div className="flex items-center justify-between">
                 <span
                   className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-semibold tnum ${
-                    k === today ? "bg-brand-600 text-white" : ""
+                    k === today ? "bg-brand-600 text-on-brand" : ""
                   }`}
                 >
                   {d.day}

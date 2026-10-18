@@ -14,12 +14,20 @@
  * outright. Substituting either one directly produces a chart that is on-brand
  * and unreadable.
  *
+ * **Clinicti's own colour is the navy of the mark, and so is the default.** A
+ * clinic with no brand, a grey or black one, or a dark navy one charts in
+ * Clinicti navy — a step lighter than the ink so a bar reads as data beside a
+ * heading. Those brands used to be given a mid blue derived from their hue, and
+ * the platform was asked for navy and white with no blue in it (Yamen, 10-18).
+ * Only a brand with a real colour of its own — teal, orange, a clear green —
+ * is carried into its charts, as below.
+ *
  * So the *hue* comes from the clinic and the *lightness and chroma* come from
  * the value that was already validated. Every clinic gets a chart in its own
  * colour, carrying the same weight on the page as the one this replaces.
  */
 
-/** The measured anchors, read off `--color-chart` (#3a6ea5). */
+/** The measured band a brand's own hue is snapped into (once read off the old #3a6ea5 default). */
 const ANCHOR_L = 0.5;
 const ANCHOR_C = 0.106;
 
@@ -31,6 +39,13 @@ const ANCHOR_C = 0.106;
  * meaning into a rounding error. Those clinics keep the default.
  */
 const HUE_IS_NOISE_BELOW = 0.03;
+
+/**
+ * Darker than this, a brand reads as navy or black — Clinicti's own family —
+ * however real its hue. `#07234d` and `#0a111f` both fall under it; a deep teal
+ * or a strong blue a clinic actually chose (`#1e3a8a`, `#0f6e5c`) do not.
+ */
+const DARK_BRAND_BELOW_L = 0.32;
 
 /* ---------------------------------------------------------------- sRGB ⇄ OKLab */
 
@@ -179,8 +194,8 @@ function toDisplayableHex(L: number, C: number, h: number): string {
 
 export type ChartColors = { chart: string; soft: string };
 
-/** What every clinic used before this existed, and the fallback for a hueless brand. */
-export const DEFAULT_CHART: ChartColors = { chart: "#3a6ea5", soft: "#e6edf5" };
+/** Clinicti navy: the chart of every clinic whose brand is navy, black, grey or unset. */
+export const DEFAULT_CHART: ChartColors = { chart: "#34445e", soft: "#e2e7ee" };
 
 /**
  * The chart colours for one clinic.
@@ -193,9 +208,9 @@ export function chartColorsFor(brandColor: string | null | undefined): ChartColo
   const rgb = brandColor ? hexToRgb(brandColor) : null;
   if (!rgb) return DEFAULT_CHART;
 
-  const { C, h } = rgbToOklch(rgb[0], rgb[1], rgb[2]);
-  // A near-grey or near-black brand has no hue worth borrowing.
-  if (C < HUE_IS_NOISE_BELOW) return DEFAULT_CHART;
+  const { L, C, h } = rgbToOklch(rgb[0], rgb[1], rgb[2]);
+  // A near-grey brand has no hue worth borrowing; a very dark one is navy or black.
+  if (C < HUE_IS_NOISE_BELOW || L < DARK_BRAND_BELOW_L) return DEFAULT_CHART;
 
   return {
     chart: snapToBand(h, ANCHOR_C),

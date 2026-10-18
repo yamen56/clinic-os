@@ -152,7 +152,7 @@ export function FlowBoard({
 
   const chip = (on: boolean) =>
     `inline-flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors ${
-      on ? "border-brand-600 bg-brand-600 text-white" : "border-line-strong bg-surface text-ink-700 hover:bg-sunken"
+      on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line-strong bg-surface text-ink-700 hover:bg-sunken"
     }`;
 
   return (

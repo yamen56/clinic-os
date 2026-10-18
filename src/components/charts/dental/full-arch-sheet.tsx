@@ -94,7 +94,7 @@ export function FullArchSheet({
               aria-pressed={arch === a}
               data-arch={a}
               className={`h-11 rounded-ctl border text-[14px] font-semibold transition-colors duration-140 ${
-                arch === a ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+                arch === a ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
               }`}
             >
               {T.sites[a]}

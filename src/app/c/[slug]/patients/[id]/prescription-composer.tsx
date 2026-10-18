@@ -540,7 +540,7 @@ export function PrescriptionComposer({
                         aria-label={l === "ar" ? "عربي" : "English"}
                         onClick={() => switchLocale(l)}
                         className={`min-w-12 rounded-[6px] px-3 text-sm font-semibold transition-colors duration-140 ${
-                          locale === l ? "bg-brand-600 text-white" : "text-ink-700 hover:bg-sunken"
+                          locale === l ? "bg-brand-600 text-on-brand" : "text-ink-700 hover:bg-sunken"
                         }`}
                       >
                         {l === "ar" ? (
@@ -641,7 +641,7 @@ export function PrescriptionComposer({
                           aria-pressed={templateId === tpl.id}
                           className={`flex min-h-11 min-w-0 items-center justify-center rounded-ctl border px-3 py-1.5 text-[13px] font-semibold leading-snug transition-colors duration-140 ${
                             templateId === tpl.id
-                              ? "border-brand-600 bg-brand-600 text-white"
+                              ? "border-brand-600 bg-brand-600 text-on-brand"
                               : "border-line bg-surface text-ink-900 hover:border-brand-300 hover:bg-brand-50"
                           }`}
                         >
@@ -957,7 +957,7 @@ function Chips({
             // A finger needs more than a cursor: taller on any touch screen,
             // phone or iPad, and the mouse keeps the compact size.
             className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-[12px] font-medium transition-colors duration-140 pointer-coarse:min-h-9 pointer-coarse:px-3.5 pointer-coarse:text-[13px] ${
-              on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-brand-50"
+              on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-brand-50"
             }`}
           >
             {c[locale]}

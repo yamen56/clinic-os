@@ -97,7 +97,7 @@ export function TriggerInspector({
   return (
     <div className="grid gap-4">
       <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-600 text-white">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-600 text-on-brand">
           <Icon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">

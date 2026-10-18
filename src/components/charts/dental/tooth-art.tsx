@@ -713,7 +713,7 @@ export function ToothTop({
         <TopLayer key={l.markId + l.surfaces.join("")} l={l} t={t} outline={outline} clip={clip} />
       ))}
       {picked && picked.length > 0 && (
-        <g clipPath={`url(#${clip})`} style={{ fill: "var(--color-brand-500)", fillOpacity: 0.22, stroke: "var(--color-brand-600)", strokeWidth: 1.4 }}>
+        <g clipPath={`url(#${clip})`} style={{ fill: "var(--color-night)", fillOpacity: 0.16, stroke: "var(--color-night)", strokeWidth: 1.4 }}>
           {picked.map((sf) => (
             <SurfaceFill key={sf} t={t} outline={outline} sf={sf} style={{}} />
           ))}

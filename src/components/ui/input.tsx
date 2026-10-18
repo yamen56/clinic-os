@@ -227,8 +227,8 @@ export function Toggle({
         landed before the round trip that follows has returned.
       */}
       <span
-        className={`absolute top-0.5 start-0.5 h-4.5 w-4.5 rounded-full bg-white shadow transition-transform duration-200 ease-out group-active:scale-90 ${
-          shown ? "translate-x-[1.125rem] rtl:-translate-x-[1.125rem]" : "translate-x-0"
+        className={`absolute top-0.5 start-0.5 h-4.5 w-4.5 rounded-full shadow transition-transform duration-200 ease-out group-active:scale-90 ${
+          shown ? "translate-x-[1.125rem] bg-on-brand rtl:-translate-x-[1.125rem]" : "translate-x-0 bg-white"
         }`}
       />
     </button>

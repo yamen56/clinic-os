@@ -95,7 +95,7 @@ export function VoiceNote({
         type="button"
         onClick={toggle}
         aria-label={label}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white transition-colors hover:bg-brand-hover"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-on-brand transition-colors hover:bg-brand-hover"
       >
         {playing ? (
           <Pause className="h-4 w-4 fill-current" />

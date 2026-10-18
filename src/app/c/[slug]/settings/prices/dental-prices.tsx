@@ -284,7 +284,7 @@ export function DentalPrices({
                 aria-pressed={filter === f}
                 data-price-filter={f}
                 className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-140 ${
-                  filter === f ? "bg-brand-600 text-white" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8 hover:text-ink-700"
+                  filter === f ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8 hover:text-ink-700"
                 }`}
               >
                 {label}

@@ -239,7 +239,7 @@ export default async function InvoicesPage({
                 key={key || "all"}
                 href={key ? `${base}?status=${key}` : base}
                 className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-140 ease-out ${
-                  on ? "bg-brand-600 text-white" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8 hover:text-ink-700"
+                  on ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8 hover:text-ink-700"
                 }`}
               >
                 {label}

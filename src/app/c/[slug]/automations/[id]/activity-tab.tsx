@@ -98,7 +98,7 @@ export function ActivityTab({
                 load(s, null);
               }}
               className={`rounded-full border px-3 py-1 text-[12px] font-medium ${
-                filter === s ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:border-line-strong"
+                filter === s ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:border-line-strong"
               }`}
             >
               {s ? (t.automations.runStatus as Record<string, string>)[s] : f.all}

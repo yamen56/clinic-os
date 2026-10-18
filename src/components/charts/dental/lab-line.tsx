@@ -72,7 +72,7 @@ export function LabLine({ m, tz }: { m: Mark; tz: string }) {
               type="button"
               onClick={() => setOpen(true)}
               className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-semibold ${
-                isLabWork && !live && impressionTaken ? "bg-brand-600 text-white hover:bg-brand-hover" : "border border-line-strong text-ink-700 hover:bg-sunken"
+                isLabWork && !live && impressionTaken ? "bg-brand-600 text-on-brand hover:bg-brand-hover" : "border border-line-strong text-ink-700 hover:bg-sunken"
               }`}
               data-lab-send={m.id}
             >
@@ -151,7 +151,7 @@ function CaseRow({
             className="h-8 w-20 rounded-ctl border border-line bg-surface px-2 text-end text-base tnum md:text-sm"
             data-lab-cost-input={c.id}
           />
-          <button type="submit" className="h-8 rounded-ctl bg-brand-600 px-2.5 font-semibold text-white">
+          <button type="submit" className="h-8 rounded-ctl bg-brand-600 px-2.5 font-semibold text-on-brand">
             {t.dental.price.save}
           </button>
         </form>
@@ -164,7 +164,7 @@ function CaseRow({
       {mayEdit && c.status !== "cancelled" && !editing && (
         <span className="ms-auto flex flex-wrap gap-1.5">
           {c.status === "sent" ? (
-            <button type="button" onClick={() => void onOp({ op: "received" })} className="h-7 rounded-full bg-brand-600 px-2.5 font-semibold text-white hover:bg-brand-hover" data-lab-received={c.id}>
+            <button type="button" onClick={() => void onOp({ op: "received" })} className="h-7 rounded-full bg-brand-600 px-2.5 font-semibold text-on-brand hover:bg-brand-hover" data-lab-received={c.id}>
               {L.received}
             </button>
           ) : (
@@ -275,7 +275,7 @@ function SendForm({ m, tz, onClose }: { m: Mark; tz: string; onClose: () => void
                 type="button"
                 aria-pressed={dueOn === d}
                 onClick={() => setDueOn(dueOn === d ? null : d)}
-                className={`h-8 rounded-full border px-3 text-[12.5px] font-semibold ${dueOn === d ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700"}`}
+                className={`h-8 rounded-full border px-3 text-[12.5px] font-semibold ${dueOn === d ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700"}`}
                 data-lab-due={n}
               >
                 {L.inDays.replace("{n}", String(n))}
@@ -297,7 +297,7 @@ function SendForm({ m, tz, onClose }: { m: Mark; tz: string; onClose: () => void
         <button type="button" onClick={onClose} className="h-9 rounded-ctl px-3 text-[13px] font-semibold text-ink-500 hover:bg-sunken">
           {t.dental.price.cancel}
         </button>
-        <button type="submit" disabled={!valid || busy} className="h-9 rounded-ctl bg-brand-600 px-3.5 text-[13px] font-semibold text-white hover:bg-brand-hover disabled:opacity-45" data-lab-send-save>
+        <button type="submit" disabled={!valid || busy} className="h-9 rounded-ctl bg-brand-600 px-3.5 text-[13px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-45" data-lab-send-save>
           {L.sendSave}
         </button>
       </div>

@@ -168,7 +168,7 @@ export function EntryRow({
                       disabled={!editable}
                       onClick={() => onDetail(m.id, d.key, o.key)}
                       className={`h-8 rounded-full border px-3 text-[12.5px] font-semibold transition-colors duration-140 disabled:opacity-60 ${
-                        on ? "border-brand-600 bg-brand-600 text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
+                        on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                       }`}
                     >
                       {locale === "ar" ? o.ar : o.en}

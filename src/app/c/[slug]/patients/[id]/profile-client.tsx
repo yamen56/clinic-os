@@ -1229,7 +1229,7 @@ export function PatientProfile(props: {
                             out
                               ? m.sender_kind === "ai"
                                 ? "rounded-be-md bg-brand-100 text-brand-900"
-                                : "rounded-be-md bg-brand-600 text-white"
+                                : "rounded-be-md bg-brand-600 text-on-brand"
                               : "rounded-bs-md border border-line bg-surface"
                           }`}
                         >
@@ -1943,7 +1943,7 @@ function NotesTab({
                 key={s}
                 onClick={() => setFilter(on ? null : `src:${s}`)}
                 className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
-                  on ? "border-brand-600 bg-brand-600 text-white" : "border-line-strong text-ink-500"
+                  on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line-strong text-ink-500"
                 }`}
                 data-notes-source={s}
               >

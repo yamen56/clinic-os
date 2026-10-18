@@ -731,7 +731,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     setLastAdded(null);
   };
   const undoPill = lastAdded && (
-    <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-brand-600 py-1.5 ps-4 pe-1.5 text-[13px] text-white shadow-pop" data-undo-pill>
+    <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-brand-600 py-1.5 ps-4 pe-1.5 text-[13px] text-on-brand shadow-pop" data-undo-pill>
       <span className="max-w-[60vw] truncate">{lastAdded.text}</span>
       <button type="button" onClick={undo} className="inline-flex h-7 items-center gap-1 rounded-full bg-white/15 px-2.5 font-semibold hover:bg-white/25">
         <Undo2 className="h-3.5 w-3.5" />

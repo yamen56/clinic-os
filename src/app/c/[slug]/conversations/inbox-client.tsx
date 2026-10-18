@@ -304,7 +304,7 @@ export function InboxClient({
                 key={f.key}
                 onClick={() => setFilter(f.key)}
                 className={`whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium transition-colors ${
-                  filter === f.key ? "bg-brand-600 text-white" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8"
+                  filter === f.key ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8"
                 }`}
               >
                 {f.label}
@@ -350,7 +350,7 @@ export function InboxClient({
                       {row.last_message_preview ?? ""}
                     </span>
                     {row.unread_count > 0 && (
-                      <span className="ms-auto shrink-0 rounded-full bg-brand-600 px-1.5 py-0.5 text-[11px] font-bold text-white tnum">
+                      <span className="ms-auto shrink-0 rounded-full bg-brand-600 px-1.5 py-0.5 text-[11px] font-bold text-on-brand tnum">
                         {row.unread_count}
                       </span>
                     )}
@@ -450,7 +450,7 @@ export function InboxClient({
                         out
                           ? m.sender_kind === "ai"
                             ? "rounded-be-md bg-brand-100 text-brand-900"
-                            : "rounded-be-md bg-brand-600 text-white"
+                            : "rounded-be-md bg-brand-600 text-on-brand"
                           : "rounded-bs-md border border-line bg-surface"
                       }`}
                     >

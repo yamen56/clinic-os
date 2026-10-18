@@ -351,7 +351,7 @@ export function Shell({
           title={t.nav.collapse}
           aria-expanded
           data-sidebar-toggle
-          className="absolute -end-3 top-[76px] z-10 grid h-6 w-6 touch-manipulation place-items-center rounded-full border border-white/12 bg-night text-white/60 shadow-pop transition-colors duration-140 ease-out hover:bg-brand-600 hover:text-white sb-mini:hidden"
+          className="absolute -end-3 top-[76px] z-10 grid h-6 w-6 touch-manipulation place-items-center rounded-full border border-white/12 bg-night text-white/60 shadow-pop transition-colors duration-140 ease-out hover:bg-white hover:text-night sb-mini:hidden"
         >
           <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" strokeWidth={2.25} />
         </button>
@@ -362,7 +362,7 @@ export function Shell({
           title={t.nav.expand}
           aria-expanded={false}
           data-sidebar-toggle
-          className="absolute -end-3 top-[76px] z-10 hidden h-6 w-6 touch-manipulation place-items-center rounded-full border border-white/12 bg-night text-white/60 shadow-pop transition-colors duration-140 ease-out hover:bg-brand-600 hover:text-white sb-mini:grid"
+          className="absolute -end-3 top-[76px] z-10 hidden h-6 w-6 touch-manipulation place-items-center rounded-full border border-white/12 bg-night text-white/60 shadow-pop transition-colors duration-140 ease-out hover:bg-white hover:text-night sb-mini:grid"
         >
           <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" strokeWidth={2.25} />
         </button>
@@ -398,12 +398,12 @@ export function Shell({
                 className={`relative mb-1 flex h-10 items-center gap-3 rounded-ctl px-3 text-sm font-medium transition-colors duration-140 ease-out sb-mini:mx-auto sb-mini:h-11 sb-mini:w-11 sb-mini:justify-center sb-mini:gap-0 sb-mini:px-0 ${
                   active
                     /*
-                      A filled pill in the brand blue. It used to be white at
-                      10%, because the brand *was* the navy of this panel and a
-                      brand-tinted mark vanished into it; the brand is a colour
-                      of its own now, so "you are here" can be said in it.
+                      A white pill with navy ink: the panel is the brand navy,
+                      so "you are here" is said in the brand's other colour.
+                      White at 10% was the old mark, and in a dim room it was
+                      hard to tell from a hovered row.
                     */
-                    ? "bg-brand-600 text-white shadow-[0_1px_2px_rgb(0_0_0/0.35)]"
+                    ? "bg-white text-night shadow-[0_1px_2px_rgb(0_0_0/0.35)]"
                     : "text-white/65 hover:bg-white/6 hover:text-white"
                 }`}
               >
@@ -411,8 +411,8 @@ export function Shell({
                 <span className="min-w-0 flex-1 truncate sb-mini:sr-only">{t.nav[key]}</span>
                 {!!badge && (
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold text-white tnum sb-mini:absolute sb-mini:-end-1 sb-mini:-top-1 sb-mini:min-w-[18px] sb-mini:px-1 sb-mini:py-0 sb-mini:text-center sb-mini:text-[10px] sb-mini:leading-[18px] sb-mini:ring-2 sb-mini:ring-night ${
-                      active ? "bg-white/22" : "bg-white/12 sb-mini:bg-brand-600"
+                    className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold tnum sb-mini:absolute sb-mini:-end-1 sb-mini:-top-1 sb-mini:min-w-[18px] sb-mini:px-1 sb-mini:py-0 sb-mini:text-center sb-mini:text-[10px] sb-mini:leading-[18px] sb-mini:ring-2 sb-mini:ring-night ${
+                      active ? "bg-night text-white" : "bg-white/12 text-white sb-mini:bg-white sb-mini:text-night"
                     }`}
                   >
                     {fmtCount(badge)}
@@ -677,7 +677,7 @@ export function Shell({
                       >
                         <Icon className="h-5 w-5" strokeWidth={1.75} />
                         {!!badge && (
-                          <span className="absolute -end-1.5 -top-1.5 min-w-[18px] rounded-full bg-brand-600 px-1 text-center text-[10px] font-semibold leading-[18px] text-white ring-2 ring-surface tnum">
+                          <span className="absolute -end-1.5 -top-1.5 min-w-[18px] rounded-full bg-brand-600 px-1 text-center text-[10px] font-semibold leading-[18px] text-on-brand ring-2 ring-surface tnum">
                             {fmtCount(badge)}
                           </span>
                         )}
@@ -752,7 +752,7 @@ export function Shell({
                 >
                   <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.75} />
                   {!!badge && (
-                    <span className="absolute -top-0.5 start-[calc(50%+0.375rem)] min-w-4 rounded-full bg-brand-600 px-1 text-center text-[10px] font-semibold leading-4 text-white ring-2 ring-surface tnum">
+                    <span className="absolute -top-0.5 start-[calc(50%+0.375rem)] min-w-4 rounded-full bg-brand-600 px-1 text-center text-[10px] font-semibold leading-4 text-on-brand ring-2 ring-surface tnum">
                       {fmtCount(badge)}
                     </span>
                   )}

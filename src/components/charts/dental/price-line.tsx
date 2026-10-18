@@ -243,7 +243,7 @@ function FeeEditor({
         <button type="button" onClick={() => setOpen(false)} className="h-8 rounded-ctl px-2.5 text-[12.5px] font-semibold text-ink-500 hover:bg-sunken">
           {P.cancel}
         </button>
-        <button type="submit" disabled={!valid || busy} className="h-8 rounded-ctl bg-brand-600 px-3 text-[12.5px] font-semibold text-white hover:bg-brand-hover disabled:opacity-45" {...{ [`data-${kind}-save`]: "" }}>
+        <button type="submit" disabled={!valid || busy} className="h-8 rounded-ctl bg-brand-600 px-3 text-[12.5px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-45" {...{ [`data-${kind}-save`]: "" }}>
           {P.save}
         </button>
       </div>

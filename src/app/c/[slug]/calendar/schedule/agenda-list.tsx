@@ -85,7 +85,7 @@ export function AgendaList({
               aria-selected={on}
               onClick={() => onPickDay(d)}
               className={`flex min-w-0 touch-manipulation flex-col items-center rounded-xl py-1.5 transition-colors duration-140 ${
-                on ? "bg-brand-600 text-white shadow-card" : k === today ? "bg-brand-50 text-ink-900" : "text-ink-500 hover:bg-sunken"
+                on ? "bg-brand-600 text-on-brand shadow-card" : k === today ? "bg-brand-50 text-ink-900" : "text-ink-500 hover:bg-sunken"
               }`}
             >
               <span className="text-[10.5px] font-medium">{d.setLocale(fmt).toFormat("ccc")}</span>

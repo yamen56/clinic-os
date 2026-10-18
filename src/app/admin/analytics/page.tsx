@@ -263,7 +263,7 @@ export default async function AnalyticsPage({
                 href={`/admin/analytics?range=${r}`}
                 prefetch
                 className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors ${
-                  r === range ? "bg-brand-600 text-white" : "text-ink-500 hover:text-ink-900"
+                  r === range ? "bg-brand-600 text-on-brand" : "text-ink-500 hover:text-ink-900"
                 }`}
               >
                 {r === 30 ? t.admin.range30 : r === 90 ? t.admin.range90 : t.admin.range365}

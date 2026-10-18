@@ -78,31 +78,32 @@ const EDGE_CASES = [
   ["cyan", "#00ffff"],
 ] as const;
 
+/*
+  Legible as a chart: a brand's own hue must sit in the measured band; Clinicti
+  navy, which dark and hueless brands get, is ink-dark on purpose and only has
+  to clear contrast against the card with room to spare.
+*/
+function legible(chart: string): { ok: boolean; detail: string } {
+  const o = oklch(chart);
+  const cr = contrast(chart, SURFACE);
+  const ok =
+    chart === DEFAULT_CHART.chart ? cr >= 7 : o.L >= 0.43 && o.L <= 0.77 && o.C >= 0.1 && cr >= 3;
+  return { ok, detail: `L ${o.L.toFixed(2)} C ${o.C.toFixed(3)} ${cr.toFixed(2)}:1` };
+}
+
 function main() {
   console.log("\n[real clinic brands: every one stays legible as a chart]");
   for (const [label, brand] of REAL_BRANDS) {
     const { chart } = chartColorsFor(brand);
-    const o = oklch(chart);
-    const cr = contrast(chart, SURFACE);
-    const ok = o.L >= 0.43 && o.L <= 0.77 && o.C >= 0.1 && cr >= 3;
-    check(
-      `${label.padEnd(16)} ${brand} → ${chart}`,
-      ok,
-      `L ${o.L.toFixed(2)} C ${o.C.toFixed(3)} ${cr.toFixed(2)}:1`
-    );
+    const { ok, detail } = legible(chart);
+    check(`${label.padEnd(16)} ${brand} → ${chart}`, ok, detail);
   }
 
   console.log("\n[edge cases]");
   for (const [label, brand] of EDGE_CASES) {
     const { chart } = chartColorsFor(brand);
-    const o = oklch(chart);
-    const cr = contrast(chart, SURFACE);
-    const ok = o.L >= 0.43 && o.L <= 0.77 && o.C >= 0.1 && cr >= 3;
-    check(
-      `${label.padEnd(16)} ${brand} → ${chart}`,
-      ok,
-      `L ${o.L.toFixed(2)} C ${o.C.toFixed(3)} ${cr.toFixed(2)}:1`
-    );
+    const { ok, detail } = legible(chart);
+    check(`${label.padEnd(16)} ${brand} → ${chart}`, ok, detail);
   }
 
   console.log("\n[the hue is the clinic's, not a repaint]");
@@ -119,18 +120,18 @@ function main() {
   const drift = Math.abs(((brandHue - chartHue + 540) % 360) - 180);
   check("the hue is carried across", drift < 12, `${drift.toFixed(1)}° drift`);
 
-  console.log("\n[a brand with no usable hue keeps the default]");
+  console.log("\n[navy, black, grey and no brand chart in Clinicti navy]");
   /*
-    Only genuinely achromatic brands fall back. A very dark *navy* like
-    `#0a111f` is not one: it is 98% of the way to black but its hue is real and
-    blue, and the derivation gives it a blue chart — which is the right answer,
-    and not the one this test originally asserted. The expectation was wrong,
-    not the code.
+    A very dark navy like `#0a111f` used to be given a mid blue of its own
+    hue. The platform is navy and white with no blue (10-18), and a navy brand
+    is Clinicti's own family, so it charts in Clinicti navy — as does a darker
+    navy, and black. A brand with a real colour still gets its own (above).
   */
-  const navy = chartColorsFor("#0a111f");
-  check("a very dark navy still yields a blue of its own hue", navy.chart !== DEFAULT_CHART.chart, navy.chart);
-  const navyDrift = Math.abs(((oklch("#0a111f").h - oklch(navy.chart).h + 540) % 360) - 180);
-  check("and that blue is the brand's blue", navyDrift < 12, `${navyDrift.toFixed(1)}° drift`);
+  check("a near-black navy charts in Clinicti navy", chartColorsFor("#0a111f").chart === DEFAULT_CHART.chart, chartColorsFor("#0a111f").chart);
+  check("so does the platform's own #0b1220", chartColorsFor("#0b1220").chart === DEFAULT_CHART.chart);
+  check("so does a dark navy", chartColorsFor("#07234d").chart === DEFAULT_CHART.chart, chartColorsFor("#07234d").chart);
+  check("black falls back", chartColorsFor("#000000").chart === DEFAULT_CHART.chart);
+  check("a blue a clinic chose is still its own", chartColorsFor("#1e3a8a").chart !== DEFAULT_CHART.chart, chartColorsFor("#1e3a8a").chart);
   check("grey falls back", chartColorsFor("#808080").chart === DEFAULT_CHART.chart);
   check("white falls back", chartColorsFor("#ffffff").chart === DEFAULT_CHART.chart);
   check("no brand at all falls back", chartColorsFor(null).chart === DEFAULT_CHART.chart);
@@ -223,9 +224,10 @@ async function live() {
       seen.token.toLowerCase() === expected.toLowerCase(),
       `brand ${brand} → token ${seen.token || "(none)"} expected ${expected}`
     );
+    // A navy or black demo brand is meant to get Clinicti navy; only a coloured one must differ.
     check(
-      "and it is not the platform default",
-      seen.token.toLowerCase() !== DEFAULT_CHART.chart,
+      "and a coloured brand is not handed the platform default",
+      expected === DEFAULT_CHART.chart || seen.token.toLowerCase() !== DEFAULT_CHART.chart,
       seen.token
     );
     // The token could be right and the bar still blue if a chart sat outside

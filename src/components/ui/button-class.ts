@@ -25,7 +25,7 @@ export type Size = "sm" | "md" | "lg" | "icon" | "iconMd";
   and animates a slim bar along the bottom edge; the product has no spinners.
 */
 const variants: Record<Variant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-hover active:bg-brand-hover",
+  primary: "bg-brand-600 text-on-brand hover:bg-brand-hover active:bg-brand-hover",
   /* White, not transparent: on the tinted canvas a see-through outline button
      took the page's grey and read as disabled. Inside a card nothing changes. */
   outline: "border border-line bg-surface text-ink-900 hover:bg-brand-50 hover:border-line-strong",

@@ -332,7 +332,7 @@ const ToothCell = memo(function ToothCell({
         textAnchor="middle"
         fontSize={p.s < 1 ? 9.5 : 11}
         fontWeight={isSel ? 700 : 600}
-        className={`tnum ${isSel ? "fill-white" : "fill-ink-500"}`}
+        className={`tnum ${isSel ? "fill-on-brand" : "fill-ink-500"}`}
         style={{ fontFamily: "var(--font-sans)" }}
       >
         {p.fdi}
@@ -357,7 +357,7 @@ const ToothCell = memo(function ToothCell({
             }
           }}
         >
-          <rect x={p.x + CW - 17} y={imgY} width={15} height={13} rx={3.2} style={{ fill: "white", stroke: "var(--color-brand-400)", strokeWidth: 0.9 }} />
+          <rect x={p.x + CW - 17} y={imgY} width={15} height={13} rx={3.2} style={{ fill: "var(--color-surface)", stroke: "var(--color-brand-400)", strokeWidth: 0.9 }} />
           <ImageIcon x={p.x + CW - 14.5} y={imgY + 2} width={10} height={9} color="var(--color-brand-600)" strokeWidth={2.4} />
           {images > 1 && (
             <text x={p.x + CW - 1} y={imgY + 4} fontSize={6.5} fontWeight={700} style={{ fill: "var(--color-brand-600)", fontFamily: "var(--font-sans)" }}>
@@ -403,7 +403,7 @@ function RegionPill({ pill, onRegion, onHover }: { pill: Pill; onRegion: (id: st
         width={pill.w}
         height={PILL_H}
         rx={PILL_H / 2}
-        style={{ fill: m ? SOFT[m.paint] : "white", stroke: m ? INK[m.paint] : "var(--color-line-strong)", strokeWidth: 1 }}
+        style={{ fill: m ? SOFT[m.paint] : "var(--color-surface)", stroke: m ? INK[m.paint] : "var(--color-line-strong)", strokeWidth: 1 }}
         strokeDasharray={planned || !m ? "3 2" : undefined}
       />
       <MouthGlyph x={pill.x + 5} y={pill.y + 2.5} size={20} region={m ? m.site : null} paint={m ? m.paint : null} icon={icon} />
@@ -412,7 +412,7 @@ function RegionPill({ pill, onRegion, onHover }: { pill: Pill; onRegion: (id: st
         y={pill.y + 13.4}
         fontSize={9.5}
         fontWeight={600}
-        style={{ fill: m ? "var(--color-ink-900)" : "var(--color-brand-600)", fontFamily: "var(--font-sans)" }}
+        style={{ fill: m ? "var(--color-night)" : "var(--color-brand-700)", fontFamily: "var(--font-sans)" }}
       >
         {pill.text}
       </text>
