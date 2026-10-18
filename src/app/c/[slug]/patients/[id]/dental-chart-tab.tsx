@@ -1258,14 +1258,14 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
           {pending && (
             <div className="mt-3 flex flex-wrap items-center gap-3 rounded-ctl border border-brand-200 bg-brand-50 px-3 py-2" data-xray-pending>
               <span className="slim-progress w-10 shrink-0 rounded-full" aria-hidden />
-              <Radiation className="h-4 w-4 shrink-0 text-brand-600" />
+              <Radiation className="h-4 w-4 shrink-0 text-brand-700" />
               <span className="min-w-0 flex-1 text-[13px] font-semibold text-ink-900">
                 {pending.teeth.length ? T.waitingXray.replace("{teeth}", pending.teeth.join(" · ")) : T.waitingXrayMouth}
               </span>
               <a href={`/c/${slug}/devices`} target="_blank" rel="noreferrer" className={buttonClass({ variant: "outline", size: "sm" })}>
                 {T.openStation}
               </a>
-              <button type="button" onClick={cancelXray} aria-label={T.cancel} className="grid h-8 w-8 place-items-center rounded-ctl text-ink-500 hover:bg-white">
+              <button type="button" onClick={cancelXray} aria-label={T.cancel} className="grid h-8 w-8 place-items-center rounded-ctl text-ink-500 hover:bg-surface">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -1334,7 +1334,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                 {at === null ? T.today : T.viewing.replace("{date}", dayLabel)}
               </span>
               {past && (
-                <button type="button" onClick={() => setDayIdx(null)} className="text-[12.5px] font-semibold text-brand-600 hover:underline">
+                <button type="button" onClick={() => setDayIdx(null)} className="text-[12.5px] font-semibold text-brand-700 hover:underline">
                   {T.backToToday}
                 </button>
               )}
@@ -1600,7 +1600,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                 </Button>
               ))}
             </div>
-            <button type="button" onClick={() => setScoped(null)} className="justify-self-start text-[13px] font-semibold text-brand-600">
+            <button type="button" onClick={() => setScoped(null)} className="justify-self-start text-[13px] font-semibold text-brand-700">
               {T.cancel}
             </button>
           </div>

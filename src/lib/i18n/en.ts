@@ -180,6 +180,18 @@ export const en = {
     admin: "Admin",
     notifications: "Notifications",
     more: "More",
+    /* The desktop sidebar folded to its icons, and opened again. */
+    collapse: "Collapse sidebar",
+    expand: "Expand sidebar",
+  },
+  theme: {
+    title: "Appearance",
+    light: "Light",
+    dark: "Dark",
+    system: "Device",
+    toDark: "Dark theme",
+    toLight: "Light theme",
+    hint: "Saved on this device. Device follows your phone or computer's own setting.",
   },
   deleteAccount: {
     cta: "Delete account",

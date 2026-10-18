@@ -22,7 +22,7 @@ export function ImageThumb({ img, pinned, onOpen, size = "md" }: { img: ChartIma
   const box = size === "sm" ? "h-16 w-20" : "h-[4.5rem] w-24";
   return (
     <button type="button" onClick={onOpen} className="group/thumb w-fit shrink-0 snap-start text-start" data-image={img.id}>
-      <span className={`relative block overflow-hidden rounded-ctl border border-line bg-ink-900 ${box}`}>
+      <span className={`relative block overflow-hidden rounded-ctl border border-line bg-night ${box}`}>
         {isPicture(img) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={img.src} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-220 group-hover/thumb:scale-105" />

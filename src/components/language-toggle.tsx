@@ -6,7 +6,20 @@ import { useI18n } from "@/lib/i18n/client";
 import { LOCALE_COOKIE } from "@/lib/i18n/shared";
 import { Languages } from "lucide-react";
 
-export function LanguageToggle({ compact, onDark }: { compact?: boolean; onDark?: boolean }) {
+export function LanguageToggle({
+  compact,
+  onDark,
+  rail,
+  onHint,
+  onHintEnd,
+}: {
+  compact?: boolean;
+  onDark?: boolean;
+  /** A bare 32px icon for the folded sidebar, which labels it with its own tooltip. */
+  rail?: boolean;
+  onHint?: (e: React.SyntheticEvent<HTMLElement>, label: string) => void;
+  onHintEnd?: () => void;
+}) {
   const { locale, t } = useI18n();
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -28,6 +41,25 @@ export function LanguageToggle({ compact, onDark }: { compact?: boolean; onDark?
     el.lang = next;
     start(() => router.refresh());
   };
+
+  if (rail) {
+    const label = next === "en" ? t.common.english : t.common.arabic;
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        aria-busy={pending || undefined}
+        aria-label={label}
+        onMouseEnter={onHint ? (e) => onHint(e, label) : undefined}
+        onFocus={onHint ? (e) => onHint(e, label) : undefined}
+        onMouseLeave={onHintEnd}
+        onBlur={onHintEnd}
+        className="grid h-8 w-8 touch-manipulation place-items-center rounded-ctl text-white/55 transition-colors duration-140 ease-out hover:bg-white/8 hover:text-white"
+      >
+        <Languages className="h-4.5 w-4.5" strokeWidth={1.75} />
+      </button>
+    );
+  }
 
   return (
     <button

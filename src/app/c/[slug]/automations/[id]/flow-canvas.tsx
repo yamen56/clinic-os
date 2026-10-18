@@ -391,7 +391,7 @@ function AddButton({ label, onClick, big }: { label: string; onClick: () => void
       }}
       aria-label={label}
       title={label}
-      className={`nodrag nopan flex items-center gap-1.5 rounded-full border border-dashed border-brand-400 bg-surface text-brand-600 shadow-card transition-colors hover:border-solid hover:border-brand-600 hover:bg-brand-50 ${
+      className={`nodrag nopan flex items-center gap-1.5 rounded-full border border-dashed border-brand-400 bg-surface text-brand-700 shadow-card transition-colors hover:border-solid hover:border-brand-600 hover:bg-brand-50 ${
         big ? "h-9 px-3.5 text-[13px] font-semibold" : "h-7 w-7 justify-center"
       }`}
     >

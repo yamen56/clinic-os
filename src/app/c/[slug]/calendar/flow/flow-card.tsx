@@ -116,7 +116,7 @@ export function FlowCard({
   const phoneDigits = appt.patient_phone?.replace(/[^\d+]/g, "");
 
   /* One colour for the one next step, whatever it is; the label and icon say which. */
-  const primary = "inline-flex h-9 touch-manipulation items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-[13px] font-semibold text-white shadow-card transition-opacity hover:bg-brand-700 active:opacity-80 disabled:opacity-60";
+  const primary = "inline-flex h-9 touch-manipulation items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-[13px] font-semibold text-white shadow-card transition-opacity hover:bg-brand-hover active:opacity-80 disabled:opacity-60";
 
   return (
     <div

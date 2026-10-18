@@ -180,7 +180,7 @@ export function AutomationsClient({
               })
             }
           />
-          <span className="hidden h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600 sm:grid">
+          <span className="hidden h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700 sm:grid">
             <Icon className="h-4.5 w-4.5" />
           </span>
           <Link href={`/c/${slug}/automations/${a.id}`} className="min-w-0 flex-1">
@@ -526,7 +526,7 @@ function TemplateGallery({
         className="flex flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 transition-colors hover:border-brand-400 hover:bg-brand-50/40"
       >
         <div className="flex items-start gap-2.5">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700">
             <Icon className="h-4.5 w-4.5" />
           </span>
           <span className="min-w-0">

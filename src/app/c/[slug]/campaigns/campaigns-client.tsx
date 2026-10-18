@@ -323,7 +323,7 @@ export function CampaignsClient({
                     muted
                     playsInline
                     preload="metadata"
-                    className="h-24 max-w-40 shrink-0 rounded-md bg-ink-900"
+                    className="h-24 max-w-40 shrink-0 rounded-md bg-night"
                   />
                 )}
                 <div className="min-w-0 flex-1 py-1">

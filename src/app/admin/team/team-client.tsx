@@ -400,7 +400,7 @@ function AccessEditor({
             />
             <span className="min-w-0">
               <span className="flex items-center gap-1.5 text-sm font-medium">
-                {lvl === "full" && <ShieldCheck className="h-4 w-4 text-brand-600" />}
+                {lvl === "full" && <ShieldCheck className="h-4 w-4 text-brand-700" />}
                 {lvl === "full" ? t.admin.adminFullAccess : t.admin.adminLimited}
               </span>
               {lvl === "full" && (

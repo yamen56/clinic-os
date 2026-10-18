@@ -124,7 +124,7 @@ export function PushManager({ compact }: { compact?: boolean }) {
   if (state === "on") {
     return (
       <Button variant="ghost" size={compact ? "sm" : "md"} onClick={disable}>
-        <BellRing className="h-4 w-4 text-brand-600" />
+        <BellRing className="h-4 w-4 text-brand-700" />
         {t.notifications.pushOn}
       </Button>
     );

@@ -4,6 +4,7 @@ import { getDict } from "@/lib/i18n";
 import { LanguageToggle } from "@/components/language-toggle";
 import { logoutAction } from "@/app/login/actions";
 import { BrandPlate } from "@/components/brand-mark";
+import { ThemeScope, ThemeToggle } from "@/components/theme";
 import { AdminNav } from "./admin-nav";
 import { AdminBack } from "./admin-back";
 
@@ -12,6 +13,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const t = await getDict();
   return (
     <div className="min-h-dvh bg-canvas">
+      <ThemeScope />
       <header className="sticky top-0 z-40 border-b border-line bg-surface/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
           <div className="flex items-center gap-6">
@@ -22,6 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <AdminNav caps={s.adminCaps} />
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <LanguageToggle compact />
             <form action={logoutAction}>
               <button className="rounded-full px-3 py-1.5 text-[13px] text-ink-500 hover:bg-ink-900/5">

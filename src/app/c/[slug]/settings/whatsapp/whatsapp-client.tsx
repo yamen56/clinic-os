@@ -146,7 +146,7 @@ export function WhatsappClient({
         <div className="p-5">
           {!st ? null : st.status === "connected" ? (
             <div className="flex flex-wrap items-center gap-5">
-              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
                 <Smartphone className="h-7 w-7" />
               </span>
               <div className="flex-1">

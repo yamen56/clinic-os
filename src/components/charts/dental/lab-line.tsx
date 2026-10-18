@@ -72,7 +72,7 @@ export function LabLine({ m, tz }: { m: Mark; tz: string }) {
               type="button"
               onClick={() => setOpen(true)}
               className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 font-semibold ${
-                isLabWork && !live && impressionTaken ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-line-strong text-ink-700 hover:bg-sunken"
+                isLabWork && !live && impressionTaken ? "bg-brand-600 text-white hover:bg-brand-hover" : "border border-line-strong text-ink-700 hover:bg-sunken"
               }`}
               data-lab-send={m.id}
             >
@@ -164,7 +164,7 @@ function CaseRow({
       {mayEdit && c.status !== "cancelled" && !editing && (
         <span className="ms-auto flex flex-wrap gap-1.5">
           {c.status === "sent" ? (
-            <button type="button" onClick={() => void onOp({ op: "received" })} className="h-7 rounded-full bg-brand-600 px-2.5 font-semibold text-white hover:bg-brand-700" data-lab-received={c.id}>
+            <button type="button" onClick={() => void onOp({ op: "received" })} className="h-7 rounded-full bg-brand-600 px-2.5 font-semibold text-white hover:bg-brand-hover" data-lab-received={c.id}>
               {L.received}
             </button>
           ) : (
@@ -297,7 +297,7 @@ function SendForm({ m, tz, onClose }: { m: Mark; tz: string; onClose: () => void
         <button type="button" onClick={onClose} className="h-9 rounded-ctl px-3 text-[13px] font-semibold text-ink-500 hover:bg-sunken">
           {t.dental.price.cancel}
         </button>
-        <button type="submit" disabled={!valid || busy} className="h-9 rounded-ctl bg-brand-600 px-3.5 text-[13px] font-semibold text-white hover:bg-brand-700 disabled:opacity-45" data-lab-send-save>
+        <button type="submit" disabled={!valid || busy} className="h-9 rounded-ctl bg-brand-600 px-3.5 text-[13px] font-semibold text-white hover:bg-brand-hover disabled:opacity-45" data-lab-send-save>
           {L.sendSave}
         </button>
       </div>

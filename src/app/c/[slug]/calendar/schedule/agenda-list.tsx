@@ -146,7 +146,7 @@ export function AgendaList({
                       <button
                         type="button"
                         onClick={() => onArrived(a)}
-                        className="h-9 touch-manipulation rounded-full bg-st-waiting px-3.5 text-[13px] font-semibold text-white shadow-card active:opacity-80"
+                        className="h-9 touch-manipulation rounded-full bg-st-waiting px-3.5 text-[13px] font-semibold text-surface shadow-card active:opacity-80"
                       >
                         {t.flow.arrived}
                       </button>

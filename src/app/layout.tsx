@@ -6,6 +6,7 @@ import { getDict, getLocale, dirFor } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/client";
 import { ToastProvider } from "@/components/ui/toast";
 import { NavTrailRecorder } from "@/components/back-link";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
   /*
@@ -72,7 +73,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getLocale();
   const dict = await getDict();
   return (
-    <html lang={locale} dir={dirFor(locale)}>
+    /*
+      suppressHydrationWarning: the boot script below may set data-theme on
+      <html> before React hydrates, which is the point of it.
+    */
+    <html lang={locale} dir={dirFor(locale)} suppressHydrationWarning>
+      <head>
+        {/* Before first paint, so a dark-theme user never sees a white flash. See lib/theme. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body>
         {/*
           `beforeinstallprompt` fires once, during load, and is usually gone

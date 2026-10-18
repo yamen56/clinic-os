@@ -408,7 +408,7 @@ export function InboxClient({
               </div>
               <div className="flex items-center gap-2.5">
                 <label className="flex items-center gap-1.5">
-                  <Sparkles className={`h-4 w-4 ${aiActive(cv) ? "text-brand-600" : "text-ink-300"}`} />
+                  <Sparkles className={`h-4 w-4 ${aiActive(cv) ? "text-brand-700" : "text-ink-300"}`} />
                   <Toggle
                     checked={cv.ai_enabled}
                     onChange={(v) => void command("ai", { enabled: v })}

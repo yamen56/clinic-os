@@ -6,6 +6,7 @@ import { PageHeader, Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PhotoPicker } from "@/components/photo-picker";
 import { LanguageToggle } from "@/components/language-toggle";
+import { ThemePicker } from "@/components/theme";
 import { InstallApp } from "@/components/pwa";
 import { logoutAction } from "@/app/login/actions";
 import { DeleteAccount } from "./delete-account";
@@ -156,6 +157,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
 
         <Card className="p-5">
           <div className="grid justify-items-start gap-3">
+            <ThemePicker />
             <LanguageToggle />
             <InstallApp presentation="button" />
           </div>

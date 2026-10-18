@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/client";
 import { LanguageToggle } from "@/components/language-toggle";
 import { InstallApp } from "@/components/pwa";
@@ -11,7 +11,9 @@ import { exitImpersonationAction } from "@/app/admin/actions";
 import { Avatar } from "@/components/ui/misc";
 import { clinicLogoUrl } from "@/lib/clinic-logo";
 import { FINANCE_PREFIXES, firstFinanceHref } from "@/lib/finance";
-import { BrandLockup } from "@/components/brand-mark";
+import { BrandLockup, BrandMark } from "@/components/brand-mark";
+import { ThemeScope, ThemeToggle } from "@/components/theme";
+import { SIDEBAR_COOKIE, type SidebarPref } from "@/lib/theme";
 import { NotificationPopups, useLiveNotifications, type InAppPrefs } from "@/components/live-notifications";
 import { ArrivalAlerts } from "@/components/appointments/arrival-alerts";
 import { BackLink, useBackHref } from "@/components/back-link";
@@ -34,6 +36,7 @@ import {
   PenTool,
   UserRound,
   ChevronRight,
+  ChevronLeft,
   LogOut,
   ShieldAlert,
   X,
@@ -76,6 +79,7 @@ const fmtCount = (n: number) => (n > 99 ? "99+" : String(n));
 export function Shell({
   clinic,
   role,
+  sidebar,
   isOwner,
   caps,
   userName,
@@ -103,6 +107,8 @@ export function Shell({
     logoPath: string | null;
   };
   role: MemberRole;
+  /** The desktop sidebar as this person left it, from the cookie (see lib/theme). */
+  sidebar: SidebarPref;
   isOwner: boolean;
   caps: CapabilityMap;
   userName: string;
@@ -131,6 +137,32 @@ export function Shell({
   const { t, locale } = useI18n();
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sb, setSb] = useState<SidebarPref>(sidebar);
+  /*
+    The folded rail's labels. A tooltip cannot live inside the nav: the nav
+    scrolls, and a scroller clips anything that pokes out of its side. So one
+    fixed tooltip is positioned against the hovered item instead.
+  */
+  const [tip, setTip] = useState<{ label: string; y: number } | null>(null);
+  const asideRef = useRef<HTMLElement>(null);
+  const isMini = () => (asideRef.current?.offsetWidth ?? 248) < 120;
+  const showTip = (e: React.SyntheticEvent<HTMLElement>, label: string) => {
+    if (!isMini()) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    setTip({ label, y: r.top + r.height / 2 });
+  };
+  const hideTip = () => setTip(null);
+  /*
+    Flips what is on screen, not the stored word. On a tablet "auto" is
+    showing the rail, so the first press has to open it — reading the width
+    answers that where the preference alone cannot.
+  */
+  const toggleSidebar = () => {
+    const next: SidebarPref = isMini() ? "expanded" : "collapsed";
+    setSb(next);
+    setTip(null);
+    document.cookie = `${SIDEBAR_COOKIE}=${next}; path=/; max-age=${365 * 86400}; samesite=lax`;
+  };
   const [hiddenAnnouncements, setHiddenAnnouncements] = useState<string[]>([]);
   const live = useLiveNotifications(clinic.slug, notifications);
 
@@ -273,7 +305,10 @@ export function Shell({
   // Navigating away closes the sheet. The links close it themselves, but the
   // back button and in-page redirects don't go through them, and a sheet left
   // sitting over the screen it just opened reads as a stuck app.
-  useEffect(() => setMoreOpen(false), [pathname]);
+  useEffect(() => {
+    setMoreOpen(false);
+    setTip(null);
+  }, [pathname]);
 
   const clinicDisplay = locale === "ar" ? clinic.nameAr || clinic.name : clinic.name;
   const logoSrc = clinicLogoUrl(clinic.slug, clinic.logoPath);
@@ -282,25 +317,71 @@ export function Shell({
   const bellLabel = live.unread ? `${t.nav.notifications} (${live.unread})` : t.nav.notifications;
 
   return (
-    <div className="min-h-dvh bg-canvas">
-      {/* Desktop sidebar — night surface, the one dark region of the app chrome */}
-      <aside className="fixed inset-y-0 start-0 z-40 hidden w-[248px] flex-col border-e border-white/6 bg-night md:flex">
-        <div className="flex h-[88px] items-center justify-center border-b border-white/6">
-          <BrandLockup />
+    <div className="shell min-h-dvh bg-canvas" data-sidebar={sb}>
+      <ThemeScope />
+      {/*
+        Desktop sidebar — night surface, the one dark region of the app chrome,
+        in both themes: the Clinicti mark is white and needs it.
+
+        It folds to a 72px rail of icons (`sb-mini:` in globals.css): by the
+        person's choice, or on its own on a tablet-width screen, where 248px of
+        labels was a third of an iPad held upright. The labels stay in the DOM
+        as screen-reader text, so a folded link is still named.
+      */}
+      <aside
+        ref={asideRef}
+        className="fixed inset-y-0 start-0 z-40 hidden w-(--sb) flex-col border-e border-white/6 bg-night transition-[width] duration-200 ease-out md:flex"
+      >
+        <div className="flex h-[88px] shrink-0 items-center justify-center overflow-hidden border-b border-white/6">
+          <span className="sb-mini:hidden">
+            <BrandLockup />
+          </span>
+          <span className="hidden sb-mini:block">
+            <BrandMark size={34} />
+          </span>
         </div>
-        <div className="flex items-center gap-2.5 px-4 py-3.5">
+        {/*
+          The fold. On the panel's edge, where the eye goes looking for the
+          thing that moves the edge, and never covering a nav item.
+        */}
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label={t.nav.collapse}
+          title={t.nav.collapse}
+          aria-expanded
+          data-sidebar-toggle
+          className="absolute -end-3 top-[76px] z-10 grid h-6 w-6 touch-manipulation place-items-center rounded-full border border-white/12 bg-night text-white/60 shadow-pop transition-colors duration-140 ease-out hover:bg-brand-600 hover:text-white sb-mini:hidden"
+        >
+          <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" strokeWidth={2.25} />
+        </button>
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label={t.nav.expand}
+          title={t.nav.expand}
+          aria-expanded={false}
+          data-sidebar-toggle
+          className="absolute -end-3 top-[76px] z-10 hidden h-6 w-6 touch-manipulation place-items-center rounded-full border border-white/12 bg-night text-white/60 shadow-pop transition-colors duration-140 ease-out hover:bg-brand-600 hover:text-white sb-mini:grid"
+        >
+          <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" strokeWidth={2.25} />
+        </button>
+        <div
+          className="flex items-center gap-2.5 px-4 py-3.5 sb-mini:justify-center sb-mini:px-0"
+          title={clinicDisplay}
+        >
           {/* Their own logo once one is uploaded. The initials stay underneath
               rather than being swapped out, so a logo that fails to load leaves
               a marked circle rather than a hole. */}
           <Avatar name={clinic.name} size={30} color={clinic.brandColor} src={logoSrc} fit="contain" />
-          <div className="min-w-0">
+          <div className="min-w-0 sb-mini:sr-only">
             <div className="truncate text-[13px] font-semibold leading-tight text-white">
               {clinicDisplay}
             </div>
-            <div className="text-[11px] text-white/40">Clinicti</div>
+            <div className="text-[11px] text-white/45">Clinicti</div>
           </div>
         </div>
-        <nav className="flex-1 overflow-y-auto px-3 py-2">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 sb-mini:px-0" onScroll={hideTip}>
           {visible.map(({ key, href, badge }) => {
             const Icon = icons[key];
             const active = isActive({ key, href });
@@ -310,22 +391,30 @@ export function Shell({
                 href={href}
                 prefetch
                 aria-current={active ? "page" : undefined}
-                className={`relative mb-0.5 flex h-10 items-center gap-2.5 rounded-ctl px-3 text-sm font-medium transition-colors duration-140 ease-out ${
+                onMouseEnter={(e) => showTip(e, t.nav[key])}
+                onMouseLeave={hideTip}
+                onFocus={(e) => showTip(e, t.nav[key])}
+                onBlur={hideTip}
+                className={`relative mb-1 flex h-10 items-center gap-3 rounded-ctl px-3 text-sm font-medium transition-colors duration-140 ease-out sb-mini:mx-auto sb-mini:h-11 sb-mini:w-11 sb-mini:justify-center sb-mini:gap-0 sb-mini:px-0 ${
                   active
                     /*
-                      White, not brand-600. The brand is the navy of the sidebar
-                      itself now, so an indicator tinted with it would be a bar
-                      the same colour as the panel behind it — the active item
-                      would simply stop being marked.
+                      A filled pill in the brand blue. It used to be white at
+                      10%, because the brand *was* the navy of this panel and a
+                      brand-tinted mark vanished into it; the brand is a colour
+                      of its own now, so "you are here" can be said in it.
                     */
-                    ? "bg-white/10 text-white before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-white before:content-['']"
-                    : "text-white/62 hover:bg-white/5 hover:text-white"
+                    ? "bg-brand-600 text-white shadow-[0_1px_2px_rgb(0_0_0/0.35)]"
+                    : "text-white/65 hover:bg-white/6 hover:text-white"
                 }`}
               >
-                <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
-                <span className="flex-1">{t.nav[key]}</span>
+                <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2 : 1.75} />
+                <span className="min-w-0 flex-1 truncate sb-mini:sr-only">{t.nav[key]}</span>
                 {!!badge && (
-                  <span className="rounded-full bg-white/12 px-1.5 py-0.5 text-[11px] font-semibold text-white tnum">
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold text-white tnum sb-mini:absolute sb-mini:-end-1 sb-mini:-top-1 sb-mini:min-w-[18px] sb-mini:px-1 sb-mini:py-0 sb-mini:text-center sb-mini:text-[10px] sb-mini:leading-[18px] sb-mini:ring-2 sb-mini:ring-night ${
+                      active ? "bg-white/22" : "bg-white/12 sb-mini:bg-brand-600"
+                    }`}
+                  >
                     {fmtCount(badge)}
                   </span>
                 )}
@@ -333,7 +422,7 @@ export function Shell({
             );
           })}
         </nav>
-        <div className="border-t border-white/6 p-3">
+        <div className="border-t border-white/6 p-3 sb-mini:px-0">
           {/*
             The name and role get this row to themselves. They used to share it
             with the three icon buttons below, which left about ninety pixels
@@ -341,51 +430,74 @@ export function Shell({
             role under it with it, and this row is the only place in the desktop
             shell either one is written.
           */}
-          <div className="flex items-center gap-2.5 px-1">
+          <Link
+            href={`${base}/profile`}
+            className="-mx-1 flex items-center gap-2.5 rounded-ctl px-2 py-1 transition-colors duration-140 ease-out hover:bg-white/6 sb-mini:mx-auto sb-mini:w-fit sb-mini:justify-center sb-mini:p-1"
+            onMouseEnter={(e) => showTip(e, `${userName} · ${roleLabel}`)}
+            onMouseLeave={hideTip}
+            onFocus={(e) => showTip(e, `${userName} · ${roleLabel}`)}
+            onBlur={hideTip}
+          >
             <Avatar name={userName} size={30} color="rgb(255 255 255 / 0.14)" src={photoSrc} />
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 sb-mini:sr-only">
               <div className="truncate text-[13px] font-medium text-white">{userName}</div>
-              <div className="truncate text-[11px] text-white/40">{roleLabel}</div>
+              <div className="truncate text-[11px] text-white/45">{roleLabel}</div>
             </div>
-          </div>
-          <div className="mt-2 space-y-1 px-1">
+          </Link>
+          <div className="mt-2 space-y-1 px-1 sb-mini:hidden">
             <InstallApp onDark />
           </div>
           {/* The controls ride on the language row instead, where there is
-              room for all four and nothing has to be truncated to fit. */}
-          <div className="mt-2 flex items-center gap-1 px-1">
-            <LanguageToggle onDark />
-            <div className="ms-auto flex items-center gap-0.5">
+              room for all of them and nothing has to be truncated to fit. On
+              the rail they stack, one icon a row. */}
+          <div className="mt-2 flex items-center gap-1 px-1 sb-mini:justify-center sb-mini:px-0">
+            <span className="sb-mini:hidden">
+              <LanguageToggle onDark />
+            </span>
+            <div className="ms-auto flex items-center gap-0.5 sb-mini:ms-0 sb-mini:grid sb-mini:grid-cols-2 sb-mini:gap-1">
+              <ThemeToggle onDark onHint={showTip} onHintEnd={hideTip} />
               {/* Reachable for doctors too, who never see /settings. */}
               <Link
                 href={`${base}/profile`}
-                className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
+                className="grid h-8 w-8 place-items-center rounded-ctl text-white/55 transition-colors hover:bg-white/8 hover:text-white sb-mini:hidden"
                 aria-label={t.profile.title}
-                title={t.profile.title}
+                onMouseEnter={(e) => showTip(e, t.profile.title)}
+                onMouseLeave={hideTip}
+                onFocus={(e) => showTip(e, t.profile.title)}
+                onBlur={hideTip}
               >
                 <UserRound className="h-4.5 w-4.5" strokeWidth={1.75} />
               </Link>
               <Link
                 href={`${base}/notifications`}
-                className={`relative rounded-ctl p-1.5 transition-colors hover:bg-white/5 hover:text-white ${
-                  live.unread ? "text-white" : "text-white/50"
+                className={`relative grid h-8 w-8 place-items-center rounded-ctl transition-colors hover:bg-white/8 hover:text-white ${
+                  live.unread ? "text-white" : "text-white/55"
                 }`}
                 aria-label={bellLabel}
-                title={t.nav.notifications}
                 data-unread={live.unread}
+                onMouseEnter={(e) => showTip(e, bellLabel)}
+                onMouseLeave={hideTip}
+                onFocus={(e) => showTip(e, bellLabel)}
+                onBlur={hideTip}
               >
                 <Bell className="h-4.5 w-4.5" strokeWidth={1.75} />
                 {live.unread > 0 && (
-                  <span className="absolute -end-1 -top-1 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-4 text-white tnum">
+                  <span className="absolute -end-1 -top-1 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-4 text-white ring-2 ring-night tnum">
                     {fmtCount(live.unread)}
                   </span>
                 )}
               </Link>
+              <span className="hidden sb-mini:block">
+                <LanguageToggle rail onHint={showTip} onHintEnd={hideTip} />
+              </span>
               <form action={logoutAction}>
                 <button
-                  className="rounded-ctl p-1.5 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
+                  className="grid h-8 w-8 place-items-center rounded-ctl text-white/55 transition-colors hover:bg-white/8 hover:text-white"
                   aria-label={t.auth.signOut}
-                  title={t.auth.signOut}
+                  onMouseEnter={(e) => showTip(e, t.auth.signOut)}
+                  onMouseLeave={hideTip}
+                  onFocus={(e) => showTip(e, t.auth.signOut)}
+                  onBlur={hideTip}
                 >
                   <LogOut className="h-4.5 w-4.5" strokeWidth={1.75} />
                 </button>
@@ -394,8 +506,17 @@ export function Shell({
           </div>
         </div>
       </aside>
+      {tip && (
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed start-[calc(var(--sb)+10px)] z-50 hidden -translate-y-1/2 whitespace-nowrap rounded-ctl bg-night px-2.5 py-1.5 text-[12.5px] font-medium text-white shadow-pop ring-1 ring-white/10 animate-fade-in md:block"
+          style={{ top: tip.y }}
+        >
+          {tip.label}
+        </div>
+      )}
 
-      <div className="md:ms-[248px]">
+      <div className="transition-[margin] duration-200 ease-out md:ms-(--sb)">
         {/*
           The top of the screen: on a phone the app bar, on every size the
           impersonation warning.
@@ -590,8 +711,9 @@ export function Shell({
               {t.mySignature.title}
             </Link>
             <InstallApp />
-            <div className="mt-1 flex items-center justify-between border-t border-line px-3 pt-3 pb-1">
+            <div className="mt-1 flex items-center justify-between gap-2 border-t border-line px-3 pt-3 pb-1">
               <LanguageToggle />
+              <ThemeToggle className="me-auto" />
               <form action={logoutAction}>
                 <button className="flex touch-manipulation items-center gap-2 py-1.5 text-sm text-ink-500">
                   <LogOut className="h-4 w-4" /> {t.auth.signOut}

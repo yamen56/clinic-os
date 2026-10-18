@@ -157,7 +157,7 @@ export function DocumentSettingsClient({
                     <span>{t.docTemplates.version.replace("{n}", String(tpl.version))}</span>
                     <span>{fmtDate(tpl.updated_at, "UTC", locale)}</span>
                     {tpl.services.length > 0 && (
-                      <span className="text-brand-600">
+                      <span className="text-brand-700">
                         {t.docTemplates.attachedServices}:{" "}
                         {tpl.services
                           .map((s) => (locale === "ar" ? s.nameAr || s.name : s.name))

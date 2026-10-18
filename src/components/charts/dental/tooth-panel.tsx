@@ -593,7 +593,7 @@ export function ToothPanel({
       </div>
       {!locked && otherImages.length > 0 && (
         <details className="mt-2">
-          <summary className="cursor-pointer text-[12.5px] font-semibold text-brand-600">{T.pinImage}</summary>
+          <summary className="cursor-pointer text-[12.5px] font-semibold text-brand-700">{T.pinImage}</summary>
           <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1">
             {otherImages.map((img) => (
               <ImageThumb key={img.id} img={img} pinned={pins[img.id] ?? []} size="sm" onOpen={() => a.onPinImage(img.id, single)} />
@@ -732,7 +732,7 @@ export function ToothPanel({
     <button
       type="button"
       onClick={() => openAdd("treatment")}
-      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-white hover:bg-brand-700"
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-white hover:bg-brand-hover"
       data-add-treatment
     >
       <Plus className="h-4 w-4" />

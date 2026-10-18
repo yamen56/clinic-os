@@ -1394,7 +1394,7 @@ function TagsRow({
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-1 rounded-full border border-dashed border-line-strong px-2.5 py-0.5 text-xs text-ink-400 transition-colors hover:border-brand-400 hover:text-brand-600"
+          className="inline-flex items-center gap-1 rounded-full border border-dashed border-line-strong px-2.5 py-0.5 text-xs text-ink-400 transition-colors hover:border-brand-400 hover:text-brand-700"
         >
           <Plus className="h-3 w-3" />
           {t.patients.addTag}
@@ -1894,7 +1894,7 @@ function NotesTab({
           <button
             onClick={() => setFilter(null)}
             className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
-              filter === null ? "border-ink-900 bg-ink-900 text-white" : "border-line-strong text-ink-500"
+              filter === null ? "border-ink-900 bg-ink-900 text-surface" : "border-line-strong text-ink-500"
             }`}
           >
             {t.common.all} <span className="tnum opacity-70">{total}</span>
@@ -1904,7 +1904,7 @@ function NotesTab({
             <button
               onClick={() => setFilter(filter === "src:here" ? null : "src:here")}
               className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
-                filter === "src:here" ? "border-ink-900 bg-ink-900 text-white" : "border-line-strong text-ink-500"
+                filter === "src:here" ? "border-ink-900 bg-ink-900 text-surface" : "border-line-strong text-ink-500"
               }`}
               data-notes-source="here"
             >

@@ -202,7 +202,7 @@ export function CampaignDetail({
               controls
               playsInline
               preload="metadata"
-              className="mt-2 max-h-72 w-full rounded-lg bg-ink-900"
+              className="mt-2 max-h-72 w-full rounded-lg bg-night"
             />
           )}
           {campaign.body && (

@@ -5,10 +5,34 @@
   CLINIC OS — Clinicti brand layer.
   Single source of truth: no hardcoded hex in components.
 
-  Daylight-white product surface, near-black text, one slate-blue accent.
-  The dark night surface is reserved for brand moments (auth/splash)
-  and the app sidebar — never for working screens.
+  Two themes over one set of names. The values below are the light theme, the
+  default; `[data-theme="dark"]` further down re-points the same names at the
+  night palette, so a component written against `bg-surface text-ink-900` is
+  right in both without knowing a theme exists. That is the whole contract:
+  name the role, never the colour.
+
+  The dark theme is staff-only. It is applied to <html> only under /c and
+  /admin (see lib/theme), so a patient's invoice, booking form or signing link
+  is always the light document it was designed as, whatever the device says.
 */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+  The desktop sidebar, folded to its icon rail. `collapsed` is the person's own
+  choice; `auto` folds it on a tablet-width screen and opens it from 1280px,
+  where there is room for the labels. The width itself is `--sb` on `.shell`.
+*/
+@custom-variant sb-mini {
+  &:where([data-sidebar="collapsed"] *) {
+    @slot;
+  }
+  @media (width < 80rem) {
+    &:where([data-sidebar="auto"] *) {
+      @slot;
+    }
+  }
+}
+
 @theme {
   --font-sans: "Inter", "Tajawal", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Montserrat", "Cairo", ui-sans-serif, system-ui, sans-serif;
@@ -30,44 +54,52 @@
     of six cards read as one undivided sheet. Public pages keep `paper` — a
     patient's invoice or booking form is a single document, not a desk.
   */
-  --color-canvas: #f5f6f8;
+  --color-canvas: #f4f6f9;
   --color-subtle: #f7f8fa;
-  --color-sunken: #f2f5f9;
-  --color-ink-900: #16181c;
-  --color-ink-700: #4b5159;
-  --color-ink-500: #7a828c;
-  --color-ink-400: #9aa2ac;
-  --color-ink-300: #c5cbd3;
-  --color-line: #e3e6eb;
-  --color-line-strong: #c5cbd3;
-  --color-graphite: #2a2d33;
+  --color-sunken: #f0f3f7;
+  /*
+    Ink, measured against white. 500 is the secondary text of the whole product
+    — dates, hints, the second line of every row — and at #7a828c it was 3.9:1,
+    under the 4.5 floor for text that size. It is 5.7:1 now, and 700 moved with
+    it so the step between them still reads. 400 is for icons and metadata
+    that sits beside a label, never for a sentence on its own.
+  */
+  --color-ink-900: #141821;
+  --color-ink-700: #3f4753;
+  --color-ink-500: #5d6775;
+  --color-ink-400: #868f9c;
+  --color-ink-300: #c3cad4;
+  --color-line: #e2e6ec;
+  --color-line-strong: #c6cdd7;
+  --color-graphite: #2a2f38;
 
   /*
-    Brand: the navy of the Clinicti mark.
+    Brand: the navy of the Clinicti mark, lifted until it reads as a colour.
 
-    600 is the primary — buttons, active icons, the default event block — and it
-    is deliberately the same value as --color-night below. That is the point:
-    the accent and the dark chrome are one colour, which is what makes the mark
-    sit in the sidebar as if it were printed there.
+    600 used to be the night surface itself, #0b1220, so a primary button was
+    the same near-black as a heading and nothing on a screen said "this one you
+    can press". It is the same hue now with enough chroma to separate from ink:
+    8.5:1 under white text, so the buttons are as legible as before and
+    obviously the actionable thing on the page.
 
-    It also has a consequence worth stating, because it caught the nav: anything
-    tinted brand-600 *on* the night surface is now invisible. Those places use
-    white at low alpha instead — see the active indicator in shell.tsx.
-
-    50–400 stay light and cool. They are backgrounds and borders, usually under
-    brand-700 text, and a ramp that went dark at the top would leave nothing to
-    put ink on.
+    The roles, which the dark theme depends on:
+      600   a fill — buttons, active tabs, toggles, focus borders
+      700   accent *text* and icons, including on 50/100 chips
+      hover the pressed/hovered state of a 600 fill (`bg-brand-hover`)
+    In light 700 and hover are the same value. In dark they part: text has to
+    get lighter to read on night, and a button under white text cannot.
   */
-  --color-brand-50: #f3f5f8;
-  --color-brand-100: #e2e7ee;
-  --color-brand-200: #c7d0dc;
-  --color-brand-300: #a4b1c3;
-  --color-brand-400: #7d8da4;
-  --color-brand-500: #4a5a72;
-  --color-brand-600: #0b1220;
-  --color-brand-700: #050810;
-  --color-brand-800: #030509;
-  --color-brand-900: #010204;
+  --color-brand-50: #f0f4fa;
+  --color-brand-100: #dfe8f5;
+  --color-brand-200: #c0d1ea;
+  --color-brand-300: #94b0da;
+  --color-brand-400: #6489c4;
+  --color-brand-500: #3d68ad;
+  --color-brand-600: #1d4b91;
+  --color-brand-700: #163b75;
+  --color-brand-800: #112e5c;
+  --color-brand-900: #0c2144;
+  --color-brand-hover: #163b75;
 
   /* Night surface — auth, splash, sidebar */
   --color-night: #0b1220;
@@ -157,10 +189,15 @@
   --radius-ctl: 8px;
   --radius-modal: 20px;
 
-  /* Never pure black — tinted with the night hue */
-  --shadow-card: 0 1px 2px rgb(11 18 32 / 0.06), 0 1px 1px rgb(11 18 32 / 0.04);
-  --shadow-pop: 0 12px 32px rgb(11 18 32 / 0.08), 0 4px 12px rgb(11 18 32 / 0.05);
-  --shadow-modal: 0 24px 64px rgb(11 18 32 / 0.12), 0 8px 20px rgb(11 18 32 / 0.06);
+  /*
+    Never pure black — tinted with the night hue. The tints are variables
+    (set per theme in the base layer below) because Tailwind copies a shadow's
+    value into each utility: a literal here could not be re-pointed for dark,
+    where the same alpha on night is no shadow at all.
+  */
+  --shadow-card: 0 1px 2px var(--sh-a), 0 1px 1px var(--sh-b);
+  --shadow-pop: 0 12px 32px var(--sh-c), 0 4px 12px var(--sh-b);
+  --shadow-modal: 0 24px 64px var(--sh-d), 0 8px 20px var(--sh-a);
 
   --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
   --animate-fade-up: fade-up 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -206,6 +243,187 @@
     transform-box: fill-box;
     transform-origin: center;
     animation: tooth-pop 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+}
+
+/*
+  The themes.
+
+  In the base layer, after `@theme` (which Tailwind emits in the `theme` layer),
+  so these win by layer order rather than by specificity, and no utility is
+  ever outranked by them.
+*/
+@layer base {
+  :root {
+    color-scheme: light;
+    --sh-a: rgb(11 18 32 / 0.06);
+    --sh-b: rgb(11 18 32 / 0.045);
+    --sh-c: rgb(11 18 32 / 0.09);
+    --sh-d: rgb(11 18 32 / 0.14);
+    --focus-ring: rgb(61 104 173 / 0.4);
+  }
+
+  /*
+    Dark: built for a reception desk at night and a doctor's phone in a dim
+    room, not as an inversion. Surfaces step up in lightness as they come
+    forward — canvas, then the card, then a hover — the way shadows can no
+    longer show depth on near-black. Ink is measured on the card: 900 at 14.9:1,
+    700 at 10.4, 500 at 6.6, so the secondary text that failed AA in the old
+    light theme passes comfortably here.
+
+    Status inks are lifted and their soft fills sunk to tints of the card, so a
+    chip keeps the meaning and the contrast it has in light. The dental-chart
+    inks are deliberately absent: a tooth is drawn in ivory in both themes and
+    what is recorded on it has to read on the tooth, not on the page.
+  */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --sh-a: rgb(0 0 0 / 0.32);
+    --sh-b: rgb(0 0 0 / 0.24);
+    --sh-c: rgb(0 0 0 / 0.42);
+    --sh-d: rgb(0 0 0 / 0.55);
+    --focus-ring: rgb(124 159 214 / 0.5);
+
+    --color-paper: #0c111a;
+    --color-surface: #131a26;
+    --color-canvas: #0c111a;
+    --color-subtle: #161e2b;
+    --color-sunken: #1b2432;
+    --color-ink-900: #e9edf3;
+    --color-ink-700: #c0c8d4;
+    --color-ink-500: #94a0b0;
+    --color-ink-400: #6f7b8c;
+    --color-ink-300: #465163;
+    --color-line: #243042;
+    --color-line-strong: #354357;
+    --color-graphite: #d5dbe4;
+
+    /* 600 under white text at 4.7:1; 700 is the readable accent on night. */
+    --color-brand-50: #142239;
+    --color-brand-100: #1a2d4b;
+    --color-brand-200: #23406a;
+    --color-brand-300: #31578c;
+    --color-brand-400: #4d75b3;
+    --color-brand-500: #7c9fd6;
+    --color-brand-600: #3a71d4;
+    --color-brand-700: #a9c4f0;
+    --color-brand-800: #c9daf6;
+    --color-brand-900: #e3ecfb;
+    --color-brand-hover: #2f62c0;
+
+    --color-chart: #6b9bd6;
+    --color-chart-soft: #1c2b40;
+    --color-cyan-ink: #6cc6df;
+    --color-deep-blue: #9db8e8;
+
+    --color-ok: #4cc38a;
+    --color-warning: #e0a84e;
+    --color-danger: #d4524f;
+    --color-danger-hover: #bf4542;
+    --color-danger-soft: #331b1d;
+
+    --color-st-scheduled: #8fb0d4;
+    --color-st-scheduled-soft: #1c2a3b;
+    --color-st-confirmed: #4cc38a;
+    --color-st-confirmed-soft: #12291f;
+    --color-st-completed: #c9ced6;
+    --color-st-completed-soft: #232a35;
+    --color-st-noshow: #e0a84e;
+    --color-st-noshow-soft: #2e2414;
+    --color-st-cancelled: #ef7a7a;
+    --color-st-cancelled-soft: #331a1c;
+    --color-st-pending: #e0a84e;
+    --color-st-pending-soft: #2e2414;
+    --color-st-waiting: #5aaee6;
+    --color-st-waiting-soft: #132838;
+    --color-st-inroom: #a98ee6;
+    --color-st-inroom-soft: #251e3a;
+    --color-st-late: #ec8a68;
+    --color-st-late-soft: #33201a;
+  }
+
+  /* The two frames of a theme swap: nothing fades, everything changes at once. */
+  .theme-switching,
+  .theme-switching *,
+  .theme-switching *::before,
+  .theme-switching *::after {
+    transition: none !important;
+  }
+
+  /*
+    Paper inside a dark screen.
+
+    A few surfaces are documents, not desk: the signing pad, which draws in
+    near-black ink and would draw it on night; a consent form's body, whose
+    HTML came from the clinic's Word files and may carry its own colours; the
+    rich-text editor that writes that HTML. Under `.theme-light` the light
+    values come back for that subtree, so they stay what the patient will see.
+  */
+  .theme-light,
+  :root[data-theme="dark"] .doc-body-wrap,
+  :root[data-theme="dark"] .doc-editor {
+    color-scheme: light;
+    --color-paper: #ffffff;
+    --color-surface: #ffffff;
+    --color-subtle: #f7f8fa;
+    --color-sunken: #f0f3f7;
+    --color-ink-900: #141821;
+    --color-ink-700: #3f4753;
+    --color-ink-500: #5d6775;
+    --color-ink-400: #868f9c;
+    --color-ink-300: #c3cad4;
+    --color-line: #e2e6ec;
+    --color-line-strong: #c6cdd7;
+    --color-brand-50: #f0f4fa;
+    --color-brand-100: #dfe8f5;
+    --color-brand-600: #1d4b91;
+    --color-brand-700: #163b75;
+    --color-danger: #c24a4a;
+    --color-st-noshow-soft: #f9f0e2;
+    color: var(--color-ink-900);
+  }
+}
+
+@layer components {
+  /* A document body on a dark screen is a sheet of paper laid on the desk. */
+  :root[data-theme="dark"] .doc-body-wrap {
+    background: #ffffff;
+    border-radius: var(--radius-ctl);
+    padding: 1rem 1.25rem;
+  }
+  :root[data-theme="dark"] .doc-editor {
+    background: #ffffff;
+  }
+
+  /*
+    The clinic's own chart colour (lib/brand-chart), set on the workspace
+    wrapper. On night the validated mid-tone bar is lifted toward white and its
+    pale track is sunk into the card, or every chart would sit in a glaring
+    light band.
+  */
+  .clinic-chart-vars {
+    --color-chart: var(--clinic-chart);
+    --color-chart-soft: var(--clinic-chart-soft);
+  }
+  :root[data-theme="dark"] .clinic-chart-vars {
+    --color-chart: color-mix(in oklab, var(--clinic-chart) 72%, white);
+    --color-chart-soft: color-mix(in oklab, var(--clinic-chart) 24%, var(--color-surface));
+  }
+
+  /*
+    The workspace frame. `--sb` is the desktop sidebar's width, which the
+    sidebar, the content's margin and the folded rail's tooltips all read.
+  */
+  .shell {
+    --sb: 248px;
+  }
+  .shell[data-sidebar="collapsed"] {
+    --sb: 72px;
+  }
+  @media (width < 80rem) {
+    .shell[data-sidebar="auto"] {
+      --sb: 72px;
+    }
   }
 }
 
@@ -261,7 +479,7 @@ html[dir="rtl"] [data-latin-island] .font-display {
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-brand-600);
+  color: var(--color-brand-700);
 }
 html[dir="rtl"] .eyebrow {
   font-family: var(--font-ar-body);
@@ -534,13 +752,14 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
 /*
   Focus: always a 3px ring — never a hard outline, never suppressed.
 
-  Deliberately a mid-tone rather than the brand navy. A focus ring has to be
-  seen on the login page and the sidebar as well as on white, and near-black at
-  30% is invisible on both of those. This one reads on either.
+  Deliberately a mid-tone rather than the brand fill. A focus ring has to be
+  seen on the login page and the sidebar as well as on the page, and a dark
+  ring at 30% is invisible on night. `--focus-ring` is a mid blue in light and a
+  lighter one in dark (see the base layer), so it reads on every surface.
 */
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgb(125 141 164 / 0.45);
+  box-shadow: 0 0 0 3px var(--focus-ring);
   border-radius: 4px;
 }
 

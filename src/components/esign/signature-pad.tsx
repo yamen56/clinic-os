@@ -400,7 +400,7 @@ export function SignaturePad({
         <div>
           <div
             ref={wrapRef}
-            className={`relative w-full overflow-hidden rounded-card border-2 border-dashed border-line-strong ${heightClass}`}
+            className={`theme-light relative w-full overflow-hidden rounded-card border-2 border-dashed border-line-strong bg-surface ${heightClass}`}
           >
             <canvas
               ref={canvasRef}
@@ -448,7 +448,7 @@ export function SignaturePad({
         </div>
       ) : (
         <div>
-          <div className={`grid place-items-center rounded-card border-2 border-dashed border-line-strong px-4 ${heightClass}`}>
+          <div className={`theme-light grid place-items-center rounded-card border-2 border-dashed border-line-strong bg-surface px-4 ${heightClass}`}>
             {typed.trim() ? (
               <span className="sig-typed break-all text-center" data-script={typedScript}>
                 {typed}

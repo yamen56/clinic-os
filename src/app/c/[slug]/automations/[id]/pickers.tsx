@@ -183,7 +183,7 @@ export function TriggerPicker({
                   key={p.id}
                   testId={p.id}
                   icon={PRESET_ICONS[p.id]}
-                  tone="bg-brand-50 text-brand-600"
+                  tone="bg-brand-50 text-brand-700"
                   title={(f.presets as Record<string, string>)[p.id]}
                   hint={(f.presetHints as Record<string, string>)[p.id]}
                   onClick={() => pick(p.trigger, p.config)}
@@ -201,7 +201,7 @@ export function TriggerPicker({
                   key={d.key}
                   testId={d.key}
                   icon={TRIGGER_ICONS[d.key]}
-                  tone="bg-brand-50 text-brand-600"
+                  tone="bg-brand-50 text-brand-700"
                   title={triggerName(d.key)}
                   hint={(f.triggerHints as Record<string, string>)[d.key] ?? ""}
                   onClick={() => pick(d.key, {})}

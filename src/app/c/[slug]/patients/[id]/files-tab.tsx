@@ -238,7 +238,7 @@ export function FilesTab({
           <ul className="mt-3 grid gap-2">
             {waiting.map((w) => (
               <li key={w.id} className="flex flex-wrap items-center gap-2.5 rounded-ctl border border-brand-300 bg-brand-50 px-3 py-2 text-[13.5px]" data-waiting-request={w.id}>
-                <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-brand-600" />
+                <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-brand-700" />
                 <span className="font-semibold text-ink-900">
                   {w.device ? T.waitingFor.replace("{device}", w.device) : T.waitingAny}
                   {w.note ? ` · ${w.note}` : ""}
@@ -247,7 +247,7 @@ export function FilesTab({
                 <span className="text-ink-500" suppressHydrationWarning>
                   {T.waitingSince.replace("{t}", fmtRelative(w.createdAt, locale))}
                 </span>
-                <button type="button" onClick={() => cancelWait(w.id)} className="ms-auto grid h-7 w-7 place-items-center rounded-md text-ink-500 hover:bg-white" aria-label={t.common.cancel}>
+                <button type="button" onClick={() => cancelWait(w.id)} className="ms-auto grid h-7 w-7 place-items-center rounded-md text-ink-500 hover:bg-surface" aria-label={t.common.cancel}>
                   <X className="h-4 w-4" />
                 </button>
               </li>
@@ -265,7 +265,7 @@ export function FilesTab({
           <ul className="grid gap-2">
             {likely.map((l) => (
               <li key={l.id} className="flex flex-wrap items-center gap-3 rounded-ctl border border-line p-2.5" data-likely={l.id}>
-                <span className="grid h-12 w-16 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900">
+                <span className="grid h-12 w-16 shrink-0 place-items-center overflow-hidden rounded-md bg-night">
                   {isPicture(l.mime_type) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={`/api/c/${slug}/imaging/inbox/${l.id}`} alt="" className="h-full w-full object-cover" />
@@ -304,7 +304,7 @@ export function FilesTab({
                 role="tab"
                 aria-selected={on}
                 onClick={() => setFilter(k)}
-                className={`rounded-full px-3 py-1 text-[13px] font-semibold transition-colors ${on ? "bg-ink-900 text-white" : "bg-surface text-ink-700 ring-1 ring-line hover:bg-sunken"}`}
+                className={`rounded-full px-3 py-1 text-[13px] font-semibold transition-colors ${on ? "bg-ink-900 text-surface" : "bg-surface text-ink-700 ring-1 ring-line hover:bg-sunken"}`}
                 data-files-filter={k}
               >
                 {k === "all" ? T.allKinds : kindLabel(k)} <span className="tnum opacity-70">{n}</span>
@@ -325,12 +325,12 @@ export function FilesTab({
             return (
               <Card key={f.id} className="group overflow-hidden">
                 <div data-file-tile={f.id} data-file-kind={f.kind}>
-                  <button type="button" onClick={open} className="relative block aspect-[4/3] w-full overflow-hidden bg-ink-900 text-start" aria-label={f.file_name}>
+                  <button type="button" onClick={open} className="relative block aspect-[4/3] w-full overflow-hidden bg-night text-start" aria-label={f.file_name}>
                     {picture ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={`/api/c/${slug}/files/${f.id}?thumb=1`} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-220 group-hover:scale-[1.03]" />
                     ) : (
-                      <span className="grid h-full w-full place-items-center bg-brand-50 text-brand-600">
+                      <span className="grid h-full w-full place-items-center bg-brand-50 text-brand-700">
                         <FileText className="h-9 w-9" />
                       </span>
                     )}

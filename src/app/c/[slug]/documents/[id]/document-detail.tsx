@@ -420,7 +420,7 @@ export function DocumentDetailClient({
                     setOverrideKey(m.key);
                     setOverrideValue("");
                   }}
-                  className="rounded-full border border-st-pending/40 bg-white px-2.5 py-1 text-[12px] font-medium text-st-pending hover:bg-st-pending-soft"
+                  className="rounded-full border border-st-pending/40 bg-surface px-2.5 py-1 text-[12px] font-medium text-st-pending hover:bg-st-pending-soft"
                 >
                   {m.label}
                 </button>
@@ -428,7 +428,7 @@ export function DocumentDetailClient({
               {doc.patient_id && (
                 <Link
                   href={`/c/${slug}/patients/${doc.patient_id}`}
-                  className="rounded-full bg-st-pending px-2.5 py-1 text-[12px] font-semibold text-white"
+                  className="rounded-full bg-st-pending px-2.5 py-1 text-[12px] font-semibold text-surface"
                 >
                   {t.docs.fixInPatient}
                 </Link>

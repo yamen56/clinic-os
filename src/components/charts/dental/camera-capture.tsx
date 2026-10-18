@@ -141,7 +141,7 @@ export function CameraCapture({ open, onClose, onPhoto }: { open: boolean; onClo
             </select>
           </label>
         )}
-        <div className="relative aspect-video overflow-hidden rounded-card bg-ink-900">
+        <div className="relative aspect-video overflow-hidden rounded-card bg-night">
           {error ? (
             <div className="absolute inset-0 grid place-items-center p-6 text-center text-[14px] text-white/80">{error === "denied" ? T.cameraDenied : T.cameraNone}</div>
           ) : shot ? (

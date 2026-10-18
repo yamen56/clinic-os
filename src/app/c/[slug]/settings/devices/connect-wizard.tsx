@@ -377,7 +377,7 @@ function Step({ n, done, title, children, hook, dim }: { n: number; done: boolea
   return (
     <li className={`rounded-xl border p-4 ${done ? "border-st-confirmed/40 bg-st-confirmed-soft/40" : "border-line"} ${dim ? "opacity-60" : ""}`} data-wizard-step={hook} data-done={done ? "" : undefined}>
       <div className="mb-2 flex items-center gap-2.5">
-        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-bold ${done ? "bg-st-confirmed text-white" : "bg-brand-100 text-brand-700"}`}>
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-bold ${done ? "bg-st-confirmed text-surface" : "bg-brand-100 text-brand-700"}`}>
           {done ? <CircleCheck className="h-4.5 w-4.5" /> : n}
         </span>
         <span className="font-semibold text-ink-900">{title}</span>

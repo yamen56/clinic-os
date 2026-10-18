@@ -196,7 +196,7 @@ function StepForm({
                 <button
                   type="button"
                   onClick={() => set({ canals: [...(data.canals ?? []), { name: `C${(data.canals?.length ?? 0) + 1}`, ...(cols.includes("length") ? { length: null, ref: "" } : {}), ...(cols.includes("file") ? { file: "" } : {}) }] })}
-                  className="inline-flex items-center gap-1 justify-self-start text-[12.5px] font-semibold text-brand-600"
+                  className="inline-flex items-center gap-1 justify-self-start text-[12.5px] font-semibold text-brand-700"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   {P.addCanal}
@@ -474,7 +474,7 @@ export function ProcedureCard({
               className="flex w-full items-center gap-2 rounded-ctl border border-line bg-canvas px-3 py-2 text-start text-[12.5px] text-ink-700 hover:bg-sunken"
               data-redo-of={original.id}
             >
-              <Repeat className="h-4 w-4 shrink-0 text-brand-600" />
+              <Repeat className="h-4 w-4 shrink-0 text-brand-700" />
               <span className="min-w-0 flex-1">{P.redoOf.replace("{name}", locale === "ar" ? original.labelAr : original.label).replace("{date}", fmtDate(original.doneAt ?? original.createdAt, tz, locale))}</span>
               {attempt > 1 && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11.5px] font-semibold text-brand-700">{P.redoTimes.replace("{n}", String(attempt - 1))}</span>}
             </button>
@@ -618,7 +618,7 @@ export function ProcedureCard({
                               setEditing(editing === r.id ? null : r.id);
                             }}
                             aria-expanded={editing === r.id}
-                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-600 hover:underline"
+                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:underline"
                             data-step-edit={def.key}
                           >
                             <Pencil className="h-3 w-3" />
@@ -626,7 +626,7 @@ export function ProcedureCard({
                           </button>
                         )}
                         {r.recordedBy.id === store.me.id && Date.now() - Date.parse(r.doneAt) < UNDO_MS ? (
-                          <button type="button" onClick={() => void w.withdrawStep(r, { undo: true })} className="text-[12px] font-semibold text-brand-600 hover:underline" data-step-undo={def.key}>
+                          <button type="button" onClick={() => void w.withdrawStep(r, { undo: true })} className="text-[12px] font-semibold text-brand-700 hover:underline" data-step-undo={def.key}>
                             {P.stepUndo}
                           </button>
                         ) : (

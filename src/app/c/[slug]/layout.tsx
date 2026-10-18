@@ -7,6 +7,8 @@ import { Shell } from "./shell";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/client";
 import { chartColorsFor } from "@/lib/brand-chart";
+import { cookies } from "next/headers";
+import { SIDEBAR_COOKIE, parseSidebarPref } from "@/lib/theme";
 
 export default async function ClinicLayout({
   children,
@@ -121,15 +123,23 @@ export default async function ClinicLayout({
     snapped back into the validated band.
   */
   const chartVars = chartColorsFor(clinic.brandColor);
+  /* Read here so the first paint already has the sidebar at the width this person left it. */
+  const sidebar = parseSidebarPref((await cookies()).get(SIDEBAR_COOKIE)?.value);
 
   return (
     <I18nProvider dict={dict} locale={locale}>
+    {/*
+      As --clinic-*, picked up by .clinic-chart-vars in globals.css, rather than
+      as --color-chart inline: an inline value would outrank the dark theme,
+      which lifts the bar and sinks the track to suit the night surface.
+    */}
     <div
+      className="clinic-chart-vars"
       style={
         {
           display: "contents",
-          "--color-chart": chartVars.chart,
-          "--color-chart-soft": chartVars.soft,
+          "--clinic-chart": chartVars.chart,
+          "--clinic-chart-soft": chartVars.soft,
         } as React.CSSProperties
       }
     >
@@ -143,6 +153,7 @@ export default async function ClinicLayout({
         logoPath: clinic.logoPath,
       }}
       role={access.role}
+      sidebar={sidebar}
       isOwner={access.isOwner}
       caps={access.caps}
       userName={access.session.user.fullName}

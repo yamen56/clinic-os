@@ -465,7 +465,7 @@ export default async function MonitoringPage() {
           <CardHeader
             title={
               <span className="flex items-center gap-2">
-                <Server className="h-4 w-4 text-brand-600" />
+                <Server className="h-4 w-4 text-brand-700" />
                 Workers
               </span>
             }
@@ -580,7 +580,7 @@ export default async function MonitoringPage() {
         <CardHeader
           title={
             <span className="flex items-center gap-2">
-              <DatabaseBackup className="h-4 w-4 text-brand-600" />
+              <DatabaseBackup className="h-4 w-4 text-brand-700" />
               Database backups
             </span>
           }
@@ -617,7 +617,7 @@ export default async function MonitoringPage() {
           <CardHeader
             title={
               <span className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-brand-600" />
+                <Sparkles className="h-4 w-4 text-brand-700" />
                 AI spend
               </span>
             }

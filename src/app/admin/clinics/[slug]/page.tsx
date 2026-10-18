@@ -184,7 +184,7 @@ export default async function AdminClinicDetail({
             {CHECKLIST.map((item) => (
               <li key={item.key} className="flex items-center gap-2.5">
                 {checklistState[item.key] ? (
-                  <CheckCircle2 className="h-4.5 w-4.5 text-brand-600" />
+                  <CheckCircle2 className="h-4.5 w-4.5 text-brand-700" />
                 ) : (
                   <Circle className="h-4.5 w-4.5 text-ink-300" />
                 )}

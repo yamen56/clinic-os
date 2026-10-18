@@ -98,7 +98,7 @@ export function FeaturePicker({
               }`}
             >
               <Icon
-                className={`h-4 w-4 shrink-0 ${value[f] ? "text-brand-600" : "text-ink-300"}`}
+                className={`h-4 w-4 shrink-0 ${value[f] ? "text-brand-700" : "text-ink-300"}`}
                 strokeWidth={1.75}
               />
               <span className="flex-1 text-[13px] font-medium">{t.caps[f]}</span>

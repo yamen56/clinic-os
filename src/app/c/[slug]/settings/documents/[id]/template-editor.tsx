@@ -634,7 +634,7 @@ export function TemplateEditor({
       <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title={t.docTemplates.previewAs} wide>
         <div
           dir={tab === "ar" ? "rtl" : "ltr"}
-          className="doc-body-wrap rounded-card border border-line bg-white p-6 text-sm leading-relaxed"
+          className="doc-body-wrap rounded-card border border-line bg-surface p-6 text-sm leading-relaxed"
           dangerouslySetInnerHTML={{ __html: previewHtml }}
         />
       </Modal>

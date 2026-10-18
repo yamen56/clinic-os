@@ -111,7 +111,7 @@ export function AiClient({
       <PageHeader
         title={
           <span className="flex items-center gap-2.5">
-            <Sparkles className="h-5 w-5 text-brand-600" />
+            <Sparkles className="h-5 w-5 text-brand-700" />
             {t.ai.title}
           </span>
         }
@@ -256,7 +256,7 @@ export function AiClient({
 
             <Card className="p-5">
               <h3 className="mb-1.5 flex items-center gap-2 text-[15px] font-semibold">
-                <ShieldCheck className="h-4.5 w-4.5 text-brand-600" />
+                <ShieldCheck className="h-4.5 w-4.5 text-brand-700" />
                 {t.ai.guardrails}
               </h3>
               <p className="text-[13px] leading-6 text-ink-700">{t.ai.guardrailsBody}</p>

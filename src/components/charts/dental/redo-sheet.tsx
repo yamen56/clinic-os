@@ -79,7 +79,7 @@ export function RedoSheet({
   return (
     <div className="grid gap-4" data-redo-sheet>
       <div className="flex items-start gap-3 rounded-card bg-brand-50 px-3 py-2.5">
-        <Repeat className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
+        <Repeat className="mt-0.5 h-5 w-5 shrink-0 text-brand-700" />
         <p className="text-[13px] text-ink-900">{P.redoIntro}</p>
       </div>
 

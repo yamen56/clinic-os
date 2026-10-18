@@ -160,7 +160,7 @@ export function AppointmentPanel({
   // Said once, on the box's first heading.
   const chartLink =
     state?.mode === "edit" ? (
-      <a href={`/c/${slug}/patients/${state.appt.patient_id}?tab=dental`} className="text-[12px] font-semibold text-brand-600 hover:underline">
+      <a href={`/c/${slug}/patients/${state.appt.patient_id}?tab=dental`} className="text-[12px] font-semibold text-brand-700 hover:underline">
         {t.calendar.openTreatment}
       </a>
     ) : null;
@@ -337,7 +337,7 @@ export function AppointmentPanel({
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{patient.name}</span>
                   {editAppt?.first_visit && <Badge status="brand">{t.flow.firstVisit}</Badge>}
                   {state.mode === "edit" && canOpenPatient && (
-                    <Link href={`/c/${slug}/patients/${patient.id}`} className="text-[12px] font-semibold text-brand-600 hover:underline">
+                    <Link href={`/c/${slug}/patients/${patient.id}`} className="text-[12px] font-semibold text-brand-700 hover:underline">
                       {t.flow.patientFile}
                     </Link>
                   )}
@@ -524,7 +524,7 @@ export function AppointmentPanel({
                   onClick={suggest}
                   disabled={!serviceId || suggesting}
                   title={serviceId ? undefined : t.calendar.pickService}
-                  className="flex items-center gap-1.5 justify-self-start text-[12.5px] font-semibold text-brand-600 hover:underline disabled:cursor-default disabled:text-ink-300 disabled:no-underline"
+                  className="flex items-center gap-1.5 justify-self-start text-[12.5px] font-semibold text-brand-700 hover:underline disabled:cursor-default disabled:text-ink-300 disabled:no-underline"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
                   {t.calendar.suggestTimes}

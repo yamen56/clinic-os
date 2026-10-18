@@ -195,7 +195,7 @@ export function ImageViewer({
           <button
             type="button"
             onClick={() => onSend(img)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-ctl bg-st-confirmed px-3 text-[12.5px] font-semibold text-white hover:brightness-110"
+            className="inline-flex h-9 items-center gap-1.5 rounded-ctl bg-st-confirmed px-3 text-[12.5px] font-semibold text-surface hover:brightness-110"
             data-send-patient
           >
             <MessageCircle className="h-4 w-4" />

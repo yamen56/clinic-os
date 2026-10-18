@@ -306,7 +306,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
     <div className="mx-auto grid max-w-3xl gap-4" data-imaging-station>
       <div>
         <h1 className="flex items-center gap-2 font-display text-2xl font-semibold text-ink-900">
-          <Radiation className="h-6 w-6 text-brand-600" />
+          <Radiation className="h-6 w-6 text-brand-700" />
           {T.title}
         </h1>
         <p className="mt-1.5 text-[14px] leading-relaxed text-ink-700">{T.intro}</p>
@@ -367,7 +367,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
           <ul className="grid gap-2" data-requests>
             {requests.map((r, i) => (
               <li key={r.id} className={`flex flex-wrap items-center gap-3 rounded-ctl border px-3 py-2.5 ${i === 0 ? "border-brand-300 bg-brand-50" : "border-line"}`} data-request={r.id}>
-                {r.kind === "xray" ? <Radiation className="h-4.5 w-4.5 shrink-0 text-brand-600" /> : <Cable className="h-4.5 w-4.5 shrink-0 text-brand-600" />}
+                {r.kind === "xray" ? <Radiation className="h-4.5 w-4.5 shrink-0 text-brand-700" /> : <Cable className="h-4.5 w-4.5 shrink-0 text-brand-700" />}
                 <div className="min-w-0 flex-1">
                   <div className="text-[14px] font-semibold text-ink-900">
                     {r.patient_name}
@@ -402,7 +402,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
 
       <Card className="p-4">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink-900">
-          <Inbox className="h-4.5 w-4.5 text-brand-600" />
+          <Inbox className="h-4.5 w-4.5 text-brand-700" />
           {T.inboxTitle}
           {inbox.length > 0 && <span className="rounded-full bg-brand-100 px-2 text-[12px] text-brand-700 tnum">{inbox.length}</span>}
         </h2>
@@ -584,7 +584,7 @@ function InboxRow({
   return (
     <li className="grid gap-2 rounded-ctl border border-line p-2.5" data-inbox-item={item.id}>
       <div className="flex flex-wrap items-center gap-3">
-        <span className="grid h-14 w-16 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-900">
+        <span className="grid h-14 w-16 shrink-0 place-items-center overflow-hidden rounded-md bg-night">
           {item.mime_type.startsWith("image/") && !item.mime_type.includes("tiff") ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={`/api/c/${slug}/imaging/inbox/${item.id}`} alt="" className="h-full w-full object-cover" />

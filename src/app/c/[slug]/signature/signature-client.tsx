@@ -110,7 +110,7 @@ export function SignatureSettings({
             </>
           ) : (
             <div className="flex flex-wrap items-center gap-4">
-              <div className="rounded-card border border-line bg-white p-4">
+              <div className="theme-light rounded-card border border-line bg-white p-4">
                 {currentSignature ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={currentSignature} alt="" className="h-16 max-w-64 object-contain" />
