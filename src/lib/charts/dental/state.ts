@@ -61,12 +61,14 @@ export type Mark = {
   serviceId: string | null;
   /** The earlier work this redoes: a crown made again, a root canal re-treated. */
   redoOf: string | null;
+  /** Its materials, set for this patient by hand; absent or null, they cost what its price's service says (0081). */
+  materialCost?: number | null;
 };
 
 export type MarkEvent = {
   id: string;
   markId: string;
-  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened" | "fee" | "redone" | "step_edit";
+  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened" | "fee" | "redone" | "step_edit" | "cost" | "lab";
   at: string;
   by: Person;
   reason?: string;

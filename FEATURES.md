@@ -1325,9 +1325,19 @@ three query builders, no second copy:
   own independently rounded share. Summing per-payment rounding drifts: 2.53 against a true
   2.63 on a 15.00 line at 17.5% over twenty-three instalments. The differenced form
   telescopes, so a settled invoice always pays exactly `round(net × rate/100, 2)`.
-- Voided invoices that were paid **still owe the doctor** (no refund was made) and are
-  flagged on the payout report. The clinic's own "after doctor commission" figure excludes
-  them from both sides.
+- A cancelled invoice earns nobody anything, paid or not: its payments are not the clinic's
+  money (2026-10-14), so they leave the takings and every doctor's share alike.
+- **A treatment's own costs come into its share, by the doctor's deal** (0081, 2026-10-17).
+  What the work used in materials — the price list's cost (Treatment prices → Materials,
+  or a service's Materials cost), or one set for that patient on the chart — is frozen on
+  the line at billing with the rate (`invoice_line_doctors.material_cost`); lab work is a
+  lab case's cost, read live until the lab is paid (0082). The deal is per doctor
+  (`clinic_members.costs_rule`, owner-only beside the rate, frozen on the line too):
+  *shared* — (net − costs) × rate, doctor and clinic carry them in proportion; *doctor* —
+  net × rate − costs. A line never earns below zero. Clinic expenses (stock bought in
+  bulk, the rent) still attach to nobody: only what one piece of work used comes into its
+  doctor's share, and the lab's bill and material purchases stay expenses, so nothing is
+  counted twice.
 
 **Screens** — the Earnings tab of the Finance section, one route for two readers.
 `earnings` (a top-level capability, on by default for the doctor job) shows a doctor their

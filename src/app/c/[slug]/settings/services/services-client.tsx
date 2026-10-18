@@ -42,6 +42,7 @@ type Service = {
   section_id: string | null;
   doctor_ids: string[];
   fee_code: string | null;
+  material_cost: string | null;
 };
 
 type Section = {
@@ -66,6 +67,8 @@ type Draft = {
   sectionId: string | null;
   doctorIds: string[];
   feeCode: string;
+  /** What its materials cost the clinic, each; empty is not set. */
+  materialCost: string;
 };
 
 type SectionDraft = { id?: string; name: string; nameAr: string; color: string; active: boolean };
@@ -82,6 +85,7 @@ const empty: Draft = {
   sectionId: null,
   doctorIds: [],
   feeCode: "",
+  materialCost: "",
 };
 
 const emptySection: SectionDraft = { name: "", nameAr: "", color: "#6989a6", active: true };
@@ -115,7 +119,10 @@ export function ServicesClient({
   const save = () =>
     start(async () => {
       if (!draft) return;
-      const r = await saveServiceAction(slug, draft);
+      const r = await saveServiceAction(slug, {
+        ...draft,
+        materialCost: draft.materialCost.trim() === "" ? null : Number(draft.materialCost),
+      });
       if (r.error) {
         toast(t.common.genericError, "error");
         return;
@@ -201,6 +208,7 @@ export function ServicesClient({
                 sectionId: s.section_id,
                 doctorIds: s.doctor_ids,
                 feeCode: s.fee_code ?? "",
+                materialCost: s.material_cost == null ? "" : String(Number(s.material_cost)),
               })
             }
           >
@@ -414,6 +422,15 @@ export function ServicesClient({
                 maxLength={30}
                 value={draft.feeCode}
                 onChange={(e) => setDraft({ ...draft, feeCode: e.target.value })}
+              />
+            </Field>
+            <Field label={t.services.materialCost} hint={t.services.materialCostHint}>
+              <Input
+                dir="ltr"
+                inputMode="decimal"
+                value={draft.materialCost}
+                onChange={(e) => /^\d{0,7}([.]\d{0,2})?$/.test(e.target.value) && setDraft({ ...draft, materialCost: e.target.value })}
+                data-material-cost
               />
             </Field>
             <div className="flex items-center gap-6">

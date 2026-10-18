@@ -16,6 +16,7 @@ export function EarningsClient({
   offset,
   hasCommission,
   myRate,
+  myCostsRule,
   self,
   detail,
   team,
@@ -31,6 +32,8 @@ export function EarningsClient({
   offset: number;
   hasCommission: boolean;
   myRate: number | null;
+  /** How a treatment's costs come into the viewer's own share. */
+  myCostsRule: "shared" | "doctor";
   self: DoctorEarnings | null;
   detail: EarningsLine[];
   team: DoctorEarnings[];
@@ -116,9 +119,10 @@ export function EarningsClient({
       <div className="grid gap-4">
         {self && (
           <Card className="p-5">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-4">
               <Figure label={t.earnings.myShare} value={money(self.earned)} strong />
               <Figure label={t.invoices.produced} value={money(self.produced)} />
+              <Figure label={t.earnings.costs} value={money(self.costs)} />
               <Figure
                 label={t.earnings.myRate}
                 value={myRate === null ? t.staff.commissionNone : `${myRate}%`}
@@ -131,6 +135,10 @@ export function EarningsClient({
             */}
             <p className="mt-4 border-t border-line pt-3 text-[12px] leading-relaxed text-ink-500">
               {t.earnings.exTaxNote}
+            </p>
+            {/* The deal, said once: how what the work cost — materials, the lab — came into the share above. */}
+            <p className="mt-2 text-[12px] leading-relaxed text-ink-500" data-costs-rule={myCostsRule}>
+              {myCostsRule === "doctor" ? t.earnings.costsDoctorNote : t.earnings.costsSharedNote}
             </p>
           </Card>
         )}
@@ -148,6 +156,7 @@ export function EarningsClient({
                       <th className="px-5 py-2 text-start font-semibold">{t.invoices.invoiceNo}</th>
                       <th className="px-5 py-2 text-start font-semibold">{t.common.date}</th>
                       <th className="px-5 py-2 text-end font-semibold">{t.invoices.produced}</th>
+                      <th className="px-5 py-2 text-end font-semibold">{t.earnings.costs}</th>
                       <th className="px-5 py-2 text-end font-semibold">{t.invoices.earned}</th>
                     </tr>
                   </thead>
@@ -174,6 +183,9 @@ export function EarningsClient({
                         <td className="px-5 py-2.5 text-ink-500">{fmtDateOnly(l.paidAt, locale)}</td>
                         <td className="px-5 py-2.5 text-end tabular-nums text-ink-500">
                           {money(l.produced)}
+                        </td>
+                        <td className="px-5 py-2.5 text-end tabular-nums text-ink-500">
+                          {l.costs > 0 ? <span dir="ltr">− {money(l.costs)}</span> : "—"}
                         </td>
                         <td className="px-5 py-2.5 text-end font-medium tabular-nums">
                           {money(l.earned)}
@@ -248,6 +260,7 @@ export function EarningsClient({
                     <tr className="border-b border-line text-[11px] uppercase tracking-wide text-ink-400">
                       <th className="px-5 py-2 text-start font-semibold">{t.invoices.doctor}</th>
                       <th className="px-5 py-2 text-end font-semibold">{t.invoices.produced}</th>
+                      <th className="px-5 py-2 text-end font-semibold">{t.earnings.costs}</th>
                       <th className="px-5 py-2 text-end font-semibold">{t.invoices.earned}</th>
                     </tr>
                   </thead>
@@ -259,6 +272,9 @@ export function EarningsClient({
                         </td>
                         <td className="px-5 py-2.5 text-end tabular-nums text-ink-500">
                           {money(d.produced)}
+                        </td>
+                        <td className="px-5 py-2.5 text-end tabular-nums text-ink-500">
+                          {d.costs > 0 ? <span dir="ltr">− {money(d.costs)}</span> : "—"}
                         </td>
                         <td className="px-5 py-2.5 text-end font-medium tabular-nums">
                           {money(d.earned)}

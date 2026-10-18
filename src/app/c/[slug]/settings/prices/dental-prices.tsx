@@ -21,6 +21,9 @@
   What the clinic charted with no price comes first. Priced from there, the
   treatments already charted take the price too.
 
+  Beside each price, what its materials cost the clinic (0081): it comes into
+  the doctor's share by the doctor's deal, and is never shown to a patient.
+
   Saved as typed, when the box is left. An empty box means no price yet.
 */
 
@@ -34,7 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Input, SearchInput } from "@/components/ui/input";
 import { BUILT_IN, PROCEDURE_CATEGORIES, matchesQuery, type Treatment } from "@/lib/charts/dental/catalog";
 import { PRICE_BY, invoiceLineText, variantName, type PriceRow } from "@/lib/charts/dental/pricing";
-import { renameDentalPricesAction, saveDentalPriceAction } from "../services/actions";
+import { renameDentalPricesAction, saveDentalMaterialCostAction, saveDentalPriceAction } from "../services/actions";
 
 export type DentalPrice = PriceRow;
 export type LinkableService = { id: string; name: string; name_ar: string | null; price: string };
@@ -48,9 +51,25 @@ type Filter = "all" | "priced" | "unpriced" | "used";
 /**
  * A price box: the figure as typed, saved when it is left. `className` sets its
  * width: a fixed 6rem beside other boxes from a tablet up, the room it is given
- * on a phone.
+ * on a phone. Shared with Dental labs, whose prices are typed the same way.
  */
-function PriceBox({ value, placeholder, label, hook, onSave, className = "w-24" }: { value: number | null; placeholder?: string; label: string; hook?: string; onSave: (v: number | null) => Promise<boolean>; className?: string }) {
+export function PriceBox({
+  value,
+  placeholder,
+  label,
+  hook,
+  onSave,
+  className = "w-24",
+  disabled = false,
+}: {
+  value: number | null;
+  placeholder?: string;
+  label: string;
+  hook?: string;
+  onSave: (v: number | null) => Promise<boolean>;
+  className?: string;
+  disabled?: boolean;
+}) {
   const [text, setText] = useState(value == null ? "" : String(value));
   const [saving, setSaving] = useState(false);
   const commit = async () => {
@@ -70,10 +89,11 @@ function PriceBox({ value, placeholder, label, hook, onSave, className = "w-24" 
       aria-label={label}
       value={text}
       placeholder={placeholder}
+      disabled={disabled}
       onChange={(e) => /^\d{0,7}(\.\d{0,3})?$/.test(e.target.value) && setText(e.target.value)}
       onBlur={() => void commit()}
       onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-      className={`h-9 min-w-0 rounded-ctl border bg-surface px-2 text-end text-base tnum focus:border-brand-600 focus:outline-none md:text-sm ${className} ${saving ? "border-brand-300" : "border-line"}`}
+      className={`h-9 min-w-0 rounded-ctl border bg-surface px-2 text-end text-base tnum focus:border-brand-600 focus:outline-none disabled:bg-sunken disabled:text-ink-400 md:text-sm ${className} ${saving ? "border-brand-300" : "border-line"}`}
       data-price-box={hook ?? label}
     />
   );
@@ -146,6 +166,17 @@ export function DentalPrices({
       setNeeds((prev) => prev.filter((n) => !(n.key === key && (variant === null || n.variant === variant))));
       if (r.priced) toast(S.pricedWaiting.replace("{n}", String(r.priced)));
     }
+    return true;
+  };
+
+  // What a price's materials cost: kept on its service, never copied onto a patient's treatment.
+  const saveMaterials = async (row: DentalPrice, cost: number | null): Promise<boolean> => {
+    const r = await saveDentalMaterialCostAction(slug, { serviceId: row.serviceId, cost });
+    if (r.error) {
+      toast(S.failed, "error");
+      return false;
+    }
+    setPrices((prev) => prev.map((p) => (p.serviceId === row.serviceId ? { ...p, materialCost: cost } : p)));
     return true;
   };
 
@@ -305,6 +336,22 @@ export function DentalPrices({
                           className={width}
                         />
                       );
+                      // What its materials cost: on a price that exists — set the price first.
+                      const materials = (variant: string | null, label: string, hook: string, placeholder?: string, width?: string) => {
+                        const row = priceOf(tr.key, variant);
+                        return (
+                          <PriceBox
+                            key={`m:${variant ?? ""}:${row?.serviceId ?? ""}`}
+                            value={row?.materialCost ?? null}
+                            placeholder={row ? placeholder : "—"}
+                            label={label}
+                            hook={hook}
+                            disabled={!row}
+                            onSave={(v) => (row ? saveMaterials(row, v) : Promise.resolve(false))}
+                            className={width}
+                          />
+                        );
+                      };
                       const preview = shown
                         ? invoiceLineText(
                             { label: tr.en, labelAr: tr.ar, treatmentKey: tr.key, detail: shown.variant && field ? { [field.key]: shown.variant } : {}, site: sampleSite(tr) },
@@ -340,6 +387,13 @@ export function DentalPrices({
                                   <span className="text-[12px] font-normal">{currency}</span>
                                 </span>
                               </label>
+                              <label className="grid min-w-0 gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="materials" title={S.materialsHint}>
+                                {S.materials}
+                                <span className="flex items-center gap-1.5">
+                                  {materials(null, `${name} · ${S.materials}`, `materials:${tr.en}`, undefined, "w-full flex-1 sm:w-24 sm:flex-none")}
+                                  <span className="text-[12px] font-normal">{currency}</span>
+                                </span>
+                              </label>
                             </div>
                             {!base && free.length > 0 && (
                               <label className="flex w-full items-center gap-1.5 self-end text-[12px] text-ink-500 sm:w-auto">
@@ -364,16 +418,18 @@ export function DentalPrices({
                           {/* Each kind of it — a material, a canal count — priced too, in a small table. */}
                           {field && (
                             /* On a phone the kind's name takes what the box leaves; it had a 7rem floor that pushed the table off the screen. */
-                            <div className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-x-2 gap-y-1.5 text-[13px] sm:w-fit sm:grid-cols-[minmax(7rem,auto)_6rem] sm:gap-x-3 sm:ps-4">
+                            <div className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] items-center gap-x-2 gap-y-1.5 text-[13px] sm:w-fit sm:grid-cols-[minmax(7rem,auto)_6rem_6rem] sm:gap-x-3 sm:ps-4">
                               <span />
                               <span className="self-end text-[11.5px] font-semibold leading-tight text-ink-500">{S.price}</span>
+                              <span className="self-end text-[11.5px] font-semibold leading-tight text-ink-500">{S.materials}</span>
                               {field.options.map((o) => (
                                 <div key={o.key} className="contents" data-price-variant={`${tr.key}:${o.key}`}>
                                   <bdi className="min-w-0 break-words text-ink-700">{o.en}</bdi>
                                   {box(o.key, `${name} · ${o.en}`, `${tr.en} · ${o.en}`, base ? String(base.price) : "—", "w-full")}
+                                  {materials(o.key, `${name} · ${o.en} · ${S.materials}`, `materials:${tr.en} · ${o.en}`, base?.materialCost != null ? String(base.materialCost) : "—", "w-full")}
                                 </div>
                               ))}
-                              <span className="col-span-2 text-[12px] text-ink-400">{S.variantHint}</span>
+                              <span className="col-span-3 text-[12px] text-ink-400">{S.variantHint}</span>
                             </div>
                           )}
                           {/* What the patient will read, and the way to change it. */}

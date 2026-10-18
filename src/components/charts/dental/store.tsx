@@ -36,6 +36,7 @@ import type { Booking, Visit } from "@/lib/charts/dental/treatment";
 import type { MedicalHistory } from "@/lib/medical-history";
 import type { PriceRow } from "@/lib/charts/dental/pricing";
 import type { Billed } from "@/lib/charts/dental/billing-server";
+import type { LabCase, LabPrice, LabRow } from "@/lib/charts/dental/labs";
 
 /** A file of the patient's, as the chart reads it: x-rays and photos, and the teeth each shows. */
 export type ChartFile = {
@@ -109,6 +110,11 @@ export type DentalStore = {
   billing: Billed[];
   /** From when chart work waits to be billed. */
   billingSince: string | null;
+  /** The clinic's labs, what each charges, and this patient's work sent to them. */
+  labs: LabRow[];
+  labPrices: LabPrice[];
+  labCases: LabCase[];
+  setLabCases: Setter<LabCase[]>;
 
   /** The treatment whose steps are open. */
   openItem: string | null;
@@ -146,7 +152,7 @@ const MINE_FOR_MS = 15_000;
 /** A page older than this when it mounts was restored from history, not freshly rendered. */
 const STALE_AFTER_MS = 30_000;
 /** The tables whose rows are this patient's chart. Each announces the patient it belongs to. */
-const TABLES = ["chart_marks", "chart_mark_steps", "appointment_items"];
+const TABLES = ["chart_marks", "chart_mark_steps", "appointment_items", "lab_cases"];
 /** And for a member who sees billing: an invoice raised or voided at the desk changes what is billed. */
 const TABLES_WITH_BILLING = [...TABLES, "invoices"];
 
@@ -181,6 +187,7 @@ export function DentalProvider({
   const [medical, setMedical] = useState<MedicalHistory>(chart.medical);
   const [prices, setPrices] = useState<PriceRow[]>(chart.prices);
   const [billing, setBilling] = useState<Billed[]>(chart.billing);
+  const [labCases, setLabCases] = useState<LabCase[]>(chart.labCases);
   const [openItem, setOpenItem] = useState<string | null>(null);
   const [emergency, setEmergency] = useState<{ markId?: string; site?: string } | null>(null);
 
@@ -223,6 +230,7 @@ export function DentalProvider({
     setMedical(c.medical);
     setPrices(c.prices);
     setBilling(c.billing);
+    setLabCases(c.labCases);
     setFiles(body.files);
     setPins(pinsOf(body.files));
   }, [slug, patientId]);
@@ -291,6 +299,10 @@ export function DentalProvider({
       prices,
       billing,
       billingSince: chart.billingSince,
+      labs: chart.labs,
+      labPrices: chart.labPrices,
+      labCases,
+      setLabCases,
       openItem,
       setOpenItem,
       emergency,
@@ -298,7 +310,7 @@ export function DentalProvider({
       write,
       reload,
     }),
-    [slug, patientId, data, marks, events, custom, favorites, files, pins, steps, visits, bookings, medical, prices, billing, chart.billingSince, openItem, emergency, write, reload]
+    [slug, patientId, data, marks, events, custom, favorites, files, pins, steps, visits, bookings, medical, prices, billing, chart.billingSince, chart.labs, chart.labPrices, labCases, openItem, emergency, write, reload]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

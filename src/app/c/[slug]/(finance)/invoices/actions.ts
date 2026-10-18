@@ -25,6 +25,7 @@ import { coverHolds, insurerShareFor, ruleOf } from "@/lib/insurance";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 import { renderUrlToPdf } from "@/lib/pdf";
 import { loadBilled } from "@/lib/charts/dental/billing-server";
+import { itemMaterialCosts, lineMaterialCosts } from "@/lib/line-costs";
 import { saveFile } from "@/lib/storage";
 import { z } from "zod";
 
@@ -180,18 +181,25 @@ export async function createInvoiceAction(
       A member with no `commission_percent` has no arrangement, so no row is
       written and the line simply has no doctor attached. That is what keeps
       this whole feature inert for a clinic that does not split revenue.
+
+      With the rate, the deal on a treatment's costs (`costs_rule`, 0081), and
+      what each line's materials cost — read from the chart and the price list,
+      never from the request — all frozen beside the line.
     */
     const wanted = [...new Set(d.items.map((it) => it.doctorMemberId).filter(Boolean))] as string[];
-    const rates = new Map<string, number>();
+    const rates = new Map<string, { rate: number; rule: string }>();
     if (wanted.length) {
       const r = await c.query(
-        `select id, commission_percent from clinic_members
+        `select id, commission_percent, costs_rule from clinic_members
           where clinic_id = $1 and role = 'doctor' and id = any($2::uuid[])
             and commission_percent is not null`,
         [access.clinicId, wanted]
       );
-      for (const row of r.rows) rates.set(row.id as string, Number(row.commission_percent));
+      for (const row of r.rows) rates.set(row.id as string, { rate: Number(row.commission_percent), rule: row.costs_rule as string });
     }
+    const materials = rates.size
+      ? await lineMaterialCosts(c, access.clinicId, d.items.map((it) => ({ markId: it.markId ?? null, serviceId: it.serviceId ?? null, qty: it.qty })))
+      : [];
 
     let sort = 0;
     for (const [i, it] of d.items.entries()) {
@@ -223,12 +231,12 @@ export async function createInvoiceAction(
           access.clinicId,
         ]);
       }
-      const rate = it.doctorMemberId ? rates.get(it.doctorMemberId) : undefined;
-      if (it.doctorMemberId && rate !== undefined) {
+      const deal = it.doctorMemberId ? rates.get(it.doctorMemberId) : undefined;
+      if (it.doctorMemberId && deal !== undefined) {
         await c.query(
-          `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent)
-           values ($1, $2, $3, $4)`,
-          [item.rows[0].id, access.clinicId, it.doctorMemberId, rate]
+          `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule, material_cost)
+           values ($1, $2, $3, $4, $5, $6)`,
+          [item.rows[0].id, access.clinicId, it.doctorMemberId, deal.rate, deal.rule, materials[i] ?? 0]
         );
       }
     }
@@ -837,15 +845,21 @@ export async function setInvoiceDoctorsAction(
     );
     const wanted = [...new Set(lines.map((l) => l.doctorMemberId).filter(Boolean))] as string[];
     const rates = new Map<string, number>();
+    const rules = new Map<string, string>();
     if (wanted.length) {
       const r = await c.query(
-        `select id, commission_percent from clinic_members
+        `select id, commission_percent, costs_rule from clinic_members
           where clinic_id = $1 and role = 'doctor' and id = any($2::uuid[])
             and commission_percent is not null`,
         [access.clinicId, wanted]
       );
-      for (const row of r.rows) rates.set(row.id as string, Number(row.commission_percent));
+      for (const row of r.rows) {
+        rates.set(row.id as string, Number(row.commission_percent));
+        rules.set(row.id as string, row.costs_rule as string);
+      }
     }
+    // The deal and the materials go with the rate: re-frozen from the doctor and the line as they are now.
+    const materials = await itemMaterialCosts(c, access.clinicId, lines.map((l) => l.itemId).filter((x) => ownItems.has(x)));
 
     const changed: { itemId: string; doctorMemberId: string | null; rate: number | null }[] = [];
     for (const l of lines) {
@@ -860,12 +874,14 @@ export async function setInvoiceDoctorsAction(
         continue;
       }
       await c.query(
-        `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent)
-         values ($1, $2, $3, $4)
+        `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule, material_cost)
+         values ($1, $2, $3, $4, $5, $6)
          on conflict (invoice_item_id) do update
            set doctor_member_id = excluded.doctor_member_id,
-               commission_percent = excluded.commission_percent`,
-        [l.itemId, access.clinicId, l.doctorMemberId, rate]
+               commission_percent = excluded.commission_percent,
+               costs_rule = excluded.costs_rule,
+               material_cost = excluded.material_cost`,
+        [l.itemId, access.clinicId, l.doctorMemberId, rate, rules.get(l.doctorMemberId) ?? "shared", materials.get(l.itemId) ?? 0]
       );
       changed.push({ itemId: l.itemId, doctorMemberId: l.doctorMemberId, rate });
     }
@@ -965,8 +981,8 @@ export async function voidInvoiceAction(
         `sort` is the join, being unique within an invoice by construction.
       */
       await c.query(
-        `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent)
-         select ni.id, ni.clinic_id, d.doctor_member_id, d.commission_percent
+        `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule, material_cost)
+         select ni.id, ni.clinic_id, d.doctor_member_id, d.commission_percent, d.costs_rule, d.material_cost
            from invoice_items ni
            join invoice_items oi on oi.invoice_id = $1 and oi.sort = ni.sort
            join invoice_line_doctors d on d.invoice_item_id = oi.id

@@ -51,6 +51,7 @@ import { siteLabel } from "./labels";
 import { TreatmentGlyph } from "./treatment-picker";
 import { INK, SOFT } from "./tooth-art";
 import { PriceLine } from "./price-line";
+import { LabLine } from "./lab-line";
 import { attemptOf, redoable, redoneBy } from "@/lib/charts/dental/redo";
 
 const UNDO_MS = 120_000;
@@ -519,8 +520,9 @@ export function ProcedureCard({
         </div>
       )}
 
-      {/* Its price, from the list: and how this patient pays for it, the whole treatment or each visit. */}
+      {/* Its price, from the list, and what its materials cost; then its work at a lab, when it goes to one. */}
       <PriceLine m={m} tz={tz} />
+      <LabLine m={m} tz={tz} />
 
       {prog && (
         <div>

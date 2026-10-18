@@ -450,6 +450,7 @@ export async function mergePatientsAction(
       ["treatment_cases", "patient_id"],
       ["chart_mark_steps", "patient_id"],
       ["appointment_items", "patient_id"],
+      ["lab_cases", "patient_id"],
       ["imaging_requests", "patient_id"],
       ["appointments", "patient_id"],
       ["invoices", "patient_id"],

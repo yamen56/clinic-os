@@ -55,8 +55,22 @@ export function withVariant(name: string, variant: string | null): string {
   return /[()]/.test(name) ? `${name} · ${variant}` : `${name} (${variant})`;
 }
 
-/** A price on the list: the service that is the price, and its names — what the patient reads on the invoice. */
-export type PriceRow = { serviceId: string; chartKey: string; variant: string | null; price: number; name: string; nameAr: string | null };
+/**
+ * A price on the list: the service that is the price, its names — what the
+ * patient reads on the invoice — and what its materials cost the clinic,
+ * each (0081; null when not set, which costs nothing).
+ */
+export type PriceRow = { serviceId: string; chartKey: string; variant: string | null; price: number; materialCost?: number | null; name: string; nameAr: string | null };
+
+/**
+ * What a treatment's materials cost: set for this patient, else its price's
+ * service's on the list — the same rule the server freezes at billing
+ * (line-costs.ts). Each; a bridge's is this times its teeth.
+ */
+export function materialCostOf(m: { materialCost?: number | null; serviceId: string | null }, list: PriceRow[]): number | null {
+  if (m.materialCost != null) return m.materialCost;
+  return list.find((p) => p.serviceId === m.serviceId)?.materialCost ?? null;
+}
 
 /**
  * The price for a treatment, from the clinic's list: its variant's price,

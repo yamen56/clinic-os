@@ -14,6 +14,7 @@ import type { Booking, Visit } from "./treatment";
 import { readHistory, type MedicalHistory } from "@/lib/medical-history";
 import type { PriceRow } from "./pricing";
 import type { Billed } from "./billing-server";
+import { toLab, toLabCase, type LabCase, type LabPrice, type LabRow } from "./labs";
 
 const iso = (v: unknown): string | null => (v ? new Date(v as string).toISOString() : null);
 
@@ -58,6 +59,7 @@ export function toMark(r: Record<string, unknown>): Mark {
     feeManual: !!r.fee_manual,
     serviceId: (r.service_id as string) ?? null,
     redoOf: (r.redo_of as string) ?? null,
+    materialCost: r.material_cost == null ? null : Number(r.material_cost),
   };
 }
 
@@ -171,6 +173,10 @@ export type DentalChartData = {
   billing: Billed[];
   /** From when chart work counts as waiting to be billed (work before it was billed by hand). */
   billingSince: string | null;
+  /** The clinic's labs — archived ones too, to name their old work — what each in use charges, and this patient's work sent to them (0082). */
+  labs: LabRow[];
+  labPrices: LabPrice[];
+  labCases: LabCase[];
 };
 
 /**
@@ -220,7 +226,7 @@ export async function loadDentalChart(
             from appointment_items ai
            where $3 and ai.clinic_id = $1 and ai.patient_id = $2) as bookings,
          (select medical_history from patients where id = $2 and clinic_id = $1) as medical,
-         (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'variant', s.chart_variant, 'price', s.price, 'name', s.name, 'nameAr', s.name_ar)), '[]'::json)
+         (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'variant', s.chart_variant, 'price', s.price, 'materialCost', s.material_cost, 'name', s.name, 'nameAr', s.name_ar)), '[]'::json)
             from services s where s.clinic_id = $1 and s.chart_key is not null and s.active and s.price_unit = 'item') as prices,
          (select coalesce(json_agg(x), '[]'::json)
             from (select iim.mark_id as "markId", sum(ii.qty)::float as qty,
@@ -234,10 +240,16 @@ export async function loadDentalChart(
                    where $4 and iim.clinic_id = $1 and m.patient_id = $2
                      and i.status <> 'void' and i.credit_note_of is null
                    group by iim.mark_id) x) as billing,
-         (select dental_billing_since from clinics where id = $1) as billing_since`,
+         (select dental_billing_since from clinics where id = $1) as billing_since,
+         (select coalesce(json_agg(x order by x.sort, x.name), '[]'::json)
+            from (select * from dental_labs where clinic_id = $1) x) as labs,
+         (select coalesce(json_agg(json_build_object('labId', lp.lab_id, 'chartKey', lp.chart_key, 'variant', lp.chart_variant, 'cost', lp.cost)), '[]'::json)
+            from dental_lab_prices lp join dental_labs l on l.id = lp.lab_id and l.active where lp.clinic_id = $1) as lab_prices,
+         (select coalesce(json_agg(x order by x.created_at), '[]'::json)
+            from (select * from lab_cases where clinic_id = $1 and patient_id = $2) x) as lab_cases`,
       [clinicId, patientId, opts.visits, opts.billing ?? false]
     )
-  ).rows[0] as Record<string, Record<string, unknown>[]> & { bookings: Booking[]; medical: unknown; billing: Billed[]; billing_since: unknown };
+  ).rows[0] as Record<string, Record<string, unknown>[]> & { bookings: Booking[]; medical: unknown; billing: Billed[]; billing_since: unknown; lab_prices: LabPrice[]; lab_cases: Record<string, unknown>[] };
   return {
     marks: r.marks.map(toMark),
     events: r.events.map(toEvent),
@@ -256,6 +268,7 @@ export async function loadDentalChart(
       chartKey: p.chartKey as string,
       variant: (p.variant as string) ?? null,
       price: Number(p.price),
+      materialCost: p.materialCost == null ? null : Number(p.materialCost),
       name: p.name as string,
       nameAr: (p.nameAr as string) ?? null,
     })),
@@ -267,6 +280,9 @@ export async function loadDentalChart(
       invoices: b.invoices ?? [],
     })),
     billingSince: iso(r.billing_since),
+    labs: r.labs.map(toLab),
+    labPrices: r.lab_prices.map((p) => ({ labId: p.labId, chartKey: p.chartKey, variant: p.variant ?? null, cost: Number(p.cost) })),
+    labCases: r.lab_cases.map(toLabCase),
   };
 }
 

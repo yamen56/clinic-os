@@ -26,6 +26,23 @@ import { round2 } from "./invoices";
  * **The rate is the one frozen on the line**, not the member's rate today.
  * `invoice_line_doctors.commission_percent` was copied from the member when the
  * work was billed; raising somebody's rate in March must not rewrite January.
+ *
+ * **A treatment's own costs come into its share, by the doctor's deal**
+ * (Yamen, 2026-10-17: "the costs in the treatments … calculate it between the
+ * doctors"). The materials the work used are frozen on the line with the rate
+ * (`material_cost`, 0081), its lab work is its lab cases' cost (0082, read
+ * live), and the deal is frozen on the line too (`costs_rule`):
+ *
+ *   shared — the costs come off the net first, and the rate is of what is
+ *            left: (net − costs) × rate. Doctor and clinic carry them in
+ *            proportion.
+ *   doctor — the rate is of the net, and the costs come off the doctor's
+ *            share: net × rate − costs.
+ *
+ * Either way a line never earns below zero — a doctor is not put in debt by
+ * one treatment whose costs ran over its price. A clinic's own spending —
+ * stock bought in bulk, the rent — still attaches to nobody (0050): only what
+ * this piece of work used comes into this doctor's share.
  */
 
 /**
@@ -89,7 +106,16 @@ const LEDGER_CTE = `
   )
 `;
 
-/** The per-line, per-payment rows. Reads `ledger`, so it needs `LEDGER_CTE` above it. */
+/**
+ * The per-line, per-payment rows. Reads `ledger`, so it needs `LEDGER_CTE` above it.
+ *
+ * `share` is what the line earns its doctor once paid in full, after its costs
+ * by the deal frozen on it; each payment earns its telescoping slice of that,
+ * exactly as before. With no costs and the shared deal, `share` is net × rate
+ * to the last digit, so every invoice billed before costs existed reads as it
+ * always did. `costs` is the same allocation of what the work cost, for the
+ * screen that has to explain the share.
+ */
 const LEDGER_ROWS = `
   select l.payment_id,
          l.paid_at,
@@ -102,13 +128,34 @@ const LEDGER_ROWS = `
          (ii.amount - ii.discount_amount)                                    as line_net,
          round((ii.amount - ii.discount_amount) * l.cum  / i.total, 2)
            - round((ii.amount - ii.discount_amount) * l.prev / i.total, 2)   as produced,
-         round((ii.amount - ii.discount_amount) * d.commission_percent / 100 * l.cum  / i.total, 2)
-           - round((ii.amount - ii.discount_amount) * d.commission_percent / 100 * l.prev / i.total, 2)
-                                                                             as earned
+         round(k.costs * l.cum  / i.total, 2)
+           - round(k.costs * l.prev / i.total, 2)                            as costs,
+         round(s.share * l.cum  / i.total, 2)
+           - round(s.share * l.prev / i.total, 2)                            as earned
     from ledger l
     join invoices i             on i.id = l.invoice_id
     join invoice_items ii       on ii.invoice_id = i.id
     join invoice_line_doctors d on d.invoice_item_id = ii.id
+    /*
+      The lab work behind the line: every case its treatment sent, not called
+      off (0082). Read live rather than frozen, because a lab's price is often
+      settled after the work was billed — a correction moves the share for
+      payments already made, until the lab is paid for the case, which locks
+      its cost.
+    */
+    left join lateral (
+      select coalesce(sum(lc.cost), 0) as lab
+        from invoice_item_marks iim
+        join lab_cases lc on lc.mark_id = iim.mark_id and lc.status <> 'cancelled'
+       where iim.invoice_item_id = ii.id
+    ) lab on true
+    cross join lateral (select d.material_cost + lab.lab as costs) k
+    cross join lateral (
+      select case when d.costs_rule = 'doctor'
+                  then greatest((ii.amount - ii.discount_amount) * d.commission_percent / 100 - k.costs, 0)
+                  else greatest((ii.amount - ii.discount_amount) - k.costs, 0) * d.commission_percent / 100
+             end as share
+    ) s
    where l.paid_at >= $2 and l.paid_at < $3
      and i.total > 0
      and i.credit_note_of is null
@@ -141,7 +188,9 @@ export type DoctorEarnings = {
   doctorMemberId: string;
   /** Collected against this doctor's lines, ex-tax. What they brought in. */
   produced: number;
-  /** Their share of it, at the rate frozen on each line. */
+  /** What the work behind it cost — materials, lab — in step with what was collected. */
+  costs: number;
+  /** Their share of it, at the rate and deal frozen on each line. */
   earned: number;
 };
 
@@ -153,7 +202,7 @@ export async function earningsForDoctor(
 ): Promise<DoctorEarnings> {
   const { sql, params } = scopeSql(scope);
   const r = await c.query(
-    `select coalesce(sum(produced), 0) as produced, coalesce(sum(earned), 0) as earned
+    `select coalesce(sum(produced), 0) as produced, coalesce(sum(costs), 0) as costs, coalesce(sum(earned), 0) as earned
        from (${sql} and d.doctor_member_id = $4) e`,
     [...params, doctorMemberId]
   );
@@ -161,6 +210,7 @@ export async function earningsForDoctor(
   return {
     doctorMemberId,
     produced: Number(row.produced),
+    costs: Number(row.costs),
     earned: Number(row.earned),
   };
 }
@@ -172,6 +222,7 @@ export type EarningsLine = {
   currency: string;
   paidAt: string;
   produced: number;
+  costs: number;
   earned: number;
 };
 
@@ -193,6 +244,7 @@ export async function earningsDetailForDoctor(
     `select invoice_id, invoice_number, invoice_status, currency,
             max(paid_at) as paid_at,
             coalesce(sum(produced), 0) as produced,
+            coalesce(sum(costs), 0)    as costs,
             coalesce(sum(earned), 0)   as earned
        from (${sql} and d.doctor_member_id = $4) e
       group by invoice_id, invoice_number, invoice_status, currency
@@ -207,6 +259,7 @@ export async function earningsDetailForDoctor(
     currency: row.currency as string,
     paidAt: (row.paid_at as Date).toISOString(),
     produced: Number(row.produced),
+    costs: Number(row.costs),
     earned: Number(row.earned),
   }));
 }
@@ -220,6 +273,7 @@ export async function earningsByDoctor(
   const r = await c.query(
     `select doctor_member_id,
             coalesce(sum(produced), 0) as produced,
+            coalesce(sum(costs), 0)    as costs,
             coalesce(sum(earned), 0)   as earned
        from (${sql}) e
       group by doctor_member_id
@@ -229,6 +283,7 @@ export async function earningsByDoctor(
   return r.rows.map((row) => ({
     doctorMemberId: row.doctor_member_id as string,
     produced: Number(row.produced),
+    costs: Number(row.costs),
     earned: Number(row.earned),
   }));
 }

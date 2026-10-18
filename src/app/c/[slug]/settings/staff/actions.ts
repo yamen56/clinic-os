@@ -333,6 +333,12 @@ export async function updateMemberAction(
      * which is not the same as setting it to 0. Owner-only — see the guard.
      */
     commissionPercent?: number | null;
+    /**
+     * How this doctor shares a treatment's costs — materials, lab: off the
+     * price before their percentage, or off their share. Owner-only, like the
+     * percentage it qualifies.
+     */
+    costsRule?: "shared" | "doctor";
     access?: { level: "full" | "custom"; caps: string[] };
     workingHours?: Record<string, [string, string][]> | null;
   }
@@ -472,6 +478,12 @@ export async function updateMemberAction(
       if (v === null) push("commission_percent", null);
       else if (Number.isFinite(v) && v >= 0 && v <= 100) push("commission_percent", v);
       else return { error: "invalid_commission" };
+    }
+    if (patch.costsRule !== undefined) {
+      // Part of the same deal as the percentage, so the owner's alone.
+      if (!access.isOwner) return { error: "forbidden" };
+      if (patch.costsRule !== "shared" && patch.costsRule !== "doctor") return { error: "invalid" };
+      push("costs_rule", patch.costsRule);
     }
     if (patch.access !== undefined) {
       /*

@@ -391,6 +391,13 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   await q(`insert into appointment_items (clinic_id, appointment_id, mark_id, patient_id) values ($1, $2, $3, $4) returning id`, [clinic, appointment, rct, patient]);
   // Billing from the chart (migration 0074): the root canal on an invoice line.
   await q(`insert into invoice_item_marks (invoice_item_id, mark_id, clinic_id) values ($1, $2, $3) returning mark_id`, [invoiceItem, rct, clinic]);
+  // Rooms (migration 0078): a room, and the service it hosts.
+  const room = (await q(`insert into clinic_rooms (clinic_id, name) values ($1, 'Room 1') returning id`, [clinic])).id;
+  await q(`insert into clinic_room_services (room_id, service_id, clinic_id) values ($1, $2, $3) returning room_id`, [room, service, clinic]);
+  // Dental labs (migration 0082): a lab, its price for a crown, and work sent to it.
+  const lab = (await q(`insert into dental_labs (clinic_id, name) values ($1, 'QA Lab') returning id`, [clinic])).id;
+  await q(`insert into dental_lab_prices (clinic_id, lab_id, chart_key, cost) values ($1, $2, 'crown', 40) returning id`, [clinic, lab]);
+  await q(`insert into lab_cases (clinic_id, patient_id, mark_id, lab_id, cost, sent_on) values ($1, $2, $3, $4, 40, current_date) returning id`, [clinic, patient, rct, lab]);
 
   // Imaging devices (migration 0069): a registered machine and an image it
   // sent for nobody in particular. patient_numbers fills itself — the patient

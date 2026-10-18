@@ -26,6 +26,7 @@ import {
   Workflow,
   Sparkles,
   Cable,
+  FlaskConical,
   Wallet,
   Settings,
   MoreHorizontal,
@@ -43,6 +44,7 @@ type NavKey =
   | "conversations"
   | "calendar"
   | "devices"
+  | "labs"
   /* Invoices, Earnings and Expenses, which are one subject and are now one
      entry with tabs inside it. See lib/finance. */
   | "finance"
@@ -58,6 +60,7 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   conversations: MessageCircle,
   calendar: CalendarDays,
   devices: Cable,
+  labs: FlaskConical,
   finance: Wallet,
   patients: Users,
   campaigns: Megaphone,
@@ -86,6 +89,7 @@ export function Shell({
   hasEarnings,
   hasInsurers,
   devices,
+  labs,
   fullControl,
   announcements,
   children,
@@ -117,6 +121,8 @@ export function Shell({
   hasInsurers: boolean;
   /** A machine is connected, and how many of its results wait to be filed. */
   devices: { connected: boolean; waiting: number };
+  /** A dental clinic's labs: whether it keeps any, and how much work is back late. */
+  labs: { kept: boolean; late: number };
   /** `hasFullControl(access)` — an owner, or somebody on `full` access. */
   fullControl: boolean;
   announcements: { id: string; title: string; body: string }[];
@@ -185,6 +191,8 @@ export function Shell({
        one it unplugged): a clinic with none sets one up in Settings → Devices
        and should not carry an empty page in its nav. The badge is the inbox. */
     { key: "devices", href: `${base}/devices`, show: caps.patients && (devices.connected || devices.waiting > 0), badge: devices.waiting },
+    /* Once a dental clinic keeps a lab (Settings → Dental labs): what is out, back, and owed. The badge is work back late. */
+    { key: "labs", href: `${base}/labs`, show: labs.kept && (caps["patients.charts"] || caps.invoices), badge: labs.late },
     ...(caps.invoices ? [] : [finance]),
     { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
@@ -233,6 +241,7 @@ export function Shell({
     patients: t.nav.patients,
     calendar: t.nav.calendar,
     devices: t.nav.devices,
+    labs: t.nav.labs,
     conversations: t.nav.conversations,
     campaigns: t.nav.campaigns,
     documents: t.nav.documents,

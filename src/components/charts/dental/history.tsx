@@ -11,7 +11,7 @@
 */
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, Banknote, Repeat, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, Banknote, Repeat, FlaskConical, type LucideIcon } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { findTreatment, type Treatment } from "@/lib/charts/dental/catalog";
@@ -22,6 +22,7 @@ import { TreatmentGlyph } from "./treatment-picker";
 import { detailLabels, markLabel, siteLabel } from "./labels";
 import { INK, SOFT } from "./tooth-art";
 import { PriceLine, useEntryMoney } from "./price-line";
+import { LabLine } from "./lab-line";
 
 /** Does one of the treatment's steps choose this detail? A crown's type is chosen at its preparation. */
 function stepCarries(treatmentKey: string, key: string): boolean {
@@ -152,6 +153,7 @@ export function EntryRow({
       {open && (
         <div className="grid gap-3 border-t border-line px-3 py-3">
           <PriceLine m={m} tz={tz} />
+          <LabLine m={m} tz={tz} />
           {/* A detail a step chooses (a crown's type, at its preparation) is chosen there, unless the work was already there. */}
           {tr.details?.filter((d) => !(d.key === "implants" && m.groupId) && (m.status === "existing" || !stepCarries(m.treatmentKey, d.key))).map((d) => (
             <div key={d.key}>
@@ -238,6 +240,8 @@ const EVENT_ICON: Record<MarkEvent["action"], LucideIcon> = {
   fee: Banknote,
   redone: Repeat,
   step_edit: Pencil,
+  cost: Banknote,
+  lab: FlaskConical,
 };
 
 /** The ink of one line in the history: what the entry was at that moment. */
@@ -256,8 +260,8 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
   const { t, locale } = useI18n();
   const T = t.dental;
   const byId = new Map(marks.map((m) => [m.id, m]));
-  // Filing under a case and changing a price were the Treatment tab's. Their events stay in the record, off the chart.
-  const rows = events.filter((e) => e.action !== "case" && e.action !== "fee").sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  // Filing under a case, changing a price or a cost: in the record, off the chart. Lab work is on it — it is where the crown is.
+  const rows = events.filter((e) => e.action !== "case" && e.action !== "fee" && e.action !== "cost").sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   if (rows.length === 0) return <p className="py-3 text-[13px] text-ink-500">{T.noHistory}</p>;
   return (
     <ol className="relative ms-2.5 grid gap-0.5 border-s border-line ps-6">
@@ -286,7 +290,9 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
                     : (stepOf(m.treatmentKey, e.reason ?? "")?.en ?? T.events.step)
                   : e.action === "step_edit"
                     ? `${T.events.step_edit}: ${stepOf(m.treatmentKey, e.reason ?? "")?.en ?? e.reason ?? ""}`
-                    : T.events[e.action]}
+                    : e.action === "lab"
+                      ? `${T.events.lab}: ${e.reason ?? ""}`
+                      : T.events[e.action]}
               </span>
               {e.action === "step" && e.reason === EMERGENCY_STEP && <Siren className="ms-1 inline h-3 w-3 text-danger" />}
             </div>

@@ -18,6 +18,7 @@ import { leadIdOf } from "@/lib/charts/dental/full-arch";
 import { EMERGENCY_STEP, type StepData, type StepRecord } from "@/lib/charts/dental/protocols";
 import type { MedicalHistory } from "@/lib/medical-history";
 import { priceFrom } from "@/lib/charts/dental/pricing";
+import type { LabCase } from "@/lib/charts/dental/labs";
 import { useDentalStore } from "./store";
 
 export const newId = () =>
@@ -293,7 +294,78 @@ export function useChartWriter() {
     [s.prices, base, setMarks, write, settle, toast, t.dental.price]
   );
 
-  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical, setFee };
+  /*
+    This patient's materials for a treatment, set by hand — or, with null, the
+    list's again. Shown at once, put back if the server refuses (it does once
+    the treatment is billed: its cost was frozen with the doctor's rate).
+  */
+  const setMaterialCost = useCallback(
+    async (m: Mark, cost: number | null): Promise<boolean> => {
+      setMarks((prev) => prev.map((x) => (x.id === m.id ? { ...x, materialCost: cost } : x)));
+      try {
+        const r = await write([m.id], call<{ mark: Mark; event: MarkEvent }>(`${base}/dental/marks/${m.id}/cost`, "POST", { materialCost: cost }));
+        settle([r.mark], [r.event]);
+        return true;
+      } catch (e) {
+        setMarks((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+        toast((e as Error).message === "billed" ? t.dental.price.editLocked : t.dental.price.failed, "error");
+        return false;
+      }
+    },
+    [base, setMarks, write, settle, toast, t.dental.price]
+  );
+
+  /*
+    A treatment's work sent to a lab: drawn at once with an id chosen here, so
+    what is drawn is the row that is stored; taken off again if refused.
+  */
+  const sendToLab = useCallback(
+    async (m: Mark, d: { labId: string; cost: number; dueOn: string | null; shade: string; note: string }): Promise<boolean> => {
+      const id = newId();
+      const today = new Date().toISOString();
+      const draft: LabCase = { id, markId: m.id, labId: d.labId, cost: d.cost, status: "sent", sentOn: today.slice(0, 10), dueOn: d.dueOn, receivedAt: null, shade: d.shade, note: d.note, paid: false, createdAt: today };
+      s.setLabCases((prev) => [...prev, draft]);
+      try {
+        const r = await write([id, m.id], call<{ labCase: LabCase; event: MarkEvent }>(`${base}/dental/marks/${m.id}/lab`, "POST", { id, ...d }));
+        s.setLabCases((prev) => prev.map((c) => (c.id === id ? r.labCase : c)));
+        settle([], [r.event]);
+        return true;
+      } catch {
+        s.setLabCases((prev) => prev.filter((c) => c.id !== id));
+        failed();
+        return false;
+      }
+    },
+    [s, base, write, settle, failed]
+  );
+
+  /** A lab case as it goes: back, called off, re-costed. Shown at once, put back if refused (a paid case keeps its cost). */
+  const labCaseOp = useCallback(
+    async (c: LabCase, op: { op: "received" | "sent" | "cancel" } | { op: "cost"; cost: number }): Promise<boolean> => {
+      const next: LabCase =
+        op.op === "cost"
+          ? { ...c, cost: op.cost }
+          : op.op === "received"
+            ? { ...c, status: "received", receivedAt: new Date().toISOString() }
+            : op.op === "sent"
+              ? { ...c, status: "sent", receivedAt: null }
+              : { ...c, status: "cancelled" };
+      s.setLabCases((prev) => prev.map((x) => (x.id === c.id ? next : x)));
+      try {
+        const r = await write([c.id], call<{ labCase: LabCase; event: MarkEvent }>(`${base}/dental/labs/${c.id}`, "PATCH", op));
+        s.setLabCases((prev) => prev.map((x) => (x.id === c.id ? r.labCase : x)));
+        settle([], [r.event]);
+        return true;
+      } catch (e) {
+        s.setLabCases((prev) => prev.map((x) => (x.id === c.id ? c : x)));
+        toast((e as Error).message === "paid" ? t.dental.lab.paidLocked : t.dental.saveFailed, "error");
+        return false;
+      }
+    },
+    [s, base, write, settle, toast, t.dental]
+  );
+
+  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical, setFee, setMaterialCost, sendToLab, labCaseOp };
 }
 
 /** The members a group's lead carries, found the same way the server finds them. */

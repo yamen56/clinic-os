@@ -18,7 +18,7 @@ import { EVERY_TOOTH, inChartOrder, leadIdOf } from "./full-arch";
  */
 export async function loadPrices(c: PoolClient, clinicId: string, treatmentKey: string | null = null): Promise<PriceRow[]> {
   const r = await c.query(
-    `select id, chart_key, chart_variant, price, name, name_ar from services
+    `select id, chart_key, chart_variant, price, material_cost, name, name_ar from services
       where clinic_id = $1 and chart_key is not null and active and price_unit = 'item' and ($2::text is null or chart_key = $2)`,
     [clinicId, treatmentKey]
   );
@@ -27,6 +27,7 @@ export async function loadPrices(c: PoolClient, clinicId: string, treatmentKey: 
     chartKey: x.chart_key as string,
     variant: (x.chart_variant as string) ?? null,
     price: Number(x.price),
+    materialCost: x.material_cost == null ? null : Number(x.material_cost),
     name: x.name as string,
     nameAr: (x.name_ar as string) ?? null,
   }));

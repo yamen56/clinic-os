@@ -29,6 +29,7 @@ import {
   clinicHasCommission,
 } from "../src/lib/earnings";
 import { computeInvoice, nextInvoiceNumber, refreshInvoiceStatus, round2 } from "../src/lib/invoices";
+import { lineMaterialCosts } from "../src/lib/line-costs";
 import { sendDigest } from "../worker/notifications";
 import { DateTime } from "luxon";
 
@@ -236,6 +237,95 @@ async function main() {
   check("the clinic's own total drops the cancelled invoice from both sides",
     netAfterVoid.gross === 0 && netAfterVoid.commission === 0,
     `gross ${netAfterVoid.gross}, commission ${netAfterVoid.commission}`);
+
+  // ---- a treatment's costs, by each doctor's deal (0081) -------------------
+  /*
+    Two doctors on 40%: Dr C shares costs (off the price, then the rate), Dr D
+    pays them (off the share). A crown of 300 with 20 of materials earns Dr C
+    (300 − 20) × 40% = 112 and Dr D 300 × 40% − 20 = 100. A line whose costs
+    run over earns 0, never less. Paid in three awkward instalments, the
+    shares still settle to the cent — the telescoping holds with a cost in the
+    base. Their own invoice, deleted after, so the screens below read as before.
+  */
+  const drC = await mkDoctor("Dr C", 40);
+  const drD = await mkDoctor("Dr D", 40);
+  await db.query(`update clinic_members set costs_rule = 'doctor' where id = $1`, [drD]);
+  const costItems = [
+    { description: "Crown", qty: 1, unitPrice: 300, taxCategory: "O" as const, taxRate: 0, doctor: drC, rule: "shared", cost: 20 },
+    { description: "Crown", qty: 1, unitPrice: 300, taxCategory: "O" as const, taxRate: 0, doctor: drD, rule: "doctor", cost: 20 },
+    { description: "Implant", qty: 1, unitPrice: 100, taxCategory: "O" as const, taxRate: 0, doctor: drC, rule: "shared", cost: 150 },
+    { description: "Graft", qty: 1, unitPrice: 50, taxCategory: "O" as const, taxRate: 0, doctor: drD, rule: "doctor", cost: 30 },
+  ];
+  const costTotals = computeInvoice(costItems);
+  const costNo = await nextInvoiceNumber(c, clinic.id);
+  const costInv = (
+    await db.query(
+      `insert into invoices (clinic_id, patient_id, seq, number, status, currency, subtotal, discount_amount, tax_rate, tax_amount, total, issue_date)
+       values ($1, $2, $3, $4, 'sent', 'JOD', $5, 0, 0, 0, $6, current_date) returning id`,
+      [clinic.id, patient.id, costNo.seq, costNo.number, costTotals.subtotal, costTotals.total]
+    )
+  ).rows[0];
+  for (const [i, it] of costItems.entries()) {
+    const line = costTotals.lines[i];
+    const row = (
+      await db.query(
+        `insert into invoice_items (clinic_id, invoice_id, description, qty, unit_price, amount, discount_amount, tax_category, tax_rate, tax_amount, sort)
+         values ($1, $2, $3, 1, $4, $5, 0, 'O', 0, 0, $6) returning id`,
+        [clinic.id, costInv.id, it.description, it.unitPrice, line.amount, i]
+      )
+    ).rows[0];
+    await db.query(
+      `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule, material_cost)
+       values ($1, $2, $3, 40, $4, $5)`,
+      [row.id, clinic.id, it.doctor, it.rule, it.cost]
+    );
+  }
+  const costPays = [333.33, 211.11, round2(costTotals.total - 333.33 - 211.11)];
+  for (const [i, amt] of costPays.entries()) {
+    await db.query(`insert into payments (clinic_id, invoice_id, patient_id, amount, method, paid_at) values ($1, $2, $3, $4, 'cash', $5)`, [
+      clinic.id,
+      costInv.id,
+      patient.id,
+      amt,
+      new Date(base + (30 + i) * 3600_000),
+    ]);
+  }
+  await refreshInvoiceStatus(c, costInv.id);
+  const ec = await earningsForDoctor(c, scope, drC);
+  const ed = await earningsForDoctor(c, scope, drD);
+  check("shared costs: (300 − 20) × 40% on the crown, nothing on the implant whose costs ran over", ec.earned === 112, `${ec.earned} vs 112`);
+  check("costs paid by the doctor: 300 × 40% − 20 on the crown, nothing on the graft", ed.earned === 100, `${ed.earned} vs 100`);
+  check("what each brought in is the price, whatever it cost", ec.produced === 400 && ed.produced === 350, `${ec.produced}, ${ed.produced}`);
+  check("and what the work cost is shown beside it", ec.costs === 170 && ed.costs === 50, `${ec.costs}, ${ed.costs}`);
+  await db.query(`update clinic_members set costs_rule = 'doctor' where id = $1`, [drC]);
+  check("changing a doctor's deal does not rewrite what was billed under the old one", (await earningsForDoctor(c, scope, drC)).earned === 112);
+  const netCosts = await clinicNetRevenue(c, { clinicId: clinic.id, from: FROM, to: TO });
+  // The first invoice is cancelled by now, so the doctors' shares are this one's alone.
+  check("the clinic's own figure counts the smaller shares", netCosts.commission === 212, `${netCosts.commission} vs 212`);
+
+  /*
+    The materials a line is billed with come from the chart and the price list,
+    never the request: a treatment costs what was set for its patient, else its
+    price's service; a plain service, its own; anything typed by hand, nothing.
+  */
+  const [implantSvc] = (
+    await db.query(`insert into services (clinic_id, name, duration_min, price, material_cost) values ($1, 'QA Implant', 30, 500, 120) returning id`, [clinic.id])
+  ).rows;
+  const [mk] = (
+    await db.query(
+      `insert into chart_marks (clinic_id, patient_id, site, treatment_key, label, label_ar, look, kind, status, service_id, fee)
+       values ($1, $2, '36', 'implant', 'Implant', 'Implant', 'implant', 'procedure', 'planned', $3, 500) returning id`,
+      [clinic.id, patient.id, implantSvc.id]
+    )
+  ).rows;
+  const fromList = await lineMaterialCosts(c, clinic.id, [{ markId: mk.id, serviceId: implantSvc.id, qty: 2 }, { serviceId: implantSvc.id, qty: 1 }, { qty: 3 }]);
+  check("a treatment's materials are its price's on the list, times the quantity; a typed line costs nothing", fromList.join(",") === "240,120,0", fromList.join(","));
+  await db.query(`update chart_marks set material_cost = 150 where id = $1`, [mk.id]);
+  const byHand = await lineMaterialCosts(c, clinic.id, [{ markId: mk.id, serviceId: implantSvc.id, qty: 1 }]);
+  check("set for this patient by hand, that is what it costs", byHand[0] === 150, String(byHand[0]));
+  await db.query(`delete from chart_marks where id = $1`, [mk.id]);
+  await db.query(`delete from payments where invoice_id = $1`, [costInv.id]);
+  await db.query(`delete from invoices where id = $1`, [costInv.id]);
 
   // ---- what each person actually sees -------------------------------------
   /*

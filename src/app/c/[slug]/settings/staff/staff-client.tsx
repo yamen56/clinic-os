@@ -76,6 +76,8 @@ type Member = {
    * of a clinic to every member row.
    */
   commission_percent: string | null;
+  /** How this doctor shares a treatment's costs. Null for anybody but the owner, like the rate. */
+  costs_rule: "shared" | "doctor" | null;
 };
 
 const ROLES: MemberRole[] = ["doctor", "receptionist", "other"];
@@ -803,6 +805,23 @@ function EditMember({
           />
         </Field>
       )}
+      {/*
+        The other half of the same deal: what a treatment cost — its materials,
+        its lab work — comes off before the percentage, or off the doctor's
+        share. Shown with a percentage to qualify, and only to the owner.
+      */}
+      {m.role === "doctor" && viewerIsOwner && m.commission_percent !== null && m.commission_percent !== "" && (
+        <Field label={t.staff.costsRule} hint={t.staff.costsRuleHint}>
+          <Select
+            value={m.costs_rule ?? "shared"}
+            onChange={(e) => setM({ ...m, costs_rule: e.target.value === "doctor" ? "doctor" : "shared" })}
+            data-costs-rule
+          >
+            <option value="shared">{t.staff.costsShared}</option>
+            <option value="doctor">{t.staff.costsDoctor}</option>
+          </Select>
+        </Field>
+      )}
 
       {accessLocked ? (
         <p className="rounded-lg border border-line bg-sunken px-4 py-3 text-[12px] leading-relaxed text-ink-500">
@@ -880,6 +899,7 @@ function EditMember({
                       ? null
                       : Number(m.commission_percent)
                     : undefined,
+                costsRule: viewerIsOwner && m.role === "doctor" ? (m.costs_rule ?? "shared") : undefined,
                 access: accessLocked
                   ? undefined
                   : { level, caps: CAPABILITIES.filter((c) => caps[c]) },

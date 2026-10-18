@@ -59,6 +59,10 @@ export default async function ClinicLayout({
          exists(select 1 from clinic_devices where clinic_id = $1 and revoked_at is null) as has_devices,
          (select count(*)::int from imaging_inbox
            where clinic_id = $1 and assigned_at is null and discarded_at is null) as devices_waiting,
+         -- The Lab work entry, once the clinic keeps a lab, and its badge: work back later than promised.
+         exists(select 1 from dental_labs where clinic_id = $1 and active) as has_labs,
+         (select count(*)::int from lab_cases
+           where clinic_id = $1 and status = 'sent' and due_on < (now() at time zone (select timezone from clinics where id = $1))::date) as labs_late,
          coalesce((
            select json_agg(json_build_object('id', a.id, 'title', a.title, 'body', a.body))
            from (
@@ -78,6 +82,8 @@ export default async function ClinicLayout({
       has_insurers: boolean;
       has_devices: boolean;
       devices_waiting: number;
+      has_labs: boolean;
+      labs_late: number;
       announcements: { id: string; title: string; body: string }[];
     };
   });
@@ -157,6 +163,7 @@ export default async function ClinicLayout({
       hasEarnings={!!chrome.has_earnings}
       hasInsurers={!!chrome.has_insurers}
       devices={{ connected: !!chrome.has_devices, waiting: chrome.devices_waiting }}
+      labs={{ kept: !!chrome.has_labs && clinic.features.dental, late: chrome.labs_late }}
       fullControl={hasFullControl(access)}
       announcements={chrome.announcements.filter((a) => !dismissed.includes(a.id))}
     >

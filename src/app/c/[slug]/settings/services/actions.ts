@@ -34,6 +34,12 @@ const serviceSchema = z.object({
     it wants; blank is the default and changes nothing.
   */
   feeCode: z.string().trim().max(30).optional().default(""),
+  /*
+    What the materials for it cost the clinic, each (0081). Null is not set,
+    which costs nothing. It comes into a doctor's share by their deal, and is
+    never on a patient's invoice.
+  */
+  materialCost: z.number().min(0).max(1_000_000).nullable().optional().default(null),
 });
 
 const sectionSchema = z.object({
@@ -86,9 +92,9 @@ export async function saveServiceAction(slug: string, data: unknown): Promise<{ 
       const r = await c.query(
         `update services set name = $3, name_ar = $4, duration_min = $5, price = $6, color = $7,
            buffer_after_min = $8, bookable_online = $9, location_kind = $10, section_id = $11,
-           fee_code = $12
+           fee_code = $12, material_cost = $13
          where id = $1 and clinic_id = $2`,
-        [serviceId, access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind, d.sectionId, d.feeCode || null]
+        [serviceId, access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind, d.sectionId, d.feeCode || null, d.materialCost]
       );
       if (!r.rowCount) return { error: "not_found" };
       await c.query(`delete from service_doctors where service_id = $1 and clinic_id = $2`, [
@@ -97,11 +103,11 @@ export async function saveServiceAction(slug: string, data: unknown): Promise<{ 
       ]);
     } else {
       const r = await c.query(
-        `insert into services (clinic_id, name, name_ar, duration_min, price, color, buffer_after_min, bookable_online, location_kind, section_id, fee_code, sort)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+        `insert into services (clinic_id, name, name_ar, duration_min, price, color, buffer_after_min, bookable_online, location_kind, section_id, fee_code, material_cost, sort)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
            (select coalesce(max(sort), 0) + 1 from services where clinic_id = $1))
          returning id`,
-        [access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind, d.sectionId, d.feeCode || null]
+        [access.clinicId, d.name, d.nameAr || null, d.durationMin, d.price, d.color, d.bufferAfterMin, d.bookableOnline, d.locationKind, d.sectionId, d.feeCode || null, d.materialCost]
       );
       serviceId = r.rows[0].id;
     }
@@ -331,7 +337,7 @@ export async function saveDentalPriceAction(
 
     const cur = (
       await c.query(
-        `select id, chart_owned, name, name_ar, price from services
+        `select id, chart_owned, name, name_ar, price, material_cost from services
           where clinic_id = $1 and chart_key = $2 and coalesce(chart_variant, '') = coalesce($3, '') and price_unit = 'item'`,
         [access.clinicId, d.key, d.variant]
       )
@@ -349,7 +355,7 @@ export async function saveDentalPriceAction(
     let row: PriceRow | null = null;
     let released: Awaited<ReturnType<typeof release>>;
     if (d.linkServiceId) {
-      const s = (await c.query(`select id, price, name, name_ar from services where id = $1 and clinic_id = $2 and chart_key is null`, [d.linkServiceId, access.clinicId])).rows[0];
+      const s = (await c.query(`select id, price, material_cost, name, name_ar from services where id = $1 and clinic_id = $2 and chart_key is null`, [d.linkServiceId, access.clinicId])).rows[0];
       if (!s) return { error: "invalid" };
       released = await release();
       await c.query(`update services set chart_key = $2, chart_variant = $3, price_unit = 'item', chart_owned = false, active = true where id = $1`, [
@@ -357,12 +363,12 @@ export async function saveDentalPriceAction(
         d.key,
         d.variant,
       ]);
-      row = { serviceId: s.id, chartKey: d.key, variant: d.variant, price: Number(s.price), name: s.name, nameAr: s.name_ar ?? null };
+      row = { serviceId: s.id, chartKey: d.key, variant: d.variant, price: Number(s.price), materialCost: s.material_cost == null ? null : Number(s.material_cost), name: s.name, nameAr: s.name_ar ?? null };
     } else if (d.price === null) {
       released = await release();
     } else if (cur) {
       await c.query(`update services set price = $2, active = true where id = $1`, [cur.id, d.price]);
-      row = { serviceId: cur.id, chartKey: d.key, variant: d.variant, price: d.price, name: cur.name, nameAr: cur.name_ar ?? null };
+      row = { serviceId: cur.id, chartKey: d.key, variant: d.variant, price: d.price, materialCost: cur.material_cost == null ? null : Number(cur.material_cost), name: cur.name, nameAr: cur.name_ar ?? null };
     } else {
       // Filed with the clinic's dental section when it keeps one; otherwise unfiled, like any new service.
       const section =
@@ -394,7 +400,7 @@ export async function saveDentalPriceAction(
           d.variant,
         ]
       );
-      row = { serviceId: ins.rows[0].id, chartKey: d.key, variant: d.variant, price: d.price, name: names.en, nameAr: names.ar };
+      row = { serviceId: ins.rows[0].id, chartKey: d.key, variant: d.variant, price: d.price, materialCost: null, name: names.en, nameAr: names.ar };
     }
     /*
       The treatments already charted with no price take one now: priced once,
@@ -451,6 +457,48 @@ export async function saveDentalPriceAction(
     });
     revalidatePath(`/c/${slug}/settings/prices`);
     return { row, released, priced };
+  });
+}
+
+const materialSchema = z.object({
+  serviceId: z.string().uuid(),
+  cost: z.number().min(0).max(1_000_000).nullable(),
+});
+
+/**
+ * What a treatment's materials cost the clinic, on its price (0081).
+ *
+ * Kept on the price's service, so the treatment's kinds — a zirconia crown,
+ * an E-max one — cost each their own, and a kind with no price of its own
+ * costs what the treatment does. Never quoted to a patient, so not copied
+ * onto the treatments already charted: a treatment not billed yet costs what
+ * the list says, unless it was set for that patient, and at billing it is
+ * frozen beside the doctor's rate, where it comes into their share.
+ */
+export async function saveDentalMaterialCostAction(slug: string, data: unknown): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "settings.services")) return { error: "forbidden" };
+  if (!access.clinic.features.dental) return { error: "forbidden" };
+  const parsed = materialSchema.safeParse(data);
+  if (!parsed.success) return { error: "invalid" };
+  const d = parsed.data;
+  return inClinic(access, async (c) => {
+    const r = await c.query(
+      `update services set material_cost = $3 where id = $1 and clinic_id = $2 and chart_key is not null returning chart_key, chart_variant`,
+      [d.serviceId, access.clinicId, d.cost]
+    );
+    if (!r.rowCount) return { error: "not_found" };
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "service.material_cost",
+      entity: "service",
+      entityId: d.serviceId,
+      detail: { key: r.rows[0].chart_key, variant: r.rows[0].chart_variant, cost: d.cost },
+    });
+    revalidatePath(`/c/${slug}/settings/prices`);
+    return {};
   });
 }
 
