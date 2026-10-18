@@ -14,14 +14,6 @@ import type { AdminCapability } from "./admin-permissions";
 
 /** Page-level guards: translate auth failures into redirects. */
 
-export async function guardUser(): Promise<SessionInfo> {
-  try {
-    return await requireUser();
-  } catch {
-    redirect("/login");
-  }
-}
-
 export async function guardAdmin(): Promise<SessionInfo> {
   try {
     return await requireSuperAdmin();

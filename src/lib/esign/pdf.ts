@@ -152,9 +152,3 @@ export async function pdfPageCount(data: Buffer): Promise<number> {
   return d.getPageCount();
 }
 
-/** Page aspect ratios (width/height), so placed boxes keep their proportions on screen. */
-export async function pdfPageSizes(data: Buffer): Promise<{ width: number; height: number }[]> {
-  const { PDFDocument } = await import("pdf-lib");
-  const d = await PDFDocument.load(data, { ignoreEncryption: true });
-  return d.getPages().map((p) => p.getSize());
-}

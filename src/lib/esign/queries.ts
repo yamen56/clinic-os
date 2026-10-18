@@ -260,16 +260,6 @@ export async function loadDocumentDetail(
   };
 }
 
-/** Counts for the sidebar badge and the dashboard. */
-export async function countPendingDocuments(c: PoolClient, clinicId: string): Promise<number> {
-  const r = await c.query(
-    `select count(*)::int as n from documents
-     where clinic_id = $1 and status in ('sent', 'partially_signed')`,
-    [clinicId]
-  );
-  return r.rows[0]?.n ?? 0;
-}
-
 /** Documents a booked service requires, and whether they exist and are signed. */
 export async function loadAppointmentDocuments(
   c: PoolClient,

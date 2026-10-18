@@ -58,16 +58,6 @@ export const TEMPLATE_CATEGORIES = [
 ] as const;
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
 
-/** Built-in signer roles. A clinic may add its own on top of these. */
-export const SYSTEM_SIGNER_ROLES = [
-  "patient",
-  "guardian",
-  "doctor",
-  "clinic_owner",
-  "clinic_representative",
-  "witness",
-] as const;
-
 /** Roles that sign inside the workspace with a saved signature. */
 export const STAFF_ROLE_KEYS = new Set(["doctor", "clinic_owner", "clinic_representative"]);
 
@@ -81,8 +71,6 @@ export const TERMINAL_STATUSES = new Set<DocumentStatus>([
 
 /** Guardians are required below this age; taken from the patient's birth date. */
 export const AGE_OF_MAJORITY = 18;
-
-export const SIGNING_STEPS = 3;
 
 /**
  * Recipes a new clinic gets switched on.

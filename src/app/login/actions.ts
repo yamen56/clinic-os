@@ -13,7 +13,7 @@ import {
   landingPathFor,
   safeNextPath,
 } from "@/lib/auth";
-import { LOCALE_COOKIE, type Locale } from "@/lib/i18n";
+import { LOCALE_COOKIE } from "@/lib/i18n";
 import { landingPathIn, resolveCapabilities, type MemberRole } from "@/lib/permissions";
 import { maskByFeatures, resolveFeatures } from "@/lib/features";
 
@@ -131,9 +131,3 @@ export async function logoutAction() {
   redirect("/login");
 }
 
-export async function setLocaleAction(locale: Locale) {
-  (await cookies()).set(LOCALE_COOKIE, locale === "en" ? "en" : "ar", {
-    maxAge: 365 * 86400,
-    path: "/",
-  });
-}

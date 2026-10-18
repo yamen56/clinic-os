@@ -47,13 +47,6 @@ function kindOf(position: number, primary: boolean): ToothKind {
 
 const cache = new Map<string, Tooth>();
 
-export function isTooth(fdi: string): boolean {
-  if (!/^[1-8][1-8]$/.test(fdi)) return false;
-  const q = Number(fdi[0]);
-  const p = Number(fdi[1]);
-  return q <= 4 || p <= 5;
-}
-
 export function tooth(fdi: string): Tooth {
   const hit = cache.get(fdi);
   if (hit) return hit;
@@ -181,4 +174,3 @@ export function surfaceAt(t: Tooth, region: "top" | "bottom" | "left" | "right" 
   return mesialOnRight ? "D" : "M";
 }
 
-export const QUADRANT_OF_SITE: Record<string, number> = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 };

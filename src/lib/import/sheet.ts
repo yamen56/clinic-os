@@ -89,10 +89,6 @@ export async function xlsxToDelimited(buf: Buffer): Promise<string> {
   return "";
 }
 
-/** What the file picker offers, and what the route will accept. */
-export const IMPORT_ACCEPT =
-  ".csv,.tsv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-
 /** An xlsx is a zip; every one begins PK. Checked on the bytes, not the name. */
 export function looksLikeXlsx(bytes: Uint8Array): boolean {
   return bytes.length > 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { guardCap } from "@/lib/guard";
 import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
+import { inOrder } from "@/lib/db";
 import { loadDocumentList } from "@/lib/esign/queries";
 import { PatientProfile } from "./profile-client";
 import { can } from "@/lib/auth";
@@ -101,8 +102,8 @@ export default async function PatientProfilePage({
     });
 
     const [notes, files, appointments, invoices, conversation, defs, activity, balance, documents, templates, clinicTags, insurers, noteCategories, dentalDoctors] =
-      await Promise.all([
-        c.query(
+      await inOrder([
+        () => c.query(
           /*
             Every column qualified, across the joins to users, appointments and
             services alike — all of those tables carry a `created_at`, and a bare
@@ -123,7 +124,7 @@ export default async function PatientProfilePage({
            where n.patient_id = $1 and n.clinic_id = $2 order by n.created_at desc limit 100`,
           [id, access.clinicId]
         ),
-        c.query(
+        () => c.query(
           `select f.id, f.file_name, f.mime_type, f.size_bytes, f.kind, f.created_at, f.teeth, d.name as device_name,
                   case when f.dicom is null then null else jsonb_build_object(
                     'modality', f.dicom->>'modality', 'instances', jsonb_array_length(f.dicom->'instances')) end as dicom
@@ -131,7 +132,7 @@ export default async function PatientProfilePage({
             where f.patient_id = $1 and f.clinic_id = $2 order by f.created_at desc`,
           [id, access.clinicId]
         ),
-        caps.calendar
+        () => caps.calendar
           ? c.query(
               `select a.id, a.starts_at, a.ends_at, a.status, a.source, s.name as service_name, s.name_ar as service_name_ar,
                       u.full_name as doctor_name
@@ -143,7 +144,7 @@ export default async function PatientProfilePage({
               [id, access.clinicId]
             )
           : none,
-        caps.invoices
+        () => caps.invoices
           ? c.query(
               `select i.id, i.number, i.title, i.status, i.total, i.amount_paid, i.created_at,
                       i.insurer_amount, i.claim_status, i.issue_date::text as issue_day, ins.name as insurer_name,
@@ -159,7 +160,7 @@ export default async function PatientProfilePage({
               [id, access.clinicId, ...invScope.params]
             )
           : none,
-        caps.conversations
+        () => caps.conversations
           ? c.query(
               `select cv.id,
                       (select json_agg(x) from (
@@ -174,7 +175,7 @@ export default async function PatientProfilePage({
         // The clinic's own field definitions drive this form, the template
         // variable picker and the document preview from one place, so a field
         // renamed in settings is renamed here without a second thought.
-        c.query(
+        () => c.query(
           `select id, key, label, label_ar, field_type, options, is_required,
                   storage_key, source_column
            from patient_field_definitions
@@ -182,14 +183,14 @@ export default async function PatientProfilePage({
            order by display_order, label`,
           [access.clinicId]
         ),
-        c.query(
+        () => c.query(
           `select al.action, al.created_at, al.detail, u.full_name as actor
            from audit_log al left join users u on u.id = al.user_id
            where al.clinic_id = $1 and al.entity = 'patient' and al.entity_id = $2
            order by al.created_at desc limit 15`,
           [access.clinicId, id]
         ),
-        caps.invoices
+        () => caps.invoices
           ? c.query(
               /*
                 What the patient still owes, drafts included: an invoice not
@@ -202,8 +203,8 @@ export default async function PatientProfilePage({
               [id, access.clinicId, ...invScope.params]
             )
           : { rows: [{ due: 0 }] },
-        caps.documents ? loadDocumentList(c, access.clinicId, { patientId: id }) : [],
-        caps.documents
+        () => caps.documents ? loadDocumentList(c, access.clinicId, { patientId: id }) : [],
+        () => caps.documents
           ? c.query(
               `select id, name, name_ar, category, language from document_templates
                where clinic_id = $1 and is_active order by category, name`,
@@ -213,14 +214,14 @@ export default async function PatientProfilePage({
         // The clinic's tag vocabulary, so this file suggests the labels the
         // clinic already uses instead of inviting a third spelling of "سكري",
         // and so a tag wears the colour it was given in settings.
-        c.query(`select name, color from clinic_tags where clinic_id = $1 order by sort, name`, [
+        () => c.query(`select name, color from clinic_tags where clinic_id = $1 order by sort, name`, [
           access.clinicId,
         ]),
         // Only companies still in use, so a list that has been tidied does not
         // offer a defunct insurer to the next patient — plus this patient's own,
         // so a file whose company was retired still says who covered them.
         // Not at all without Insurance: an empty list is what hides the card.
-        caps.insurance
+        () => caps.insurance
           ? c.query(
               `select id, name, coverage_percent, coverage_cap from insurers
                 where clinic_id = $1 and (active or id = $2) order by name`,
@@ -229,13 +230,13 @@ export default async function PatientProfilePage({
           : none,
         // The note categories this clinic defined. Inactive ones come too: a note
         // filed under a retired category still has to show which one.
-        c.query(
+        () => c.query(
           `select id, key, name, name_ar, color, is_system, active, sort
            from note_categories where clinic_id = $1 order by sort, name`,
           [access.clinicId]
         ),
         // The doctors a chart entry can be performed by.
-        dental
+        () => dental
           ? c.query(
               `select m.id, u.full_name as name from clinic_members m join users u on u.id = m.user_id
                 where m.clinic_id = $1 and m.active and m.role = 'doctor' order by u.full_name`,

@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { appUrl } from "@/lib/urls";
 import "./globals.css";
-import { getDict, getLocale, dirFor } from "@/lib/i18n";
+import { getLocale, dirFor } from "@/lib/i18n";
+import { dictSources } from "@/lib/i18n/asset";
 import { I18nProvider } from "@/lib/i18n/client";
 import { ToastProvider } from "@/components/ui/toast";
 import { NavTrailRecorder } from "@/components/back-link";
@@ -71,7 +72,7 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
-  const dict = await getDict();
+  const src = dictSources("medical");
   return (
     /*
       suppressHydrationWarning: the boot script below may set data-theme on
@@ -81,6 +82,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         {/* Before first paint, so a dark-theme user never sees a white flash. See lib/theme. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        {/*
+          The interface's words, from a file the browser keeps rather than inside
+          every page. Blocking and in <head> on purpose: the page's own data
+          arrives in inline scripts further down, so this has always run by the
+          time React needs a word. See lib/i18n/asset.
+        */}
+        <script src={src[locale]} />
       </head>
       <body>
         {/*
@@ -96,7 +104,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               "window.dispatchEvent(new Event('installpromptready'))});",
           }}
         />
-        <I18nProvider dict={dict} locale={locale}>
+        <I18nProvider locale={locale} vocabulary="medical" src={src}>
           <ToastProvider>{children}</ToastProvider>
         </I18nProvider>
         {/* Feeds the Back buttons: see lib/nav-trail. */}

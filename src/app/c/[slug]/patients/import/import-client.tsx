@@ -6,7 +6,6 @@ import { fmtDateTime } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/input";
-import { IMPORT_ACCEPT } from "@/lib/import/sheet";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -15,7 +14,7 @@ import {
   undoImportAction,
   type ImportPreview,
 } from "./actions";
-import type { ImportField } from "@/lib/import/parse";
+import { IMPORT_ACCEPT, type ImportField } from "@/lib/import/parse";
 import { Upload, Undo2 } from "lucide-react";
 
 const FIELDS: ImportField[] = [

@@ -166,11 +166,6 @@ export function normalizePhone(raw: string, defaultCountry: CountryCode = "JO"):
   return null;
 }
 
-/** True when the string is already a plausible E.164 number. */
-export function isE164(s: string | null | undefined): s is string {
-  return !!s && /^\+\d{8,15}$/.test(s);
-}
-
 /** Display format: +962 79 074 4070 style grouping. */
 export function formatPhone(e164: string | null | undefined): string {
   if (!e164) return "";

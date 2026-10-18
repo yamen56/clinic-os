@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useI18n } from "@/lib/i18n/client";
+import { useI18n, usePreloadLocale } from "@/lib/i18n/client";
 import { LOCALE_COOKIE } from "@/lib/i18n/shared";
 import { Languages } from "lucide-react";
 
@@ -22,6 +22,7 @@ export function LanguageToggle({
 }) {
   const { locale, t } = useI18n();
   const router = useRouter();
+  const preload = usePreloadLocale();
   const [pending, start] = useTransition();
   const next = locale === "ar" ? "en" : "ar";
 
@@ -32,13 +33,15 @@ export function LanguageToggle({
     existed only to set it, and flipping dir/lang mirrors the layout on the spot.
     The refresh that follows swaps the server-rendered text, but by then the
     change the eye tracks has already happened, so the button responds instantly
-    instead of appearing stuck.
+    instead of appearing stuck. The other language's words are fetched
+    alongside the refresh, not after it.
   */
   const toggle = () => {
     document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=${365 * 86400}; samesite=lax`;
     const el = document.documentElement;
     el.dir = next === "ar" ? "rtl" : "ltr";
     el.lang = next;
+    preload(next);
     start(() => router.refresh());
   };
 

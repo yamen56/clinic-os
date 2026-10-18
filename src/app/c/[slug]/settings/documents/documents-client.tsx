@@ -7,7 +7,7 @@ import { fmtDate } from "@/lib/dates";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
-import { Field, Input, NumberInput, Select, Toggle } from "@/components/ui/input";
+import { Field, Input, NumberInput, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";

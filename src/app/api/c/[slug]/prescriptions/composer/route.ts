@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { systemMessageDef } from "@/lib/system-messages";
+import { dictFor } from "@/lib/i18n/client-dict";
 import { isUuid } from "@/lib/uuid";
 
 /**
@@ -73,6 +74,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       captions: {
         ar: override.body_ar?.trim() ? override.body_ar : def.ar,
         en: override.body_en?.trim() ? override.body_en : def.en,
+      },
+      // The attachment's name in either language, since the prescription's can differ from the screen's.
+      sheetTitles: {
+        ar: dictFor("ar").prescriptions.sheet.title,
+        en: dictFor("en").prescriptions.sheet.title,
       },
       clinic: {
         name: row.clinic_name,

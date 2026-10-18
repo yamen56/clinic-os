@@ -179,53 +179,6 @@ export async function addStaffAction(
   });
 }
 
-/** Re-issues an invitation, invalidating any previous link. */
-export async function resendInviteAction(
-  slug: string,
-  memberId: string
-): Promise<{ error?: string; inviteUrl?: string; emailed?: boolean }> {
-  const access = await requireClinic(slug);
-  if (!can(access, "settings.staff")) return { error: "forbidden" };
-
-  return inClinic(access, async (c) => {
-    const m = await c.query(
-      `select u.id, u.email, u.full_name, u.password_hash
-       from clinic_members m join users u on u.id = m.user_id
-       where m.id = $1 and m.clinic_id = $2`,
-      [memberId, access.clinicId]
-    );
-    if (!m.rowCount) return { error: "not_found" };
-    const u = m.rows[0];
-    if (u.password_hash) return { error: "already_active" };
-
-    const raw = await withSystem((sc) =>
-      createAuthToken(sc, {
-        userId: u.id,
-        clinicId: access.clinicId,
-        purpose: "invite",
-        createdBy: access.session.user.id,
-      })
-    );
-    const inviteUrl = `${appUrl()}/invite/${raw}`;
-    const clinic = await clinicEmailContext(c, access.clinicId);
-    const sent = await sendEmail({
-      to: u.email,
-      ...renderEmail({ type: "invitation", locale: clinic.locale, name: u.full_name, clinic: clinic.name, url: inviteUrl }),
-    });
-    await audit(c, {
-      clinicId: access.clinicId,
-      userId: access.session.user.id,
-      impersonatedBy: access.session.impersonatedBy,
-      action: "staff.invite_resent",
-      entity: "user",
-      entityId: u.id,
-      detail: { email: u.email },
-    });
-    revalidatePath(`/c/${slug}/settings/staff`);
-    return { emailed: sent.ok, inviteUrl: sent.ok ? undefined : inviteUrl };
-  });
-}
-
 /**
  * Emails somebody who has just been given access to this clinic — added for the
  * first time, added back, or reactivated. Every one of those is news to them.

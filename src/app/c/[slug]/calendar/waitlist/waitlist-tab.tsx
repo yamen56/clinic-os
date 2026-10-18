@@ -7,7 +7,6 @@ import { useI18n } from "@/lib/i18n/client";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { fmtDate, fmtRelative } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

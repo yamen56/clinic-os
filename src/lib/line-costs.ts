@@ -45,21 +45,3 @@ export async function lineMaterialCosts(
     return round2(each * Math.max(0, Number(l.qty) || 0));
   });
 }
-
-/** The same, for lines already on an invoice: their treatment, if they bill one, else their service. */
-export async function itemMaterialCosts(c: PoolClient, clinicId: string, itemIds: string[]): Promise<Map<string, number>> {
-  if (!itemIds.length) return new Map();
-  const r = await c.query(
-    `select ii.id, ii.qty::float as qty, ii.service_id,
-            (select iim.mark_id from invoice_item_marks iim where iim.invoice_item_id = ii.id limit 1) as mark_id
-       from invoice_items ii
-      where ii.id = any($1::uuid[]) and ii.clinic_id = $2`,
-    [itemIds, clinicId]
-  );
-  const costs = await lineMaterialCosts(
-    c,
-    clinicId,
-    r.rows.map((x) => ({ markId: x.mark_id as string | null, serviceId: x.service_id as string | null, qty: Number(x.qty) }))
-  );
-  return new Map(r.rows.map((x, i) => [x.id as string, costs[i]]));
-}

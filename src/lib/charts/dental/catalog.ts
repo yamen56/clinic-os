@@ -111,14 +111,6 @@ export type Treatment = {
   custom?: { addedBy: string; addedAt: string };
 };
 
-const MATERIAL_FILLING: DetailField = {
-  key: "material",
-  options: [
-    { key: "composite", en: "Composite", ar: "تجميلية (ضوئية)" },
-    { key: "amalgam", en: "Amalgam", ar: "أملغم (فضية)" },
-    { key: "gic", en: "Glass ionomer", ar: "زجاجية أيونومرية" },
-  ],
-};
 const MATERIAL_CROWN: DetailField = {
   key: "material",
   options: [
@@ -366,11 +358,6 @@ export function treatmentLabel(tr: { en: string; ar: string }, locale: string): 
 export function treatmentSubLabel(tr: { en: string; ar: string; abbr?: string }, locale: string): string {
   if (locale === "ar") return tr.abbr ? `${tr.en} · ${tr.abbr}` : tr.en;
   return tr.abbr ?? "";
-}
-
-/** True when the entry, once done, means the tooth is no longer there. */
-export function removesTooth(look: Look): boolean {
-  return look === "extraction";
 }
 
 export type { Surface };

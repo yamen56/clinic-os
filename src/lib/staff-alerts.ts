@@ -210,22 +210,3 @@ export async function alertKindsFor(
   return new Set(r.rows.map((x) => x.kind as string));
 }
 
-/**
- * The notification `kind` each alert writes.
- *
- * Deliberately the values that already existed, because every user's saved
- * notification preferences are keyed by them — changing the string here would
- * silently un-mute everyone who had muted their morning digest.
- */
-export const ALERT_NOTIFICATION_KIND: Record<StaffAlertKind, string> = {
-  appointment_reminder: "doctor_reminder",
-  day_schedule: "daily_summary",
-  day_end: "day_end",
-  unread_digest: "unread_digest",
-  appointment_booked: "appointment_booked",
-  appointment_cancelled: "appointment_cancelled",
-  appointment_rescheduled: "appointment_rescheduled",
-  tomorrow_schedule: "tomorrow_schedule",
-  unconfirmed_tomorrow: "unconfirmed_tomorrow",
-  weekly_summary: "weekly_summary",
-};

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { dictFor, type Locale } from "@/lib/i18n/client-dict";
+import type { Locale } from "@/lib/i18n/client-dict";
+import { useSignWords } from "@/components/esign/sign-words";
 import { Button } from "@/components/ui/button";
 import { SigningChrome } from "@/components/esign/signing-chrome";
 import type { PublicSigningView } from "@/lib/esign/public";
@@ -25,7 +26,7 @@ export function SigningDeadEnd({
   locale: Locale;
   token: string;
 }) {
-  const t = dictFor(locale);
+  const t = useSignWords();
   const [requested, setRequested] = useState(false);
   const [pending, start] = useTransition();
   const clinicName = view.clinic?.name ?? "";

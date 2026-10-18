@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireClinic, can, type ClinicAccess } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
-import { invoiceScopeSql, mayTouchInvoice, ownInvoicesOnly } from "@/lib/invoice-scope";
+import { invoiceScopeSql, mayTouchInvoice } from "@/lib/invoice-scope";
 import {
   nextInvoiceNumber,
   nextReceiptNumber,
@@ -25,7 +25,7 @@ import { coverHolds, insurerShareFor, ruleOf } from "@/lib/insurance";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 import { renderUrlToPdf } from "@/lib/pdf";
 import { loadBilled } from "@/lib/charts/dental/billing-server";
-import { itemMaterialCosts, lineMaterialCosts } from "@/lib/line-costs";
+import { lineMaterialCosts } from "@/lib/line-costs";
 import { saveFile } from "@/lib/storage";
 import { z } from "zod";
 
@@ -662,32 +662,6 @@ async function ensureReceipt(
   return { number, token: r.rows[0].receipt_token as string };
 }
 
-/** Raises the receipt without sending it — the clinic that prints and hands it over. */
-export async function issueReceiptAction(
-  slug: string,
-  invoiceId: string
-): Promise<{ error?: string; token?: string; number?: string }> {
-  const access = await requireClinic(slug);
-  if (!can(access, "invoices")) return { error: "forbidden" };
-
-  return inClinic(access, async (c) => {
-    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
-    const r = await ensureReceipt(c, access.clinicId, invoiceId);
-    if ("error" in r) return { error: r.error };
-    await audit(c, {
-      clinicId: access.clinicId,
-      userId: access.session.user.id,
-      impersonatedBy: access.session.impersonatedBy,
-      action: "receipt.issue",
-      entity: "invoice",
-      entityId: invoiceId,
-      detail: { receipt: r.number },
-    });
-    revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
-    return { token: r.token, number: r.number };
-  });
-}
-
 /** Sends it on WhatsApp, as a PDF, the same way an invoice goes out. */
 export async function sendReceiptAction(
   slug: string,
@@ -777,128 +751,6 @@ export async function sendReceiptAction(
       entity: "invoice",
       entityId: invoiceId,
       detail: { receipt: pre.number },
-    });
-    revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
-    return {};
-  });
-}
-
-/**
- * Who earned which line, after the invoice was raised.
- *
- * A raised invoice is immutable, and this does not dent that: it touches no
- * figure the patient was shown and nothing a tax authority holds. Attribution
- * is in the same category as the insurance block above — information about the
- * invoice that arrives after it, rather than part of the bill. It is also why
- * it lives in `invoice_line_doctors` rather than on `invoice_items`, so that
- * "nothing updates a line after issue" stays literally true.
- *
- * The rate is re-frozen from the member's rate *now*, not carried over from
- * whoever was on the line before. Moving a line from a doctor on 20% to one on
- * 30% and keeping the 20 would pay the second doctor at the first one's rate,
- * which is the bug this is most likely to be used to fix.
- */
-export async function setInvoiceDoctorsAction(
-  slug: string,
-  invoiceId: string,
-  lines: { itemId: string; doctorMemberId: string | null }[]
-): Promise<{ error?: string }> {
-  const access = await requireClinic(slug);
-  if (!can(access, "invoices")) return { error: "forbidden" };
-  /*
-    Not for a doctor whose own view is filtered, and this is the one refusal in
-    the file that is about the caller rather than the invoice.
-
-    Attribution is what the filter reads. Left on `invoices` alone, a doctor
-    granted the till could point any line in the clinic at themselves and get
-    three things at once: the invoice appears in their list, the commission
-    moves to them and is re-frozen at their own rate, and the colleague who
-    actually did the work is overwritten — `invoice_item_id` is the primary key
-    here, so there is no history to notice it by. Deciding who gets paid is not
-    a billing action wearing a different hat.
-
-    Reception keeps it: correcting who did the work is a desk job, and they
-    have no share to move it to.
-  */
-  if (ownInvoicesOnly(access)) return { error: "forbidden" };
-  if (!Array.isArray(lines) || lines.length > 200) return { error: "invalid" };
-
-  return inClinic(access, async (c) => {
-    const inv = (
-      await c.query(
-        `select id, number, status from invoices where id = $1 and clinic_id = $2`,
-        [invoiceId, access.clinicId]
-      )
-    ).rows[0];
-    if (!inv) return { error: "not_found" };
-    if (inv.status === "void") return { error: "void" };
-
-    // Both sides checked against this clinic rather than trusted: the lines
-    // must belong to this invoice, and the doctors to this clinic.
-    const ownItems = new Set(
-      (
-        await c.query(`select id from invoice_items where invoice_id = $1 and clinic_id = $2`, [
-          invoiceId,
-          access.clinicId,
-        ])
-      ).rows.map((r) => r.id as string)
-    );
-    const wanted = [...new Set(lines.map((l) => l.doctorMemberId).filter(Boolean))] as string[];
-    const rates = new Map<string, number>();
-    const rules = new Map<string, string>();
-    if (wanted.length) {
-      const r = await c.query(
-        `select id, commission_percent, costs_rule from clinic_members
-          where clinic_id = $1 and role = 'doctor' and id = any($2::uuid[])
-            and commission_percent is not null`,
-        [access.clinicId, wanted]
-      );
-      for (const row of r.rows) {
-        rates.set(row.id as string, Number(row.commission_percent));
-        rules.set(row.id as string, row.costs_rule as string);
-      }
-    }
-    // The deal and the materials go with the rate: re-frozen from the doctor and the line as they are now.
-    const materials = await itemMaterialCosts(c, access.clinicId, lines.map((l) => l.itemId).filter((x) => ownItems.has(x)));
-
-    const changed: { itemId: string; doctorMemberId: string | null; rate: number | null }[] = [];
-    for (const l of lines) {
-      if (!ownItems.has(l.itemId)) continue;
-      const rate = l.doctorMemberId ? rates.get(l.doctorMemberId) : undefined;
-      if (!l.doctorMemberId || rate === undefined) {
-        await c.query(`delete from invoice_line_doctors where invoice_item_id = $1 and clinic_id = $2`, [
-          l.itemId,
-          access.clinicId,
-        ]);
-        changed.push({ itemId: l.itemId, doctorMemberId: null, rate: null });
-        continue;
-      }
-      await c.query(
-        `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule, material_cost)
-         values ($1, $2, $3, $4, $5, $6)
-         on conflict (invoice_item_id) do update
-           set doctor_member_id = excluded.doctor_member_id,
-               commission_percent = excluded.commission_percent,
-               costs_rule = excluded.costs_rule,
-               material_cost = excluded.material_cost`,
-        [l.itemId, access.clinicId, l.doctorMemberId, rate, rules.get(l.doctorMemberId) ?? "shared", materials.get(l.itemId) ?? 0]
-      );
-      changed.push({ itemId: l.itemId, doctorMemberId: l.doctorMemberId, rate });
-    }
-
-    /*
-      Audited in full, including the rate, because `invoice_line_doctors` keeps
-      no history of its own and this is money owed to a person. The audit log is
-      the only place that can answer "it used to say Dr A".
-    */
-    await audit(c, {
-      clinicId: access.clinicId,
-      userId: access.session.user.id,
-      impersonatedBy: access.session.impersonatedBy,
-      action: "invoice.attribute",
-      entity: "invoice",
-      entityId: invoiceId,
-      detail: { number: inv.number, lines: changed },
     });
     revalidatePath(`/c/${slug}/invoices/${invoiceId}`);
     return {};

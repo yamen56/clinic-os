@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/misc";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { DocumentBody } from "@/components/esign/document-body";
 import { SignaturePad, type SignaturePadHandle } from "@/components/esign/signature-pad";

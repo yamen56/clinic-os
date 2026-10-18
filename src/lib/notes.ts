@@ -64,21 +64,6 @@ export type NoteAppointment = {
   doctor_name: string | null;
 };
 
-export async function loadNoteCategories(
-  c: PoolClient,
-  clinicId: string,
-  opts: { includeInactive?: boolean } = {}
-): Promise<NoteCategory[]> {
-  const r = await c.query(
-    `select id, key, name, name_ar, color, is_system, active, sort
-     from note_categories
-     where clinic_id = $1 ${opts.includeInactive ? "" : "and active"}
-     order by sort, name`,
-    [clinicId]
-  );
-  return r.rows as NoteCategory[];
-}
-
 /** The category a note falls back to when none was chosen. */
 export async function defaultCategoryId(c: PoolClient, clinicId: string): Promise<string | null> {
   const r = await c.query(

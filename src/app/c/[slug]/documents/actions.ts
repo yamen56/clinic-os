@@ -7,12 +7,9 @@ import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
-import { notifyClinicStaff } from "@/lib/notify";
 import {
   acquireLock,
-  BODY_OVERRIDE_KEY,
   buildDefaultSigners,
-  buildMergeTable,
   createDocument,
   isEditable,
   isTerminal,
@@ -28,15 +25,11 @@ import { sendDocument, afterSignature, sendAllPendingForPatient } from "@/lib/es
 import { recordSignature, declineDocument, saveStaffSignature } from "@/lib/esign/signing";
 import { revokeSignerTokens, issueSigningToken } from "@/lib/esign/tokens";
 import {
-  clinicDisplayName,
-  firstName,
   loadClinicDelivery,
   notifyStaffOfSignerAction,
 } from "@/lib/esign/delivery";
 import { logDocEvent } from "@/lib/esign/events";
-import { queueWhatsAppMessage } from "@/lib/outbound";
 import { emitDocumentTrigger } from "@/lib/esign/jobs";
-import { sanitizeHtml } from "@/lib/esign/render";
 
 /**
  * Everything staff can do to a document.
@@ -258,42 +251,6 @@ export async function clearFieldValueAction(
     await c.query(
       `delete from document_field_values where document_id = $1 and field_key = $2 and clinic_id = $3`,
       [documentId, fieldKey, access.clinicId]
-    );
-    revalidatePath(`/c/${slug}/documents/${documentId}`);
-    return {};
-  });
-}
-
-/** Edits the wording of one document, without touching the template. */
-export async function setDocumentBodyAction(
-  slug: string,
-  documentId: string,
-  html: string
-): Promise<{ error?: string }> {
-  const access = await requireClinic(slug);
-  if (!can(access, "documents.manage")) return bad("forbidden");
-  return inClinic(access, async (c) => {
-    const doc = (
-      await c.query(`select status, language from documents where id = $1 and clinic_id = $2`, [
-        documentId,
-        access.clinicId,
-      ])
-    ).rows[0];
-    if (!doc) return bad("not_found");
-    if (!isEditable(doc)) return bad("terminal");
-
-    /*
-      A per-document body override lives on the document as an unfrozen draft
-      body. It is stored in `content_snapshot` only once the document is frozen;
-      until then it sits in a one-off field value under a reserved key, so the
-      freeze path picks it up without a second column.
-    */
-    await c.query(
-      `insert into document_field_values
-         (clinic_id, document_id, field_key, label, value, is_override, is_one_off, sort)
-       values ($1, $2, $4, 'Body', $3, true, false, -1)
-       on conflict (document_id, field_key) do update set value = excluded.value`,
-      [access.clinicId, documentId, sanitizeHtml(html).slice(0, 80_000), BODY_OVERRIDE_KEY]
     );
     revalidatePath(`/c/${slug}/documents/${documentId}`);
     return {};
@@ -854,62 +811,3 @@ export async function verifyKioskUnlockAction(
 
 // ------------------------------------------------------------ missing fields
 
-/** The merge table for a draft, for the preview panel. */
-export async function loadMergeTableAction(
-  slug: string,
-  documentId: string
-): Promise<{ error?: string; missing?: { key: string; label: string; fixHint: string | null }[] }> {
-  const access = await requireClinic(slug);
-  if (!can(access, "documents")) return bad("forbidden");
-  return inClinic(access, async (c) => {
-    const doc = (
-      await c.query(`select * from documents where id = $1 and clinic_id = $2`, [
-        documentId,
-        access.clinicId,
-      ])
-    ).rows[0];
-    if (!doc) return bad("not_found");
-    const template = doc.template_id
-      ? (await c.query(`select body, body_ar from document_templates where id = $1`, [doc.template_id]))
-          .rows[0]
-      : null;
-    const body =
-      doc.language === "ar"
-        ? template?.body_ar || template?.body || ""
-        : template?.body || template?.body_ar || "";
-    const table = await buildMergeTable(c, {
-      clinicId: access.clinicId,
-      documentId,
-      body,
-      locale: doc.language,
-      patientId: doc.patient_id,
-      appointmentId: doc.appointment_id,
-      serviceId: doc.service_id,
-    });
-    return {
-      missing: table.missing.map((m) => ({
-        key: m.key,
-        label: doc.language === "ar" ? m.labelAr : m.label,
-        fixHint: m.fixHint,
-      })),
-    };
-  });
-}
-
-/** Reception asks staff for a new link on the patient's behalf. */
-export async function requestNewLinkAction(
-  slug: string,
-  documentId: string
-): Promise<{ error?: string }> {
-  const access = await requireClinic(slug);
-  if (!can(access, "documents")) return bad("forbidden");
-  return inClinic(access, async (c) => {
-    await notifyClinicStaff(c, access.clinicId, {
-      kind: "document_new_link",
-      title: "A patient asked for a new signing link",
-      url: `/c/${slug}/documents/${documentId}`,
-      roles: ["owner", "receptionist"],
-    });
-    return {};
-  });
-}

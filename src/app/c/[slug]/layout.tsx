@@ -4,7 +4,8 @@ import { inClinic } from "@/lib/clinic-api";
 import { ServiceWorkerRegistrar } from "@/components/pwa";
 import { AutosaveGuard } from "@/components/autosave-guard";
 import { Shell } from "./shell";
-import { dictForClinic, getLocale } from "@/lib/i18n";
+import { getLocale } from "@/lib/i18n";
+import { dictSources } from "@/lib/i18n/asset";
 import { I18nProvider } from "@/lib/i18n/client";
 import { chartColorsFor } from "@/lib/brand-chart";
 import { cookies } from "next/headers";
@@ -102,11 +103,11 @@ export default async function ClinicLayout({
     the context with that clinic's vocabulary. React takes the nearest provider,
     so every client component below reads the right words without being told.
 
-    For a clinic on the default vocabulary this is the same object the root
-    already provided, so the extra provider costs nothing but a render.
+    For a clinic on the default vocabulary the file is the one the root already
+    loaded, so the extra provider costs nothing but a render. The agency's own
+    workspace fetches its file once, then keeps it like any other.
   */
   const locale = await getLocale();
-  const dict = await dictForClinic(clinic.vocabulary);
 
   /*
     The clinic's own colour for its charts.
@@ -127,7 +128,7 @@ export default async function ClinicLayout({
   const sidebar = parseSidebarPref((await cookies()).get(SIDEBAR_COOKIE)?.value);
 
   return (
-    <I18nProvider dict={dict} locale={locale}>
+    <I18nProvider locale={locale} vocabulary={clinic.vocabulary} src={dictSources(clinic.vocabulary)}>
     {/*
       As --clinic-*, picked up by .clinic-chart-vars in globals.css, rather than
       as --color-chart inline: an inline value would outrank the dark theme,

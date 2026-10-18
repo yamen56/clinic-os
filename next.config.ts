@@ -130,13 +130,7 @@ const nextConfig: NextConfig = {
     instead of stopping the dev server.
   */
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  /*
-    `pdfjs-dist` and `mammoth` are read at runtime rather than bundled. Both
-    reach for files relative to their own package — pdf.js for its standard font
-    data, mammoth for its XML fixtures — and a bundled copy loses that path and
-    fails at the first call, not at build time.
-  */
-  serverExternalPackages: ["pg", "bcryptjs", "pdfjs-dist", "mammoth"],
+  serverExternalPackages: ["pg", "bcryptjs"],
   outputFileTracingExcludes: { "*": [".pgdata/**", "storage/**"] },
   eslint: { ignoreDuringBuilds: true },
 

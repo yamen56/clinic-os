@@ -10,6 +10,16 @@
  * pre-selects, and every guess is overridable.
  */
 
+/**
+ * What the file picker offers, and what the route will accept.
+ *
+ * Here rather than beside the xlsx reader in ./sheet: the picker is a client
+ * component, and importing a constant from that module shipped ExcelJS with it
+ * (250 KB of the import page's 261).
+ */
+export const IMPORT_ACCEPT =
+  ".csv,.tsv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
 /** Columns the platform can fill from an import. */
 export type ImportField =
   | "full_name"

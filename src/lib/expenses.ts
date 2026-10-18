@@ -182,12 +182,6 @@ export async function clinicProfit(
   };
 }
 
-/** Does this clinic record any spending at all? Decides whether the lines render. */
-export async function clinicHasExpenses(c: PoolClient, clinicId: string): Promise<boolean> {
-  const r = await c.query(`select 1 from expenses where clinic_id = $1 limit 1`, [clinicId]);
-  return (r.rowCount ?? 0) > 0;
-}
-
 function toISODate(v: unknown): string {
   if (v instanceof Date) {
     // Local parts, not toISOString(): the value is a calendar day and UTC
@@ -199,7 +193,6 @@ function toISODate(v: unknown): string {
   }
   return String(v).slice(0, 10);
 }
-
 
 /** One repeating bill, as both the worker and the expenses screen need it. */
 export type ScheduleRow = {

@@ -84,6 +84,3 @@ export function effectiveHours(
   return out;
 }
 
-export function isBlockedDate(blocked: string[] | null | undefined, dt: DateTime): boolean {
-  return !!blocked?.includes(dt.toISODate()!);
-}

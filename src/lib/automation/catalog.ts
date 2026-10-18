@@ -35,9 +35,6 @@ export type TriggerCategory = (typeof TRIGGER_CATEGORIES)[number];
 export const APPOINTMENT_SOURCES = ["staff", "booking_link", "ai_agent"] as const;
 export const PATIENT_SOURCES = ["staff", "booking_link", "whatsapp", "ai_agent", "import"] as const;
 export const PATIENT_STATUSES = ["lead", "active", "archived"] as const;
-export const APPOINTMENT_STATUSES = [
-  "pending_approval", "scheduled", "confirmed", "completed", "no_show", "cancelled",
-] as const;
 
 const apptFilters = { services: uuids, doctors: uuids };
 
@@ -83,7 +80,6 @@ const TRIGGER_SCHEMAS = {
 } as const;
 
 export type TriggerKey = keyof typeof TRIGGER_SCHEMAS;
-export const TRIGGER_KEYS = Object.keys(TRIGGER_SCHEMAS) as TriggerKey[];
 
 export type TriggerDef = {
   key: TriggerKey;
@@ -351,7 +347,6 @@ const STEP_SCHEMAS = {
 } as const;
 
 export type StepKey = keyof typeof STEP_SCHEMAS;
-export const STEP_KEYS = Object.keys(STEP_SCHEMAS) as StepKey[];
 export type StepConfig<K extends StepKey> = z.infer<(typeof STEP_SCHEMAS)[K]>;
 
 export type StepDef = {

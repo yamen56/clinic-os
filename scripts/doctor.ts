@@ -97,7 +97,7 @@ async function emailCheck() {
     Resend's own shared sender is allowed to send without being verified, so it
     is not the 403 below — but it is a shared domain carrying nobody's
     reputation, and it lands in spam often enough that real staff should never
-    be invited from it. See usingSharedSender() in src/lib/email.ts.
+    be invited from it.
   */
   if (/(^|\.)resend\.dev$/.test(domain)) {
     add("warn", "Email", `from ${domain} — Resend's shared sender; often lands in spam`);

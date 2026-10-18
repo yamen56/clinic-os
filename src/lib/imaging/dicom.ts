@@ -37,7 +37,6 @@ export type DicomMeta = {
 
 export type ParsedDicom = { meta: DicomMeta; ds: dicomParser.DataSet };
 
-const DEFLATED = "1.2.840.10008.1.2.1.99";
 
 /** `YYYYMMDD` → `YYYY-MM-DD`, or null for anything else. */
 function isoDate(da: string | undefined): string | null {

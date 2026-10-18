@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, NumberInput, Select, Toggle } from "@/components/ui/input";
+import { Field, NumberInput, Select, Toggle } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";

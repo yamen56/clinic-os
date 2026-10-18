@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useI18nSafe } from "@/lib/i18n/client";
-import { dictFor, type Locale } from "@/lib/i18n/client-dict";
+import type { Locale } from "@/lib/i18n/client-dict";
+import { useSignWords } from "@/components/esign/sign-words";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eraser, Undo2, PenLine, Type } from "lucide-react";
@@ -115,14 +116,13 @@ export function SignaturePad({
   heightClass?: string;
 }) {
   /*
-    The provider's dictionary is preferred over `dictFor` inside the workspace
-    because it has the clinic's vocabulary applied to it — an agency workspace
-    says "client" where a medical one says "patient", and rebuilding it from the
-    locale alone would quietly undo that. Outside a provider there is nothing to
-    prefer, so Arabic is the fallback here rather than in the hook.
+    On a signing screen the words are the document's, from SignWordsProvider;
+    in the workspace they are the workspace dictionary's, which carries the
+    clinic's vocabulary — an agency workspace says "client" where a medical one
+    says "patient".
   */
   const provider = useI18nSafe();
-  const t = locale ? dictFor(locale) : (provider?.t ?? dictFor("ar"));
+  const t = useSignWords();
   const uiLocale = locale ?? provider?.locale ?? "ar";
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);

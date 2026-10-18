@@ -94,35 +94,3 @@ export function PhoneInput({
   );
 }
 
-/**
- * A phone number for reading.
- *
- * Exists so no caller has to remember that `dir="ltr"` alone leaves the number
- * reversed in Arabic — the isolation is what matters, and it lives here.
- */
-export function PhoneText({
-  value,
-  className = "",
-}: {
-  value: string | null | undefined;
-  className?: string;
-}) {
-  if (!value) return null;
-  return <span className={`num tnum ${className}`}>{formatForDisplay(value)}</span>;
-}
-
-/** Groups the national part for legibility, leaving unknown shapes alone. */
-function formatForDisplay(e164: string): string {
-  const { country, national } = splitE164(e164, "JO");
-  if (!national) return e164;
-  const cc = dialCode(country);
-  const grouped =
-    national.length === 9
-      ? `${national.slice(0, 2)} ${national.slice(2, 5)} ${national.slice(5)}`
-      : national.length === 10
-        ? `${national.slice(0, 3)} ${national.slice(3, 6)} ${national.slice(6)}`
-        : national.length === 8
-          ? `${national.slice(0, 4)} ${national.slice(4)}`
-          : national;
-  return `+${cc} ${grouped}`;
-}

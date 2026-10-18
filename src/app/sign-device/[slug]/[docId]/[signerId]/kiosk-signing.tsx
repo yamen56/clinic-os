@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { dictFor, type Locale } from "@/lib/i18n/client-dict";
+import type { Locale } from "@/lib/i18n/client-dict";
+import { useSignWords } from "@/components/esign/sign-words";
+import type { SignWords } from "@/lib/esign/sign-words";
 import { Button } from "@/components/ui/button";
 import { SigningChrome } from "@/components/esign/signing-chrome";
 import { SigningFlow, type SubmitPayload } from "@/components/esign/signing-flow";
@@ -41,7 +43,7 @@ export function KioskSigning({
   view: PublicSigningView;
 }) {
   const locale = (view.document?.language ?? "ar") as Locale;
-  const t = dictFor(locale);
+  const t = useSignWords();
   const router = useRouter();
 
   /*
@@ -283,7 +285,7 @@ function UnlockSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  t: ReturnType<typeof dictFor>;
+  t: SignWords;
   hasPin: boolean;
   secret: string;
   setSecret: (v: string) => void;

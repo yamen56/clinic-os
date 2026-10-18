@@ -13,7 +13,6 @@ import {
   createNote,
   defaultCategoryId,
   loadNoteHistory,
-  saveNoteVersion,
   setNoteAppointment,
 } from "@/lib/notes";
 

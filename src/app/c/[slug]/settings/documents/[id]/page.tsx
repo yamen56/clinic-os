@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { guardCap } from "@/lib/guard";
 import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
+import { inOrder } from "@/lib/db";
 import { loadFieldDefinitions } from "@/lib/esign/fields";
 import { TemplateEditor } from "./template-editor";
 import { can } from "@/lib/auth";
@@ -18,9 +19,9 @@ export default async function TemplateEditorPage({
   if (!isNew && !isUuid(id)) notFound();
 
   const data = await inClinic(access, async (c) => {
-    const [defs, roles] = await Promise.all([
-      loadFieldDefinitions(c, access.clinicId),
-      c.query(
+    const [defs, roles] = await inOrder([
+      () => loadFieldDefinitions(c, access.clinicId),
+      () => c.query(
         `select key, label, label_ar, is_staff from signer_roles
          where clinic_id = $1 order by display_order, label`,
         [access.clinicId]
@@ -40,8 +41,8 @@ export default async function TemplateEditorPage({
     ).rows[0];
     if (!template) return null;
 
-    const [versions, attached, fields] = await Promise.all([
-      c.query(
+    const [versions, attached, fields] = await inOrder([
+      () => c.query(
         /*
           Every column qualified, and `v.created_at` is the reason: both
           `document_template_versions` and `users` have one, so a bare
@@ -56,11 +57,11 @@ export default async function TemplateEditorPage({
          where v.template_id = $1 order by v.version desc limit 20`,
         [id]
       ),
-      c.query(
+      () => c.query(
         `select service_id, auto_send from service_documents where template_id = $1 and clinic_id = $2`,
         [id, access.clinicId]
       ),
-      c.query(
+      () => c.query(
         `select id, page_number, x, y, width, height, field_type, assigned_role_key,
                 is_required, label, prefilled_value, sort
          from document_fields where template_id = $1 order by page_number, sort`,

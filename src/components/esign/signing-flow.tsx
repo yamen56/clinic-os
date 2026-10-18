@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { dictFor, type Locale } from "@/lib/i18n/client-dict";
+import type { Locale } from "@/lib/i18n/client-dict";
+import { useSignWords } from "@/components/esign/sign-words";
 import { Button } from "@/components/ui/button";
 import { DocumentBody } from "@/components/esign/document-body";
 import { SignaturePad, type SignaturePadHandle, type Stroke } from "@/components/esign/signature-pad";
@@ -54,7 +55,7 @@ export function SigningFlow({
   onProgress?: (p: { step: number; scrolledToEnd: boolean; consent: boolean; strokes: Stroke[] }) => void;
   kioskFooter?: React.ReactNode;
 }) {
-  const t = dictFor(locale);
+  const t = useSignWords();
   const resume = view.session;
 
   const [step, setStep] = useState(resume?.lastStep ?? 1);
@@ -532,7 +533,7 @@ function CodeGate({
   locale: Locale;
   onVerified: () => void;
 }) {
-  const t = dictFor(locale);
+  const t = useSignWords();
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);

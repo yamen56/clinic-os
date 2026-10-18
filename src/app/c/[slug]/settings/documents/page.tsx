@@ -1,5 +1,6 @@
 import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
+import { inOrder } from "@/lib/db";
 import { DocumentSettingsClient } from "./documents-client";
 import { can } from "@/lib/auth";
 
@@ -12,8 +13,8 @@ export default async function DocumentSettingsPage({
   const access = await guardCap(slug, "settings");
 
   const data = await inClinic(access, async (c) => {
-    const [templates, roles, library, clinic] = await Promise.all([
-      c.query(
+    const [templates, roles, library, clinic] = await inOrder([
+      () => c.query(
         `select t.id, t.name, t.name_ar, t.category, t.language, t.source, t.version, t.is_active,
                 t.updated_at, t.library_key,
                 (select count(*)::int from documents d where d.template_id = t.id) as used,
@@ -27,13 +28,13 @@ export default async function DocumentSettingsPage({
          order by t.category, t.name`,
         [access.clinicId]
       ),
-      c.query(
+      () => c.query(
         `select r.id, r.key, r.label, r.label_ar, r.is_staff, r.is_system, r.display_order
          from signer_roles r where r.clinic_id = $1 order by r.display_order, r.label`,
         [access.clinicId]
       ),
       // Library entries this clinic has not copied yet.
-      c.query(
+      () => c.query(
         `select l.key, l.name, l.name_ar, l.category from document_template_library l
          where l.active and not exists (
            select 1 from document_templates t where t.clinic_id = $1 and t.library_key = l.key
@@ -41,7 +42,7 @@ export default async function DocumentSettingsPage({
          order by l.sort, l.name`,
         [access.clinicId]
       ),
-      c.query(
+      () => c.query(
         `select esign_link_days, esign_require_code, esign_reminder_hours from clinics where id = $1`,
         [access.clinicId]
       ),

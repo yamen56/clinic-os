@@ -5,6 +5,8 @@ import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
 import { isSignerDue, isTerminal, loadSigners } from "@/lib/esign/documents";
 import type { PublicSigningView } from "@/lib/esign/public";
+import { SignWordsProvider } from "@/components/esign/sign-words";
+import { signWordsFor } from "@/lib/esign/sign-words";
 import { KioskSigning } from "./kiosk-signing";
 
 /**
@@ -137,12 +139,14 @@ export default async function SignDevicePage({
   if (!data) notFound();
 
   return (
-    <KioskSigning
-      slug={slug}
-      docId={docId}
-      signerId={signerId}
-      hasPin={data.hasPin}
-      view={JSON.parse(JSON.stringify(data.view))}
-    />
+    <SignWordsProvider words={signWordsFor(data.view.document?.language ?? "ar")}>
+      <KioskSigning
+        slug={slug}
+        docId={docId}
+        signerId={signerId}
+        hasPin={data.hasPin}
+        view={JSON.parse(JSON.stringify(data.view))}
+      />
+    </SignWordsProvider>
   );
 }

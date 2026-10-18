@@ -3,6 +3,8 @@ import { getLocale } from "@/lib/i18n";
 import { loadSigningView } from "@/lib/esign/public";
 import { SigningFlow } from "@/components/esign/signing-flow";
 import { SigningDeadEnd } from "@/components/esign/signing-dead-end";
+import { SignWordsProvider } from "@/components/esign/sign-words";
+import { signWordsFor } from "@/lib/esign/sign-words";
 
 /**
  * The page a patient lands on from WhatsApp.
@@ -29,9 +31,13 @@ export default async function PublicSignPage({
   // shown a specific document, in the language it was written in.
   const locale = view.document?.language ?? (await getLocale());
 
-  if (view.state !== "ready" && view.state !== "needs_code") {
-    return <SigningDeadEnd view={view} locale={locale} token={token} />;
-  }
-
-  return <SigningFlow mode="remote" token={token} view={view} locale={locale} />;
+  return (
+    <SignWordsProvider words={signWordsFor(locale)}>
+      {view.state !== "ready" && view.state !== "needs_code" ? (
+        <SigningDeadEnd view={view} locale={locale} token={token} />
+      ) : (
+        <SigningFlow mode="remote" token={token} view={view} locale={locale} />
+      )}
+    </SignWordsProvider>
+  );
 }

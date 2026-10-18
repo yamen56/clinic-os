@@ -24,18 +24,6 @@ export async function enqueueFinalize(
   );
 }
 
-/** Nudges the next signer once the previous one is done. */
-export async function enqueueAdvance(
-  c: PoolClient,
-  clinicId: string,
-  documentId: string
-): Promise<void> {
-  await c.query(`insert into jobs (clinic_id, kind, payload) values ($1, 'document:advance', $2)`, [
-    clinicId,
-    JSON.stringify({ documentId }),
-  ]);
-}
-
 /**
  * Schedules the two reminders the brief ships on by default.
  *

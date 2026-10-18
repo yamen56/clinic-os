@@ -66,10 +66,6 @@ export async function loadFieldDefinitions(
   })) as FieldDefinition[];
 }
 
-export function labelFor(d: { label: string; label_ar: string | null }, locale: string): string {
-  return locale === "ar" ? d.label_ar || d.label : d.label;
-}
-
 /** Everything a document merges from, loaded once. */
 export type MergeSources = {
   clinic: {

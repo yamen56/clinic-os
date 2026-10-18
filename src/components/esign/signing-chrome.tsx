@@ -1,6 +1,7 @@
 "use client";
 
-import { dictFor, type Locale } from "@/lib/i18n/client-dict";
+import type { Locale } from "@/lib/i18n/client-dict";
+import { useSignWords } from "@/components/esign/sign-words";
 import { PoweredBy, PrivacyLink } from "@/components/powered-by";
 
 /**
@@ -36,7 +37,7 @@ export function SigningChrome({
   /** "link" opens clinicti.app; "text" is the kiosk-safe default. */
   credit?: "link" | "text";
 }) {
-  const t = dictFor(locale);
+  const t = useSignWords();
   const dir = locale === "ar" ? "rtl" : "ltr";
 
   return (
@@ -87,7 +88,7 @@ export function SigningChrome({
 
 /** "Step 2 of 3" plus a rail, always visible. */
 export function StepIndicator({ step, locale }: { step: number; locale: Locale }) {
-  const t = dictFor(locale);
+  const t = useSignWords();
   const labels = [t.sign.stepRead, t.sign.stepConfirm, t.sign.stepSign];
   return (
     <div className="mb-4">

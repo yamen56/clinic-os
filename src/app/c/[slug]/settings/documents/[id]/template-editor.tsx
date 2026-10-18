@@ -132,13 +132,12 @@ export function TemplateEditor({
     }))
   );
   const [tab, setTab] = useState<"ar" | "en">(language === "en" ? "en" : "ar");
-  const [imported, setImported] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
-  const [fields, setFields] = useState<PlacedField[]>(placedFields);
-  const [pdfPath, setPdfPath] = useState<string | null>(
-    (template?.source_pdf_path as string | null) ?? null
-  );
+  // An uploaded template's file and boxes are read-only now (the upload was
+  // withdrawn), so they are saved back exactly as they came.
+  const fields = placedFields;
+  const pdfPath = (template?.source_pdf_path as string | null) ?? null;
 
   const roleLabel = (key: string) => {
     const r = roles.find((x) => x.key === key);
@@ -346,7 +345,7 @@ export function TemplateEditor({
               </span>
             </div>
             <RichText
-              key={`${tab}-${imported}`}
+              key={tab}
               defaultValue={currentBody}
               dir={tab === "ar" ? "rtl" : "ltr"}
               placeholder={tab === "ar" ? t.docTemplates.bodyAr : t.docTemplates.bodyEn}

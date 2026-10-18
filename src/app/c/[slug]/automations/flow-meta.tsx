@@ -1,7 +1,7 @@
 import {
   ArrowRightLeft, BellRing, Bot, Cake, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, CheckCheck,
   CircleStop, Clock, DoorOpen, Eye, FileCheck, FileClock, FilePen, FileSignature, FileX, Flag, GitBranch,
-  History, ListTodo, MessageCircle, MessageCircleReply, MessageSquareWarning, Pill, Receipt, Reply, Send,
+  History, ListTodo, MessageCircle, MessageSquareWarning, Pill, Receipt, Reply, Send,
   StickyNote, Tag, Tags, UserCheck, UserCog, UserPlus, UserX, Wallet, Globe, Hourglass,
 } from "lucide-react";
 import type { Dict } from "@/lib/i18n/en";

@@ -145,7 +145,3 @@ export function maskByFeatures(caps: CapabilityMap, features: FeatureMap): Capab
   return out;
 }
 
-/** Count of modules a clinic has, for the "6 of 8" summary on the admin list. */
-export function enabledFeatureCount(features: FeatureMap): number {
-  return FEATURES.filter((f) => features[f]).length;
-}

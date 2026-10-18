@@ -71,10 +71,6 @@ export function registerJobHandler(kind: string, fn: JobHandler) {
  */
 const SLOW_PREFIXES = ["ai:", "einvoice:", "document:"] as const;
 
-export function isSlowKind(kind: string): boolean {
-  return SLOW_PREFIXES.some((p) => kind.startsWith(p));
-}
-
 /** SQL for "this job belongs to my lane", built from the same list. */
 function laneFilter(slow: boolean): string {
   const tests = SLOW_PREFIXES.map((p) => `kind like '${p}%'`).join(" or ");

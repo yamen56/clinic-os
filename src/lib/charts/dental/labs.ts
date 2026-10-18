@@ -110,11 +110,6 @@ export function labPriceFor(list: LabPrice[], labId: string, treatmentKey: strin
   return hit ? hit.cost : null;
 }
 
-/** A treatment's lab cost: every case it sent that was not called off. */
-export function labCostOf(cases: LabCase[], markId: string): number {
-  return Math.round(cases.filter((c) => c.markId === markId && c.status !== "cancelled").reduce((s, c) => s + c.cost, 0) * 100) / 100;
-}
-
 /** Back later than promised, and still out. */
 export function isOverdue(c: LabCase, today: string): boolean {
   return c.status === "sent" && !!c.dueOn && c.dueOn < today;

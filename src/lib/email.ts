@@ -10,17 +10,6 @@
 const FROM = () => process.env.EMAIL_FROM || "Clinicti <onboarding@resend.dev>";
 const REPLY_TO = () => process.env.EMAIL_REPLY_TO?.trim() || undefined;
 
-/**
- * Inbox placement depends far more on the sending domain than on the message.
- * The default `onboarding@resend.dev` is a shared sender with no reputation of
- * yours and will often land in spam — set EMAIL_FROM to an address on a domain
- * verified in Resend (which publishes SPF and DKIM for it) before inviting real
- * staff. `npm run doctor` reports when this is still the shared default.
- */
-export function usingSharedSender(): boolean {
-  return /resend\.dev/i.test(FROM());
-}
-
 export type SendResult = { ok: boolean; skipped?: boolean; error?: string };
 
 export function emailConfigured(): boolean {

@@ -48,8 +48,6 @@ export type MedicalHistory = {
   updatedBy?: string;
 };
 
-export const EMPTY_HISTORY: MedicalHistory = { conditions: [], allergies: "", medications: "", notes: "" };
-
 /** What the server keeps: known conditions only, trimmed text, nothing else. */
 export function cleanHistory(raw: unknown): MedicalHistory {
   const r = (raw ?? {}) as Partial<MedicalHistory>;

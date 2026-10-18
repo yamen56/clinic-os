@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
-import { dictFor } from "@/lib/i18n/client-dict";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -89,6 +88,7 @@ export type ComposerData = {
   templates: TemplateRow[];
   lastDoctor: string | null;
   captions: { ar: string; en: string };
+  sheetTitles: { ar: string; en: string };
   clinic: { name: string; nameAr: string | null; defaultLocale: RxLocale; timezone: string };
 };
 
@@ -712,7 +712,7 @@ export function PrescriptionComposer({
                 </button>
                 {showPreview && (
                   <div className="mt-2">
-                    <Preview caption={caption} locale={locale} title={T.preview} fileLabel={dictFor(locale).prescriptions.sheet.title} />
+                    <Preview caption={caption} locale={locale} title={T.preview} fileLabel={data?.sheetTitles[locale] ?? T.sheet.title} />
                   </div>
                 )}
               </div>
@@ -720,7 +720,7 @@ export function PrescriptionComposer({
 
             <aside className="hidden lg:block">
               <div className="sticky top-0">
-                <Preview caption={caption} locale={locale} title={T.preview} fileLabel={dictFor(locale).prescriptions.sheet.title} />
+                <Preview caption={caption} locale={locale} title={T.preview} fileLabel={data?.sheetTitles[locale] ?? T.sheet.title} />
               </div>
             </aside>
           </div>

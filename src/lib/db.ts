@@ -474,8 +474,19 @@ export function withSystem<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
   return withCtx({ isAdmin: true }, fn);
 }
 
-export async function notifyClinic(c: PoolClient, clinicId: string, table: string) {
-  await c.query("select pg_notify('app_events', $1)", [
-    JSON.stringify({ t: table, op: "update", clinic_id: clinicId }),
-  ]);
+/**
+ * Several queries on one connection, one after another.
+ *
+ * What `Promise.all` over one client looked like it did and did not: node-pg
+ * runs a connection's queries one at a time whatever the caller writes, so the
+ * timing is the same either way. The difference is that pg 8.22 warns about
+ * queueing ("already executing a query") and pg 9 refuses it.
+ */
+export async function inOrder<const T extends readonly (() => unknown)[]>(
+  steps: T
+): Promise<{ -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> }> {
+  const out: unknown[] = [];
+  for (const step of steps) out.push(await step());
+  return out as { -readonly [K in keyof T]: Awaited<ReturnType<T[K]>> };
 }
+

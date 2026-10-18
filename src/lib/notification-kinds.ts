@@ -173,10 +173,6 @@ export function levelOf(prefs: Record<string, unknown> | null | undefined, key: 
   return "push";
 }
 
-export function parseLevel(v: unknown): NotificationLevel | null {
-  return v === "push" || v === "app" || v === "off" ? v : null;
-}
-
 /**
  * How a kind behaves on its way to the phone.
  *

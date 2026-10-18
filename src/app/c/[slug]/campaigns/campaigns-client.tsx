@@ -12,7 +12,6 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
-import { useToast } from "@/components/ui/toast";
 import { createCampaignAction, previewAudienceAction } from "./actions";
 import {
   MIN_INTERVAL_SECONDS,
@@ -104,7 +103,6 @@ export function CampaignsClient({
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
-  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
 

@@ -43,7 +43,6 @@ agent, and renders PDFs with headless Chromium — none of which fit a serverles
 Stack notes: raw `pg` (no ORM, no query-cache library), `luxon` for time,
 `zod` for validation, `bcryptjs` + SHA-256 session tokens for auth, `@whiskeysockets/baileys`
 6.7.21 for WhatsApp, `playwright` Chromium for PDF, `pdf-lib` as a PDF compositor,
-`pdfjs-dist` for PDF rendering in the browser, `mammoth` for .docx import,
 `@anthropic-ai/sdk` for the AI agent, `web-push` for notifications, Tailwind 4.
 
 ---
@@ -824,27 +823,13 @@ treatment consent and others), **copied into each new clinic at creation** and n
 referenced again, so a clinic owns and can rewrite every word. The library is edited at
 `/admin/defaults`, alongside the other content every new clinic is seeded with.
 
-### Uploaded PDFs + field placement
+### Uploaded PDFs and Word/PDF import — withdrawn
 
-- Upload your own PDF (**15 MB max**). It is **never re-typeset**.
-- **Place boxes** by dragging on the page: `signature` | `initials` | `date` | `text` |
-  `checkbox`, each assigned to a signer role, optionally required, labelled, or pre-filled.
-- Coordinates are stored as **page-relative fractions (0–1)**, so a box placed on a phone
-  lands in the same spot at A4 and survives any zoom or render scale.
-- At finalisation, transparent per-page overlays are rendered by the same browser (so Arabic
-  values shape correctly) and composited onto the untouched original with `pdf-lib`, then the
-  certificate is appended. The worker exposes `POST /render-overlays` for this.
-
-### Import from Word or PDF
-
-- **.docx** (via `mammoth`): structured XML, so headings, lists and emphasis survive and the
-  result is genuinely editable.
-- **.pdf**: text only. A PDF stores positioned glyphs with no notion of a paragraph, and for
-  Arabic the extraction can come back **reversed or with letters disconnected**.
-- **15 MB max**, `.doc` rejected (must be saved as `.docx` first).
-- Both are **previewed before acceptance** — nothing is written until you press "Use this
-  text" — and warnings name exactly what was lost: `docx_partial`, `images_dropped`,
-  `pdf_layout_lost`, `pdf_arabic`, `pdf_no_text`.
+Withdrawn on 2026-08-26 (`dc6b391`): extraction from a PDF was too often unusable, Arabic
+worst of all. The few templates made from an uploaded PDF still open, send and sign — at
+finalisation their boxes are overlaid on the untouched original with `pdf-lib` and the
+worker's `POST /render-overlays` — and the editor shows them read-only. Nothing new can be
+uploaded or imported; the last of the import code went on 2026-10-18.
 
 ### Merge fields (`patient_field_definitions`)
 
@@ -1311,8 +1296,8 @@ A clinic can agree a percentage with a doctor, and the system then works out wha
   owner, and the server refuses the write from anyone else.
 - `invoice_line_doctors` — whose work a line was, plus the rate **frozen at billing**. Its
   own table so `invoice_items` stays the immutable tax document (§ the UBL is built from it).
-  Attribution stays correctable afterwards via `setInvoiceDoctorsAction`, which re-freezes
-  from the member's current rate and touches no figure.
+  Once the invoice is raised, attribution is fixed: there is no screen that moves a line to
+  another doctor (the unused `setInvoiceDoctorsAction` was removed 2026-10-18).
 - **The patient never sees any of it.** Not on `/inv/{token}`, not on `/rcp/{token}`, not in
   the UBL.
 
@@ -1371,8 +1356,8 @@ while leaving `voidInvoiceAction` reachable by id is a wager, not a permission. 
 clinic totals either, whatever else they hold — a screen that filters the rows and sums
 every row in the clinic above them is two different answers stacked. **Reception is never
 filtered**: settling at the desk for whoever is in the chair is the job.
-Attribution itself (`setInvoiceDoctorsAction`) is refused to a filtered doctor — it decides
-who gets paid, and it is the predicate the filter reads (decision 88).
+Attribution is set when the invoice is raised and not changed afterwards, so a filtered
+doctor has no way to point a line at themselves (decision 88).
 
 ### Money views
 
