@@ -548,8 +548,29 @@ export function Odontogram({
             const ink = INK[j.paint];
             const dash = j.paint === "planned" ? "3 2" : undefined;
             if (j.kind === "bar") {
-              const y = local(88);
-              return <rect key={`${a.fdi}-${k}`} x={xa} y={y - 2.2} width={xb - xa} height={4.4} rx={2} className="tooth-pop" style={{ fill: ink, opacity: 0.85 }} strokeDasharray={dash} />;
+              /*
+                A bridge as it is made: crowns joined at their contact, a small
+                ceramic connector between each pair — and under it a fine line
+                in the status' ink, so the span still reads as one piece of work.
+              */
+              // Halfway between the two crowns — across the midline gap too.
+              const joint = (a.x + CW + b.x) / 2;
+              const yc = local(80);
+              const yl = local(76);
+              return (
+                <g key={`${a.fdi}-${k}`} className="tooth-pop">
+                  <line x1={xa} y1={yl} x2={xb} y2={yl} style={{ stroke: ink, strokeWidth: 1.1, opacity: 0.7 }} strokeDasharray={dash} strokeLinecap="round" />
+                  <rect
+                    x={joint - 4.2}
+                    y={yc - 5}
+                    width={8.4}
+                    height={10}
+                    rx={3.5}
+                    style={{ fill: "url(#dental-defs-ceramic)", fillOpacity: j.paint === "planned" ? 0.55 : 1, stroke: ink, strokeWidth: 0.9 }}
+                    strokeDasharray={dash}
+                  />
+                </g>
+              );
             }
             const y = local(j.kind === "wire" ? 85 : 93);
             return (

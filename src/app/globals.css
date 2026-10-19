@@ -162,20 +162,55 @@
   --color-st-late-soft: #fbece6;
 
   /*
-    The dental chart. A tooth is drawn in ivory on a pink gum, and everything
-    recorded on it wears one of four inks that dentists already read without a
-    legend: red for work still to do, blue for work done here, slate for work
-    that arrived in the patient's mouth from elsewhere, and brown for what was
-    found rather than done.
+    The dental chart. Teeth, gums and the work in them are drawn as they look
+    in the mouth (2026-10-19): enamel warmer at the neck and translucent at the
+    edge, coral gingiva, crowns in ceramic or metal, root fillings in
+    gutta-percha, implants in titanium. On top of that, every record wears one
+    of four inks that dentists already read without a legend: red for work
+    still to do, blue for work done here, slate for work that arrived in the
+    patient's mouth from elsewhere, and brown for what was found rather than
+    done. The same in both themes: a tooth is ivory whatever the page is.
   */
-  --color-tooth-enamel: #fffdf7;
-  --color-tooth-shade: #ece2cd;
-  --color-tooth-root: #f4ead5;
-  --color-tooth-root-shade: #e2d2b2;
-  --color-tooth-line: #a3977f;
-  --color-tooth-pulp: #f1c9c4;
-  --color-gum: #f3b6bd;
-  --color-gum-line: #e28f9b;
+  --color-tooth-enamel: #fdfbf3;
+  --color-tooth-shade: #e3d6bb;
+  --color-tooth-cervical: #e8cf9c;
+  --color-tooth-incisal: #c9d4dd;
+  --color-tooth-root: #efdcb3;
+  --color-tooth-root-shade: #d4b98a;
+  --color-tooth-line: #b3a283;
+  --color-tooth-pulp: #e9a9a2;
+  --color-tooth-groove: #9c8461;
+  --color-gum: #ec9c9a;
+  --color-gum-deep: #d36a72;
+  --color-gum-light: #f6c4bf;
+  --color-gum-line: #b95660;
+  /* What work is made of. */
+  --color-mat-ceramic: #ffffff;
+  --color-mat-ceramic-shade: #dfe6ec;
+  --color-mat-composite: #fbf6e8;
+  --color-mat-composite-shade: #e7dcc2;
+  --color-mat-metal: #b9c0c8;
+  --color-mat-metal-light: #f2f4f7;
+  --color-mat-metal-shade: #6d7680;
+  --color-mat-gold: #e2bd62;
+  --color-mat-gold-light: #fbefc6;
+  --color-mat-gold-shade: #9c7426;
+  --color-mat-amalgam: #8e959d;
+  --color-mat-amalgam-shade: #4f565e;
+  --color-mat-titanium: #a6adb6;
+  --color-mat-titanium-shade: #5d646d;
+  --color-mat-gic: #f3f1ea;
+  --color-mat-gic-shade: #d9d4c6;
+  --color-mat-temp: #f1e5c8;
+  --color-mat-temp-shade: #d8c49a;
+  --color-mat-gutta: #e57858;
+  --color-mat-gutta-shade: #b4513a;
+  --color-mat-sealant: #e6f1f6;
+  /* What is found. */
+  --color-caries-halo: #8c5b2a;
+  --color-lesion: #3a2d2a;
+  --color-stain: #9c7a3c;
+  --color-crack: #3b2a1c;
   --color-dental-planned: #d33a3a;
   --color-dental-planned-soft: #fbdede;
   --color-dental-done: #2463cf;
