@@ -9,7 +9,10 @@
  * - Take payment on the patient file pays the oldest open invoice first, an
  *   invoice not sent yet counts, and more than is owed cannot be taken;
  * - each treatment on the chart says how much of it is paid;
- * - today's board says what the patient owes, with Take payment.
+ * - today's board says what the patient owes, with Take payment;
+ * - billing from the chart: tick what goes on the bill (planned work too),
+ *   see what is billed, delete an unpaid bill made by mistake;
+ * - "Next: …" on a treatment opens it at that step.
  *
  * Run against a warm server.
  */
@@ -73,7 +76,7 @@ async function main() {
     docUser,
   ]);
   await q(
-    `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions) values ($1, $2, 'receptionist', false, '{"level":"custom","caps":{"dashboard":true,"patients":true,"calendar":true,"invoices":true}}')`,
+    `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions) values ($1, $2, 'receptionist', false, '{"level":"custom","caps":{"dashboard":true,"patients":true,"calendar":true,"invoices":true,"invoices.void":true}}')`,
     [clinic.id, deskUser]
   );
   const [patient] = await q(`insert into patients (clinic_id, full_name, phone_e164, source) values ($1, 'Sara Pay', '+962790008888', 'staff') returning id`, [clinic.id]);
@@ -88,6 +91,7 @@ async function main() {
   const crownSvc = await price("crown", null, 110, "Crown");
   const rctSvc = await price("rct", null, 90, "Root canal treatment");
   const scSvc = await price("scaling", null, 30, "Scaling & polishing");
+  const veneerSvc = await price("veneer", null, 200, "Veneer");
   const mark = async (key: string, site: string, label: string, fee: number, svc: string) =>
     (
       await q(
@@ -99,6 +103,8 @@ async function main() {
   const crown = await mark("crown", "16", "Crown", 110, crownSvc);
   const rct = await mark("rct", "26", "Root canal treatment", 90, rctSvc);
   const sc = await mark("scaling", "mouth", "Scaling & polishing", 30, scSvc);
+  // Planned, not started: billable ahead, never ticked for it.
+  const veneer = await mark("veneer", "11", "Veneer", 200, veneerSvc);
   const step = (markId: string, s: string, daysAgo: number) =>
     q(
       `insert into chart_mark_steps (clinic_id, mark_id, patient_id, step, performed_by, recorded_by, done_at) values ($1, $2, $3, $4, $5, $6, now() - ($7 || ' days')::interval)`,
@@ -132,7 +138,16 @@ async function main() {
     check(of(sc)?.qty === 1 && of(sc)?.unitPrice === 30, "the cleaning, done over two visits, is one line at its whole price: 30", JSON.stringify(of(sc)));
     check(of(crown)?.unitPrice === 110 && of(rct)?.unitPrice === 90, "the crown at 110 and the root canal at 90");
 
-    await desk.goto(`${BASE}/c/${slug}/invoices/new?patient=${patient.id}&marks=${crown},${rct}`, { timeout: 120000 });
+    // The bill is for what is ticked: the cleaning unticked, the crown and the root canal billed.
+    await desk.goto(`${BASE}/c/${slug}/patients/${patient.id}?tab=invoices`, { timeout: 120000 });
+    await desk.waitForSelector("[data-ready-to-bill]", { timeout: 60000 });
+    check((await desk.locator("[data-ready-to-bill] [data-ready-item] [data-bill-pick]:checked").count()) === 3, "Ready to bill lists the three started treatments, each ticked");
+    check((await desk.locator(`[data-ahead-item='${veneer}'] [data-bill-pick]`).isChecked()) === false, "the veneer, planned and not started, can be billed ahead, unticked");
+    await desk.locator(`[data-bill-pick='${sc}']`).uncheck();
+    check((await desk.locator("[data-bill-ready]").innerText()).includes("Bill 2 selected"), "unticking the cleaning: Bill 2 selected", await desk.locator("[data-bill-ready]").innerText());
+    await desk.locator("[data-bill-ready]").click();
+    await desk.waitForURL(/\/invoices\/new\?/, { timeout: 60000 });
+    check(desk.url().includes(crown) && desk.url().includes(rct) && !desk.url().includes(sc) && !desk.url().includes(veneer), "the bill is for the two chosen", desk.url());
     await desk.waitForSelector("input:not([type=hidden])", { timeout: 60000 });
     const values = () => desk.locator("input").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
     check(await until(async () => (await values()).some((v) => v.includes("Crown")), 60000), "Bill opens a new invoice with the crown's line");
@@ -143,6 +158,10 @@ async function main() {
     check(billed.length === 2 && billed.every((l) => l.qty === 1), "the invoice bills each once", JSON.stringify(billed));
     const after = await billable();
     check(after.length === 1 && after[0].markId === sc, "billed, they are not offered again; the cleaning still is", JSON.stringify(after));
+    await desk.goto(`${BASE}/c/${slug}/patients/${patient.id}?tab=invoices`, { timeout: 120000 });
+    await desk.waitForSelector(`[data-billed-invoice='${inv1}']`, { timeout: 60000 });
+    const billedRow = await desk.locator(`[data-billed-invoice='${inv1}']`).innerText();
+    check(billedRow.includes("Crown") && billedRow.includes("Root canal") && billedRow.includes("Nothing paid yet"), "Billed shows the invoice with its two treatments, nothing paid yet", billedRow);
 
     /* ── Take payment ────────────────────────────────────────────────── */
     console.log("Take payment");
@@ -178,7 +197,25 @@ async function main() {
     const paidLine = await desk.locator(`[data-paid-line='${crown}']`).innerText();
     check(paidLine.includes("27.5") && paidLine.includes("82.5"), "the crown says 27.50 of its 110 is paid, 82.50 left — its share of what came in", paidLine);
 
-    // The cleaning billed too; then 160 settles the older invoice's 150 and puts 10 on the newer.
+    /* ── A bill made by mistake ──────────────────────────────────────── */
+    console.log("A bill made by mistake");
+    await desk.goto(`${BASE}/c/${slug}/invoices/new?patient=${patient.id}&marks=${sc}`, { timeout: 120000 });
+    check(await until(async () => (await values()).some((v) => v.includes("Scaling")), 60000), "the cleaning is billed");
+    await desk.getByRole("button", { name: "Create", exact: true }).click();
+    await desk.waitForURL(/\/invoices\/[0-9a-f-]{36}$/, { timeout: 60000 });
+    const mistake = new URL(desk.url()).pathname.split("/").pop()!;
+    await desk.goto(`${BASE}/c/${slug}/patients/${patient.id}?tab=invoices`, { timeout: 120000 });
+    await desk.waitForSelector(`[data-billed-invoice='${mistake}']`, { timeout: 60000 });
+    check(
+      (await desk.locator(`[data-delete-bill='${mistake}']`).count()) === 1 && (await desk.locator(`[data-delete-bill='${inv1}']`).count()) === 0,
+      "an unpaid bill can be deleted; one with a payment on it cannot"
+    );
+    await desk.locator(`[data-delete-bill='${mistake}']`).click();
+    await desk.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
+    check(await until(async () => (await q(`select 1 from invoices where id = $1`, [mistake])).length === 0), "deleted, the invoice is gone");
+    check(await until(async () => (await desk.locator(`[data-ready-item='${sc}']`).count()) === 1), "and the cleaning is ready to bill again");
+
+    // Billed again; then 160 settles the older invoice's 150 and puts 10 on the newer.
     await desk.goto(`${BASE}/c/${slug}/invoices/new?patient=${patient.id}&marks=${sc}`, { timeout: 120000 });
     check(await until(async () => (await values()).some((v) => v.includes("Scaling")), 60000), "the cleaning is billed, whole");
     await desk.getByRole("button", { name: "Create", exact: true }).click();
@@ -200,6 +237,26 @@ async function main() {
     await card.waitFor({ timeout: 30000 });
     check(await until(async () => (await card.innerText()).includes("Owes")), "the patient's card on today's board says what they owe", await card.innerText());
     check((await card.locator(`[data-take-payment='${patient.id}']`).getAttribute("data-owed")) === "20", "with Take payment for the 20 left");
+
+    /* ── Next: it goes there ─────────────────────────────────────────── */
+    console.log("Next goes there");
+    const doc = await signIn(browser, `pay-doc-${tag}@test.local`);
+    doc.on("pageerror", (e) => errors.push(e.message));
+    await doc.goto(`${BASE}/c/${slug}/patients/${patient.id}?tab=dental`, { timeout: 120000 });
+    await doc.waitForSelector(`[data-next-step='${rct}']`, { timeout: 120000 });
+    check((await doc.locator(`[data-next-step='${rct}']`).innerText()).includes("Working length"), "the root canal says what comes next: Working length");
+    await doc.locator(`[data-next-step='${rct}']`).click();
+    const next = doc.locator(`[data-procedure='${rct}'] [data-step-state='next']`);
+    check(await until(async () => (await next.count()) === 1), "tapping it opens the root canal at that step");
+    check(
+      await until(async () => {
+        const box = await next.boundingBox();
+        const vh = doc.viewportSize()?.height ?? 1000;
+        return !!box && box.y >= 0 && box.y + 20 <= vh;
+      }),
+      "with the step in view"
+    );
+    check((await doc.locator(`[data-procedure='${rct}'] [data-step-form='length']`).count()) === 1, "open, ready to record");
     check(errors.length === 0, "no page errors", errors.join(" | "));
   } finally {
     await browser.close();

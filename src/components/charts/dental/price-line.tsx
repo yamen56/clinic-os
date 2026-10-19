@@ -11,10 +11,6 @@
   do it, until the treatment is billed. It is billed once, whole, and paid off
   over the visits (Yamen, 2026-10-17): for whoever bills, the line says
   whether it is billed yet, and how much of it is paid.
-
-  Under the price, what its materials cost the clinic (0081) — the list's, or
-  set for this patient (a second graft) — which comes into the doctor's share.
-  It can change until the treatment is billed, like the price.
 */
 
 import { useState } from "react";
@@ -23,7 +19,7 @@ import { Pencil } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtMoney } from "@/lib/dates";
 import { isToothSite, type Mark } from "@/lib/charts/dental/state";
-import { materialCostOf, pickPrice, variantOf } from "@/lib/charts/dental/pricing";
+import { pickPrice, variantOf } from "@/lib/charts/dental/pricing";
 import { useDentalStore, type DentalStore } from "./store";
 import { useChartWriter } from "./writer";
 import { moneyOf, type Money } from "./money";
@@ -85,10 +81,6 @@ export function PriceLine({ m, tz }: { m: Mark; tz: string }) {
   const paid = store.canBill ? paidText(cash, store.currency, locale, P) : null;
   // The list's price for it: what "Use the list price" goes back to.
   const list = pickPrice(store.prices, m.treatmentKey, variantOf(m.treatmentKey, m.detail));
-  // Its materials, each: set for this patient, else its price's on the list.
-  const materials = materialCostOf(m, store.prices);
-  const materialsByHand = m.materialCost != null;
-  const showMaterials = (store.canWrite || store.canBill) && (materials != null || mayChoose);
 
   return (
     <div className="grid gap-1.5" data-price-line={m.id} data-amount={cash.amount ?? ""} data-fee-manual={m.feeManual ? "yes" : "no"}>
@@ -102,7 +94,7 @@ export function PriceLine({ m, tz }: { m: Mark; tz: string }) {
           </span>
         )}
         {mayChoose && (
-          <FeeEditor m={m} kind="fee" initial={m.fee} field={P.forPatient} currency={store.currency} label={text ? P.edit : P.setForPatient} onSave={(fee) => w.setFee(m, fee)} />
+          <FeeEditor m={m} currency={store.currency} label={text ? P.edit : P.setForPatient} onSave={(fee) => w.setFee(m, fee)} />
         )}
         {m.feeManual && mayChoose && (
           <button type="button" onClick={() => void w.setFee(m, null)} className="text-[12px] font-semibold text-ink-500 hover:text-ink-900 hover:underline" data-fee-reset>
@@ -130,51 +122,18 @@ export function PriceLine({ m, tz }: { m: Mark; tz: string }) {
           {paid}
         </div>
       )}
-      {showMaterials && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]" data-materials-line={m.id} data-materials={materials ?? ""}>
-          <span className="font-semibold text-ink-500">{P.materials}</span>
-          <span className={`font-semibold tnum ${materials != null ? "text-ink-700" : "text-ink-400"}`}>
-            {materials == null ? P.materialsNone : cash.units > 1 ? `${fmt(materials)} × ${cash.units} = ${fmt(materials * cash.units)}` : fmt(materials)}
-          </span>
-          {materialsByHand && <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700">{P.edited}</span>}
-          {mayChoose && (
-            <FeeEditor
-              m={m}
-              kind="materials"
-              initial={materials}
-              field={P.materialsForPatient}
-              currency={store.currency}
-              label={materials != null ? P.edit : P.setMaterials}
-              onSave={(cost) => w.setMaterialCost(m, cost)}
-            />
-          )}
-          {materialsByHand && mayChoose && (
-            <button type="button" onClick={() => void w.setMaterialCost(m, null)} className="text-[12px] font-semibold text-ink-500 hover:text-ink-900 hover:underline" data-materials-reset>
-              {P.useListMaterials}
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }
 
-/** This patient's price — or materials — typed: a pencil that opens one field, the amount it stands at already in it. */
+/** This patient's price, typed: a pencil that opens one field, the amount the list gave already in it. */
 function FeeEditor({
   m,
-  kind,
-  initial,
-  field,
   currency,
   label,
   onSave,
 }: {
   m: Mark;
-  /** Which figure: names the hooks the suites find it by. */
-  kind: "fee" | "materials";
-  initial: number | null;
-  /** The field's own label, inside the form. */
-  field: string;
   currency: string;
   label: string;
   onSave: (fee: number) => Promise<boolean>;
@@ -191,11 +150,11 @@ function FeeEditor({
       <button
         type="button"
         onClick={() => {
-          setText(initial == null ? "" : String(initial));
+          setText(m.fee == null ? "" : String(m.fee));
           setOpen(true);
         }}
         className="inline-flex h-7 items-center gap-1 rounded-ctl px-1.5 text-[12px] font-semibold text-brand-700 hover:bg-brand-50"
-        {...{ [`data-${kind}-edit`]: m.id }}
+        data-fee-edit={m.id}
       >
         <Pencil className="h-3.5 w-3.5" />
         {label}
@@ -216,10 +175,10 @@ function FeeEditor({
         e.preventDefault();
         void save();
       }}
-      {...{ [`data-${kind}-form`]: m.id }}
+      data-fee-form={m.id}
     >
       <label className="flex items-center gap-2 text-[12px] font-semibold text-ink-500">
-        {field}
+        {P.forPatient}
         {/* The focus ring goes round the whole box, the currency with it, not the number alone. */}
         <span className="flex h-9 items-center rounded-ctl border border-line bg-surface focus-within:border-brand-600 focus-within:shadow-[0_0_0_3px_rgb(125_141_164/0.45)]" dir="ltr">
           <input
@@ -232,9 +191,9 @@ function FeeEditor({
               e.stopPropagation();
               setOpen(false);
             }}
-            aria-label={field}
+            aria-label={P.forPatient}
             className="h-full w-24 rounded-ctl bg-transparent px-2 text-base font-semibold text-ink-900 tnum focus:outline-none focus-visible:!shadow-none md:text-sm"
-            {...{ [`data-${kind}-input`]: "" }}
+            data-fee-input
           />
           <span className="pe-2 text-[12px] font-semibold text-ink-400">{currency}</span>
         </span>
@@ -243,7 +202,7 @@ function FeeEditor({
         <button type="button" onClick={() => setOpen(false)} className="h-8 rounded-ctl px-2.5 text-[12.5px] font-semibold text-ink-500 hover:bg-sunken">
           {P.cancel}
         </button>
-        <button type="submit" disabled={!valid || busy} className="h-8 rounded-ctl bg-brand-600 px-3 text-[12.5px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-45" {...{ [`data-${kind}-save`]: "" }}>
+        <button type="submit" disabled={!valid || busy} className="h-8 rounded-ctl bg-brand-600 px-3 text-[12.5px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-45" data-fee-save>
           {P.save}
         </button>
       </div>

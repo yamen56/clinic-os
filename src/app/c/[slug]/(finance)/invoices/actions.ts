@@ -25,7 +25,6 @@ import { coverHolds, insurerShareFor, ruleOf } from "@/lib/insurance";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 import { renderUrlToPdf } from "@/lib/pdf";
 import { loadBilled } from "@/lib/charts/dental/billing-server";
-import { lineMaterialCosts } from "@/lib/line-costs";
 import { saveFile } from "@/lib/storage";
 import { z } from "zod";
 
@@ -182,9 +181,8 @@ export async function createInvoiceAction(
       written and the line simply has no doctor attached. That is what keeps
       this whole feature inert for a clinic that does not split revenue.
 
-      With the rate, the deal on a treatment's costs (`costs_rule`, 0081), and
-      what each line's materials cost — read from the chart and the price list,
-      never from the request — all frozen beside the line.
+      With the rate, the deal on a treatment's lab costs (`costs_rule`, 0081),
+      frozen beside the line.
     */
     const wanted = [...new Set(d.items.map((it) => it.doctorMemberId).filter(Boolean))] as string[];
     const rates = new Map<string, { rate: number; rule: string }>();
@@ -197,9 +195,6 @@ export async function createInvoiceAction(
       );
       for (const row of r.rows) rates.set(row.id as string, { rate: Number(row.commission_percent), rule: row.costs_rule as string });
     }
-    const materials = rates.size
-      ? await lineMaterialCosts(c, access.clinicId, d.items.map((it) => ({ markId: it.markId ?? null, serviceId: it.serviceId ?? null, qty: it.qty })))
-      : [];
 
     let sort = 0;
     for (const [i, it] of d.items.entries()) {
@@ -234,9 +229,9 @@ export async function createInvoiceAction(
       const deal = it.doctorMemberId ? rates.get(it.doctorMemberId) : undefined;
       if (it.doctorMemberId && deal !== undefined) {
         await c.query(
-          `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule, material_cost)
-           values ($1, $2, $3, $4, $5, $6)`,
-          [item.rows[0].id, access.clinicId, it.doctorMemberId, deal.rate, deal.rule, materials[i] ?? 0]
+          `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule)
+           values ($1, $2, $3, $4, $5)`,
+          [item.rows[0].id, access.clinicId, it.doctorMemberId, deal.rate, deal.rule]
         );
       }
     }
@@ -833,8 +828,8 @@ export async function voidInvoiceAction(
         `sort` is the join, being unique within an invoice by construction.
       */
       await c.query(
-        `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule, material_cost)
-         select ni.id, ni.clinic_id, d.doctor_member_id, d.commission_percent, d.costs_rule, d.material_cost
+        `insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule)
+         select ni.id, ni.clinic_id, d.doctor_member_id, d.commission_percent, d.costs_rule
            from invoice_items ni
            join invoice_items oi on oi.invoice_id = $1 and oi.sort = ni.sort
            join invoice_line_doctors d on d.invoice_item_id = oi.id
@@ -900,6 +895,53 @@ export async function deleteInvoiceAction(slug: string, invoiceId: string): Prom
       entity: "invoice",
       entityId: invoiceId,
       detail: { number: inv.number, total: inv.total, patientId: inv.patient_id, payments: paid.n, paid: paid.paid },
+    });
+    revalidatePath(`/c/${slug}/invoices`);
+    revalidatePath(`/c/${slug}/patients/${inv.patient_id}`);
+    return {};
+  });
+}
+
+/**
+ * An invoice made by mistake, deleted from where it was made: the chart's
+ * Billed list (Yamen, 2026-10-19: "have the ability to delete them").
+ *
+ * Without cancelling it first, but only while nothing depends on it: no
+ * payment on it (money taken is cancelled from the invoice, a decision with
+ * its own record), never filed with JoFotara and no credit note pointing at
+ * it (the tax authority holds those), and not a credit note itself. Its lines
+ * and their links to the chart go with it, so its treatments are back on
+ * Ready to bill. Gated like deleting a cancelled invoice.
+ */
+export async function deleteBilledInvoiceAction(slug: string, invoiceId: string): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices.void")) return { error: "forbidden" };
+  if (!isUuid(invoiceId)) return { error: "not_found" };
+
+  return inClinic(access, async (c) => {
+    if (!(await mayTouchInvoice(c, access, invoiceId))) return { error: "not_found" };
+    const inv = (
+      await c.query(
+        `select i.number, i.total, i.patient_id, i.status, i.credit_note_of, i.einvoice_status,
+                exists (select 1 from invoices cn where cn.credit_note_of = i.id) as has_credit_note,
+                exists (select 1 from payments p where p.invoice_id = i.id) as has_payments
+           from invoices i where i.id = $1 and i.clinic_id = $2 for update`,
+        [invoiceId, access.clinicId]
+      )
+    ).rows[0];
+    if (!inv) return { error: "not_found" };
+    if (inv.credit_note_of || inv.has_credit_note || ["submitted", "pending"].includes(inv.einvoice_status)) return { error: "filed" };
+    if (inv.has_payments) return { error: "has_payments" };
+
+    await c.query(`delete from invoices where id = $1 and clinic_id = $2`, [invoiceId, access.clinicId]);
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "invoice.delete",
+      entity: "invoice",
+      entityId: invoiceId,
+      detail: { number: inv.number, total: inv.total, patientId: inv.patient_id, status: inv.status, unpaid: true },
     });
     revalidatePath(`/c/${slug}/invoices`);
     revalidatePath(`/c/${slug}/patients/${inv.patient_id}`);

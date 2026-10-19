@@ -61,8 +61,6 @@ export type Mark = {
   serviceId: string | null;
   /** The earlier work this redoes: a crown made again, a root canal re-treated. */
   redoOf: string | null;
-  /** Its materials, set for this patient by hand; absent or null, they cost what its price's service says (0081). */
-  materialCost?: number | null;
 };
 
 export type MarkEvent = {
@@ -99,6 +97,8 @@ export function paintAt(m: Mark, at: number | null): Paint | null {
 
 export type Layer = {
   markId: string;
+  /** The treatment it draws — what a filling is made of, when the look alone does not say. */
+  treatmentKey?: string;
   look: Look;
   paint: Paint;
   surfaces: Surface[];
@@ -160,7 +160,7 @@ export function toothStates(marks: Mark[], at: number | null, resolved?: Map<str
     if (m.role === "pontic" || m.look === "implant" || m.look === "denture") {
       if (paint !== "planned") s.gone = true;
     }
-    s.layers.push({ markId: m.id, look: m.look, paint, surfaces: m.surfaces, detail: m.detail, role: m.role, groupId: m.groupId });
+    s.layers.push({ markId: m.id, treatmentKey: m.treatmentKey, look: m.look, paint, surfaces: m.surfaces, detail: m.detail, role: m.role, groupId: m.groupId });
   }
   return out;
 }

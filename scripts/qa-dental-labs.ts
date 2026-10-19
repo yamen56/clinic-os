@@ -10,7 +10,7 @@
  *   starts at that lab's price; the case shows at the lab, then back.
  * - Lab work: Out, Received, and To pay — Mark paid records one expense in the
  *   Lab category, and the case's cost is then settled.
- * - The share: (price − lab − materials) × rate on the shared deal, price ×
+ * - The share: (price − lab) × rate on the shared deal, price ×
  *   rate − costs on the doctor's; a corrected lab cost moves it, a cancelled
  *   case leaves it, the clinic's own lab is never owed.
  *
@@ -81,10 +81,10 @@ async function main() {
     [clinic.id, docUser.id]
   );
   const [patient] = await q(`insert into patients (clinic_id, full_name, phone_e164, source) values ($1, 'Lab Patient', '+962790007777', 'staff') returning id`, [clinic.id]);
-  // A zirconia crown at 300 on the list, with 20 of materials; one on 16, prepared today.
+  // A zirconia crown at 300 on the list; one on 16, prepared today.
   const [svc] = await q(
-    `insert into services (clinic_id, name, duration_min, price, material_cost, chart_key, chart_variant, price_unit, chart_owned, bookable_online)
-     values ($1, 'Crown (Zirconia)', 30, 300, 20, 'crown', 'zirconia', 'item', true, false) returning id`,
+    `insert into services (clinic_id, name, duration_min, price, chart_key, chart_variant, price_unit, chart_owned, bookable_online)
+     values ($1, 'Crown (Zirconia)', 30, 300, 'crown', 'zirconia', 'item', true, false) returning id`,
     [clinic.id]
   );
   const [crown] = await q(
@@ -135,8 +135,7 @@ async function main() {
     check((await page.locator("nav a", { hasText: "Lab work" }).count()) > 0, "the clinic keeps a lab, so Lab work is in the nav");
     await page.locator(`[data-mark='${crown.id}'] [data-open-item]`).first().click();
     await page.locator(`[data-procedure='${crown.id}']`).waitFor({ timeout: 15000 });
-    const materials = await page.locator(`[data-materials-line='${crown.id}']`).getAttribute("data-materials");
-    check(materials === "20", "the crown's materials cost the list's 20", String(materials));
+    check((await page.locator("[data-materials-line]").count()) === 0, "no materials cost anywhere on the treatment (taken out 2026-10-19)");
     await page.locator(`[data-lab-send='${crown.id}']`).click();
     const form = page.locator(`[data-lab-form='${crown.id}']`);
     await form.waitFor({ timeout: 10000 });
@@ -156,7 +155,7 @@ async function main() {
 
     /* ── The share ───────────────────────────────────────────────────── */
     console.log("The doctor's share");
-    // Billed and paid in full: the crown at 300, Dr on 40%, shared deal, 20 of materials frozen.
+    // Billed and paid in full: the crown at 300, Dr on 40%, shared deal.
     const [inv] = await q(
       `insert into invoices (clinic_id, patient_id, seq, number, status, subtotal, total, amount_paid, issue_date)
        values ($1, $2, 1, 'QAL-1', 'sent', 300, 300, 0, current_date) returning id`,
@@ -167,7 +166,7 @@ async function main() {
       [clinic.id, inv.id, svc.id]
     );
     await q(`insert into invoice_item_marks (invoice_item_id, mark_id, clinic_id) values ($1, $2, $3)`, [item.id, crown.id, clinic.id]);
-    await q(`insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule, material_cost) values ($1, $2, $3, 40, 'shared', 20)`, [
+    await q(`insert into invoice_line_doctors (invoice_item_id, clinic_id, doctor_member_id, commission_percent, costs_rule) values ($1, $2, $3, 40, 'shared')`, [
       item.id,
       clinic.id,
       doc.id,
@@ -176,22 +175,22 @@ async function main() {
     await q(`update invoices set amount_paid = 300, status = 'paid' where id = $1`, [inv.id]);
     const scope = { clinicId: clinic.id as string, from: new Date("2020-01-01"), to: new Date("2099-01-01") };
     const share = async () => (await earningsForDoctor(c, scope, doc.id)).earned;
-    check((await share()) === 94, "shared: (300 − 45 lab − 20 materials) × 40% = 94", String(await share()));
+    check((await share()) === 102, "shared: (300 − 45 lab) × 40% = 102", String(await share()));
     // The lab's bill says 50: corrected on the case, the share follows.
     const [lc] = await caseOf();
     const patch = (caseId: string, body: unknown) => page.request.patch(`${BASE}/api/c/${slug}/patients/${patient.id}/dental/labs/${caseId}`, { data: body });
     check((await patch(lc.id, { op: "cost", cost: 50 })).ok(), "the lab's cost is corrected to 50");
-    check((await share()) === 92, "and the share follows: (300 − 50 − 20) × 40% = 92", String(await share()));
+    check((await share()) === 100, "and the share follows: (300 − 50) × 40% = 100", String(await share()));
     await q(`update invoice_line_doctors set costs_rule = 'doctor' where invoice_item_id = $1`, [item.id]);
-    check((await share()) === 50, "on the doctor's deal: 300 × 40% − 70 = 50", String(await share()));
+    check((await share()) === 70, "on the doctor's deal: 300 × 40% − 50 = 70", String(await share()));
     await q(`update invoice_line_doctors set costs_rule = 'shared' where invoice_item_id = $1`, [item.id]);
     // A remake sent and called off costs nothing.
     const remake = await page.request.post(`${BASE}/api/c/${slug}/patients/${patient.id}/dental/marks/${crown.id}/lab`, {
       data: { id: crypto.randomUUID(), labId: smile.id, cost: 30, dueOn: null, shade: "", note: "remake" },
     });
     const remakeId = (await remake.json()).labCase?.id as string;
-    check(remake.ok() && (await share()) === 80, "a remake at 30 comes off too: (300 − 80 − 20) × 40% = 80", String(await share()));
-    check((await patch(remakeId, { op: "cancel" })).ok() && (await share()) === 92, "called off, it costs nothing again: 92", String(await share()));
+    check(remake.ok() && (await share()) === 88, "a remake at 30 comes off too: (300 − 80) × 40% = 88", String(await share()));
+    check((await patch(remakeId, { op: "cancel" })).ok() && (await share()) === 100, "called off, it costs nothing again: 100", String(await share()));
 
     /* ── Lab work ────────────────────────────────────────────────────── */
     console.log("Lab work");
@@ -218,7 +217,7 @@ async function main() {
     check(p?.vendor === "Smile Lab" && p.key === "lab", "to Smile Lab, under Lab", JSON.stringify(p));
     const locked = await patch(lc.id, { op: "cost", cost: 10 });
     check(locked.status() === 409 && (await locked.json()).error === "paid", "paid for, its cost is settled: a change is refused");
-    check((await share()) === 82, "and the in-house work, 25, still comes off the share: (300 − 50 − 25 − 20) × 40% = 82", String(await share()));
+    check((await share()) === 90, "and the in-house work, 25, still comes off the share: (300 − 50 − 25) × 40% = 90", String(await share()));
     check(errors.length === 0, "no page errors", errors.join(" | "));
   } finally {
     await browser.close();

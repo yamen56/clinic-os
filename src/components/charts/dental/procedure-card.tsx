@@ -15,7 +15,7 @@
   comes next is offered: a crown after a root canal, the crown on an implant.
 */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, ChevronDown, Maximize2, Pencil, Plus, Repeat, Siren, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
@@ -372,6 +372,20 @@ export function ProcedureCard({
   const [finishing, setFinishing] = useState(false);
   const m = store.marks.find((x) => x.id === markId);
   const steps = useMemo(() => store.steps.filter((s) => s.markId === markId), [store.steps, markId]);
+  /*
+    Opened, it shows where it is going: the next step, open and in view — the
+    card may sit below the fold, or beside a chart that scrolled.
+  */
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const target = root.querySelector<HTMLElement>("[data-step-state='next']") ?? root;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Once per treatment opened, not on every change to it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markId]);
+
   if (!m) return null;
 
   const tr = findTreatment(m.treatmentKey, store.custom);
@@ -429,7 +443,7 @@ export function ProcedureCard({
   };
 
   return (
-    <div className="flex flex-col gap-4" data-procedure={m.id} data-procedure-status={m.status}>
+    <div ref={rootRef} className="flex flex-col gap-4" data-procedure={m.id} data-procedure-status={m.status}>
       <div className="flex items-start gap-3">
         <button type="button" onClick={onBack} className="inline-flex h-9 shrink-0 items-center gap-1 rounded-ctl px-2 text-[13px] font-semibold text-ink-500 hover:bg-sunken" data-card-back>
           <ArrowLeft className="h-4 w-4" />
@@ -704,10 +718,11 @@ export function ProcedureCard({
           <div className="flex flex-wrap items-center justify-between gap-2" data-next-visit={next?.id ?? ""}>
             <span className="text-ink-700">
               {next ? (
-                <>
+                // The booked visit, a tap away in the calendar.
+                <a href={`/c/${store.slug}/calendar?open=${next.id}`} className="hover:underline" data-next-visit-open>
                   <span className="font-semibold text-ink-900">{P.nextVisit}</span> · {fmtDateTime(next.startsAt, tz, locale)}
                   {next.doctor ? ` · ${next.doctor}` : ""}
-                </>
+                </a>
               ) : (
                 P.notBooked
               )}

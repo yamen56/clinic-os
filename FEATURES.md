@@ -1312,17 +1312,13 @@ three query builders, no second copy:
   telescopes, so a settled invoice always pays exactly `round(net × rate/100, 2)`.
 - A cancelled invoice earns nobody anything, paid or not: its payments are not the clinic's
   money (2026-10-14), so they leave the takings and every doctor's share alike.
-- **A treatment's own costs come into its share, by the doctor's deal** (0081, 2026-10-17).
-  What the work used in materials — the price list's cost (Treatment prices → Materials,
-  or a service's Materials cost), or one set for that patient on the chart — is frozen on
-  the line at billing with the rate (`invoice_line_doctors.material_cost`); lab work is a
-  lab case's cost, read live until the lab is paid (0082). The deal is per doctor
-  (`clinic_members.costs_rule`, owner-only beside the rate, frozen on the line too):
-  *shared* — (net − costs) × rate, doctor and clinic carry them in proportion; *doctor* —
-  net × rate − costs. A line never earns below zero. Clinic expenses (stock bought in
-  bulk, the rent) still attach to nobody: only what one piece of work used comes into its
-  doctor's share, and the lab's bill and material purchases stay expenses, so nothing is
-  counted twice.
+- **A treatment's lab work comes into its share, by the doctor's deal** (0081, 0082).
+  The cost is the treatment's lab cases', read live until the lab is paid. The deal is
+  per doctor (`clinic_members.costs_rule`, owner-only beside the rate, frozen on the
+  line): *shared* — (net − lab) × rate; *doctor* — net × rate − lab. A line never earns
+  below zero. The lab's bill stays an expense, so nothing is counted twice. Material
+  costs were added on 2026-10-17 and taken out on 2026-10-19 (0083) — "it only makes
+  things more complicated".
 
 **Screens** — the Earnings tab of the Finance section, one route for two readers.
 `earnings` (a top-level capability, on by default for the doctor job) shows a doctor their

@@ -18,7 +18,7 @@ import { EVERY_TOOTH, inChartOrder, leadIdOf } from "./full-arch";
  */
 export async function loadPrices(c: PoolClient, clinicId: string, treatmentKey: string | null = null): Promise<PriceRow[]> {
   const r = await c.query(
-    `select id, chart_key, chart_variant, price, material_cost, name, name_ar from services
+    `select id, chart_key, chart_variant, price, name, name_ar from services
       where clinic_id = $1 and chart_key is not null and active and price_unit = 'item' and ($2::text is null or chart_key = $2)`,
     [clinicId, treatmentKey]
   );
@@ -27,7 +27,6 @@ export async function loadPrices(c: PoolClient, clinicId: string, treatmentKey: 
     chartKey: x.chart_key as string,
     variant: (x.chart_variant as string) ?? null,
     price: Number(x.price),
-    materialCost: x.material_cost == null ? null : Number(x.material_cost),
     name: x.name as string,
     nameAr: (x.name_ar as string) ?? null,
   }));
@@ -40,7 +39,10 @@ export async function loadPrices(c: PoolClient, clinicId: string, treatmentKey: 
  * payment counts toward each line in proportion, the same way a doctor's
  * share is earned (earnings.ts).
  */
-export type Billed = { markId: string; qty: number; charged: number; paid: number; invoices: { id: string; number: string; status: string }[] };
+export type Billed = { markId: string; qty: number; charged: number; paid: number; invoices: BilledInvoice[] };
+
+/** An invoice a treatment is on: its total, what the patient has paid of it, and whether it was filed with JoFotara. */
+export type BilledInvoice = { id: string; number: string; status: string; total?: number; paid?: number; filed?: boolean };
 
 /** The SQL for what is billed of a set of treatments ($1 the clinic, $2 the ids) — shared by the chart and the builder. */
 export const BILLED_SQL = `
@@ -48,7 +50,8 @@ export const BILLED_SQL = `
          sum(ii.qty)::float as qty,
          sum(ii.amount - ii.discount_amount + ii.tax_amount)::float as charged,
          sum(round((ii.amount - ii.discount_amount + ii.tax_amount) * i.amount_paid / nullif(i.total, 0), 2))::float as paid,
-         json_agg(distinct jsonb_build_object('id', i.id, 'number', i.number, 'status', i.status)) as invoices
+         json_agg(distinct jsonb_build_object('id', i.id, 'number', i.number, 'status', i.status, 'total', i.total, 'paid', i.amount_paid,
+                                                   'filed', i.einvoice_status in ('submitted', 'pending'))) as invoices
     from invoice_item_marks iim
     join invoice_items ii on ii.id = iim.invoice_item_id
     join invoices i on i.id = ii.invoice_id

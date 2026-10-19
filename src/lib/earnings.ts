@@ -27,11 +27,11 @@ import { round2 } from "./invoices";
  * `invoice_line_doctors.commission_percent` was copied from the member when the
  * work was billed; raising somebody's rate in March must not rewrite January.
  *
- * **A treatment's own costs come into its share, by the doctor's deal**
+ * **A treatment's lab work comes into its share, by the doctor's deal**
  * (Yamen, 2026-10-17: "the costs in the treatments … calculate it between the
- * doctors"). The materials the work used are frozen on the line with the rate
- * (`material_cost`, 0081), its lab work is its lab cases' cost (0082, read
- * live), and the deal is frozen on the line too (`costs_rule`):
+ * doctors"). The cost is its lab cases' (0082, read live); the deal is frozen
+ * on the line (`costs_rule`, 0081). Material costs were tried and taken out
+ * again on 2026-10-19 — "it only makes things more complicated" (0083):
  *
  *   shared — the costs come off the net first, and the rate is of what is
  *            left: (net − costs) × rate. Doctor and clinic carry them in
@@ -40,9 +40,9 @@ import { round2 } from "./invoices";
  *            share: net × rate − costs.
  *
  * Either way a line never earns below zero — a doctor is not put in debt by
- * one treatment whose costs ran over its price. A clinic's own spending —
- * stock bought in bulk, the rent — still attaches to nobody (0050): only what
- * this piece of work used comes into this doctor's share.
+ * one treatment whose lab bill ran over its price. A clinic's own spending —
+ * supplies, the rent — still attaches to nobody (0050): only the lab work this
+ * treatment needed comes into this doctor's share.
  */
 
 /**
@@ -149,7 +149,7 @@ const LEDGER_ROWS = `
         join lab_cases lc on lc.mark_id = iim.mark_id and lc.status <> 'cancelled'
        where iim.invoice_item_id = ii.id
     ) lab on true
-    cross join lateral (select d.material_cost + lab.lab as costs) k
+    cross join lateral (select lab.lab as costs) k
     cross join lateral (
       select case when d.costs_rule = 'doctor'
                   then greatest((ii.amount - ii.discount_amount) * d.commission_percent / 100 - k.costs, 0)
@@ -188,7 +188,7 @@ export type DoctorEarnings = {
   doctorMemberId: string;
   /** Collected against this doctor's lines, ex-tax. What they brought in. */
   produced: number;
-  /** What the work behind it cost — materials, lab — in step with what was collected. */
+  /** What the lab charged for the work behind it, in step with what was collected. */
   costs: number;
   /** Their share of it, at the rate and deal frozen on each line. */
   earned: number;

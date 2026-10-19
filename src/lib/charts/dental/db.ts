@@ -59,7 +59,6 @@ export function toMark(r: Record<string, unknown>): Mark {
     feeManual: !!r.fee_manual,
     serviceId: (r.service_id as string) ?? null,
     redoOf: (r.redo_of as string) ?? null,
-    materialCost: r.material_cost == null ? null : Number(r.material_cost),
   };
 }
 
@@ -226,13 +225,14 @@ export async function loadDentalChart(
             from appointment_items ai
            where $3 and ai.clinic_id = $1 and ai.patient_id = $2) as bookings,
          (select medical_history from patients where id = $2 and clinic_id = $1) as medical,
-         (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'variant', s.chart_variant, 'price', s.price, 'materialCost', s.material_cost, 'name', s.name, 'nameAr', s.name_ar)), '[]'::json)
+         (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'variant', s.chart_variant, 'price', s.price, 'name', s.name, 'nameAr', s.name_ar)), '[]'::json)
             from services s where s.clinic_id = $1 and s.chart_key is not null and s.active and s.price_unit = 'item') as prices,
          (select coalesce(json_agg(x), '[]'::json)
             from (select iim.mark_id as "markId", sum(ii.qty)::float as qty,
                          sum(ii.amount - ii.discount_amount + ii.tax_amount)::float as charged,
                          sum(round((ii.amount - ii.discount_amount + ii.tax_amount) * i.amount_paid / nullif(i.total, 0), 2))::float as paid,
-                         json_agg(distinct jsonb_build_object('id', i.id, 'number', i.number, 'status', i.status)) as invoices
+                         json_agg(distinct jsonb_build_object('id', i.id, 'number', i.number, 'status', i.status, 'total', i.total, 'paid', i.amount_paid,
+                                                   'filed', i.einvoice_status in ('submitted', 'pending'))) as invoices
                     from invoice_item_marks iim
                     join chart_marks m on m.id = iim.mark_id
                     join invoice_items ii on ii.id = iim.invoice_item_id
@@ -268,7 +268,6 @@ export async function loadDentalChart(
       chartKey: p.chartKey as string,
       variant: (p.variant as string) ?? null,
       price: Number(p.price),
-      materialCost: p.materialCost == null ? null : Number(p.materialCost),
       name: p.name as string,
       nameAr: (p.nameAr as string) ?? null,
     })),

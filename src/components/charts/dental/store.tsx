@@ -61,6 +61,8 @@ export type DentalTabData = {
   canBook: boolean;
   /** May this member see what was billed and bill it (`invoices`)? */
   canBill: boolean;
+  /** May this member delete an invoice made by mistake (`invoices.void`)? */
+  canDeleteInvoices?: boolean;
   /** May this member set the clinic's prices (`settings.services`)? Then an unpriced treatment links to them. */
   canPrice?: boolean;
   /** The clinic's currency, for prices on the chart. */
@@ -82,6 +84,7 @@ export type DentalStore = {
   canWrite: boolean;
   canBook: boolean;
   canBill: boolean;
+  canDeleteInvoices: boolean;
   canPrice: boolean;
   currency: string;
 
@@ -276,6 +279,7 @@ export function DentalProvider({
       canWrite: data.canWrite,
       canBook: data.canBook,
       canBill: data.canBill,
+      canDeleteInvoices: !!data.canDeleteInvoices,
       canPrice: !!data.canPrice,
       currency: data.currency,
       marks,

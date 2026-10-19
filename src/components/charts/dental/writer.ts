@@ -295,27 +295,6 @@ export function useChartWriter() {
   );
 
   /*
-    This patient's materials for a treatment, set by hand — or, with null, the
-    list's again. Shown at once, put back if the server refuses (it does once
-    the treatment is billed: its cost was frozen with the doctor's rate).
-  */
-  const setMaterialCost = useCallback(
-    async (m: Mark, cost: number | null): Promise<boolean> => {
-      setMarks((prev) => prev.map((x) => (x.id === m.id ? { ...x, materialCost: cost } : x)));
-      try {
-        const r = await write([m.id], call<{ mark: Mark; event: MarkEvent }>(`${base}/dental/marks/${m.id}/cost`, "POST", { materialCost: cost }));
-        settle([r.mark], [r.event]);
-        return true;
-      } catch (e) {
-        setMarks((prev) => prev.map((x) => (x.id === m.id ? m : x)));
-        toast((e as Error).message === "billed" ? t.dental.price.editLocked : t.dental.price.failed, "error");
-        return false;
-      }
-    },
-    [base, setMarks, write, settle, toast, t.dental.price]
-  );
-
-  /*
     A treatment's work sent to a lab: drawn at once with an id chosen here, so
     what is drawn is the row that is stored; taken off again if refused.
   */
@@ -365,7 +344,7 @@ export function useChartWriter() {
     [s, base, write, settle, toast, t.dental]
   );
 
-  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical, setFee, setMaterialCost, sendToLab, labCaseOp };
+  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical, setFee, sendToLab, labCaseOp };
 }
 
 /** The members a group's lead carries, found the same way the server finds them. */

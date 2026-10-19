@@ -94,7 +94,18 @@ export function EntryRow({
     <li className={`rounded-ctl border border-line bg-surface ${m.voidedAt ? "opacity-60" : ""}`} data-mark={m.id}>
       <div className="flex items-start gap-2.5 p-2.5">
         <TreatmentGlyph tr={tr} paint={paint} context={ctx} size={42} />
-        <button type="button" onClick={() => setOpen((v) => !v)} className="min-w-0 flex-1 text-start">
+        {/*
+          A treatment with steps opens where it is going — its card, at the next
+          step — from anywhere on its line, "Next: …" included (Yamen,
+          2026-10-19: "when i press the next … i want it to make me go there").
+          The chevron still shows its details here.
+        */}
+        <button
+          type="button"
+          onClick={() => (onOpen && !m.voidedAt ? onOpen() : setOpen((v) => !v))}
+          className="min-w-0 flex-1 text-start"
+          data-entry-open={onOpen && !m.voidedAt ? m.id : undefined}
+        >
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={`text-[13.5px] font-semibold text-ink-900 ${m.voidedAt ? "line-through" : ""}`}>{markLabel(m, locale)}</span>
             <PaintPill m={m} />
@@ -116,8 +127,9 @@ export function EntryRow({
                 ))}
               </span>
               {progress.next && (
-                <span className="font-semibold" style={{ color: INK.progress }}>
+                <span className="inline-flex items-center gap-0.5 font-semibold underline-offset-2 hover:underline" style={{ color: INK.progress }} data-next-step={m.id}>
                   {T.treatment.nextStep.replace("{step}", progress.next)}
+                  <ChevronRight className="h-3 w-3 rtl:rotate-180" />
                 </span>
               )}
             </span>
