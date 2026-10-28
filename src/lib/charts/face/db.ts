@@ -11,6 +11,8 @@ import type { MarkEvent } from "@/lib/charts/dental/state";
 import type { Billed } from "@/lib/charts/dental/billing-server";
 import { toEvent } from "@/lib/charts/dental/db";
 import { FACE_TREATMENT_BY_KEY, type Area, type Family } from "./catalog";
+import { loadMarkProducts, loadStockProducts, type MarkProduct, type StockProduct } from "./stock";
+import { loadPatientPackages, loadPlans, type PackagePlan, type PatientPackage } from "./packages";
 
 type Person = { id: string; name: string };
 
@@ -38,10 +40,12 @@ export type FaceMark = {
   voidedBy: Person | null;
   voidReason: string | null;
   appointmentId: string | null;
+  /** A session done from one of the patient's packages: no new charge. */
+  packageItemId: string | null;
 };
 
 /** A face treatment's price on the clinic's list: the service that is the price. */
-export type FacePrice = { serviceId: string; chartKey: string; price: number; name: string; nameAr: string | null };
+export type FacePrice = { serviceId: string; chartKey: string; variant: string | null; price: number; name: string; nameAr: string | null };
 
 export type FaceChartData = {
   marks: FaceMark[];
@@ -49,6 +53,14 @@ export type FaceChartData = {
   prices: FacePrice[];
   /** What is billed of each treatment, on invoices that stand. Empty for a member who may not see invoices. */
   billing: Billed[];
+  /** The products the chart offers: active, with what is on hand and the batch next in line. */
+  products: StockProduct[];
+  /** What each treatment used. Costs only for a member who sees stock. */
+  markProducts: MarkProduct[];
+  /** The patient's packages, with the sessions used of each item. */
+  packages: PatientPackage[];
+  /** What the clinic sells, for selling one here. */
+  plans: PackagePlan[];
 };
 
 const iso = (v: unknown): string | null => (v ? new Date(v as string).toISOString() : null);
@@ -83,24 +95,25 @@ export function toFaceMark(r: Record<string, unknown>): FaceMark {
     voidedBy: r.voided_by ? { id: r.voided_by as string, name: (r.voider_name as string) ?? "" } : null,
     voidReason: (r.void_reason as string) ?? null,
     appointmentId: (r.appointment_id as string) ?? null,
+    packageItemId: (r.package_item_id as string) ?? null,
   };
 }
 
 /** The clinic's face prices, or one treatment's. */
 export async function loadFacePrices(c: PoolClient, clinicId: string, key: string | null = null): Promise<FacePrice[]> {
   const r = await c.query(
-    `select id, chart_key, price, name, name_ar from services
+    `select id, chart_key, chart_variant, price, name, name_ar from services
       where clinic_id = $1 and chart_key like 'aes\\_%' and active and price_unit = 'item' and ($2::text is null or chart_key = $2)`,
     [clinicId, key]
   );
-  return r.rows.map((x) => ({ serviceId: x.id, chartKey: x.chart_key, price: Number(x.price), name: x.name, nameAr: x.name_ar ?? null }));
+  return r.rows.map((x) => ({ serviceId: x.id, chartKey: x.chart_key, variant: x.chart_variant ?? null, price: Number(x.price), name: x.name, nameAr: x.name_ar ?? null }));
 }
 
 /**
  * Everything the face chart needs for one patient, in one round trip: its
  * treatments, their history, the clinic's face prices, and what is billed.
  */
-export async function loadFaceChart(c: PoolClient, clinicId: string, patientId: string, opts: { billing: boolean }): Promise<FaceChartData> {
+export async function loadFaceChart(c: PoolClient, clinicId: string, patientId: string, opts: { billing: boolean; stockCosts: boolean }): Promise<FaceChartData> {
   const r = (
     await c.query(
       `select
@@ -112,7 +125,7 @@ export async function loadFaceChart(c: PoolClient, clinicId: string, patientId: 
                     join chart_marks m on m.id = e.mark_id
                     left join users u on u.id = e.by_user
                    where m.clinic_id = $1 and m.patient_id = $2 and m.chart = 'aesthetic') x) as events,
-         (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'price', s.price, 'name', s.name, 'nameAr', s.name_ar)), '[]'::json)
+         (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'variant', s.chart_variant, 'price', s.price, 'name', s.name, 'nameAr', s.name_ar)), '[]'::json)
             from services s where s.clinic_id = $1 and s.chart_key like 'aes\\_%' and s.active and s.price_unit = 'item') as prices,
          (select coalesce(json_agg(x), '[]'::json)
             from (select iim.mark_id as "markId", sum(ii.qty)::float as qty,
@@ -136,10 +149,16 @@ export async function loadFaceChart(c: PoolClient, clinicId: string, patientId: 
     prices: r.prices.map((p) => ({
       serviceId: p.serviceId as string,
       chartKey: p.chartKey as string,
+      variant: (p.variant as string) ?? null,
       price: Number(p.price),
       name: p.name as string,
       nameAr: (p.nameAr as string) ?? null,
     })),
     billing: r.billing.map((b) => ({ markId: b.markId, qty: Number(b.qty), charged: Number(b.charged ?? 0), paid: Number(b.paid ?? 0), invoices: b.invoices ?? [] })),
+    // One after another: one connection runs one statement at a time whatever Promise.all suggests.
+    products: await loadStockProducts(c, clinicId, { activeOnly: true }),
+    markProducts: await loadMarkProducts(c, clinicId, patientId, opts.stockCosts),
+    packages: await loadPatientPackages(c, clinicId, patientId),
+    plans: await loadPlans(c, clinicId, true),
   };
 }

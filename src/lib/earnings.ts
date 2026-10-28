@@ -31,7 +31,10 @@ import { round2 } from "./invoices";
  * (Yamen, 2026-10-17: "the costs in the treatments … calculate it between the
  * doctors"). The cost is its lab cases' (0082, read live); the deal is frozen
  * on the line (`costs_rule`, 0081). Material costs were tried and taken out
- * again on 2026-10-19 — "it only makes things more complicated" (0083):
+ * again on 2026-10-19 — "it only makes things more complicated" (0083) — and
+ * came back for the face chart alone (0085): the product an aesthetic
+ * treatment used is most of what it cost, and is costed from the batch it came
+ * from, never typed:
  *
  *   shared — the costs come off the net first, and the rate is of what is
  *            left: (net − costs) × rate. Doctor and clinic carry them in
@@ -149,7 +152,18 @@ const LEDGER_ROWS = `
         join lab_cases lc on lc.mark_id = iim.mark_id and lc.status <> 'cancelled'
        where iim.invoice_item_id = ii.id
     ) lab on true
-    cross join lateral (select lab.lab as costs) k
+    /*
+      The product a face treatment used (0085), frozen on it when it was
+      recorded. A voided treatment gave its product back, so it costs nothing.
+    */
+    left join lateral (
+      select coalesce(sum(cmp.cost), 0) as products
+        from invoice_item_marks iim
+        join chart_marks pm on pm.id = iim.mark_id and pm.voided_at is null
+        join chart_mark_products cmp on cmp.mark_id = iim.mark_id
+       where iim.invoice_item_id = ii.id
+    ) prod on true
+    cross join lateral (select lab.lab + prod.products as costs) k
     cross join lateral (
       select case when d.costs_rule = 'doctor'
                   then greatest((ii.amount - ii.discount_amount) * d.commission_percent / 100 - k.costs, 0)
@@ -163,6 +177,54 @@ const LEDGER_ROWS = `
 
 /** The two together — what every caller but `clinicNetRevenue` wants. */
 const LEDGER_SQL = `${LEDGER_CTE}${LEDGER_ROWS}`;
+
+/**
+ * A face chart package's sessions (0085), each earning its own doctor.
+ *
+ * The package is one invoice line, sold by nobody in particular; what it pays
+ * for is done session by session, often by different doctors. So a session
+ * done earns its doctor its part of the line — the item's share of the price,
+ * over its sessions — less the product it used, at the deal frozen on the
+ * session when it was done, in step with how much of the package invoice is
+ * paid. It counts on the day it was done: a session not done yet has earned
+ * nobody anything. Same columns as `LEDGER_ROWS`, with no payment of its own.
+ */
+const SESSION_ROWS = `
+  select null::uuid     as payment_id,
+         m.done_at      as paid_at,
+         i.id           as invoice_id,
+         i.number       as invoice_number,
+         i.status       as invoice_status,
+         i.currency,
+         m.performed_by as doctor_member_id,
+         m.commission_percent,
+         v.net                      as line_net,
+         round(v.net * r.paid, 2)   as produced,
+         round(pc.cost * r.paid, 2) as costs,
+         round(s.share * r.paid, 2) as earned
+    from chart_marks m
+    join patient_package_items pi on pi.id = m.package_item_id
+    join patient_packages pp      on pp.id = pi.patient_package_id
+    join invoice_item_marks iim   on iim.mark_id = pp.sale_mark_id
+    join invoice_items ii         on ii.id = iim.invoice_item_id
+    join invoices i               on i.id = ii.invoice_id
+    cross join lateral (
+      select case when pp.price > 0 then (ii.amount - ii.discount_amount) * pi.value / pp.price / pi.sessions else 0 end as net
+    ) v
+    cross join lateral (select least(i.amount_paid / i.total, 1) as paid) r
+    cross join lateral (
+      select coalesce((select sum(cmp.cost) from chart_mark_products cmp where cmp.mark_id = m.id), 0) as cost
+    ) pc
+    cross join lateral (
+      select case when m.costs_rule = 'doctor'
+                  then greatest(v.net * m.commission_percent / 100 - pc.cost, 0)
+                  else greatest(v.net - pc.cost, 0) * m.commission_percent / 100
+             end as share
+    ) s
+   where m.clinic_id = $1 and m.done_at >= $2 and m.done_at < $3
+     and m.voided_at is null and m.performed_by is not null and m.commission_percent is not null
+     and i.total > 0 and i.credit_note_of is null and i.status <> 'void'
+`;
 
 export type EarningsScope = {
   clinicId: string;
@@ -181,7 +243,10 @@ export type EarningsScope = {
  * left to settle.
  */
 function scopeSql(scope: EarningsScope): { sql: string; params: unknown[] } {
-  return { sql: `${LEDGER_SQL} and i.status <> 'void'`, params: [scope.clinicId, scope.from, scope.to] };
+  return {
+    sql: `select * from (${LEDGER_SQL} and i.status <> 'void') paid union all select * from (${SESSION_ROWS}) sessions`,
+    params: [scope.clinicId, scope.from, scope.to],
+  };
 }
 
 export type DoctorEarnings = {
@@ -203,7 +268,7 @@ export async function earningsForDoctor(
   const { sql, params } = scopeSql(scope);
   const r = await c.query(
     `select coalesce(sum(produced), 0) as produced, coalesce(sum(costs), 0) as costs, coalesce(sum(earned), 0) as earned
-       from (${sql} and d.doctor_member_id = $4) e`,
+       from (${sql}) e where e.doctor_member_id = $4`,
     [...params, doctorMemberId]
   );
   const row = r.rows[0];
@@ -246,7 +311,8 @@ export async function earningsDetailForDoctor(
             coalesce(sum(produced), 0) as produced,
             coalesce(sum(costs), 0)    as costs,
             coalesce(sum(earned), 0)   as earned
-       from (${sql} and d.doctor_member_id = $4) e
+       from (${sql}) e
+      where e.doctor_member_id = $4
       group by invoice_id, invoice_number, invoice_status, currency
       order by max(paid_at) desc
       limit 500`,
@@ -342,10 +408,12 @@ export async function clinicNetRevenue(
          join invoices i on i.id = l.invoice_id
         where l.paid_at >= $2 and l.paid_at < $3
           and i.total > 0 and i.credit_note_of is null and i.status <> 'void'
-     )
+     ),
+     -- Package sessions earn on the day they are done, against no one payment.
+     sessions as (${SESSION_ROWS})
      select coalesce(sum(p.amount), 0)   as gross,
             coalesce(sum(t.tax), 0)      as tax,
-            coalesce(sum(e.earned), 0)   as commission
+            coalesce(sum(e.earned), 0) + (select coalesce(sum(earned), 0) from sessions) as commission
        from payments p
        join invoices i on i.id = p.invoice_id and i.status <> 'void'
        left join earned e on e.payment_id = p.id

@@ -1066,7 +1066,7 @@ export function PatientProfile(props: {
         {tab === "dental" && props.dental && (
           <DentalChartTab slug={slug} patientId={p.id} tz={tz} birthDate={p.birth_date} data={props.dental} />
         )}
-        {tab === "face" && props.face && <FaceChartTab tz={tz} />}
+        {tab === "face" && props.face && <FaceChartTab tz={tz} today={props.today} />}
         {tab === "appointments" && (
           <Card>
             {props.appointments.length === 0 ? (

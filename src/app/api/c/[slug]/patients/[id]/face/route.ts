@@ -18,7 +18,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
   const chart = await inClinic(access, async (c) => {
     const p = await c.query(`select 1 from patients where id = $1 and clinic_id = $2`, [id, access.clinicId]);
     if (!p.rowCount) return null;
-    return loadFaceChart(c, access.clinicId, id, { billing: can(access, "invoices") });
+    return loadFaceChart(c, access.clinicId, id, { billing: can(access, "invoices"), stockCosts: can(access, "stock") });
   });
   if (!chart) return NextResponse.json({ error: "not_found" }, { status: 404 });
   return NextResponse.json({ ok: true, chart });

@@ -66,6 +66,10 @@ export default async function ClinicLayout({
          exists(select 1 from dental_labs where clinic_id = $1 and active) as has_labs,
          (select count(*)::int from lab_cases
            where clinic_id = $1 and status = 'sent' and due_on < (now() at time zone (select timezone from clinics where id = $1))::date) as labs_late,
+         -- The Stock entry's badge: face chart products in use that are running low or out.
+         (select count(*)::int from aesthetic_products p
+           where p.clinic_id = $1 and p.active and p.low_stock is not null
+             and coalesce((select sum(m.qty) from stock_moves m where m.product_id = p.id), 0) <= p.low_stock) as stock_low,
          coalesce((
            select json_agg(json_build_object('id', a.id, 'title', a.title, 'body', a.body))
            from (
@@ -87,6 +91,7 @@ export default async function ClinicLayout({
       devices_waiting: number;
       has_labs: boolean;
       labs_late: number;
+      stock_low: number;
       announcements: { id: string; title: string; body: string }[];
     };
   });
@@ -176,6 +181,7 @@ export default async function ClinicLayout({
       hasInsurers={!!chrome.has_insurers}
       devices={{ connected: !!chrome.has_devices, waiting: chrome.devices_waiting }}
       labs={{ kept: !!chrome.has_labs && clinic.features.dental, late: chrome.labs_late }}
+      stock={{ kept: !!clinic.features.aesthetic, low: chrome.stock_low }}
       fullControl={hasFullControl(access)}
       announcements={chrome.announcements.filter((a) => !dismissed.includes(a.id))}
     >

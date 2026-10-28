@@ -171,7 +171,9 @@ async function main() {
     check(units.forehead === 10 && units.glabella === 20 && units.crows_r === 12 && units.crows_l === 12, "with the units on each area", JSON.stringify(units));
     check(toxin.quantity === 3 && toxin.fee === null, "priced by the area: 3 areas (both crow's feet are one), no price yet", JSON.stringify({ q: toxin.quantity, fee: toxin.fee }));
     check(await until(async () => (await page.locator(`[data-face-entry='${toxin.id}']`).count()) > 0), "it is in the history at once");
-    check((await page.locator("[data-zone='forehead'] span span").count()) === 1, "and the forehead carries a toxin dot");
+    // Colour, not dots (Yamen, 2026-10-28): the area itself is tinted.
+    check((await page.locator("[data-zone='forehead']").getAttribute("data-tint")) === "toxin", "and the forehead is tinted as toxin work");
+    check((await page.locator("[data-face-map] [data-zone] span").count()) === 0, "with no dots anywhere on the face");
 
     /* ── Prices ─────────────────────────────────────────────────────── */
     console.log("Prices");

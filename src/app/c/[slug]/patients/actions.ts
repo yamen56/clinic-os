@@ -450,6 +450,8 @@ export async function mergePatientsAction(
       ["chart_mark_steps", "patient_id"],
       ["appointment_items", "patient_id"],
       ["lab_cases", "patient_id"],
+      // The face chart's packages: what they bought, and the sessions left.
+      ["patient_packages", "patient_id"],
       ["imaging_requests", "patient_id"],
       ["appointments", "patient_id"],
       ["invoices", "patient_id"],

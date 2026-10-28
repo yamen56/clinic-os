@@ -398,6 +398,46 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   const lab = (await q(`insert into dental_labs (clinic_id, name) values ($1, 'QA Lab') returning id`, [clinic])).id;
   await q(`insert into dental_lab_prices (clinic_id, lab_id, chart_key, cost) values ($1, $2, 'crown', 40) returning id`, [clinic, lab]);
   await q(`insert into lab_cases (clinic_id, patient_id, mark_id, lab_id, cost, sent_on) values ($1, $2, $3, $4, 40, current_date) returning id`, [clinic, patient, rct, lab]);
+  // The face chart's products, stock and packages (migration 0085): a company
+  // and its product, a delivery and what it put on hand, a toxin that used
+  // some, and a package sold with one session done from it.
+  const company = (await q(`insert into aesthetic_companies (clinic_id, name) values ($1, 'QA Pharma') returning id`, [clinic])).id;
+  const product = (
+    await q(`insert into aesthetic_products (clinic_id, company_id, name, treatments, unit, pack_size) values ($1, $2, 'Toxin 100u', '{aes_toxin}', 'u', 100) returning id`, [
+      clinic,
+      company,
+    ])
+  ).id;
+  const batch = (
+    await q(`insert into stock_batches (clinic_id, product_id, received_on, qty, unit_cost) values ($1, $2, current_date, 100, 1.1) returning id`, [clinic, product])
+  ).id;
+  await q(`insert into stock_moves (clinic_id, product_id, batch_id, kind, qty, unit_cost) values ($1, $2, $3, 'receive', 100, 1.1) returning id`, [clinic, product, batch]);
+  const faceMark = (
+    await q(
+      `insert into chart_marks (clinic_id, patient_id, chart, site, treatment_key, label, label_ar, look, kind, status, recorded_by, areas, quantity)
+       values ($1, $2, 'aesthetic', 'face', 'aes_toxin', 'Botulinum toxin', 'بوتوكس', 'toxin', 'procedure', 'done', $3, '[{"zone":"forehead","units":10}]', 1) returning id`,
+      [clinic, patient, user]
+    )
+  ).id;
+  await q(`insert into chart_mark_products (clinic_id, mark_id, product_id, qty, cost) values ($1, $2, $3, 10, 11) returning id`, [clinic, faceMark, product]);
+  const plan = (await q(`insert into package_plans (clinic_id, name, price) values ($1, 'Laser × 6', 150) returning id`, [clinic])).id;
+  await q(`insert into package_plan_items (clinic_id, plan_id, treatment_key, sessions) values ($1, $2, 'aes_laser_hair', 6) returning id`, [clinic, plan]);
+  const saleMark = (
+    await q(
+      `insert into chart_marks (clinic_id, patient_id, chart, site, treatment_key, label, label_ar, look, kind, status, recorded_by, fee)
+       values ($1, $2, 'aesthetic', 'face', 'aes_package', 'Laser × 6', 'Laser × 6', 'package', 'procedure', 'done', $3, 150) returning id`,
+      [clinic, patient, user]
+    )
+  ).id;
+  const pkg = (
+    await q(`insert into patient_packages (clinic_id, patient_id, plan_id, name, price, sale_mark_id) values ($1, $2, $3, 'Laser × 6', 150, $4) returning id`, [
+      clinic,
+      patient,
+      plan,
+      saleMark,
+    ])
+  ).id;
+  await q(`insert into patient_package_items (clinic_id, patient_package_id, treatment_key, sessions, value) values ($1, $2, 'aes_laser_hair', 6, 150) returning id`, [clinic, pkg]);
 
   // Imaging devices (migration 0069): a registered machine and an image it
   // sent for nobody in particular. patient_numbers fills itself — the patient

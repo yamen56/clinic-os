@@ -116,7 +116,8 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
   // Off, the chart's tab is gone from every file. Recording on it is
   // `patients.charts`, shared by the charts — see CHART_FEATURES.
   dental: [],
-  aesthetic: [],
+  // Its products and stock are its own; recording on it is `patients.charts`, shared.
+  aesthetic: ["stock"],
 };
 
 /** What the new-clinic form starts from: everything except the opt-ins. */

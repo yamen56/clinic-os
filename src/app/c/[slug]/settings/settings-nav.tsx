@@ -50,6 +50,7 @@ export function SettingsNav({
     { href: `${base}/prices`, label: t.settings.treatmentPrices, show: hasDental && caps["settings.services"] },
     { href: `${base}/labs`, label: t.settings.dentalLabs, show: hasDental && caps["settings.services"] },
     { href: `${base}/face-prices`, label: t.settings.facePrices, show: hasFace && caps["settings.services"] },
+    { href: `${base}/face-packages`, label: t.settings.facePackages, show: hasFace && caps["settings.services"] },
     { href: `${base}/hours`, label: t.settings.workingHours },
     { href: `${base}/fields`, label: t.fields.title, show: caps["settings.clinic"] },
     { href: `${base}/tags`, label: t.tags.title, show: caps["settings.tags"] },

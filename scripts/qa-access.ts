@@ -641,7 +641,7 @@ async function main() {
     a member with nothing. The server used to read an empty list as "no opinion"
     and substitute the job's defaults.
   */
-  for (const section of ["Dashboard", "WhatsApp inbox", "Calendar", "Patients", "Documents", "Invoices", "Insurance", "Settings"]) {
+  for (const section of ["Dashboard", "WhatsApp inbox", "Calendar", "Patients", "Documents", "Products and stock", "Invoices", "Insurance", "Settings"]) {
     const sw = page.getByRole("switch", { name: section }).first();
     if ((await sw.count()) && (await sw.getAttribute("aria-checked")) === "true") await sw.click();
   }

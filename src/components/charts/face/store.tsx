@@ -17,6 +17,8 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRealtimeRefresh, type RealtimeEvent } from "@/lib/use-realtime";
 import type { FaceChartData, FaceMark, FacePrice } from "@/lib/charts/face/db";
+import type { MarkProduct, StockProduct } from "@/lib/charts/face/stock";
+import type { PackagePlan, PatientPackage } from "@/lib/charts/face/packages";
 import type { MarkEvent } from "@/lib/charts/dental/state";
 import type { Billed } from "@/lib/charts/dental/billing-server";
 
@@ -52,6 +54,10 @@ export type FaceTabData = {
   canBill: boolean;
   /** May this member set the clinic's prices (`settings.services`)? */
   canPrice: boolean;
+  /** May this member sell a package (`patients.charts` or `invoices`)? */
+  canSell: boolean;
+  /** May this member see products, stock and what a product cost (`stock`)? */
+  canStock: boolean;
   currency: string;
   chart: FaceChartData;
 };
@@ -67,6 +73,12 @@ export type FaceStore = Omit<FaceTabData, "chart"> & {
   setEvents: Setter<MarkEvent[]>;
   prices: FacePrice[];
   billing: Billed[];
+  products: StockProduct[];
+  markProducts: MarkProduct[];
+  setMarkProducts: Setter<MarkProduct[]>;
+  packages: PatientPackage[];
+  setPackages: Setter<PatientPackage[]>;
+  plans: PackagePlan[];
   /** Send a write through the store: a re-read waits for it, and its echo is not taken for a colleague's change. */
   write<T>(ids: string[], p: Promise<T>): Promise<T>;
   reload(): Promise<void>;
@@ -107,6 +119,10 @@ export function FaceProvider({
   const [events, setEvents] = useState<MarkEvent[]>(data.chart.events);
   const [prices, setPrices] = useState<FacePrice[]>(data.chart.prices);
   const [billing, setBilling] = useState<Billed[]>(data.chart.billing);
+  const [products, setProducts] = useState<StockProduct[]>(data.chart.products);
+  const [markProducts, setMarkProducts] = useState<MarkProduct[]>(data.chart.markProducts);
+  const [packages, setPackages] = useState<PatientPackage[]>(data.chart.packages);
+  const [plans, setPlans] = useState<PackagePlan[]>(data.chart.plans);
   const sync = useRef({ inflight: 0, writes: 0, owed: false, mine: new Map<string, number>() });
   const [staleOnMount] = useState(() => Date.now() - renderedAt > STALE_AFTER_MS);
 
@@ -130,6 +146,10 @@ export function FaceProvider({
     setEvents(body.chart.events);
     setPrices(body.chart.prices);
     setBilling(body.chart.billing);
+    setProducts(body.chart.products);
+    setMarkProducts(body.chart.markProducts);
+    setPackages(body.chart.packages);
+    setPlans(body.chart.plans);
   }, [slug, patientId]);
 
   const write = useCallback(
@@ -161,7 +181,9 @@ export function FaceProvider({
     },
     [patientId]
   );
-  useRealtimeRefresh(slug, data.canBill ? ["chart_marks", "invoices"] : ["chart_marks"], reload, isOthers, { syncOnOpen: staleOnMount });
+  useRealtimeRefresh(slug, data.canBill ? ["chart_marks", "patient_packages", "invoices"] : ["chart_marks", "patient_packages"], reload, isOthers, {
+    syncOnOpen: staleOnMount,
+  });
 
   const value = useMemo<FaceStore>(
     () => ({
@@ -173,6 +195,8 @@ export function FaceProvider({
       canWrite: data.canWrite,
       canBill: data.canBill,
       canPrice: data.canPrice,
+      canSell: data.canSell,
+      canStock: data.canStock,
       currency: data.currency,
       marks,
       setMarks,
@@ -180,10 +204,16 @@ export function FaceProvider({
       setEvents,
       prices,
       billing,
+      products,
+      markProducts,
+      setMarkProducts,
+      packages,
+      setPackages,
+      plans,
       write,
       reload,
     }),
-    [slug, patientId, data, marks, events, prices, billing, write, reload]
+    [slug, patientId, data, marks, events, prices, billing, products, markProducts, packages, plans, write, reload]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

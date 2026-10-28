@@ -234,6 +234,34 @@ export function totalUnits(t: FaceTreatment, areas: Area[]): number | null {
   return t.units ? areas.reduce((n, a) => n + (a.units ?? 0), 0) : null;
 }
 
+/**
+ * A treatment's price on the list: with this product, when the clinic prices
+ * it by product (a Juvederm syringe dearer than another), else the
+ * treatment's own — as a crown's price follows its material.
+ */
+export function pickFacePrice<T extends { chartKey: string; variant: string | null }>(list: T[], key: string, productId: string | null): T | null {
+  return (productId ? list.find((p) => p.chartKey === key && p.variant === productId) : undefined) ?? list.find((p) => p.chartKey === key && p.variant === null) ?? null;
+}
+
+/** What a product is counted in (0085 aesthetic_products.unit). */
+export type ProductUnit = "u" | "ml" | "syringe" | "vial" | "thread" | "piece";
+
+const UNIT_WORDS: Record<ProductUnit, { en: [string, string]; ar: [string, string] }> = {
+  u: { en: ["{n}u", "{n}u"], ar: ["{n} وحدة", "{n} وحدة"] },
+  ml: { en: ["{n} ml", "{n} ml"], ar: ["{n} مل", "{n} مل"] },
+  syringe: { en: ["1 syringe", "{n} syringes"], ar: ["سرنجة واحدة", "{n} سرنجات"] },
+  vial: { en: ["1 vial", "{n} vials"], ar: ["عبوة واحدة", "{n} عبوات"] },
+  thread: { en: ["1 thread", "{n} threads"], ar: ["خيط واحد", "{n} خيوط"] },
+  piece: { en: ["1 piece", "{n} pieces"], ar: ["قطعة واحدة", "{n} قطع"] },
+};
+
+/** "54u", "2 syringes", "1.5 ml" — an amount of a product, in the reader's language. */
+export function productAmount(unit: ProductUnit, qty: number, locale: string): string {
+  const w = UNIT_WORDS[unit][locale === "ar" ? "ar" : "en"];
+  const n = Math.round(qty * 100) / 100;
+  return (n === 1 ? w[0] : w[1]).replace("{n}", String(n));
+}
+
 /** The whole price: the list's price for one, times what it counts. */
 export function feeOf(unitPrice: number | null, quantity: number): number | null {
   return unitPrice == null ? null : Math.round(unitPrice * quantity * 100) / 100;

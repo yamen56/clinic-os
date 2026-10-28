@@ -29,6 +29,7 @@ import {
   Sparkles,
   Cable,
   FlaskConical,
+  Boxes,
   Wallet,
   Settings,
   MoreHorizontal,
@@ -48,6 +49,7 @@ type NavKey =
   | "calendar"
   | "devices"
   | "labs"
+  | "stock"
   /* Invoices, Earnings and Expenses, which are one subject and are now one
      entry with tabs inside it. See lib/finance. */
   | "finance"
@@ -64,6 +66,7 @@ const icons: Record<NavKey, React.ComponentType<{ className?: string; strokeWidt
   calendar: CalendarDays,
   devices: Cable,
   labs: FlaskConical,
+  stock: Boxes,
   finance: Wallet,
   patients: Users,
   campaigns: Megaphone,
@@ -94,6 +97,7 @@ export function Shell({
   hasInsurers,
   devices,
   labs,
+  stock,
   fullControl,
   announcements,
   children,
@@ -129,6 +133,8 @@ export function Shell({
   devices: { connected: boolean; waiting: number };
   /** A dental clinic's labs: whether it keeps any, and how much work is back late. */
   labs: { kept: boolean; late: number };
+  /** An aesthetic clinic's products and stock: whether it has the face chart, and how many products run low. */
+  stock: { kept: boolean; low: number };
   /** `hasFullControl(access)` — an owner, or somebody on `full` access. */
   fullControl: boolean;
   announcements: { id: string; title: string; body: string }[];
@@ -225,6 +231,8 @@ export function Shell({
     { key: "devices", href: `${base}/devices`, show: caps.patients && (devices.connected || devices.waiting > 0), badge: devices.waiting },
     /* Once a dental clinic keeps a lab (Settings → Dental labs): what is out, back, and owed. The badge is work back late. */
     { key: "labs", href: `${base}/labs`, show: labs.kept && (caps["patients.charts"] || caps.invoices), badge: labs.late },
+    /* The face chart's products and stock. The badge is what runs low. */
+    { key: "stock", href: `${base}/stock`, show: stock.kept && caps.stock, badge: stock.low },
     ...(caps.invoices ? [] : [finance]),
     { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
@@ -274,6 +282,7 @@ export function Shell({
     calendar: t.nav.calendar,
     devices: t.nav.devices,
     labs: t.nav.labs,
+    stock: t.nav.stock,
     conversations: t.nav.conversations,
     campaigns: t.nav.campaigns,
     documents: t.nav.documents,

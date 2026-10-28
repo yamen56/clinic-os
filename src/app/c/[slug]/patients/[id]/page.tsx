@@ -281,7 +281,7 @@ export default async function PatientProfilePage({
       dentalDoctors: dentalDoctors.rows as { id: string; name: string }[],
       // The saved chart: its entries and their history, the clinic's own treatments and favourites.
       dentalChart: dental ? await loadDentalChart(c, access.clinicId, id, { visits: caps.calendar, billing: caps.invoices }) : null,
-      faceChart: face ? await loadFaceChart(c, access.clinicId, id, { billing: caps.invoices }) : null,
+      faceChart: face ? await loadFaceChart(c, access.clinicId, id, { billing: caps.invoices, stockCosts: can(access, "stock") }) : null,
       filesHub: await loadFilesHub(c, access.clinicId, id, p.full_name as string, (p.birth_date as Date | null) ?? null),
       // Notes written elsewhere in the file — visits, invoices, prescriptions… — for the Notes tab, each where its reader may look.
       noteFeed: await loadNoteFeed(
@@ -357,6 +357,10 @@ export default async function PatientProfilePage({
                 canWrite: can(access, "patients.charts"),
                 canBill: caps.invoices,
                 canPrice: can(access, "settings.services"),
+                // Sell a package: the doctor at the chair, or the desk.
+                canSell: can(access, "patients.charts") || caps.invoices,
+                // Products and stock, and what a treatment's product cost.
+                canStock: can(access, "stock"),
                 currency: access.clinic.currency,
                 chart: d.faceChart,
               })

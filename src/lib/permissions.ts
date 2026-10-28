@@ -124,6 +124,15 @@ export const CAPABILITIES = [
     which is the most sensitive number in the business.
   */
   "expenses",
+  /*
+    The face chart's products and stock (0085): the companies the clinic buys
+    from, the products, what comes in and what goes out. Top-level, like
+    `expenses`: receiving stock records what it cost, and Yamen wanted the
+    doctor able to add companies and products without being handed the
+    clinic's invoices. A module's capability — masked unless the clinic has the
+    face chart (features.ts).
+  */
+  "stock",
   "campaigns",
   "automations",
   "ai",
@@ -213,7 +222,7 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
   // A doctor on a revenue share can see what they have earned, and nothing else
   // about the clinic's money. The screen is empty and harmless for a doctor who
   // has no arrangement, so it costs nothing to start on.
-  doctor: ["dashboard", "calendar", "patients", "patients.prescriptions", "patients.charts", "documents", "earnings"],
+  doctor: ["dashboard", "calendar", "patients", "patients.prescriptions", "patients.charts", "documents", "earnings", "stock"],
   receptionist: [
     "dashboard",
     "conversations",
@@ -227,6 +236,8 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
     "patients.merge",
     "documents",
     "documents.manage",
+    // The desk takes the deliveries in.
+    "stock",
     "invoices",
     // Correcting the desk's own mistake. Everything below this line up to
     // `settings` is what the desk could already do before it had a name.
@@ -393,6 +404,10 @@ export function resolveCapabilities(
   if (!("patients.charts" in ticked) && opts.role === "doctor" && caps.patients) {
     caps["patients.charts"] = true;
   }
+  // The face chart's products and stock, likewise: the doctor adds the companies and products (2026-10-28).
+  if (!("stock" in ticked) && opts.role === "doctor" && caps.patients) {
+    caps.stock = true;
+  }
 
   /*
     The capabilities carved out on 2026-10-06, each from whatever used to grant
@@ -557,6 +572,7 @@ export const CAPABILITY_GROUPS: {
     area: "daily",
   },
   { section: "documents", actions: ["documents.manage", "documents.void"], area: "daily" },
+  { section: "stock", actions: [], area: "daily" },
   { section: "invoices", actions: ["invoices.void", "invoices.analytics"], area: "money" },
   { section: "insurance", actions: ["insurance.claims", "insurance.companies"], area: "money" },
   { section: "earnings", actions: [], area: "money" },
