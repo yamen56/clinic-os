@@ -10,7 +10,7 @@ import { addedByLabel, type AddedBy } from "@/lib/added-by";
 import { PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
-import { SearchInput, Select, Field, Input } from "@/components/ui/input";
+import { SearchInput, Select, Field, Input, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
@@ -34,12 +34,28 @@ type Row = {
   addedBy: AddedBy | null;
 };
 
+/** One of the clinic's patient fields (Settings → Fields), as the new-patient form needs it. */
+type FieldDef = {
+  id: string;
+  key: string;
+  label: string;
+  label_ar: string | null;
+  field_type: string;
+  options: string[];
+  is_required: boolean;
+  storage_key: string | null;
+  source_column: string | null;
+};
+const storageKeyOf = (d: FieldDef) => d.storage_key ?? d.key.replace(/^patient\./, "");
+const blankNew = { name: "", phone: "", gender: "" as "" | "male" | "female", birthDate: "", nationalId: "" };
+
 export function PatientsList({
   slug,
   patients,
   total,
   pageSize,
   allTags,
+  fields = [],
   tz,
   initialFilters,
   openNew,
@@ -52,6 +68,8 @@ export function PatientsList({
   total: number;
   pageSize: number;
   allTags: string[];
+  /** The clinic's patient fields: labels for the ones asked on adding, and which are required. */
+  fields?: FieldDef[];
   tz: string;
   initialFilters: { q: string; tag: string; source: string; visit: string; optedOut: string };
   /** Open the new-patient dialog on arrival — the dashboard shortcut. */
@@ -69,9 +87,38 @@ export function PatientsList({
   const { toast } = useToast();
   const [f, setF] = useState(initialFilters);
   const [newOpen, setNewOpen] = useState(Boolean(openNew));
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [err, setErr] = useState("");
+  /*
+    The new patient: who they are — name, phone, gender, date of birth, the
+    national number — and every field the clinic itself made required, so the
+    file opens complete rather than with half of it left for somebody to
+    remember (2026-10-28).
+  */
+  const [nw, setNw] = useState(blankNew);
+  const [custom, setCustom] = useState<Record<string, string | boolean | null>>({});
+  const name = nw.name;
+  const [err, setErr] = useState<{ field: string; text: string } | null>(null);
+  const def = (key: string) => fields.find((d) => d.key === key) ?? null;
+  const labelOf = (key: string, fallback: string) => {
+    const d = def(key);
+    return d ? (locale === "ar" ? d.label_ar || d.label : d.label) : fallback;
+  };
+  /*
+    Not the phone: every clinic was seeded with it marked required, for its
+    documents, and a patient with no phone — a child, a walk-in — has always
+    been addable here (createPatientAction).
+  */
+  const requiredKey = (key: string) => key !== "patient.phone" && Boolean(def(key)?.is_required);
+  const nationalIdDef = def("patient.national_id");
+  const extraRequired = fields.filter((d) => d.is_required && !d.source_column && d !== nationalIdDef);
+  const missing =
+    !name.trim() ||
+    (requiredKey("patient.gender") && !nw.gender) ||
+    (requiredKey("patient.birth_date") && !nw.birthDate) ||
+    (Boolean(nationalIdDef?.is_required) && !nw.nationalId.trim()) ||
+    extraRequired.some((d) => {
+      const v = custom[storageKeyOf(d)];
+      return v === undefined || v === null || (typeof v === "string" && !v.trim());
+    });
   const [pending, start] = useTransition();
   /*
     Which format is in flight, not merely whether one is. Two buttons sharing a
@@ -167,16 +214,33 @@ export function PatientsList({
 
   const submitNew = () =>
     start(async () => {
-      setErr("");
-      const r = await createPatientAction(slug, { fullName: name, phone });
+      setErr(null);
+      const r = await createPatientAction(slug, {
+        fullName: name,
+        phone: nw.phone,
+        gender: nw.gender,
+        birthDate: nw.birthDate,
+        nationalId: nationalIdDef ? nw.nationalId : "",
+        custom,
+      });
       if (r.error) {
-        setErr(r.error === "invalid_phone" ? t.common.invalidPhone : t.common.required);
+        setErr(
+          r.error === "invalid_phone"
+            ? { field: "phone", text: t.common.invalidPhone }
+            : r.error === "invalid_national_id"
+              ? { field: "nid", text: t.patients.nationalIdTenDigits }
+              : r.error === "national_id_taken"
+                ? { field: "nid", text: `${t.patients.nationalIdTaken}${r.other ? ` — ${r.other}` : ""}` }
+                : r.error === "invalid_birth_date"
+                  ? { field: "birth", text: t.patients.birthDateFuture }
+                  : { field: "form", text: t.common.required }
+        );
         return;
       }
       if (r.existing) toast(t.patients.existingPatient, "info");
       setNewOpen(false);
-      setName("");
-      setPhone("");
+      setNw(blankNew);
+      setCustom({});
       router.push(`/c/${slug}/patients/${r.id}`);
     });
 
@@ -455,19 +519,109 @@ export function PatientsList({
         </div>
       )}
 
-      <Modal open={newOpen} onClose={() => setNewOpen(false)} title={t.patients.newPatient}>
-        <div className="grid gap-4">
-          <Field label={t.patients.fullName} required>
-            <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-          </Field>
-          <Field label={t.patients.phone} hint="xxxxxxxxxx" error={err || undefined}>
-            <Input dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+962…" />
-          </Field>
+      <Modal open={newOpen} onClose={() => setNewOpen(false)} title={t.patients.newPatient} wide>
+        <div className="grid gap-4" data-new-patient>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={t.patients.fullName} required>
+              <Input value={nw.name} onChange={(e) => setNw({ ...nw, name: e.target.value })} autoFocus data-new-name />
+            </Field>
+            <Field
+              label={labelOf("patient.phone", t.patients.phone)}
+              required={requiredKey("patient.phone")}
+              error={err?.field === "phone" ? err.text : undefined}
+            >
+              <Input dir="ltr" type="tel" value={nw.phone} onChange={(e) => setNw({ ...nw, phone: e.target.value })} placeholder="+962 7…" data-new-phone />
+            </Field>
+            <Field label={labelOf("patient.gender", t.patients.gender)} required={requiredKey("patient.gender")}>
+              <Select value={nw.gender} onChange={(e) => setNw({ ...nw, gender: e.target.value as typeof nw.gender })} data-new-gender>
+                <option value="">—</option>
+                <option value="male">{t.patients.male}</option>
+                <option value="female">{t.patients.female}</option>
+              </Select>
+            </Field>
+            <Field
+              label={labelOf("patient.birth_date", t.patients.birthDate)}
+              required={requiredKey("patient.birth_date")}
+              error={err?.field === "birth" ? err.text : undefined}
+            >
+              <Input
+                type="date"
+                max={new Date().toISOString().slice(0, 10)}
+                value={nw.birthDate}
+                onChange={(e) => setNw({ ...nw, birthDate: e.target.value })}
+                data-new-birth
+              />
+            </Field>
+            {/* The national number — what an insurer, and Hakeem, match the patient on. The clinic's own field: renamed or hidden in settings, it is here too. */}
+            {nationalIdDef && (
+              <Field
+                label={labelOf("patient.national_id", "")}
+                required={nationalIdDef.is_required}
+                error={err?.field === "nid" ? err.text : undefined}
+              >
+                <Input dir="ltr" inputMode="numeric" value={nw.nationalId} onChange={(e) => setNw({ ...nw, nationalId: e.target.value })} data-new-nid />
+              </Field>
+            )}
+            {/* Whatever else the clinic made required in Settings → Fields. */}
+            {extraRequired.map((d) => {
+              const label = locale === "ar" ? d.label_ar || d.label : d.label;
+              const sk = storageKeyOf(d);
+              const val = custom[sk];
+              const setVal = (v: string | boolean | null) => setCustom((prev) => ({ ...prev, [sk]: v }));
+              if (d.field_type === "select" || d.field_type === "checkbox") {
+                const opts = d.field_type === "checkbox" ? null : d.options ?? [];
+                return (
+                  <Field key={d.id} label={label} required>
+                    <Select
+                      value={opts ? String(val ?? "") : val === true ? "yes" : val === false ? "no" : ""}
+                      onChange={(e) => setVal(opts ? e.target.value : e.target.value === "" ? null : e.target.value === "yes")}
+                      data-new-field={d.key}
+                    >
+                      <option value="">—</option>
+                      {opts
+                        ? opts.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))
+                        : [
+                            <option key="yes" value="yes">
+                              {t.common.yes}
+                            </option>,
+                            <option key="no" value="no">
+                              {t.common.no}
+                            </option>,
+                          ]}
+                    </Select>
+                  </Field>
+                );
+              }
+              if (d.field_type === "longtext") {
+                return (
+                  <Field key={d.id} label={label} required>
+                    <Textarea value={String(val ?? "")} className="min-h-20" onChange={(e) => setVal(e.target.value)} data-new-field={d.key} />
+                  </Field>
+                );
+              }
+              return (
+                <Field key={d.id} label={label} required>
+                  <Input
+                    type={d.field_type === "number" ? "number" : d.field_type === "date" ? "date" : d.field_type === "email" ? "email" : "text"}
+                    dir={d.field_type === "phone" || d.field_type === "email" ? "ltr" : undefined}
+                    value={String(val ?? "")}
+                    onChange={(e) => setVal(e.target.value)}
+                    data-new-field={d.key}
+                  />
+                </Field>
+              );
+            })}
+          </div>
+          {err?.field === "form" && <p className="text-[13px] text-danger">{err.text}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setNewOpen(false)}>
               {t.common.cancel}
             </Button>
-            <Button onClick={submitNew} loading={pending} disabled={!name.trim()}>
+            <Button onClick={submitNew} loading={pending} disabled={missing} data-new-create>
               {t.common.create}
             </Button>
           </div>

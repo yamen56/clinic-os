@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "./button";
 import { useI18n } from "@/lib/i18n/client";
+
+const noSubscribe = () => () => {};
+const isClient = () => true;
+const isServer = () => false;
 
 export function Modal({
   open,
@@ -30,6 +34,13 @@ export function Modal({
 }) {
   const { t, dir, locale } = useI18n();
   const box = useRef<HTMLDivElement>(null);
+  /*
+    False on the server and while the page hydrates, true after. A dialog open
+    on arrival (the new-patient form behind ?new=1) used to render nothing on
+    the server and a portal on the first client pass, and React threw the page
+    away as a hydration mismatch; now both passes agree, and it opens a frame later.
+  */
+  const hydrated = useSyncExternalStore(noSubscribe, isClient, isServer);
   useEffect(() => {
     if (!open) return;
     /*
@@ -52,7 +63,7 @@ export function Modal({
     };
   }, [open, onClose]);
 
-  if (!open || typeof document === "undefined") return null;
+  if (!open || !hydrated) return null;
 
   /*
     The portal leaves the component tree's DOM for <body>, and with it any

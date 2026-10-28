@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { WeeklyHoursEditor } from "@/components/weekly-hours-editor";
 import { PhotoPicker } from "@/components/photo-picker";
 import { addStaffAction, updateMemberAction } from "./actions";
+import { PayEditor, emptyPay, payDraftOf, payKindsFor, payLine, payOf, type PayDraft } from "./pay-editor";
 import {
   CAPABILITIES,
   CAPABILITY_GROUPS,
@@ -78,6 +79,10 @@ type Member = {
   commission_percent: string | null;
   /** How this doctor shares a treatment's costs. Null for anybody but the owner, like the rate. */
   costs_rule: "shared" | "doctor" | null;
+  /** A monthly salary and its pay day, or a fee per visit on call (0086). Owner-only, like the rate. */
+  salary_amount: string | null;
+  salary_day: number | null;
+  on_call_fee: string | null;
 };
 
 const ROLES: MemberRole[] = ["doctor", "receptionist", "other"];
@@ -107,13 +112,15 @@ export function StaffClient({
   members,
   selfId,
   viewerIsOwner,
+  currency,
 }: {
   slug: string;
   members: Member[];
   selfId: string | null;
   viewerIsOwner: boolean;
+  currency: string;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -127,6 +134,9 @@ export function StaffClient({
     title: string;
     specialty: string;
     color: string;
+    licenseNo: string;
+    syndicateNo: string;
+    pay: PayDraft;
   }>({
     fullName: "",
     email: "",
@@ -136,6 +146,9 @@ export function StaffClient({
     title: "",
     specialty: "",
     color: "#0b1220",
+    licenseNo: "",
+    syndicateNo: "",
+    pay: emptyPay(),
   });
   const [pending, start] = useTransition();
 
@@ -149,7 +162,18 @@ export function StaffClient({
       title: "",
       specialty: "",
       color: "#0b1220",
+      licenseNo: "",
+      syndicateNo: "",
+      pay: emptyPay(),
     });
+
+  /*
+    The deal goes with the invitation only from the owner. A doctor starts on a
+    percentage — the usual deal, and the one this form is most often filling
+    in — with the box empty, so nothing is assumed about the number.
+  */
+  const addPay = viewerIsOwner ? payOf(form.pay) : null;
+  const addPayMissing = viewerIsOwner && addPay === null;
 
   /*
     Closing puts the form back to blank, whichever way it was closed. Leaving it
@@ -217,7 +241,11 @@ export function StaffClient({
                   {m.email}
                   {m.specialty ? ` · ${m.specialty}` : ""}
                 </div>
-                <div className="text-[12px] text-ink-400">{accessSummary(m)}</div>
+                <div className="text-[12px] text-ink-400">
+                  {accessSummary(m)}
+                  {/* Only the owner's browser is sent anybody's pay, so for anyone else this is always empty. */}
+                  {viewerIsOwner && payLine(m, currency, locale, t.staff) && <span data-pay-line> · {payLine(m, currency, locale, t.staff)}</span>}
+                </div>
               </div>
               <Button
                 variant="ghost"
@@ -257,7 +285,14 @@ export function StaffClient({
                   // ticking done so far, which is the right trade on an invite
                   // form: picking "doctor" after "receptionist" means the whole
                   // starting point was wrong, not just the label.
-                  setForm({ ...form, role, caps: capabilitiesFor(ROLE_DEFAULTS[role]) });
+                  // And the deal: a doctor starts on a percentage, and a share or a
+                  // per-visit fee is not offered to anybody but a doctor.
+                  const pay = !payKindsFor(role).includes(form.pay.kind)
+                    ? emptyPay()
+                    : role === "doctor" && form.pay.kind === "none"
+                      ? { ...form.pay, kind: "percent" as const }
+                      : form.pay;
+                  setForm({ ...form, role, caps: capabilitiesFor(ROLE_DEFAULTS[role]), pay });
                 }}
               >
                 {ROLES.map((r) => (
@@ -276,6 +311,21 @@ export function StaffClient({
               <Field label={t.staff.specialty}>
                 <Input value={form.specialty} onChange={(e) => setForm({ ...form, specialty: e.target.value })} />
               </Field>
+              {/* Printed under the signature on prescriptions, and what an insurer identifies the doctor by. */}
+              <Field label={t.staff.licenseNo}>
+                <Input dir="ltr" value={form.licenseNo} onChange={(e) => setForm({ ...form, licenseNo: e.target.value })} data-add-license />
+              </Field>
+              <Field label={t.staff.syndicateNo}>
+                <Input dir="ltr" value={form.syndicateNo} onChange={(e) => setForm({ ...form, syndicateNo: e.target.value })} data-add-syndicate />
+              </Field>
+            </div>
+          )}
+          {viewerIsOwner && (
+            <div data-add-pay>
+              <PayEditor role={form.role} value={form.pay} onChange={(pay) => setForm((f) => ({ ...f, pay }))} currency={currency} />
+              {addPayMissing && form.pay.kind !== "none" && (
+                <p className="mt-1.5 text-[12px] text-st-pending">{t.staff.payInvalid}</p>
+              )}
             </div>
           )}
           <Field label={t.staff.color}>
@@ -313,7 +363,7 @@ export function StaffClient({
             </Button>
             <Button
               loading={pending}
-              disabled={!form.fullName || !form.email}
+              disabled={!form.fullName || !form.email || addPayMissing}
               onClick={() =>
                 start(async () => {
                   const r = await addStaffAction(slug, {
@@ -325,6 +375,9 @@ export function StaffClient({
                     title: form.title,
                     specialty: form.specialty,
                     color: form.color,
+                    licenseNo: form.role === "doctor" ? form.licenseNo : "",
+                    syndicateNo: form.role === "doctor" ? form.syndicateNo : "",
+                    pay: addPay ?? undefined,
                   });
                   if (r.error) {
                     toast(t.common.genericError, "error");
@@ -391,6 +444,7 @@ export function StaffClient({
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.full_name} wide>
         {editing && (
           <EditMember
+            currency={currency}
             key={editing.id}
             slug={slug}
             member={editing}
@@ -634,12 +688,14 @@ function EditMember({
   isSelf,
   viewerIsOwner,
   onDone,
+  currency,
 }: {
   slug: string;
   member: Member;
   isSelf: boolean;
   viewerIsOwner: boolean;
   onDone: () => void;
+  currency: string;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -652,6 +708,15 @@ function EditMember({
   );
   const [ownHours, setOwnHours] = useState(!!member.working_hours);
   const [pending, start] = useTransition();
+  /*
+    The deal as stored, and as edited. It is sent only when it changed, so a
+    save that only fixed a colour never re-writes anybody's pay — and only by
+    the owner, who is the only one sent it in the first place.
+  */
+  const [startPay] = useState(() => payDraftOf(member));
+  const [pay, setPay] = useState<PayDraft>(startPay);
+  const payChanged = viewerIsOwner && JSON.stringify(payOf(pay)) !== JSON.stringify(payOf(startPay));
+  const payMissing = viewerIsOwner && payOf(pay) === null;
 
   // The owner's access is not editable and neither is your own — the server
   // refuses both, and a form that lets you set something it will reject is
@@ -774,53 +839,16 @@ function EditMember({
       )}
 
       {/*
-        What the clinic pays this doctor, and the one field on this screen that
+        What the clinic pays this person, and the one part of this screen that
         only the owner sees. `settings.staff` is grantable — a receptionist can
         be given the staff screen without being given everyone's pay, and the
-        server does not send the number to anybody else in the first place.
-
-        Empty is not zero. Leaving it blank means there is no revenue-sharing
-        arrangement and the doctor gets no earnings screen; typing 0 means there
-        is one and it currently pays nothing.
+        server does not send the numbers to anybody else in the first place.
       */}
-      {m.role === "doctor" && viewerIsOwner && (
-        <Field label={t.staff.commission} hint={t.staff.commissionHint}>
-          {/*
-            A plain Input, not NumberInput: that one settles an emptied box to
-            its minimum, which would quietly turn "no arrangement" into "0%" —
-            the one distinction this field exists to keep.
-          */}
-          <Input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            max={100}
-            step={0.5}
-            dir="ltr"
-            placeholder={t.staff.commissionNone}
-            value={m.commission_percent ?? ""}
-            onChange={(e) =>
-              setM({ ...m, commission_percent: e.target.value === "" ? null : e.target.value })
-            }
-          />
-        </Field>
-      )}
-      {/*
-        The other half of the same deal: what a treatment cost — its materials,
-        its lab work — comes off before the percentage, or off the doctor's
-        share. Shown with a percentage to qualify, and only to the owner.
-      */}
-      {m.role === "doctor" && viewerIsOwner && m.commission_percent !== null && m.commission_percent !== "" && (
-        <Field label={t.staff.costsRule} hint={t.staff.costsRuleHint}>
-          <Select
-            value={m.costs_rule ?? "shared"}
-            onChange={(e) => setM({ ...m, costs_rule: e.target.value === "doctor" ? "doctor" : "shared" })}
-            data-costs-rule
-          >
-            <option value="shared">{t.staff.costsShared}</option>
-            <option value="doctor">{t.staff.costsDoctor}</option>
-          </Select>
-        </Field>
+      {viewerIsOwner && (
+        <div data-edit-pay>
+          <PayEditor role={m.role} value={pay} onChange={setPay} currency={currency} />
+          {payMissing && pay.kind !== "none" && <p className="mt-1.5 text-[12px] text-st-pending">{t.staff.payInvalid}</p>}
+        </div>
       )}
 
       {accessLocked ? (
@@ -871,7 +899,7 @@ function EditMember({
         )}
         <Button
           loading={pending}
-          disabled={!nameLocked && m.full_name.trim().length < 2}
+          disabled={(!nameLocked && m.full_name.trim().length < 2) || payMissing}
           onClick={() =>
             start(async () => {
               const r = await updateMemberAction(slug, m.id, {
@@ -888,18 +916,11 @@ function EditMember({
                 licenseNo: m.role === "doctor" ? (m.license_no ?? "") : undefined,
                 syndicateNo: m.role === "doctor" ? (m.syndicate_no ?? "") : undefined,
                 /*
-                  Sent only by an owner editing a doctor, and left absent
-                  otherwise so a save from any other screen state cannot clear a
-                  rate it was never shown. The server refuses it from anybody
-                  else regardless.
+                  Sent only by the owner, and only when it changed, so a save
+                  from any other screen state cannot clear a deal it was never
+                  shown. The server refuses it from anybody else regardless.
                 */
-                commissionPercent:
-                  viewerIsOwner && m.role === "doctor"
-                    ? m.commission_percent === null || m.commission_percent === ""
-                      ? null
-                      : Number(m.commission_percent)
-                    : undefined,
-                costsRule: viewerIsOwner && m.role === "doctor" ? (m.costs_rule ?? "shared") : undefined,
+                pay: payChanged ? (payOf(pay) ?? undefined) : undefined,
                 access: accessLocked
                   ? undefined
                   : { level, caps: CAPABILITIES.filter((c) => caps[c]) },

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { AuthError, can, requireClinic } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
-import { findOrCreatePatient } from "@/lib/patients";
+import { checkNationalId, findOrCreatePatient, nationalIdOf } from "@/lib/patients";
+import type { PoolClient } from "pg";
 import { normalizePhone } from "@/lib/phone";
 import { deleteFiles } from "@/lib/storage";
 import { storedPaths } from "@/lib/imaging/ingest";
@@ -16,22 +17,114 @@ import {
   setNoteAppointment,
 } from "@/lib/notes";
 
+/**
+ * What the new-patient form asks besides the name and the phone (2026-10-28):
+ * the things that identify the person — gender, date of birth, the national
+ * number — and whatever the clinic itself made required in Settings → Fields.
+ * Yamen: adding a patient should "align well with all the needed fields",
+ * rather than leave half of them for somebody to remember on the file.
+ *
+ * Absent from callers that add a patient on the way to something else (the
+ * waitlist): they send a name and a phone, as before, and nothing is required
+ * of them.
+ */
+type PatientExtras = {
+  gender?: "male" | "female" | "";
+  birthDate?: string;
+  nationalId?: string;
+  /** The clinic's own fields, by storage key. */
+  custom?: Record<string, string | boolean | null>;
+};
+
+/** The clinic's patient fields the form must ask for, by the key the form uses. */
+async function requiredPatientFields(c: PoolClient, clinicId: string) {
+  const r = await c.query(
+    `select key, storage_key, source_column from patient_field_definitions
+      where clinic_id = $1 and scope = 'patient' and is_required and not hidden and show_in_profile`,
+    [clinicId]
+  );
+  return r.rows as { key: string; storage_key: string | null; source_column: string | null }[];
+}
+
 export async function createPatientAction(
   slug: string,
-  data: { fullName: string; phone: string }
-): Promise<{ id?: string; existing?: boolean; error?: string }> {
+  data: { fullName: string; phone: string } & PatientExtras
+): Promise<{ id?: string; existing?: boolean; error?: string; other?: string; field?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "patients")) return { error: "forbidden" };
   const name = data.fullName.trim();
   if (!name) return { error: "name_required" };
   if (data.phone.trim() && !normalizePhone(data.phone)) return { error: "invalid_phone" };
+  const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(data.birthDate ?? "") ? data.birthDate! : null;
+  if (birthDate && birthDate > new Date().toISOString().slice(0, 10)) return { error: "invalid_birth_date" };
+  const gender = data.gender === "male" || data.gender === "female" ? data.gender : null;
+  // The national number is checked here as on the file: a typo is a claim an insurer rejects later.
+  const nid = checkNationalId(data.nationalId ?? "");
+  if ("error" in nid) return { error: nid.error };
 
   return inClinic(access, async (c) => {
+    /*
+      The clinic's required fields, checked only for the form that shows them —
+      the one that sends `custom`. Before anything is written, so a refusal
+      never leaves half a patient behind.
+    */
+    if (data.custom !== undefined) {
+      /*
+        Not the phone. Every clinic was seeded with it marked required (0010),
+        for its documents, and a patient with no phone — a child, a walk-in —
+        has always been addable here; the clinic did not choose to change that.
+      */
+      const given: Record<string, unknown> = {
+        birth_date: birthDate,
+        gender,
+      };
+      for (const f of await requiredPatientFields(c, access.clinicId)) {
+        const v = f.source_column
+          ? given[f.source_column]
+          : f.key === "patient.national_id"
+            ? nid.value
+            : data.custom[f.storage_key ?? f.key.replace(/^patient\./, "")];
+        if (f.source_column === "full_name") continue;
+        if (v === undefined && f.source_column) continue; // a column this form does not ask for
+        if (v === null || v === undefined || (typeof v === "string" && !v.trim())) return { error: "required", field: f.key };
+      }
+    }
+    const nationalNo = nationalIdOf(nid.value);
+    if (nationalNo) {
+      const dup = await c.query(
+        `select full_name from patients
+          where clinic_id = $1 and national_id = $2 and merged_into is null limit 1`,
+        [access.clinicId, nationalNo]
+      );
+      if (dup.rowCount) return { error: "national_id_taken", other: dup.rows[0].full_name as string };
+    }
+    /*
+      Written onto a patient this form created, and only then. A phone that
+      found somebody already here opens their file as it is: what was typed for
+      a stranger does not get to overwrite a file somebody else keeps.
+    */
+    const fillIn = async (id: string) => {
+      const custom: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(data.custom ?? {})) {
+        if (/^[a-z0-9_]{1,60}$/i.test(k) && v !== null && v !== "") custom[k] = typeof v === "string" ? v.slice(0, 500) : v;
+      }
+      if (nid.value) custom.national_id = nid.value;
+      if (!gender && !birthDate && !Object.keys(custom).length) return;
+      await c.query(
+        `update patients
+            set gender = coalesce($3, gender), birth_date = coalesce($4::date, birth_date),
+                custom_fields = custom_fields || $5::jsonb
+          where id = $1 and clinic_id = $2`,
+        [id, access.clinicId, gender, birthDate, JSON.stringify(custom)]
+      );
+    };
+
     if (!data.phone.trim()) {
       const r = await c.query(
         `insert into patients (clinic_id, full_name, source, created_by) values ($1, $2, 'staff', $3) returning id`,
         [access.clinicId, name, access.session.user.id]
       );
+      await fillIn(r.rows[0].id as string);
       await audit(c, {
         clinicId: access.clinicId,
         userId: access.session.user.id,
@@ -61,6 +154,7 @@ export async function createPatientAction(
       createdBy: access.session.user.id,
     });
     if (result.created) {
+      await fillIn(result.id);
       await audit(c, {
         clinicId: access.clinicId,
         userId: access.session.user.id,

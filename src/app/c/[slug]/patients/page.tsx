@@ -64,7 +64,22 @@ export default async function PatientsPage({
       )
     ).rows[0];
 
-    return { rows, total: Number(meta.total), tags: (meta.tags ?? []) as string[] };
+    /*
+      The clinic's own patient fields, for the new-patient form: what it calls
+      the national number, and which fields it made required — those are asked
+      when the patient is added, not left for the file.
+    */
+    const fields = (
+      await c.query(
+        `select id, key, label, label_ar, field_type, options, is_required, storage_key, source_column
+           from patient_field_definitions
+          where clinic_id = $1 and scope = 'patient' and not hidden and show_in_profile
+          order by display_order, label`,
+        [access.clinicId]
+      )
+    ).rows;
+
+    return { rows, total: Number(meta.total), tags: (meta.tags ?? []) as string[], fields };
   });
 
   return (
@@ -74,6 +89,7 @@ export default async function PatientsPage({
       pageSize={PATIENT_PAGE_SIZE}
       patients={data.rows.map(toPatientListRow)}
       allTags={data.tags}
+      fields={JSON.parse(JSON.stringify(data.fields))}
       canExportAll={can(access, "patients.export") || access.session.user.isSuperAdmin}
       canImport={can(access, "patients.import")}
       tz={access.clinic.timezone}

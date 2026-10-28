@@ -405,6 +405,9 @@ export const en = {
       "When the clinic agrees a percentage with a doctor, the clinic admin sets it on the staff screen and this page starts filling in.",
     myShare: "You earned",
     myRate: "Your rate",
+    perVisit: "{amount} a visit",
+    onCallVisits: "On-call visits · {n}",
+    onCallNote: "On call: you earn your fee for each of your appointments marked completed, at the fee on that day.",
     exTaxNote:
       "Your share is of the amount billed before sales tax, and it is counted as the patient pays — a part-paid invoice earns part of it.",
     /* What the lab charged for the work, and how it came into the share. */
@@ -756,6 +759,8 @@ export const en = {
     phoneTakenAction: "Open their file or merge the two records.",
     nationalIdInvalid: "A national number is 10 digits — this one was not saved",
     nationalIdTaken: "Another patient already has this national number",
+    nationalIdTenDigits: "A national number is 10 digits",
+    birthDateFuture: "The date of birth can't be in the future",
     tabs: {
       overview: "Overview",
       treatment: "Treatment",
@@ -1356,14 +1361,28 @@ export const en = {
     meetingUrl: "Meeting room link",
     meetingUrlHint:
       "Used for anything booked as an online meeting. The customer gets this link in their confirmation and their calendar invite.",
-    commission: "Revenue share (%)",
-    commissionHint:
-      "What this doctor earns of the work they bill, before tax. Leave it empty if there is no revenue-sharing arrangement — that is not the same as 0%. Only you can see or change this, and it never appears on a patient's invoice.",
     commissionNone: "No arrangement",
     costsRule: "Lab costs",
     costsRuleHint: "How what the lab charged for a treatment comes into this doctor's share.",
     costsShared: "Off the price, then the percentage",
     costsDoctor: "Paid from the doctor's share",
+    pay: "Pay",
+    payHint: "How the clinic pays them. Only you can see or change this.",
+    payKinds: { percent: "Percentage", salary: "Salary", on_call: "On call", none: "Not set" },
+    payPercentLabel: "Share of what they bill (%)",
+    payPercentHint: "Of the work billed under their name, before tax, earned as the patient pays. It shows on their Earnings screen.",
+    paySalaryLabel: "Monthly salary",
+    paySalaryDay: "Paid on day",
+    paySalaryHint:
+      "Added to Expenses as a repeating Salaries bill from the next pay day, so the clinic's profit counts it. Nothing is taken from what they bill.",
+    payOnCallLabel: "Fee per visit",
+    payOnCallHint:
+      "Earned for each of their appointments marked completed, at the fee on that day. It shows on their Earnings screen.",
+    payNoneHint: "No pay recorded for now. You can set it any time from their profile.",
+    payInvalid: "Enter the amount for how they're paid, or choose Not set.",
+    payListPercent: "{n}% share",
+    payListSalary: "Salary · {amount} a month",
+    payListOnCall: "On call · {amount} a visit",
     accessTitle: "Access",
     accessSub: "What this person can open and do. The job above decides scheduling, not access.",
     fullAccess: "Full access",

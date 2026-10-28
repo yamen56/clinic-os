@@ -50,8 +50,11 @@ export default async function ClinicLayout({
          */
          (
            exists(select 1 from clinic_members
-                   where id = $3 and clinic_id = $1 and commission_percent is not null)
+                   where id = $3 and clinic_id = $1
+                     and (commission_percent is not null or on_call_fee is not null))
            or exists(select 1 from invoice_line_doctors
+                      where clinic_id = $1 and doctor_member_id = $3)
+           or exists(select 1 from on_call_visits
                       where clinic_id = $1 and doctor_member_id = $3)
          ) as has_earnings,
          -- Claims are a Finance tab only for a clinic that deals with insurers,

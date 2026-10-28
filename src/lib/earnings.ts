@@ -226,6 +226,33 @@ const SESSION_ROWS = `
      and i.total > 0 and i.credit_note_of is null and i.status <> 'void'
 `;
 
+/**
+ * An on-call doctor's visits (0086): a set fee for each of their appointments
+ * completed, earned on the visit's day at the fee frozen when it was completed.
+ *
+ * Nothing here is a share of a payment — the fee is owed for turning up and
+ * seeing the patient, whether or not the patient has paid yet — so these rows
+ * produce nothing and cost nothing, and carry no invoice. Same columns as
+ * `LEDGER_ROWS`, so every total below adds them without a second query.
+ */
+const VISIT_ROWS = `
+  select null::uuid    as payment_id,
+         v.visit_at    as paid_at,
+         null::uuid    as invoice_id,
+         null::text    as invoice_number,
+         null::text    as invoice_status,
+         cl.currency,
+         v.doctor_member_id,
+         null::numeric as commission_percent,
+         0::numeric    as line_net,
+         0::numeric    as produced,
+         0::numeric    as costs,
+         v.fee         as earned
+    from on_call_visits v
+    join clinics cl on cl.id = v.clinic_id
+   where v.clinic_id = $1 and v.visit_at >= $2 and v.visit_at < $3
+`;
+
 export type EarningsScope = {
   clinicId: string;
   from: Date;
@@ -244,7 +271,9 @@ export type EarningsScope = {
  */
 function scopeSql(scope: EarningsScope): { sql: string; params: unknown[] } {
   return {
-    sql: `select * from (${LEDGER_SQL} and i.status <> 'void') paid union all select * from (${SESSION_ROWS}) sessions`,
+    sql: `select * from (${LEDGER_SQL} and i.status <> 'void') paid
+           union all select * from (${SESSION_ROWS}) sessions
+           union all select * from (${VISIT_ROWS}) visits`,
     params: [scope.clinicId, scope.from, scope.to],
   };
 }
@@ -281,8 +310,11 @@ export async function earningsForDoctor(
 }
 
 export type EarningsLine = {
-  invoiceId: string;
+  /** Null for the month's on-call visits, which are owed against no invoice. */
+  invoiceId: string | null;
   number: string;
+  /** How many on-call visits the row is; 0 for an invoice. */
+  visits: number;
   status: string;
   currency: string;
   paidAt: string;
@@ -310,7 +342,8 @@ export async function earningsDetailForDoctor(
             max(paid_at) as paid_at,
             coalesce(sum(produced), 0) as produced,
             coalesce(sum(costs), 0)    as costs,
-            coalesce(sum(earned), 0)   as earned
+            coalesce(sum(earned), 0)   as earned,
+            count(*) filter (where invoice_id is null) as visits
        from (${sql}) e
       where e.doctor_member_id = $4
       group by invoice_id, invoice_number, invoice_status, currency
@@ -319,8 +352,9 @@ export async function earningsDetailForDoctor(
     [...params, doctorMemberId]
   );
   return r.rows.map((row) => ({
-    invoiceId: row.invoice_id as string,
-    number: row.invoice_number as string,
+    invoiceId: (row.invoice_id as string | null) ?? null,
+    number: (row.invoice_number as string | null) ?? "",
+    visits: Number(row.visits),
     status: row.invoice_status as string,
     currency: row.currency as string,
     paidAt: (row.paid_at as Date).toISOString(),
@@ -409,11 +443,14 @@ export async function clinicNetRevenue(
         where l.paid_at >= $2 and l.paid_at < $3
           and i.total > 0 and i.credit_note_of is null and i.status <> 'void'
      ),
-     -- Package sessions earn on the day they are done, against no one payment.
-     sessions as (${SESSION_ROWS})
+     -- Package sessions earn on the day they are done, against no one payment,
+     -- and an on-call doctor's visits on the day they were seen.
+     sessions as (${SESSION_ROWS}),
+     visits as (${VISIT_ROWS})
      select coalesce(sum(p.amount), 0)   as gross,
             coalesce(sum(t.tax), 0)      as tax,
-            coalesce(sum(e.earned), 0) + (select coalesce(sum(earned), 0) from sessions) as commission
+            coalesce(sum(e.earned), 0) + (select coalesce(sum(earned), 0) from sessions)
+              + (select coalesce(sum(earned), 0) from visits) as commission
        from payments p
        join invoices i on i.id = p.invoice_id and i.status <> 'void'
        left join earned e on e.payment_id = p.id
@@ -449,19 +486,22 @@ export async function memberHasEarnings(
   const r = await c.query(
     `select
        exists(select 1 from clinic_members
-               where id = $2 and clinic_id = $1 and commission_percent is not null)
+               where id = $2 and clinic_id = $1
+                 and (commission_percent is not null or on_call_fee is not null))
        or exists(select 1 from invoice_line_doctors
+                  where clinic_id = $1 and doctor_member_id = $2)
+       or exists(select 1 from on_call_visits
                   where clinic_id = $1 and doctor_member_id = $2) as has`,
     [clinicId, memberId]
   );
   return r.rows[0]?.has === true;
 }
 
-/** Does this clinic split revenue with anybody? Decides whether any of it renders. */
+/** Does this clinic pay anybody by their work — a share, or by the visit? Decides whether any of it renders. */
 export async function clinicHasCommission(c: PoolClient, clinicId: string): Promise<boolean> {
   const r = await c.query(
     `select 1 from clinic_members
-      where clinic_id = $1 and commission_percent is not null limit 1`,
+      where clinic_id = $1 and (commission_percent is not null or on_call_fee is not null) limit 1`,
     [clinicId]
   );
   return (r.rowCount ?? 0) > 0;

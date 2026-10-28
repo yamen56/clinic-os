@@ -138,17 +138,18 @@ export default async function EarningsPage({
     return { hasCommission, self, detail, team, net, names, showSpend };
   });
 
-  // The viewer's own deal: their rate, and how a treatment's costs come into it.
+  // The viewer's own deal: their rate, and how a treatment's costs come into it — or their fee by the visit.
   const myDeal = await inClinic(access, async (c) => {
     if (!hasOwn || !access.memberId) return null;
     const r = await c.query(
-      `select commission_percent, costs_rule from clinic_members where id = $1 and clinic_id = $2`,
+      `select commission_percent, costs_rule, on_call_fee from clinic_members where id = $1 and clinic_id = $2`,
       [access.memberId, access.clinicId]
     );
     const v = r.rows[0]?.commission_percent;
     return {
       rate: v === null || v === undefined ? null : Number(v),
       costsRule: (r.rows[0]?.costs_rule === "doctor" ? "doctor" : "shared") as "shared" | "doctor",
+      visitFee: r.rows[0]?.on_call_fee == null ? null : Number(r.rows[0].on_call_fee),
     };
   });
   const myRate = myDeal?.rate ?? null;
@@ -162,6 +163,7 @@ export default async function EarningsPage({
       hasCommission={data.hasCommission}
       myRate={myRate}
       myCostsRule={myDeal?.costsRule ?? "shared"}
+      myVisitFee={myDeal?.visitFee ?? null}
       self={data.self}
       detail={data.detail}
       team={data.team}

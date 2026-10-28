@@ -13,13 +13,18 @@ export default async function StaffSettingsPage({ params }: { params: Promise<{ 
   const members = await inClinic(access, async (c) => {
     const r = await c.query(
       /*
-        `commission_percent` and `costs_rule` are selected only for the owner,
+        The pay columns — `commission_percent`, `costs_rule`, and the salary
+        and on-call fee (0086) — are selected only for the owner,
         and the column list is the whole of that protection: `members_access`
         lets any member of a clinic read any member row, so RLS will not keep a
         doctor's pay from a delegated staff manager. Not sending it is what does.
       */
       `select cm.id, cm.user_id, cm.role, cm.is_owner, cm.title, cm.specialty, cm.color, cm.active,
-              ${access.isOwner ? "cm.commission_percent, cm.costs_rule" : "null::numeric as commission_percent, null::text as costs_rule"},
+              ${
+                access.isOwner
+                  ? "cm.commission_percent, cm.costs_rule, cm.salary_amount, cm.salary_day, cm.on_call_fee"
+                  : "null::numeric as commission_percent, null::text as costs_rule, null::numeric as salary_amount, null::int as salary_day, null::numeric as on_call_fee"
+              },
               cm.reminder_minutes, cm.meeting_url, cm.license_no, cm.syndicate_no,
               cm.permissions, cm.working_hours, u.full_name, u.email,
               (u.avatar_path is not null) as has_photo
@@ -60,6 +65,7 @@ export default async function StaffSettingsPage({ params }: { params: Promise<{ 
       members={JSON.parse(JSON.stringify(rows))}
       selfId={access.memberId}
       viewerIsOwner={access.isOwner}
+      currency={access.clinic.currency}
     />
   );
 }

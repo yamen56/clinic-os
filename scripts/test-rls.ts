@@ -438,6 +438,12 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     ])
   ).id;
   await q(`insert into patient_package_items (clinic_id, patient_package_id, treatment_key, sessions, value) values ($1, $2, 'aes_laser_hair', 6, 150) returning id`, [clinic, pkg]);
+  // Staff pay (migration 0086): a visit an on-call doctor is owed for.
+  await q(`insert into on_call_visits (appointment_id, clinic_id, doctor_member_id, visit_at, fee) values ($1, $2, $3, now(), 25) returning appointment_id`, [
+    appointment,
+    clinic,
+    member,
+  ]);
 
   // Imaging devices (migration 0069): a registered machine and an image it
   // sent for nobody in particular. patient_numbers fills itself — the patient

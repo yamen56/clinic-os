@@ -16,6 +16,7 @@ export function EarningsClient({
   offset,
   hasCommission,
   myRate,
+  myVisitFee,
   myCostsRule,
   self,
   detail,
@@ -32,6 +33,8 @@ export function EarningsClient({
   offset: number;
   hasCommission: boolean;
   myRate: number | null;
+  /** On call (0086): what each completed visit earns them; null when they are not. */
+  myVisitFee: number | null;
   /** How a treatment's costs come into the viewer's own share. */
   myCostsRule: "shared" | "doctor";
   self: DoctorEarnings | null;
@@ -63,6 +66,7 @@ export function EarningsClient({
   const { t, locale } = useI18n();
   const router = useRouter();
   const money = (n: number) => fmtMoney(n, currency, locale);
+  const visitOnly = myVisitFee !== null && self !== null && self.produced === 0 && self.costs === 0;
 
   /*
     Empty only when there is genuinely nothing on the page. `hasCommission`
@@ -119,13 +123,24 @@ export function EarningsClient({
       <div className="grid gap-4">
         {self && (
           <Card className="p-5">
-            <div className="grid gap-4 sm:grid-cols-4">
+            {/*
+              On call and nothing billed under their name: what they billed and
+              what it cost would be two zeros about a deal they do not have, so
+              the card is their pay and their fee.
+            */}
+            <div className={`grid gap-4 ${visitOnly ? "sm:grid-cols-2" : "sm:grid-cols-4"}`}>
               <Figure label={t.earnings.myShare} value={money(self.earned)} strong />
-              <Figure label={t.invoices.produced} value={money(self.produced)} />
-              <Figure label={t.earnings.costs} value={money(self.costs)} />
+              {!visitOnly && <Figure label={t.invoices.produced} value={money(self.produced)} />}
+              {!visitOnly && <Figure label={t.earnings.costs} value={money(self.costs)} />}
               <Figure
                 label={t.earnings.myRate}
-                value={myRate === null ? t.staff.commissionNone : `${myRate}%`}
+                value={
+                  myVisitFee !== null
+                    ? t.earnings.perVisit.replace("{amount}", money(myVisitFee))
+                    : myRate === null
+                      ? t.staff.commissionNone
+                      : `${myRate}%`
+                }
               />
             </div>
             {/*
@@ -133,13 +148,21 @@ export function EarningsClient({
               about: the share is of the ex-tax net, so it is not a percentage of
               what the patient handed over.
             */}
-            <p className="mt-4 border-t border-line pt-3 text-[12px] leading-relaxed text-ink-500">
-              {t.earnings.exTaxNote}
-            </p>
+            {!visitOnly && (
+              <p className="mt-4 border-t border-line pt-3 text-[12px] leading-relaxed text-ink-500">
+                {t.earnings.exTaxNote}
+              </p>
+            )}
             {/* The deal, said once: how what the work cost — materials, the lab — came into the share above. */}
-            <p className="mt-2 text-[12px] leading-relaxed text-ink-500" data-costs-rule={myCostsRule}>
-              {myCostsRule === "doctor" ? t.earnings.costsDoctorNote : t.earnings.costsSharedNote}
-            </p>
+            {myVisitFee !== null ? (
+              <p className={`text-[12px] leading-relaxed text-ink-500 ${visitOnly ? "mt-4 border-t border-line pt-3" : "mt-2"}`} data-on-call>
+                {t.earnings.onCallNote}
+              </p>
+            ) : (
+              <p className="mt-2 text-[12px] leading-relaxed text-ink-500" data-costs-rule={myCostsRule}>
+                {myCostsRule === "doctor" ? t.earnings.costsDoctorNote : t.earnings.costsSharedNote}
+              </p>
+            )}
           </Card>
         )}
 
@@ -162,9 +185,14 @@ export function EarningsClient({
                   </thead>
                   <tbody>
                     {detail.map((l) => (
-                      <tr key={l.invoiceId} className="border-b border-line last:border-0">
+                      <tr key={l.invoiceId ?? "visits"} className="border-b border-line last:border-0">
                         <td className="px-5 py-2.5">
-                          {canOpenInvoices ? (
+                          {/* The month's on-call visits, owed against no invoice: one line, counted. */}
+                          {l.invoiceId === null ? (
+                            <span className="font-medium" data-visits-line={l.visits}>
+                              {t.earnings.onCallVisits.replace("{n}", String(l.visits))}
+                            </span>
+                          ) : canOpenInvoices ? (
                             <Link
                               href={`/c/${slug}/invoices/${l.invoiceId}`}
                               className="font-medium text-brand-700 hover:underline"
@@ -182,7 +210,7 @@ export function EarningsClient({
                         </td>
                         <td className="px-5 py-2.5 text-ink-500">{fmtDateOnly(l.paidAt, locale)}</td>
                         <td className="px-5 py-2.5 text-end tabular-nums text-ink-500">
-                          {money(l.produced)}
+                          {l.invoiceId === null ? "—" : money(l.produced)}
                         </td>
                         <td className="px-5 py-2.5 text-end tabular-nums text-ink-500">
                           {l.costs > 0 ? <span dir="ltr">− {money(l.costs)}</span> : "—"}

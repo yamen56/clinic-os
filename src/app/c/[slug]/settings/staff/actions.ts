@@ -17,6 +17,7 @@ import {
   toAccessSetting,
   type Capability,
 } from "@/lib/permissions";
+import { applyPay, payFitsRole, paySchema, syncSalaryBill, type Pay } from "./pay";
 
 const addStaffSchema = z.object({
   fullName: z.string().min(2).max(80),
@@ -34,6 +35,14 @@ const addStaffSchema = z.object({
   title: z.string().max(60).optional().default(""),
   specialty: z.string().max(60).optional().default(""),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#0b1220"),
+  /** Licence to practise and syndicate number, as printed on prescriptions. */
+  licenseNo: z.string().max(40).optional().default(""),
+  syndicateNo: z.string().max(40).optional().default(""),
+  /*
+    How they are paid, asked when they are added rather than discovered missing
+    at the first payout (0086). The owner's alone; absent means "not now".
+  */
+  pay: paySchema.optional(),
 });
 
 /**
@@ -60,6 +69,9 @@ export async function addStaffAction(
   const parsed = addStaffSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
+  // What a colleague is paid is the owner's to set, here as on the edit form.
+  if (d.pay && !access.isOwner) return { error: "forbidden" };
+  if (d.pay && !payFitsRole(d.pay, d.role)) return { error: "invalid" };
   /*
     `d.caps === undefined`, not `!d.caps.length`. The job's defaults are the
     fallback for a caller that expressed no opinion at all; an owner who opened
@@ -118,7 +130,9 @@ export async function addStaffAction(
     );
     // Already an active member here: the form edited them, it did not add them.
     const alreadyHere = Boolean(dup.rows[0]?.active);
+    let memberId: string;
     if (dup.rowCount) {
+      memberId = dup.rows[0].id as string;
       /*
         Everything the form collected, not just the role — somebody adding a
         removed colleague back has just retyped their title, specialty and
@@ -128,7 +142,8 @@ export async function addStaffAction(
       await c.query(
         `update clinic_members
             set active = true, role = $3, permissions = $4,
-                title = $5, specialty = $6, color = coalesce($7, color)
+                title = $5, specialty = $6, color = coalesce($7, color),
+                license_no = coalesce($8, license_no), syndicate_no = coalesce($9, syndicate_no)
           where id = $1 and clinic_id = $2`,
         [
           dup.rows[0].id,
@@ -138,15 +153,32 @@ export async function addStaffAction(
           d.title,
           d.specialty,
           d.color,
+          d.licenseNo.trim() || null,
+          d.syndicateNo.trim() || null,
         ]
       );
     } else {
-      await c.query(
-        `insert into clinic_members (clinic_id, user_id, role, title, specialty, color, permissions)
-         values ($1, $2, $3, $4, $5, $6, $7)`,
-        [access.clinicId, userId, d.role, d.title, d.specialty, d.color, JSON.stringify(permissions)]
+      const ins = await c.query(
+        `insert into clinic_members (clinic_id, user_id, role, title, specialty, color, permissions, license_no, syndicate_no)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         returning id`,
+        [
+          access.clinicId,
+          userId,
+          d.role,
+          d.title,
+          d.specialty,
+          d.color,
+          JSON.stringify(permissions),
+          d.licenseNo.trim() || null,
+          d.syndicateNo.trim() || null,
+        ]
       );
+      memberId = ins.rows[0].id as string;
     }
+    if (d.pay) await applyPay(c, access.clinicId, memberId, d.pay);
+    // Added back with a salary from before: their bill comes back with them.
+    else if (dup.rowCount) await syncSalaryBill(c, access.clinicId, memberId);
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,
@@ -154,7 +186,7 @@ export async function addStaffAction(
       action: "staff.add",
       entity: "user",
       entityId: userId,
-      detail: { role: d.role, email: d.email },
+      detail: { role: d.role, email: d.email, pay: d.pay?.kind },
     });
     /*
       An email is owed whenever this gives somebody access — a first add, an add
@@ -292,6 +324,11 @@ export async function updateMemberAction(
      * percentage it qualifies.
      */
     costsRule?: "shared" | "doctor";
+    /**
+     * The whole deal — a percentage, a salary, on call, or none (0086). Clears
+     * whichever the member had before. Owner-only, like the percentage.
+     */
+    pay?: Pay;
     access?: { level: "full" | "custom"; caps: string[] };
     workingHours?: Record<string, [string, string][]> | null;
   }
@@ -302,13 +339,13 @@ export async function updateMemberAction(
   return inClinic(access, async (c) => {
     const target = (
       await c.query(
-        `select cm.is_owner, cm.user_id, cm.active, u.full_name
+        `select cm.is_owner, cm.user_id, cm.active, cm.role, u.full_name
            from clinic_members cm join users u on u.id = cm.user_id
           where cm.id = $1 and cm.clinic_id = $2`,
         [memberId, access.clinicId]
       )
     ).rows[0] as
-      | { is_owner: boolean; user_id: string; active: boolean; full_name: string }
+      | { is_owner: boolean; user_id: string; active: boolean; role: string; full_name: string }
       | undefined;
     if (!target) return { error: "not_found" };
 
@@ -386,6 +423,20 @@ export async function updateMemberAction(
       }
     }
 
+    /*
+      The deal, checked before anything is written so a refusal never lands half
+      a save. A share and a per-visit fee are paid on a doctor's own work, so
+      they need the role the member will have once this save lands.
+    */
+    let pay: Pay | null = null;
+    if (patch.pay !== undefined) {
+      if (!access.isOwner) return { error: "forbidden" };
+      const parsedPay = paySchema.safeParse(patch.pay);
+      if (!parsedPay.success) return { error: "invalid" };
+      if (!payFitsRole(parsedPay.data, patch.role ?? target.role)) return { error: "invalid" };
+      pay = parsedPay.data;
+    }
+
     const sets: string[] = [];
     const vals: unknown[] = [memberId, access.clinicId];
     const push = (col: string, v: unknown) => {
@@ -455,7 +506,7 @@ export async function updateMemberAction(
     if (patch.workingHours !== undefined)
       push("working_hours", patch.workingHours ? JSON.stringify(patch.workingHours) : null);
     const renaming = newName !== null && newName !== target.full_name;
-    if (!sets.length && !renaming) return {};
+    if (!sets.length && !renaming && !pay) return {};
     if (sets.length) {
       const r = await c.query(
         `update clinic_members set ${sets.join(", ")} where id = $1 and clinic_id = $2`,
@@ -474,6 +525,12 @@ export async function updateMemberAction(
         sc.query(`update users set full_name = $2 where id = $1`, [target.user_id, newName])
       );
     }
+    /*
+      The salary's repeating bill follows the deal, the name on it, and whether
+      the member is still here — removed, it stops; added back, it resumes.
+    */
+    if (pay) await applyPay(c, access.clinicId, memberId, pay);
+    else if (renaming || patch.active !== undefined) await syncSalaryBill(c, access.clinicId, memberId);
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,
