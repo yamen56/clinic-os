@@ -58,6 +58,8 @@ export type FaceTabData = {
   canSell: boolean;
   /** May this member see products, stock and what a product cost (`stock`)? */
   canStock: boolean;
+  /** May this member delete an invoice made by mistake (`invoices.void`)? */
+  canDeleteInvoices: boolean;
   currency: string;
   chart: FaceChartData;
 };
@@ -197,6 +199,7 @@ export function FaceProvider({
       canPrice: data.canPrice,
       canSell: data.canSell,
       canStock: data.canStock,
+      canDeleteInvoices: data.canDeleteInvoices,
       currency: data.currency,
       marks,
       setMarks,

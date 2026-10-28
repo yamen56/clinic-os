@@ -12,7 +12,8 @@ import { redirect } from "next/navigation";
 import { Plus, ReceiptText, Download } from "lucide-react";
 import { can } from "@/lib/auth";
 import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
-import { readyToBillDesk, type DeskRow } from "@/lib/charts/dental/billing-server";
+import { deskLines, readyToBillDesk } from "@/lib/charts/dental/billing-server";
+import { ReadyToBillDesk, type DeskGroup } from "./ready-to-bill-desk";
 import { billsFromCharts } from "@/lib/features";
 import { DELETABLE_INVOICE_SQL } from "@/lib/invoices";
 import { DeleteCancelled } from "./delete-cancelled";
@@ -161,10 +162,15 @@ export default async function InvoicesPage({
       invoices list. A doctor who sees only their own invoices sees only their
       own work here.
     */
-    let ready: DeskRow[] = [];
+    let ready: DeskGroup[] = [];
     if (tab === "invoices" && billsFromCharts(access.clinic.features)) {
       const own = ownInvoicesOnly(access);
-      if (!own || access.memberId) ready = await readyToBillDesk(c, access.clinicId, own ? access.memberId! : null);
+      if (!own || access.memberId) {
+        const rows = await readyToBillDesk(c, access.clinicId, own ? access.memberId! : null);
+        // Each patient's work item by item, worded and priced as the invoice will be.
+        const lines = await deskLines(c, access.clinicId, rows.flatMap((r) => r.marks), locale, t.invoices.chartLine);
+        ready = rows.map((r) => ({ patientId: r.patientId, name: r.name, lastAt: r.lastAt, lines: lines.filter((l) => l.patientId === r.patientId) }));
+      }
     }
     return { stats, invoices, payments, ready };
   });
@@ -215,7 +221,18 @@ export default async function InvoicesPage({
         </div>
       )}
 
-      {data.ready.length > 0 && <ReadyToBillDesk rows={data.ready} slug={slug} currency={access.clinic.currency} locale={locale} tz={tz} t={t.invoices} />}
+      {data.ready.length > 0 && (
+        <ReadyToBillDesk
+          slug={slug}
+          currency={access.clinic.currency}
+          tz={tz}
+          groups={JSON.parse(JSON.stringify(data.ready))}
+          priceLinks={{
+            dental: !!access.clinic.features.dental && can(access, "settings.services"),
+            face: !!access.clinic.features.aesthetic && can(access, "settings.services"),
+          }}
+        />
+      )}
 
       {/*
         Invoices and Payments used to be a strip of their own here. They are
@@ -429,65 +446,4 @@ export default async function InvoicesPage({
   );
 }
 
-/*
-  The desk's Ready to bill: the patients whose chart work waits for an
-  invoice, the latest first, each with what it comes to and one button that
-  opens the invoice with the lines already written. The first few show; the
-  rest fold away, so a busy day does not push the invoices off the screen.
-*/
-function ReadyToBillDesk({
-  rows,
-  slug,
-  currency,
-  locale,
-  tz,
-  t,
-}: {
-  rows: DeskRow[];
-  slug: string;
-  currency: string;
-  locale: string;
-  tz: string;
-  t: Dict["invoices"];
-}) {
-  const shown = 5;
-  const row = (r: DeskRow) => (
-    <li key={r.patientId} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 sm:px-5" data-desk-patient={r.patientId}>
-      <Link href={`/c/${slug}/patients/${r.patientId}?tab=invoices`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-brand-700">
-        {r.name}
-      </Link>
-      <span className="text-[13px] text-ink-500">
-        {r.marks.length === 1 ? t.treatmentsOne : t.treatmentsN.replace("{n}", String(r.marks.length))}
-        {r.unpriced && <span className="text-st-pending"> · {t.unpriced}</span>}
-        <span className="hidden sm:inline"> · {fmtDate(r.lastAt, tz, locale)}</span>
-      </span>
-      <span className="w-24 shrink-0 text-end text-sm font-semibold tnum">{r.total > 0 ? fmtMoney(r.total, currency, locale) : "—"}</span>
-      <Link
-        href={`/c/${slug}/invoices/new?patient=${r.patientId}&marks=${r.marks.join(",")}`}
-        className={buttonClass({ size: "sm", variant: "outline" })}
-        data-desk-bill={r.patientId}
-      >
-        {t.billThese}
-      </Link>
-    </li>
-  );
-  return (
-    <div data-ready-desk={rows.length}>
-      <Card className="mb-4">
-        <div className="px-4 pt-3.5 pb-2 sm:px-5">
-          <h2 className="text-[15px] font-semibold">{t.readyToBill}</h2>
-          <p className="mt-0.5 text-[13px] text-ink-500">{t.readyToBillDesk}</p>
-        </div>
-        <ul className="divide-y divide-line border-t border-line">{rows.slice(0, shown).map(row)}</ul>
-        {rows.length > shown && (
-          <details className="border-t border-line">
-            <summary className="cursor-pointer px-4 py-2.5 text-[13px] font-medium text-brand-700 sm:px-5">
-              {t.showAllN.replace("{n}", String(rows.length))}
-            </summary>
-            <ul className="divide-y divide-line border-t border-line">{rows.slice(shown).map(row)}</ul>
-          </details>
-        )}
-      </Card>
-    </div>
-  );
-}
+

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireClinic, can, type ClinicAccess } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
-import { invoiceScopeSql, mayTouchInvoice } from "@/lib/invoice-scope";
+import { invoiceScopeSql, mayTouchInvoice, ownInvoicesOnly } from "@/lib/invoice-scope";
 import {
   nextInvoiceNumber,
   nextReceiptNumber,
@@ -945,6 +945,53 @@ export async function deleteBilledInvoiceAction(slug: string, invoiceId: string)
     });
     revalidatePath(`/c/${slug}/invoices`);
     revalidatePath(`/c/${slug}/patients/${inv.patient_id}`);
+    return {};
+  });
+}
+
+/**
+ * Chart work taken off Ready to bill (Yamen, 2026-10-28: "add a delete
+ * option"). Reception decides what is billed, not what was done: the
+ * treatment stays on the patient's chart — the clinical record is the
+ * doctor's, and leaves it only by being voided there — and is set at no
+ * charge, which is what keeps it off every Ready to bill (dueSql: not free).
+ * A price can be set on it again from the chart, and it is back.
+ *
+ * Only while it is on no invoice that stands; a doctor who sees only their own
+ * invoices takes off only their own work. Dental and face work alike.
+ */
+export async function removeFromBillingAction(slug: string, markId: string): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices")) return { error: "forbidden" };
+  if (!isUuid(markId)) return { error: "not_found" };
+  const own = ownInvoicesOnly(access);
+
+  return inClinic(access, async (c) => {
+    const m = (
+      await c.query(
+        `select id, patient_id, treatment_key, fee, performed_by from chart_marks
+          where id = $1 and clinic_id = $2 and voided_at is null and kind = 'procedure' for update`,
+        [markId, access.clinicId]
+      )
+    ).rows[0];
+    if (!m || (own && m.performed_by !== access.memberId)) return { error: "not_found" };
+    if ((await loadBilled(c, access.clinicId, [markId])).some((b) => b.qty > 0)) return { error: "billed" };
+    await c.query(`update chart_marks set fee = 0, fee_manual = true where id = $1`, [markId]);
+    await c.query(`insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason) values ($1, $2, 'fee', $3, '0')`, [
+      access.clinicId,
+      markId,
+      access.session.user.id,
+    ]);
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "chart.mark.no_charge",
+      entity: "patient",
+      entityId: m.patient_id,
+      detail: { mark: markId, treatment: m.treatment_key, was: m.fee == null ? null : Number(m.fee) },
+    });
+    revalidatePath(`/c/${slug}/invoices`);
     return {};
   });
 }

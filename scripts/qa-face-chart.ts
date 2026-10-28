@@ -316,6 +316,43 @@ async function main() {
     await cp.waitForSelector("main", { timeout: 60000 });
     const tabs = await cp.locator("main").innerText();
     check(tabs.includes("Dental chart") && tabs.includes("Face chart"), "the file has both tabs");
+
+    /* ── The desk's Ready to bill, item by item ─────────────────────── */
+    console.log("The desk's Ready to bill");
+    // A crown done at 300, beside the face work with no price yet.
+    const [crown] = await q(
+      `insert into chart_marks (clinic_id, patient_id, site, treatment_key, label, label_ar, look, kind, status, fee, performed_by, recorded_by, done_at)
+       values ($1, $2, '16', 'crown', 'Crown', 'تاج', 'crown', 'procedure', 'done', 300, $3, (select user_id from clinic_members where id = $3), now()) returning id`,
+      [centre.id, centre.patientId, centre.docId]
+    );
+    await cp.goto(`${BASE}/c/${centre.slug}/invoices`, { timeout: 120000 });
+    const deskRow = cp.locator(`[data-desk-patient='${centre.patientId}']`);
+    await deskRow.waitFor({ timeout: 60000 });
+    const deskText = await deskRow.innerText();
+    check(
+      (await deskRow.locator(`[data-desk-line='${crown.id}']`).innerText()).includes("300.00") && deskText.includes("Dental"),
+      "the desk lists the crown itself, with its price",
+      deskText
+    );
+    check(
+      (await deskRow.locator(`[data-desk-line='${both}']`).innerText()).includes("Botulinum toxin — Glabella") && deskText.includes("Face") && deskText.includes("No price yet"),
+      "and the face work beside it, saying it has no price yet",
+      deskText
+    );
+    check(((await cp.locator(`[data-desk-bill='${centre.patientId}']`).getAttribute("href")) ?? "").includes(crown.id), "Bill names what is ticked");
+    await deskRow.locator(`[data-desk-line='${crown.id}'] input[type='checkbox']`).uncheck();
+    check(!((await cp.locator(`[data-desk-bill='${centre.patientId}']`).getAttribute("href")) ?? "").includes(crown.id), "and leaves out what is unticked");
+    await deskRow.locator(`[data-desk-remove='${both}']`).click();
+    await cp.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
+    check(await until(async () => (await deskRow.locator(`[data-desk-line='${both}']`).count()) === 0), "Remove takes it off the desk's list");
+    const [taken] = await q(`select fee::float as fee, fee_manual, voided_at from chart_marks where id = $1`, [both]);
+    check(taken.fee === 0 && taken.fee_manual === true && taken.voided_at === null, "it stays on the chart, at no charge — not voided");
+    await cp.goto(`${BASE}/c/${centre.slug}/invoices`, { timeout: 120000 });
+    await deskRow.waitFor({ timeout: 60000 });
+    check((await deskRow.locator(`[data-desk-line='${both}']`).count()) === 0, "and stays off it after a reload");
+    // The patient's own card has Remove too.
+    await cp.goto(`${BASE}/c/${centre.slug}/patients/${centre.patientId}?tab=invoices`, { timeout: 120000 });
+    check(await until(async () => (await cp.locator(`[data-bill-remove='${crown.id}']`).count()) === 1, 30000), "the patient's Ready to bill offers Remove on the crown as well");
     await cp.context().close();
 
     check(errors.length === 0, "no page errors", errors.slice(0, 3).join(" | "));

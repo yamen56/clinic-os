@@ -32,7 +32,7 @@ import { isToothSite, type Mark } from "@/lib/charts/dental/state";
 import { groupLeads, inChartOrder, leadOf } from "@/lib/charts/dental/full-arch";
 import { invoiceLineText } from "@/lib/charts/dental/pricing";
 import type { BilledInvoice } from "@/lib/charts/dental/billing-server";
-import { deleteBilledInvoiceAction } from "@/app/c/[slug]/(finance)/invoices/actions";
+import { deleteBilledInvoiceAction, removeFromBillingAction } from "@/app/c/[slug]/(finance)/invoices/actions";
 import { useOptionalDentalStore } from "./store";
 import { moneyOf } from "./money";
 
@@ -45,6 +45,7 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
   const [unticked, setUnticked] = useState<Set<string>>(new Set());
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<BilledInvoice | null>(null);
+  const [removing, setRemoving] = useState<Mark | null>(null);
   const [busy, setBusy] = useState(false);
   if (!store || !store.canBill) return null;
 
@@ -108,6 +109,22 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
     void store.reload();
   };
 
+  // Off the list, still on the chart at no charge (removeFromBillingAction), 2026-10-28.
+  const takeOff = async () => {
+    if (!removing) return;
+    const m = removing;
+    setBusy(true);
+    const r = await store.write([m.id], removeFromBillingAction(store.slug, m.id));
+    setBusy(false);
+    setRemoving(null);
+    if (r.error) {
+      toast(I.removeFailed, "error");
+      return;
+    }
+    toast(I.removed);
+    void store.reload();
+  };
+
   const row = (m: Mark, amount: number | null, isReady: boolean) => (
     <li key={m.id} className="flex items-center gap-3 py-2 text-[13px]" data-ready-item={isReady ? m.id : undefined} data-ahead-item={isReady ? undefined : m.id}>
       <input
@@ -120,6 +137,18 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
       />
       <span className="min-w-0 flex-1">{lineOf(m)}</span>
       <span className="shrink-0 font-semibold tnum">{amount != null ? fmt(amount) : "—"}</span>
+      {isReady && (
+        <button
+          type="button"
+          onClick={() => setRemoving(m)}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-500 hover:bg-danger-soft hover:text-danger"
+          aria-label={`${I.remove}: ${lineOf(m)}`}
+          title={I.remove}
+          data-bill-remove={m.id}
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
     </li>
   );
 
@@ -205,6 +234,16 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
           </div>
         )}
       </Card>
+      <ConfirmDialog
+        open={!!removing}
+        onClose={() => setRemoving(null)}
+        onConfirm={() => void takeOff()}
+        title={I.removeTitle}
+        body={removing ? I.removeBody.replace("{line}", lineOf(removing)) : ""}
+        confirmLabel={I.remove}
+        cancelLabel={t.common.cancel}
+        loading={busy}
+      />
       <ConfirmDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}

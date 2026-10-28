@@ -124,6 +124,19 @@ export type ChartLine = {
 };
 
 /**
+ * A line as the desk's Ready to bill shows it: whose it is, which chart it
+ * came from, who did it and when, and whether the list prices it at all.
+ */
+export type DeskLine = ChartLine & {
+  patientId: string;
+  chart: "dental" | "aesthetic";
+  at: string;
+  doctorName: string | null;
+  /** False: no price on the list when it was charted — it bills at 0 until one is set. */
+  priced: boolean;
+};
+
+/**
  * The lines to bill a patient's chart work: one per treatment, in the clinic's
  * language, at its whole price. A bridge is one line with its units as the
  * quantity; work already billed is left out. Only this patient's own work,
@@ -137,14 +150,35 @@ export async function chartLines(
   locale: string,
   words: LineWords
 ): Promise<ChartLine[]> {
+  return linesFor(c, clinicId, patientId, ids, locale, words);
+}
+
+/**
+ * The desk's lines: the same lines, for any patient's work — the ids come from
+ * `readyToBillDesk`, which only ever names work that waits to be billed.
+ */
+export async function deskLines(c: PoolClient, clinicId: string, ids: string[], locale: string, words: LineWords): Promise<DeskLine[]> {
+  return linesFor(c, clinicId, null, ids, locale, words);
+}
+
+async function linesFor(
+  c: PoolClient,
+  clinicId: string,
+  patientId: string | null,
+  ids: string[],
+  locale: string,
+  words: LineWords
+): Promise<DeskLine[]> {
   if (!ids.length) return [];
   const marks = (
     await c.query(
       `select m.id, m.site, m.label, m.label_ar, m.treatment_key, m.detail, m.group_id, m.fee, m.service_id, m.performed_by,
-              m.chart, m.areas, m.quantity,
+              m.chart, m.areas, m.quantity, m.patient_id, coalesce(m.done_at, m.created_at) as at, pu.full_name as doctor_name,
               s.name as service_name, s.name_ar as service_name_ar, s.chart_variant as service_variant
          from chart_marks m left join services s on s.id = m.service_id
-        where m.id = any($1::uuid[]) and m.clinic_id = $2 and m.patient_id = $3
+         left join clinic_members pm on pm.id = m.performed_by
+         left join users pu on pu.id = pm.user_id
+        where m.id = any($1::uuid[]) and m.clinic_id = $2 and ($3::uuid is null or m.patient_id = $3)
           and m.voided_at is null and m.kind = 'procedure' and m.status <> 'existing'
         order by m.created_at`,
       [ids, clinicId, patientId]
@@ -159,8 +193,15 @@ export async function chartLines(
     : [];
   const billed = new Map((await loadBilled(c, clinicId, marks.map((m) => m.id))).map((b) => [b.markId, b.qty]));
 
-  const lines: ChartLine[] = [];
+  const lines: DeskLine[] = [];
   for (const m of marks) {
+    const about = {
+      patientId: m.patient_id as string,
+      chart: m.chart as DeskLine["chart"],
+      at: new Date(m.at).toISOString(),
+      doctorName: (m.doctor_name as string) ?? null,
+      priced: m.fee != null,
+    };
     /*
       Face work (0084) is one line at its whole price — the areas, units or
       syringes it counts are in its words — and is never part of a group.
@@ -178,6 +219,7 @@ export async function chartLines(
         qty: 1,
         unitPrice: m.fee == null ? 0 : Number(m.fee),
         doctorMemberId: m.performed_by ?? null,
+        ...about,
       });
       continue;
     }
@@ -203,6 +245,7 @@ export async function chartLines(
       qty,
       unitPrice: m.fee == null ? 0 : Number(m.fee),
       doctorMemberId: m.performed_by ?? null,
+      ...about,
     });
   }
   return lines;

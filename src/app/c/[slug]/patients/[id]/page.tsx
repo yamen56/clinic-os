@@ -361,6 +361,7 @@ export default async function PatientProfilePage({
                 canSell: can(access, "patients.charts") || caps.invoices,
                 // Products and stock, and what a treatment's product cost.
                 canStock: can(access, "stock"),
+                canDeleteInvoices: can(access, "invoices.void"),
                 currency: access.clinic.currency,
                 chart: d.faceChart,
               })
