@@ -47,7 +47,7 @@ async function answer(c: import("pg").PoolClient, markId: string) {
 export async function PATCH(req: Request, ctx: Params) {
   const { slug, id, stepId } = await ctx.params;
   if (!isUuid(id) || !isUuid(stepId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const g = await apiClinic(slug, "patients.charts");
+  const g = await apiClinic(slug, "patients.charts", { module: "dental" });
   if (!g.ok) return g.res;
   const access = g.access;
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
@@ -119,7 +119,7 @@ export async function PATCH(req: Request, ctx: Params) {
 export async function DELETE(_req: Request, ctx: Params) {
   const { slug, id, stepId } = await ctx.params;
   if (!isUuid(id) || !isUuid(stepId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const g = await apiClinic(slug, "patients.charts");
+  const g = await apiClinic(slug, "patients.charts", { module: "dental" });
   if (!g.ok) return g.res;
   const access = g.access;
   const me = access.session.user.id;

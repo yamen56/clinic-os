@@ -220,6 +220,28 @@ export function PatientRecord({
           </table>
         </Section>
       )}
+
+      {(record.face ?? []).length > 0 && (
+        /* In English, like the face chart itself. */
+        <Section title={`${t.face.tab} (${record.face.length})`} empty={false} t={t}>
+          <table className="grid" dir="ltr">
+            <tbody>
+              {record.face.map((m) => (
+                <tr key={m.id} className={m.voided ? "muted" : undefined}>
+                  <td>
+                    {m.voided ? <s>{m.label}</s> : m.label}
+                    {m.where && ` — ${m.where}`}
+                    {m.note && <span className="muted"> — {m.note}</span>}
+                  </td>
+                  <td className="nowrap">{m.voided ? t.face.voided : m.amount || "—"}</td>
+                  <td className="nowrap">{m.doctor ?? "—"}</td>
+                  <td className="nowrap">{fmtDate(m.date, tz, "en")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Section>
+      )}
     </>
   );
 }

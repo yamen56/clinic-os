@@ -21,7 +21,7 @@ export default async function SettingsLayout({
     <>
       <PageHeader title={t.settings.title} />
       <div className="grid gap-6 lg:grid-cols-[13rem_1fr]">
-        <SettingsNav slug={slug} caps={access.caps} hasEinvoicing={access.clinic.features.einvoicing} hasDental={!!access.clinic.features.dental} />
+        <SettingsNav slug={slug} caps={access.caps} hasEinvoicing={access.clinic.features.einvoicing} hasDental={!!access.clinic.features.dental} hasFace={!!access.clinic.features.aesthetic} />
         <div className="min-w-0">{children}</div>
       </div>
     </>

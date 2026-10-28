@@ -5,6 +5,7 @@ import { ownInvoicesOnly } from "@/lib/invoice-scope";
 import { billableMarks, chartLines } from "@/lib/charts/dental/billing-server";
 import { dictFor } from "@/lib/i18n/client-dict";
 import { getLocale } from "@/lib/i18n";
+import { billsFromCharts } from "@/lib/features";
 
 /*
   The patient's chart work waiting to be billed, as invoice lines.
@@ -24,7 +25,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
   const g = await apiClinic(slug, "invoices");
   if (!g.ok) return g.res;
   const access = g.access;
-  if (!access.clinic.features.dental) return NextResponse.json({ ok: true, lines: [] });
+  // The dental chart's work and the face chart's alike: both are chart marks.
+  if (!billsFromCharts(access.clinic.features)) return NextResponse.json({ ok: true, lines: [] });
   const locale = await getLocale();
 
   const lines = await inClinic(access, async (c) => {

@@ -34,11 +34,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
                 (select coalesce(json_agg(x order by x.at), '[]'::json) from (
                    select m.id as "markId", m.site, m.label, m.label_ar as "labelAr", m.treatment_key as "treatmentKey", m.group_id as "groupId", null::text as step, m.done_at as at
                      from chart_marks m
-                    where m.appointment_id = a.id and m.voided_at is null and m.status = 'done'
+                    where m.appointment_id = a.id and m.chart = 'dental' and m.voided_at is null and m.status = 'done'
                    union all
                    select m.id, m.site, m.label, m.label_ar, m.treatment_key, m.group_id, s.step, s.done_at
                      from chart_mark_steps s join chart_marks m on m.id = s.mark_id
-                    where s.appointment_id = a.id and s.voided_at is null and m.voided_at is null
+                    where s.appointment_id = a.id and s.voided_at is null and m.voided_at is null and m.chart = 'dental'
                  ) x) as done`
     : "";
 

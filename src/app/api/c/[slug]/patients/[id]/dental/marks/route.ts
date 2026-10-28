@@ -45,7 +45,7 @@ const bodySchema = z.object({ marks: z.array(markSchema).min(1).max(48) });
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await ctx.params;
   if (!isUuid(id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const g = await apiClinic(slug, "patients.charts");
+  const g = await apiClinic(slug, "patients.charts", { module: "dental" });
   if (!g.ok) return g.res;
   const access = g.access;
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

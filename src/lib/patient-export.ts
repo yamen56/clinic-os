@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { EMERGENCY_STEP, stepOf, stepSummary } from "./charts/dental/protocols";
 import { readHistory, type MedicalHistory } from "./medical-history";
+import { FACE_TREATMENT_BY_KEY, amountText, totalUnits, unitsText, whereText, type Area } from "./charts/face/catalog";
 
 /**
  * Everything that belongs in a patient's record when it leaves the clinic.
@@ -110,6 +111,21 @@ export type ExportedRecord = {
     surfaces: string[];
     status: string;
     kind: string;
+    doctor: string | null;
+    date: string;
+    note: string;
+    voided: boolean;
+  }[];
+  /**
+   * The face chart (0084), treatment by treatment: what was done, on which
+   * parts of the face, how much, by whom and when — voided ones included and
+   * marked. Empty for a clinic without the face chart.
+   */
+  face: {
+    id: string;
+    label: string;
+    where: string;
+    amount: string;
     doctor: string | null;
     date: string;
     note: string;
@@ -309,7 +325,7 @@ export async function loadPatientExportBatch(
   const docsBy = bucket(documents);
   const dental = (
     await c.query(
-      `select m.patient_id, m.id, m.site, m.label, m.surfaces, m.status, m.kind, m.note,
+      `select m.patient_id, m.id, m.chart, m.site, m.label, m.surfaces, m.status, m.kind, m.note, m.treatment_key, m.areas, m.quantity,
               coalesce(m.done_at, m.created_at) as at, m.voided_at, u.full_name as doctor
          from chart_marks m
          left join clinic_members cm on cm.id = m.performed_by
@@ -320,7 +336,8 @@ export async function loadPatientExportBatch(
     )
   ).rows;
   const filesBy = bucket(files);
-  const dentalBy = bucket(dental);
+  const dentalBy = bucket(dental.filter((m) => m.chart === "dental"));
+  const faceBy = bucket(dental.filter((m) => m.chart === "aesthetic"));
   const steps = (
     await c.query(
       `select s.patient_id, s.step, s.data, s.done_at, s.voided_at, m.site, m.label, m.treatment_key, u.full_name as doctor
@@ -427,6 +444,23 @@ export async function loadPatientExportBatch(
         note: m.note ?? "",
         voided: !!m.voided_at,
       })),
+      face: (faceBy.get(id) ?? []).map((m) => {
+        const t = FACE_TREATMENT_BY_KEY.get(m.treatment_key);
+        const areas = (m.areas ?? []) as Area[];
+        const u = t ? totalUnits(t, areas) : null;
+        return {
+          id: m.id,
+          label: m.label,
+          where: whereText(areas.map((a) => a.zone), "en"),
+          amount: [t && t.pricedBy !== "session" && m.quantity != null ? amountText(t.pricedBy, Number(m.quantity), "en") : null, u ? unitsText(u, "en") : null]
+            .filter(Boolean)
+            .join(" · "),
+          doctor: m.doctor ?? null,
+          date: String(m.at),
+          note: m.note ?? "",
+          voided: !!m.voided_at,
+        };
+      }),
       treatment: {
         steps: (stepsBy.get(id) ?? []).map((s) => {
           const def = s.step === EMERGENCY_STEP ? null : stepOf(s.treatment_key, s.step);

@@ -12,6 +12,7 @@ import { PATIENT_PRESCRIPTIONS_JSON } from "@/lib/prescriptions";
 import { auditView } from "@/lib/audit";
 import { DateTime } from "luxon";
 import { loadDentalChart } from "@/lib/charts/dental/db";
+import { loadFaceChart } from "@/lib/charts/face/db";
 import { loadNoteFeed } from "@/lib/note-feed";
 import type { PoolClient } from "pg";
 import { IMAGING_REQUEST_OPEN_FOR, nameWords } from "@/lib/imaging/ingest";
@@ -89,8 +90,10 @@ export default async function PatientProfilePage({
     ).rows[0];
     if (!row) return null;
     const { __prescriptions: prescriptions, ...p } = row;
-    // The dental chart is a module the agency switches on for a clinic that charts teeth.
+    // The dental chart is a module the agency switches on for a clinic that charts teeth;
+    // the face chart, for an aesthetic clinic.
     const dental = access.clinic.features.dental;
+    const face = access.clinic.features.aesthetic;
     if (p.merged_into) return { mergedInto: p.merged_into as string };
     await auditView(c, {
       clinicId: access.clinicId,
@@ -236,7 +239,7 @@ export default async function PatientProfilePage({
           [access.clinicId]
         ),
         // The doctors a chart entry can be performed by.
-        () => dental
+        () => dental || face
           ? c.query(
               `select m.id, u.full_name as name from clinic_members m join users u on u.id = m.user_id
                 where m.clinic_id = $1 and m.active and m.role = 'doctor' order by u.full_name`,
@@ -278,6 +281,7 @@ export default async function PatientProfilePage({
       dentalDoctors: dentalDoctors.rows as { id: string; name: string }[],
       // The saved chart: its entries and their history, the clinic's own treatments and favourites.
       dentalChart: dental ? await loadDentalChart(c, access.clinicId, id, { visits: caps.calendar, billing: caps.invoices }) : null,
+      faceChart: face ? await loadFaceChart(c, access.clinicId, id, { billing: caps.invoices }) : null,
       filesHub: await loadFilesHub(c, access.clinicId, id, p.full_name as string, (p.birth_date as Date | null) ?? null),
       // Notes written elsewhere in the file — visits, invoices, prescriptions… — for the Notes tab, each where its reader may look.
       noteFeed: await loadNoteFeed(
@@ -339,6 +343,22 @@ export default async function PatientProfilePage({
                 clinicName: access.clinic.name,
                 // Pictures to the patient go through the inbox: its switch, and a number to send to.
                 canMessage: can(access, "conversations") && !!d.patient.phone_e164,
+              })
+            )
+          : null
+      }
+      face={
+        d.faceChart
+          ? JSON.parse(
+              JSON.stringify({
+                me: { id: access.session.user.id, name: access.session.user.fullName },
+                myMemberId: access.memberId,
+                doctors: d.dentalDoctors,
+                canWrite: can(access, "patients.charts"),
+                canBill: caps.invoices,
+                canPrice: can(access, "settings.services"),
+                currency: access.clinic.currency,
+                chart: d.faceChart,
               })
             )
           : null

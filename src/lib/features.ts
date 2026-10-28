@@ -38,6 +38,12 @@ export const FEATURES = [
     dental department — rather than something every clinic sees.
   */
   "dental",
+  /*
+    The face chart, for an aesthetic clinic: the doctor taps the parts of the
+    face treated, says what was done, and reception bills it. Opt-in like the
+    dental chart — the agency turns it on, one clinic at a time.
+  */
+  "aesthetic",
 ] as const;
 
 export type Feature = (typeof FEATURES)[number];
@@ -62,7 +68,21 @@ export const OPT_IN_FEATURES = new Set<Feature>([
   // A tooth chart on a dermatology clinic's files is noise, so it waits to be
   // switched on — the dental clinics that already existed were, in 0068.
   "dental",
+  // Yamen, 2026-10-28: "it now don't appear to all clinics unless I gave them
+  // the permission". Nothing turns it on but the switch — no specialty, no
+  // migration (0084 switched it on for nobody).
+  "aesthetic",
 ]);
+
+/**
+ * The charts a doctor records on. `patients.charts` is the right to record on
+ * whichever of them the clinic has, so it is masked only when it has none —
+ * an aesthetic clinic without the dental chart still records on the face.
+ */
+export const CHART_FEATURES: Feature[] = ["dental", "aesthetic"];
+
+/** Whether a clinic bills from a chart: the desk's Ready to bill, and "From the chart" in the invoice builder. */
+export const billsFromCharts = (features: Record<Feature, boolean>) => CHART_FEATURES.some((f) => features[f]);
 
 /**
  * The capabilities each module owns.
@@ -93,8 +113,10 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
   // its own: it is not a screen somebody visits, it is what happens to an
   // invoice. Its own settings tab is gated on the feature directly.
   einvoicing: [],
-  // Off, the chart's tab is gone from every file and nobody can record on it.
-  dental: ["patients.charts"],
+  // Off, the chart's tab is gone from every file. Recording on it is
+  // `patients.charts`, shared by the charts — see CHART_FEATURES.
+  dental: [],
+  aesthetic: [],
 };
 
 /** What the new-clinic form starts from: everything except the opt-ins. */
@@ -139,6 +161,8 @@ export function maskByFeatures(caps: CapabilityMap, features: FeatureMap): Capab
   for (const f of FEATURES) {
     if (!features[f]) for (const cap of FEATURE_CAPS[f]) denied.add(cap);
   }
+  // No chart at all, nothing to record on.
+  if (!CHART_FEATURES.some((f) => features[f])) denied.add("patients.charts");
   if (denied.size === 0) return caps;
   const out = { ...caps };
   for (const cap of CAPABILITIES) if (denied.has(cap)) out[cap] = false;

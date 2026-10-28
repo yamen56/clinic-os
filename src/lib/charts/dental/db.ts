@@ -197,13 +197,13 @@ export async function loadDentalChart(
     await c.query(
       `select
          (select coalesce(json_agg(x order by x.created_at), '[]'::json)
-            from (${MARK_SELECT} where m.clinic_id = $1 and m.patient_id = $2) x) as marks,
+            from (${MARK_SELECT} where m.clinic_id = $1 and m.patient_id = $2 and m.chart = 'dental') x) as marks,
          (select coalesce(json_agg(x order by x.at), '[]'::json)
             from (select e.*, u.full_name as by_name
                     from chart_mark_events e
                     join chart_marks m on m.id = e.mark_id
                     left join users u on u.id = e.by_user
-                   where m.clinic_id = $1 and m.patient_id = $2) x) as events,
+                   where m.clinic_id = $1 and m.patient_id = $2 and m.chart = 'dental') x) as events,
          (select coalesce(json_agg(x order by x.created_at), '[]'::json)
             from (select t.*, u.full_name as creator_name
                     from chart_treatments t left join users u on u.id = t.created_by
@@ -226,7 +226,7 @@ export async function loadDentalChart(
            where $3 and ai.clinic_id = $1 and ai.patient_id = $2) as bookings,
          (select medical_history from patients where id = $2 and clinic_id = $1) as medical,
          (select coalesce(json_agg(json_build_object('serviceId', s.id, 'chartKey', s.chart_key, 'variant', s.chart_variant, 'price', s.price, 'name', s.name, 'nameAr', s.name_ar)), '[]'::json)
-            from services s where s.clinic_id = $1 and s.chart_key is not null and s.active and s.price_unit = 'item') as prices,
+            from services s where s.clinic_id = $1 and s.chart_key is not null and s.chart_key not like 'aes\\_%' and s.active and s.price_unit = 'item') as prices,
          (select coalesce(json_agg(x), '[]'::json)
             from (select iim.mark_id as "markId", sum(ii.qty)::float as qty,
                          sum(ii.amount - ii.discount_amount + ii.tax_amount)::float as charged,
@@ -237,7 +237,7 @@ export async function loadDentalChart(
                     join chart_marks m on m.id = iim.mark_id
                     join invoice_items ii on ii.id = iim.invoice_item_id
                     join invoices i on i.id = ii.invoice_id
-                   where $4 and iim.clinic_id = $1 and m.patient_id = $2
+                   where $4 and iim.clinic_id = $1 and m.patient_id = $2 and m.chart = 'dental'
                      and i.status <> 'void' and i.credit_note_of is null
                    group by iim.mark_id) x) as billing,
          (select dental_billing_since from clinics where id = $1) as billing_since,

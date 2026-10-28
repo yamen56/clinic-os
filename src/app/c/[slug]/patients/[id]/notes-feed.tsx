@@ -26,6 +26,7 @@ import {
   ListChecks,
   Pill,
   ReceiptText,
+  ScanFace,
   ShieldCheck,
   Siren,
   Smile,
@@ -36,10 +37,12 @@ import { Card } from "@/components/ui/card";
 import { fmtDate, fmtTime } from "@/lib/dates";
 import type { FeedItem, FeedSource } from "@/lib/note-feed";
 import { useOptionalDentalStore } from "@/components/charts/dental/store";
+import { useOptionalFaceStore } from "@/components/charts/face/store";
+import { whereText } from "@/lib/charts/face/catalog";
 import { isToothSite, type Mark } from "@/lib/charts/dental/state";
 import { EMERGENCY_STEP, stepOf } from "@/lib/charts/dental/protocols";
 
-export type OtherSource = FeedSource | "chart" | "step" | "emergency";
+export type OtherSource = FeedSource | "chart" | "step" | "emergency" | "face";
 
 /** A note from elsewhere in the file, ready to show. */
 export type Other = {
@@ -64,6 +67,7 @@ export const SOURCE_ICON: Record<OtherSource, LucideIcon> = {
   chart: Smile,
   step: ListChecks,
   emergency: Siren,
+  face: ScanFace,
 };
 
 type Answer = { label?: string; labelAr?: string; value?: unknown };
@@ -85,6 +89,7 @@ export function useOtherNotes({
   const N = t.patients.notes;
   const router = useRouter();
   const store = useOptionalDentalStore();
+  const faceStore = useOptionalFaceStore();
   const has = (k: string) => tabKeys.includes(k);
   const out: Other[] = [];
 
@@ -211,6 +216,25 @@ export function useOtherNotes({
         body: s.note,
         lines: [],
         open: has("dental") ? openItem(m.id) : undefined,
+      });
+    }
+  }
+
+  // The face chart's notes, likewise live: a treatment's note, with where on the face.
+  if (faceStore) {
+    for (const m of faceStore.marks) {
+      if (m.voidedAt || !m.note.trim()) continue;
+      const ev = faceStore.events.filter((e) => e.markId === m.id && e.action === "note").sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+      const where = whereText(m.areas.map((a) => a.zone), locale);
+      out.push({
+        key: `face:${m.id}`,
+        source: "face",
+        at: ev?.at ?? m.createdAt,
+        by: ev?.by.name ?? m.recordedBy.name,
+        title: `${locale === "ar" ? m.labelAr || m.label : m.label}${where ? ` · ${where}` : ""}`,
+        body: m.note,
+        lines: [],
+        open: has("face") ? () => onTab("face") : undefined,
       });
     }
   }

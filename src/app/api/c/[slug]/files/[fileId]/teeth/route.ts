@@ -15,7 +15,7 @@ const bodySchema = z.object({ teeth: z.array(z.string().regex(/^[1-8][1-8]$/)).m
 export async function PATCH(req: Request, ctx: { params: Promise<{ slug: string; fileId: string }> }) {
   const { slug, fileId } = await ctx.params;
   if (!isUuid(fileId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const g = await apiClinic(slug, "patients.charts");
+  const g = await apiClinic(slug, "patients.charts", { module: "dental" });
   if (!g.ok) return g.res;
   const access = g.access;
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

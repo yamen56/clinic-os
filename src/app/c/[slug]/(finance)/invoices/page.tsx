@@ -13,6 +13,7 @@ import { Plus, ReceiptText, Download } from "lucide-react";
 import { can } from "@/lib/auth";
 import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { readyToBillDesk, type DeskRow } from "@/lib/charts/dental/billing-server";
+import { billsFromCharts } from "@/lib/features";
 import { DELETABLE_INVOICE_SQL } from "@/lib/invoices";
 import { DeleteCancelled } from "./delete-cancelled";
 
@@ -156,11 +157,12 @@ export default async function InvoicesPage({
       ).rows;
     }
     /*
-      The desk's Ready to bill: dental clinics only, on the invoices list. A
-      doctor who sees only their own invoices sees only their own work here.
+      The desk's Ready to bill: clinics that chart — teeth or faces — on the
+      invoices list. A doctor who sees only their own invoices sees only their
+      own work here.
     */
     let ready: DeskRow[] = [];
-    if (tab === "invoices" && access.clinic.features.dental) {
+    if (tab === "invoices" && billsFromCharts(access.clinic.features)) {
       const own = ownInvoicesOnly(access);
       if (!own || access.memberId) ready = await readyToBillDesk(c, access.clinicId, own ? access.memberId! : null);
     }

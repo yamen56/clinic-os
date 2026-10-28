@@ -11,6 +11,7 @@ export function SettingsNav({
   caps,
   hasEinvoicing,
   hasDental = false,
+  hasFace = false,
 }: {
   slug: string;
   /**
@@ -24,6 +25,8 @@ export function SettingsNav({
   hasEinvoicing: boolean;
   /** Treatment prices are the dental chart's: a clinic with the chart gets the tab. */
   hasDental?: boolean;
+  /** Face treatment prices are the face chart's, likewise. */
+  hasFace?: boolean;
 }) {
   const { t } = useI18n();
   const pathname = usePathname();
@@ -46,6 +49,7 @@ export function SettingsNav({
     { href: `${base}/rooms`, label: t.rooms.title, show: caps["settings.services"] },
     { href: `${base}/prices`, label: t.settings.treatmentPrices, show: hasDental && caps["settings.services"] },
     { href: `${base}/labs`, label: t.settings.dentalLabs, show: hasDental && caps["settings.services"] },
+    { href: `${base}/face-prices`, label: t.settings.facePrices, show: hasFace && caps["settings.services"] },
     { href: `${base}/hours`, label: t.settings.workingHours },
     { href: `${base}/fields`, label: t.fields.title, show: caps["settings.clinic"] },
     { href: `${base}/tags`, label: t.tags.title, show: caps["settings.tags"] },

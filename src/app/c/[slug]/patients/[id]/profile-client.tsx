@@ -43,6 +43,8 @@ import type { PrescriptionRow } from "@/lib/prescriptions";
 import type { DentalTabData } from "./dental-chart-tab";
 import { DentalProvider, useOptionalDentalStore } from "@/components/charts/dental/store";
 import { ReadyToBill } from "@/components/charts/dental/ready-to-bill";
+import { FaceProvider, type FaceTabData } from "@/components/charts/face/store";
+import { FaceReadyToBill } from "@/components/charts/face/ready-to-bill";
 import { TakePayment } from "@/components/take-payment";
 import { MedicalCard } from "@/components/charts/dental/medical-card";
 import { VisitWork, useVisitWorkCount } from "@/components/charts/dental/visit-work";
@@ -89,6 +91,11 @@ import {
   with every patient file.
 */
 const DentalChartTab = dynamic(() => import("./dental-chart-tab").then((m) => m.DentalChartTab), {
+  ssr: false,
+  loading: () => <Spinner />,
+});
+// The face chart likewise: its picture and catalog only when its tab opens.
+const FaceChartTab = dynamic(() => import("./face-chart-tab").then((m) => m.FaceChartTab), {
   ssr: false,
   loading: () => <Spinner />,
 });
@@ -140,6 +147,28 @@ function MaybeDental({
     <DentalProvider slug={slug} patientId={patientId} data={dental} files={files} renderedAt={renderedAt}>
       {children}
     </DentalProvider>
+  );
+}
+
+/* The face chart's store, for a clinic that has it — above the tabs, for the same reasons. */
+function MaybeFace({
+  slug,
+  patientId,
+  face,
+  renderedAt,
+  children,
+}: {
+  slug: string;
+  patientId: string;
+  face: FaceTabData | null | undefined;
+  renderedAt: number;
+  children: React.ReactNode;
+}) {
+  if (!face) return <>{children}</>;
+  return (
+    <FaceProvider slug={slug} patientId={patientId} data={face} renderedAt={renderedAt}>
+      {children}
+    </FaceProvider>
   );
 }
 
@@ -338,6 +367,8 @@ export function PatientProfile(props: {
    * whether this member may record on it. Null hides the tab.
    */
   dental?: DentalTabData | null;
+  /** The face chart, for an aesthetic clinic (the `aesthetic` module). Null hides the tab. */
+  face?: FaceTabData | null;
   /** The Files hub: the clinic's machines, requests waiting, results that look like this patient's. */
   filesHub?: FilesHub | null;
   /** When the server rendered this page — the chart store re-reads a page restored from history. */
@@ -476,6 +507,8 @@ export function PatientProfile(props: {
     },
     // The doctor's side of the file, beside the prescriptions: the tooth chart, for a dental clinic.
     props.dental && { key: "dental", label: t.dental.tab },
+    // And the face, for an aesthetic clinic.
+    props.face && { key: "face", label: t.face.tab },
     caps.calendar && {
       key: "appointments",
       label: t.patients.tabs.appointments,
@@ -501,6 +534,7 @@ export function PatientProfile(props: {
 
   return (
     <MaybeDental slug={slug} patientId={p.id} dental={props.dental} files={props.files} renderedAt={props.renderedAt}>
+    <MaybeFace slug={slug} patientId={p.id} face={props.face} renderedAt={props.renderedAt}>
       {/* Header */}
       <div className="relative mb-5 flex flex-wrap items-start gap-4">
         <Avatar name={p.full_name} size={52} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
@@ -1032,6 +1066,7 @@ export function PatientProfile(props: {
         {tab === "dental" && props.dental && (
           <DentalChartTab slug={slug} patientId={p.id} tz={tz} birthDate={p.birth_date} data={props.dental} />
         )}
+        {tab === "face" && props.face && <FaceChartTab tz={tz} />}
         {tab === "appointments" && (
           <Card>
             {props.appointments.length === 0 ? (
@@ -1084,6 +1119,7 @@ export function PatientProfile(props: {
           />
         )}
         {tab === "invoices" && <ReadyToBill tz={tz} />}
+        {tab === "invoices" && <FaceReadyToBill />}
         {tab === "invoices" && (
           <Card>
             {props.invoices.length === 0 ? (
@@ -1301,6 +1337,7 @@ export function PatientProfile(props: {
           toast(next === "archived" ? t.patients.archived : t.common.saved);
         }}
       />
+    </MaybeFace>
     </MaybeDental>
   );
 }

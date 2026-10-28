@@ -10,16 +10,19 @@
 import type { PoolClient } from "pg";
 import { invoiceLineText, pickPrice, variantOf, type LineWords, type PriceRow } from "./pricing";
 import { EVERY_TOOTH, inChartOrder, leadIdOf } from "./full-arch";
+import { faceLineText } from "@/lib/charts/face/catalog";
 
 /**
  * The clinic's dental prices: the services linked to a treatment, still in
  * use — or one treatment's. Whole-treatment prices only: the per-visit ones
  * (price_unit 'session') were retired by 0080 and nothing writes them now.
+ * The face chart's prices (`aes_…`, 0084) are its own.
  */
 export async function loadPrices(c: PoolClient, clinicId: string, treatmentKey: string | null = null): Promise<PriceRow[]> {
   const r = await c.query(
     `select id, chart_key, chart_variant, price, name, name_ar from services
-      where clinic_id = $1 and chart_key is not null and active and price_unit = 'item' and ($2::text is null or chart_key = $2)`,
+      where clinic_id = $1 and chart_key is not null and chart_key not like 'aes\\_%' and active and price_unit = 'item'
+        and ($2::text is null or chart_key = $2)`,
     [clinicId, treatmentKey]
   );
   return r.rows.map((x) => ({
@@ -138,6 +141,7 @@ export async function chartLines(
   const marks = (
     await c.query(
       `select m.id, m.site, m.label, m.label_ar, m.treatment_key, m.detail, m.group_id, m.fee, m.service_id, m.performed_by,
+              m.chart, m.areas, m.quantity,
               s.name as service_name, s.name_ar as service_name_ar, s.chart_variant as service_variant
          from chart_marks m left join services s on s.id = m.service_id
         where m.id = any($1::uuid[]) and m.clinic_id = $2 and m.patient_id = $3
@@ -157,6 +161,26 @@ export async function chartLines(
 
   const lines: ChartLine[] = [];
   for (const m of marks) {
+    /*
+      Face work (0084) is one line at its whole price — the areas, units or
+      syringes it counts are in its words — and is never part of a group.
+    */
+    if (m.chart === "aesthetic") {
+      if ((billed.get(m.id) ?? 0) > 0) continue;
+      lines.push({
+        markId: m.id,
+        serviceId: m.service_id ?? null,
+        description: faceLineText(
+          { treatmentKey: m.treatment_key, label: m.label, labelAr: m.label_ar, areas: m.areas ?? [], quantity: m.quantity == null ? null : Number(m.quantity) },
+          m.service_name ? { name: m.service_name, nameAr: m.service_name_ar ?? null } : null,
+          locale
+        ),
+        qty: 1,
+        unitPrice: m.fee == null ? 0 : Number(m.fee),
+        doctorMemberId: m.performed_by ?? null,
+      });
+      continue;
+    }
     const mates = m.group_id ? members.filter((x) => x.group_id === m.group_id) : [];
     // A bridge's teeth are its units; a full arch is one prosthesis, whatever it stands on.
     const archParent = mates.some((x) => !/^[1-8][1-8]$/.test(x.site));

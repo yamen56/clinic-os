@@ -28,7 +28,7 @@ type Params = { params: Promise<{ slug: string; id: string; caseId: string }> };
 export async function PATCH(req: Request, ctx: Params) {
   const { slug, id, caseId } = await ctx.params;
   if (!isUuid(id) || !isUuid(caseId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const g = await apiClinic(slug, ["patients.charts", "invoices"]);
+  const g = await apiClinic(slug, ["patients.charts", "invoices"], { module: "dental" });
   if (!g.ok) return g.res;
   const access = g.access;
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

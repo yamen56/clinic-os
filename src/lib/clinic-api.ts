@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, can, requireClinic, type ClinicAccess } from "./auth";
 import { withCtx } from "./db";
 import type { Capability } from "./permissions";
+import type { Feature } from "./features";
 import type { PoolClient } from "pg";
 
 /**
@@ -21,7 +22,13 @@ import type { PoolClient } from "pg";
  */
 export async function apiClinic(
   slug: string,
-  need?: Capability | Capability[]
+  need?: Capability | Capability[],
+  /**
+   * The module the route belongs to, when its capability is shared: recording
+   * on a chart is `patients.charts` for the dental chart and the face chart
+   * alike, so a dental route names "dental" or a face clinic could write teeth.
+   */
+  opts: { module?: Feature } = {}
 ): Promise<{ ok: true; access: ClinicAccess } | { ok: false; res: NextResponse }> {
   let access: ClinicAccess;
   try {
@@ -48,6 +55,9 @@ export async function apiClinic(
     if (!wanted.some((cap) => can(access, cap))) {
       return { ok: false, res: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
     }
+  }
+  if (opts.module && !access.clinic.features[opts.module]) {
+    return { ok: false, res: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
   }
   return { ok: true, access };
 }

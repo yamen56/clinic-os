@@ -29,7 +29,7 @@ type Params = { params: Promise<{ slug: string; id: string; markId: string }> };
 export async function POST(req: Request, ctx: Params) {
   const { slug, id, markId } = await ctx.params;
   if (!isUuid(id) || !isUuid(markId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const g = await apiClinic(slug, ["patients.charts", "invoices"]);
+  const g = await apiClinic(slug, ["patients.charts", "invoices"], { module: "dental" });
   if (!g.ok) return g.res;
   const access = g.access;
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

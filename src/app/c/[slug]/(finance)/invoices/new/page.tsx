@@ -9,6 +9,7 @@ import { loadServicesWithSections } from "@/lib/services";
 import { chartLines, type ChartLine } from "@/lib/charts/dental/billing-server";
 import { dictFor } from "@/lib/i18n/client-dict";
 import { getLocale } from "@/lib/i18n";
+import { billsFromCharts } from "@/lib/features";
 
 export default async function NewInvoicePage({
   params,
@@ -94,7 +95,7 @@ export default async function NewInvoicePage({
     */
     let initialLines: ChartLine[] = [];
     const markIds = (sp.marks ?? "").split(",").filter((x) => isUuid(x)).slice(0, 40);
-    if (patient && markIds.length && access.clinic.features.dental) {
+    if (patient && markIds.length && billsFromCharts(access.clinic.features)) {
       initialLines = await chartLines(c, access.clinicId, patient.id, markIds, locale, dictFor(locale).invoices.chartLine);
     }
     return { services, sections, doctors, clinic, patient, appointment, einvoice, initialLines };
@@ -115,7 +116,7 @@ export default async function NewInvoicePage({
       appointmentDoctorId={data.appointment?.doctorMemberId ?? null}
       einvoice={data.einvoice}
       initialLines={data.initialLines}
-      chartBilling={!!access.clinic.features.dental}
+      chartBilling={billsFromCharts(access.clinic.features)}
     />
   );
 }

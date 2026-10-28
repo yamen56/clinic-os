@@ -42,7 +42,7 @@ export default async function TreatmentPricesPage({ params }: { params: Promise<
                 count(distinct coalesce(m.group_id, m.id))::int as used,
                 count(distinct coalesce(m.group_id, m.id)) filter (where m.fee is null)::int as unpriced
            from chart_marks m
-          where m.clinic_id = $1 and m.kind = 'procedure' and m.voided_at is null and m.status <> 'existing'
+          where m.clinic_id = $1 and m.chart = 'dental' and m.kind = 'procedure' and m.voided_at is null and m.status <> 'existing'
             and not (m.group_id is not null and m.site ~ '^[1-8][1-8]$'
                      and exists (select 1 from chart_marks p where p.group_id = m.group_id and p.site !~ '^[1-8][1-8]$'))
           group by m.treatment_key, m.detail`,

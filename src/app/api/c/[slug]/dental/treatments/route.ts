@@ -21,7 +21,7 @@ const bodySchema = z.object({
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const g = await apiClinic(slug, "patients.charts");
+  const g = await apiClinic(slug, "patients.charts", { module: "dental" });
   if (!g.ok) return g.res;
   const access = g.access;
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
