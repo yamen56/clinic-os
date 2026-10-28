@@ -21,7 +21,17 @@ import { execSync, spawnSync } from "node:child_process";
 process.loadEnvFile(".env.production.local");
 
 const API = "https://backboard.railway.com/graphql/v2";
-const TOKEN = process.env.RAILWAY_TOKEN;
+/*
+  A project token (project Settings → Tokens) is scoped to this project's
+  production environment and travels in its own header; an account token is a
+  Bearer and can reach every project on the account. Prefer the project token —
+  the account token was retired after Railway's 2026-10-21 breach.
+*/
+const PROJECT_TOKEN = process.env.RAILWAY_PROJECT_TOKEN;
+const TOKEN = PROJECT_TOKEN ?? process.env.RAILWAY_TOKEN;
+const AUTH: Record<string, string> = PROJECT_TOKEN
+  ? { "Project-Access-Token": PROJECT_TOKEN }
+  : { Authorization: `Bearer ${TOKEN}` };
 const ENV_ID = process.env.RAILWAY_ENV_ID;
 const SERVICES = [
   { key: "web", label: "clinic-web", id: process.env.RAILWAY_WEB_SERVICE_ID },
@@ -29,14 +39,14 @@ const SERVICES = [
 ];
 
 if (!TOKEN || !ENV_ID) {
-  console.error("RAILWAY_TOKEN / RAILWAY_ENV_ID missing from .env.production.local");
+  console.error("RAILWAY_PROJECT_TOKEN (or RAILWAY_TOKEN) / RAILWAY_ENV_ID missing from .env.production.local");
   process.exit(1);
 }
 
 async function gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   const r = await fetch(API, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+    headers: { "Content-Type": "application/json", ...AUTH },
     body: JSON.stringify({ query, variables }),
   });
   const body = (await r.json()) as { data?: T; errors?: { message: string }[] };

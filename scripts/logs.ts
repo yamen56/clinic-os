@@ -19,7 +19,12 @@ export {};
 process.loadEnvFile(".env.production.local");
 
 const API = "https://backboard.railway.com/graphql/v2";
-const TOKEN = process.env.RAILWAY_TOKEN;
+// Project token first, account token as a fallback — see deploy.ts.
+const PROJECT_TOKEN = process.env.RAILWAY_PROJECT_TOKEN;
+const TOKEN = PROJECT_TOKEN ?? process.env.RAILWAY_TOKEN;
+const AUTH: Record<string, string> = PROJECT_TOKEN
+  ? { "Project-Access-Token": PROJECT_TOKEN }
+  : { Authorization: `Bearer ${TOKEN}` };
 const ENV_ID = process.env.RAILWAY_ENV_ID;
 
 const args = process.argv.slice(2);
@@ -35,14 +40,14 @@ const serviceId = has("--web")
 const label = has("--web") ? "clinic-web" : "clinic-os (worker)";
 
 if (!TOKEN || !ENV_ID || !serviceId) {
-  console.error("RAILWAY_TOKEN / RAILWAY_ENV_ID / service id missing from .env.production.local");
+  console.error("RAILWAY_PROJECT_TOKEN (or RAILWAY_TOKEN) / RAILWAY_ENV_ID / service id missing from .env.production.local");
   process.exit(1);
 }
 
 async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const r = await fetch(API, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+    headers: { "Content-Type": "application/json", ...AUTH },
     body: JSON.stringify({ query, variables }),
   });
   const body = (await r.json()) as { data?: T; errors?: { message: string }[] };
