@@ -2,15 +2,22 @@ import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { ingestImage } from "@/lib/imaging/ingest";
 import { isDicom } from "@/lib/imaging/dicom";
+import { FILE_KINDS, type FileKind } from "@/lib/imaging/kinds";
 
 /*
-  The browser station on a device computer, sending a file its folder got.
+  The browser station on a device computer, sending a file its folder got —
+  or one of a whole folder somebody uploaded.
 
   Everything goes through ingest, so the station decides nothing itself: a
   DICOM slice joins its series, a file whose machine or DICOM says whose it
   is goes to that patient, the next file answers whoever is waiting on one,
   and the rest go to the clinic's one inbox — never a list kept in one
   browser tab until somebody closes it.
+
+  A folder upload (`bulk`) is the past arriving at once: none of it answers
+  the patient in the chair now. It may say what its pictures are (`kind`) —
+  a panoramic machine's JPEG is an x-ray, not a photo — and where each sat
+  (`folder`), which the inbox shows and suggests patients from.
 */
 
 const MAX_SIZE = 100 * 1024 * 1024;
@@ -26,17 +33,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   if (!(file instanceof File)) return NextResponse.json({ error: "no_file" }, { status: 400 });
   if (file.size > MAX_SIZE) return NextResponse.json({ error: "too_large" }, { status: 413 });
   const data = Buffer.from(await file.arrayBuffer());
+  const dicom = isDicom(data);
+  const mime = dicom ? "application/dicom" : file.type || "application/octet-stream";
+  const asked = String(form?.get("kind") ?? "");
+  // A DICOM says what it is itself, and a PDF beside the pictures stays a report.
+  const kind = !dicom && mime.startsWith("image/") && (FILE_KINDS as readonly string[]).includes(asked) ? (asked as FileKind) : undefined;
+  const folder = String(form?.get("folder") ?? "").trim().slice(0, 120) || null;
 
   const r = await ingestImage(
     {
       clinicId: access.clinicId,
       from: { userId: access.session.user.id, impersonatedBy: access.session.impersonatedBy },
       fileName: file.name,
-      mime: isDicom(data) ? "application/dicom" : file.type || "application/octet-stream",
+      mime,
       data,
+      kind,
+      folder,
       // A slice of a series already on file joins it; a new series answers
       // whoever has waited longest — the same order the station uses.
-      useOpenRequest: true,
+      useOpenRequest: form?.get("bulk") !== "1",
     },
     (fn) => inClinic(access, fn)
   );

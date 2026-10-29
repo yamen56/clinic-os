@@ -107,7 +107,7 @@ async function main() {
   try {
     const page = await signIn(browser, `hub-owner-${tag}@test.local`);
     page.on("pageerror", (e) => errors.push(e.message));
-    page.on("console", (m) => m.type() === "error" && !/Failed to load resource|favicon/.test(m.text()) && errors.push(`[console] ${m.text().slice(0, 300)}`));
+    page.on("console", (m) => m.type() === "error" && !/Failed to load resource|favicon/.test(m.text()) && errors.push(`[console] ${m.text().slice(0, process.env.QA_FULL ? 20000 : 300)}`));
 
     /* ── Before any machine ──────────────────────────────────────────── */
     console.log("\na clinic with no machines");
@@ -230,7 +230,7 @@ async function main() {
 
     const ar = await signIn(browser, `hub-ar-${tag}@test.local`);
     ar.on("pageerror", (e) => errors.push(`[ar] ${e.message}`));
-    ar.on("console", (m) => m.type() === "error" && !/Failed to load resource|favicon/.test(m.text()) && errors.push(`[ar console] ${m.text().slice(0, 300)}`));
+    ar.on("console", (m) => m.type() === "error" && !/Failed to load resource|favicon/.test(m.text()) && errors.push(`[ar console] ${m.text().slice(0, process.env.QA_FULL ? 20000 : 300)}`));
     await ar.goto(`${BASE}/c/${slug}/devices`, { timeout: 120000 });
     await ar.waitForSelector("[data-imaging-station] [data-inbox-item]", { timeout: 60000 });
     const arText = await ar.locator("main").innerText();

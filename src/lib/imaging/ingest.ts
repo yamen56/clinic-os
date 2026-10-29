@@ -58,6 +58,8 @@ export type IngestInput = {
   patientRef?: string | null;
   /** With nothing else to go on, answer the oldest open "Take x-ray". */
   useOpenRequest?: boolean;
+  /** The folder an uploaded file sat in — often the patient's name. Shown, never trusted. */
+  folder?: string | null;
 };
 
 export type IngestResult =
@@ -104,6 +106,21 @@ export function nameWords(raw: string): string[] {
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .split(" ")
     .filter((w) => w.length >= 2);
+}
+
+/** What an inbox item came with about whose it is (`imaging_inbox.hint`). */
+export type InboxHint = { machine?: { name?: string; birthDate?: string | null } | null; folder?: string | null; originalName?: string | null };
+
+/**
+ * The name words an inbox item came with: what the machine called the
+ * patient, or else the folder and the file name — x-ray software names both
+ * after the patient ("Ababneh Rakan/PAN_20261028.jpg"). Numbers (dates, image
+ * counters) are no name. For suggesting whose it is, never for filing it.
+ */
+export function hintWords(h: InboxHint | null | undefined): string[] {
+  const said = h?.machine?.name ? nameWords(h.machine.name) : [];
+  const raw = said.length ? said : [...nameWords(h?.folder ?? ""), ...nameWords((h?.originalName ?? "").replace(/\.[a-z0-9]{1,5}$/i, ""))];
+  return [...new Set(raw.filter((w) => !/^\d+$/.test(w)))].slice(0, 12);
 }
 
 /**
@@ -372,6 +389,7 @@ export async function ingestImage(input: IngestInput, run: Run): Promise<IngestR
         const hint = {
           ...(input.patientRef ? { ref: input.patientRef } : {}),
           ...(meta?.patient.id || meta?.patient.name ? { machine: meta!.patient } : {}),
+          ...(input.folder ? { folder: input.folder } : {}),
           originalName: input.fileName,
         };
         const r = await c.query(

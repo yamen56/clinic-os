@@ -19,7 +19,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, Download, FileText, LoaderCircle, Radio, Smile, Trash2, Upload, X } from "lucide-react";
+import { Camera, Download, FileText, FolderUp, LoaderCircle, Radio, Smile, Trash2, Upload, X } from "lucide-react";
+import { folderItems, resultsIn } from "@/lib/imaging/folder-files";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtRelative } from "@/lib/dates";
 import { Card } from "@/components/ui/card";
@@ -46,6 +47,8 @@ export type FilesHub = {
     received_at: string;
     device: string | null;
     machine: { name?: string; birthDate?: string | null } | null;
+    /** The folder it was uploaded from, when that is what named the patient. */
+    folder?: string | null;
   }[];
   /** Result kinds the clinic's specialties keep, in their order. */
   kinds: string[];
@@ -80,6 +83,7 @@ export function FilesTab({
 
   const [uploadKind, setUploadKind] = useState("other");
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
   const [viewer, setViewer] = useState<number | null>(null);
@@ -90,6 +94,7 @@ export function FilesTab({
   const [teeth, setTeeth] = useState<Record<string, string[]>>(() => Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []])));
   const [sending, setSending] = useState<{ img: ChartImage; caption: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => setTeeth(Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []]))), [files]);
 
@@ -109,19 +114,38 @@ export function FilesTab({
   const upload = async (list: File[], kind: string) => {
     if (!list.length) return;
     setUploading(true);
+    setProgress(list.length > 1 ? { done: 0, total: list.length } : null);
+    // A folder is many files: one word about what went wrong, not one per file.
+    let tooLarge = 0;
+    let failed = 0;
     try {
       for (const file of list) {
         const fd = new FormData();
         fd.set("file", file);
         fd.set("kind", kind);
-        const res = await fetch(`/api/c/${slug}/patients/${patientId}/files`, { method: "POST", body: fd });
-        if (res.status === 413) toast(t.patients.files.tooLarge, "error");
-        else if (!res.ok) toast(t.common.genericError, "error");
+        const res = await fetch(`/api/c/${slug}/patients/${patientId}/files`, { method: "POST", body: fd }).catch(() => null);
+        if (res?.status === 413) tooLarge++;
+        else if (!res?.ok) failed++;
+        setProgress((p) => p && { ...p, done: p.done + 1 });
       }
+      if (list.length === 1 && tooLarge) toast(t.patients.files.tooLarge, "error");
+      else if (list.length === 1 && failed) toast(t.common.genericError, "error");
+      else if (tooLarge + failed) toast(t.patients.files.someFailed.replace("{n}", String(tooLarge + failed)), "error");
       router.refresh();
     } finally {
       setUploading(false);
+      setProgress(null);
     }
+  };
+
+  /* A folder — a CD or USB from the x-ray machine: its pictures, scans and reports, never the viewer program beside them. */
+  const uploadFolder = async (picked: FileList | null) => {
+    const items = await resultsIn(folderItems(picked));
+    if (!items.length) return toast(t.patients.files.noneInFolder, "error");
+    await upload(
+      items.map((i) => i.file),
+      uploadKind
+    );
   };
 
   // Waiting on a machine: the result shows up here by itself.
@@ -219,7 +243,24 @@ export function FilesTab({
           />
           <Button loading={uploading} onClick={() => fileInput.current?.click()}>
             <Upload className="h-4 w-4" />
-            {t.patients.files.upload}
+            {progress ? t.patients.files.uploadingOf.replace("{n}", String(progress.done)).replace("{total}", String(progress.total)) : t.patients.files.upload}
+          </Button>
+          <input
+            ref={folderInput}
+            // Not in React's types; every browser takes it. In the HTML, so it holds before hydration too.
+            {...{ webkitdirectory: "" }}
+            type="file"
+            multiple
+            className="hidden"
+            data-patient-folder-input
+            onChange={(e) => {
+              void uploadFolder(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <Button variant="outline" disabled={uploading} onClick={() => folderInput.current?.click()} data-patient-upload-folder>
+            <FolderUp className="h-4 w-4" />
+            {t.patients.files.uploadFolder}
           </Button>
           <Button variant="outline" onClick={() => setCamera(true)} data-take-photo>
             <Camera className="h-4 w-4" />
@@ -280,6 +321,7 @@ export function FilesTab({
                     {l.device ? ` · ${l.device}` : ""} · {fmtDate(l.received_at, tz, locale)}
                     {l.machine?.name ? ` · ${l.machine.name}` : ""}
                     {l.machine?.birthDate ? ` · ${l.machine.birthDate}` : ""}
+                    {!l.machine?.name && l.folder ? ` · ${t.station.inFolder.replace("{folder}", l.folder)}` : ""}
                   </div>
                 </div>
                 <Button size="sm" onClick={() => fileLikely(l.id)} data-likely-file>

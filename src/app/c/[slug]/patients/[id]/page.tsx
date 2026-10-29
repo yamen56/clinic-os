@@ -15,7 +15,7 @@ import { loadDentalChart } from "@/lib/charts/dental/db";
 import { loadFaceChart } from "@/lib/charts/face/db";
 import { loadNoteFeed } from "@/lib/note-feed";
 import type { PoolClient } from "pg";
-import { IMAGING_REQUEST_OPEN_FOR, nameWords } from "@/lib/imaging/ingest";
+import { IMAGING_REQUEST_OPEN_FOR, hintWords, nameWords } from "@/lib/imaging/ingest";
 import { clinicSpecialties } from "@/lib/specialties";
 import { profileFor } from "@/lib/specialty-profile";
 
@@ -391,19 +391,31 @@ async function loadFilesHub(c: PoolClient, clinicId: string, patientId: string, 
            where r.clinic_id = $2 and r.patient_id = $1 and r.fulfilled_at is null and r.cancelled_at is null
              and r.created_at > now() - interval '${IMAGING_REQUEST_OPEN_FOR}') as waiting,
          (select coalesce(json_agg(x order by x.received_at), '[]') from (
-            select i.id, i.file_name, i.mime_type, i.kind, i.received_at, d.name as device, i.hint->'machine' as machine
+            select i.id, i.file_name, i.mime_type, i.kind, i.received_at, d.name as device, i.hint->'machine' as machine,
+                   i.hint->>'folder' as folder, i.hint->>'originalName' as "originalName"
               from imaging_inbox i left join clinic_devices d on d.id = i.device_id
-             where i.clinic_id = $2 and i.assigned_at is null and i.discarded_at is null and i.hint ? 'machine'
-             order by i.received_at desc limit 50) x) as inbox,
+             where i.clinic_id = $2 and i.assigned_at is null and i.discarded_at is null
+             order by i.received_at desc limit 200) x) as inbox,
          (select json_build_object('specialty', cl.specialty, 'specialties', cl.specialties) from clinics cl where cl.id = $2) as clinic`,
       [patientId, clinicId]
     )
   ).rows[0];
   const words = new Set(nameWords(fullName));
   const birthIso = birth ? `${birth.getFullYear()}-${String(birth.getMonth() + 1).padStart(2, "0")}-${String(birth.getDate()).padStart(2, "0")}` : null;
-  type Inbox = { id: string; file_name: string; mime_type: string; kind: string; received_at: string; device: string | null; machine: { name?: string; birthDate?: string | null } | null };
+  type Inbox = {
+    id: string;
+    file_name: string;
+    mime_type: string;
+    kind: string;
+    received_at: string;
+    device: string | null;
+    machine: { name?: string; birthDate?: string | null } | null;
+    folder: string | null;
+    originalName: string | null;
+  };
+  // What the machine called the patient — or, for a folder upload, the folder and file names.
   const likely = (r.inbox as Inbox[]).filter((i) => {
-    const theirs = nameWords(i.machine?.name ?? "");
+    const theirs = hintWords(i);
     const score = (birthIso && i.machine?.birthDate === birthIso ? 2 : 0) + theirs.filter((w) => words.has(w)).length;
     return score >= 2;
   });

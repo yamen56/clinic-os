@@ -20,15 +20,23 @@
 
   Nothing is installed and no vendor software is changed. The machine's
   software is only asked to do what it already does: save the result.
+
+  Where neither the Bridge nor watching can run, the folder is uploaded:
+  every result in it, now, from any browser. This computer remembers what it
+  has sent, so the same folder uploaded again tomorrow sends only what is new
+  — and watching offers to send what was already there when it began.
 */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Cable, FolderOpen, Inbox, Radiation, Send, Trash2, Upload, WifiOff, X } from "lucide-react";
+import { Cable, FolderOpen, FolderUp, Inbox, Radiation, Send, Trash2, Upload, WifiOff, X } from "lucide-react";
 import { bridgeOffline } from "@/lib/imaging/offline";
+import { folderItems, isDicomFile, isKnownResult, mayBeResult, parentFolder, resultsIn } from "@/lib/imaging/folder-files";
+import { DEVICE_FILE_KIND, FILE_KINDS } from "@/lib/imaging/kinds";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { buttonClass } from "@/components/ui/button-class";
@@ -63,7 +71,7 @@ type InboxItem = {
   kind: "xray" | "photo";
   teeth: string[];
   received_at: string;
-  hint: { ref?: string; machine?: { id: string; name: string; birthDate: string | null }; originalName?: string };
+  hint: { ref?: string; machine?: { id: string; name: string; birthDate: string | null }; folder?: string; originalName?: string };
   modality: string | null;
   description: string | null;
   study_date: string | null;
@@ -74,21 +82,38 @@ type InboxItem = {
 };
 type Found = { id: string; full_name: string; phone_e164: string | null; file_no?: number | null };
 type Sent = { key: string; name: string; patient: string; teeth: string[]; at: number };
+type Placed =
+  | { placed: "patient"; added: string; patientName: string; teeth: string[]; requestId: string | null }
+  | { placed: "inbox"; added: string };
+/** A folder upload under way, then what became of it. */
+type Bulk = { folder: string; found: number; total: number; done: number; patient: number; inbox: number; before: number; failed: number; finished: boolean };
+type PastFile = { path: string; file: File };
 
-const IMAGE = /\.(jpe?g|png|bmp|gif|webp|tiff?|dcm)$/i;
-/** DICOM exports often have no extension at all (IM0001, 1.2.840…); those are read to see. */
-const BARE = /^[^.]+$|^[\d.]+$/;
+const SCAN_MS = 2000;
+/** Files of one folder upload in flight at once. */
+const BULK_LANES = 3;
 
-/** "DICM" at byte 128 — a DICOM file, whatever it is called. */
-async function isDicomFile(f: File): Promise<boolean> {
-  if (f.size < 132) return false;
+/* What this computer has sent, by path, size and time — so a folder uploaded again sends only what is new. */
+const SENT_MAX = 10000;
+const sentStore = (slug: string) => `clinicti-sent:${slug}`;
+const sentKey = (path: string, f: File) => `${path}|${f.size}|${f.lastModified}`;
+function loadSent(slug: string): Set<string> {
   try {
-    return (await f.slice(128, 132).text()) === "DICM";
+    return new Set(JSON.parse(localStorage.getItem(sentStore(slug)) ?? "[]") as string[]);
   } catch {
-    return false;
+    return new Set();
   }
 }
-const SCAN_MS = 2000;
+function rememberSent(slug: string, keys: string[]) {
+  if (!keys.length) return;
+  try {
+    const all = loadSent(slug);
+    for (const k of keys) all.add(k);
+    localStorage.setItem(sentStore(slug), JSON.stringify([...all].slice(-SENT_MAX)));
+  } catch {
+    // A private window, or storage full: the next upload sends these again, and a DICOM is still kept once.
+  }
+}
 
 /* The chosen folder, remembered on this computer between visits. */
 const DB = "clinicti-imaging";
@@ -120,7 +145,7 @@ function mimeOf(f: File): string {
 async function* walk(dir: DirHandle, prefix = "", depth = 0): AsyncGenerator<{ path: string; handle: FileHandle }> {
   for await (const h of dir.values()) {
     if (h.kind === "file") {
-      if (IMAGE.test(h.name) || BARE.test(h.name)) yield { path: prefix + h.name, handle: h };
+      if (mayBeResult(h.name)) yield { path: prefix + h.name, handle: h };
     } else if (depth < 2) {
       // Many x-ray programs file each day or each patient in a subfolder.
       yield* walk(h, `${prefix}${h.name}/`, depth + 1);
@@ -186,35 +211,105 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
     is goes to that patient, the next file answers whoever is waiting, and the
     rest wait to be filed in the clinic's one inbox below.
   */
-  const arrive = useCallback(
-    async (file: File) => {
+  // What the folder's pictures are: a panoramic machine's JPEG is an x-ray, not a photo.
+  const [kind, setKind] = useState<string>(() => devices.map((d) => (DEVICE_FILE_KIND as Record<string, string>)[d.kind]).find((k) => k && k !== "other") ?? "xray");
+  const kindRef = useRef(kind);
+  kindRef.current = kind;
+
+  const post = useCallback(
+    async (file: File, opts: { bulk?: boolean; folder?: string | null } = {}): Promise<Placed | "not_result" | null> => {
       const dicom = await isDicomFile(file);
       // A file with no extension that is not DICOM is not a result at all.
-      if (!dicom && !IMAGE.test(file.name)) return;
+      if (!dicom && !isKnownResult(file.name)) return "not_result";
       const fd = new FormData();
       fd.set("file", new File([file], file.name, { type: dicom ? "application/dicom" : mimeOf(file), lastModified: file.lastModified }));
+      fd.set("kind", kindRef.current);
+      if (opts.bulk) fd.set("bulk", "1");
+      if (opts.folder) fd.set("folder", opts.folder);
       try {
         const res = await fetch(`/api/c/${slug}/imaging/receive`, { method: "POST", body: fd });
-        const body = (await res.json().catch(() => null)) as
-          | { placed: "patient"; added: string; patientName: string; teeth: string[]; requestId: string | null }
-          | { placed: "inbox"; added: string }
-          | null;
-        if (!res.ok || !body) throw new Error("upload");
+        const body = (await res.json().catch(() => null)) as Placed | null;
+        return res.ok && body ? body : null;
+      } catch {
+        return null;
+      }
+    },
+    [slug]
+  );
+
+  const noteSent = useCallback((name: string, body: Extract<Placed, { placed: "patient" }>) => {
+    setSent((prev) => [{ key: `${name}-${Date.now()}-${Math.random()}`, name, patient: body.patientName, teeth: body.teeth, at: Date.now() }, ...prev].slice(0, 30));
+  }, []);
+
+  /** One file, as it arrives: from the watched folder (with its path there) or picked by hand. */
+  const arrive = useCallback(
+    async (file: File, path?: string) => {
+      const body = await post(file, { folder: path ? parentFolder(path) : null });
+      if (body === "not_result") return;
+      if (!body) {
+        toast(T.failed, "error");
+      } else {
+        if (path) rememberSent(slug, [sentKey(path, file)]);
         if (body.placed === "inbox") {
           if (body.added === "new") toast(T.toInbox);
           void loadInbox();
         } else {
           if (body.requestId) setRequests((prev) => prev.filter((r) => r.id !== body.requestId));
-          setSent((prev) => [{ key: `${file.name}-${Date.now()}`, name: file.name, patient: body.patientName, teeth: body.teeth, at: Date.now() }, ...prev].slice(0, 30));
+          noteSent(file.name, body);
           if (body.added === "new") toast(T.sent.replace("{patient}", body.patientName));
         }
-      } catch {
-        toast(T.failed, "error");
       }
       void poll();
     },
-    [slug, toast, T.toInbox, T.sent, T.failed, loadInbox, poll]
+    [slug, post, toast, T.toInbox, T.sent, T.failed, loadInbox, poll, noteSent]
   );
+
+  /*
+    A whole folder at once: what is in it now, from any browser. None of it
+    answers the patient in the chair — the server is told it is the past.
+    Each file sent is remembered on this computer as it goes, so a tab closed
+    halfway, or the folder uploaded again tomorrow, sends only the rest.
+  */
+  const [bulk, setBulk] = useState<Bulk | null>(null);
+  const bulkRunning = useRef(false);
+  const sendAll = useCallback(
+    async (folderName: string, items: { file: File; path: string }[]) => {
+      if (bulkRunning.current) return;
+      bulkRunning.current = true;
+      setBulk({ folder: folderName, found: 0, total: 0, done: 0, patient: 0, inbox: 0, before: 0, failed: 0, finished: false });
+      try {
+        const results = await resultsIn(items);
+        const memory = loadSent(slug);
+        const todo = results.filter((it) => !memory.has(sentKey(it.path, it.file)));
+        setBulk((b) => b && { ...b, found: results.length, total: todo.length, before: results.length - todo.length });
+        let next = 0;
+        let pending: string[] = [];
+        const lane = async () => {
+          while (next < todo.length) {
+            const it = todo[next++];
+            const body = await post(it.file, { bulk: true, folder: parentFolder(it.path) });
+            const placed = body && body !== "not_result" ? body : null;
+            if (placed) pending.push(sentKey(it.path, it.file));
+            if (pending.length >= 25) {
+              rememberSent(slug, pending);
+              pending = [];
+            }
+            if (placed?.placed === "patient" && placed.added === "new") noteSent(it.file.name, placed);
+            const outcome = !placed ? "failed" : placed.added === "duplicate" ? "before" : placed.placed;
+            setBulk((b) => b && { ...b, done: b.done + 1, [outcome]: b[outcome] + 1 });
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(BULK_LANES, todo.length) }, lane));
+        rememberSent(slug, pending);
+      } finally {
+        bulkRunning.current = false;
+        setBulk((b) => b && { ...b, finished: true });
+        void loadInbox();
+      }
+    },
+    [slug, post, noteSent, loadInbox]
+  );
+  const folderPick = useRef<HTMLInputElement>(null);
 
   /*
     Watching: everything in the folder when watching starts is the past and is
@@ -224,10 +319,13 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
   */
   const seen = useRef<Set<string>>(new Set());
   const growing = useRef<Map<string, number>>(new Map());
+  // What was there when watching began and this computer never sent: offered, not sent unasked.
+  const [past, setPast] = useState<PastFile[]>([]);
   useEffect(() => {
     if (!folder || !watching) return;
     let stop = false;
     let first = true;
+    const found: PastFile[] = [];
     const look = async () => {
       try {
         for await (const { path, handle } of walk(folder)) {
@@ -236,16 +334,21 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
           const f = await handle.getFile();
           if (first) {
             seen.current.add(path);
+            found.push({ path: `${folder.name}/${path}`, file: f });
             continue;
           }
           const before = growing.current.get(path);
           if (before === f.size && f.size > 0) {
             seen.current.add(path);
             growing.current.delete(path);
-            void arrive(f);
+            void arrive(f, `${folder.name}/${path}`);
           } else {
             growing.current.set(path, f.size);
           }
+        }
+        if (first && !stop) {
+          const memory = loadSent(slug);
+          setPast(found.filter((p) => !memory.has(sentKey(p.path, p.file))));
         }
         first = false;
       } catch {
@@ -258,8 +361,9 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
     return () => {
       stop = true;
       clearInterval(id);
+      setPast([]);
     };
-  }, [folder, watching, arrive]);
+  }, [folder, watching, arrive, slug]);
 
   // The folder chosen last time on this computer, if any. Reading it again
   // needs a click (the browser's rule), so it waits as "Resume watching".
@@ -323,40 +427,96 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
       ))}
 
       <Card className="p-4">
-        {!supported ? (
-          <p className="text-[13.5px] text-ink-700" data-unsupported>
-            {T.unsupported}
-          </p>
-        ) : watching && folder ? (
-          <div className="flex flex-wrap items-center gap-3" data-watching>
-            <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-st-confirmed-soft text-st-confirmed">
-              <FolderOpen className="h-4.5 w-4.5" />
-              <span className="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-st-confirmed ring-2 ring-surface" />
-            </span>
-            <span className="min-w-0 flex-1 text-[14px] font-semibold text-ink-900">{T.watching.replace("{folder}", folder.name)}</span>
-            <Button size="sm" variant="outline" onClick={choose}>
-              {T.change}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setWatching(false)}>
-              {T.stop}
-            </Button>
+        <div className="grid gap-3" data-folder-card>
+          <div>
+            <h2 className="text-[15px] font-semibold text-ink-900">{T.folderTitle}</h2>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-ink-500">{T.folderIntro}</p>
           </div>
-        ) : folder ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={resume}>
-              <FolderOpen className="h-4 w-4" />
-              {T.resume.replace("{folder}", folder.name)}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <label className="flex items-center gap-2 text-[13px] text-ink-700">
+              {T.theseAre}
+              <Select value={kind} onChange={(e) => setKind(e.target.value)} className="!w-auto" data-folder-kind>
+                {FILE_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {(t.patients.files.kinds as Record<string, string>)[k] ?? k}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <Button onClick={() => folderPick.current?.click()} loading={!!bulk && !bulk.finished} data-upload-folder>
+              <FolderUp className="h-4 w-4" />
+              {T.uploadFolder}
             </Button>
-            <Button variant="outline" onClick={choose}>
-              {T.change}
-            </Button>
+            <input
+              ref={folderPick}
+              // Not in React's types; every browser takes it. In the HTML, so it holds before hydration too.
+              {...{ webkitdirectory: "" }}
+              type="file"
+              multiple
+              hidden
+              data-folder-input
+              onChange={(e) => {
+                const items = folderItems(e.target.files);
+                e.target.value = "";
+                const name = items[0]?.path.split("/")[0] ?? "";
+                if (items.length) void sendAll(name, items);
+              }}
+            />
+            {supported && !watching && folder && (
+              <Button variant="outline" onClick={resume}>
+                <FolderOpen className="h-4 w-4" />
+                {T.resume.replace("{folder}", folder.name)}
+              </Button>
+            )}
+            {supported && !watching && (
+              <Button variant="outline" onClick={choose} data-choose-folder>
+                <FolderOpen className="h-4 w-4" />
+                {folder ? T.change : T.chooseFolder}
+              </Button>
+            )}
           </div>
-        ) : (
-          <Button onClick={choose} data-choose-folder>
-            <FolderOpen className="h-4 w-4" />
-            {T.chooseFolder}
-          </Button>
-        )}
+          {!supported && (
+            <p className="text-[12.5px] text-ink-500" data-unsupported>
+              {T.unsupported}
+            </p>
+          )}
+
+          {bulk && <BulkProgress bulk={bulk} />}
+
+          {supported && watching && folder && (
+            <div className="flex flex-wrap items-center gap-3 rounded-ctl border border-line px-3 py-2.5" data-watching>
+              <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-st-confirmed-soft text-st-confirmed">
+                <FolderOpen className="h-4.5 w-4.5" />
+                <span className="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-st-confirmed ring-2 ring-surface" />
+              </span>
+              <span className="min-w-0 flex-1 text-[14px] font-semibold text-ink-900">{T.watching.replace("{folder}", folder.name)}</span>
+              <Button size="sm" variant="outline" onClick={choose}>
+                {T.change}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setWatching(false)}>
+                {T.stop}
+              </Button>
+              {past.length > 0 && (
+                <div className="flex w-full flex-wrap items-center gap-2 border-t border-line pt-2.5 text-[13px] text-ink-700" data-past>
+                  <span className="min-w-0 flex-1">{T.past.replace("{n}", String(past.length)).replace("{folder}", folder.name)}</span>
+                  <Button
+                    size="sm"
+                    disabled={!!bulk && !bulk.finished}
+                    onClick={() => {
+                      const items = past;
+                      setPast([]);
+                      void sendAll(folder.name, items);
+                    }}
+                    data-send-past
+                  >
+                    <Send className="h-4 w-4" />
+                    {T.sendPast}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </Card>
 
       <Card className="p-4">
@@ -414,6 +574,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
                 key={item.id}
                 slug={slug}
                 item={item}
+                siblings={item.hint.folder ? inbox.filter((x) => x.id !== item.id && x.hint.folder === item.hint.folder).map((x) => x.id) : []}
                 waiting={requests[0] ?? null}
                 onDone={(id, requestId) => {
                   setInbox((prev) => prev.filter((x) => x.id !== id));
@@ -435,12 +596,15 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
           <input
             ref={handPick}
             type="file"
-            accept="image/*,.dcm,.tif,.tiff"
+            accept="image/*,.dcm,.tif,.tiff,.pdf"
+            multiple
             hidden
             onChange={(e) => {
-              const f = e.target.files?.[0];
+              const files = Array.from(e.target.files ?? []);
               e.target.value = "";
-              if (f) void arrive(f);
+              void (async () => {
+                for (const f of files) await arrive(f);
+              })();
             }}
           />
         </div>
@@ -493,6 +657,49 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
   );
 }
 
+/** A folder upload: how far it has got, then what became of every file in it. */
+function BulkProgress({ bulk }: { bulk: Bulk }) {
+  const { t } = useI18n();
+  const T = t.station;
+  const n = (s: string, v: number) => s.replace("{n}", String(v));
+  if (!bulk.finished) {
+    return (
+      <div className="grid gap-1.5" role="status" data-bulk-progress>
+        <div className="text-[13.5px] font-semibold text-ink-900 tnum">
+          {bulk.total
+            ? T.uploading.replace("{n}", String(bulk.done)).replace("{total}", String(bulk.total)).replace("{folder}", bulk.folder)
+            : T.reading.replace("{folder}", bulk.folder)}
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-sunken">
+          <div className="h-full rounded-full bg-brand-600 transition-[width]" style={{ width: `${bulk.total ? (bulk.done / bulk.total) * 100 : 0}%` }} />
+        </div>
+      </div>
+    );
+  }
+  const parts = [
+    bulk.patient ? n(T.doneFiled, bulk.patient) : null,
+    bulk.inbox ? n(T.doneInbox, bulk.inbox) : null,
+    bulk.before ? n(T.doneBefore, bulk.before) : null,
+  ].filter(Boolean);
+  return (
+    <div
+      className={`rounded-ctl border px-3 py-2.5 text-[13.5px] ${bulk.failed ? "border-danger/30 bg-danger-soft" : "border-line bg-sunken"}`}
+      role="status"
+      data-bulk-done={`${bulk.patient}/${bulk.inbox}/${bulk.before}/${bulk.failed}`}
+    >
+      <div className="font-semibold text-ink-900">
+        {bulk.found === 0
+          ? T.noResults.replace("{folder}", bulk.folder)
+          : bulk.total === 0
+            ? T.nothingNew.replace("{folder}", bulk.folder)
+            : T.doneTitle.replace("{folder}", bulk.folder)}
+      </div>
+      {bulk.total > 0 && parts.length > 0 && <div className="text-ink-700 tnum">{parts.join(" · ")}</div>}
+      {bulk.failed > 0 && <div className="text-danger tnum">{n(T.doneFailed, bulk.failed)}</div>}
+    </div>
+  );
+}
+
 /** Patients by name, phone or file number, as somebody types. */
 function usePatientSearch(slug: string, q: string): Found[] {
   const [results, setResults] = useState<Found[]>([]);
@@ -517,16 +724,22 @@ function usePatientSearch(slug: string, q: string): Found[] {
 
 /**
  * An image a machine sent for nobody: shown, so a person can see whose it
- * is, with what the machine called the patient; then filed or discarded.
+ * is, with what the machine called the patient (or the folder it was
+ * uploaded from); then filed or discarded. A folder named after a patient
+ * usually holds only theirs, so the rest of it can go with one tap — when
+ * the person says so; a folder of one day holds everybody.
  */
 function InboxRow({
   slug,
   item,
+  siblings,
   waiting,
   onDone,
 }: {
   slug: string;
   item: InboxItem;
+  /** The other items waiting from the same folder. */
+  siblings: string[];
   waiting: Request | null;
   onDone: (id: string, answeredRequest?: string) => void;
 }) {
@@ -537,6 +750,7 @@ function InboxRow({
   const results = usePatientSearch(slug, q);
   const [busy, setBusy] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [together, setTogether] = useState(false);
 
   const post = async (url: string, body: unknown) => {
     const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -552,7 +766,20 @@ function InboxRow({
       if (requestId && r?.fileId) {
         await post(`/api/c/${slug}/imaging/requests/${requestId}`, { op: "fulfil", fileId: r.fileId }).catch(() => null);
       }
-      toast(T.filed.replace("{patient}", name));
+      let filed = 1;
+      if (together) {
+        for (const id of siblings) {
+          const ok = await post(`/api/c/${slug}/imaging/inbox/${id}`, { op: "file", patientId }).then(
+            () => true,
+            () => false
+          );
+          if (ok) {
+            filed++;
+            onDone(id);
+          }
+        }
+      }
+      toast(filed > 1 ? T.filedMany.replace("{n}", String(filed)).replace("{patient}", name) : T.filed.replace("{patient}", name));
       onDone(item.id, requestId);
     } catch {
       toast(T.failed, "error");
@@ -603,6 +830,11 @@ function InboxRow({
               {T.machineSaid.replace("{who}", who)}
             </div>
           )}
+          {item.hint.folder && (
+            <div className="truncate text-[12.5px] text-ink-700" dir="auto" data-inbox-folder>
+              {T.inFolder.replace("{folder}", item.hint.folder)}
+            </div>
+          )}
         </div>
         {waiting && (
           <Button
@@ -646,6 +878,18 @@ function InboxRow({
             </button>
           ))}
         </div>
+      )}
+      {siblings.length > 0 && item.hint.folder && (
+        <label className="flex items-center gap-2 text-[13px] text-ink-700" data-inbox-together>
+          <input
+            type="checkbox"
+            className="h-4.5 w-4.5 shrink-0 accent-brand-600"
+            checked={together}
+            disabled={busy}
+            onChange={(e) => setTogether(e.target.checked)}
+          />
+          <span dir="auto">{T.alsoFolder.replace("{n}", String(siblings.length)).replace("{folder}", item.hint.folder)}</span>
+        </label>
       )}
       <div>
         <input

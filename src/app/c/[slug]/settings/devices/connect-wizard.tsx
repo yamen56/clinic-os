@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Camera, Circle, CircleCheck, Download, FolderOpen, LoaderCircle, ScanLine, ScanText, Usb } from "lucide-react";
+import { ArrowLeft, Camera, Circle, CircleCheck, Download, FolderOpen, FolderUp, LoaderCircle, ScanLine, ScanText, Usb } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { orderedKinds } from "@/lib/imaging/kinds";
 import { Modal } from "@/components/ui/modal";
@@ -203,6 +203,20 @@ export function ConnectWizard({
       <div data-connect-wizard data-step={step}>
         {step === "choose" && (
           <div>
+            {/* Before anything that installs a program or touches the network: most clinics need neither. */}
+            <Link
+              href={`/c/${slug}/devices`}
+              className="mb-4 flex items-start gap-3 rounded-xl border border-brand-300 bg-brand-50 p-4 transition-colors duration-140 ease-out hover:border-brand-500"
+              data-choice="upload"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-600 text-on-brand [&_svg]:h-5 [&_svg]:w-5">
+                <FolderUp />
+              </span>
+              <span>
+                <span className="block font-semibold text-ink-900">{T.choiceUpload}</span>
+                <span className="mt-0.5 block text-[13px] leading-snug text-ink-700">{T.choiceUploadBody}</span>
+              </span>
+            </Link>
             <p className="mb-3 text-sm text-ink-700">{T.whatTitle}</p>
             <div className="grid gap-2.5 sm:grid-cols-2">
               <Tile icon={<Usb />} title={T.choiceCamera} body={T.choiceCameraBody} onClick={() => setStep("camera")} id="camera" />

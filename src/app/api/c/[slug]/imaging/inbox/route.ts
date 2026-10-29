@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
-import { nameWords } from "@/lib/imaging/ingest";
+import { hintWords, nameWords, type InboxHint } from "@/lib/imaging/ingest";
 
 /*
   Images a machine sent that nobody could place — waiting on the Imaging page
@@ -9,11 +9,14 @@ import { nameWords } from "@/lib/imaging/ingest";
 
   Each comes with up to three likely patients, from what the machine said
   about it: the same birth date counts most, then each word of the name they
-  share. Filing becomes one tap on the right name instead of a search — the
-  person still chooses; nothing is filed on a guess.
+  share. A file uploaded from a folder, whose machine said nothing, is read
+  the way a person would read it: x-ray software names its folders and files
+  after the patient ("Ababneh Rakan/PAN_20261028.jpg"). Filing becomes one
+  tap on the right name instead of a search — the person still chooses;
+  nothing is filed on a guess.
 */
 
-type Hint = { machine?: { id?: string; name?: string; birthDate?: string | null } };
+type Hint = InboxHint & { machine?: { id?: string } };
 
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
@@ -36,7 +39,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
 
     for (const row of rows) {
       const m = (row.hint as Hint | null)?.machine;
-      const words = m?.name ? nameWords(m.name) : [];
+      const words = hintWords(row.hint as Hint | null);
       const birth = m?.birthDate && /^\d{4}-\d{2}-\d{2}$/.test(m.birthDate) ? m.birthDate : null;
       row.suggestions = [];
       if (!words.length && !birth) continue;
@@ -47,6 +50,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
             where p.clinic_id = $1 and p.merged_into is null
               and (p.birth_date = $2::date
                    or exists (select 1 from unnest($3::text[]) w where ar_normalize(p.full_name) like '%' || ar_normalize(w) || '%'))
+            order by (select count(*) from unnest($3::text[]) w where ar_normalize(p.full_name) like '%' || ar_normalize(w) || '%') desc
             limit 30`,
           [g.access.clinicId, birth, words]
         )
