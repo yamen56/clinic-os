@@ -68,7 +68,7 @@ export type IngestResult =
       added: "new" | "series" | "duplicate";
       patientId: string;
       fileId: string;
-      matchedBy: "request" | "sender" | "machine_id" | "name_birth" | "series" | "open_request";
+      matchedBy: "request" | "sender" | "machine_id" | "name_birth" | "link" | "series" | "open_request";
       requestId: string | null;
     }
   | { placed: "inbox"; added: "new" | "series" | "duplicate"; inboxId: string }
@@ -121,6 +121,135 @@ export function hintWords(h: InboxHint | null | undefined): string[] {
   const said = h?.machine?.name ? nameWords(h.machine.name) : [];
   const raw = said.length ? said : [...nameWords(h?.folder ?? ""), ...nameWords((h?.originalName ?? "").replace(/\.[a-z0-9]{1,5}$/i, ""))];
   return [...new Set(raw.filter((w) => !/^\d+$/.test(w)))].slice(0, 12);
+}
+
+/* ---- What a machine calls a patient ------------------------------------- */
+
+/**
+ * The patient's Clinicti number, given to them on the machine as the name of
+ * their folder or file: "CLN-1042", "CLN1042_PAN.jpg". A Clinicti number
+ * cannot be mistaken for the machine's own numbering, so it is believed.
+ */
+const CLN_IN_NAME = /(?:^|[^a-z0-9])cln-?(\d{1,9})(?![0-9])/i;
+export function clinictiNumberIn(...names: (string | null | undefined)[]): string | null {
+  for (const n of names) {
+    const m = CLN_IN_NAME.exec(n ?? "");
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/** One way a machine named a patient: the key a link is kept under, as the machine wrote it, and its name words. */
+export type SourceKey = { key: string; label: string; words: string[] };
+
+const isNumber = (w: string) => /^\d+$/.test(w);
+
+/**
+ * The ways a machine's file says whose it is, most specific first: the
+ * machine's own patient ID inside a DICOM, the folder its software keeps the
+ * patient's pictures in, and the file name without its numbers (dates and
+ * counters change with every picture; "Ababneh_Rakan_PAN" does not). A
+ * folder or file with fewer than two words of name says nobody.
+ */
+export function sourceKeys(src: { machineId?: string | null; machineName?: string | null; folder?: string | null; fileName?: string | null }): SourceKey[] {
+  const keys: SourceKey[] = [];
+  const id = (src.machineId ?? "").trim();
+  const idKey = `id:${id.toLowerCase()}`;
+  // A Clinicti id is found directly; it needs no learning.
+  if (id && !isUuid(id) && !/^CLN-?\d{1,9}$/i.test(id)) {
+    keys.push({ key: idKey, label: id, words: nameWords(src.machineName ?? "").filter((w) => !isNumber(w)) });
+  }
+  const folder = (src.folder ?? "").trim();
+  const inFolder = nameWords(folder);
+  if (inFolder.filter((w) => !isNumber(w)).length >= 2) {
+    keys.push({ key: `folder:${inFolder.join(" ")}`, label: folder, words: inFolder.filter((w) => !isNumber(w)) });
+  }
+  const stem = (src.fileName ?? "").replace(/\.[a-z0-9]{1,5}$/i, "");
+  const inName = nameWords(stem).filter((w) => !isNumber(w));
+  if (inName.length >= 2) {
+    keys.push({
+      key: `file:${inName.join(" ")}`,
+      label: stem.replace(/\d+/g, " ").replace(/[\s_.\-]+/g, " ").trim(),
+      words: inName,
+    });
+  }
+  return keys;
+}
+
+/** How many of the patient's name words the machine's name holds — two, or all of a one-word name. */
+function namesThem(words: string[], fullName: string): boolean {
+  const theirs = new Set(nameWords(fullName));
+  return theirs.size > 0 && words.filter((w) => theirs.has(w)).length >= Math.min(2, theirs.size);
+}
+
+/** No other patient of the clinic has a name holding all of these words. */
+async function nobodyElseCalled(c: PoolClient, clinicId: string, words: string[], patientId: string): Promise<boolean> {
+  if (!words.length) return false;
+  const r = await c.query(
+    `select full_name from patients
+      where clinic_id = $1 and merged_into is null and id <> $2
+        and ar_normalize(full_name) like '%' || ar_normalize($3) || '%'`,
+    [clinicId, patientId, words[0]]
+  );
+  return !r.rows.some((p: { full_name: string }) => {
+    const theirs = new Set(nameWords(p.full_name));
+    return words.every((w) => theirs.has(w));
+  });
+}
+
+/**
+ * The patient a person once said this machine's name means. A machine ID is
+ * believed only while the name inside the DICOM still shares a word with the
+ * patient (two programs may both number from 1); a folder or file name only
+ * while it names this patient and nobody else — a namesake registered since
+ * makes it a question again, answered in the inbox.
+ */
+async function linkedPatient(c: PoolClient, clinicId: string, keys: SourceKey[], machineName: string | null): Promise<{ id: string; full_name: string } | null> {
+  if (!keys.length) return null;
+  const r = await c.query(`select key, patient_id from imaging_patient_links where clinic_id = $1 and key = any($2::text[])`, [
+    clinicId,
+    keys.map((k) => k.key),
+  ]);
+  for (const k of keys) {
+    const link = r.rows.find((x: { key: string }) => x.key === k.key);
+    if (!link) continue;
+    const p = await findPatientByRef(c, clinicId, link.patient_id);
+    if (!p) continue;
+    const theirs = new Set(nameWords(p.full_name));
+    if (k.key.startsWith("id:")) {
+      if (!nameWords(machineName ?? "").some((w) => theirs.has(w))) continue;
+    } else if (!(await nobodyElseCalled(c, clinicId, k.words.filter((w) => theirs.has(w)), p.id))) {
+      continue;
+    }
+    await c.query(`update imaging_patient_links set last_used_at = now() where clinic_id = $1 and key = $2`, [clinicId, k.key]);
+    return p;
+  }
+  return null;
+}
+
+/**
+ * A person filed a picture to a patient: what the machine called it now
+ * means that patient, from the next picture on. Only a name that holds the
+ * patient's own name is learned — a date folder, "Images" or "PAN_0001"
+ * never becomes anybody's — and filing it elsewhere later moves the link.
+ */
+export async function learnLinks(
+  c: PoolClient,
+  o: { clinicId: string; patient: { id: string; full_name: string }; machine?: { id?: string; name?: string } | null; folder?: string | null; fileName?: string | null; userId: string }
+): Promise<string[]> {
+  const keys = sourceKeys({ machineId: o.machine?.id, machineName: o.machine?.name, folder: o.folder, fileName: o.fileName });
+  const learned: string[] = [];
+  for (const k of keys) {
+    if (!namesThem(k.words, o.patient.full_name)) continue;
+    await c.query(
+      `insert into imaging_patient_links (clinic_id, patient_id, key, label, created_by) values ($1, $2, $3, $4, $5)
+       on conflict (clinic_id, key) do update
+         set patient_id = excluded.patient_id, label = excluded.label, created_by = excluded.created_by, created_at = now(), last_used_at = null`,
+      [o.clinicId, o.patient.id, k.key, k.label.slice(0, 120), o.userId]
+    );
+    learned.push(k.label);
+  }
+  return learned;
 }
 
 /**
@@ -346,6 +475,31 @@ export async function ingestImage(input: IngestInput, run: Run): Promise<IngestR
         }
       }
       /*
+        The machine's software, told who the patient is in Clinicti's words:
+        their Clinicti number as the name of the folder or the file.
+      */
+      if (!patient) {
+        const n = clinictiNumberIn(input.folder, input.fileName);
+        const found = n ? await findPatientByRef(c, clinicId, `CLN-${n}`) : null;
+        if (found) {
+          patient = found;
+          matchedBy = "machine_id";
+        }
+      }
+      /*
+        What a person once told Clinicti this machine's name for a patient
+        means — learned the first time they filed one of its pictures — so
+        every picture after it goes straight to them.
+      */
+      if (!patient) {
+        const keys = sourceKeys({ machineId: meta?.patient.id, machineName: meta?.patient.name, folder: input.folder, fileName: input.fileName });
+        const found = await linkedPatient(c, clinicId, keys, meta?.patient.name ?? null);
+        if (found) {
+          patient = found;
+          matchedBy = "link";
+        }
+      }
+      /*
         Which open requests this file may answer. One that names a machine is
         that machine's alone. "Take x-ray" or "Take photo" wants a picture —
         never an STL or a PDF; "Request from device" with no machine named
@@ -533,7 +687,7 @@ export function storedPaths(row: { storage_path: string; dicom?: DicomRecord | n
 export async function fileInboxItem(
   c: PoolClient,
   opts: { clinicId: string; inboxId: string; patientId: string; teeth?: string[]; userId: string; impersonatedBy?: string | null }
-): Promise<{ fileId: string; patientId: string } | { error: "not_found" | "patient_not_found" }> {
+): Promise<{ fileId: string; patientId: string; learned: string[] } | { error: "not_found" | "patient_not_found" }> {
   const r = await c.query(
     `select * from imaging_inbox where id = $1 and clinic_id = $2 and assigned_at is null and discarded_at is null for update`,
     [opts.inboxId, opts.clinicId]
@@ -573,6 +727,16 @@ export async function fileInboxItem(
     fileId,
     opts.userId,
   ]);
+  // Whose it is, now a person has said so: the machine's next picture of them needs nobody.
+  const hint = (item.hint ?? {}) as InboxHint;
+  const learned = await learnLinks(c, {
+    clinicId: opts.clinicId,
+    patient,
+    machine: dicom?.machinePatient ?? hint.machine ?? null,
+    folder: hint.folder,
+    fileName: hint.originalName ?? item.file_name,
+    userId: opts.userId,
+  });
   await audit(c, {
     clinicId: opts.clinicId,
     userId: opts.userId,
@@ -580,7 +744,7 @@ export async function fileInboxItem(
     action: "imaging.inbox.file",
     entity: "patient_file",
     entityId: fileId,
-    detail: { patientId: patient.id, inbox: item.id, name: item.file_name },
+    detail: { patientId: patient.id, inbox: item.id, name: item.file_name, learned },
   });
-  return { fileId, patientId: patient.id };
+  return { fileId, patientId: patient.id, learned };
 }

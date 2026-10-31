@@ -69,7 +69,7 @@ export async function POST(req: Request, ctx: Params) {
       })
     );
     if ("error" in r) return NextResponse.json({ error: r.error }, { status: 404 });
-    return NextResponse.json({ ok: true, fileId: r.fileId, patientId: r.patientId });
+    return NextResponse.json({ ok: true, fileId: r.fileId, patientId: r.patientId, learned: r.learned });
   }
 
   const gone = await inClinic(access, async (c) => {

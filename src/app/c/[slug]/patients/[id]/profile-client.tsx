@@ -1102,6 +1102,8 @@ export function PatientProfile(props: {
           <FilesTab
             slug={slug}
             patientId={p.id}
+            patientName={p.full_name}
+            fileNo={p.file_no}
             files={props.files}
             tz={tz}
             hub={props.filesHub ?? null}

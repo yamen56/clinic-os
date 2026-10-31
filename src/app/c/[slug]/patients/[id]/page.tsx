@@ -396,6 +396,8 @@ async function loadFilesHub(c: PoolClient, clinicId: string, patientId: string, 
               from imaging_inbox i left join clinic_devices d on d.id = i.device_id
              where i.clinic_id = $2 and i.assigned_at is null and i.discarded_at is null
              order by i.received_at desc limit 200) x) as inbox,
+         (select coalesce(json_agg(json_build_object('id', l.id, 'label', l.label, 'key', l.key) order by l.created_at), '[]')
+            from imaging_patient_links l where l.clinic_id = $2 and l.patient_id = $1) as links,
          (select json_build_object('specialty', cl.specialty, 'specialties', cl.specialties) from clinics cl where cl.id = $2) as clinic`,
       [patientId, clinicId]
     )
@@ -424,6 +426,8 @@ async function loadFilesHub(c: PoolClient, clinicId: string, patientId: string, 
     devices: r.devices as { id: string; name: string; kind: string }[],
     waiting: r.waiting as { id: string; kind: string; note: string; device: string | null; createdAt: string; teeth: string[] }[],
     likely,
+    // What the clinic's machines call this patient, learned when somebody filed one of their pictures.
+    links: r.links as { id: string; label: string; key: string }[],
     // The kinds of result this clinic's fields keep, in their order (lib/specialty-profile).
     kinds: profileFor(practises).files,
   };

@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, Download, FileText, FolderUp, LoaderCircle, Radio, Smile, Trash2, Upload, X } from "lucide-react";
+import { Camera, Copy, Download, FileText, FolderUp, LoaderCircle, Radio, Smile, Trash2, Upload, X } from "lucide-react";
 import { folderItems, resultsIn } from "@/lib/imaging/folder-files";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtRelative } from "@/lib/dates";
@@ -50,6 +50,8 @@ export type FilesHub = {
     /** The folder it was uploaded from, when that is what named the patient. */
     folder?: string | null;
   }[];
+  /** What the clinic's machines call this patient — learned when somebody filed one of their pictures. */
+  links: { id: string; label: string; key: string }[];
   /** Result kinds the clinic's specialties keep, in their order. */
   kinds: string[];
   canMessage: boolean;
@@ -62,6 +64,8 @@ const isPicture = (mime: string) => /^image\/(png|jpe?g|webp|gif|bmp)$/.test(mim
 export function FilesTab({
   slug,
   patientId,
+  patientName,
+  fileNo,
   files,
   tz,
   hub,
@@ -69,6 +73,9 @@ export function FilesTab({
 }: {
   slug: string;
   patientId: string;
+  patientName: string;
+  /** Their Clinicti number: "CLN-<n>" given to them on a machine's software finds them by itself. */
+  fileNo: number | null;
   files: PatientFileRow[];
   tz: string;
   hub: FilesHub | null;
@@ -91,6 +98,11 @@ export function FilesTab({
   const [asking, setAsking] = useState(false);
   const [waiting, setWaiting] = useState(hub?.waiting ?? []);
   const [likely, setLikely] = useState(hub?.likely ?? []);
+  const [links, setLinks] = useState(hub?.links ?? []);
+  useEffect(() => setLinks(hub?.links ?? []), [hub?.links]);
+  // Clinics whose machines send results: where telling a machine who the patient is matters.
+  const machines = !!hub && (hub.devices.length > 0 || links.length > 0 || hub.kinds.some((k) => ["xray", "ecg", "ultrasound", "scan"].includes(k)));
+  const machineId = fileNo != null ? `CLN-${fileNo}` : null;
   const [teeth, setTeeth] = useState<Record<string, string[]>>(() => Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []])));
   const [sending, setSending] = useState<{ img: ChartImage; caption: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -190,8 +202,20 @@ export function FilesTab({
       body: JSON.stringify({ op: "file", patientId }),
     });
     if (!res.ok) return toast(t.common.genericError, "error");
+    const body = (await res.json().catch(() => null)) as { learned?: string[] } | null;
     setLikely((prev) => prev.filter((l) => l.id !== id));
+    if (body?.learned?.length) toast(T.learned.replace("{name}", body.learned[0]).replace("{patient}", patientName));
     router.refresh();
+  };
+
+  const forget = async (link: FilesHub["links"][number]) => {
+    setLinks((prev) => prev.filter((l) => l.id !== link.id));
+    const res = await fetch(`/api/c/${slug}/imaging/links/${link.id}`, { method: "DELETE" }).catch(() => null);
+    if (!res?.ok) {
+      setLinks((prev) => [...prev, link]);
+      return toast(t.common.genericError, "error");
+    }
+    toast(T.forgotten.replace("{name}", link.label));
   };
 
   const pin = useCallback(
@@ -294,6 +318,57 @@ export function FilesTab({
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Who this patient is on the machine: the number to give them there, and the names it has already been taught. */}
+        {machines && (machineId || links.length > 0) && (
+          <div className="mt-3 grid gap-2 border-t border-line pt-3 text-[13px] text-ink-700" data-machine-id={machineId ?? ""}>
+            {machineId && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>{T.machineIdIntro}</span>
+                <button
+                  type="button"
+                  dir="ltr"
+                  onClick={() =>
+                    navigator.clipboard?.writeText(machineId).then(
+                      () => toast(t.common.copied),
+                      () => toast(t.common.genericError, "error")
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-md bg-sunken px-2 py-0.5 font-semibold text-ink-900 tnum hover:bg-line"
+                  aria-label={`${t.common.copy} ${machineId}`}
+                  data-machine-id-copy
+                >
+                  {machineId}
+                  <Copy className="h-3.5 w-3.5 text-ink-500" />
+                </button>
+                <span className="text-ink-500">{T.machineIdHint}</span>
+              </div>
+            )}
+            {links.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5" data-machine-links>
+                <span className="text-ink-500">{T.knownAs}</span>
+                {links.map((l) => (
+                  <span
+                    key={l.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-line bg-surface py-0.5 pe-1 ps-2.5 text-[12.5px] font-semibold text-ink-900"
+                    data-machine-link={l.id}
+                  >
+                    <span dir="auto">{l.key.startsWith("id:") ? T.machinePatientId.replace("{id}", l.label) : l.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => forget(l)}
+                      aria-label={`${T.forgetLink}: ${l.label}`}
+                      className="grid h-5 w-5 place-items-center rounded-full text-ink-500 hover:bg-sunken hover:text-ink-900"
+                      data-forget-link
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </Card>
 

@@ -754,7 +754,7 @@ function InboxRow({
 
   const post = async (url: string, body: unknown) => {
     const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    const json = (await res.json().catch(() => null)) as { fileId?: string } | null;
+    const json = (await res.json().catch(() => null)) as { fileId?: string; learned?: string[] } | null;
     if (!res.ok) throw new Error("inbox");
     return json;
   };
@@ -779,7 +779,14 @@ function InboxRow({
           }
         }
       }
-      toast(filed > 1 ? T.filedMany.replace("{n}", String(filed)).replace("{patient}", name) : T.filed.replace("{patient}", name));
+      // Filed by a person once: say that the machine's name for them now leads here by itself.
+      toast(
+        r?.learned?.length
+          ? t.devices.learned.replace("{name}", r.learned[0]).replace("{patient}", name)
+          : filed > 1
+            ? T.filedMany.replace("{n}", String(filed)).replace("{patient}", name)
+            : T.filed.replace("{patient}", name)
+      );
       onDone(item.id, requestId);
     } catch {
       toast(T.failed, "error");

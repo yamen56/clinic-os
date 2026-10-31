@@ -173,7 +173,12 @@ async function main() {
     check((await page.locator("[data-patient-upload-folder]").innerText()).includes("Upload a folder"), "a patient's Files has Upload a folder");
     await page.locator("[data-patient-folder-input]").setInputFiles(cd);
     await page.waitForSelector("[data-file-tile]", { timeout: 120000 });
-    await page.waitForTimeout(1500);
+    // The slices go up one after another; the first makes the tile, the rest join it.
+    for (let i = 0; i < 60; i++) {
+      const f = await filesOf(sara);
+      if (f.length === 1 && f[0].dicom?.instances?.length === 3) break;
+      await page.waitForTimeout(1000);
+    }
     const saraFiles = await filesOf(sara);
     check(
       saraFiles.length === 1 && saraFiles[0].dicom?.instances?.length === 3,
@@ -181,6 +186,72 @@ async function main() {
       JSON.stringify(saraFiles.map((f) => [f.file_name, f.mime_type, f.dicom?.instances?.length]))
     );
     await page.screenshot({ path: join(SHOTS, "2-patient-cd.png"), fullPage: true });
+
+    console.log("\nthe machine's next picture finds its patient by itself");
+    // Nobody in the chair from here on: what follows is the machine's own name for each patient.
+    await q(`update imaging_requests set cancelled_at = now() where id = $1`, [chair.id]);
+    const links = (p: string) => q(`select id, key, label from imaging_patient_links where patient_id = $1 order by created_at`, [p]);
+    const rakanLinks = await links(rakan);
+    check(rakanLinks.length === 1 && rakanLinks[0].key === "folder:ababneh rakan", "filing Rakan's folder once taught Clinicti what the machine calls him", JSON.stringify(rakanLinks));
+    check(!(await q(`select 1 from imaging_patient_links where clinic_id = $1 and key like 'folder:pano%'`, [clinic.id])).length, "and the folder the upload started from taught nothing");
+    /** One picture, as the watched folder sends it the moment the machine saves it. */
+    const live = async (name: string, data: Buffer, folder: string | null, mimeType = "image/jpeg") => {
+      const res = await page.request.post(`${BASE}/api/c/${slug}/imaging/receive`, {
+        multipart: { file: { name, mimeType, buffer: data }, kind: "xray", ...(folder ? { folder } : {}) },
+      });
+      return (await res.json()) as { placed?: string; patientId?: string; inboxId?: string };
+    };
+    let r = await live("PAN_20261031.jpg", await jpeg(160), "Ababneh Rakan");
+    check(r.placed === "patient" && r.patientId === rakan, "a new x-ray saved in his folder goes straight to Rakan", JSON.stringify(r));
+    mkdirSync(join(root, "Next", "Ababneh Rakan"), { recursive: true });
+    writeFileSync(join(root, "Next", "Ababneh Rakan", "PAN_20261101.jpg"), await jpeg(170));
+    await page.goto(`${BASE}/c/${slug}/devices`, { timeout: 180000 });
+    await page.locator("[data-folder-input]").setInputFiles(join(root, "Next"));
+    await page.waitForFunction(() => document.querySelector("[data-bulk-done]")?.getAttribute("data-bulk-done") === "1/0/0/0", null, { timeout: 60000 }).catch(() => null);
+    check((await page.locator("[data-bulk-done]").getAttribute("data-bulk-done")) === "1/0/0/0", "and so does one in an uploaded folder", (await page.locator("[data-bulk-done]").getAttribute("data-bulk-done")) ?? "");
+    check((await filesOf(rakan)).length === 4, "Rakan's Files now hold all four");
+
+    const [{ file_no: saraNo }] = await q(`select file_no from patients where id = $1`, [sara]);
+    r = await live(`CLN-${saraNo}_PAN.jpg`, await jpeg(60), "Today");
+    check(r.placed === "patient" && r.patientId === sara, "a picture the machine saved under Sara's Clinicti number goes to Sara", JSON.stringify(r));
+
+    const vendor = (name: string) =>
+      makeDicom({ sopUid: uid(), seriesUid: uid(), studyUid: uid(), patientId: "VND-500", patientName: name, description: "Panoramic" });
+    r = await live("IM0100", vendor("Haddad^Sara"), null, "application/dicom");
+    check(r.placed === "inbox", "the machine's own ID for Sara, never seen before, waits to be filed", JSON.stringify(r));
+    const filedVendor = await page.request.post(`${BASE}/api/c/${slug}/imaging/inbox/${r.inboxId}`, { data: { op: "file", patientId: sara } });
+    const filedBody = (await filedVendor.json()) as { learned?: string[] };
+    check(filedBody.learned?.includes("VND-500"), "filing it once teaches the machine's ID", JSON.stringify(filedBody));
+    r = await live("IM0101", vendor("Haddad^Sara"), null, "application/dicom");
+    check(r.placed === "patient" && r.patientId === sara, "the machine's next x-ray under that ID goes to Sara by itself", JSON.stringify(r));
+    r = await live("IM0102", vendor("Aziz^Omar"), null, "application/dicom");
+    check(r.placed === "inbox", "but not one the machine says belongs to somebody else under the same ID", JSON.stringify(r));
+
+    console.log("\nthe patient's file shows it");
+    await page.goto(`${BASE}/c/${slug}/patients/${omar}?tab=files`, { timeout: 180000 });
+    await page.waitForSelector("[data-likely-file]", { timeout: 120000 });
+    check((await page.locator("[data-machine-id]").getAttribute("data-machine-id")) === "CLN-2", "Omar's Files gives his number for the machine: CLN-2");
+    check((await page.locator("[data-machine-id]").innerText()).includes("every picture of them comes here by itself"), "and says what it is for");
+    // The one from his folder — the DICOM that names him under Sara's machine ID waits here too.
+    await page.locator("[data-likely]", { hasText: "Folder: Omar Aziz" }).locator("[data-likely-file]").click();
+    await page.waitForSelector("[data-machine-links]", { timeout: 30000 });
+    check((await page.locator("[data-machine-links]").innerText()).includes("Omar Aziz"), "filing the picture from his folder here teaches it too, and shows it", await page.locator("[data-machine-links]").innerText());
+    await page.screenshot({ path: join(SHOTS, "5-machine-id.png"), fullPage: true });
+
+    await page.goto(`${BASE}/c/${slug}/patients/${rakan}?tab=files`, { timeout: 180000 });
+    await page.waitForSelector("[data-forget-link]", { timeout: 120000 });
+    // The chip goes at once; the server's answer is what counts.
+    const forgotten = page.waitForResponse((res) => res.url().includes("/imaging/links/") && res.request().method() === "DELETE", { timeout: 60000 });
+    await page.locator("[data-forget-link]").first().click();
+    check((await forgotten).ok() && !(await page.locator("[data-forget-link]").count()), "the link goes from Rakan's file at a tap");
+    check((await links(rakan)).length === 0, "forgetting the link on Rakan's file forgets it");
+    r = await live("PAN_20261102.jpg", await jpeg(180), "Ababneh Rakan");
+    check(r.placed === "inbox", "and his folder's next picture waits to be filed again", JSON.stringify(r));
+    await page.request.post(`${BASE}/api/c/${slug}/imaging/inbox/${r.inboxId}`, { data: { op: "file", patientId: rakan } });
+    check((await links(rakan)).length === 1, "until it is filed to him once more");
+    await patient("Rakan Ababneh Hadi", null);
+    r = await live("PAN_20261103.jpg", await jpeg(190), "Ababneh Rakan");
+    check(r.placed === "inbox", "a second Rakan Ababneh registered since makes the folder a question again, not a guess", JSON.stringify(r));
 
     console.log("\nconnect a machine starts with the way that needs no setup");
     await page.goto(`${BASE}/c/${slug}/settings/devices`, { timeout: 180000 });
