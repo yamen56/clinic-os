@@ -1005,6 +1005,7 @@ export const en = {
     patient: "Patient",
     searchOrCreate: "Search by name or phone…",
     createNew: "Create new patient",
+    createNamed: "Create “{q}” as a new patient",
     service: "Service",
     doctor: "Doctor",
     anyDoctor: "Any doctor",
@@ -1014,6 +1015,7 @@ export const en = {
     start: "Start",
     duration: "Duration",
     colorBy: "Color",
+    unconfirmedOnly: "Not confirmed",
     byService: "By service",
     byDoctor: "By doctor",
     statuses: {
@@ -1101,6 +1103,8 @@ export const en = {
     call: "Call",
     createInvoice: "Create invoice",
     bookNext: "Book next visit",
+    billedInvoice: "Billed · {number}",
+    paidInvoice: "Paid · {number}",
     expected: "Expected",
     waitingNow: "Waiting",
     inRooms: "In rooms",
@@ -2752,6 +2756,7 @@ export const en = {
     sendReceipt: "Send receipt",
     resendInvoice: "Re-send invoice",
     receiptSent: "Receipt sent",
+    settledSendReceipt: "Paid in full. Send the receipt on WhatsApp while they are here.",
     receiptNeedsFullPayment: "A receipt is issued once the invoice is paid in full.",
     doctor: "Doctor",
     doctorHint:
@@ -2890,6 +2895,10 @@ export const en = {
     fromChartHint: "Dental chart work not billed yet. Add it from here and the chart shows it billed.",
     addAll: "Add all",
     alreadyBilled: "Some of this chart work is on an invoice already. Refresh to see what is left to bill.",
+    visitAlreadyBilled: "This visit is already billed on {number}.",
+    openIt: "Open it",
+    visitLine: "Visit: {visit}",
+    backToToday: "Back to today",
     chartChanged: "This chart work has changed, or is not this patient's. Refresh and try again.",
     /* How chart work reads on an invoice line: "Crown (Zirconia) — tooth 36". */
     chartLine: {
@@ -2942,6 +2951,9 @@ export const en = {
     patientUnlinked: "Unlinked",
     markDone: "Close conversation",
     reopen: "Reopen",
+    done: "Done",
+    handled: "Handled",
+    patientPanel: "Patient details",
   },
   wa: {
     title: "WhatsApp connection",

@@ -63,6 +63,7 @@ const ar = {
   testBody: "إن وصلك هذا فالإشعارات تعمل على هذا الجهاز.",
   heldTitle: (n: number) => `${n} إشعارات جديدة`,
   heldBody: "وصلت أثناء ساعات الهدوء.",
+  aiBooked: (p: string) => `حجز جديد من المساعد الذكي: ${p}`,
 };
 
 const en: typeof ar = {
@@ -96,6 +97,7 @@ const en: typeof ar = {
   testBody: "If you can see this, notifications work on this device.",
   heldTitle: (n) => `${n} new notifications`,
   heldBody: "They arrived during your quiet hours.",
+  aiBooked: (p) => `New booking by the AI receptionist: ${p}`,
 };
 
 export const NT: Record<NLocale, typeof ar> = { ar, en };

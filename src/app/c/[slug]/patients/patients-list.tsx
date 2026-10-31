@@ -17,6 +17,7 @@ import { Modal } from "@/components/ui/modal";
 import { ReauthPrompt } from "@/components/reauth-prompt";
 import { useToast } from "@/components/ui/toast";
 import { createPatientAction } from "./actions";
+import { splitTyped } from "@/components/appointments/patient-picker";
 import { Users, Plus, Upload, Download, BellOff, Sheet } from "lucide-react";
 
 type Row = {
@@ -453,6 +454,18 @@ export function PatientsList({
           action={
             !f.q && !f.tag && !f.source ? (
               <Button onClick={() => setNewOpen(true)}>{t.patients.newPatient}</Button>
+            ) : f.q.trim().length >= 2 ? (
+              /* Nobody by that name or number: they are new, and what was searched is how they start. */
+              <Button
+                onClick={() => {
+                  const typed = splitTyped(f.q);
+                  setNw({ ...blankNew, name: typed.fullName, phone: typed.phone });
+                  setNewOpen(true);
+                }}
+                data-create-searched
+              >
+                {t.calendar.createNamed.replace("{q}", f.q.trim())}
+              </Button>
             ) : undefined
           }
         />

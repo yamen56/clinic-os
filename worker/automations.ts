@@ -712,7 +712,16 @@ async function runStep(env: Env, step: Step): Promise<StepResult> {
         if (doc) users.add(doc);
       }
       const slug = (await c.query(`select slug from clinics where id = $1`, [run.clinic_id])).rows[0]?.slug;
-      const url = run.patient_id ? `/c/${slug}/patients/${run.patient_id}` : run.conversation_id ? `/c/${slug}/conversations` : undefined;
+      /*
+        Onto what the flow was about: a reply that needs a person opens on the
+        patient's conversation (a member who may not read it lands on the
+        file), a thread with no file yet on the thread itself.
+      */
+      const url = run.patient_id
+        ? `/c/${slug}/patients/${run.patient_id}${run.conversation_id ? "?tab=conversation" : ""}`
+        : run.conversation_id
+          ? `/c/${slug}/conversations?open=${run.conversation_id}`
+          : undefined;
       for (const userId of users) {
         await notifyUser(c, userId, { clinicId: run.clinic_id, kind: "automation", title, body, url });
       }

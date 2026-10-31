@@ -36,6 +36,9 @@ import {
   TriangleAlert,
   Landmark,
   Trash2,
+  CalendarClock,
+  CalendarPlus,
+  ArrowLeft,
 } from "lucide-react";
 
 const invStatus: Record<string, StatusKey> = {
@@ -103,7 +106,16 @@ export function InvoiceDetailClient({
   insurers,
   filesEinvoices,
   canVoid,
+  visit = null,
+  canBook = false,
+  fromBoard = false,
 }: {
+  /** The visit it was raised from, when it was. */
+  visit?: { id: string; starts_at: string; doctor_member_id: string | null; service_id: string | null; service_name: string | null; service_name_ar: string | null } | null;
+  /** May book appointments — Book next visit leads to the calendar. */
+  canBook?: boolean;
+  /** Opened from the Today board's finished card: Back to today. */
+  fromBoard?: boolean;
   slug: string;
   invoice: Invoice;
   items: {
@@ -373,6 +385,46 @@ export function InvoiceDetailClient({
         />
       ) : (
         inv.title && <p className="-mt-3 mb-5 text-[15px] font-medium text-ink-700">{inv.title}</p>
+      )}
+
+      {/*
+        The visit this bills, and the desk's next step once it is paid: the
+        next visit, with the same doctor for the same thing — or back to the
+        board it was raised from. The invoice used to be where checkout ended.
+      */}
+      {(visit || fromBoard) && (
+        <div className="-mt-2 mb-5 flex flex-wrap items-center gap-2" data-invoice-visit>
+          {visit && (
+            <Link
+              href={`/c/${slug}/calendar?open=${visit.id}`}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-sunken px-3 text-[13px] text-ink-700 hover:bg-line"
+            >
+              <CalendarClock className="h-3.5 w-3.5 text-ink-400" />
+              {t.invoices.visitLine.replace(
+                "{visit}",
+                [fmtDateTime(visit.starts_at, inv.timezone, locale), (locale === "ar" ? visit.service_name_ar : null) || visit.service_name]
+                  .filter(Boolean)
+                  .join(" · ")
+              )}
+            </Link>
+          )}
+          {canBook && inv.status !== "void" && (
+            <Link
+              href={`/c/${slug}/calendar?patient=${inv.patient_id}${visit?.doctor_member_id ? `&doctor=${visit.doctor_member_id}` : ""}${visit?.service_id ? `&service=${visit.service_id}` : ""}`}
+              className={buttonClass({ variant: "outline", size: "sm" })}
+              data-invoice-book-next
+            >
+              <CalendarPlus className="h-4 w-4" />
+              {t.flow.bookNext}
+            </Link>
+          )}
+          {fromBoard && (
+            <Link href={`/c/${slug}/calendar?tab=today`} className={buttonClass({ variant: "ghost", size: "sm" })}>
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+              {t.invoices.backToToday}
+            </Link>
+          )}
+        </div>
       )}
 
       {/*

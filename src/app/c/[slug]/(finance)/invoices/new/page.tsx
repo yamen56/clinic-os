@@ -6,7 +6,8 @@ import { NewInvoiceClient } from "./new-invoice-client";
 import { can } from "@/lib/auth";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 import { loadServicesWithSections } from "@/lib/services";
-import { chartLines, type ChartLine } from "@/lib/charts/dental/billing-server";
+import { billableMarks, chartLines, type ChartLine } from "@/lib/charts/dental/billing-server";
+import { ownInvoicesOnly } from "@/lib/invoice-scope";
 import { dictFor } from "@/lib/i18n/client-dict";
 import { getLocale } from "@/lib/i18n";
 import { billsFromCharts } from "@/lib/features";
@@ -16,7 +17,7 @@ export default async function NewInvoicePage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ patient?: string; appointment?: string; marks?: string }>;
+  searchParams: Promise<{ patient?: string; appointment?: string; marks?: string; from?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -98,7 +99,53 @@ export default async function NewInvoicePage({
     if (patient && markIds.length && billsFromCharts(access.clinic.features)) {
       initialLines = await chartLines(c, access.clinicId, patient.id, markIds, locale, dictFor(locale).invoices.chartLine);
     }
-    return { services, sections, doctors, clinic, patient, appointment, einvoice, initialLines };
+    /*
+      An invoice raised from a visit bills what was done at it. The chart says
+      what that was — the treatments recorded at this appointment, or a step
+      of one — so those are the lines, rather than the service it was booked
+      for: booked as a check-up, the visit that ended in a filling bills the
+      filling. Only work still waiting to be billed; a treatment billed whole
+      at its first visit is not billed again at the second.
+    */
+    if (patient && appointment && !markIds.length && billsFromCharts(access.clinic.features)) {
+      const own = ownInvoicesOnly(access);
+      if (!own || access.memberId) {
+        const waiting = await billableMarks(c, access.clinicId, patient.id, own ? access.memberId! : null);
+        if (waiting.length) {
+          const atVisit = (
+            await c.query(
+              `select l.id from chart_marks l
+                where l.id = any($1::uuid[])
+                  and exists (
+                    select 1 from chart_marks m
+                     where m.clinic_id = $2 and coalesce(m.group_id, m.id) = coalesce(l.group_id, l.id) and m.voided_at is null
+                       and (m.appointment_id = $3
+                            or exists (select 1 from chart_mark_steps s where s.mark_id = m.id and s.appointment_id = $3 and s.voided_at is null)))`,
+              [waiting, access.clinicId, appointment.id]
+            )
+          ).rows.map((r) => r.id as string);
+          // In the order billing would list them.
+          const ids = waiting.filter((id) => atVisit.includes(id));
+          if (ids.length) initialLines = await chartLines(c, access.clinicId, patient.id, ids, locale, dictFor(locale).invoices.chartLine);
+        }
+      }
+    }
+    /*
+      Billed already: say so, with the invoice, before a second one is made.
+      Not refused — a visit may honestly need two (a second treatment added
+      later) — but never by accident from a card that did not know.
+    */
+    const existing = appointment
+      ? ((
+          await c.query(
+            `select i.id, i.number from invoices i
+              where i.clinic_id = $1 and i.appointment_id = $2 and i.status <> 'void' and i.credit_note_of is null
+              order by i.created_at desc limit 1`,
+            [access.clinicId, appointment.id]
+          )
+        ).rows[0] as { id: string; number: string } | undefined) ?? null
+      : null;
+    return { services, sections, doctors, clinic, patient, appointment, einvoice, initialLines, existing };
   });
 
   return (
@@ -117,6 +164,8 @@ export default async function NewInvoicePage({
       einvoice={data.einvoice}
       initialLines={data.initialLines}
       chartBilling={billsFromCharts(access.clinic.features)}
+      existingInvoice={data.existing}
+      fromBoard={sp.from === "board"}
     />
   );
 }

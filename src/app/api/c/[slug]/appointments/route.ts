@@ -165,6 +165,41 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       );
       const due = new Map(owed.rows.map((r) => [r.patient_id as string, Number(r.due)]));
       appointments = appointments.map((a) => (due.has(a.patient_id) ? { ...a, balance_due: due.get(a.patient_id) } : a));
+
+      /*
+        Whether a finished visit is billed, and by which invoice: raised from
+        the visit itself, or carrying chart work done at it — a treatment
+        billed whole at its first visit covers the steps of the later ones.
+        Without it every finished card offered "Create invoice", and the
+        second press made a second invoice.
+      */
+      const finished = appointments.filter((a) => a.status === "completed").map((a) => a.id as string);
+      if (finished.length) {
+        const billScope = invoiceScopeSql(access, "i", 3);
+        const billed = await c.query(
+          `select distinct on (x.appt) x.appt, i.id, i.number, i.status = 'paid' as paid
+             from (
+               select i.id as inv, i.appointment_id as appt from invoices i
+                where i.clinic_id = $1 and i.appointment_id = any($2::uuid[])
+               union
+               select ii.invoice_id, m.appointment_id from chart_marks m
+                 join invoice_item_marks iim on iim.mark_id = m.id
+                 join invoice_items ii on ii.id = iim.invoice_item_id
+                where m.clinic_id = $1 and m.appointment_id = any($2::uuid[])
+               union
+               select ii.invoice_id, s.appointment_id from chart_mark_steps s
+                 join invoice_item_marks iim on iim.mark_id = s.mark_id
+                 join invoice_items ii on ii.id = iim.invoice_item_id
+                where s.clinic_id = $1 and s.appointment_id = any($2::uuid[]) and s.voided_at is null
+             ) x
+             join invoices i on i.id = x.inv
+            where i.status <> 'void' and i.credit_note_of is null${billScope.sql}
+            order by x.appt, i.created_at desc`,
+          [access.clinicId, finished, ...billScope.params]
+        );
+        const bill = new Map(billed.rows.map((r) => [r.appt as string, { id: r.id as string, number: r.number as string, paid: !!r.paid }]));
+        appointments = appointments.map((a) => (bill.has(a.id) ? { ...a, invoice: bill.get(a.id) } : a));
+      }
     }
 
     return {

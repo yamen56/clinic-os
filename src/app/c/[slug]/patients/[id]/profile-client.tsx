@@ -1014,11 +1014,10 @@ export function PatientProfile(props: {
                     {fmtMoney(props.balanceDue, currency, locale)}
                   </div>
                   {/* Paid off over the visits: what the patient hands over goes on the oldest invoices first. */}
-                  {props.balanceDue > 0 && (
-                    <div className="mt-3">
-                      <TakePayment slug={slug} patientId={p.id} balance={props.balanceDue} currency={currency} />
-                    </div>
-                  )}
+                  {/* Always mounted: it hides itself at nothing owed, and stays to offer the receipt of what it settled. */}
+                  <div className="mt-3 empty:hidden">
+                    <TakePayment slug={slug} patientId={p.id} balance={props.balanceDue} currency={currency} />
+                  </div>
                 </Card>
               )}
               {caps.calendar && (
@@ -1035,7 +1034,14 @@ export function PatientProfile(props: {
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-1 text-sm text-ink-400">{t.patients.overview.noUpcoming}</p>
+                    /* Nothing booked is the moment to book — here, where it is noticed. */
+                    <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-ink-400">{t.patients.overview.noUpcoming}</p>
+                      <Link href={`/c/${slug}/calendar?patient=${p.id}`} className={buttonClass({ variant: "soft", size: "sm" })} data-upcoming-book>
+                        <CalendarPlus className="h-4 w-4" />
+                        {t.patients.bookAppointment}
+                      </Link>
+                    </div>
                   )}
                 </Card>
               )}

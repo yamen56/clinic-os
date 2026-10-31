@@ -30,6 +30,7 @@ import {
   Stethoscope,
   DoorClosed,
   Minus,
+  Check,
 } from "lucide-react";
 
 /**
@@ -272,16 +273,28 @@ export function FlowCard({
         )}
         {stage === "finished" && (
           <div className="flex flex-1 flex-wrap gap-1.5">
-            {caps.invoices && (
+            {/* Billed already: the invoice it is on, not a way to bill it twice. */}
+            {caps.invoices && appt.invoice && (
               <a
-                href={`/c/${slug}/invoices/new?patient=${appt.patient_id}&appointment=${appt.id}`}
+                href={`/c/${slug}/invoices/${appt.invoice.id}?from=board`}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-st-confirmed-soft px-3 text-[12.5px] font-semibold text-st-confirmed hover:opacity-90"
+                data-flow-billed={appt.invoice.paid ? "paid" : "billed"}
+              >
+                <Check className="h-3.5 w-3.5" />
+                {(appt.invoice.paid ? t.flow.paidInvoice : t.flow.billedInvoice).replace("{number}", appt.invoice.number)}
+              </a>
+            )}
+            {caps.invoices && !appt.invoice && (
+              <a
+                href={`/c/${slug}/invoices/new?patient=${appt.patient_id}&appointment=${appt.id}&from=board`}
                 className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
               >
                 <ReceiptText className="h-3.5 w-3.5" />
                 {t.flow.createInvoice}
               </a>
             )}
-            {owed > 0 && (
+            {/* Mounted while nothing is owed too: it hides itself, and stays open to offer the receipt of what it just settled. */}
+            {caps.invoices && !!currency && (
               <TakePayment
                 slug={slug}
                 patientId={appt.patient_id}

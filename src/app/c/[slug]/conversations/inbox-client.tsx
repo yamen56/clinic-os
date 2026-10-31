@@ -35,6 +35,7 @@ import {
   ArrowLeft,
   Trash2,
   Search,
+  X,
 } from "lucide-react";
 
 type ConvRow = {
@@ -128,6 +129,9 @@ export function InboxClient({
   const [saveQrOpen, setSaveQrOpen] = useState(false);
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
+  /* The patient panel below a wide screen: a drawer from the thread's header, closed on each new thread. */
+  const [panelOpen, setPanelOpen] = useState(false);
+  useEffect(() => setPanelOpen(false), [openId]);
   const [qrTitle, setQrTitle] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -425,14 +429,42 @@ export function InboxClient({
                     {t.conversations.assignToMe}
                   </Button>
                 )}
+                {/* Answered and nothing left to do: off the open list, flag and all, until they write again. */}
+                {cv.status === "closed" ? (
+                  <Button variant="ghost" size="sm" onClick={() => void command("status", { status: "open" })} data-thread-reopen>
+                    {t.conversations.reopen}
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => void command("status", { status: "closed" })} data-thread-done>
+                    <CheckCheck className="h-4 w-4" />
+                    <span className="max-sm:sr-only">{t.conversations.done}</span>
+                  </Button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPanelOpen(true)}
+                  aria-label={t.conversations.patientPanel}
+                  className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full text-ink-700 transition-colors hover:bg-sunken xl:hidden"
+                  data-open-patient-panel
+                >
+                  <UserRound className="h-5 w-5" strokeWidth={1.75} />
+                </button>
               </div>
             </div>
 
             {/* Messages */}
             <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto bg-subtle px-4 py-4">
-              {cv.flagged && cv.flag_reason && (
-                <div className="mx-auto mb-2 rounded-full bg-st-pending-soft px-4 py-1.5 text-[12px] font-medium text-st-pending">
-                  {cv.flag_reason}
+              {cv.flagged && (
+                <div className="mx-auto mb-2 flex items-center gap-2 rounded-full bg-st-pending-soft py-1 pe-1 ps-4 text-[12px] font-medium text-st-pending" data-thread-flag>
+                  <span>{cv.flag_reason || t.conversations.flagged}</span>
+                  <button
+                    type="button"
+                    onClick={() => void command("unflag")}
+                    className="rounded-full bg-surface px-2.5 py-1 text-[12px] font-semibold text-ink-700 shadow-card hover:bg-sunken"
+                    data-thread-unflag
+                  >
+                    {t.conversations.handled}
+                  </button>
                 </div>
               )}
               {thread.messages.map((m) => {
@@ -546,8 +578,28 @@ export function InboxClient({
       </div>
 
       {/* ------ Patient panel ------ */}
+      {thread && panelOpen && (
+        <button type="button" aria-label={t.common.close} onClick={() => setPanelOpen(false)} className="fixed inset-0 z-40 bg-night/25 animate-fade-in xl:hidden" />
+      )}
       {thread && (
-        <div className="hidden w-72 shrink-0 flex-col border-s border-line xl:flex">
+        <div
+          className={
+            panelOpen
+              ? "fixed inset-y-0 end-0 z-50 flex w-[min(20rem,100%)] flex-col bg-surface pt-[env(safe-area-inset-top)] shadow-pop animate-fade-in xl:static xl:z-auto xl:w-72 xl:shrink-0 xl:border-s xl:border-line xl:pt-0 xl:shadow-none"
+              : "hidden w-72 shrink-0 flex-col border-s border-line xl:flex"
+          }
+          data-patient-panel
+        >
+          <div className="flex justify-end px-2 pt-2 xl:hidden">
+            <button
+              type="button"
+              onClick={() => setPanelOpen(false)}
+              aria-label={t.common.close}
+              className="grid h-10 w-10 touch-manipulation place-items-center rounded-full text-ink-500 hover:bg-sunken"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
           {thread.patient ? (
             <div className="flex flex-col gap-4 overflow-y-auto p-4">
               <div className="flex flex-col items-center gap-2 text-center">

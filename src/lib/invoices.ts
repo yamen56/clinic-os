@@ -178,3 +178,17 @@ export async function refreshInvoiceStatus(c: PoolClient, invoiceId: string): Pr
 export const DELETABLE_INVOICE_SQL = `(i.status = 'void' and i.credit_note_of is null
   and i.einvoice_status not in ('submitted', 'pending')
   and not exists (select 1 from invoices cn where cn.credit_note_of = i.id))`;
+
+/**
+ * What "unpaid" means, on every screen that counts it: an invoice that still
+ * asks the patient for money. A draft counts — most are printed and handed
+ * over, never sent on WhatsApp, and are owed all the same — a credit note
+ * never does, and neither does one with nothing left to pay.
+ *
+ * The board's "owes", the patient's balance and Take payment always counted
+ * drafts; the dashboard and the invoice list's Unpaid did not, so the same
+ * patient owed money on one screen and nothing on the next.
+ */
+export function owedSql(alias: string): string {
+  return `(${alias}.status in ('draft', 'sent', 'partially_paid') and ${alias}.credit_note_of is null and ${alias}.total > ${alias}.amount_paid)`;
+}

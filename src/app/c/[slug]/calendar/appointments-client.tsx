@@ -47,7 +47,18 @@ export function AppointmentsClient({
   initialWaitlist,
   caps,
   showBoard,
+  initialDate,
+  unconfirmedOnly = false,
+  initialDoctorId = null,
+  initialServiceId = null,
 }: {
+  /** With initialPatient: the doctor and service a booking starts with. */
+  initialDoctorId?: string | null;
+  initialServiceId?: string | null;
+  /** ?date= — the day the Schedule opens on, from a link about that day. */
+  initialDate?: string | null;
+  /** ?show=unconfirmed — the Schedule opens on the visits nobody has confirmed. */
+  unconfirmedOnly?: boolean;
   slug: string;
   tz: string;
   isDoctor: boolean;
@@ -68,12 +79,13 @@ export function AppointmentsClient({
   const [tab, setTabState] = useState<Tab>(initialTab);
   const [schedule, setSchedule] = useState<ScheduleState>(() => ({
     view: initialView,
-    anchor: initialOpen?.date ?? DateTime.now().setZone(tz).toISODate()!,
+    anchor: initialOpen?.date ?? initialDate ?? DateTime.now().setZone(tz).toISODate()!,
     doctorFilter: isDoctor ? (selfMemberId ?? "") : "",
     serviceFilter: "",
     sectionFilter: "",
     colorBy: "service",
     groupBy: "doctor",
+    unconfirmedOnly,
   }));
   const [boardDoctor, setBoardDoctor] = useState(isDoctor ? (selfMemberId ?? "") : "");
   const [today, setToday] = useState<CalendarData | null>(null);
@@ -84,7 +96,8 @@ export function AppointmentsClient({
           mode: "create",
           patient: initialPatient,
           items: initialPlan?.items,
-          doctorId: initialPlan?.doctorId ?? undefined,
+          doctorId: initialPlan?.doctorId ?? initialDoctorId ?? undefined,
+          serviceId: initialServiceId ?? undefined,
           notes: initialPlan?.notes,
         }
       : openNew
@@ -131,7 +144,12 @@ export function AppointmentsClient({
   useEffect(() => {
     void refetchToday();
   }, [refetchToday]);
-  useRealtimeRefresh(slug, ["appointments", "clinic_rooms"], refetchToday);
+  /*
+    Money moves the board too: a payment taken on the file or the invoice
+    changes what a card says is owed, and a new invoice is what marks a
+    finished visit billed.
+  */
+  useRealtimeRefresh(slug, caps.invoices ? ["appointments", "clinic_rooms", "invoices"] : ["appointments", "clinic_rooms"], refetchToday);
 
   const onScheduleData = useCallback((d: CalendarData) => setScheduleData(d), []);
   const meta: CalendarMeta | null = scheduleData ?? today;

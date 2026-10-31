@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { BarChart, RowBar, type Point } from "@/components/ui/chart";
 import { QuickActions, type QuickAction } from "./quick-actions";
 import { TodayList } from "./today-list";
+import { owedSql } from "@/lib/invoices";
 import {
   CalendarDays,
   CalendarCheck,
@@ -156,13 +157,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           }
           (select count(*) from appointments where clinic_id=$1 and starts_at >= $2 and starts_at < $3 and status='no_show')::int as noshow,
           (select count(*) from appointments where clinic_id=$1 and starts_at >= $2 and starts_at < $3 and status in ('completed','no_show'))::int as finished,
-          (select count(*) from invoices i where i.clinic_id=$1 and i.status in ('sent','partially_paid')${unpaidScope.sql})::int as unpaid,
+          (select count(*) from invoices i where i.clinic_id=$1 and ${owedSql("i")}${unpaidScope.sql})::int as unpaid,
           -- The money owed, not just how many pieces of paper it is spread across.
           -- Same rule as the takings above: a sum of what the clinic is owed is
           -- a clinic-wide figure, so it is not computed for somebody without it.
           ${
             showRevenue
-              ? `(select coalesce(sum(total - amount_paid),0) from invoices where clinic_id=$1 and status in ('sent','partially_paid')) as owed,`
+              ? `(select coalesce(sum(i.total - i.amount_paid),0) from invoices i where i.clinic_id=$1 and ${owedSql("i")}) as owed,`
               : `0::numeric as owed,`
           }
           (select count(*) from patients where clinic_id=$1 and merged_into is null and created_at >= $2 and created_at < $3)::int as new_patients,
@@ -581,7 +582,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             )}
             {showCalendar && (
               <FollowUpRow
-                href={`${base}/calendar`}
+                href={`${base}/calendar?show=unconfirmed`}
                 icon={CalendarClock}
                 label={t.dashboard.unconfirmed}
                 count={data.stats.unconfirmed}

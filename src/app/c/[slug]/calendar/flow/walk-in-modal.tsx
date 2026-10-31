@@ -99,7 +99,7 @@ export function WalkInModal({
               </button>
             </div>
           ) : (
-            <PatientPicker slug={slug} autoFocus onPick={setPatient} onCreateNew={() => setNewPatient({ fullName: "", phone: "" })} />
+            <PatientPicker slug={slug} autoFocus onPick={setPatient} onCreateNew={setNewPatient} />
           )}
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">

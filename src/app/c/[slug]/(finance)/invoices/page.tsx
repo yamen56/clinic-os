@@ -15,7 +15,7 @@ import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { deskLines, readyToBillDesk } from "@/lib/charts/dental/billing-server";
 import { ReadyToBillDesk, type DeskGroup } from "./ready-to-bill-desk";
 import { billsFromCharts } from "@/lib/features";
-import { DELETABLE_INVOICE_SQL } from "@/lib/invoices";
+import { DELETABLE_INVOICE_SQL, owedSql } from "@/lib/invoices";
 import { DeleteCancelled } from "./delete-cancelled";
 
 const invStatus: Record<string, StatusKey> = {
@@ -98,7 +98,7 @@ export default async function InvoicesPage({
                  where p.clinic_id = $1 and p.paid_at >= $4 and p.paid_at < $5) as week,
                (select coalesce(sum(p.amount), 0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
                  where p.clinic_id = $1 and p.paid_at >= $6 and p.paid_at < $7) as month,
-               (select coalesce(sum(total - amount_paid), 0) from invoices where clinic_id = $1 and status in ('sent', 'partially_paid')) as outstanding,
+               (select coalesce(sum(i.total - i.amount_paid), 0) from invoices i where i.clinic_id = $1 and ${owedSql("i")}) as outstanding,
                ${chipCounts}`
           : `select ${chipCounts}`,
         showTotals
@@ -116,7 +116,7 @@ export default async function InvoicesPage({
         and "has started paying" are different conversations to have with a
         patient, and lumping them together was why the second one was invisible.
       */
-      if (sp.status === "unpaid") conds.push(`i.status in ('sent', 'partially_paid')`);
+      if (sp.status === "unpaid") conds.push(owedSql("i"));
       else if (sp.status === "partial") conds.push(`i.status = 'partially_paid'`);
       else if (sp.status === "paid") conds.push(`i.status = 'paid'`);
       /*

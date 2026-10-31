@@ -10,10 +10,14 @@ import { DELETABLE_INVOICE_SQL } from "@/lib/invoices";
 
 export default async function InvoiceDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; id: string }>;
+  /** ?from=board — raised from the Today board, which is where Back to today goes. */
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { slug, id } = await params;
+  const sp = await searchParams;
   if (!isUuid(id)) notFound();
   const access = await guardClinic(slug);
   if (!can(access, "invoices")) redirect(`/c/${slug}`);
@@ -84,7 +88,22 @@ export default async function InvoiceDetailPage({
     // filing switch or says nothing about JoFotara, exactly as before.
     const settings = await loadEinvoiceSettings(c, access.clinicId);
     const filesEinvoices = Boolean(access.clinic.features.einvoicing) && isReady(settings);
-    return { inv, items, payments, insurers, filesEinvoices };
+    /*
+      The visit it bills, named the way a visit is named everywhere — date,
+      time, service — so the desk can tell which one, and book the next with
+      the same doctor for the same thing.
+    */
+    const visit = inv.appointment_id
+      ? ((
+          await c.query(
+            `select a.id, a.starts_at, a.doctor_member_id, a.service_id, s.name as service_name, s.name_ar as service_name_ar
+               from appointments a left join services s on s.id = a.service_id
+              where a.id = $1 and a.clinic_id = $2`,
+            [inv.appointment_id, access.clinicId]
+          )
+        ).rows[0] ?? null)
+      : null;
+    return { inv, items, payments, insurers, filesEinvoices, visit };
   });
   if (!data) notFound();
 
@@ -97,6 +116,9 @@ export default async function InvoiceDetailPage({
       insurers={JSON.parse(JSON.stringify(data.insurers))}
       filesEinvoices={data.filesEinvoices}
       canVoid={can(access, "invoices.void")}
+      visit={data.visit ? JSON.parse(JSON.stringify(data.visit)) : null}
+      canBook={can(access, "calendar")}
+      fromBoard={sp.from === "board"}
     />
   );
 }

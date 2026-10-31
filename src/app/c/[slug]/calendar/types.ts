@@ -45,6 +45,8 @@ export type Appt = {
   balance_due?: number;
   /** Allergies and the conditions that change what may be done; null when there are none. */
   medical?: MedicalFlags | null;
+  /** The invoice that bills a finished visit — sent only to a member who may see invoices. */
+  invoice?: { id: string; number: string; paid: boolean };
 };
 
 /** A treatment on the patient's plan, as a visit carries it. */
@@ -106,7 +108,12 @@ export type ScheduleState = {
   colorBy: "service" | "doctor";
   /** Day view columns: one per doctor, or one per room. */
   groupBy: "doctor" | "room";
+  /** Only the visits nobody has confirmed yet — the list reception calls through. */
+  unconfirmedOnly: boolean;
 };
+
+/** Booked but not confirmed: what "unconfirmed" means on the dashboard, the evening alert and the Schedule. */
+export const UNCONFIRMED = new Set(["scheduled", "pending_approval"]);
 
 export type Tab = "today" | "schedule" | "waitlist";
 

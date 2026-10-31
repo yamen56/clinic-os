@@ -129,6 +129,35 @@ async function main() {
   const tomorrow = now.setZone(TZ).plus({ days: 1 }).set({ hour: 10, minute: 0, second: 0, millisecond: 0 });
   await mkAppt(patient, docA, tomorrow);
 
+  /* Release 1b: a finished visit billed by a draft (printed, never sent), and one booked but not confirmed tomorrow. */
+  const finished = (
+    await db.query(
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, arrived_at, seated_at, finished_at)
+       values ($1, $2, $3, $4, now() - interval '2 hours', now() - interval '90 minutes', 'completed', now() - interval '2 hours', now() - interval '110 minutes', now() - interval '90 minutes')
+       returning id`,
+      [clinic, other, docB, svc]
+    )
+  ).rows[0].id as string;
+  const draft = (
+    await db.query(
+      `insert into invoices (clinic_id, patient_id, appointment_id, seq, number, status, subtotal, total)
+       values ($1, $2, $3, 1, 'INV-QA-0001', 'draft', 50, 50) returning id`,
+      [clinic, other, finished]
+    )
+  ).rows[0].id as string;
+  await db.query(
+    `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status)
+     values ($1, $2, $3, $4, $5, $6, 'scheduled')`,
+    [clinic, other, docB, svc, tomorrow.plus({ hours: 2 }).toISO(), tomorrow.plus({ hours: 2, minutes: 30 }).toISO()]
+  );
+  const thread = (
+    await db.query(
+      `insert into conversations (clinic_id, patient_id, phone_e164, flagged, flag_reason, last_message_at, last_message_preview, last_message_direction, ai_enabled)
+       values ($1, $2, '+962790551178', true, 'Wants to reschedule', now(), '2', 'in', false) returning id`,
+      [clinic, other]
+    )
+  ).rows[0].id as string;
+
   const browser = await chromium.launch();
   const errors: string[] = [];
   const watch = (p: Page) => {
@@ -241,6 +270,83 @@ async function main() {
     await doc.waitForURL(`**/patients/${patient}`, { timeout: 30_000 });
     check("on the board, a doctor's tap on the patient opens the file", doc.url().includes(`/patients/${patient}`));
 
+    /* ============================================================ 1b: one truth */
+    console.log("\n[unpaid means the same everywhere]");
+    await desk.goto(`${base}/invoices?status=unpaid`);
+    await desk.waitForLoadState("networkidle");
+    check("a printed, never-sent invoice is in Unpaid", (await desk.locator("main").innerText()).includes("INV-QA-0001"));
+    await desk.goto(base);
+    await desk.waitForSelector("[data-today-list]", { timeout: 60_000 });
+    const unconfirmedHref = await desk.locator(`a[href*="show=unconfirmed"]`).first().getAttribute("href");
+    check("the dashboard's Unconfirmed opens that list, not today's board", !!unconfirmedHref);
+
+    console.log("\n[a finished visit knows it is billed]");
+    await desk.goto(`${base}/calendar?tab=today`);
+    await desk.waitForSelector(`[data-flow-card="${finished}"]`, { timeout: 60_000 });
+    const billedTag = desk.locator(`[data-flow-card="${finished}"] [data-flow-billed]`);
+    check("the card says Billed with the invoice, not Create invoice", (await billedTag.count()) === 1 && (await billedTag.innerText()).includes("INV-QA-0001"));
+    await desk.goto(`${base}/invoices/new?patient=${other}&appointment=${finished}`);
+    await desk.waitForLoadState("networkidle");
+    check("raising another for the same visit says it is billed already", (await desk.locator("[data-existing-invoice]").count()) === 1);
+
+    console.log("\n[the invoice hands on to the next step]");
+    await desk.goto(`${base}/invoices/${draft}?from=board`);
+    await desk.waitForSelector("[data-invoice-visit]", { timeout: 60_000 });
+    check("it names the visit it bills", (await desk.locator("[data-invoice-visit]").innerText()).includes("Checkup"));
+    const nextHref = (await desk.locator("[data-invoice-book-next]").getAttribute("href")) ?? "";
+    check("Book next visit carries the doctor and the service", nextHref.includes(`doctor=${docB}`) && nextHref.includes(`service=${svc}`), nextHref);
+    check("and the board it came from is one press away", (await desk.locator("[data-invoice-visit]").innerText()).includes("Back to today"));
+    await desk.click("[data-invoice-book-next]");
+    const booking = desk.locator("aside", { hasText: "New appointment" });
+    await booking.waitFor({ timeout: 60_000 });
+    check("the booking opens with the patient in it", await until(async () => (await booking.innerText()).includes("Omar Haddad")));
+
+    console.log("\n[money moves the board, and a settled payment offers its receipt]");
+    await desk.goto(`${base}/calendar?tab=today`);
+    const omar = desk.locator(`[data-flow-card="${finished}"]`);
+    await omar.waitFor({ timeout: 60_000 });
+    check("the card says what is owed", (await omar.innerText()).includes("Owes"));
+    await omar.locator("[data-take-payment] button").click();
+    await desk.click("[data-take-payment-save]");
+    check("paid in full, the receipt is offered there and then", await until(async () => (await desk.locator("[data-take-payment-receipts]").count()) === 1));
+    await desk.getByRole("button", { name: "Close", exact: true }).last().click();
+    await db.query(
+      `insert into invoices (clinic_id, patient_id, seq, number, status, subtotal, total) values ($1, $2, 2, 'INV-QA-0002', 'sent', 30, 30)`,
+      [clinic, patient]
+    );
+    const sara = desk.locator(`[data-flow-card="${waiting}"]`);
+    check("an invoice raised elsewhere shows on the board without a reload", await until(async () => (await sara.innerText()).includes("Owes")));
+    await db.query(`update invoices set amount_paid = 30, status = 'paid' where number = 'INV-QA-0002' and clinic_id = $1`, [clinic]);
+    check("and paying it elsewhere clears it", await until(async () => !(await sara.innerText()).includes("Owes")));
+
+    console.log("\n[what was typed is kept]");
+    await desk.goto(`${base}/calendar?new=1`);
+    await desk.waitForSelector("aside", { timeout: 60_000 });
+    await desk.locator("aside").getByPlaceholder("Search by name or phone…").fill("Lina Qasem");
+    await desk.locator("aside").getByRole("button", { name: "Create “Lina Qasem” as a new patient" }).click();
+    check("Create new starts with the name typed", (await desk.evaluate("document.activeElement && document.activeElement.value")) === "Lina Qasem");
+    await desk.goto(`${base}/patients?q=0799123456`);
+    await desk.waitForSelector("[data-create-searched]", { timeout: 60_000 });
+    await desk.click("[data-create-searched]");
+    const typed = await desk.getByRole("dialog").locator('input[dir="ltr"], input[type="tel"], input[inputmode="tel"]').first().inputValue().catch(() => "");
+    check("a number searched for becomes the new patient's phone", typed.includes("0799123456"), typed);
+
+    console.log("\n[the inbox can finish what it starts]");
+    await desk.goto(`${base}/conversations?open=${thread}`);
+    await desk.waitForSelector("[data-thread-flag]", { timeout: 60_000 });
+    await desk.click("[data-thread-unflag]");
+    check("a flag clears without switching the AI on", await until(async () => !(await db.query(`select flagged from conversations where id = $1`, [thread])).rows[0].flagged));
+    await desk.click("[data-thread-done]");
+    check("Done closes the thread", await until(async () => (await db.query(`select status from conversations where id = $1`, [thread])).rows[0].status === "closed"));
+
+    console.log("\n[unconfirmed tomorrow, as a list]");
+    await desk.goto(`${base}/calendar?show=unconfirmed&date=${tomorrow.toISODate()}`);
+    await desk.waitForSelector("[data-unconfirmed-only]", { timeout: 60_000 });
+    check("the Schedule opens filtered to the unconfirmed", (await desk.locator("[data-unconfirmed-only]").getAttribute("aria-pressed")) === "true");
+    const sched = await until(async () => (await desk.locator("main").innerText()).includes("Omar Haddad"));
+    check("tomorrow's unconfirmed visit is listed", sched);
+    check("and the confirmed one is not", !(await desk.locator("main").innerText()).includes("سارة الخطيب"));
+
     /* ============================================================ the phone */
     console.log("\n[on the doctor's phone]");
     const phoneCtx = await browser.newContext({ ...devices["iPhone 13"] });
@@ -263,6 +369,18 @@ async function main() {
     await ph.fill("[data-palette-input]", "0790551177");
     check("and finds her by the number as it is dialled", await until(async () => (await ph.locator(`[data-palette-patient="${patient}"]`).count()) === 1));
     await phoneCtx.close();
+
+    const deskPhoneCtx = await browser.newContext({ ...devices["iPhone 13"] });
+    const dp = await deskPhoneCtx.newPage();
+    watch(dp);
+    await signIn(dp, `owner-${slug}@test.local`);
+    await dp.goto(`${base}/conversations?open=${thread}`);
+    await dp.waitForSelector("[data-open-patient-panel]", { timeout: 90_000 });
+    await dp.click("[data-open-patient-panel]");
+    check("on a phone the inbox's patient panel opens as a drawer", await until(async () => (await dp.locator("[data-patient-panel]").innerText()).includes("Omar Haddad")));
+    const inboxSideways = (await dp.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")) as number;
+    check("and the thread does not scroll sideways", inboxSideways <= 0, String(inboxSideways));
+    await deskPhoneCtx.close();
 
     check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
     await browser.close();

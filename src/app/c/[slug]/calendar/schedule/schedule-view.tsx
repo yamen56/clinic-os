@@ -15,7 +15,7 @@ import { scheduleErrorText, savedText } from "../messages";
 import { TimeGrid, type GridColumn, type MoveChange } from "./time-grid";
 import { MonthGrid } from "./month-grid";
 import { AgendaList } from "./agenda-list";
-import type { Appt, CalendarData, ScheduleState, ScheduleView as View } from "../types";
+import { UNCONFIRMED, type Appt, type CalendarData, type ScheduleState, type ScheduleView as View } from "../types";
 import { ChevronLeft, ChevronRight, DoorOpen } from "lucide-react";
 
 /**
@@ -56,7 +56,7 @@ export function ScheduleView({
   const { t, locale } = useI18n();
   const { toast } = useToast();
   const [data, setData] = useState<CalendarData | null>(null);
-  const { view, anchor, doctorFilter, serviceFilter, sectionFilter, colorBy, groupBy } = state;
+  const { view, anchor, doctorFilter, serviceFilter, sectionFilter, colorBy, groupBy, unconfirmedOnly } = state;
   const anchorDt = useMemo(() => DateTime.fromISO(anchor, { zone: tz }), [anchor, tz]);
 
   const range = useMemo(() => {
@@ -91,11 +91,12 @@ export function ScheduleView({
     return data.appointments.filter(
       (a) =>
         a.status !== "cancelled" &&
+        (!unconfirmedOnly || UNCONFIRMED.has(a.status)) &&
         (!doctorFilter || a.doctor_member_id === doctorFilter) &&
         (!sectionFilter || a.service_section_id === sectionFilter) &&
         (!serviceFilter || a.service_id === serviceFilter)
     );
-  }, [data, doctorFilter, sectionFilter, serviceFilter]);
+  }, [data, doctorFilter, sectionFilter, serviceFilter, unconfirmedOnly]);
 
   const filterServices = useMemo(
     () => (!data ? [] : sectionFilter ? data.services.filter((s) => s.section_id === sectionFilter) : data.services),
@@ -281,6 +282,17 @@ export function ScheduleView({
               ))}
             </Select>
           )}
+          <button
+            type="button"
+            aria-pressed={unconfirmedOnly}
+            onClick={() => setState({ unconfirmedOnly: !unconfirmedOnly })}
+            className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+              unconfirmedOnly ? "border-brand-600 bg-brand-50 text-brand-700" : "border-line-strong text-ink-500 hover:bg-sunken"
+            }`}
+            data-unconfirmed-only
+          >
+            {t.calendar.unconfirmedOnly}
+          </button>
           <button
             onClick={() => setState({ colorBy: colorBy === "service" ? "doctor" : "service" })}
             className="rounded-full border border-line-strong px-3 py-1 text-[12px] font-medium text-ink-500 hover:bg-sunken"

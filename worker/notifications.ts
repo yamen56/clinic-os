@@ -536,7 +536,8 @@ export async function sendDigest(c: PoolClient, alert: DigestAlert, now: DateTim
         kind: "unconfirmed_tomorrow",
         title: L.unconfirmedTitle(n),
         body: L.unconfirmedBody,
-        url: `/c/${alert.slug}/calendar`,
+        // The list itself: tomorrow, only the unconfirmed ones.
+        url: `/c/${alert.slug}/calendar?show=unconfirmed&date=${from.toISODate()}`,
         dedupeKey: `unconfirmed_tomorrow:${alert.id}:${today}`,
       });
     }
@@ -784,7 +785,7 @@ export async function appointmentAlerts(
         kind,
         title,
         body,
-        url: `/c/${a.slug}/calendar`,
+        url: `/c/${a.slug}/calendar?open=${a.id}`,
         dedupeKey: `${kind}:${jobId}`,
       });
     }

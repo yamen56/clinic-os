@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
+import { owedSql } from "@/lib/invoices";
 
 /** Thread detail: messages + linked patient panel. */
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
@@ -44,8 +45,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
           `select p.id, p.full_name, p.phone_e164, p.tags, p.status, p.birth_date, p.notes_summary,
                   (select starts_at from appointments a where a.patient_id = p.id and a.starts_at > now()
                      and a.status not in ('cancelled') order by starts_at limit 1) as next_appointment,
-                  (select coalesce(sum(total - amount_paid), 0) from invoices i
-                     where i.patient_id = p.id and i.status in ('sent', 'partially_paid')) as balance_due
+                  (select coalesce(sum(i.total - i.amount_paid), 0) from invoices i
+                     where i.patient_id = p.id and ${owedSql("i")}) as balance_due
            from patients p where p.id = $1`,
           [conv.patient_id]
         )
@@ -94,12 +95,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       );
       return true;
     }
+    /*
+      Done: answered, nothing left to do. Closing clears the flag with it — a
+      thread somebody has dealt with is not still asking for a person. The
+      patient's next message opens it again (worker/wa/inbound).
+    */
     if (body.op === "status" && (body.status === "open" || body.status === "closed")) {
-      await c.query(`update conversations set status = $3 where id = $1 and clinic_id = $2`, [
-        id,
-        g.access.clinicId,
-        body.status,
-      ]);
+      await c.query(
+        `update conversations set status = $3,
+                flagged = case when $3 = 'closed' then false else flagged end,
+                flag_reason = case when $3 = 'closed' then null else flag_reason end
+          where id = $1 and clinic_id = $2`,
+        [id, g.access.clinicId, body.status]
+      );
+      return true;
+    }
+    // The flag handled, the thread still open. It used to clear only by switching the AI on.
+    if (body.op === "unflag") {
+      await c.query(`update conversations set flagged = false, flag_reason = null where id = $1 and clinic_id = $2`, [id, g.access.clinicId]);
       return true;
     }
     return false;

@@ -971,6 +971,7 @@ export const ar: Dict = {
     patient: "المريض",
     searchOrCreate: "ابحث بالاسم أو رقم الهاتف…",
     createNew: "إنشاء مريض جديد",
+    createNamed: "إنشاء «{q}» كمريض جديد",
     service: "الخدمة",
     doctor: "الطبيب",
     anyDoctor: "أي طبيب",
@@ -980,6 +981,7 @@ export const ar: Dict = {
     start: "البداية",
     duration: "المدة",
     colorBy: "التلوين",
+    unconfirmedOnly: "غير المؤكدة",
     byService: "حسب الخدمة",
     byDoctor: "حسب الطبيب",
     statuses: {
@@ -1067,6 +1069,8 @@ export const ar: Dict = {
     call: "اتصال",
     createInvoice: "إنشاء فاتورة",
     bookNext: "حجز الزيارة القادمة",
+    billedInvoice: "مُفوترة · {number}",
+    paidInvoice: "مدفوعة · {number}",
     expected: "متوقع",
     waitingNow: "بالانتظار",
     inRooms: "في الغرف",
@@ -2686,6 +2690,7 @@ export const ar: Dict = {
     sendReceipt: "إرسال الإيصال",
     resendInvoice: "إعادة إرسال الفاتورة",
     receiptSent: "أُرسل الإيصال",
+    settledSendReceipt: "دُفعت بالكامل. أرسل الإيصال على واتساب والمريض ما زال هنا.",
     receiptNeedsFullPayment: "يُصدر الإيصال بعد سداد الفاتورة بالكامل.",
     doctor: "الطبيب",
     doctorHint:
@@ -2819,6 +2824,10 @@ export const ar: Dict = {
     fromChartHint: "علاجات على مخطط الأسنان لم تدخل فاتورة بعد. أضفها من هنا ليظهر على المخطط أنها فُوترت.",
     addAll: "إضافة الكل",
     alreadyBilled: "بعض هذه العلاجات موجود في فاتورة سابقة. حدّث الصفحة لترى ما بقي للفوترة.",
+    visitAlreadyBilled: "هذه الزيارة لها فاتورة مسبقاً: {number}.",
+    openIt: "افتحها",
+    visitLine: "الزيارة: {visit}",
+    backToToday: "العودة إلى مرضى اليوم",
     chartChanged: "تغيّرت هذه العلاجات أو أنها ليست لهذا المريض. حدّث الصفحة وحاول مرة أخرى.",
     chartLine: {
       tooth: "سن {n}",
@@ -2870,6 +2879,9 @@ export const ar: Dict = {
     patientUnlinked: "تم إلغاء الربط",
     markDone: "إغلاق المحادثة",
     reopen: "إعادة فتح",
+    done: "تمّ",
+    handled: "تمت المعالجة",
+    patientPanel: "بيانات المريض",
   },
   wa: {
     title: "ربط واتساب",

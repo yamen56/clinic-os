@@ -14,14 +14,14 @@
 */
 
 import { useEffect, useState, useTransition } from "react";
-import { Wallet } from "lucide-react";
+import { Check, ReceiptText, Wallet } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtMoney } from "@/lib/dates";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
-import { recordPatientPaymentAction } from "@/app/c/[slug]/(finance)/invoices/actions";
+import { recordPatientPaymentAction, sendReceiptAction } from "@/app/c/[slug]/(finance)/invoices/actions";
 
 export function TakePayment({
   slug,
@@ -51,10 +51,14 @@ export function TakePayment({
   const [method, setMethod] = useState("cash");
   const [reference, setReference] = useState("");
   const [pending, start] = useTransition();
+  /* The invoices this payment settled, while their receipts are on offer. */
+  const [receipts, setReceipts] = useState<{ id: string; number: string; sent: boolean }[] | null>(null);
+  const [sendingReceipt, setSendingReceipt] = useState<string | null>(null);
   // A fresh read of the page is the truth again.
   useEffect(() => setOwed(balance), [balance]);
 
-  if (!(owed > 0)) return null;
+  // Paid off with the receipts still on offer: the modal stays until it is closed.
+  if (!(owed > 0) && !(open && receipts)) return null;
   const value = Number(amount.replace(",", "."));
   const valid = Number.isFinite(value) && value > 0 && value <= owed + 0.001;
 
@@ -67,9 +71,26 @@ export function TakePayment({
       }
       setOwed((o) => Math.max(0, Math.round((o - value) * 100) / 100));
       onPaid?.(value);
-      setOpen(false);
       toast(t.invoices.paidOnto.replace("{list}", r.paid.map((p) => p.number).join(", ")));
+      /*
+        Settled: the patient is at the desk and asks for proof of payment now,
+        not after somebody finds the invoice. The receipt is offered here.
+      */
+      const settled = r.paid.filter((p) => p.settled);
+      if (settled.length) setReceipts(settled.map((p) => ({ id: p.invoiceId, number: p.number, sent: false })));
+      else setOpen(false);
     });
+
+  const sendReceipt = async (id: string) => {
+    setSendingReceipt(id);
+    const r = await sendReceiptAction(slug, id).finally(() => setSendingReceipt(null));
+    if (r.error) {
+      toast(r.error === "no_phone" ? t.invoices.noPhone : r.error === "wa_disconnected" ? t.invoices.waDisconnected : t.common.genericError, "error");
+      return;
+    }
+    setReceipts((xs) => xs?.map((x) => (x.id === id ? { ...x, sent: true } : x)) ?? null);
+    toast(t.invoices.receiptSent);
+  };
 
   return (
     <>
@@ -83,6 +104,7 @@ export function TakePayment({
           onClick={() => {
             setAmount(String(owed));
             setReference("");
+            setReceipts(null);
             setOpen(true);
           }}
         >
@@ -91,6 +113,32 @@ export function TakePayment({
         </Button>
       </span>
       <Modal open={open} onClose={() => setOpen(false)} title={t.invoices.takePaymentTitle}>
+        {receipts ? (
+          <div className="grid gap-3" data-take-payment-receipts>
+            <p className="text-[13px] text-ink-700">{t.invoices.settledSendReceipt}</p>
+            {receipts.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
+                <span className="text-sm font-semibold tnum">{r.number}</span>
+                {r.sent ? (
+                  <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-st-confirmed">
+                    <Check className="h-4 w-4" />
+                    {t.invoices.receiptSent}
+                  </span>
+                ) : (
+                  <Button size="sm" loading={sendingReceipt === r.id} onClick={() => void sendReceipt(r.id)} data-take-payment-send-receipt>
+                    <ReceiptText className="h-4 w-4" />
+                    {t.invoices.sendReceipt}
+                  </Button>
+                )}
+              </div>
+            ))}
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                {t.common.close}
+              </Button>
+            </div>
+          </div>
+        ) : (
         <form
           className="grid gap-4"
           onSubmit={(e) => {
@@ -135,6 +183,7 @@ export function TakePayment({
             </Button>
           </div>
         </form>
+        )}
       </Modal>
     </>
   );

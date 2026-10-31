@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { flowStage, type FlowStage } from "@/lib/patient-flow";
 import { createAppointmentAction, updateAppointmentAction, setAppointmentStatusAction } from "./actions";
 import { setFlowAction, type FlowStep } from "./flow-actions";
+import { addToWaitlistAction } from "../waitlist/actions";
 import { scheduleErrorText, savedText } from "./messages";
 import { RequiredDocuments } from "@/components/esign/required-documents";
 import { AppointmentNotes } from "@/components/appointment-notes";
@@ -96,6 +97,7 @@ export function AppointmentPanel({
   const [items, setItems] = useState<PlannedItem[]>([]);
   const [suggested, setSuggested] = useState<{ startISO: string; doctorMemberId: string | null }[] | null>(null);
   const [suggesting, setSuggesting] = useState(false);
+  const [waitlisting, setWaitlisting] = useState(false);
 
   useEffect(() => {
     if (!state) return;
@@ -377,7 +379,7 @@ export function AppointmentPanel({
                   </button>
                 </div>
               ) : (
-                <PatientPicker slug={slug} onPick={setPatient} onCreateNew={() => setNewPatient({ fullName: "", phone: "" })} />
+                <PatientPicker slug={slug} onPick={setPatient} onCreateNew={setNewPatient} />
               )}
             </Field>
 
@@ -543,7 +545,35 @@ export function AppointmentPanel({
                 {suggested && (
                   <div className="flex flex-wrap gap-1.5" data-suggested>
                     {suggested.length === 0 ? (
-                      <span className="text-[12px] text-ink-500">{t.calendar.noFreeTimes}</span>
+                      /*
+                        Nothing free is where the waitlist begins: the patient,
+                        the doctor and the service are already chosen, so one
+                        press puts them in line for the first cancellation.
+                      */
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-[12px] text-ink-500">{t.calendar.noFreeTimes}</span>
+                        {patient && (
+                          <button
+                            type="button"
+                            disabled={waitlisting}
+                            onClick={async () => {
+                              setWaitlisting(true);
+                              const r = await addToWaitlistAction(slug, {
+                                patientId: patient.id,
+                                doctorMemberId: doctorId || null,
+                                serviceId: serviceId || null,
+                                earliestDate: date || null,
+                              }).finally(() => setWaitlisting(false));
+                              if (r.error) toast(r.error === "already_waiting" ? t.waitlist.alreadyWaiting : t.common.genericError, "error");
+                              else toast(t.waitlist.added);
+                            }}
+                            className="rounded-full border border-brand-200 px-2.5 py-1 text-[12px] font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-60"
+                            data-panel-waitlist
+                          >
+                            {t.waitlist.add}
+                          </button>
+                        )}
+                      </span>
                     ) : (
                       suggested.map((s) => {
                         const d = DateTime.fromISO(s.startISO).setZone(tz).setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB");

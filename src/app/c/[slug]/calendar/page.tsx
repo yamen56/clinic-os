@@ -17,7 +17,17 @@ export default async function CalendarPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ patient?: string; new?: string; items?: string; open?: string; tab?: string }>;
+  searchParams: Promise<{
+    patient?: string;
+    new?: string;
+    items?: string;
+    open?: string;
+    tab?: string;
+    date?: string;
+    show?: string;
+    doctor?: string;
+    service?: string;
+  }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -105,7 +115,7 @@ export default async function CalendarPage({
   */
   const showBoard = access.clinic.vocabulary !== "agency";
   const asked = sp.tab === "schedule" || sp.tab === "waitlist" || (sp.tab === "today" && showBoard) ? (sp.tab as Tab) : null;
-  const aboutTheCalendar = !!(data.initialPatient || data.initialOpen || sp.new === "1");
+  const aboutTheCalendar = !!(data.initialPatient || data.initialOpen || sp.new === "1" || sp.show === "unconfirmed");
   const initialTab: Tab = asked ?? (aboutTheCalendar || !showBoard ? "schedule" : "today");
 
   return (
@@ -120,6 +130,12 @@ export default async function CalendarPage({
       initialOpen={data.initialOpen}
       /* ?new=1 — what the dashboard shortcut and its keyboard accelerator open. */
       openNew={sp.new === "1"}
+      /* ?doctor=&service= with ?patient= — "Book next visit" from an invoice: who saw them, and for what. */
+      initialDoctorId={isUuid(sp.doctor) ? sp.doctor : null}
+      initialServiceId={isUuid(sp.service) ? sp.service : null}
+      /* ?show=unconfirmed&date= — "N not confirmed": the list to call through, on its day. */
+      unconfirmedOnly={sp.show === "unconfirmed"}
+      initialDate={/^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date : null}
       initialWaitlist={data.waitlist}
       caps={{
         patients: can(access, "patients"),

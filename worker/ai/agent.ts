@@ -3,6 +3,7 @@ import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import { DateTime } from "luxon";
 import { withSystem } from "../db";
 import { notifyUser } from "../../src/lib/notify";
+import { NT, asLocale, when } from "../../src/lib/notification-text";
 import { lockClinicSchedule } from "../../src/lib/appointments";
 import { findOrCreatePatient } from "../../src/lib/patients";
 import { buildSystemPrompt, type AgentConfig } from "./prompt";
@@ -419,18 +420,21 @@ export async function respondToConversation(conversationId: string): Promise<voi
           [cfg.clinicId]
         );
         const staff = await c.query(
-          `select cm.user_id, cl.slug from clinic_members cm join clinics cl on cl.id = cm.clinic_id
+          `select cm.user_id, cl.slug, u.locale from clinic_members cm
+             join clinics cl on cl.id = cm.clinic_id join users u on u.id = cm.user_id
            where cm.clinic_id = $1 and cm.active and (cm.is_owner or cm.role = 'receptionist')`,
           [cfg.clinicId]
         );
         const local = start.setZone(clinic.timezone).setLocale("ar-JO-u-nu-latn");
+        // In each reader's language, and onto the booking itself rather than the calendar's today.
         for (const s of staff.rows) {
+          const L = asLocale(s.locale);
           await notifyUser(c, s.user_id as string, {
             clinicId: cfg.clinicId,
             kind: "ai_booking",
-            title: `حجز جديد من المساعد الذكي: ${patient_name?.trim() || conv.whatsapp_name || conv.phone_e164}`,
-            body: `${svc.name} — ${local.toFormat("cccc d LLLL")} ${local.toFormat("h:mm a")}`,
-            url: `/c/${s.slug}/calendar`,
+            title: NT[L].aiBooked(patient_name?.trim() || conv.whatsapp_name || conv.phone_e164),
+            body: `${svc.name} — ${when(start.toJSDate(), clinic.timezone, L)}`,
+            url: `/c/${s.slug}/calendar?open=${appt.rows[0].id}`,
           });
         }
         booked = true;

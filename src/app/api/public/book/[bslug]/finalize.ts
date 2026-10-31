@@ -283,7 +283,8 @@ export async function finalizeBooking(
           p.fullName
         ),
       body: `${serviceName} · ${when}${summary ? `\n${summary}` : ""}`,
-      url: `/c/${data.clinic.slug}/calendar`,
+      // Onto the booking itself: one waiting for approval is approved from its panel.
+      url: `/c/${data.clinic.slug}/calendar?open=${appointmentId}`,
     });
     await emitTrigger(c, data.clinic.id, "booking_submitted", {
       appointmentId,

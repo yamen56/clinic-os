@@ -462,7 +462,7 @@ export async function recordPaymentAction(
 export async function recordPatientPaymentAction(
   slug: string,
   data: { patientId: string; amount: number; method: string; reference: string }
-): Promise<{ error?: string; paid?: { invoiceId: string; number: string; amount: number }[] }> {
+): Promise<{ error?: string; paid?: { invoiceId: string; number: string; amount: number; settled: boolean }[] }> {
   const access = await requireClinic(slug);
   if (!can(access, "invoices")) return { error: "forbidden" };
   if (!isUuid(data.patientId)) return { error: "not_found" };
@@ -487,14 +487,16 @@ export async function recordPatientPaymentAction(
     if (!open.length) return { error: "nothing_due" };
     if (amount > owed + 0.001) return { error: "overpay" };
 
-    const paid: { invoiceId: string; number: string; amount: number }[] = [];
+    const paid: { invoiceId: string; number: string; amount: number; settled: boolean }[] = [];
     let left = amount;
     for (const inv of open) {
       if (left <= 0) break;
-      const slice = Math.min(left, round2(Number(inv.total) - Number(inv.amount_paid)));
+      const remaining = round2(Number(inv.total) - Number(inv.amount_paid));
+      const slice = Math.min(left, remaining);
       if (slice <= 0) continue;
       await applyPayment(c, access, inv, { amount: slice, method: data.method, reference: data.reference, paidAt: null });
-      paid.push({ invoiceId: inv.id, number: inv.number, amount: slice });
+      // Settled by this payment: the desk is offered its receipt then and there.
+      paid.push({ invoiceId: inv.id, number: inv.number, amount: slice, settled: slice >= remaining - 0.001 });
       left = round2(left - slice);
     }
     revalidatePath(`/c/${slug}/invoices`);

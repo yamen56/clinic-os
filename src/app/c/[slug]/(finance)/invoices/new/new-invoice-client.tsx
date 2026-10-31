@@ -57,7 +57,11 @@ export function NewInvoiceClient({
   einvoice,
   initialLines,
   chartBilling = false,
+  existingInvoice = null,
+  fromBoard = false,
 }: {
+  /** Raised from the Today board: the invoice it makes offers Back to today. */
+  fromBoard?: boolean;
   slug: string;
   currency: string;
   defaultTaxRate: number;
@@ -84,6 +88,8 @@ export function NewInvoiceClient({
   initialLines?: StartLine[];
   /** A dental clinic: the patient's unbilled chart work is offered as lines. */
   chartBilling?: boolean;
+  /** The visit this invoice is raised from already has one. */
+  existingInvoice?: { id: string; number: string } | null;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -247,12 +253,20 @@ export function NewInvoiceClient({
         return;
       }
       toast(t.invoices.created);
-      router.push(`/c/${slug}/invoices/${r.id}`);
+      router.push(`/c/${slug}/invoices/${r.id}${fromBoard ? "?from=board" : ""}`);
     });
 
   return (
     <>
       <PageHeader title={t.invoices.newInvoice} />
+      {existingInvoice && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-st-pending/30 bg-st-pending-soft px-4 py-3 text-[13px] text-ink-900" data-existing-invoice>
+          <span>{t.invoices.visitAlreadyBilled.replace("{number}", existingInvoice.number)}</span>
+          <a href={`/c/${slug}/invoices/${existingInvoice.id}`} className="font-semibold text-brand-700 underline">
+            {t.invoices.openIt}
+          </a>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="grid content-start gap-4 lg:col-span-2">
           {/* grid-cols-1, not a bare grid: an implicit column is sized `auto`,
