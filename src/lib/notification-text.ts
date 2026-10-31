@@ -64,6 +64,17 @@ const ar = {
   heldTitle: (n: number) => `${n} إشعارات جديدة`,
   heldBody: "وصلت أثناء ساعات الهدوء.",
   aiBooked: (p: string) => `حجز جديد من المساعد الذكي: ${p}`,
+  handoffTitle: (doctor: string, p: string) => `${doctor} أنهى زيارة ${p}`,
+  handoffNext: (days: number) => {
+    const span =
+      days % 7 === 0 && days < 56
+        ? days === 7 ? "أسبوع" : days === 14 ? "أسبوعين" : `${days / 7} أسابيع`
+        : days === 182 ? "6 أشهر"
+        : days % 30 === 0 ? (days === 30 ? "شهر" : `${days / 30} أشهر`)
+        : `${days} يوماً`;
+    return `احجز الموعد القادم بعد ${span}`;
+  },
+  handoffDone: "لا يحتاج موعداً آخر",
 };
 
 const en: typeof ar = {
@@ -98,6 +109,9 @@ const en: typeof ar = {
   heldTitle: (n) => `${n} new notifications`,
   heldBody: "They arrived during your quiet hours.",
   aiBooked: (p) => `New booking by the AI receptionist: ${p}`,
+  handoffTitle: (doctor, p) => `${doctor} finished with ${p}`,
+  handoffNext: (days) => `Book the next visit in ${days % 7 === 0 && days < 56 ? `${days / 7} ${days === 7 ? "week" : "weeks"}` : days === 182 ? "6 months" : days % 30 === 0 ? `${days / 30} ${days === 30 ? "month" : "months"}` : `${days} days`}`,
+  handoffDone: "No further visit needed",
 };
 
 export const NT: Record<NLocale, typeof ar> = { ar, en };

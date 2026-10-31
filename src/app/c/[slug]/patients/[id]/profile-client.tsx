@@ -47,6 +47,8 @@ import { FaceProvider, type FaceTabData } from "@/components/charts/face/store";
 import { FaceReadyToBill } from "@/components/charts/face/ready-to-bill";
 import { TakePayment } from "@/components/take-payment";
 import { DentalMedicalCard } from "@/components/charts/dental/medical-card";
+import { DateTime } from "luxon";
+import { VisitBanner, type VisitNow } from "./visit-banner";
 import { MedicalCard } from "@/components/medical-card";
 import { VisitWork, useVisitWorkCount } from "@/components/charts/dental/visit-work";
 import { medicalAlerts, readHistory, type MedicalHistory } from "@/lib/medical-history";
@@ -321,7 +323,7 @@ export function PatientProfile(props: {
   noteFeed?: FeedItem[];
   noteCategories: NoteCategoryRow[];
   files: PatientFileRow[];
-  appointments: { id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null }[];
+  appointments: ({ id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null } & Partial<VisitNow>)[];
   invoices: ({
     id: string;
     number: string;
@@ -523,6 +525,18 @@ export function PatientProfile(props: {
       else toast(r.error === "no_phone" ? t.patients.messageNoPhone : t.patients.messageFailed, "error");
     });
   };
+  /*
+    The visit going on now: today, arrived and not yet finished. While there is
+    one, the file says so over its tabs, and what is written in it is filed
+    under that visit — a note, a prescription.
+  */
+  const visitNow =
+    (props.appointments.find(
+      (a) =>
+        ["scheduled", "confirmed", "pending_approval"].includes(a.status) &&
+        !!(a.arrived_at || a.seated_at) &&
+        DateTime.fromISO(a.starts_at).setZone(tz).toISODate() === props.today
+    ) as (VisitNow & { id: string }) | undefined) ?? null;
   const upcoming = props.appointments.find(
     (a) => new Date(a.starts_at) > new Date() && !["cancelled", "no_show"].includes(a.status)
   );
@@ -776,6 +790,7 @@ export function PatientProfile(props: {
         </div>
       </div>
 
+      {visitNow && <VisitBanner key={visitNow.id} slug={slug} visit={visitNow} patientName={p.full_name} canFlow={caps.calendar} />}
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
       <div className="mt-5">
@@ -1074,6 +1089,7 @@ export function PatientProfile(props: {
           <NotesTab
             slug={slug}
             patientId={p.id}
+            currentVisitId={visitNow?.id ?? null}
             notes={props.notes}
             categories={props.noteCategories}
             /*
@@ -1363,6 +1379,7 @@ export function PatientProfile(props: {
               onClose={() => setComposer(null)}
               onSaved={onRxSaved}
               allergies={allergies}
+              appointmentId={visitNow?.id ?? null}
             />
           )}
         </WithAllergies>
@@ -1748,6 +1765,7 @@ function visitLabel(v: NoteVisit, tz: string, locale: string): string {
 function NotesTab({
   slug,
   patientId,
+  currentVisitId,
   notes,
   categories,
   visits,
@@ -1773,6 +1791,8 @@ function NotesTab({
   /** The tabs this member has, so a note points only at one that exists. */
   tabKeys: string[];
   onTab: (key: string) => void;
+  /** The visit going on now: a note written during it is filed under it unless changed. */
+  currentVisitId?: string | null;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -1782,7 +1802,7 @@ function NotesTab({
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<string | null>(null);
   const [catName, setCatName] = useState("");
-  const [visitId, setVisitId] = useState<string | null>(null);
+  const [visitId, setVisitId] = useState<string | null>(currentVisitId ?? null);
   const [manageCats, setManageCats] = useState(false);
   const [deleteCat, setDeleteCat] = useState<NoteCategoryRow | null>(null);
 

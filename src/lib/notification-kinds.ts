@@ -45,6 +45,7 @@ export const PREF_KEYS = [
   "billing",
   "whatsapp",
   "automation",
+  "visit_handoff",
 ] as const;
 export type PrefKey = (typeof PREF_KEYS)[number];
 
@@ -88,6 +89,8 @@ export const PREF_DEFS: PrefDef[] = [
       a.alertKinds.has("appointment_cancelled") || a.alertKinds.has("appointment_rescheduled"),
   },
   { key: "doctor_reminder", group: "schedule", shownTo: (a) => a.alertKinds.has("appointment_reminder") },
+  // The doctor's hand-off, to whoever books the next visit.
+  { key: "visit_handoff", group: "schedule", shownTo: (a) => frontDesk(a) && a.caps.calendar === true },
 
   // Summaries at a fixed hour
   { key: "daily_summary", group: "summaries", shownTo: (a) => a.alertKinds.has("day_schedule") },
@@ -144,6 +147,7 @@ export function prefKeyFor(kind: string): PrefKey | null {
     case "unread_digest":
     case "ai_escalation":
     case "automation":
+    case "visit_handoff":
       return kind;
     case "prescription_in_your_name":
       return "prescriptions";

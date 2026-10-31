@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { TakePayment } from "@/components/take-payment";
 import { minutesBetween, type FlowStage } from "@/lib/patient-flow";
 import { flagAlerts } from "@/lib/medical-history";
+import { nextWhen } from "@/lib/next-visit";
 import type { FlowStep } from "../flow-actions";
 import type { Appt, PageCaps, Room } from "../types";
 import { Menu, MenuItem } from "./menu";
@@ -187,6 +188,21 @@ export function FlowCard({
         )}
       </div>
 
+      {/* The doctor's hand-off, where the desk takes the patient out: when to book next, and their line for reception. */}
+      {stage === "finished" && appt.handed_off_at && (appt.next_visit_days || appt.desk_note) && (
+        <div className="mt-2 grid gap-0.5 rounded-lg bg-brand-50 px-2.5 py-1.5 text-[12.5px] text-ink-900" data-flow-handoff>
+          {appt.next_visit_days ? (
+            <span className="font-semibold">
+              {t.finishVisit.nextIn.replace("{when}", nextWhen(appt.next_visit_days, t.finishVisit.inDays))}
+            </span>
+          ) : null}
+          {appt.desk_note && (
+            <span dir="auto" className="whitespace-pre-line text-ink-700">
+              {appt.desk_note}
+            </span>
+          )}
+        </div>
+      )}
       {(tags.length > 0 || appt.notes) && (
         <div className="mt-2 grid gap-1.5">
           {tags.length > 0 && (
@@ -303,10 +319,14 @@ export function FlowCard({
                 onPaid={(n) => setPaidHere((x) => Math.round((x + n) * 100) / 100)}
               />
             )}
+            {/* What the doctor asked for leads: "in 2 weeks" opens the booking on that day, with that doctor. */}
             <button
               type="button"
               onClick={onBookNext}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold ${
+                appt.next_visit_days ? "bg-brand-600 text-on-brand hover:bg-brand-hover" : "border border-line-strong text-ink-700 hover:bg-sunken"
+              }`}
+              data-flow-book-next
             >
               <CalendarPlus className="h-3.5 w-3.5" />
               {t.flow.bookNext}

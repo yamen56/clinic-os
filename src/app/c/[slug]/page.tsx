@@ -13,6 +13,7 @@ import { BarChart, RowBar, type Point } from "@/components/ui/chart";
 import { QuickActions, type QuickAction } from "./quick-actions";
 import { TodayList } from "./today-list";
 import { owedSql } from "@/lib/invoices";
+import { dueBackCount } from "@/lib/due-back";
 import {
   CalendarDays,
   CalendarCheck,
@@ -27,6 +28,7 @@ import {
   UserX,
   UserPlus,
   ChevronRight,
+  CalendarPlus,
 } from "lucide-react";
 
 /** A stat tile. Built as data so the visible four follow the viewer's access. */
@@ -312,7 +314,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           ).rows
         : [];
 
-    return { appts, stats, series, doctors, services, sections };
+    // Patients the doctor asked to see again, not booked yet — the desk's recall list.
+    const dueBack = showCalendar ? await dueBackCount(c, a.clinicId) : 0;
+    return { appts, stats, series, doctors, services, sections, dueBack };
   });
 
   const revThis = Number(data.stats.rev_this);
@@ -587,6 +591,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
                 label={t.dashboard.unconfirmed}
                 count={data.stats.unconfirmed}
               />
+            )}
+            {showCalendar && (
+              <FollowUpRow href={`${base}/calendar?tab=waitlist`} icon={CalendarPlus} label={t.finishVisit.dueBack} count={data.dueBack} />
             )}
           </ul>
         </Card>

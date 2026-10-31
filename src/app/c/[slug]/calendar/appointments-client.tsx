@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import type { WaitlistEntry } from "@/lib/waitlist";
 import { AppointmentPanel, type PanelState } from "./appointment-panel";
-import { setFlowAction, type FlowStep } from "./flow-actions";
+import { setFlowAction, type FlowStep, type Handoff } from "./flow-actions";
+import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
+import { nextVisitOf } from "@/lib/next-visit";
+import { DueBackList } from "./waitlist/due-back";
 import { FlowBoard } from "./flow/flow-board";
 import { WalkInModal } from "./flow/walk-in-modal";
 import { ScheduleView } from "./schedule/schedule-view";
@@ -74,7 +77,7 @@ export function AppointmentsClient({
   /** Off for a workspace whose "appointments" are sales meetings. */
   showBoard: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { toast } = useToast();
   const [tab, setTabState] = useState<Tab>(initialTab);
   const [schedule, setSchedule] = useState<ScheduleState>(() => ({
@@ -105,6 +108,8 @@ export function AppointmentsClient({
         : null
   );
   const [walkIn, setWalkIn] = useState(false);
+  /* The visit whose Finish is being answered on the sheet. */
+  const [finishing, setFinishing] = useState<Appt | null>(null);
   const [version, setVersion] = useState(0);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [waitlistCount, setWaitlistCount] = useState(initialWaitlist);
@@ -172,7 +177,15 @@ export function AppointmentsClient({
     answered by the screen, not by the server — and the server's answer then
     replaces the guess, or puts the card back with the reason.
   */
-  const step = async (a: Appt, s: FlowStep, roomId?: string | null) => {
+  const step = async (a: Appt, s: FlowStep, roomId?: string | null, handoff?: Handoff | null) => {
+    /*
+      Finish asks first: the doctor hands the visit to the desk on the sheet,
+      or skips it. The sheet calls back here with its answer.
+    */
+    if (s === "finished" && handoff === undefined) {
+      setFinishing(a);
+      return;
+    }
     const now = new Date(nowMs).toISOString();
     const room = roomId !== undefined ? (today?.rooms ?? []).find((r) => r.id === roomId) : null;
     const roomPatch =
@@ -193,7 +206,8 @@ export function AppointmentsClient({
                   : { arrived_at: null };
     patchToday(a.id, guess);
     setBusyIds((x) => new Set(x).add(a.id));
-    const r = await setFlowAction(slug, a.id, s, roomId !== undefined ? { roomId } : {});
+    const r = await setFlowAction(slug, a.id, s, { ...(roomId !== undefined ? { roomId } : {}), ...(handoff ? { handoff } : {}) });
+    if (s === "finished") setFinishing(null);
     setBusyIds((x) => {
       const n = new Set(x);
       n.delete(a.id);
@@ -338,7 +352,7 @@ export function AppointmentsClient({
             busyIds={busyIds}
             onStep={step}
             onOpen={(a) => setPanel({ mode: "edit", appt: a })}
-            onBookNext={(a) => bookFrom({ id: a.patient_id, name: a.patient_name }, { doctorId: a.doctor_member_id, serviceId: a.service_id })}
+            onBookNext={(a) => bookFrom({ id: a.patient_id, name: a.patient_name }, nextVisitOf(a, tz))}
           />
         </div>
       )}
@@ -369,6 +383,17 @@ export function AppointmentsClient({
 
       {tab === "waitlist" && (
         <div className="pb-20 sm:pb-0">
+          <DueBackList
+            slug={slug}
+            tz={tz}
+            canMessage={caps.patients && caps.conversations}
+            onBook={(d) =>
+              bookFrom(
+                { id: d.patientId, name: d.patientName },
+                nextVisitOf({ starts_at: d.startsAt, finished_at: d.finishedAt, doctor_member_id: d.doctorId, service_id: d.serviceId, next_visit_days: d.nextVisitDays }, tz)
+              )
+            }
+          />
           <WaitlistTab
             slug={slug}
             tz={tz}
@@ -402,6 +427,8 @@ export function AppointmentsClient({
         nowMs={nowMs}
         canSendDocuments={!isDoctor}
         canOpenPatient={caps.patients}
+        canInvoice={caps.invoices}
+        onBookNext={(a) => bookFrom({ id: a.patient_id, name: a.patient_name }, nextVisitOf(a, tz))}
       />
 
       <WalkInModal
@@ -415,6 +442,20 @@ export function AppointmentsClient({
         meta={meta}
         defaultDoctorId={isDoctor ? selfMemberId ?? "" : boardDoctor}
       />
+
+      {finishing && (
+        <FinishVisitSheet
+          patientName={finishing.patient_name}
+          serviceName={(locale === "ar" ? finishing.service_name_ar : null) || finishing.service_name}
+          done={finishing.done}
+          doctors={(meta?.doctors ?? []).map((d) => ({ id: d.id, name: d.name }))}
+          defaultDoctorId={finishing.doctor_member_id}
+          defaultMinutes={finishing.service_duration_min ?? null}
+          busy={busyIds.has(finishing.id)}
+          onFinish={(h) => void step(finishing, "finished", undefined, h)}
+          onClose={() => setFinishing(null)}
+        />
+      )}
     </div>
   );
 }

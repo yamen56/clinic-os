@@ -138,11 +138,15 @@ export default async function PatientProfilePage({
         () => caps.calendar
           ? c.query(
               `select a.id, a.starts_at, a.ends_at, a.status, a.source, s.name as service_name, s.name_ar as service_name_ar,
-                      u.full_name as doctor_name
+                      u.full_name as doctor_name,
+                      -- Where they are today, for the banner over the file while they are in the clinic.
+                      a.arrived_at, a.seated_at, a.doctor_member_id, a.service_id, s.duration_min as service_duration_min,
+                      rm.name as room_name, rm.name_ar as room_name_ar
                from appointments a
                left join services s on s.id = a.service_id
                left join clinic_members m on m.id = a.doctor_member_id
                left join users u on u.id = m.user_id
+               left join clinic_rooms rm on rm.id = a.room_id
                where a.patient_id = $1 and a.clinic_id = $2 order by a.starts_at desc limit 50`,
               [id, access.clinicId]
             )

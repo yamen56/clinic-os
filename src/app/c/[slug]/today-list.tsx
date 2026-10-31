@@ -23,7 +23,8 @@ import { Badge, type StatusKey } from "@/components/ui/badge";
 import { fmtTime } from "@/lib/dates";
 import { flowStage, type FlowStage } from "@/lib/patient-flow";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
-import { setFlowAction, type FlowStep } from "./calendar/flow-actions";
+import { setFlowAction, type FlowStep, type Handoff } from "./calendar/flow-actions";
+import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
 
 export type TodayRow = {
   id: string;
@@ -78,14 +79,16 @@ export function TodayList({
     router.refresh();
   });
 
-  const step = async (row: TodayRow, s: FlowStep) => {
+  const [finishing, setFinishing] = useState<TodayRow | null>(null);
+  const step = async (row: TodayRow, s: FlowStep, handoff?: Handoff | null) => {
     const now = new Date().toISOString();
     const guess: Partial<TodayRow> =
       s === "arrived" ? { arrived_at: now } : s === "seated" ? { seated_at: now, arrived_at: row.arrived_at ?? now } : { status: "completed" };
     setMoved((m) => ({ ...m, [row.id]: guess }));
     setBusy(row.id);
-    const r = await setFlowAction(slug, row.id, s);
+    const r = await setFlowAction(slug, row.id, s, handoff ? { handoff } : {});
     setBusy(null);
+    setFinishing(null);
     if (r.error) {
       setMoved((m) => {
         const { [row.id]: _, ...rest } = m;
@@ -146,7 +149,7 @@ export function TodayList({
               <button
                 type="button"
                 disabled={busy === ap.id}
-                onClick={() => step(base, next)}
+                onClick={() => (next === "finished" ? setFinishing(base) : step(base, next))}
                 className="inline-flex h-10 shrink-0 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-[13px] font-semibold text-on-brand hover:bg-brand-hover active:opacity-80 disabled:opacity-60 sm:h-8 sm:px-3 sm:text-[12.5px]"
                 data-today-action={next}
               >
@@ -157,6 +160,17 @@ export function TodayList({
           </li>
         );
       })}
+      {finishing && (
+        <FinishVisitSheet
+          patientName={finishing.patient_name}
+          serviceName={(locale === "ar" ? finishing.service_name_ar : null) || finishing.service_name}
+          defaultDoctorId={null}
+          defaultMinutes={null}
+          busy={busy === finishing.id}
+          onFinish={(h) => void step(finishing, "finished", h)}
+          onClose={() => setFinishing(null)}
+        />
+      )}
     </ul>
   );
 }

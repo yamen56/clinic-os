@@ -347,7 +347,11 @@ async function main() {
     check("Call in puts the patient in the chosen room", !!seated.seated_at && seated.room_id === R1);
     check("the room strip shows the room busy", (await desk.locator('[data-room-tile="Room 1"]').getAttribute("data-room-busy")) === "1");
 
+    // Finish asks for the hand-off first (0088); Skip finishes exactly as Finish did before it.
     await card(lateId).locator('[data-flow-action="finished"]').click();
+    await desk.waitForSelector("[data-finish-sheet]", { timeout: 10000 });
+    check("Finish asks for the hand-off to the desk", (await desk.locator("[data-finish-sheet]").count()) === 1);
+    await desk.click("[data-finish-skip]");
     await desk.waitForSelector(`[data-flow-card="${lateId}"][data-stage="finished"]`, { timeout: 10000 }).catch(() => {});
     await desk.waitForTimeout(800);
     const fin = (await db.query(`select a.status, a.finished_at, p.last_visit_at from appointments a join patients p on p.id = a.patient_id where a.id = $1`, [lateId])).rows[0];

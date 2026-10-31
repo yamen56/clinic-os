@@ -181,7 +181,10 @@ export function PrescriptionComposer({
   onClose,
   onSaved,
   allergies = "",
+  appointmentId = null,
 }: {
+  /** The visit going on now: the prescription is filed under it. */
+  appointmentId?: string | null;
   slug: string;
   patient: { id: string; full_name: string; phone_e164: string | null };
   tz: string;
@@ -420,6 +423,7 @@ export function PrescriptionComposer({
       templateId,
       send,
       allergyAck: acked,
+      appointmentId,
     })
       .then((r) => {
         if (r.error || !r.row) {

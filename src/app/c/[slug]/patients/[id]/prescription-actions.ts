@@ -49,6 +49,8 @@ const createSchema = z.object({
   send: z.boolean(),
   /** The prescriber saw that a medicine runs into the patient's allergies, and went on. */
   allergyAck: z.boolean().optional(),
+  /** Written during a visit: filed under it (migration 0088). */
+  appointmentId: z.string().uuid().nullable().optional(),
 });
 
 type SendError = "no_phone" | "wa_disconnected" | "pdf_failed" | "not_found";
@@ -140,8 +142,9 @@ export async function createPrescriptionAction(
       */
       `insert into prescriptions (clinic_id, patient_id, doctor_member_id, doctor_name, author_id,
                                   number, locale, diagnosis, items, signed,
-                                  doctor_license_no, doctor_syndicate_no)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                                  doctor_license_no, doctor_syndicate_no, appointment_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+               (select id from appointments where id = $13::uuid and clinic_id = $1 and patient_id = $2))
        returning id`,
       [
         access.clinicId,
@@ -156,6 +159,8 @@ export async function createPrescriptionAction(
         doctor.has_signature,
         doctor.license_no ?? null,
         doctor.syndicate_no ?? null,
+        // Only a visit of this patient at this clinic; anything else files it under none.
+        data.appointmentId ?? null,
       ]
     );
     const id = ins.rows[0].id as string;

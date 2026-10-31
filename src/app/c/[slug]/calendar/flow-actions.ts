@@ -8,6 +8,10 @@ import { findOrCreatePatient } from "@/lib/patients";
 import { lockClinicSchedule } from "@/lib/appointments";
 import { loadActiveRooms, roomOccupant, suitableRooms } from "@/lib/rooms";
 import { isUuid } from "@/lib/uuid";
+import type { PoolClient } from "pg";
+import { notifyUser, staffMembersInRoles } from "@/lib/notify";
+import { NT, asLocale } from "@/lib/notification-text";
+import { resolveCapabilities, type MemberRole } from "@/lib/permissions";
 
 /**
  * The patient's way through the clinic today: arrived → in a room → finished,
@@ -28,6 +32,23 @@ export type FlowRow = {
   finished_at: string | null;
   room_id: string | null;
   flow_prev_status: string | null;
+  next_visit_days: number | null;
+  next_visit_min: number | null;
+  next_visit_member_id: string | null;
+  desk_note: string;
+  handed_off_at: string | null;
+};
+
+/**
+ * What the doctor tells the desk on finishing — all of it optional (migration
+ * 0088). When the next visit should be, how long and with whom, and a line for
+ * reception. Finish without it is Skip: the visit ends exactly as it used to.
+ */
+export type Handoff = {
+  nextDays: number | null;
+  nextMin: number | null;
+  nextMemberId: string | null;
+  note: string;
 };
 
 export type FlowResult = {
@@ -38,13 +59,14 @@ export type FlowResult = {
   row?: FlowRow;
 };
 
-const RETURNING = `returning id, status, arrived_at, seated_at, finished_at, room_id, flow_prev_status`;
+const RETURNING = `returning id, status, arrived_at, seated_at, finished_at, room_id, flow_prev_status,
+  next_visit_days, next_visit_min, next_visit_member_id, desk_note, handed_off_at`;
 
 export async function setFlowAction(
   slug: string,
   id: string,
   step: FlowStep,
-  opts: { roomId?: string | null } = {}
+  opts: { roomId?: string | null; handoff?: Handoff } = {}
 ): Promise<FlowResult> {
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
@@ -129,6 +151,32 @@ export async function setFlowAction(
         [cur.patient_id, cur.starts_at]
       );
       statusEvent = { status: "completed", previousStatus: cur.status };
+
+      /*
+        The hand-off, when the doctor gave one. Checked here, not trusted: the
+        member must be this clinic's and active (a foreign key is checked as
+        the table's owner, past RLS), the numbers inside what the columns allow.
+      */
+      const h = opts.handoff;
+      if (h) {
+        const days = Number.isInteger(h.nextDays) && h.nextDays! >= 1 && h.nextDays! <= 730 ? h.nextDays : null;
+        const mins = Number.isInteger(h.nextMin) && h.nextMin! >= 5 && h.nextMin! <= 480 ? h.nextMin : null;
+        let member: string | null = null;
+        if (h.nextMemberId && isUuid(h.nextMemberId)) {
+          const m = await c.query(`select id from clinic_members where id = $1 and clinic_id = $2 and active`, [h.nextMemberId, access.clinicId]);
+          member = m.rowCount ? h.nextMemberId : null;
+        }
+        const note = String(h.note ?? "").trim().slice(0, 500);
+        row = (
+          await c.query(
+            `update appointments set next_visit_days = $2, next_visit_min = $3, next_visit_member_id = $4, desk_note = $5,
+                    handed_off_at = now(), handed_off_by = $6
+              where id = $1 ${RETURNING}`,
+            [id, days, mins, member, note, access.session.user.id]
+          )
+        ).rows[0];
+        if (days || note) await tellTheDesk(c, access.clinicId, access.clinicSlug, id, access.session.user.id);
+      }
     } else if (step === "no_show") {
       // Somebody already in a room plainly came.
       if (!active || cur.seated_at) return { error: "bad_state" };
@@ -149,9 +197,12 @@ export async function setFlowAction(
         an undo that cannot message anybody.
       */
       if ((cur.status === "completed" || cur.status === "no_show") && cur.flow_prev_status) {
+        // Unfinished, the visit's hand-off goes with it: it was about a visit that has not ended.
         row = (
           await c.query(
-            `update appointments set status = flow_prev_status, flow_prev_status = null, finished_at = null
+            `update appointments set status = flow_prev_status, flow_prev_status = null, finished_at = null,
+                    next_visit_days = null, next_visit_min = null, next_visit_member_id = null, desk_note = '',
+                    handed_off_at = null, handed_off_by = null
               where id = $1 ${RETURNING}`,
             [id]
           )
@@ -186,6 +237,42 @@ export async function setFlowAction(
     }
     return { ok: true, row: serialize(row) };
   });
+}
+
+/**
+ * The desk is told the doctor has finished, and what they asked for.
+ *
+ * To whoever takes the patient out of the clinic — the front desk and the
+ * owners who may see the calendar — in their own language, onto the visit on
+ * the board. Not to the doctor who finished it: they know.
+ */
+async function tellTheDesk(c: PoolClient, clinicId: string, slug: string, appointmentId: string, actorUserId: string) {
+  const a = (
+    await c.query(
+      `select a.next_visit_days, a.desk_note, p.full_name as patient, coalesce(du.full_name, au.full_name) as doctor
+         from appointments a
+         join patients p on p.id = a.patient_id
+         left join clinic_members dm on dm.id = a.doctor_member_id
+         left join users du on du.id = dm.user_id
+         left join users au on au.id = a.handed_off_by
+        where a.id = $1`,
+      [appointmentId]
+    )
+  ).rows[0];
+  if (!a) return;
+  for (const m of await staffMembersInRoles(c, clinicId, ["owner", "receptionist"])) {
+    if (m.userId === actorUserId) continue;
+    if (!resolveCapabilities(m.permissions, { isOwner: m.isOwner, role: m.role as MemberRole }).calendar) continue;
+    const L = NT[asLocale(m.locale)];
+    await notifyUser(c, m.userId, {
+      clinicId,
+      kind: "visit_handoff",
+      title: L.handoffTitle(a.doctor ?? "", a.patient),
+      body: [a.next_visit_days ? L.handoffNext(a.next_visit_days) : L.handoffDone, a.desk_note].filter(Boolean).join("\n"),
+      url: `/c/${slug}/calendar?open=${appointmentId}`,
+      dedupeKey: `visit_handoff:${appointmentId}`,
+    });
+  }
 }
 
 /**
@@ -301,5 +388,10 @@ function serialize(r: FlowRow): FlowRow {
     finished_at: iso(r.finished_at),
     room_id: r.room_id,
     flow_prev_status: r.flow_prev_status,
+    next_visit_days: r.next_visit_days ?? null,
+    next_visit_min: r.next_visit_min ?? null,
+    next_visit_member_id: r.next_visit_member_id ?? null,
+    desk_note: r.desk_note ?? "",
+    handed_off_at: iso(r.handed_off_at),
   };
 }

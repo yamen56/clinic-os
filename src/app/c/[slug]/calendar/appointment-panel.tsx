@@ -14,6 +14,9 @@ import { flowStage, type FlowStage } from "@/lib/patient-flow";
 import { createAppointmentAction, updateAppointmentAction, setAppointmentStatusAction } from "./actions";
 import { setFlowAction, type FlowStep } from "./flow-actions";
 import { addToWaitlistAction } from "../waitlist/actions";
+import type { Handoff } from "./flow-actions";
+import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
+import { nextWhen } from "@/lib/next-visit";
 import { scheduleErrorText, savedText } from "./messages";
 import { RequiredDocuments } from "@/components/esign/required-documents";
 import { AppointmentNotes } from "@/components/appointment-notes";
@@ -62,7 +65,13 @@ export function AppointmentPanel({
   nowMs,
   canSendDocuments,
   canOpenPatient,
+  canInvoice = false,
+  onBookNext,
 }: {
+  /** May raise an invoice — a finished visit offers to bill it. */
+  canInvoice?: boolean;
+  /** Book the next visit from a finished one, on the day its hand-off asked for. */
+  onBookNext?: (a: Appt) => void;
   slug: string;
   tz: string;
   state: PanelState;
@@ -227,10 +236,12 @@ export function AppointmentPanel({
       onChanged();
     });
 
-  const flow = (step: FlowStep) =>
+  const [finishing, setFinishing] = useState(false);
+  const flow = (step: FlowStep, handoff?: Handoff | null) =>
     start(async () => {
       if (state?.mode !== "edit") return;
-      const r = await setFlowAction(slug, state.appt.id, step);
+      const r = await setFlowAction(slug, state.appt.id, step, handoff ? { handoff } : {});
+      setFinishing(false);
       if (r.error) {
         toast(
           r.error === "room_occupied"
@@ -317,7 +328,7 @@ export function AppointmentPanel({
                     </Button>
                   )}
                   {stage === "in_room" && (
-                    <Button size="sm" onClick={() => flow("finished")} loading={pending}>
+                    <Button size="sm" onClick={() => setFinishing(true)} loading={pending}>
                       <CheckCheck className="h-4 w-4" />
                       {t.flow.finish}
                     </Button>
@@ -329,6 +340,54 @@ export function AppointmentPanel({
                     </Button>
                   )}
                 </span>
+              </div>
+            )}
+
+            {/*
+              A finished visit, wherever it is opened: what the doctor handed on,
+              and the desk's next steps — bill it, book the next one. It used
+              to offer only Undo here, so checkout worked from the board alone.
+            */}
+            {editAppt && editAppt.status === "completed" && (canInvoice || onBookNext) && (
+              <div className="grid gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5" data-panel-checkout>
+                {editAppt.handed_off_at && (editAppt.next_visit_days || editAppt.desk_note) && (
+                  <div className="grid gap-0.5 text-[12.5px]">
+                    {editAppt.next_visit_days ? (
+                      <span className="font-semibold">{t.finishVisit.nextIn.replace("{when}", nextWhen(editAppt.next_visit_days, t.finishVisit.inDays))}</span>
+                    ) : null}
+                    {editAppt.desk_note && (
+                      <span dir="auto" className="whitespace-pre-line text-ink-700">
+                        {editAppt.desk_note}
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {canInvoice &&
+                    (editAppt.invoice ? (
+                      <Link href={`/c/${slug}/invoices/${editAppt.invoice.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-st-confirmed-soft px-3 text-[12.5px] font-semibold text-st-confirmed">
+                        <CheckCheck className="h-3.5 w-3.5" />
+                        {(editAppt.invoice.paid ? t.flow.paidInvoice : t.flow.billedInvoice).replace("{number}", editAppt.invoice.number)}
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/c/${slug}/invoices/new?patient=${editAppt.patient_id}&appointment=${editAppt.id}`}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+                      >
+                        {t.flow.createInvoice}
+                      </Link>
+                    ))}
+                  {onBookNext && (
+                    <button
+                      type="button"
+                      onClick={() => onBookNext(editAppt)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-[12.5px] font-semibold text-on-brand hover:bg-brand-hover"
+                      data-panel-book-next
+                    >
+                      {t.flow.bookNext}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -694,6 +753,19 @@ export function AppointmentPanel({
         </footer>
       </aside>
 
+      {finishing && editAppt && (
+        <FinishVisitSheet
+          patientName={editAppt.patient_name}
+          serviceName={(locale === "ar" ? editAppt.service_name_ar : null) || editAppt.service_name}
+          done={done}
+          doctors={doctors.map((d) => ({ id: d.id, name: d.name }))}
+          defaultDoctorId={editAppt.doctor_member_id}
+          defaultMinutes={editAppt.service_duration_min ?? null}
+          busy={pending}
+          onFinish={(h) => flow("finished", h)}
+          onClose={() => setFinishing(false)}
+        />
+      )}
       <ConfirmDialog
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}

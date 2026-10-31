@@ -47,6 +47,14 @@ export type Appt = {
   medical?: MedicalFlags | null;
   /** The invoice that bills a finished visit — sent only to a member who may see invoices. */
   invoice?: { id: string; number: string; paid: boolean };
+  /** The doctor's hand-off on finishing (migration 0088): when, how long and with whom next, and a line for the desk. */
+  next_visit_days?: number | null;
+  next_visit_min?: number | null;
+  next_visit_member_id?: string | null;
+  desk_note?: string;
+  handed_off_at?: string | null;
+  /** The booked service's length — what a next visit takes unless the hand-off says otherwise. */
+  service_duration_min?: number | null;
 };
 
 /** A treatment on the patient's plan, as a visit carries it. */
