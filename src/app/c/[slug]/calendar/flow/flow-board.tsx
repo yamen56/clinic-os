@@ -262,6 +262,7 @@ export function FlowBoard({
                         onStep={(step, roomId) => onStep(a, step, roomId)}
                         onOpen={() => onOpen(a)}
                         onBookNext={() => onBookNext(a)}
+                        nameOpensFile={isDoctor && caps.patients}
                       />
                     ))
                   )}
@@ -301,6 +302,7 @@ export function FlowBoard({
                       onStep={(step, roomId) => onStep(a, step, roomId)}
                       onOpen={() => onOpen(a)}
                       onBookNext={() => onBookNext(a)}
+                      nameOpensFile={isDoctor && caps.patients}
                     />
                   ))}
                 </div>

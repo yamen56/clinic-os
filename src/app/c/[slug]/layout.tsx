@@ -160,6 +160,7 @@ export default async function ClinicLayout({
         slug: clinic.slug,
         brandColor: clinic.brandColor,
         logoPath: clinic.logoPath,
+        tz: clinic.timezone,
       }}
       role={access.role}
       sidebar={sidebar}

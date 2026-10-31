@@ -19,7 +19,8 @@ import { AppointmentNotes } from "@/components/appointment-notes";
 import { PatientPicker } from "@/components/appointments/patient-picker";
 import type { Appt, Doctor, PlannedItem, Room, Section, Service } from "./types";
 import { VisitLineView, whereOf } from "@/components/charts/dental/visit-work";
-import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2 } from "lucide-react";
+import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert } from "lucide-react";
+import { flagAlerts } from "@/lib/medical-history";
 
 export type PanelState =
   | null
@@ -329,7 +330,17 @@ export function AppointmentPanel({
               </div>
             )}
 
-            {/* Patient */}
+            {/* Patient — and, before anything else about the visit, what must not be missed. */}
+            {editAppt && flagAlerts(editAppt.medical, locale).length > 0 && (
+              <div className="flex flex-wrap gap-1.5" data-panel-medical>
+                {flagAlerts(editAppt.medical, locale).map((a) => (
+                  <Badge key={a} status="danger">
+                    <ShieldAlert className="h-3 w-3" />
+                    {a}
+                  </Badge>
+                ))}
+              </div>
+            )}
             <Field label={t.calendar.patient} required>
               {patient ? (
                 <div className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2">

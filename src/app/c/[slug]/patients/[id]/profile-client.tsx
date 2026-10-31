@@ -46,9 +46,10 @@ import { ReadyToBill } from "@/components/charts/dental/ready-to-bill";
 import { FaceProvider, type FaceTabData } from "@/components/charts/face/store";
 import { FaceReadyToBill } from "@/components/charts/face/ready-to-bill";
 import { TakePayment } from "@/components/take-payment";
-import { MedicalCard } from "@/components/charts/dental/medical-card";
+import { DentalMedicalCard } from "@/components/charts/dental/medical-card";
+import { MedicalCard } from "@/components/medical-card";
 import { VisitWork, useVisitWorkCount } from "@/components/charts/dental/visit-work";
-import { medicalAlerts } from "@/lib/medical-history";
+import { medicalAlerts, readHistory, type MedicalHistory } from "@/lib/medical-history";
 import { FilesTab, type FilesHub } from "./files-tab";
 import { OnFile, OtherNoteCard, SOURCE_ICON, useOtherNotes, type OtherSource } from "./notes-feed";
 import type { FeedItem } from "@/lib/note-feed";
@@ -101,17 +102,17 @@ const FaceChartTab = dynamic(() => import("./face-chart-tab").then((m) => m.Face
 });
 
 /*
-  What the dentist must not miss before touching the patient: allergies, blood
+  What the doctor must not miss before touching the patient: allergies, blood
   thinners, bisphosphonates, pregnancy. In the header, in the clinic's own
-  language, for a clinic that keeps the medical history with the chart.
+  language, for every clinic. A dental clinic's chart holds the history live,
+  so its copy wins; any other clinic reads the file's own.
 */
-function MedicalAlerts() {
+function MedicalAlerts({ history }: { history: MedicalHistory }) {
   const { locale } = useI18n();
   const store = useOptionalDentalStore();
-  if (!store) return null;
   return (
     <>
-      {medicalAlerts(store.medical, locale).map((a) => (
+      {medicalAlerts(store ? store.medical : history, locale).map((a) => (
         <Badge key={a} status="danger">
           <ShieldAlert className="h-3 w-3" />
           {a}
@@ -119,6 +120,19 @@ function MedicalAlerts() {
       ))}
     </>
   );
+}
+
+/* The allergies a prescription is checked against, from the same place as the card's. */
+function WithAllergies({ history, children }: { history: MedicalHistory; children: (allergies: string) => React.ReactNode }) {
+  const store = useOptionalDentalStore();
+  return <>{children((store ? store.medical : history).allergies)}</>;
+}
+
+/* The medical history card: the dental chart's live copy when there is one, the file's own otherwise. */
+function PatientMedical({ tz, history, onSave }: { tz: string; history: MedicalHistory; onSave: (h: MedicalHistory) => Promise<boolean> }) {
+  const store = useOptionalDentalStore();
+  if (store) return <DentalMedicalCard tz={tz} />;
+  return <MedicalCard tz={tz} value={history} onSave={onSave} />;
 }
 
 /*
@@ -238,6 +252,8 @@ type Patient = {
   file_no: number | null;
   /** Who typed them in or imported them; null for WhatsApp, the booking link and the AI. */
   added_by: AddedBy | null;
+  /** Conditions, allergies and medicines, as stored — read through readHistory. */
+  medical_history: unknown;
 };
 
 export type PatientFileRow = {
@@ -446,6 +462,30 @@ export function PatientProfile(props: {
   };
 
   /*
+    The medical history, for a clinic without the dental chart: saved whole and
+    at once rather than through the autosave, because its editor closes only on
+    a save that landed. The server stamps who changed it, and its answer is
+    what the card and the header show.
+  */
+  const medical = readHistory(p.medical_history);
+  const saveMedical = async (h: MedicalHistory): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/c/${slug}/patients/${p.id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ patch: { medical_history: h } }),
+      });
+      const j = (await res.json().catch(() => null)) as { patient?: { medical_history?: unknown } } | null;
+      if (!res.ok || !j?.patient) throw new Error(`http_${res.status}`);
+      setP((prev) => ({ ...prev, medical_history: j.patient!.medical_history }));
+      return true;
+    } catch {
+      toast(t.common.genericError, "error");
+      return false;
+    }
+  };
+
+  /*
     The clinic can rename any field, including the built-in ones, so the labels
     on this form come from the definitions rather than from the dictionary. The
     dictionary is the fallback for a clinic that has not touched them.
@@ -586,7 +626,7 @@ export function PatientProfile(props: {
                 {cover === "expired" ? ` · ${t.insurers.card.expiredShort}` : ""}
               </Badge>
             )}
-            <MedicalAlerts />
+            <MedicalAlerts history={medical} />
             <SaveIndicator state={state} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-500">
@@ -914,8 +954,8 @@ export function PatientProfile(props: {
                   }}
                 />
               )}
-              {/* The medical history: a dental clinic's, held with its chart; its alerts head the file. */}
-              <MedicalCard tz={tz} />
+              {/* The medical history, for every clinic; its alerts head the file. */}
+              <PatientMedical tz={tz} history={medical} onSave={saveMedical} />
               <Card className="p-5">
                 <h3 className="mb-3 text-[15px] font-semibold">{t.patients.overview.summary}</h3>
                 <Textarea
@@ -1304,17 +1344,22 @@ export function PatientProfile(props: {
       </div>
 
       {composer && (
-        <PrescriptionComposer
-          slug={slug}
-          patient={{ id: p.id, full_name: p.full_name, phone_e164: p.phone_e164 }}
-          tz={tz}
-          draft={composer.draft}
-          data={rxData.data}
-          setData={rxData.setData}
-          reload={rxData.load}
-          onClose={() => setComposer(null)}
-          onSaved={onRxSaved}
-        />
+        <WithAllergies history={medical}>
+          {(allergies) => (
+            <PrescriptionComposer
+              slug={slug}
+              patient={{ id: p.id, full_name: p.full_name, phone_e164: p.phone_e164 }}
+              tz={tz}
+              draft={composer.draft}
+              data={rxData.data}
+              setData={rxData.setData}
+              reload={rxData.load}
+              onClose={() => setComposer(null)}
+              onSaved={onRxSaved}
+              allergies={allergies}
+            />
+          )}
+        </WithAllergies>
       )}
       <MergeModal
         open={mergeOpen}

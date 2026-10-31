@@ -74,6 +74,108 @@ export function medicalAlerts(h: MedicalHistory, locale: string): string[] {
   return out;
 }
 
+/**
+ * What must follow the patient onto other screens — the board, the calendar,
+ * the prescription — and nothing more: the allergies and the conditions that
+ * change what may be done. The medicines and the notes stay in the file.
+ * Null when there is nothing to warn about.
+ */
+export type MedicalFlags = { allergies: string; conditions: string[] };
+
+export function medicalFlags(raw: unknown): MedicalFlags | null {
+  const h = readHistory(raw);
+  const conditions = h.conditions.filter((k) => CONDITIONS.some((c) => c.key === k && c.alert));
+  const allergies = h.allergies.trim();
+  return allergies || conditions.length ? { allergies, conditions } : null;
+}
+
+/** The flags as the header words them. */
+export function flagAlerts(f: MedicalFlags | null | undefined, locale: string): string[] {
+  return f ? medicalAlerts({ conditions: f.conditions, allergies: f.allergies, medications: "", notes: "" }, locale) : [];
+}
+
+/*
+  Allergies are typed as a family more often than as a drug: "Penicillin",
+  "NSAIDs", "sulfa". A prescription names the drug, and usually by its brand —
+  Augmentin, Brufen, Cataflam. Each family below is what a clinic here would
+  write for it, in either language, and the drugs and brands it covers. A
+  warning that misses Augmentin for a penicillin allergy is worse than none,
+  because it is trusted.
+*/
+const FAMILIES: { names: string[]; drugs: string[] }[] = [
+  {
+    names: ["penicillin", "بنسلين", "بنيسلين"],
+    drugs: [
+      "penicillin", "amoxicillin", "amoxil", "augmentin", "amoxiclav", "co-amoxiclav", "ampicillin", "cloxacillin",
+      "flucloxacillin", "piperacillin", "tazocin", "bactoclav", "megamox", "curam", "اموكسيسيلين", "اموكسيل", "اوجمنتين", "بنسلين",
+    ],
+  },
+  {
+    names: ["cephalosporin", "سيفالوسبورين"],
+    drugs: ["cephalexin", "keflex", "cefuroxime", "zinnat", "cefixime", "suprax", "ceftriaxone", "rocephin", "cefadroxil", "cefaclor", "cefdinir", "zinat"],
+  },
+  {
+    names: ["nsaid", "nsaids", "مضادات الالتهاب", "aspirin", "اسبرين"],
+    drugs: [
+      "ibuprofen", "brufen", "advil", "nurofen", "diclofenac", "voltaren", "cataflam", "naproxen", "aspirin", "aspocid", "ketoprofen",
+      "mefenamic", "ponstan", "celecoxib", "celebrex", "meloxicam", "mobic", "etoricoxib", "arcoxia", "piroxicam", "indomethacin",
+      "ketorolac", "toradol", "بروفين", "فولتارين", "كتافلام", "اسبرين", "ارتوكسيا", "اركوكسيا",
+    ],
+  },
+  {
+    names: ["sulfa", "sulfonamide", "سلفا"],
+    drugs: ["sulfamethoxazole", "co-trimoxazole", "cotrimoxazole", "septrin", "bactrim", "sulfadiazine", "sulfasalazine"],
+  },
+  {
+    names: ["macrolide", "erythromycin", "اريثرومايسين"],
+    drugs: ["erythromycin", "azithromycin", "zithromax", "clarithromycin", "klacid", "ازيثرومايسين", "زيثروماكس", "كلاسيد"],
+  },
+  {
+    names: ["local anaesthetic", "local anesthetic", "مخدر موضعي", "بنج"],
+    drugs: ["lidocaine", "lignocaine", "xylocaine", "articaine", "septanest", "mepivacaine", "scandonest", "bupivacaine", "prilocaine", "benzocaine"],
+  },
+  {
+    names: ["codeine", "opioid", "كودين"],
+    drugs: ["codeine", "tramadol", "tramal", "morphine", "oxycodone", "solpadeine", "panadol extra codeine", "ترامادول"],
+  },
+];
+
+/** Lower case, Arabic letters folded the way search folds them, no marks. */
+function fold(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/[ً-ْـ]/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The allergy a medicine runs into, as the patient's history words it — or
+ * null. Matches a family by its drugs and brands, and anything else written
+ * as an allergy by name, so "Latex" never warns but "Brufen" under "NSAIDs"
+ * and "Tramadol" under "Tramadol" both do.
+ */
+export function allergyFor(allergies: string, medicine: string): string | null {
+  const med = fold(medicine);
+  if (med.length < 3) return null;
+  for (const raw of allergies.split(/[,،;؛\n/+]+/)) {
+    const allergy = raw.trim();
+    const a = fold(allergy);
+    if (a.length < 3) continue;
+    const family = FAMILIES.find((f) => f.names.some((n) => a.includes(fold(n))));
+    if (family?.drugs.some((d) => med.includes(fold(d)))) return allergy;
+    // By name: the allergy in the medicine ("amoxicillin" in "Amoxicillin 500mg"), or its first word among the allergy's.
+    const word = med.split(" ")[0];
+    if (a.length >= 4 && med.includes(a)) return allergy;
+    if (word.length >= 4 && a.split(" ").includes(word)) return allergy;
+  }
+  return null;
+}
+
 export function hasHistory(h: MedicalHistory): boolean {
   return h.conditions.length > 0 || !!h.allergies.trim() || !!h.medications.trim() || !!h.notes.trim();
 }

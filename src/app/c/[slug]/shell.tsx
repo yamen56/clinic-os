@@ -18,7 +18,10 @@ import { NotificationPopups, useLiveNotifications, type InAppPrefs } from "@/com
 import { ArrivalAlerts } from "@/components/appointments/arrival-alerts";
 import { BackLink, useBackHref } from "@/components/back-link";
 import type { CapabilityMap, MemberRole } from "@/lib/permissions";
+import { CommandPalette, keyIsFree, type PaletteAction, type PalettePage } from "@/components/command-palette";
+import { hrefFor, useQuickShortcuts, type QuickAction } from "./quick-actions";
 import {
+  Search,
   LayoutDashboard,
   MessageCircle,
   CalendarDays,
@@ -109,6 +112,8 @@ export function Shell({
     slug: string;
     brandColor: string;
     logoPath: string | null;
+    /** The clinic's timezone — a found patient's next visit is in the clinic's time. */
+    tz: string;
   };
   role: MemberRole;
   /** The desktop sidebar as this person left it, from the cookie (see lib/theme). */
@@ -241,6 +246,49 @@ export function Shell({
     { key: "settings", href: `${base}/settings`, show: caps.settings },
   ];
   const visible = items.filter((i) => i.show);
+
+  /*
+    The search box and the four accelerators, on every screen. A patient found
+    goes to their file, or — for somebody who may book but not open files — to
+    a booking for them.
+  */
+  const quick: QuickAction[] = [
+    ...(caps.calendar ? (["appointment"] as const) : []),
+    ...(caps.patients ? (["patient"] as const) : []),
+    ...(caps.invoices ? (["invoice"] as const) : []),
+    ...(caps.conversations ? (["inbox"] as const) : []),
+  ];
+  useQuickShortcuts(clinic.slug, quick);
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // `code`, not `key`: on an Arabic layout K is "ن" and / is "ظ".
+      const combo = (e.ctrlKey || e.metaKey) && !e.altKey && e.code === "KeyK";
+      const slash = !e.ctrlKey && !e.metaKey && !e.altKey && e.code === "Slash" && keyIsFree();
+      if (!combo && !slash) return;
+      e.preventDefault();
+      setSearchOpen((o) => !o);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const canSearch = caps.patients || caps.calendar || caps.invoices || caps.conversations || caps.automations;
+  const patientHref = caps.patients
+    ? (id: string) => `${base}/patients/${id}`
+    : caps.calendar
+      ? (id: string) => `${base}/calendar?patient=${id}`
+      : caps.invoices
+        ? (id: string) => `${base}/invoices/new?patient=${id}`
+        : null;
+  const quickLabel: Record<QuickAction, string> = {
+    appointment: t.dashboard.newAppointment,
+    patient: t.dashboard.newPatient,
+    invoice: t.dashboard.newInvoice,
+    inbox: t.dashboard.openInbox,
+  };
+  const paletteActions: PaletteAction[] = quick.map((a) => ({ key: a, label: quickLabel[a], href: hrefFor(clinic.slug, a), icon: a }));
+  const palettePages: PalettePage[] = visible.map((v) => ({ key: v.key, label: t.nav[v.key], href: v.href }));
+
   const mobileMain = visible.slice(0, 4);
   const mobileMore = visible.slice(4);
   /*
@@ -389,6 +437,23 @@ export function Shell({
             </div>
             <div className="text-[11px] text-white/45">Clinicti</div>
           </div>
+        </div>
+        <div className="px-3 pb-1 sb-mini:px-0">
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="flex h-9 w-full items-center gap-2 rounded-ctl border border-white/10 bg-white/5 px-2.5 text-[13px] text-white/55 transition-colors duration-140 ease-out hover:bg-white/10 hover:text-white sb-mini:mx-auto sb-mini:w-9 sb-mini:justify-center sb-mini:px-0"
+            aria-label={t.search.title}
+            onMouseEnter={(e) => showTip(e, t.search.title)}
+            onMouseLeave={hideTip}
+            onFocus={(e) => showTip(e, t.search.title)}
+            onBlur={hideTip}
+            data-open-search
+          >
+            <Search className="h-4 w-4 shrink-0" strokeWidth={1.9} />
+            <span className="flex-1 truncate text-start sb-mini:sr-only">{t.search.button}</span>
+            <kbd className="rounded border border-white/15 px-1 text-[10px] font-semibold sb-mini:hidden">Ctrl K</kbd>
+          </button>
         </div>
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 sb-mini:px-0" onScroll={hideTip}>
           {visible.map(({ key, href, badge }) => {
@@ -573,6 +638,15 @@ export function Shell({
                 {clinicDisplay}
               </span>
             </Link>
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              aria-label={t.search.title}
+              className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full text-ink-500 transition-colors duration-140 ease-out active:bg-sunken"
+              data-open-search
+            >
+              <Search className="h-5 w-5" strokeWidth={1.75} />
+            </button>
             <Link
               href={`${base}/notifications`}
               aria-label={bellLabel}
@@ -636,6 +710,16 @@ export function Shell({
       </div>
 
       <NotificationPopups items={live.popups} onDismiss={live.dismiss} />
+      <CommandPalette
+        slug={clinic.slug}
+        tz={clinic.tz}
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        canSearch={canSearch}
+        patientHref={patientHref}
+        actions={paletteActions}
+        pages={palettePages}
+      />
       {/* A doctor hears their patient arrive, on any screen. The waitlist used
           to sit here as a nav entry of its own; it is a tab of Appointments now. */}
       {role === "doctor" && caps.calendar && memberId && <ArrivalAlerts slug={clinic.slug} push={live.push} />}

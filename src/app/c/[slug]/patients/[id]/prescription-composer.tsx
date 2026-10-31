@@ -40,9 +40,11 @@ import {
   Printer,
   Send,
   Settings2,
+  ShieldAlert,
   Trash2,
   X,
 } from "lucide-react";
+import { allergyFor } from "@/lib/medical-history";
 
 /*
   The prescription composer.
@@ -178,10 +180,13 @@ export function PrescriptionComposer({
   reload,
   onClose,
   onSaved,
+  allergies = "",
 }: {
   slug: string;
   patient: { id: string; full_name: string; phone_e164: string | null };
   tz: string;
+  /** The patient's allergies, as their medical history words them — every medicine is checked against them. */
+  allergies?: string;
   draft: RxDraft | null;
   data: ComposerData | null;
   setData: (fn: (d: ComposerData | null) => ComposerData | null) => void;
@@ -360,6 +365,22 @@ export function PrescriptionComposer({
     });
   }, [data, locale, patient.full_name, doctor, tz, clean, diagnosis]);
 
+  /*
+    Each medicine against the patient's allergies. A match does not stop the
+    doctor — they may know the reaction was mild, or the history is wrong — but
+    it must be looked at: saving waits for "I've checked", which the server
+    asks for again and records. Changing the medicines asks again.
+  */
+  const conflicts = useMemo(
+    () =>
+      items.map((it) => (it.name.trim() && allergies.trim() ? allergyFor(allergies, it.name) : null)),
+    [items, allergies]
+  );
+  const conflictKey = conflicts.map((c, i) => (c ? `${i}:${items[i].name}` : "")).join("|");
+  const hasConflict = conflicts.some(Boolean);
+  const [ackFor, setAckFor] = useState<string | null>(null);
+  const acked = hasConflict && ackFor === conflictKey;
+
   /* ------------------------------------------------------------ saving */
 
   const submit = (send: boolean) => {
@@ -369,6 +390,10 @@ export function PrescriptionComposer({
       return;
     }
     if (!doctorId || pending) return;
+    if (hasConflict && !acked) {
+      toast(T.allergyAckNeeded, "error");
+      return;
+    }
 
     /*
       The print tab is opened here, inside the press, and pointed at the PDF
@@ -394,11 +419,12 @@ export function PrescriptionComposer({
       items: clean,
       templateId,
       send,
+      allergyAck: acked,
     })
       .then((r) => {
         if (r.error || !r.row) {
           win?.close();
-          toast(T.failed, "error");
+          toast(r.error === "allergy" ? T.allergyAckNeeded : T.failed, "error");
           setPending(null);
           return;
         }
@@ -507,6 +533,13 @@ export function PrescriptionComposer({
               {!hasPhone && (
                 <p className="rounded-lg border border-st-pending/30 bg-st-pending/10 px-3 py-2 text-[13px] text-ink-700">
                   {T.noPhone}
+                </p>
+              )}
+              {/* The sheet covers the file's header, so its allergies come with it. */}
+              {allergies.trim() && (
+                <p className="flex items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] font-semibold text-danger" dir="auto" data-rx-allergies>
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  {T.allergies}: {allergies.trim()}
                 </p>
               )}
 
@@ -679,21 +712,39 @@ export function PrescriptionComposer({
                 <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{T.medicines}</span>
                 <div ref={listRef} className="space-y-2.5" onKeyDown={onListKeyDown}>
                   {items.map((it, i) => (
-                    <MedicineRow
-                      key={i}
-                      index={i}
-                      item={it}
-                      active={active === i}
-                      locale={locale}
-                      medications={data?.medications ?? []}
-                      canRemove={items.length > 1 || !!it.name}
-                      onFocus={() => setActive(i)}
-                      onChange={(f, v) => setField(i, f, v)}
-                      onPick={(m) => pickMedicine(i, m)}
-                      onRemove={() => removeRow(i)}
-                    />
+                    <div key={i}>
+                      <MedicineRow
+                        index={i}
+                        item={it}
+                        active={active === i}
+                        locale={locale}
+                        medications={data?.medications ?? []}
+                        canRemove={items.length > 1 || !!it.name}
+                        onFocus={() => setActive(i)}
+                        onChange={(f, v) => setField(i, f, v)}
+                        onPick={(m) => pickMedicine(i, m)}
+                        onRemove={() => removeRow(i)}
+                      />
+                      {conflicts[i] && (
+                        <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-danger" data-rx-allergy={i}>
+                          <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+                          {T.allergyMatch.replace("{allergy}", conflicts[i]!)}
+                        </p>
+                      )}
+                    </div>
                   ))}
                 </div>
+                {hasConflict && (
+                  <label className="mt-3 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-soft px-3 py-2.5 text-[13px] font-semibold text-danger" data-rx-allergy-ack>
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 accent-[var(--color-danger)]"
+                      checked={acked}
+                      onChange={(e) => setAckFor(e.target.checked ? conflictKey : null)}
+                    />
+                    {T.allergyAck}
+                  </label>
+                )}
                 <Button variant="soft" className="mt-3 w-full sm:w-auto" onClick={addRow} disabled={items.length >= 20}>
                   <Plus className="h-4 w-4" />
                   {T.addMedicine}

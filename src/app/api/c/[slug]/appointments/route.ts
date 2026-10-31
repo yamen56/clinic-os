@@ -4,6 +4,7 @@ import { can } from "@/lib/auth";
 import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { leadIdOf } from "@/lib/charts/dental/full-arch";
 import { visitLines } from "@/lib/charts/dental/treatment";
+import { medicalFlags } from "@/lib/medical-history";
 
 type WorkRow = { markId: string; site: string; label: string; labelAr: string | null; treatmentKey: string; groupId: string | null; step: string | null; at: string };
 type Member = { id: string; site: string; label: string; labelAr: string | null; treatmentKey: string; groupId: string };
@@ -51,7 +52,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
         `select a.id, a.patient_id, a.doctor_member_id, a.service_id, a.starts_at, a.ends_at,
                 a.status, a.source, a.notes, a.intake_answers,
                 a.room_id, a.arrived_at, a.seated_at, a.finished_at, a.walk_in, a.flow_prev_status,
-                p.full_name as patient_name, p.phone_e164 as patient_phone,
+                p.full_name as patient_name, p.phone_e164 as patient_phone, p.medical_history,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
                 s.section_id as service_section_id, s.location_kind as service_location,
                 cm.color as doctor_color, u.full_name as doctor_name,
@@ -120,7 +121,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       and bridge teeth, or a bridge's teeth, are listed under the group's lead —
       found among the group's members by the chart's own rule.
     */
-    let appointments = appts.rows;
+    /*
+      The allergies and the conditions that change what may be done, so the
+      board and the panel warn before the patient is called in — the
+      medicines and notes stay in the file.
+    */
+    let appointments = appts.rows.map(({ medical_history, ...a }) => ({ ...a, medical: medicalFlags(medical_history) }));
     if (dental) {
       const rows = appointments.flatMap((a) => (a.done ?? []) as WorkRow[]);
       const groups = [...new Set(rows.map((r) => r.groupId).filter((g): g is string => !!g))];

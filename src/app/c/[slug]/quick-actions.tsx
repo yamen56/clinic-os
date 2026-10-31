@@ -32,7 +32,7 @@ const ICONS: Record<QuickAction, React.ComponentType<{ className?: string }>> = 
 
 /** Where each action goes. Outside the component so the effect below can depend
  *  on `slug` alone rather than on an object rebuilt every render. */
-function hrefFor(slug: string, a: QuickAction): string {
+export function hrefFor(slug: string, a: QuickAction): string {
   return {
     appointment: `/c/${slug}/calendar?new=1`,
     patient: `/c/${slug}/patients?new=1`,
@@ -41,17 +41,13 @@ function hrefFor(slug: string, a: QuickAction): string {
   }[a];
 }
 
-export function QuickActions({ slug, actions }: { slug: string; actions: QuickAction[] }) {
-  const { t } = useI18n();
+/**
+ * The accelerators, on every screen rather than only the dashboard: the shell
+ * listens, for whatever this member may start. The dashboard's buttons only
+ * show the letters.
+ */
+export function useQuickShortcuts(slug: string, actions: QuickAction[]) {
   const router = useRouter();
-
-  const label: Record<QuickAction, string> = {
-    appointment: t.dashboard.newAppointment,
-    patient: t.dashboard.newPatient,
-    invoice: t.dashboard.newInvoice,
-    inbox: t.dashboard.openInbox,
-  };
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       /*
@@ -85,6 +81,17 @@ export function QuickActions({ slug, actions }: { slug: string; actions: QuickAc
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [actions, router, slug]);
+}
+
+export function QuickActions({ slug, actions }: { slug: string; actions: QuickAction[] }) {
+  const { t } = useI18n();
+
+  const label: Record<QuickAction, string> = {
+    appointment: t.dashboard.newAppointment,
+    patient: t.dashboard.newPatient,
+    invoice: t.dashboard.newInvoice,
+    inbox: t.dashboard.openInbox,
+  };
 
   return (
     <>

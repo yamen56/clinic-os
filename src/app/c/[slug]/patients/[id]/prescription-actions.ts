@@ -14,6 +14,7 @@ import { notifyUser } from "@/lib/notify";
 import { dictFor } from "@/lib/i18n/client-dict";
 import { fmtDate } from "@/lib/dates";
 import { renderPrescriptionPdf } from "@/lib/prescription-pdf";
+import { allergyFor, readHistory } from "@/lib/medical-history";
 import {
   MAX_ITEMS,
   PRESCRIPTION_ROW_SQL,
@@ -46,12 +47,14 @@ const createSchema = z.object({
   templateId: z.string().uuid().nullable().optional(),
   /** False for Print: saved and rendered, not sent. */
   send: z.boolean(),
+  /** The prescriber saw that a medicine runs into the patient's allergies, and went on. */
+  allergyAck: z.boolean().optional(),
 });
 
 type SendError = "no_phone" | "wa_disconnected" | "pdf_failed" | "not_found";
 
 export type PrescriptionResult = {
-  error?: "forbidden" | "invalid" | "no_items" | "not_found" | "bad_doctor" | "failed";
+  error?: "forbidden" | "invalid" | "no_items" | "not_found" | "bad_doctor" | "failed" | "allergy";
   /** Saved, but something after the save did not happen. The record stands. */
   warning?: SendError;
   row?: PrescriptionRow;
@@ -83,11 +86,33 @@ export async function createPrescriptionAction(
   const created = await inClinic(access, async (c) => {
     const patient = (
       await c.query(
-        `select id, full_name from patients where id = $1 and clinic_id = $2 and merged_into is null`,
+        `select id, full_name, medical_history from patients where id = $1 and clinic_id = $2 and merged_into is null`,
         [data.patientId, access.clinicId]
       )
     ).rows[0];
     if (!patient) return { error: "not_found" as const };
+
+    /*
+      Checked again here, against the history as it is now: the composer's
+      copy may be older than an allergy reception added a minute ago. Going on
+      past a match is the prescriber's call, and it is recorded as theirs.
+    */
+    const allergies = readHistory(patient.medical_history).allergies;
+    const clashes = items
+      .map((i) => ({ medicine: i.name, allergy: allergies ? allergyFor(allergies, i.name) : null }))
+      .filter((x) => x.allergy);
+    if (clashes.length && !data.allergyAck) return { error: "allergy" as const };
+    if (clashes.length) {
+      await audit(c, {
+        clinicId: access.clinicId,
+        userId: access.session.user.id,
+        impersonatedBy: access.session.impersonatedBy,
+        action: "prescription.allergy_override",
+        entity: "patient",
+        entityId: patient.id,
+        detail: { clashes, doctorMemberId: data.doctorMemberId },
+      });
+    }
 
     /*
       The prescriber must be a doctor here, or the clinic's owner — the admin

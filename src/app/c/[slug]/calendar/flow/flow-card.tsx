@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { DateTime } from "luxon";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtMoney } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { TakePayment } from "@/components/take-payment";
 import { minutesBetween, type FlowStage } from "@/lib/patient-flow";
+import { flagAlerts } from "@/lib/medical-history";
 import type { FlowStep } from "../flow-actions";
 import type { Appt, PageCaps, Room } from "../types";
 import { Menu, MenuItem } from "./menu";
@@ -53,8 +55,11 @@ export function FlowCard({
   onStep,
   onOpen,
   onBookNext,
+  nameOpensFile = false,
 }: {
   slug: string;
+  /** Tapping the patient opens their file rather than the visit — a doctor's board. */
+  nameOpensFile?: boolean;
   appt: Appt;
   stage: FlowStage;
   nowMs: number;
@@ -101,7 +106,9 @@ export function FlowCard({
     over: "bg-danger-soft text-danger",
   };
 
-  const tags: { key: string; text: string; status: "brand" | "pending" | "neutral" | "waiting" }[] = [];
+  const tags: { key: string; text: string; status: "brand" | "pending" | "neutral" | "waiting" | "danger" }[] = [];
+  // Before the patient is called in: what the doctor must not miss, first and in red.
+  for (const a of flagAlerts(appt.medical, locale)) tags.push({ key: `med:${a}`, text: a, status: "danger" });
   if (appt.first_visit) tags.push({ key: "first", text: t.flow.firstVisit, status: "brand" });
   if (appt.walk_in) tags.push({ key: "walk", text: t.flow.walkInTag, status: "neutral" });
   else if (appt.source === "booking_link") tags.push({ key: "online", text: t.flow.bookedOnline, status: "neutral" });
@@ -127,15 +134,29 @@ export function FlowCard({
       } ${busy ? "opacity-70" : ""}`}
     >
       <div className="flex items-start gap-2">
-        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-start">
-          <div className="flex items-baseline gap-1.5 text-[12px] text-ink-500">
-            <span className="text-[13px] font-bold text-ink-900 tnum">{s.toFormat("H:mm")}</span>
-            <span className="tnum">– {e.toFormat("H:mm")}</span>
-          </div>
-          <div className={`mt-0.5 truncate text-[15px] font-semibold leading-snug ${stage === "no_show" ? "text-ink-400 line-through" : "text-ink-900"}`}>
-            {appt.patient_name}
-          </div>
-        </button>
+        {(() => {
+          const who = (
+            <>
+              <div className="flex items-baseline gap-1.5 text-[12px] text-ink-500">
+                <span className="text-[13px] font-bold text-ink-900 tnum">{s.toFormat("H:mm")}</span>
+                <span className="tnum">– {e.toFormat("H:mm")}</span>
+              </div>
+              <div className={`mt-0.5 truncate text-[15px] font-semibold leading-snug ${stage === "no_show" ? "text-ink-400 line-through" : "text-ink-900"}`}>
+                {appt.patient_name}
+              </div>
+            </>
+          );
+          /* A doctor tapping a patient wants the patient: the file. The visit stays in the menu. */
+          return nameOpensFile ? (
+            <Link href={`/c/${slug}/patients/${appt.patient_id}`} className="min-w-0 flex-1 text-start" data-flow-file>
+              {who}
+            </Link>
+          ) : (
+            <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-start">
+              {who}
+            </button>
+          );
+        })()}
         {timer && (
           <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold tnum ${toneClass[timer.tone]}`}>
             <Clock className="h-3 w-3" />

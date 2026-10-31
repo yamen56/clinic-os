@@ -6,13 +6,12 @@ import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { landingPathIn } from "@/lib/permissions";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
-import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtTime, fmtMoney, fmtLongToday } from "@/lib/dates";
-import { flowStage } from "@/lib/patient-flow";
+import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtMoney, fmtLongToday } from "@/lib/dates";
 import { Card, CardHeader, PageHeader } from "@/components/ui/card";
-import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { BarChart, RowBar, type Point } from "@/components/ui/chart";
 import { QuickActions, type QuickAction } from "./quick-actions";
+import { TodayList } from "./today-list";
 import {
   CalendarDays,
   CalendarCheck,
@@ -28,15 +27,6 @@ import {
   UserPlus,
   ChevronRight,
 } from "lucide-react";
-
-const apptStatus: Record<string, StatusKey> = {
-  pending_approval: "pending",
-  scheduled: "scheduled",
-  confirmed: "confirmed",
-  completed: "completed",
-  no_show: "no_show",
-  cancelled: "cancelled",
-};
 
 /** A stat tile. Built as data so the visible four follow the viewer's access. */
 type Tile = { key: string; label: string; value: string; foot?: React.ReactNode; href?: string };
@@ -104,6 +94,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
   const showInbox = can(a, "conversations");
   const showCalendar = can(a, "calendar");
   const showPatients = can(a, "patients");
+  const ownDay = a.role === "doctor" && !!a.memberId;
   const intl = locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB";
 
   const data = await inClinic(a, async (c) => {
@@ -112,9 +103,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
     const lastWeek = weekRangeUtc(tz, -1);
     const month = monthRangeUtc(tz);
 
+    /*
+      A doctor's front page is their own day: who is waiting for them, who is
+      in their room, who is next. Everyone else sees the clinic's.
+    */
     const appts = (
       await c.query(
-        `select ap.id, ap.starts_at, ap.status, ap.arrived_at, ap.seated_at, p.full_name as patient_name,
+        `select ap.id, ap.patient_id, ap.starts_at, ap.status, ap.arrived_at, ap.seated_at, p.full_name as patient_name,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
                 du.full_name as doctor_name
          from appointments ap
@@ -124,9 +119,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
          left join users du on du.id = dm.user_id
          where ap.clinic_id = $1 and ap.starts_at >= $2 and ap.starts_at < $3
            and ap.status not in ('cancelled')
+           and ($4::uuid is null or ap.doctor_member_id = $4)
          order by ap.starts_at
-         limit 20`,
-        [a.clinicId, today.start, today.end]
+         limit 30`,
+        [a.clinicId, today.start, today.end, ownDay ? a.memberId : null]
       )
     ).rows;
 
@@ -471,7 +467,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         bit that goes. An iPhone SE gets four full-width tiles instead; every
         other phone keeps the pair.
       */}
-      <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4">
+      {/*
+        A doctor opens this on a phone between patients, and the question is
+        who is next — so on a phone their own list comes first and the numbers
+        after it. Everybody else, and every wider screen, keeps the tiles on top.
+      */}
+      <div className="flex flex-col gap-4">
+      <div className={`grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4 ${ownDay ? "max-lg:order-last" : ""}`}>
         {tiles.slice(0, 4).map((tile) => {
           const Icon = tileIcons[tile.key];
           const body = (
@@ -532,10 +534,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         a long patient name held the dashboard open past the screen. The third
         instance of this bug — see automations-client and weekly-hours-editor.
       */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
-            title={t.dashboard.todayAppointments}
+            title={ownDay ? t.dashboard.myPatientsToday : t.dashboard.todayAppointments}
             action={
               <Link
                 href={`${base}/calendar`}
@@ -555,47 +557,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
               body={t.dashboard.emptyDay}
             />
           ) : (
-            <ul className="divide-y divide-line">
-              {data.appts.map((ap) => (
-                <li
-                  key={ap.id}
-                  className="spine flex items-center gap-4 px-5 py-3"
-                  style={
-                    {
-                      "--spine-color": ap.service_color ?? "var(--color-brand-600)",
-                    } as React.CSSProperties
-                  }
-                >
-                  <span className="w-16 shrink-0 text-sm font-semibold tnum">
-                    {fmtTime(ap.starts_at, tz, locale)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{ap.patient_name}</div>
-                    <div className="truncate text-[13px] text-ink-500">
-                      {(locale === "ar" ? ap.service_name_ar : null) || ap.service_name || "—"}
-                      {ap.doctor_name ? ` · ${ap.doctor_name}` : ""}
-                    </div>
-                  </div>
-                  {/*
-                    Where they are today, once that is more than the booking
-                    says: in the waiting room, or with the doctor.
-                  */}
-                  {(() => {
-                    const stage = flowStage(
-                      { status: ap.status, starts_at: new Date(ap.starts_at).toISOString(), arrived_at: ap.arrived_at, seated_at: ap.seated_at },
-                      Date.now()
-                    );
-                    return stage === "waiting" || stage === "in_room" || stage === "late" ? (
-                      <Badge status={stage}>{t.flow.stages[stage]}</Badge>
-                    ) : (
-                      <Badge status={apptStatus[ap.status] ?? "neutral"}>
-                        {(t.calendar.statuses as Record<string, string>)[ap.status] ?? ap.status}
-                      </Badge>
-                    );
-                  })()}
-                </li>
-              ))}
-            </ul>
+            <TodayList
+              slug={slug}
+              tz={tz}
+              rows={JSON.parse(JSON.stringify(data.appts))}
+              canFlow={showCalendar}
+              canOpenPatient={showPatients}
+              showDoctor={!ownDay}
+            />
           )}
         </Card>
 
@@ -620,6 +589,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             )}
           </ul>
         </Card>
+      </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">

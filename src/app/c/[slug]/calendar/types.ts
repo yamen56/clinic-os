@@ -1,6 +1,7 @@
 import type { WeeklyHours } from "@/lib/hours";
 import type { IntakeAnswer } from "@/lib/booking-intake";
 import type { VisitLine } from "@/lib/charts/dental/treatment";
+import type { MedicalFlags } from "@/lib/medical-history";
 
 /** One appointment, as GET /api/c/[slug]/appointments returns it. */
 export type Appt = {
@@ -42,6 +43,8 @@ export type Appt = {
   done?: VisitLine[];
   /** What the patient still owes on their invoices — sent only to a member who may see invoices, and only when above 0. */
   balance_due?: number;
+  /** Allergies and the conditions that change what may be done; null when there are none. */
+  medical?: MedicalFlags | null;
 };
 
 /** A treatment on the patient's plan, as a visit carries it. */
