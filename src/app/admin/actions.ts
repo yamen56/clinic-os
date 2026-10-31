@@ -124,6 +124,38 @@ export async function setClinicSpecialtyAction(
   });
 }
 
+/**
+ * Switches on, for a clinic already running, the flows a new clinic now starts
+ * with — the reminders above all (Yamen, 2026-10-31: on for the pilot clinics
+ * too). Pressed from the clinic's page after reading the messages it will send
+ * (pendingDefaultRecipes), because from this moment its patients receive them.
+ *
+ * Additive: a flow the clinic already has, even one it switched off, is left
+ * alone, and so is one it built itself on the same trigger at the same hour.
+ */
+export async function applyDefaultFlowsAction(slug: string): Promise<{ installed?: number; error?: string }> {
+  const s = await requireAdminCap("clinics.edit");
+  return withSystem(async (c) => {
+    const clinic = await c.query(`select id, specialty, specialties from clinics where slug = $1 and deleted_at is null`, [slug]);
+    if (!clinic.rowCount) return { error: "not_found" };
+    const clinicId = clinic.rows[0].id as string;
+    const chosen = asSpecialty(clinic.rows[0].specialty);
+    const practises = clinicSpecialties(chosen, clinic.rows[0].specialties ?? []);
+    let installed = 0;
+    for (const sp of practises.length ? practises : [chosen]) installed += await installRecipes(c, clinicId, sp);
+    await audit(c, {
+      clinicId,
+      userId: s.user.id,
+      action: "admin.clinic.default_flows",
+      entity: "clinic",
+      entityId: clinicId,
+      detail: { installed },
+    });
+    revalidatePath(`/admin/clinics/${slug}`);
+    return { installed };
+  });
+}
+
 export async function createClinicAction(
   _prev: CreateClinicResult,
   formData: FormData

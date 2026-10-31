@@ -64,9 +64,15 @@ export const RECIPES: Recipe[] = [
     key: "confirm_on_booking",
     name: "Appointment confirmation",
     name_ar: "تأكيد الحجز",
-    description: "Sends a confirmation as soon as an appointment is created.",
+    description: "Sends a confirmation as soon as reception books an appointment.",
     trigger_type: "appointment_created",
-    trigger_config: {},
+    /*
+      Reception's bookings only. The booking page sends its own confirmation
+      (or "we'll confirm it shortly") and the AI receptionist confirms in the
+      chat it booked from — a recipe answering those too sent the patient the
+      same news twice, and "confirmed" for a booking still awaiting approval.
+    */
+    trigger_config: { sources: ["staff"] },
     sort: 1,
     steps: [
       {
@@ -134,6 +140,17 @@ export const RECIPES: Recipe[] = [
           ],
           "opt:1": [
             { step_type: "flag_conversation", config: { reason: "يريد تغيير موعده" } },
+            // A job on the desk's To do, not only a flag in the inbox: somebody has to call them back.
+            {
+              step_type: "create_task",
+              config: {
+                title: "اتصل بـ{{patient.name}} لتغيير موعده",
+                body: "{{appointment.date}} — {{appointment.time}}",
+                due_amount: 0,
+                due_unit: "minutes",
+                assignee: "nobody",
+              },
+            },
             {
               step_type: "notify_staff",
               config: {
@@ -170,6 +187,16 @@ export const RECIPES: Recipe[] = [
                       title: "لم يؤكد {{patient.name}} موعده",
                       body: "{{appointment.day}} · {{appointment.time}} — يُفضّل الاتصال به",
                       roles: ["receptionist"],
+                    },
+                  },
+                  {
+                    step_type: "create_task",
+                    config: {
+                      title: "اتصل بـ{{patient.name}} لتأكيد موعده",
+                      body: "{{appointment.day}} · {{appointment.time}}",
+                      due_amount: 0,
+                      due_unit: "minutes",
+                      assignee: "nobody",
                     },
                   },
                 ],

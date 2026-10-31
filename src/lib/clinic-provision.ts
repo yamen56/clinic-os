@@ -73,14 +73,8 @@ export async function installRecipes(
   clinicId: string,
   specialty: Specialty
 ): Promise<number> {
-  const recipes = await c.query(
-    `select * from recipe_templates
-      where active and specialty in ('general', $1) and key = any($3::text[])
-        and key not in (select recipe_key from automations where clinic_id = $2 and recipe_key is not null)
-      order by sort`,
-    [specialty, clinicId, [...RECIPES_ON_BY_DEFAULT]]
-  );
-  for (const r of recipes.rows) {
+  const recipes = await pendingDefaultRecipes(c, clinicId, specialty);
+  for (const r of recipes) {
     const graph = treeToGraph((Array.isArray(r.steps) ? r.steps : []) as RecipeStep[], () => randomUUID());
     const a = await c.query(
       `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, recipe_key,
@@ -99,7 +93,37 @@ export async function installRecipes(
     );
     await writeFlowGraph(c, clinicId, a.rows[0].id, graph.nodes, graph.edges);
   }
-  return recipes.rowCount ?? 0;
+  return recipes.length;
+}
+
+/**
+ * The default flows this clinic does not have yet — what installRecipes would
+ * add, read without adding it, so the agency can see the messages before a
+ * live clinic's patients start receiving them.
+ */
+export async function pendingDefaultRecipes(
+  c: PoolClient,
+  clinicId: string,
+  specialty: Specialty
+): Promise<Record<string, any>[]> {
+  const recipes = await c.query(
+    `select * from recipe_templates
+      where active and specialty in ('general', $1) and key = any($3::text[])
+        and key not in (select recipe_key from automations where clinic_id = $2 and recipe_key is not null)
+        /*
+          Nor beside a flow of the clinic's own that already does the same
+          job — a reminder it built by hand, on the same trigger at the same
+          hour. Two of them is the same patient reminded twice.
+        */
+        and not exists (
+          select 1 from automations x
+           where x.clinic_id = $2 and x.active and x.trigger_type = recipe_templates.trigger_type
+             and coalesce(x.trigger_config->>'hours', '') = coalesce(recipe_templates.trigger_config->>'hours', '')
+             and coalesce(x.trigger_config->>'first_visit', 'false') = coalesce(recipe_templates.trigger_config->>'first_visit', 'false'))
+      order by sort`,
+    [specialty, clinicId, [...RECIPES_ON_BY_DEFAULT]]
+  );
+  return recipes.rows;
 }
 
 export type ProvisionInput = {

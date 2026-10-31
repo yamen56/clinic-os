@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { emitTrigger } from "@/lib/triggers";
 import { findOrCreatePatient } from "@/lib/patients";
 import { applyAppointmentStatus } from "@/lib/appointments";
+import { tellPatientBookingApproved } from "@/lib/booking-approved";
 import { scheduleCheck } from "@/lib/schedule-check";
 
 export type ApptInput = {
@@ -230,6 +231,10 @@ export async function setAppointmentStatusAction(
       actorUserId: access.session.user.id,
     });
     if (!r.ok) return { error: "not_found" };
+    // Approved: the patient was told "we'll confirm it shortly", so now they are.
+    if (r.changed && r.previousStatus === "pending_approval" && (status === "scheduled" || status === "confirmed")) {
+      await tellPatientBookingApproved(c, access.clinicId, id);
+    }
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,

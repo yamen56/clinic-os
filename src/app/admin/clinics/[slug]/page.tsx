@@ -10,19 +10,27 @@ import { OwnerInvite } from "./owner-invite";
 import { DangerZone } from "./danger-zone";
 import { FEATURES, resolveFeatures } from "@/lib/features";
 import type { MemberRole } from "@/lib/permissions";
-import { asSpecialty, isSpecialty } from "@/lib/specialties";
+import { asSpecialty, clinicSpecialties, isSpecialty } from "@/lib/specialties";
+import { setupChecklist } from "@/lib/setup-checklist";
+import { pendingDefaultRecipes } from "@/lib/clinic-provision";
+import { DefaultFlowsButton } from "./default-flows-button";
 import { CheckCircle2, Circle, ShieldCheck } from "lucide-react";
 import { listSupportVisits, SUPPORT_VISIT_HOURS } from "@/lib/support-visits";
 import { SupportVisitList } from "@/components/support-visit-list";
 import { EmptyState } from "@/components/ui/misc";
 
-const CHECKLIST: { key: string; en: string; ar: string }[] = [
-  { key: "branding", en: "Branding set up", ar: "تم إعداد الهوية البصرية" },
-  { key: "services", en: "Services added", ar: "تمت إضافة الخدمات" },
-  { key: "whatsapp", en: "WhatsApp connected", ar: "تم ربط واتساب" },
-  { key: "automations", en: "Automations enabled", ar: "تم تفعيل الأتمتة" },
-  { key: "ai", en: "AI agent configured", ar: "تم إعداد المساعد الذكي" },
-];
+/** The first message a flow sends — what its patients will read — for the preview before it is switched on. */
+function firstMessage(steps: unknown): string {
+  for (const st of Array.isArray(steps) ? steps : []) {
+    const s = st as { step_type?: string; config?: { message?: string }; children?: Record<string, unknown> };
+    if (s.step_type === "send_whatsapp" && s.config?.message) return s.config.message;
+    for (const branch of Object.values(s.children ?? {})) {
+      const m = firstMessage(branch);
+      if (m) return m;
+    }
+  }
+  return "";
+}
 
 export default async function AdminClinicDetail({
   params,
@@ -68,26 +76,45 @@ export default async function AdminClinicDetail({
       )
     ).rows[0];
     const visits = await listSupportVisits(c, { clinicId: clinic.id }, { limit: 30 });
-    return { clinic, members, stats, visits };
+    // The clinic's own setup list, as its owner sees it on the dashboard.
+    const setup = await setupChecklist(c, clinic.id);
+    /*
+      The default flows it does not have yet, with the first message each
+      sends, and what that means for its WhatsApp: about how many reminders a
+      day against the daily cap.
+    */
+    const chosen = asSpecialty(clinic.specialty);
+    const practises = clinicSpecialties(chosen, clinic.specialties ?? []);
+    const pendingByKey = new Map<string, { key: string; name: string; message: string }>();
+    for (const sp of practises.length ? practises : [chosen]) {
+      for (const r of await pendingDefaultRecipes(c, clinic.id, sp)) {
+        pendingByKey.set(r.key, { key: r.key, name: r.name_ar || r.name, message: firstMessage(r.steps) });
+      }
+    }
+    const volume = (
+      await c.query(
+        `select (select count(*) from appointments where clinic_id = $1 and starts_at between now() and now() + interval '7 days'
+                   and status in ('pending_approval', 'scheduled', 'confirmed'))::int as week`,
+        [clinic.id]
+      )
+    ).rows[0];
+    return { clinic, members, stats, visits, setup, pendingFlows: [...pendingByKey.values()], perDay: Math.ceil(Number(volume.week) / 7) };
   });
   if (!data) notFound();
-  const { clinic, members, stats, visits } = data;
+  const { clinic, members, stats, visits, setup, pendingFlows, perDay } = data;
   const features = resolveFeatures(clinic.features);
   const missing = FEATURES.filter((f) => !features[f]);
 
-  const checklistState: Record<string, boolean> = {
-    /*
-      Compared against the schema's own default, which is what an untouched
-      clinic actually has. This read "#6989a6" — a colour no clinic is ever
-      created with — so the test was true for everybody and the checklist item
-      has been reporting branding as done since the day it was written.
-    */
-    branding: !!clinic.logo_path || clinic.brand_color !== "#0f6e5c",
-    services: Number(stats.services) > 0,
-    whatsapp: clinic.wa_status === "connected",
-    automations: Number(stats.active_automations) > 0,
-    ai: stats.ai_enabled && Number(stats.knowledge_items) > 0,
-  };
+  /*
+    The clinic's own setup list (lib/setup-checklist), the one its owner sees,
+    and the AI receptionist, which only the agency sets up. The old list said
+    "automations enabled" from day one, because the welcome flow always is;
+    reminders being on is the item that matters.
+  */
+  const checklist = [
+    ...setup.map((i) => ({ key: i.key, done: i.done, label: t.setup.items[i.key].label })),
+    { key: "ai", done: !!stats.ai_enabled && Number(stats.knowledge_items) > 0, label: locale === "en" ? "AI agent configured" : "تم إعداد المساعد الذكي" },
+  ];
 
   return (
     <>
@@ -181,20 +208,48 @@ export default async function AdminClinicDetail({
         <Card>
           <CardHeader title="Onboarding" />
           <ul className="grid gap-2.5 px-5 py-4 text-sm">
-            {CHECKLIST.map((item) => (
-              <li key={item.key} className="flex items-center gap-2.5">
-                {checklistState[item.key] ? (
-                  <CheckCircle2 className="h-4.5 w-4.5 text-brand-700" />
-                ) : (
-                  <Circle className="h-4.5 w-4.5 text-ink-300" />
-                )}
-                <span className={checklistState[item.key] ? "" : "text-ink-500"}>
-                  {locale === "en" ? item.en : item.ar}
-                </span>
+            {checklist.map((item) => (
+              <li key={item.key} className="flex items-center gap-2.5" data-admin-setup={item.key} data-done={item.done ? "1" : "0"}>
+                {item.done ? <CheckCircle2 className="h-4.5 w-4.5 text-brand-700" /> : <Circle className="h-4.5 w-4.5 text-ink-300" />}
+                <span className={item.done ? "" : "text-ink-500"}>{item.label}</span>
               </li>
             ))}
           </ul>
         </Card>
+        {/*
+          The flows a new clinic starts with that this one does not have: the
+          first message each sends, and what it means for the number. Switched
+          on from here, after reading them, because its patients receive them.
+        */}
+        <div data-default-flows>
+          <Card>
+            <CardHeader
+              title={locale === "en" ? "Default flows" : "التدفقات الافتراضية"}
+              action={pendingFlows.length > 0 ? <DefaultFlowsButton slug={clinic.slug} count={pendingFlows.length} locale={locale} /> : undefined}
+            />
+            {pendingFlows.length === 0 ? (
+              <p className="px-5 pb-4 text-sm text-ink-500">{locale === "en" ? "All of them are on." : "كلها مفعّلة."}</p>
+            ) : (
+              <div className="grid gap-3 px-5 pb-4">
+                {pendingFlows.map((f) => (
+                  <div key={f.key} className="grid gap-1" data-pending-flow={f.key}>
+                    <div className="text-sm font-semibold">{f.name}</div>
+                    {f.message && (
+                      <p dir="rtl" className="whitespace-pre-line rounded-lg bg-sunken px-3 py-2 text-[12.5px] text-ink-700">
+                        {f.message}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                <p className="text-[12px] text-ink-500">
+                  {locale === "en"
+                    ? `About ${perDay} appointment(s) a day in the coming week — each gets a reminder. Daily WhatsApp cap: ${clinic.daily_outbound_cap}.`
+                    : `نحو ${perDay} موعد يومياً خلال الأسبوع القادم، لكل منها تذكير. الحد اليومي لواتساب: ${clinic.daily_outbound_cap}.`}
+                </p>
+              </div>
+            )}
+          </Card>
+        </div>
         <Card>
           <CardHeader title={t.settings.staff} />
           <ul className="grid gap-2.5 px-5 py-4 text-sm">

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
-import { can } from "@/lib/auth";
+import { can, hasFullControl } from "@/lib/auth";
 import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { landingPathIn } from "@/lib/permissions";
 import { inClinic } from "@/lib/clinic-api";
@@ -12,8 +12,10 @@ import { EmptyState } from "@/components/ui/misc";
 import { BarChart, RowBar, type Point } from "@/components/ui/chart";
 import { QuickActions, type QuickAction } from "./quick-actions";
 import { TodayList } from "./today-list";
+import { TodoCard } from "./todo-card";
 import { owedSql } from "@/lib/invoices";
 import { dueBackCount } from "@/lib/due-back";
+import { setupChecklist, type SetupItem } from "@/lib/setup-checklist";
 import {
   CalendarDays,
   CalendarCheck,
@@ -29,6 +31,8 @@ import {
   UserPlus,
   ChevronRight,
   CalendarPlus,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 
 /** A stat tile. Built as data so the visible four follow the viewer's access. */
@@ -316,7 +320,22 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
 
     // Patients the doctor asked to see again, not booked yet — the desk's recall list.
     const dueBack = showCalendar ? await dueBackCount(c, a.clinicId) : 0;
-    return { appts, stats, series, doctors, services, sections, dueBack };
+    // Whoever runs the clinic sees what is left to set up, until nothing is.
+    const setup = hasFullControl(a) ? await setupChecklist(c, a.clinicId) : null;
+    // What the automations asked somebody at the desk to do: call back, chase, approve.
+    const todo =
+      showCalendar || showInbox
+        ? (
+            await c.query(
+              `select t.id, t.title, t.body, t.patient_id, p.full_name as patient_name, t.created_at
+                 from tasks t left join patients p on p.id = t.patient_id
+                where t.clinic_id = $1 and not t.done
+                order by t.created_at desc limit 10`,
+              [a.clinicId]
+            )
+          ).rows
+        : [];
+    return { appts, stats, series, doctors, services, sections, dueBack, setup, todo };
   });
 
   const revThis = Number(data.stats.rev_this);
@@ -478,6 +497,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         after it. Everybody else, and every wider screen, keeps the tiles on top.
       */}
       <div className="flex flex-col gap-4">
+      {data.setup && data.setup.some((i) => !i.done) && <SetupCard base={base} items={data.setup} t={t} />}
+      {data.todo.length > 0 && <TodoCard slug={slug} rows={JSON.parse(JSON.stringify(data.todo))} canOpenPatient={showPatients} />}
       <div className={`grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4 ${ownDay ? "max-lg:order-last" : ""}`}>
         {tiles.slice(0, 4).map((tile) => {
           const Icon = tileIcons[tile.key];
@@ -728,6 +749,47 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
  * at a glance — amber when there is work, quiet when there is none — rather
  * than the same bold digit either way.
  */
+/*
+  What is left to set up, each item a link to the page that does it. Done
+  items stay, ticked, so the progress is visible; the card goes when the last
+  one is done.
+*/
+function SetupCard({ base, items, t }: { base: string; items: SetupItem[]; t: Awaited<ReturnType<typeof dictForClinic>> }) {
+  const done = items.filter((i) => i.done).length;
+  return (
+    <div data-setup-card>
+      <Card>
+        <CardHeader title={t.setup.title} sub={t.setup.progress.replace("{done}", String(done)).replace("{total}", String(items.length))} />
+        <div className="mx-5 mb-2 h-1.5 overflow-hidden rounded-full bg-sunken">
+          <div className="h-full rounded-full bg-brand-600" style={{ width: `${Math.round((done / items.length) * 100)}%` }} />
+        </div>
+        <ul className="grid gap-1 p-3 sm:grid-cols-2">
+          {items.map((i) => {
+            const words = t.setup.items[i.key];
+            return (
+              <li key={i.key}>
+                <Link
+                  href={`${base}${i.path}`}
+                  className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-sunken"
+                  data-setup-item={i.key}
+                  data-done={i.done ? "1" : "0"}
+                >
+                  {i.done ? <CheckCircle2 className="h-5 w-5 shrink-0 text-brand-700" /> : <Circle className="h-5 w-5 shrink-0 text-ink-300" />}
+                  <span className="min-w-0 flex-1">
+                    <span className={`block text-sm font-medium ${i.done ? "text-ink-500 line-through" : "text-ink-900"}`}>{words.label}</span>
+                    {!i.done && <span className="block text-[12.5px] text-ink-500">{words.hint}</span>}
+                  </span>
+                  {!i.done && <ChevronRight className="h-4 w-4 shrink-0 text-ink-400 rtl:rotate-180" />}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
 function FollowUpRow({
   href,
   icon: Icon,

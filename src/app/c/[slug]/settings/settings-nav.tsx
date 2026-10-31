@@ -42,53 +42,73 @@ export function SettingsNav({
   useEffect(() => setPressed(null), [pathname]);
   const current = pressed ?? pathname;
 
-  const items: { href: string; label: string; show?: boolean }[] = [
-    { href: base, label: t.settings.profile },
-    { href: `${base}/staff`, label: t.settings.staff, show: caps["settings.staff"] },
-    { href: `${base}/services`, label: t.settings.services, show: caps["settings.services"] },
-    { href: `${base}/rooms`, label: t.rooms.title, show: caps["settings.services"] },
-    { href: `${base}/prices`, label: t.settings.treatmentPrices, show: hasDental && caps["settings.services"] },
-    { href: `${base}/labs`, label: t.settings.dentalLabs, show: hasDental && caps["settings.services"] },
-    { href: `${base}/face-prices`, label: t.settings.facePrices, show: hasFace && caps["settings.services"] },
-    { href: `${base}/face-packages`, label: t.settings.facePackages, show: hasFace && caps["settings.services"] },
-    { href: `${base}/hours`, label: t.settings.workingHours },
-    { href: `${base}/fields`, label: t.fields.title, show: caps["settings.clinic"] },
-    { href: `${base}/tags`, label: t.tags.title, show: caps["settings.tags"] },
-    { href: `${base}/documents`, label: t.settings.documentTemplates },
-    { href: `${base}/booking`, label: t.settings.bookingLinks, show: caps["settings.booking"] },
-    { href: `${base}/insurers`, label: t.insurers.title, show: caps["insurance.companies"] },
-    { href: `${base}/whatsapp`, label: t.settings.whatsapp, show: caps["settings.whatsapp"] },
-    { href: `${base}/invoicing`, label: t.settings.invoiceSettings },
-    { href: `${base}/einvoicing`, label: t.einvoicing.title, show: hasEinvoicing && caps["settings.clinic"] },
-    { href: `${base}/devices`, label: t.devices.tab, show: caps["settings.clinic"] },
-    { href: `${base}/support-visits`, label: t.supportVisits.tab, show: caps["settings.support_visits"] },
+  /*
+    In groups, in the order a clinic meets them (Yamen, 2026-10-31: "setup is
+    confusing"). Nineteen tabs in one column read as a list to search; under a
+    few headings they read as a map. On a phone the strip stays one scrolling
+    row and the headings stay out of it. Messaging also points at the words
+    the clinic sends on its own and the AI receptionist, which live on their
+    own pages and were nowhere to be found from here.
+  */
+  type Group = "clinic" | "services" | "patients" | "team" | "messaging" | "you";
+  const items: { href: string; label: string; group: Group; show?: boolean }[] = [
+    { href: base, label: t.settings.profile, group: "clinic" },
+    { href: `${base}/hours`, label: t.settings.workingHours, group: "clinic" },
+    { href: `${base}/rooms`, label: t.rooms.title, group: "clinic", show: caps["settings.services"] },
+    { href: `${base}/devices`, label: t.devices.tab, group: "clinic", show: caps["settings.clinic"] },
+    { href: `${base}/support-visits`, label: t.supportVisits.tab, group: "clinic", show: caps["settings.support_visits"] },
+    { href: `${base}/services`, label: t.settings.services, group: "services", show: caps["settings.services"] },
+    { href: `${base}/prices`, label: t.settings.treatmentPrices, group: "services", show: hasDental && caps["settings.services"] },
+    { href: `${base}/labs`, label: t.settings.dentalLabs, group: "services", show: hasDental && caps["settings.services"] },
+    { href: `${base}/face-prices`, label: t.settings.facePrices, group: "services", show: hasFace && caps["settings.services"] },
+    { href: `${base}/face-packages`, label: t.settings.facePackages, group: "services", show: hasFace && caps["settings.services"] },
+    { href: `${base}/insurers`, label: t.insurers.title, group: "services", show: caps["insurance.companies"] },
+    { href: `${base}/invoicing`, label: t.settings.invoiceSettings, group: "services" },
+    { href: `${base}/einvoicing`, label: t.einvoicing.title, group: "services", show: hasEinvoicing && caps["settings.clinic"] },
+    { href: `${base}/fields`, label: t.fields.title, group: "patients", show: caps["settings.clinic"] },
+    { href: `${base}/tags`, label: t.tags.title, group: "patients", show: caps["settings.tags"] },
+    { href: `${base}/documents`, label: t.settings.documentTemplates, group: "patients" },
+    { href: `${base}/staff`, label: t.settings.staff, group: "team", show: caps["settings.staff"] },
+    { href: `${base}/whatsapp`, label: t.settings.whatsapp, group: "messaging", show: caps["settings.whatsapp"] },
+    { href: `${base}/booking`, label: t.settings.bookingLinks, group: "messaging", show: caps["settings.booking"] },
+    { href: `/c/${slug}/automations`, label: t.settings.groups.autoMessages, group: "messaging", show: caps.automations },
+    { href: `/c/${slug}/ai`, label: t.nav.aiAgent, group: "messaging", show: caps.ai },
     // Personal, not clinic configuration — and it lives outside /settings so that
     // members without the settings capability can still reach it.
-    { href: `/c/${slug}/signature`, label: t.settings.mySignature },
-    { href: `/c/${slug}/notifications`, label: t.settings.notificationPrefs },
+    { href: `/c/${slug}/signature`, label: t.settings.mySignature, group: "you" },
+    { href: `/c/${slug}/notifications`, label: t.settings.notificationPrefs, group: "you" },
   ];
+  const groups: Group[] = ["clinic", "services", "patients", "team", "messaging", "you"];
+  const visible = items.filter((i) => i.show !== false);
 
   return (
     <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-      {items
-        .filter((i) => i.show !== false)
-        .map((i) => {
-          const active = i.href === base ? current === base : current.startsWith(i.href);
-          return (
-            <Link
-              key={i.href}
-              href={i.href}
-              prefetch
-              onClick={() => setPressed(i.href)}
-              aria-current={active ? "page" : undefined}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-140 ease-out ${
-                active ? "bg-surface text-ink-900 shadow-card" : "text-ink-700 hover:bg-ink-900/4"
-              }`}
-            >
-              {i.label}
-            </Link>
-          );
-        })}
+      {groups.map((g) => {
+        const inGroup = visible.filter((i) => i.group === g);
+        if (!inGroup.length) return null;
+        return (
+          <div key={g} className="flex shrink-0 gap-1 lg:mb-2 lg:flex-col" data-settings-group={g}>
+            <div className="px-3 pb-0.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400 max-lg:hidden">{t.settings.groups[g]}</div>
+            {inGroup.map((i) => {
+              const active = i.href === base ? current === base : current.startsWith(i.href);
+              return (
+                <Link
+                  key={i.href}
+                  href={i.href}
+                  prefetch
+                  onClick={() => setPressed(i.href)}
+                  aria-current={active ? "page" : undefined}
+                  className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-140 ease-out ${
+                    active ? "bg-surface text-ink-900 shadow-card" : "text-ink-700 hover:bg-ink-900/4"
+                  }`}
+                >
+                  {i.label}
+                </Link>
+              );
+            })}
+          </div>
+        );
+      })}
     </nav>
   );
 }

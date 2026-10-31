@@ -102,4 +102,12 @@ export const RECIPES_ON_BY_DEFAULT = new Set([
   "document_unsigned_escalate",
   "document_declined_alert",
   "welcome_new_patient",
+  /*
+    Reminders, on from the first day (Yamen, 2026-10-31): a clinic that has to
+    find and switch on the one thing that cuts its no-shows usually never does.
+    The confirmation answers reception's bookings only; the booking page and
+    the AI confirm their own.
+  */
+  "confirm_on_booking",
+  "reminder_24h",
 ]);
