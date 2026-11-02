@@ -13,7 +13,7 @@
  * canal and status edge is still drawn by tooth-art.tsx on those outlines, so
  * it lands exactly on the picture; only the paint underneath changed.
  *
- *   npx tsx scripts/render-tooth-art.ts   → public/charts/teeth/*.webp
+ *   npx tsx scripts/render-tooth-art.tsx   → public/charts/teeth/*.webp
  *                                          + scripts/qa-shots/tooth-art/sprites.png
  *
  * Run it again after changing a shape in tooth-art.tsx, and bump ART_VERSION.

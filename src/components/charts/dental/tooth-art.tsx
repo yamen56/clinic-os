@@ -80,7 +80,7 @@ export function shapeOf(t: Tooth): Shape {
 }
 
 /*
-  The baked art (scripts/render-tooth-art.ts → public/charts/teeth): one
+  The baked art (scripts/render-tooth-art.tsx → public/charts/teeth): one
   picture per drawing, named by what decides its shape. A baby tooth's incisors
   and canines share the grown-up drawing, as `shapeOf` does; its molars do not.
 */
@@ -734,7 +734,7 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
   const stump = `M ${C - s.nw - 0.5} ${Y0} L ${C - s.nw - 1} ${Y0 + 6} L ${C - s.nw / 2} ${Y0 + 9} L ${C - 2} ${Y0 + 5} L ${C + 2} ${Y0 + 10} L ${C + s.nw / 2} ${Y0 + 6} L ${C + s.nw + 1} ${Y0 + 8} L ${C + s.nw + 0.5} ${Y0} Q ${C} ${Y0 - 5} ${C - s.nw - 0.5} ${Y0} Z`;
 
   /*
-    The tooth itself is a rendered picture (scripts/render-tooth-art.ts), baked
+    The tooth itself is a rendered picture (scripts/render-tooth-art.tsx), baked
     from these same outlines, so everything drawn below lands on it exactly.
     A tooth broken down to its root shows only the root and the jagged stump.
   */
@@ -1100,5 +1100,5 @@ export function PaintSwatch({ paint, size = 16 }: { paint: Paint; size?: number 
 }
 
 export { crownPath, rootGeom, festoon, gumMargin };
-/** The drawing's landmarks, for the script that bakes the art (scripts/render-tooth-art.ts). */
+/** The drawing's landmarks, for the script that bakes the art (scripts/render-tooth-art.tsx). */
 export const GEOM = { C, Y0, YB, YE, GUM_TOP, PAP, ZEN };
