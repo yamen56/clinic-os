@@ -14,7 +14,7 @@
 */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MousePointer2, Paintbrush, History as HistoryIcon, Undo2, ChevronDown, Radiation, X } from "lucide-react";
+import { MousePointer2, Paintbrush, History as HistoryIcon, Undo2, ChevronDown, X } from "lucide-react";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
@@ -328,6 +328,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
           src: `/api/c/${slug}/files/${f.id}`,
           name: f.file_name,
           kind: f.kind === "xray" || f.kind === "photo" ? f.kind : "other",
+          view: f.view ?? null,
           mime: f.mime_type,
           date: f.created_at,
         })),
@@ -337,8 +338,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const [sending, setSending] = useState<{ img: ChartImage; caption: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [camera, setCamera] = useState<{ tooth?: string } | null>(null);
-  /** A "Take x-ray" request waiting on the imaging station. */
-  const [pending, setPending] = useState<{ id: string; teeth: string[] } | null>(null);
 
   /*
     Wide enough for the panel beside the chart, or narrow enough for half a
@@ -549,6 +548,54 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     void setTeeth(fileId, cur.includes(fdi) ? cur.filter((x) => x !== fdi) : [...cur, fdi]);
   };
 
+  /* What a picture shows — panoramic, bitewing… — set from the viewer, beside its teeth. */
+  const setView = async (fileId: string, view: string | null) => {
+    const before = allFiles.find((f) => f.id === fileId);
+    const apply = (v: string | null, kind?: string) => {
+      setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, view: v, ...(kind ? { kind } : {}) } : f)));
+      setViewer((cur) => cur && { ...cur, list: cur.list.map((x) => (x.id === fileId ? { ...x, view: v, ...(kind ? { kind } : {}) } : x)) });
+    };
+    apply(view);
+    const res = await fetch(`/api/c/${slug}/files/${fileId}/view`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ view }),
+    }).catch(() => null);
+    const body = (await res?.json().catch(() => null)) as { kind?: string } | null;
+    if (!res?.ok) {
+      apply(before?.view ?? null);
+      return toast(T.saveFailed, "error");
+    }
+    if (body?.kind) apply(view, body.kind);
+  };
+
+  /*
+    An edited picture, saved beside its original (2026-11-02): the same kind,
+    view and teeth, and a link back to the picture it came from. The viewer
+    moves on to it, so Send sends what the doctor just made.
+  */
+  const saveCopy = async (orig: ChartImage, file: File): Promise<ChartImage | null> => {
+    const fd = new FormData();
+    fd.set("file", file);
+    fd.set("kind", orig.kind);
+    if (orig.view) fd.set("view", orig.view);
+    fd.set("teeth", (pins[orig.id] ?? []).join(","));
+    fd.set("editedFrom", orig.id);
+    const res = await fetch(`/api/c/${slug}/patients/${patientId}/files`, { method: "POST", body: fd }).catch(() => null);
+    const body = (await res?.json().catch(() => null)) as { file?: PatientFile } | null;
+    if (!res?.ok || !body?.file) {
+      toast(t.viewer.saveFailed, "error");
+      return null;
+    }
+    const row = body.file;
+    setFiles((prev) => [row, ...prev.filter((f) => f.id !== row.id)]);
+    setPins((prev) => ({ ...prev, [row.id]: row.teeth ?? [] }));
+    const copy: ChartImage = { id: row.id, src: `/api/c/${slug}/files/${row.id}`, name: row.file_name, kind: orig.kind, view: row.view ?? null, mime: row.mime_type, date: row.created_at };
+    setViewer((cur) => cur && { list: [copy, ...cur.list], index: 0 });
+    toast(t.viewer.savedCopy);
+    return copy;
+  };
+
   /*
     An image goes into the patient's Files through the same route the Files
     tab uses, so it is a real file of the right kind and the Files tab lists it
@@ -574,59 +621,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       setUploading(false);
     }
   };
-
-  /*
-    "Take x-ray": arm the imaging station on the computer beside the x-ray
-    machine. The next image its software saves comes into this patient's
-    files, pinned to these teeth, and opens here the moment it lands.
-  */
-  const takeXray = async (teeth: string[]) => {
-    try {
-      const r = await call<{ request: { id: string } }>(`/api/c/${slug}/imaging/requests`, "POST", { patientId, teeth, kind: "xray" });
-      setPending({ id: r.request.id, teeth });
-    } catch {
-      toast(T.saveFailed, "error");
-    }
-  };
-  const cancelXray = async () => {
-    if (!pending) return;
-    const id = pending.id;
-    setPending(null);
-    await call(`/api/c/${slug}/imaging/requests/${id}`, "POST", { op: "cancel" }).catch(() => {});
-  };
-  useEffect(() => {
-    if (!pending) return;
-    let stop = false;
-    const tick = async () => {
-      try {
-        const res = await fetch(`/api/c/${slug}/imaging/requests/${pending.id}`);
-        const body = (await res.json()) as { request?: { fulfilledAt: string | null; cancelledAt: string | null }; file?: PatientFile & { teeth: string[] } | null };
-        if (stop) return;
-        if (body.request?.cancelledAt) {
-          setPending(null);
-          return;
-        }
-        if (body.request?.fulfilledAt && body.file) {
-          const f = body.file;
-          setFiles((prev) => [f, ...prev.filter((x) => x.id !== f.id)]);
-          setPins((prev) => ({ ...prev, [f.id]: f.teeth ?? [] }));
-          setPending(null);
-          toast(T.xrayArrived);
-          setViewer({
-            list: [{ id: f.id, src: `/api/c/${slug}/files/${f.id}`, name: f.file_name, kind: "xray", mime: f.mime_type, date: f.created_at }],
-            index: 0,
-          });
-        }
-      } catch {
-        // A missed poll is retried on the next tick.
-      }
-    };
-    const id = setInterval(tick, 2500);
-    return () => {
-      stop = true;
-      clearInterval(id);
-    };
-  }, [pending, slug, T.xrayArrived, toast]);
 
   /* ── Recording ───────────────────────────────────────────────────────── */
 
@@ -932,7 +926,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     onOpenImages: (list, index) => setViewer({ list, index }),
     onPinImage: (imageId, fdi) => togglePin(imageId, fdi),
     onUploadForTooth: (kind, file, fdi) => upload(kind, file, fdi),
-    onTakeXray: (fdi) => void takeXray([fdi]),
     onCamera: (fdi) => setCamera({ tooth: fdi }),
     onOpenEntry: (id) => setMouthEntry(id),
     onOpenItem: (id) => setOpenItem(id),
@@ -1254,23 +1247,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
             )}
           </div>
 
-          {/* "Take x-ray": waiting on the imaging station. */}
-          {pending && (
-            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-ctl border border-brand-200 bg-brand-50 px-3 py-2" data-xray-pending>
-              <span className="slim-progress w-10 shrink-0 rounded-full" aria-hidden />
-              <Radiation className="h-4 w-4 shrink-0 text-brand-700" />
-              <span className="min-w-0 flex-1 text-[13px] font-semibold text-ink-900">
-                {pending.teeth.length ? T.waitingXray.replace("{teeth}", pending.teeth.join(" · ")) : T.waitingXrayMouth}
-              </span>
-              <a href={`/c/${slug}/devices`} target="_blank" rel="noreferrer" className={buttonClass({ variant: "outline", size: "sm" })}>
-                {T.openStation}
-              </a>
-              <button type="button" onClick={cancelXray} aria-label={T.cancel} className="grid h-8 w-8 place-items-center rounded-ctl text-ink-500 hover:bg-surface">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-
           {/* The mouth */}
           <div className="mt-3" dir="ltr" onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
             <div className="mb-1 flex items-center justify-between px-1 text-[11px] font-semibold text-ink-400">
@@ -1308,7 +1284,6 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
             canAdd={!past}
             onOpen={(i) => setViewer({ list: images, index: i })}
             onFile={(kind, f) => upload(kind, f)}
-            onTakeXray={canWrite && !pending ? () => void takeXray([]) : undefined}
             onCamera={() => setCamera({})}
           />
 
@@ -1490,6 +1465,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
           onPin={togglePin}
           onClose={() => setViewer(null)}
           onSend={data.canMessage ? (img) => setSending({ img, caption: caption(img.date) }) : undefined}
+          onView={canWrite ? (id, v) => void setView(id, v) : undefined}
+          onSaveCopy={saveCopy}
         />
       )}
 

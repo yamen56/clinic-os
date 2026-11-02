@@ -266,6 +266,10 @@ export type PatientFileRow = {
   kind: string;
   created_at: string;
   teeth?: string[];
+  /** What a dental picture shows — panoramic, bitewing… (lib/imaging/kinds FILE_VIEWS). */
+  view?: string | null;
+  /** The picture this is an edited copy of. */
+  edited_from?: string | null;
   /** The machine that sent it, when one did. */
   device_name?: string | null;
   /** A DICOM study kept with its originals; what the row shows is the preview. */

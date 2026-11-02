@@ -10,27 +10,27 @@
     use (lib/specialty-profile).
   - One viewer for every picture, the same as the dental chart's: zoom,
     exposure, compare two side by side, send to the patient on WhatsApp.
-  - The machines, from here: "Request from device" asks a machine for this
-    patient's next result and shows it waiting until it arrives; "Take photo"
-    uses the camera on this computer; results a machine sent without saying
-    whose, that look like this patient's, can be filed from here in one tap.
+  - The machines, from here: "Take photo" uses the camera on this computer;
+    results a machine sent without saying whose, that look like this
+    patient's, can be filed from here in one tap. "Request from device" (ask a
+    machine for the next result) was taken out on 2026-11-02 — Yamen: "it is
+    not functional".
 */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, Copy, Download, FileText, FolderUp, LoaderCircle, Radio, Smile, Trash2, Upload, X } from "lucide-react";
+import { Camera, Copy, Download, FileText, FolderUp, Smile, Trash2, Upload, X } from "lucide-react";
 import { folderItems, resultsIn } from "@/lib/imaging/folder-files";
 import { useI18n } from "@/lib/i18n/client";
-import { fmtDate, fmtRelative } from "@/lib/dates";
+import { fmtDate } from "@/lib/dates";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { buttonClass } from "@/components/ui/button-class";
-import { ConfirmDialog, Modal } from "@/components/ui/modal";
-import { Field, Input, Select } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/ui/modal";
+import { Select } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { ImageViewer, type ChartImage } from "@/components/charts/dental/image-viewer";
+import { FILE_VIEWS } from "@/lib/imaging/kinds";
 import { CameraCapture } from "@/components/charts/dental/camera-capture";
 import { SendToPatient, sendPictureToPatient } from "@/components/patient-files/send-to-patient";
 import { deletePatientFileAction } from "../actions";
@@ -38,7 +38,6 @@ import type { PatientFileRow } from "./profile-client";
 
 export type FilesHub = {
   devices: { id: string; name: string; kind: string }[];
-  waiting: { id: string; kind: string; note: string; device: string | null; createdAt: string; teeth: string[] }[];
   likely: {
     id: string;
     file_name: string;
@@ -93,10 +92,15 @@ export function FilesTab({
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
-  const [viewer, setViewer] = useState<number | null>(null);
+  /** Within x-rays: panoramics, bitewings… (2026-11-02). */
+  const [viewFilter, setViewFilter] = useState<string>("all");
+  /** The picture open in the viewer — by id, so a copy saved in front of it does not shift it. */
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  /** Copies saved from the viewer, until the page's own list has them. */
+  const [added, setAdded] = useState<PatientFileRow[]>([]);
+  const [views, setViews] = useState<Record<string, string | null>>(() => Object.fromEntries(files.map((f) => [f.id, f.view ?? null])));
+  useEffect(() => setViews((prev) => ({ ...prev, ...Object.fromEntries(files.map((f) => [f.id, f.view ?? null])) })), [files]);
   const [camera, setCamera] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const [waiting, setWaiting] = useState(hub?.waiting ?? []);
   const [likely, setLikely] = useState(hub?.likely ?? []);
   const [links, setLinks] = useState(hub?.links ?? []);
   useEffect(() => setLinks(hub?.links ?? []), [hub?.links]);
@@ -108,22 +112,83 @@ export function FilesTab({
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => setTeeth(Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []]))), [files]);
+  useEffect(() => setTeeth((prev) => ({ ...prev, ...Object.fromEntries(files.map((f) => [f.id, f.teeth ?? []])) })), [files]);
+  const allFiles = useMemo(() => [...added.filter((a) => !files.some((f) => f.id === a.id)), ...files], [added, files]);
+  const viewLabels = t.viewer.views as Record<string, string>;
 
   // The clinic's kinds first, then whatever else this patient has; only kinds that have files.
   const kinds = useMemo(() => {
-    const present = new Set(files.map((f) => f.kind));
-    const order = [...(hub?.kinds ?? []), ...files.map((f) => f.kind)];
+    const present = new Set(allFiles.map((f) => f.kind));
+    const order = [...(hub?.kinds ?? []), ...allFiles.map((f) => f.kind)];
     return order.filter((k, i) => present.has(k) && order.indexOf(k) === i && k !== "insurance_card");
-  }, [files, hub?.kinds]);
-  const shown = useMemo(() => (filter === "all" ? files : files.filter((f) => f.kind === filter)), [files, filter]);
+  }, [allFiles, hub?.kinds]);
+  const ofKind = useMemo(() => (filter === "all" ? allFiles : allFiles.filter((f) => f.kind === filter)), [allFiles, filter]);
+  // The views among the x-rays (or photos) shown, for the second row of filters.
+  const presentViews = useMemo(() => FILE_VIEWS.filter((v) => ofKind.some((f) => views[f.id] === v)), [ofKind, views]);
+  const shown = useMemo(
+    () => (viewFilter === "all" || filter === "all" ? ofKind : ofKind.filter((f) => views[f.id] === viewFilter)),
+    [ofKind, viewFilter, filter, views]
+  );
   const pictures = useMemo(() => shown.filter((f) => isPicture(f.mime_type)), [shown]);
   const images: ChartImage[] = useMemo(
-    () => pictures.map((f) => ({ id: f.id, src: `/api/c/${slug}/files/${f.id}`, name: f.file_name, kind: f.kind, mime: f.mime_type, date: f.created_at })),
-    [pictures, slug]
+    () =>
+      pictures.map((f) => ({
+        id: f.id,
+        src: `/api/c/${slug}/files/${f.id}`,
+        name: f.file_name,
+        kind: f.kind,
+        view: views[f.id] ?? null,
+        mime: f.mime_type,
+        date: f.created_at,
+      })),
+    [pictures, slug, views]
   );
+  const viewer = viewerId ? images.findIndex((x) => x.id === viewerId) : -1;
 
-  const upload = async (list: File[], kind: string) => {
+  /* What a picture shows, set from the viewer; taken back if the save fails. */
+  const setView = async (fileId: string, view: string | null) => {
+    const before = views[fileId] ?? null;
+    setViews((prev) => ({ ...prev, [fileId]: view }));
+    const res = await fetch(`/api/c/${slug}/files/${fileId}/view`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ view }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      setViews((prev) => ({ ...prev, [fileId]: before }));
+      return toast(t.common.genericError, "error");
+    }
+    router.refresh();
+  };
+
+  /* An edited picture, saved beside its original, with its view and teeth; the viewer moves on to it. */
+  const saveCopy = async (orig: ChartImage, file: File): Promise<ChartImage | null> => {
+    const fd = new FormData();
+    fd.set("file", file);
+    fd.set("kind", orig.kind);
+    if (orig.view) fd.set("view", orig.view);
+    fd.set("teeth", (teeth[orig.id] ?? []).join(","));
+    fd.set("editedFrom", orig.id);
+    const res = await fetch(`/api/c/${slug}/patients/${patientId}/files`, { method: "POST", body: fd }).catch(() => null);
+    const body = (await res?.json().catch(() => null)) as { file?: PatientFileRow } | null;
+    if (!res?.ok || !body?.file) {
+      toast(t.viewer.saveFailed, "error");
+      return null;
+    }
+    const row = body.file;
+    setAdded((prev) => [row, ...prev]);
+    setTeeth((prev) => ({ ...prev, [row.id]: row.teeth ?? [] }));
+    setViews((prev) => ({ ...prev, [row.id]: row.view ?? null }));
+    setViewerId(row.id);
+    toast(t.viewer.savedCopy);
+    router.refresh();
+    return { id: row.id, src: `/api/c/${slug}/files/${row.id}`, name: row.file_name, kind: row.kind, view: row.view ?? null, mime: row.mime_type, date: row.created_at };
+  };
+
+  /* "view:panoramic" in the upload menu is an x-ray of that view. */
+  const upload = async (list: File[], choice: string) => {
+    const view = choice.startsWith("view:") ? choice.slice(5) : null;
+    const kind = view ? (view === "intraoral" ? "photo" : "xray") : choice;
     if (!list.length) return;
     setUploading(true);
     setProgress(list.length > 1 ? { done: 0, total: list.length } : null);
@@ -135,6 +200,7 @@ export function FilesTab({
         const fd = new FormData();
         fd.set("file", file);
         fd.set("kind", kind);
+        if (view) fd.set("view", view);
         const res = await fetch(`/api/c/${slug}/patients/${patientId}/files`, { method: "POST", body: fd }).catch(() => null);
         if (res?.status === 413) tooLarge++;
         else if (!res?.ok) failed++;
@@ -158,41 +224,6 @@ export function FilesTab({
       items.map((i) => i.file),
       uploadKind
     );
-  };
-
-  // Waiting on a machine: the result shows up here by itself.
-  const watchIds = waiting.map((w) => w.id).join();
-  useEffect(() => {
-    if (!watchIds) return;
-    let stop = false;
-    const look = async () => {
-      for (const id of watchIds.split(",")) {
-        try {
-          const res = await fetch(`/api/c/${slug}/imaging/requests/${id}`, { cache: "no-store" });
-          const body = (await res.json()) as { request?: { fulfilledAt: string | null; cancelledAt: string | null }; file?: { file_name: string } | null };
-          if (stop || !body.request) continue;
-          if (body.request.fulfilledAt || body.request.cancelledAt) {
-            setWaiting((prev) => prev.filter((w) => w.id !== id));
-            if (body.request.fulfilledAt) {
-              toast(T.arrived.replace("{name}", body.file?.file_name ?? ""));
-              router.refresh();
-            }
-          }
-        } catch {
-          // the next look
-        }
-      }
-    };
-    const timer = setInterval(look, 2500);
-    return () => {
-      stop = true;
-      clearInterval(timer);
-    };
-  }, [watchIds, slug, router, toast, T.arrived]);
-
-  const cancelWait = async (id: string) => {
-    setWaiting((prev) => prev.filter((w) => w.id !== id));
-    await fetch(`/api/c/${slug}/imaging/requests/${id}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "cancel" }) }).catch(() => null);
   };
 
   const fileLikely = async (id: string) => {
@@ -254,6 +285,16 @@ export function FilesTab({
                 {kindLabel(k)}
               </option>
             ))}
+            {/* A dental clinic files its x-rays by what they show. */}
+            {dental && (
+              <optgroup label={kindLabel("xray")}>
+                {FILE_VIEWS.map((v) => (
+                  <option key={v} value={`view:${v}`}>
+                    {viewLabels[v]}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </Select>
           <input
             ref={fileInput}
@@ -290,35 +331,8 @@ export function FilesTab({
             <Camera className="h-4 w-4" />
             {T.takePhoto}
           </Button>
-          {hub && (
-            <Button variant="outline" onClick={() => setAsking(true)} data-request-device>
-              <Radio className="h-4 w-4" />
-              {T.request}
-            </Button>
-          )}
           <span className="text-[13px] text-ink-400">{t.patients.files.dropHint}</span>
         </div>
-
-        {waiting.length > 0 && (
-          <ul className="mt-3 grid gap-2">
-            {waiting.map((w) => (
-              <li key={w.id} className="flex flex-wrap items-center gap-2.5 rounded-ctl border border-brand-300 bg-brand-50 px-3 py-2 text-[13.5px]" data-waiting-request={w.id}>
-                <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-brand-700" />
-                <span className="font-semibold text-ink-900">
-                  {w.device ? T.waitingFor.replace("{device}", w.device) : T.waitingAny}
-                  {w.note ? ` · ${w.note}` : ""}
-                  {w.teeth.length ? ` · ${w.teeth.join(" ")}` : ""}
-                </span>
-                <span className="text-ink-500" suppressHydrationWarning>
-                  {T.waitingSince.replace("{t}", fmtRelative(w.createdAt, locale))}
-                </span>
-                <button type="button" onClick={() => cancelWait(w.id)} className="ms-auto grid h-7 w-7 place-items-center rounded-md text-ink-500 hover:bg-surface" aria-label={t.common.cancel}>
-                  <X className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
 
         {/* Who this patient is on the machine: the number to give them there, and the names it has already been taught. */}
         {machines && (machineId || links.length > 0) && (
@@ -412,7 +426,7 @@ export function FilesTab({
       {kinds.length > 1 && (
         <div className="flex flex-wrap gap-1.5" role="tablist" data-files-filters>
           {["all", ...kinds].map((k) => {
-            const n = k === "all" ? files.length : files.filter((f) => f.kind === k).length;
+            const n = k === "all" ? allFiles.length : allFiles.filter((f) => f.kind === k).length;
             const on = filter === k;
             return (
               <button
@@ -420,11 +434,35 @@ export function FilesTab({
                 type="button"
                 role="tab"
                 aria-selected={on}
-                onClick={() => setFilter(k)}
+                onClick={() => {
+                  setFilter(k);
+                  setViewFilter("all");
+                }}
                 className={`rounded-full px-3 py-1 text-[13px] font-semibold transition-colors ${on ? "bg-ink-900 text-surface" : "bg-surface text-ink-700 ring-1 ring-line hover:bg-sunken"}`}
                 data-files-filter={k}
               >
                 {k === "all" ? T.allKinds : kindLabel(k)} <span className="tnum opacity-70">{n}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {/* Within the x-rays: panoramics, bitewings, periapicals… */}
+      {filter !== "all" && presentViews.length > 0 && (
+        <div className="-mt-2 flex flex-wrap gap-1.5" data-files-views>
+          {["all", ...presentViews].map((v) => {
+            const on = viewFilter === v;
+            const n = v === "all" ? ofKind.length : ofKind.filter((f) => views[f.id] === v).length;
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setViewFilter(v)}
+                aria-pressed={on}
+                className={`rounded-full px-2.5 py-0.5 text-[12.5px] font-semibold transition-colors ${on ? "bg-brand-600 text-on-brand" : "bg-sunken text-ink-700 hover:bg-line"}`}
+                data-files-view={v}
+              >
+                {v === "all" ? T.allKinds : viewLabels[v]} <span className="tnum opacity-70">{n}</span>
               </button>
             );
           })}
@@ -437,7 +475,8 @@ export function FilesTab({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {shown.map((f) => {
             const picture = isPicture(f.mime_type);
-            const open = () => (picture ? setViewer(pictures.findIndex((p) => p.id === f.id)) : window.open(`/api/c/${slug}/files/${f.id}`, "_blank", "noopener"));
+            const open = () => (picture ? setViewerId(f.id) : window.open(`/api/c/${slug}/files/${f.id}`, "_blank", "noopener"));
+            const fileView = views[f.id];
             const fileTeeth = teeth[f.id] ?? [];
             return (
               <Card key={f.id} className="group overflow-hidden">
@@ -451,7 +490,14 @@ export function FilesTab({
                         <FileText className="h-9 w-9" />
                       </span>
                     )}
-                    <span className="absolute start-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">{kindLabel(f.kind)}</span>
+                    <span className="absolute start-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white" data-file-label>
+                      {(fileView && viewLabels[fileView]) || kindLabel(f.kind)}
+                    </span>
+                    {f.edited_from && (
+                      <span className="absolute end-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-ink-900" data-file-edited>
+                        {t.viewer.editedSuffix}
+                      </span>
+                    )}
                     {fileTeeth.length > 0 && (
                       <span dir="ltr" className="absolute bottom-2 start-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-brand-700 tnum" data-file-teeth>
                         <Smile className="h-3 w-3" />
@@ -490,16 +536,18 @@ export function FilesTab({
         </div>
       )}
 
-      {viewer !== null && images[viewer] && (
+      {viewer >= 0 && images[viewer] && (
         <ImageViewer
           images={images}
           index={viewer}
           pins={teeth}
           canPin={!!dental?.canPin}
           showTeeth={!!dental}
-          onIndex={setViewer}
+          onIndex={(i) => setViewerId(images[i]?.id ?? null)}
           onPin={pin}
-          onClose={() => setViewer(null)}
+          onClose={() => setViewerId(null)}
+          onView={dental ? (id, v) => void setView(id, v) : undefined}
+          onSaveCopy={saveCopy}
           onSend={
             hub?.canMessage
               ? (img) =>
@@ -533,19 +581,6 @@ export function FilesTab({
 
       <CameraCapture open={camera} onClose={() => setCamera(false)} onPhoto={(f) => void upload([f], "photo").then(() => setCamera(false))} />
 
-      {asking && hub && (
-        <RequestFromDevice
-          slug={slug}
-          patientId={patientId}
-          hub={hub}
-          onClose={() => setAsking(false)}
-          onWaiting={(w) => {
-            setWaiting((prev) => [...prev, w]);
-            setAsking(false);
-          }}
-        />
-      )}
-
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
@@ -563,108 +598,5 @@ export function FilesTab({
         }}
       />
     </div>
-  );
-}
-
-/** Ask one machine — or whichever sends next — for this patient's next result. */
-function RequestFromDevice({
-  slug,
-  patientId,
-  hub,
-  onClose,
-  onWaiting,
-}: {
-  slug: string;
-  patientId: string;
-  hub: FilesHub;
-  onClose: () => void;
-  onWaiting: (w: FilesHub["waiting"][number]) => void;
-}) {
-  const { t } = useI18n();
-  const T = t.devices;
-  const { toast } = useToast();
-  const [deviceId, setDeviceId] = useState<string | null>(hub.devices.length === 1 ? hub.devices[0].id : null);
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const go = async () => {
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/c/${slug}/imaging/requests`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ patientId, kind: "file", deviceId, note }),
-      });
-      const body = (await res.json().catch(() => ({}))) as { request?: { id: string; created_at: string } };
-      if (!res.ok || !body.request) throw new Error("failed");
-      onWaiting({
-        id: body.request.id,
-        kind: "file",
-        note: note.trim(),
-        device: hub.devices.find((d) => d.id === deviceId)?.name ?? null,
-        createdAt: body.request.created_at,
-        teeth: [],
-      });
-    } catch {
-      toast(t.common.genericError, "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={T.requestTitle}
-      footer={
-        hub.devices.length ? (
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
-              {t.common.cancel}
-            </Button>
-            <Button onClick={go} loading={busy} data-request-go>
-              {T.requestGo}
-            </Button>
-          </div>
-        ) : undefined
-      }
-    >
-      {hub.devices.length === 0 ? (
-        <div className="grid gap-3 text-sm text-ink-700" data-request-none>
-          <p>{T.noMachines}</p>
-          {hub.canManageDevices && (
-            <Link href={`/c/${slug}/settings/devices`} className={buttonClass({ variant: "primary", size: "sm", className: "w-fit" })}>
-              {T.connect}
-            </Link>
-          )}
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          <div className="grid gap-1.5" role="radiogroup" aria-label={T.request}>
-            {[{ id: null as string | null, name: T.anyMachine, kind: "" }, ...hub.devices].map((d) => {
-              const on = deviceId === d.id;
-              return (
-                <button
-                  key={d.id ?? "any"}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => setDeviceId(d.id)}
-                  className={`flex items-center justify-between gap-3 rounded-ctl border px-3 py-2.5 text-start text-sm ${on ? "border-brand-600 bg-brand-50 font-semibold text-ink-900" : "border-line text-ink-700 hover:bg-sunken"}`}
-                  data-request-option={d.id ?? "any"}
-                >
-                  <span>{d.name}</span>
-                  {d.kind && <span className="text-[12px] font-normal text-ink-500">{(t.devices.kinds as Record<string, string>)[d.kind] ?? d.kind}</span>}
-                </button>
-              );
-            })}
-          </div>
-          <Field label={T.requestNote}>
-            <Input value={note} maxLength={80} placeholder={T.requestNotePlaceholder} onChange={(e) => setNote(e.target.value)} data-request-note />
-          </Field>
-        </div>
-      )}
-    </Modal>
   );
 }

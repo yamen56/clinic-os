@@ -55,8 +55,6 @@ export type PanelActions = {
   onOpenImages: (list: ChartImage[], index: number) => void;
   onPinImage: (imageId: string, fdi: string) => void;
   onUploadForTooth: (kind: "xray" | "photo", f: File, fdi: string) => void;
-  /** Arm the imaging station for this tooth. */
-  onTakeXray: (fdi: string) => void;
   /** A photo of this tooth from a camera on this device. */
   onCamera: (fdi: string) => void;
   /** Open an entry that is not on this tooth — the full arch a tooth's implant belongs to. */
@@ -586,7 +584,6 @@ export function ToothPanel({
             compact
             busy={uploading}
             onFile={(k, f) => a.onUploadForTooth(k, f, single)}
-            onTakeXray={canWrite ? () => a.onTakeXray(single) : undefined}
             onCamera={() => a.onCamera(single)}
           />
         )}

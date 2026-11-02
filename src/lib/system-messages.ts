@@ -20,6 +20,7 @@ import type { PoolClient } from "pg";
 export type SystemMessageKey =
   | "booking_confirmed"
   | "booking_pending"
+  | "running_late"
   | "booking_otp"
   | "waitlist_offer"
   | "document_sign_request"
@@ -91,6 +92,27 @@ export const SYSTEM_MESSAGES: SystemMessageDef[] = [
     vars: ["patient.first_name", "patient.name", "clinic.name", "appointment.when", "appointment.service"],
     ar: "مرحباً {{patient.first_name}}، استلمنا طلب حجزك في {{clinic.name}} ليوم {{appointment.when}}. سنؤكده لك قريباً.",
     en: "Hi {{patient.first_name}}, we received your booking request at {{clinic.name}} for {{appointment.when}}. We'll confirm it shortly.",
+  },
+  /*
+    A patient before this one is running late (2026-11-02), and the desk chose
+    to tell the people after them. Only a heads-up: their booking does not
+    move, so it names their own time and roughly how long the wait may be.
+  */
+  {
+    key: "running_late",
+    group: "booking",
+    canDisable: true,
+    vars: ["patient.first_name", "patient.name", "clinic.name", "appointment.time", "appointment.doctor", "delay.minutes"],
+    ar: [
+      "مرحباً {{patient.first_name}} 👋",
+      "معك {{clinic.name}}. حبينا ننبهك إنه ممكن يتأخر موعدك اليوم الساعة {{appointment.time}} حوالي {{delay.minutes}} دقيقة.",
+      "نعتذر عن الانتظار وشكراً لتفهمك 🙏",
+    ].join("\n"),
+    en: [
+      "Hi {{patient.first_name}} 👋",
+      "This is {{clinic.name}}. A heads-up: your appointment today at {{appointment.time}} may start about {{delay.minutes}} minutes late.",
+      "Sorry for the wait, and thank you for understanding 🙏",
+    ].join("\n"),
   },
   {
     key: "booking_otp",

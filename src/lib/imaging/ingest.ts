@@ -6,7 +6,7 @@ import { nationalIdOf } from "@/lib/patients";
 import { toAsciiDigits } from "@/lib/phone";
 import { dicomPreview, isDicom, modalityLabel, parseDicomFile, type DicomMeta, type ParsedDicom } from "./dicom";
 import type { MatchBy } from "./devices";
-import { isPictureKind, kindFor, type FileKind } from "./kinds";
+import { isPictureKind, kindFor, viewFor, type FileKind } from "./kinds";
 
 /**
  * Every image that reaches a patient by machine passes through here: a
@@ -563,9 +563,23 @@ export async function ingestImage(input: IngestInput, run: Run): Promise<IngestR
       }
 
       const f = await c.query(
-        `insert into patient_files (clinic_id, patient_id, uploaded_by, file_name, mime_type, size_bytes, storage_path, kind, teeth, device_id, dicom)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
-        [clinicId, patient.id, userId, mainName, mainMime, size, mainPath, fileKind, fileTeeth, device?.id ?? null, record ? JSON.stringify(record) : null]
+        `insert into patient_files (clinic_id, patient_id, uploaded_by, file_name, mime_type, size_bytes, storage_path, kind, teeth, device_id, dicom, view)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
+        [
+          clinicId,
+          patient.id,
+          userId,
+          mainName,
+          mainMime,
+          size,
+          mainPath,
+          fileKind,
+          fileTeeth,
+          device?.id ?? null,
+          record ? JSON.stringify(record) : null,
+          // A panoramic machine's picture is a panoramic, without anyone saying so.
+          fileKind === "xray" ? viewFor({ deviceKind: device?.kind, modality: meta?.modality, fileName: input.fileName }) : null,
+        ]
       );
       const fileId = f.rows[0].id as string;
       if (request) await fulfil(c, request, fileId);
@@ -716,9 +730,24 @@ export async function fileInboxItem(
     );
   } else {
     const f = await c.query(
-      `insert into patient_files (clinic_id, patient_id, uploaded_by, file_name, mime_type, size_bytes, storage_path, kind, teeth, device_id, dicom)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
-      [opts.clinicId, patient.id, opts.userId, item.file_name, item.mime_type, item.size_bytes, item.storage_path, item.kind, teeth, item.device_id, dicom ? JSON.stringify(dicom) : null]
+      `insert into patient_files (clinic_id, patient_id, uploaded_by, file_name, mime_type, size_bytes, storage_path, kind, teeth, device_id, dicom, view)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+               case when $8 = 'xray' then coalesce($12, (select case d.kind when 'opg' then 'panoramic' when 'cbct' then 'cbct' end from clinic_devices d where d.id = $10)) end)
+       returning id`,
+      [
+        opts.clinicId,
+        patient.id,
+        opts.userId,
+        item.file_name,
+        item.mime_type,
+        item.size_bytes,
+        item.storage_path,
+        item.kind,
+        teeth,
+        item.device_id,
+        dicom ? JSON.stringify(dicom) : null,
+        viewFor({ modality: (dicom as { modality?: string } | null)?.modality, fileName: item.hint?.originalName ?? item.file_name }),
+      ]
     );
     fileId = f.rows[0].id;
   }

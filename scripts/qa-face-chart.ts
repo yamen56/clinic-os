@@ -213,6 +213,7 @@ async function main() {
     const billHref = (await page.locator("[data-face-bill]").getAttribute("href")) ?? "";
     check(billHref.includes(toxin.id) && billHref.includes(filler.id), "Bill names both");
     await page.goto(`${BASE}/c/${face.slug}/invoices`, { timeout: 120000 });
+    await openDesk(page);
     check(await until(async () => (await page.locator(`[data-desk-bill='${face.patientId}']`).count()) > 0, 60000), "the desk's Ready to bill lists the patient");
     const lineValues = (p: Page) => p.locator("input").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
     await page.goto(`${BASE}${billHref}`, { timeout: 120000 });
@@ -326,8 +327,12 @@ async function main() {
       [centre.id, centre.patientId, centre.docId]
     );
     await cp.goto(`${BASE}/c/${centre.slug}/invoices`, { timeout: 120000 });
+    await openDesk(cp);
     const deskRow = cp.locator(`[data-desk-patient='${centre.patientId}']`);
     await deskRow.waitFor({ timeout: 60000 });
+    // Each patient is one row; its items open under it.
+    await deskRow.locator("[data-desk-expand]").click();
+    await deskRow.locator("[data-desk-lines]").waitFor();
     const deskText = await deskRow.innerText();
     check(
       (await deskRow.locator(`[data-desk-line='${crown.id}']`).innerText()).includes("300.00") && deskText.includes("Dental"),
@@ -342,13 +347,17 @@ async function main() {
     check(((await cp.locator(`[data-desk-bill='${centre.patientId}']`).getAttribute("href")) ?? "").includes(crown.id), "Bill names what is ticked");
     await deskRow.locator(`[data-desk-line='${crown.id}'] input[type='checkbox']`).uncheck();
     check(!((await cp.locator(`[data-desk-bill='${centre.patientId}']`).getAttribute("href")) ?? "").includes(crown.id), "and leaves out what is unticked");
+    // One tap, no confirm box: Undo is on the toast instead (2026-11-02).
     await deskRow.locator(`[data-desk-remove='${both}']`).click();
-    await cp.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
     check(await until(async () => (await deskRow.locator(`[data-desk-line='${both}']`).count()) === 0), "Remove takes it off the desk's list");
+    check(await until(async () => (await q(`select fee::float as fee from chart_marks where id = $1`, [both]))[0].fee === 0), "at once, with no confirm box");
     const [taken] = await q(`select fee::float as fee, fee_manual, voided_at from chart_marks where id = $1`, [both]);
     check(taken.fee === 0 && taken.fee_manual === true && taken.voided_at === null, "it stays on the chart, at no charge — not voided");
     await cp.goto(`${BASE}/c/${centre.slug}/invoices`, { timeout: 120000 });
+    await openDesk(cp);
     await deskRow.waitFor({ timeout: 60000 });
+    await deskRow.locator("[data-desk-expand]").click();
+    await deskRow.locator("[data-desk-lines]").waitFor();
     check((await deskRow.locator(`[data-desk-line='${both}']`).count()) === 0, "and stays off it after a reload");
     // The patient's own card has Remove too.
     await cp.goto(`${BASE}/c/${centre.slug}/patients/${centre.patientId}?tab=invoices`, { timeout: 120000 });
@@ -362,6 +371,12 @@ async function main() {
   }
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
+}
+
+/** The desk's Ready to bill opens minimised (2026-11-02); open it. */
+async function openDesk(p: Page) {
+  await p.waitForSelector("[data-ready-desk][data-ready-open]", { timeout: 60000 });
+  if ((await p.locator("[data-ready-desk]").getAttribute("data-ready-open")) !== "1") await p.click("[data-ready-toggle]");
 }
 
 main().catch((e) => {

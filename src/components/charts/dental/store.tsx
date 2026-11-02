@@ -47,6 +47,9 @@ export type ChartFile = {
   kind: string;
   created_at: string;
   teeth?: string[];
+  /** Panoramic, bitewing… (migration 0089). */
+  view?: string | null;
+  edited_from?: string | null;
 };
 
 /** What the patient page hands the chart: the saved chart, and who is charting. */

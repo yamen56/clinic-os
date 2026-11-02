@@ -961,40 +961,107 @@ export async function deleteBilledInvoiceAction(slug: string, invoiceId: string)
  *
  * Only while it is on no invoice that stands; a doctor who sees only their own
  * invoices takes off only their own work. Dental and face work alike.
+ *
+ * One item or a patient's whole list at once (2026-11-02: "a faster delete
+ * button"): no confirm box on the desk any more, an Undo instead —
+ * restoreToBillingAction.
  */
-export async function removeFromBillingAction(slug: string, markId: string): Promise<{ error?: string }> {
+export async function removeFromBillingAction(slug: string, markIds: string | string[]): Promise<{ error?: string; removed?: string[] }> {
   const access = await requireClinic(slug);
   if (!can(access, "invoices")) return { error: "forbidden" };
-  if (!isUuid(markId)) return { error: "not_found" };
+  const ids = [...new Set(Array.isArray(markIds) ? markIds : [markIds])];
+  if (!ids.length || ids.length > 100 || !ids.every(isUuid)) return { error: "not_found" };
   const own = ownInvoicesOnly(access);
 
   return inClinic(access, async (c) => {
-    const m = (
+    const marks = (
       await c.query(
-        `select id, patient_id, treatment_key, fee, performed_by from chart_marks
-          where id = $1 and clinic_id = $2 and voided_at is null and kind = 'procedure' for update`,
-        [markId, access.clinicId]
+        `select id, patient_id, treatment_key, fee, fee_manual, performed_by from chart_marks
+          where id = any($1::uuid[]) and clinic_id = $2 and voided_at is null and kind = 'procedure' for update`,
+        [ids, access.clinicId]
       )
-    ).rows[0];
-    if (!m || (own && m.performed_by !== access.memberId)) return { error: "not_found" };
-    if ((await loadBilled(c, access.clinicId, [markId])).some((b) => b.qty > 0)) return { error: "billed" };
-    await c.query(`update chart_marks set fee = 0, fee_manual = true where id = $1`, [markId]);
-    await c.query(`insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason) values ($1, $2, 'fee', $3, '0')`, [
-      access.clinicId,
-      markId,
-      access.session.user.id,
-    ]);
-    await audit(c, {
-      clinicId: access.clinicId,
-      userId: access.session.user.id,
-      impersonatedBy: access.session.impersonatedBy,
-      action: "chart.mark.no_charge",
-      entity: "patient",
-      entityId: m.patient_id,
-      detail: { mark: markId, treatment: m.treatment_key, was: m.fee == null ? null : Number(m.fee) },
-    });
+    ).rows.filter((m) => !own || m.performed_by === access.memberId);
+    if (!marks.length) return { error: "not_found" };
+    const billed = new Set((await loadBilled(c, access.clinicId, marks.map((m) => m.id))).filter((b) => b.qty > 0).map((b) => b.markId));
+    const free = marks.filter((m) => !billed.has(m.id));
+    if (!free.length) return { error: "billed" };
+    for (const m of free) {
+      await c.query(`update chart_marks set fee = 0, fee_manual = true where id = $1`, [m.id]);
+      await c.query(`insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason) values ($1, $2, 'fee', $3, '0')`, [
+        access.clinicId,
+        m.id,
+        access.session.user.id,
+      ]);
+      await audit(c, {
+        clinicId: access.clinicId,
+        userId: access.session.user.id,
+        impersonatedBy: access.session.impersonatedBy,
+        action: "chart.mark.no_charge",
+        entity: "patient",
+        entityId: m.patient_id,
+        // What it cost before, so Undo puts exactly that back.
+        detail: { mark: m.id, treatment: m.treatment_key, was: m.fee == null ? null : Number(m.fee), wasManual: !!m.fee_manual },
+      });
+    }
     revalidatePath(`/c/${slug}/invoices`);
-    return {};
+    return { removed: free.map((m) => m.id) };
+  });
+}
+
+/**
+ * Undo of the above: the price each item had before this member took it off
+ * Ready to bill, read back from the record of taking it off — never a price
+ * the browser names. Only for what this member took off in the last half hour
+ * and nobody has priced since.
+ */
+export async function restoreToBillingAction(slug: string, markIds: string[]): Promise<{ error?: string; restored?: number }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "invoices")) return { error: "forbidden" };
+  const ids = [...new Set(markIds)];
+  if (!ids.length || ids.length > 100 || !ids.every(isUuid)) return { error: "not_found" };
+
+  return inClinic(access, async (c) => {
+    const rows = (
+      await c.query(
+        `select distinct on (a.detail->>'mark') a.detail->>'mark' as mark_id, a.detail->>'was' as was,
+                coalesce((a.detail->>'wasManual')::boolean, a.detail->>'was' is not null) as was_manual
+           from audit_log a
+           join chart_marks m on m.id::text = a.detail->>'mark' and m.clinic_id = a.clinic_id
+          where a.clinic_id = $1 and a.user_id = $2 and a.action = 'chart.mark.no_charge'
+            and a.detail->>'mark' = any($3::text[]) and a.created_at > now() - interval '30 minutes'
+            and m.fee = 0 and m.fee_manual and m.voided_at is null
+          order by a.detail->>'mark', a.created_at desc`,
+        [access.clinicId, access.session.user.id, ids]
+      )
+    ).rows;
+    for (const r of rows) {
+      const was = r.was == null ? null : Number(r.was);
+      await c.query(`update chart_marks set fee = $2, fee_manual = $3 where id = $1 and clinic_id = $4`, [
+        r.mark_id,
+        was,
+        was == null ? false : !!r.was_manual,
+        access.clinicId,
+      ]);
+      await c.query(`insert into chart_mark_events (clinic_id, mark_id, action, by_user, reason) values ($1, $2, 'fee', $3, $4)`, [
+        access.clinicId,
+        r.mark_id,
+        access.session.user.id,
+        was == null ? "list" : String(was),
+      ]);
+    }
+    if (rows.length) {
+      await audit(c, {
+        clinicId: access.clinicId,
+        userId: access.session.user.id,
+        impersonatedBy: access.session.impersonatedBy,
+        action: "chart.mark.charge_restored",
+        entity: "chart_mark",
+        entityId: rows[0].mark_id,
+        detail: { marks: rows.map((r) => r.mark_id) },
+      });
+    }
+    revalidatePath(`/c/${slug}/invoices`);
+    return { restored: rows.length };
   });
 }
 

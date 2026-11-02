@@ -15,7 +15,7 @@ import { loadDentalChart } from "@/lib/charts/dental/db";
 import { loadFaceChart } from "@/lib/charts/face/db";
 import { loadNoteFeed } from "@/lib/note-feed";
 import type { PoolClient } from "pg";
-import { IMAGING_REQUEST_OPEN_FOR, hintWords, nameWords } from "@/lib/imaging/ingest";
+import { hintWords, nameWords } from "@/lib/imaging/ingest";
 import { clinicSpecialties } from "@/lib/specialties";
 import { profileFor } from "@/lib/specialty-profile";
 
@@ -128,7 +128,7 @@ export default async function PatientProfilePage({
           [id, access.clinicId]
         ),
         () => c.query(
-          `select f.id, f.file_name, f.mime_type, f.size_bytes, f.kind, f.created_at, f.teeth, d.name as device_name,
+          `select f.id, f.file_name, f.mime_type, f.size_bytes, f.kind, f.created_at, f.teeth, f.view, f.edited_from, d.name as device_name,
                   case when f.dicom is null then null else jsonb_build_object(
                     'modality', f.dicom->>'modality', 'instances', jsonb_array_length(f.dicom->'instances')) end as dicom
              from patient_files f left join clinic_devices d on d.id = f.device_id
@@ -377,8 +377,7 @@ export default async function PatientProfilePage({
 }
 
 /**
- * What the patient's Files need besides the files: the clinic's machines (to
- * ask one for this patient's next result), the requests already waiting, and
+ * What the patient's Files need besides the files: the clinic's machines, and
  * results a machine sent without saying whose that look like this patient's
  * — so they can be filed from here, without going to the Devices page. One
  * statement, one round trip; the likeness is scored in JS with the same rule
@@ -390,10 +389,6 @@ async function loadFilesHub(c: PoolClient, clinicId: string, patientId: string, 
       `select
          (select coalesce(json_agg(json_build_object('id', d.id, 'name', d.name, 'kind', d.kind) order by d.created_at), '[]')
             from clinic_devices d where d.clinic_id = $2 and d.revoked_at is null) as devices,
-         (select coalesce(json_agg(json_build_object('id', r.id, 'kind', r.kind, 'note', r.note, 'device', d.name, 'createdAt', r.created_at, 'teeth', r.teeth) order by r.created_at), '[]')
-            from imaging_requests r left join clinic_devices d on d.id = r.device_id
-           where r.clinic_id = $2 and r.patient_id = $1 and r.fulfilled_at is null and r.cancelled_at is null
-             and r.created_at > now() - interval '${IMAGING_REQUEST_OPEN_FOR}') as waiting,
          (select coalesce(json_agg(x order by x.received_at), '[]') from (
             select i.id, i.file_name, i.mime_type, i.kind, i.received_at, d.name as device, i.hint->'machine' as machine,
                    i.hint->>'folder' as folder, i.hint->>'originalName' as "originalName"
@@ -428,7 +423,6 @@ async function loadFilesHub(c: PoolClient, clinicId: string, patientId: string, 
   const practises = clinicSpecialties(r.clinic?.specialty, r.clinic?.specialties ?? []);
   return {
     devices: r.devices as { id: string; name: string; kind: string }[],
-    waiting: r.waiting as { id: string; kind: string; note: string; device: string | null; createdAt: string; teeth: string[] }[],
     likely,
     // What the clinic's machines call this patient, learned when somebody filed one of their pictures.
     links: r.links as { id: string; label: string; key: string }[],

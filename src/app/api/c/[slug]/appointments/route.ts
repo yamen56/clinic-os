@@ -53,6 +53,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
                 a.status, a.source, a.notes, a.intake_answers,
                 a.room_id, a.arrived_at, a.seated_at, a.finished_at, a.walk_in, a.flow_prev_status,
                 a.next_visit_days, a.next_visit_min, a.next_visit_member_id, a.desk_note, a.handed_off_at,
+                a.late_min, a.delay_notice_at,
                 s.duration_min as service_duration_min,
                 p.full_name as patient_name, p.phone_e164 as patient_phone, p.medical_history,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,

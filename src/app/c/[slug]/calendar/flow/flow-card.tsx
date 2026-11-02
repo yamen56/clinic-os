@@ -57,9 +57,12 @@ export function FlowCard({
   onStep,
   onOpen,
   onBookNext,
+  onLate,
   nameOpensFile = false,
 }: {
   slug: string;
+  /** Reception notes the patient is running late, and may tell the next ones (2026-11-02). */
+  onLate?: () => void;
   /** Tapping the patient opens their file rather than the visit — a doctor's board. */
   nameOpensFile?: boolean;
   appt: Appt;
@@ -116,6 +119,10 @@ export function FlowCard({
   else if (appt.source === "booking_link") tags.push({ key: "online", text: t.flow.bookedOnline, status: "neutral" });
   else if (appt.source === "ai_agent") tags.push({ key: "ai", text: t.flow.bookedByAi, status: "neutral" });
   if (appt.status === "pending_approval") tags.push({ key: "pending", text: t.flow.awaitingApproval, status: "pending" });
+  // What the desk was told: how late this patient said they would be, and whether they were warned of a wait themselves.
+  const notHereYet = stage === "expected" || stage === "late";
+  if (appt.late_min && (notHereYet || stage === "waiting")) tags.push({ key: "said-late", text: t.flow.saidLate.replace("{n}", String(appt.late_min)), status: "pending" });
+  if (appt.delay_notice_at && notHereYet) tags.push({ key: "told-delay", text: t.flow.toldOfDelay, status: "neutral" });
   // A treatment is paid off over the visits: the desk sees what is still owed when the patient walks in.
   const owed = caps.invoices && currency ? Math.max(0, Math.round(((appt.balance_due ?? 0) - paidHere) * 100) / 100) : 0;
   if (owed > 0) tags.push({ key: "owes", text: t.invoices.owes.replace("{amount}", fmtMoney(owed, currency, locale)), status: "pending" });
@@ -218,11 +225,25 @@ export function FlowCard({
         </div>
       )}
 
-      <div className="mt-3 flex items-center gap-2">
+      {/* The buttons press; the rest of the card picks it up to drag it. */}
+      <div className="mt-3 flex items-center gap-2" data-no-drag>
         {(stage === "expected" || stage === "late") && (
           <button type="button" disabled={busy} onClick={() => onStep("arrived")} className={`${primary} flex-1`} data-flow-action="arrived">
             <Armchair className="h-4 w-4" />
             {t.flow.arrived}
+          </button>
+        )}
+        {/* Late already by the clock: how late they will be, said in the open. */}
+        {stage === "late" && onLate && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onLate}
+            className="inline-flex h-9 shrink-0 touch-manipulation items-center gap-1.5 rounded-full border border-st-late/40 bg-st-late-soft px-3 text-[13px] font-semibold text-st-late transition-opacity hover:opacity-90 disabled:opacity-60"
+            data-flow-late
+          >
+            <Clock className="h-4 w-4" />
+            {t.flow.runningLate}
           </button>
         )}
         {stage === "waiting" &&
@@ -342,6 +363,17 @@ export function FlowCard({
         >
           {(close) => (
             <>
+              {(stage === "expected" || stage === "waiting") && onLate && (
+                <MenuItem
+                  icon={<Clock />}
+                  onClick={() => {
+                    close();
+                    onLate();
+                  }}
+                >
+                  {t.flow.runningLate}
+                </MenuItem>
+              )}
               {(stage === "expected" || stage === "late" || stage === "waiting") && (
                 <MenuItem
                   icon={<UserX />}

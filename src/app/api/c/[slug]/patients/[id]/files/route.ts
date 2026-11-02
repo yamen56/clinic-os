@@ -6,7 +6,7 @@ import { saveFile } from "@/lib/storage";
 import { can } from "@/lib/auth";
 import { isDicom } from "@/lib/imaging/dicom";
 import { ingestImage } from "@/lib/imaging/ingest";
-import { FILE_KINDS, type FileKind } from "@/lib/imaging/kinds";
+import { FILE_KINDS, isFileView, kindOfView, type FileKind } from "@/lib/imaging/kinds";
 
 const MAX_SIZE = 25 * 1024 * 1024;
 
@@ -20,7 +20,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
 
   const form = await req.formData();
   const file = form.get("file");
-  const kind = String(form.get("kind") ?? "other");
+  /*
+    What it shows (a panoramic, a bitewing…), the teeth it is of, and the
+    picture it is an edited copy of — sent by the viewer's Save (2026-11-02).
+    A view says the kind as well.
+  */
+  const viewRaw = form.get("view");
+  const view = isFileView(viewRaw) ? viewRaw : null;
+  const kind = view ? kindOfView(view) : String(form.get("kind") ?? "other");
+  const teeth = String(form.get("teeth") ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter((x) => /^[1-8][1-8]$/.test(x));
+  const editedFromRaw = String(form.get("editedFrom") ?? "");
+  const editedFrom = isUuid(editedFromRaw) ? editedFromRaw : null;
   if (!(file instanceof File)) return NextResponse.json({ error: "no_file" }, { status: 400 });
   // A photo of the insurance card is filed as insurance, so it takes the switch.
   if (kind === "insurance_card" && !can(access, "insurance")) {
@@ -55,7 +68,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     const f = await inClinic(access, async (c) =>
       (
         await c.query(
-          `select id, file_name, mime_type, size_bytes, kind, created_at, teeth from patient_files where id = $1 and clinic_id = $2`,
+          `select id, file_name, mime_type, size_bytes, kind, created_at, teeth, view, edited_from from patient_files where id = $1 and clinic_id = $2`,
           [r.fileId, access.clinicId]
         )
       ).rows[0]
@@ -71,9 +84,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     if (!p.rowCount) return null;
     const { storagePath, sizeBytes } = await saveFile(access.clinicId, `patients/${id}`, file.name, buf);
     const r = await c.query(
-      `insert into patient_files (clinic_id, patient_id, uploaded_by, file_name, mime_type, size_bytes, storage_path, kind)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
-       returning id, file_name, mime_type, size_bytes, kind, created_at`,
+      `insert into patient_files (clinic_id, patient_id, uploaded_by, file_name, mime_type, size_bytes, storage_path, kind, view, teeth, edited_from)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+               -- An edited copy points at its original — only one of this patient's own.
+               (select id from patient_files where id = $11::uuid and clinic_id = $1 and patient_id = $2))
+       returning id, file_name, mime_type, size_bytes, kind, created_at, view, teeth, edited_from`,
       [
         access.clinicId,
         id,
@@ -83,6 +98,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         sizeBytes,
         storagePath,
         [...FILE_KINDS, "consent", "insurance_card"].includes(kind as FileKind) ? kind : "other",
+        view,
+        [...new Set(teeth)].sort(),
+        editedFrom,
       ]
     );
     await audit(c, {
@@ -92,7 +110,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       action: "patient.file.upload",
       entity: "patient_file",
       entityId: r.rows[0].id,
-      detail: { patientId: id, name: file.name },
+      detail: { patientId: id, name: file.name, ...(editedFrom ? { editedFrom } : {}) },
     });
     return r.rows[0];
   });

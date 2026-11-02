@@ -519,11 +519,11 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
         </div>
       </Card>
 
+      {/* Asking a machine from a patient's file was taken out (2026-11-02); a request still open from before is answered here until it lapses. */}
+      {requests.length > 0 && (
       <Card className="p-4">
         <h2 className="mb-3 text-[15px] font-semibold text-ink-900">{T.waiting}</h2>
-        {requests.length === 0 ? (
-          <p className="text-[13.5px] text-ink-500">{T.nothingWaiting}</p>
-        ) : (
+        {(
           <ul className="grid gap-2" data-requests>
             {requests.map((r, i) => (
               <li key={r.id} className={`flex flex-wrap items-center gap-3 rounded-ctl border px-3 py-2.5 ${i === 0 ? "border-brand-300 bg-brand-50" : "border-line"}`} data-request={r.id}>
@@ -559,6 +559,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
           </ul>
         )}
       </Card>
+      )}
 
       <Card className="p-4">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink-900">

@@ -76,6 +76,43 @@ export function isPictureKind(kind: string): boolean {
   return kind === "xray" || kind === "photo";
 }
 
+/**
+ * What a dental picture shows, as a dentist files it (migration 0089,
+ * 2026-11-02): the x-ray views, and an intraoral photo. A view says the kind
+ * too — every x-ray view is an x-ray, the intraoral one a photo.
+ */
+export const XRAY_VIEWS = ["panoramic", "bitewing", "periapical", "occlusal", "cbct"] as const;
+export const FILE_VIEWS = [...XRAY_VIEWS, "intraoral"] as const;
+export type FileView = (typeof FILE_VIEWS)[number];
+
+export function isFileView(v: unknown): v is FileView {
+  return typeof v === "string" && (FILE_VIEWS as readonly string[]).includes(v);
+}
+
+/** The kind a view makes a file. */
+export function kindOfView(v: FileView): FileKind {
+  return v === "intraoral" ? "photo" : "xray";
+}
+
+/**
+ * An x-ray's view from where it came from: a panoramic machine sends
+ * panoramics, a cone beam sends CBCT, and the names imaging software gives
+ * its files say the rest ("PAN_0012", "BW left", "PA 36"). Null when nothing
+ * says — the doctor picks it in the viewer.
+ */
+export function viewFor(opts: { deviceKind?: string | null; modality?: string | null; fileName?: string | null }): FileView | null {
+  if (opts.deviceKind === "opg") return "panoramic";
+  if (opts.deviceKind === "cbct") return "cbct";
+  if (opts.modality?.toUpperCase() === "PX") return "panoramic";
+  const n = (opts.fileName ?? "").toLowerCase().replace(/[_\-.]+/g, " ");
+  if (/\b(pan|opg|opt|pano|panoramic|panorama)\b/.test(n)) return "panoramic";
+  if (/\b(bw|bitewing|bite wing)\b/.test(n)) return "bitewing";
+  if (/\b(pa|periapical|peri)\b/.test(n)) return "periapical";
+  if (/\b(cbct|cone beam|conebeam)\b/.test(n)) return "cbct";
+  if (/\b(occ|occlusal)\b/.test(n)) return "occlusal";
+  return null;
+}
+
 /** Machine types, the clinic's usual ones (from its specialties) first. */
 export function orderedKinds(usual: readonly DeviceKind[]): DeviceKind[] {
   return [...usual, ...DEVICE_KINDS.filter((k) => !usual.includes(k))];

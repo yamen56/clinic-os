@@ -4,18 +4,21 @@ import { createContext, useCallback, useContext, useRef, useState } from "react"
 import { CheckCircle2, AlertCircle, Info } from "lucide-react";
 
 type ToastKind = "success" | "error" | "info";
-type Toast = { id: number; kind: ToastKind; text: string };
+/** A button on the toast — Undo, after something done in one tap with no confirm box. */
+type ToastAction = { label: string; onClick: () => void };
+type Toast = { id: number; kind: ToastKind; text: string; action?: ToastAction };
 
-const ToastContext = createContext<{ toast: (text: string, kind?: ToastKind) => void } | null>(null);
+const ToastContext = createContext<{ toast: (text: string, kind?: ToastKind, action?: ToastAction) => void } | null>(null);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<Toast[]>([]);
   const seq = useRef(0);
 
-  const toast = useCallback((text: string, kind: ToastKind = "success") => {
+  const toast = useCallback((text: string, kind: ToastKind = "success", action?: ToastAction) => {
     const id = ++seq.current;
-    setItems((xs) => [...xs, { id, kind, text }]);
-    setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), 3500);
+    setItems((xs) => [...xs, { id, kind, text, action }]);
+    // Long enough to reach for Undo.
+    setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), action ? 7000 : 3500);
   }, []);
 
   // The only place a colored edge is allowed by the brand.
@@ -48,6 +51,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             {icons[t.kind]}
             <span>{t.text}</span>
+            {t.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  t.action!.onClick();
+                  setItems((xs) => xs.filter((x) => x.id !== t.id));
+                }}
+                className="ms-1 -me-1 h-8 shrink-0 rounded-ctl px-2.5 text-[13px] font-semibold text-brand-700 hover:bg-sunken"
+                data-toast-action
+              >
+                {t.action.label}
+              </button>
+            )}
           </div>
         ))}
       </div>

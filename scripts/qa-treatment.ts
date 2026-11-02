@@ -812,6 +812,9 @@ async function main() {
     );
 
     await desk.goto(`${BASE}/c/${slug}/invoices`, { timeout: 120000 });
+    // Minimised until opened (2026-11-02): one line above the invoices.
+    await desk.waitForSelector("[data-ready-desk][data-ready-open]", { timeout: 60000 });
+    if ((await desk.locator("[data-ready-desk]").getAttribute("data-ready-open")) !== "1") await desk.click("[data-ready-toggle]");
     await desk.waitForSelector(`[data-desk-patient='${p3.id}']`, { timeout: 60000 });
     const deskRow = await desk.locator(`[data-desk-patient='${p3.id}']`).innerText();
     check(deskRow.includes("Sami Khoury") && deskRow.includes("2 treatments") && deskRow.includes("200"), "the Invoices page lists the patient for the desk: two treatments, 200", deskRow);

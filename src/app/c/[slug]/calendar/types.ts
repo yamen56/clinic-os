@@ -55,6 +55,10 @@ export type Appt = {
   handed_off_at?: string | null;
   /** The booked service's length — what a next visit takes unless the hand-off says otherwise. */
   service_duration_min?: number | null;
+  /** How late the patient said they would be, or were (migration 0089). */
+  late_min?: number | null;
+  /** When this patient was told the doctor's day is running behind. */
+  delay_notice_at?: string | null;
 };
 
 /** A treatment on the patient's plan, as a visit carries it. */

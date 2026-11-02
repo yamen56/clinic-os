@@ -9,6 +9,7 @@ import type { FlowStep } from "../flow-actions";
 import type { Appt, CalendarData, PageCaps } from "../types";
 import { FlowCard } from "./flow-card";
 import { RoomsStrip } from "./rooms-strip";
+import { useBoardDrag } from "./use-board-drag";
 import { CalendarCheck, ChevronDown, CalendarClock, Armchair, DoorOpen, CheckCheck, UserX, Clock } from "lucide-react";
 
 type Column = "coming" | "waiting" | "in_room" | "finished";
@@ -32,6 +33,22 @@ const tabletOrder: Record<Column, string> = {
   coming: "md:order-3 xl:order-none",
   finished: "md:order-4 xl:order-none",
 };
+/*
+  What dropping a card on another column does (2026-11-02): forward is the
+  next step — arrived, called in, finished (which asks first, on the sheet) —
+  and one column back is Undo of the step that put it there. Anything else is
+  not a drop.
+*/
+function stepFor(a: Appt, from: Column, to: Column): FlowStep | null {
+  if (from === to) return null;
+  if (to === "finished") return "finished";
+  if (from === "coming") return to === "waiting" ? "arrived" : to === "in_room" ? "seated" : null;
+  if (from === "waiting") return to === "in_room" ? "seated" : to === "coming" && !a.seated_at ? "undo" : null;
+  if (from === "in_room") return to === "waiting" && !!a.seated_at ? "undo" : null;
+  if (from === "finished") return to === "in_room" && !!a.flow_prev_status && !!a.seated_at && a.status === "completed" ? "undo" : null;
+  return null;
+}
+
 /*
   Each stage is named and drawn, never colour-coded: a row of coloured dots
   was a legend nobody had been given. Colour is kept for what needs
@@ -70,6 +87,7 @@ export function FlowBoard({
   onStep,
   onOpen,
   onBookNext,
+  onLate,
 }: {
   slug: string;
   tz: string;
@@ -84,6 +102,7 @@ export function FlowBoard({
   onStep: (a: Appt, step: FlowStep, roomId?: string | null) => void;
   onOpen: (a: Appt) => void;
   onBookNext: (a: Appt) => void;
+  onLate: (a: Appt) => void;
 }) {
   const { t } = useI18n();
   const [phoneCol, setPhoneCol] = useState<Column | null>(null);
@@ -144,6 +163,26 @@ export function FlowBoard({
     return m;
   }, [today]);
 
+  const byId = new Map(staged.map((x) => [x.a.id, x.a]));
+  const { drag, handle } = useBoardDrag({
+    canDrop: (id, from, to) => {
+      const a = byId.get(id);
+      return !!a && !busyIds.has(id) && !!stepFor(a, from as Column, to as Column);
+    },
+    onDrop: (id, from, to) => {
+      const a = byId.get(id);
+      const s = a && stepFor(a, from as Column, to as Column);
+      if (a && s) onStep(a, s);
+    },
+  });
+  /* Where the card in hand can go, outlined; where it is over, filled. */
+  const dropClass = (c: Column) => {
+    if (!drag || drag.from === c) return "";
+    const a = byId.get(drag.id);
+    if (!a || !stepFor(a, drag.from as Column, c)) return "opacity-60";
+    return drag.over === c ? "ring-2 ring-brand-600 bg-brand-50" : "outline-dashed outline-2 -outline-offset-2 outline-brand-600/50";
+  };
+
   if (!data) return <Spinner label={t.common.loading} />;
 
   const activeCol: Column = phoneCol ?? (cols.waiting.length ? "waiting" : cols.in_room.length && !cols.coming.length ? "in_room" : "coming");
@@ -156,7 +195,7 @@ export function FlowBoard({
     }`;
 
   return (
-    <div className="grid grid-cols-1 gap-4" data-flow-board>
+    <div className="grid grid-cols-1 gap-4" data-flow-board data-dragging={drag?.id} data-drag-over={drag?.over ?? undefined}>
       {/* Whose patients: a doctor starts on their own. */}
       {doctors.length > 1 || (isDoctor && selfMemberId) ? (
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
@@ -211,9 +250,11 @@ export function FlowBoard({
                 role="tab"
                 aria-selected={activeCol === c}
                 onClick={() => setPhoneCol(c)}
+                // A phone shows one column, so its tabs take a drop too.
+                data-drop-col={c}
                 className={`flex min-w-0 touch-manipulation flex-col items-center rounded-full px-1 py-1 text-[11px] font-medium leading-tight transition-colors ${
                   activeCol === c ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"
-                }`}
+                } ${dropClass(c)}`}
               >
                 <span className="text-[15px] font-bold tnum">
                   {cols[c].length}
@@ -228,7 +269,8 @@ export function FlowBoard({
               <section
                 key={c}
                 data-flow-column={c}
-                className={`min-w-0 flex-col rounded-card bg-sunken/70 p-2 ${tabletOrder[c]} ${activeCol === c ? "flex" : "max-md:hidden md:flex"}`}
+                data-drop-col={c}
+                className={`min-w-0 flex-col rounded-card bg-sunken/70 p-2 transition-colors ${tabletOrder[c]} ${activeCol === c ? "flex" : "max-md:hidden md:flex"} ${dropClass(c)}`}
               >
                 <header className="flex items-center gap-2 px-1.5 pb-2 pt-1">
                   {(() => {
@@ -247,8 +289,12 @@ export function FlowBoard({
                     </div>
                   ) : (
                     cols[c].map(({ a, stage }) => (
-                      <FlowCard
+                      <div
                         key={a.id}
+                        {...(busyIds.has(a.id) ? {} : handle(a.id, c))}
+                        className={`select-none [-webkit-touch-callout:none] ${drag?.id === a.id ? "opacity-40" : ""}`}
+                      >
+                      <FlowCard
                         slug={slug}
                         appt={a}
                         stage={stage}
@@ -262,8 +308,10 @@ export function FlowBoard({
                         onStep={(step, roomId) => onStep(a, step, roomId)}
                         onOpen={() => onOpen(a)}
                         onBookNext={() => onBookNext(a)}
+                        onLate={() => onLate(a)}
                         nameOpensFile={isDoctor && caps.patients}
                       />
+                      </div>
                     ))
                   )}
                 </div>

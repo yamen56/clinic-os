@@ -310,32 +310,14 @@ async function main() {
     await viewerEl.waitFor({ state: "detached", timeout: 5000 });
     check((await panelOf(page).count()) > 0, "and closing the x-ray leaves the tooth's panel where the doctor left it");
 
-    /* ── "Take x-ray": the station sends the machine's next image ─────── */
-    await panel.locator("[data-take-xray]").click();
-    await page.locator("[data-xray-pending]").waitFor({ timeout: 10000 });
-    ok("Take x-ray on 36 leaves the chart waiting on the imaging station");
-    const station = await page.context().newPage();
-    await station.goto(`${BASE}/c/qateeth${tag}/devices`, { timeout: 120000 });
-    await station.locator("[data-request]").first().waitFor({ timeout: 30000 });
-    check(/Rami Khatib · 36/.test(await station.locator("[data-requests]").innerText()), "the station shows who is waiting: the patient and the tooth");
-    await station.locator("[data-imaging-station] input[type='file']").setInputFiles({ name: "IMG_0042.png", mimeType: "image/png", buffer: PNG });
-    await station.locator("[data-sent]").waitFor({ timeout: 30000 });
-    await page.locator("[data-image-viewer]").waitFor({ timeout: 20000 });
-    ok("the image the station sent opens on the doctor's chart by itself");
-    rows = await q(
-      `select f.kind, f.teeth, r.fulfilled_at from imaging_requests r join patient_files f on f.id = r.file_id where r.patient_id = $1`,
-      [patient.id]
-    );
-    check(rows.length === 1 && rows[0].kind === "xray" && rows[0].teeth.join() === "36" && rows[0].fulfilled_at, "the station's image is in the patient's files, labelled 36, and the request answered");
-    await page.screenshot({ path: join(SHOTS, "saved-xray-from-station.png") });
-    await page.keyboard.press("Escape");
-    await station.screenshot({ path: join(SHOTS, "imaging-station.png"), fullPage: true });
-    await station.close();
+    // "Take x-ray" (wait for the machine's next image) was taken out on 2026-11-02 — it never worked for the clinics.
+    check((await panel.locator("[data-take-xray]").count()) === 0 && (await page.locator("[data-take-xray]").count()) === 0, "there is no Take x-ray any more, on the tooth or the chart");
 
     // In the Files tab too, with its teeth.
     await page.goto(`${BASE}/c/qateeth${tag}/patients/${patient.id}?tab=files`, { timeout: 120000 });
     await page.waitForSelector("[data-file-teeth]", { timeout: 60000 });
-    check((await page.locator("[data-file-teeth]").count()) === 3, "the Files tab lists the chart's images with the teeth they show");
+    const pinnedFiles = Number((await q(`select count(*) from patient_files where patient_id = $1 and cardinality(teeth) > 0`, [patient.id]))[0].count);
+    check((await page.locator("[data-file-teeth]").count()) === pinnedFiles && pinnedFiles >= 2, "the Files tab lists the chart's images with the teeth they show", String(pinnedFiles));
     await page.context().close();
 
     /* ── Reading without recording ───────────────────────────────────── */

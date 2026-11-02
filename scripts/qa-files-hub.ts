@@ -115,13 +115,8 @@ async function main() {
     await page.waitForSelector("[data-files-hub]", { timeout: 120000 });
     await page.waitForLoadState("networkidle");
     check((await navDevices(page).count()) === 0, "the nav carries no empty Devices page");
-    await page.click("[data-request-device]");
-    await page.locator("[data-request-none]").waitFor({ timeout: 10000 });
-    check(
-      (await page.locator(`[data-request-none] a[href='/c/${slug}/settings/devices']`).count()) === 1,
-      "Request from device, with no machine yet, says so and offers the owner the setup"
-    );
-    await page.keyboard.press("Escape");
+    // Taken out on 2026-11-02 (Yamen: "not functional"); machines' results arrive by the patient's CLN number instead.
+    check((await page.locator("[data-request-device]").count()) === 0, "there is no Request from device button any more");
 
     /* ── The machines a cardiology clinic connects ───────────────────── */
     console.log("\nconnecting an ECG cart, an echo machine and a camera");
@@ -140,29 +135,16 @@ async function main() {
     await page.waitForLoadState("networkidle");
     check((await navDevices(page).count()) > 0, "with a machine connected, Devices joins the nav");
 
-    /* ── Request from device: one machine, with what is wanted ───────── */
-    console.log("\nrequest from device");
-    await page.click("[data-request-device]");
-    await page.locator(`[data-request-option='${ecg.id}']`).click();
-    await page.locator("[data-request-note]").fill("12-lead");
-    await page.screenshot({ path: join(SHOTS, "request-from-device.png") });
-    await page.click("[data-request-go]");
-    const waitingRow = page.locator("[data-waiting-request]");
-    await waitingRow.waitFor({ timeout: 10000 });
-    const rowText = await waitingRow.innerText();
-    check(rowText.includes("ECG cart") && rowText.includes("12-lead"), "the file shows it waiting on the ECG cart, with the note", rowText);
-    const [req] = await q(`select id, kind, device_id, note from imaging_requests where patient_id = $1 and fulfilled_at is null`, [patient.id]);
-    check(req?.kind === "file" && req.device_id === ecg.id && req.note === "12-lead", "saved as a request of that machine", JSON.stringify(req));
-    check((await waitingFor(ecg.key)).some((r) => r.id === req.id && r.note === "12-lead"), "the ECG cart's Bridge sees it, note and all");
-    check(!(await waitingFor(cam.key)).some((r) => r.id === req.id), "the camera's Bridge does not");
-
+    /* ── A machine's result finds the patient by their CLN number ─────── */
+    console.log("\na result named with the patient's CLN number");
+    const [{ file_no: fileNo }] = await q(`select file_no from patients where id = $1`, [patient.id]);
     const png = await sharp({ create: { width: 64, height: 48, channels: 3, background: { r: 30, g: 90, b: 160 } } }).png().toBuffer();
     const stray = await send(cam.key, png, "IMG_2001.png");
-    check(stray.json?.placed === "inbox", "a picture from the camera does not answer the ECG cart's request", JSON.stringify(stray.json));
-    const answer = await send(ecg.key, PDF, "ECG_0001.pdf");
-    check(answer.json?.placed === "patient" && answer.json?.requestId === req.id, "the ECG cart's PDF answers it", JSON.stringify(answer.json));
-    await waitingRow.waitFor({ state: "detached", timeout: 20000 });
-    await page.locator("[data-file-kind='ecg']").first().waitFor({ timeout: 20000 });
+    check(stray.json?.placed === "inbox", "a camera picture that names nobody waits in the inbox", JSON.stringify(stray.json));
+    const answer = await send(ecg.key, PDF, `ECG_CLN-${fileNo}.pdf`);
+    check(answer.json?.placed === "patient", "the ECG cart's PDF, named with the patient's CLN number, goes to them", JSON.stringify(answer.json));
+    await page.goto(fileUrl, { timeout: 120000 });
+    await page.locator("[data-file-kind='ecg']").first().waitFor({ timeout: 30000 });
     check(true, "the ECG appears in the file by itself, marked ECG");
     const kept = await filesOf();
     check(kept.some((f) => f.kind === "ecg" && f.mime_type === "application/pdf" && f.device_id === ecg.id), "kept as an ECG from that machine", JSON.stringify(kept));

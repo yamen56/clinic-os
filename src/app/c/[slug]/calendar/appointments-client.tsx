@@ -10,6 +10,8 @@ import type { WaitlistEntry } from "@/lib/waitlist";
 import { AppointmentPanel, type PanelState } from "./appointment-panel";
 import { setFlowAction, type FlowStep, type Handoff } from "./flow-actions";
 import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
+import { RunningLateSheet } from "@/components/appointments/running-late-sheet";
+import { markLateAction } from "./late-actions";
 import { nextVisitOf } from "@/lib/next-visit";
 import { DueBackList } from "./waitlist/due-back";
 import { FlowBoard } from "./flow/flow-board";
@@ -110,6 +112,9 @@ export function AppointmentsClient({
   const [walkIn, setWalkIn] = useState(false);
   /* The visit whose Finish is being answered on the sheet. */
   const [finishing, setFinishing] = useState<Appt | null>(null);
+  /* The patient reception is marking late, and whether that is being saved. */
+  const [late, setLate] = useState<Appt | null>(null);
+  const [lateBusy, setLateBusy] = useState(false);
   const [version, setVersion] = useState(0);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [waitlistCount, setWaitlistCount] = useState(initialWaitlist);
@@ -236,6 +241,39 @@ export function AppointmentsClient({
     if (tab !== "today") setVersion((v) => v + 1);
   };
 
+  /*
+    Late: the minutes on the patient's card, and — if the desk ticked anyone —
+    a WhatsApp to the doctor's later patients that there may be a wait.
+  */
+  const lateNext = (a: Appt) =>
+    (today?.appointments ?? [])
+      .filter(
+        (x) =>
+          x.id !== a.id &&
+          x.doctor_member_id === a.doctor_member_id &&
+          x.starts_at > a.starts_at &&
+          ["pending_approval", "scheduled", "confirmed"].includes(x.status) &&
+          !x.arrived_at &&
+          DateTime.fromISO(x.starts_at).setZone(tz).toISODate() === todayKey
+      )
+      .sort((p, q) => p.starts_at.localeCompare(q.starts_at));
+  const saveLate = async (a: Appt, minutes: number, tellIds: string[]) => {
+    setLateBusy(true);
+    const r = await markLateAction(slug, a.id, minutes, tellIds);
+    setLateBusy(false);
+    if (!r.row) {
+      toast(r.error === "not_today" ? t.flow.notToday : r.error === "bad_state" ? t.flow.stale : t.runningLate.failed, "error");
+      return;
+    }
+    patchToday(a.id, { late_min: r.row.late_min });
+    for (const x of r.told ?? []) patchToday(x.id, { delay_notice_at: x.delay_notice_at });
+    setLate(null);
+    const n = r.told?.length ?? 0;
+    if (r.error === "whatsapp_not_connected") toast(t.runningLate.savedNotConnected, "error");
+    else if (r.error === "message_off") toast(t.runningLate.savedMessageOff, "error");
+    else toast(n ? t.runningLate.savedTold.replace("{n}", String(n)) : t.runningLate.saved);
+  };
+
   const bookFrom = (patient: { id: string; name: string }, opts: { doctorId?: string | null; serviceId?: string | null; start?: string }) =>
     setPanel({
       mode: "create",
@@ -353,6 +391,7 @@ export function AppointmentsClient({
             onStep={step}
             onOpen={(a) => setPanel({ mode: "edit", appt: a })}
             onBookNext={(a) => bookFrom({ id: a.patient_id, name: a.patient_name }, nextVisitOf(a, tz))}
+            onLate={setLate}
           />
         </div>
       )}
@@ -442,6 +481,28 @@ export function AppointmentsClient({
         meta={meta}
         defaultDoctorId={isDoctor ? selfMemberId ?? "" : boardDoctor}
       />
+
+      {late && (
+        <RunningLateSheet
+          patientName={late.patient_name}
+          time={DateTime.fromISO(late.starts_at).setZone(tz).toFormat("H:mm")}
+          // Late by the clock already: that, to the nearest five; otherwise what they last said, or a quarter of an hour.
+          defaultMinutes={
+            late.late_min ??
+            (nowMs > Date.parse(late.starts_at) ? Math.min(240, Math.max(5, Math.round((nowMs - Date.parse(late.starts_at)) / 300_000) * 5)) : 15)
+          }
+          next={lateNext(late).map((x) => ({
+            id: x.id,
+            name: x.patient_name,
+            time: DateTime.fromISO(x.starts_at).setZone(tz).toFormat("H:mm"),
+            toldAt: x.delay_notice_at ? DateTime.fromISO(x.delay_notice_at).setZone(tz).toFormat("H:mm") : null,
+            hasPhone: !!x.patient_phone,
+          }))}
+          busy={lateBusy}
+          onSave={(m, ids) => void saveLate(late, m, ids)}
+          onClose={() => setLate(null)}
+        />
+      )}
 
       {finishing && (
         <FinishVisitSheet
