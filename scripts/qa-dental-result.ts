@@ -114,6 +114,13 @@ async function main() {
     await record([{ site: "18", treatmentKey: "extraction", status: "planned" }]);
     await record([{ site: "11", treatmentKey: "veneer", status: "planned", detail: { material: "porcelain" } }]);
     await record([{ site: "14", surfaces: ["O"], treatmentKey: "filling_composite", status: "done" }]);
+    // The gum: what was found, and the cleaning and deep scaling planned for it.
+    await record([{ site: "21", treatmentKey: "gingivitis", status: "existing" }]);
+    await record([{ site: "22", treatmentKey: "bleeding_gums", status: "existing" }]);
+    await record([{ site: "31", treatmentKey: "calculus", status: "existing" }]);
+    await record([{ site: "17", treatmentKey: "pocket", status: "existing", detail: { depth: "6" } }]);
+    await record([{ site: "mouth", treatmentKey: "scaling", status: "planned" }]);
+    await record([{ site: "Q1", treatmentKey: "srp", status: "planned" }]);
     const plannedBefore = await plannedInDb();
 
     /* ── The teeth are the rendered pictures ─────────────────────────── */
@@ -138,10 +145,18 @@ async function main() {
     await page.screenshot({ path: join(SHOTS, "today-desktop.png"), fullPage: false, clip: { x: 0, y: 0, width: 1440, height: 1000 } });
 
     /* ── After the plan ──────────────────────────────────────────────── */
-    console.log("After the plan");
     check((await looksOf(page, "16")).includes("caries") && !(await goneOf(page, "18")), "today: caries on 16, 18 still there to come out");
     check((await plannedEdges(page)) > 0, "and the planned work wears its dashed red outline");
     const see = page.locator("[data-see-result]");
+    console.log("The gum");
+    check((await looksOf(page, "21")).includes("inflamed"), "21: gingivitis is drawn on its gum", await looksOf(page, "21"));
+    check((await looksOf(page, "22")).includes("bleeding"), "22: bleeding at the gum margin");
+    check((await looksOf(page, "31")).includes("calculus"), "31: tartar at the neck");
+    check((await looksOf(page, "17")).includes("pocket"), "17: the pocket beside the root");
+    check(((await chart(page).locator("[data-tooth='17'] text").evaluateAll((els) => els.map((e) => e.textContent ?? ""))) as string[]).some((x) => x.trim() === "6"), "with its depth, 6");
+    check((await looksOf(page, "11")).includes("perio") && (await looksOf(page, "26")).includes("perio"), "the cleaning planned for the mouth is on every tooth's gum");
+    check((await looksOf(page, "17")).split(" ").filter((l) => l === "perio").length === 2, "and 17, in Q1, also carries the deep scaling planned there");
+    console.log("After the plan");
     check(await see.isVisible(), "See the result is offered beside the time bar");
     await see.click();
     const viewing = page.locator("[data-viewing]");
@@ -154,6 +169,12 @@ async function main() {
     check((await looksOf(page, "46")).includes("implant"), "46: the implant stands in the gap");
     check((await looksOf(page, "36")).includes("crown"), "36: crowned over its root canal");
     check((await looksOf(page, "11")).includes("veneer"), "11: veneered");
+    check(
+      !(await looksOf(page, "21")).includes("inflamed") && !(await looksOf(page, "22")).includes("bleeding") && !(await looksOf(page, "31")).includes("calculus"),
+      "the cleaning takes the gingivitis, the bleeding and the tartar"
+    );
+    check(!(await looksOf(page, "17")).includes("pocket"), "the deep scaling takes the pocket");
+    check(!(await looksOf(page, "26")).includes("perio") && (await looksOf(page, "17")).includes("perio"), "a finished cleaning leaves no mark; the deep scaling stays on Q1's gum, done");
     check((await plannedEdges(page)) === 0, "no planned outline is left anywhere", String(await plannedEdges(page)));
     await page.screenshot({ path: join(SHOTS, "after-plan-desktop.png"), fullPage: false, clip: { x: 0, y: 0, width: 1440, height: 1000 } });
     // A tooth opened here reads only: its panel offers nothing to record.

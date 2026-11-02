@@ -211,6 +211,14 @@
   --color-lesion: #3a2d2a;
   --color-stain: #9c7a3c;
   --color-crack: #3b2a1c;
+  /* The gum's own findings (2026-11-03). */
+  --color-gum-inflamed: #d84a5e;
+  --color-gum-inflamed-deep: #a3243a;
+  --color-blood: #b0102b;
+  --color-calculus: #cfae63;
+  --color-calculus-shade: #8e6c30;
+  --color-pocket: #5a1a2b;
+  --color-pus: #f2d36b;
   --color-dental-planned: #d33a3a;
   --color-dental-planned-soft: #fbdede;
   --color-dental-done: #2463cf;

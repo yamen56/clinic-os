@@ -26,6 +26,7 @@
 import { surfaceAt, type Surface, type Tooth } from "@/lib/charts/dental/teeth";
 import type { Layer, Paint, ToothState } from "@/lib/charts/dental/state";
 import type { Look } from "@/lib/charts/dental/catalog";
+import { TOOTH_PHOTOS } from "./tooth-photos";
 
 export const CW = 44;
 export const SIDE_H = 104;
@@ -65,7 +66,19 @@ type Shape = { nw: number; mw: number; cusp: "incisal" | "canine" | "premolar" |
   about seven tenths of the crown, which is what gives a tooth its waist. Front
   teeth are a little narrower than molars, lower incisors narrowest of all.
 */
+/**
+ * A tooth's proportions. Since 2026-11-03 the teeth are photographs
+ * (scripts/bake-tooth-photos.tsx), so the widths and the root's length are the
+ * photograph's own, measured when it was fitted; the drawn proportions below
+ * are what each photograph is fitted to, and the fallback for a tooth with none.
+ */
 export function shapeOf(t: Tooth): Shape {
+  const drawn = drawnShape(t);
+  const photo = TOOTH_PHOTOS[sideArtKey(t)];
+  return photo ? { ...drawn, nw: photo.nw, mw: photo.mw, apex: photo.apex } : drawn;
+}
+
+export function drawnShape(t: Tooth): Shape {
   const upper = t.arch === "upper";
   if (t.kind === "incisor") {
     if (t.position === 1) return upper ? { nw: 11.5, mw: 17.5, cusp: "incisal", apex: 14, roots: 1 } : { nw: 8, mw: 12.5, cusp: "incisal", apex: 18, roots: 1 };
@@ -99,7 +112,7 @@ export function topArtKey(t: Tooth): string {
   return t.primary ? `${a}-d` : `${a}-m${t.position}`;
 }
 /** Bump when the art is baked again, so a browser never paints yesterday's picture. */
-export const ART_VERSION = 1;
+export const ART_VERSION = 2;
 /** How far each column's gum reaches into its neighbours', so the joint never shows (the renderer explains). */
 export const GUM_PAD = 0.6;
 export const sideArt = (t: Tooth) => `/charts/teeth/side-${sideArtKey(t)}.webp?v=${ART_VERSION}`;
@@ -324,6 +337,12 @@ export function DentalDefs() {
           {stop(0, "var(--color-lesion)", 0.7)}
           {stop(0.6, "var(--color-lesion)", 0.35)}
           {stop(1, "var(--color-lesion)", 0)}
+        </radialGradient>
+        <radialGradient id={`${DEFS}-pus`} cx="0.5" cy="0.45" r="0.5">
+          {stop(0, "var(--color-pus)")}
+          {stop(0.45, "var(--color-pus)", 0.85)}
+          {stop(0.75, "var(--color-gum-inflamed)", 0.75)}
+          {stop(1, "var(--color-gum-inflamed)", 0)}
         </radialGradient>
         <radialGradient id={`${DEFS}-stain`} cx="0.5" cy="0.5" r="0.5">
           {stop(0, "var(--color-stain)", 0.75)}
@@ -637,6 +656,85 @@ function SideLayer({ l, t, s, crown, roots, clip, uid }: { l: Layer; t: Tooth; s
         </g>
       );
     }
+    /*
+      The gum's own findings (2026-11-03), drawn on the gum as they look:
+      inflamed gum reddened and swollen along its margin, blood at the margin,
+      tartar at the neck of the tooth, a pocket opening down beside the root,
+      gum grown over the crown, an abscess swelling on the gum.
+    */
+    case "inflamed":
+      return (
+        <g className="tooth-pop" strokeLinecap="round">
+          <path d={gumMargin()} transform="translate(0 -2.6)" style={{ fill: "none", stroke: "var(--color-gum-inflamed)", strokeWidth: 6 }} opacity={0.5} />
+          <path d={gumMargin()} transform="translate(0 -0.7)" style={{ fill: "none", stroke: "var(--color-gum-inflamed-deep)", strokeWidth: 1.7 }} opacity={0.85} />
+        </g>
+      );
+    case "bleeding": {
+      const drop = (x: number, y: number, k: number) =>
+        `M ${x} ${y} C ${x + 1.7 * k} ${y + 2.3 * k} ${x + 2 * k} ${y + 4.3 * k} ${x} ${y + 5.2 * k} C ${x - 2 * k} ${y + 4.3 * k} ${x - 1.7 * k} ${y + 2.3 * k} ${x} ${y} Z`;
+      return (
+        <g className="tooth-pop">
+          <path d={gumMargin()} transform="translate(0 -0.6)" style={{ fill: "none", stroke: "var(--color-blood)", strokeWidth: 1.3 }} opacity={0.75} />
+          {[
+            [C - 7, Y0 + 2.2, 1],
+            [C + 5.5, Y0 + 1.8, 0.8],
+          ].map(([x, y, k]) => (
+            <g key={x}>
+              <path d={drop(x, y, k)} style={{ fill: "var(--color-blood)" }} />
+              <ellipse cx={x - 0.5 * k} cy={y + 3.2 * k} rx={0.45 * k} ry={0.9 * k} style={{ fill: "white" }} opacity={0.55} />
+            </g>
+          ))}
+        </g>
+      );
+    }
+    case "calculus":
+      return (
+        <g className="tooth-pop" clipPath={`url(#${clip})`}>
+          {[
+            [C - s.mw * 0.55, Y0 + 5.2, 3.4, 0.4],
+            [C - s.mw * 0.1, Y0 + 4.4, 3.9, 1.6],
+            [C + s.mw * 0.4, Y0 + 5.4, 3.3, 2.9],
+            [C + s.mw * 0.8, Y0 + 4.6, 2.4, 4.1],
+          ].map(([x, y, r, seed]) => (
+            <path key={seed} d={blob(x, y, r, seed)} style={{ fill: "var(--color-calculus)", stroke: "var(--color-calculus-shade)", strokeWidth: 0.5 }} opacity={0.92} />
+          ))}
+        </g>
+      );
+    case "pocket": {
+      // The depth probed, down beside the root: a millimetre is about 3.6 of these units (a crown's ~10.5 mm is 38).
+      const mm = Math.min(Number(l.detail.depth) || 5, 9);
+      const end = Y0 + 2 - mm * 3.6;
+      const side = (x: number, out: 1 | -1) => `M ${x} ${Y0 + 2} L ${x - out * 2.6} ${Y0 + 2} L ${x - out * 0.4} ${end} Z`;
+      return (
+        <g className="tooth-pop" style={{ fill: "var(--color-pocket)" }} opacity={0.62}>
+          <path d={side(C - s.nw + 0.8, -1)} />
+          <path d={side(C + s.nw - 0.8, 1)} />
+        </g>
+      );
+    }
+    case "overgrowth":
+      // The gum grown down over the crown.
+      return (
+        <g className="tooth-pop">
+          <g clipPath={`url(#${uid}-og)`}>
+            <clipPath id={`${uid}-og`}>
+              <rect x={-GUM_PAD} y={Y0 - 4} width={CW + 2 * GUM_PAD} height={PAP + 10 - Y0} />
+            </clipPath>
+            <image href={gumArt(t)} x={-GUM_PAD} y={0} width={CW + 2 * GUM_PAD} height={SIDE_H} transform="translate(0 7)" />
+          </g>
+          <path d={gumMargin()} transform="translate(0 7)" style={{ fill: "none", stroke: "var(--color-gum-inflamed-deep)", strokeWidth: 0.8 }} opacity={0.55} />
+        </g>
+      );
+    case "gum_abscess":
+      return (
+        <g className="tooth-pop">
+          <ellipse cx={C} cy={Y0 - 13} rx={7} ry={6} style={{ fill: url("pus") }} />
+          <ellipse cx={C - 1.6} cy={Y0 - 15} rx={1.6} ry={1.1} style={{ fill: "white" }} opacity={0.6} />
+        </g>
+      );
+    case "perio":
+      // Gum work on the quadrant, arch or mouth this tooth is in: its margin, in the status' edge.
+      return <path className="tooth-pop" d={gumMargin()} transform="translate(0 -1.3)" style={{ fill: "none", ...edge(l.paint, 1.5) }} strokeLinecap="round" />;
     case "gum":
       // Gum work (a graft, a recontouring): the new margin, in the status' edge.
       return (
@@ -694,8 +792,35 @@ function SideLayer({ l, t, s, crown, roots, clip, uid }: { l: Layer; t: Tooth; s
 
 /** Grade and other words, kept out of the flipped group so they never read backwards. */
 function SideText({ t, st, visible }: { t: Tooth; st: ToothState; visible: (p: Paint) => boolean }) {
+  const pocket = st.layers.find((l) => l.look === "pocket" && visible(l.paint));
   const mob = st.layers.find((l) => l.look === "mobility" && visible(l.paint));
-  if (!mob) return null;
+  return (
+    <>
+      {pocket && <PocketDepth t={t} mm={pocket.detail.depth} />}
+      {mob && <Mobility t={t} mob={mob} />}
+    </>
+  );
+}
+
+function PocketDepth({ t, mm }: { t: Tooth; mm?: string }) {
+  if (!mm) return null;
+  const y = t.arch === "upper" ? Y0 - 21 : SIDE_H - (Y0 - 21) + 3;
+  return (
+    <text
+      className="tooth-pop"
+      x={C}
+      y={y}
+      textAnchor="middle"
+      fontSize={7.5}
+      fontWeight={700}
+      style={{ fill: "var(--color-pocket)", stroke: "white", strokeWidth: 2.2, paintOrder: "stroke", fontFamily: "var(--font-sans)" }}
+    >
+      {mm === "8" ? "8+" : mm}
+    </text>
+  );
+}
+
+function Mobility({ t, mob }: { t: Tooth; mob: Layer }) {
   const s = shapeOf(t);
   const y = t.arch === "upper" ? YE - 14 : SIDE_H - (YE - 14);
   const grade = mob.detail.grade ? ["", "I", "II", "III"][Number(mob.detail.grade)] ?? "" : "";
@@ -718,8 +843,10 @@ function SideText({ t, st, visible }: { t: Tooth; st: ToothState; visible: (p: P
  */
 export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: ToothState; uid: string; visible?: (p: Paint) => boolean }) {
   const s = shapeOf(t);
-  const crown = crownPath(s);
-  const roots = rootGeom(s);
+  // The photograph's own outline and roots, so what is drawn on the tooth follows the tooth in the picture.
+  const photo = TOOTH_PHOTOS[sideArtKey(t)];
+  const crown = photo?.crown ?? crownPath(s);
+  const roots: Roots = photo ? { body: photo.root, canals: photo.canals, apices: photo.apices, furcation: photo.furcation } : rootGeom(s);
   const clip = `${uid}-c${t.fdi}`;
   const rootClip = `${uid}-r${t.fdi}`;
   const stumpClip = `${uid}-s${t.fdi}`;
@@ -948,6 +1075,8 @@ function TopLayer({ l, t, outline, clip }: { l: Layer; t: Tooth; outline: string
     }
     case "band":
       return <path className="tooth-pop" d={outline} style={{ fill: "none", stroke: url("metal"), strokeWidth: 3.2, strokeOpacity: on }} />;
+    case "calculus":
+      return <path className="tooth-pop" d={outline} clipPath={`url(#${clip})`} style={{ fill: "none", stroke: "var(--color-calculus)", strokeWidth: 3.6, strokeDasharray: "2.6 1.4", strokeLinecap: "round" }} opacity={0.85} />;
     case "fracture":
       return (
         <g className="tooth-pop" clipPath={`url(#${clip})`} strokeLinejoin="round" strokeLinecap="round" style={{ fill: "none" }}>

@@ -23,7 +23,7 @@ mkdirSync(OUT, { recursive: true });
 // The theme's colour tokens, as the app defines them.
 const css = readFileSync(join(process.cwd(), "src", "app", "globals.css"), "utf8");
 const tokens = [...css.matchAll(/^\s*(--color-[a-z0-9-]+):\s*([^;]+);/gm)]
-  .filter((m) => /tooth|gum|dental|mat-|night|ink-/.test(m[1]))
+  .filter((m) => /tooth|gum|dental|mat-|night|ink-|blood|calculus|pocket|pus|lesion|crack|stain|caries/.test(m[1]))
   .map((m) => `${m[1]}: ${m[2]};`);
 const vars = [...new Map(tokens.map((t) => [t.split(":")[0], t])).values()].join("\n");
 
@@ -93,6 +93,13 @@ const CASES: Case[] = [
   { look: "denture", fdi: "36", state: { gone: true } },
   { look: "root", fdi: "36" },
   { look: "mobility", fdi: "11", detail: { grade: "2" } },
+  { look: "inflamed", fdi: "11" },
+  { look: "bleeding", fdi: "36" },
+  { look: "calculus", fdi: "36" },
+  { look: "pocket", fdi: "36", detail: { depth: "6" } },
+  { look: "overgrowth", fdi: "11" },
+  { look: "gum_abscess", fdi: "36" },
+  { look: "perio", fdi: "36" },
 ];
 
 function gallery(paints: Paint[]) {
@@ -101,7 +108,7 @@ function gallery(paints: Paint[]) {
     { style: { display: "flex", flexWrap: "wrap", gap: 14 } },
     CASES.flatMap((c, i) =>
       paints.map((p) => {
-        const finding = ["caries", "fracture", "wear", "stain", "lesion", "furcation", "recession", "rotation", "root", "mobility"].includes(c.look);
+        const finding = ["caries", "fracture", "wear", "stain", "lesion", "furcation", "recession", "rotation", "root", "mobility", "inflamed", "bleeding", "calculus", "pocket", "overgrowth", "gum_abscess"].includes(c.look);
         const paint: Paint = finding ? "finding" : p;
         const st: ToothState = { ...EMPTY, ...c.state, layers: [{ ...layer(c.look, paint, c.surfaces ?? [], c.detail ?? {}), treatmentKey: c.treatmentKey }] };
         const what = `${c.look}${c.detail?.material ? ` ${c.detail.material}` : c.treatmentKey ? ` ${c.treatmentKey.replace("filling_", "")}` : ""}`;

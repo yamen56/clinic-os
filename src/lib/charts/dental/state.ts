@@ -9,7 +9,7 @@
 
 import { DateTime } from "luxon";
 import type { EntryKind, Look } from "./catalog";
-import type { Surface } from "./teeth";
+import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, type Surface } from "./teeth";
 
 export type Status = "planned" | "done" | "existing";
 /**
@@ -145,7 +145,10 @@ export function toothStates(marks: Mark[], at: number | null, resolved?: Map<str
   const out = new Map<string, ToothState>();
   const sorted = [...marks].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   for (const entry of sorted) {
-    if (!isToothSite(entry.site)) continue;
+    if (!isToothSite(entry.site)) {
+      gumWork(entry, at, out);
+      continue;
+    }
     const paint = paintAt(entry, at);
     if (!paint) continue;
     // A finding later work answered (resolve.ts) is drawn no more — or only on the surfaces still showing.
@@ -179,6 +182,43 @@ export function toothStates(marks: Mark[], at: number | null, resolved?: Map<str
     s.layers.push({ markId: m.id, treatmentKey: m.treatmentKey, look: m.look, paint, surfaces: m.surfaces, detail: m.detail, role: m.role, groupId: m.groupId });
   }
   return out;
+}
+
+/*
+  Gum work recorded on a quadrant, an arch or the whole mouth — scaling, deep
+  scaling and root planing, flap surgery, contouring — drawn on the gum of
+  every tooth it covers (look "perio"), not only as a label beside the chart
+  (2026-11-03). A routine cleaning shows while it is to be done and is gone
+  once it is; the surgical work stays, like any finished treatment.
+*/
+const GUM_WORK: Record<string, "while-planned" | "always"> = {
+  scaling: "while-planned",
+  gum_contouring: "while-planned",
+  srp: "always",
+  flap_surgery: "always",
+};
+const ALL_TEETH = [...PERMANENT_UPPER, ...PERMANENT_LOWER, ...PRIMARY_UPPER, ...PRIMARY_LOWER];
+
+/** The teeth a mouth, arch or quadrant entry covers. */
+export function teethIn(site: string): string[] {
+  const q = (fdi: string) => ((Number(fdi[0]) - 1) % 4) + 1;
+  if (site === "mouth") return ALL_TEETH;
+  if (site === "upper") return ALL_TEETH.filter((f) => q(f) <= 2);
+  if (site === "lower") return ALL_TEETH.filter((f) => q(f) >= 3);
+  const m = /^Q([1-4])$/.exec(site);
+  return m ? ALL_TEETH.filter((f) => q(f) === Number(m[1])) : [];
+}
+
+function gumWork(entry: Mark, at: number | null, out: Map<string, ToothState>) {
+  const keep = GUM_WORK[entry.treatmentKey];
+  if (!keep) return;
+  const paint = paintAt(entry, at);
+  if (!paint || (keep === "while-planned" && paint !== "planned" && paint !== "progress")) return;
+  for (const fdi of teethIn(entry.site)) {
+    const s = out.get(fdi) ?? { gone: false, buried: null, layers: [], badges: [] };
+    out.set(fdi, s);
+    s.layers.push({ markId: entry.id, treatmentKey: entry.treatmentKey, look: "perio", paint, surfaces: [], detail: entry.detail });
+  }
 }
 
 export function stateOf(states: Map<string, ToothState>, fdi: string): ToothState {

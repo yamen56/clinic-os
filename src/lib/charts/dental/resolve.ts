@@ -21,7 +21,23 @@
  */
 
 import { tooth, type Surface } from "./teeth";
-import { isToothSite, paintAt, type Mark } from "./state";
+import { isToothSite, paintAt, teethIn, type Mark } from "./state";
+
+/*
+  The gum's findings, and the work that answers each (2026-11-03): a cleaning
+  takes the tartar and the inflammation it caused, deep scaling or a flap
+  takes a pocket, a gingivectomy the overgrowth. Recorded on the tooth, or on
+  the quadrant, arch or mouth it is in.
+*/
+const GUM_ANSWERS: Record<string, string[]> = {
+  inflamed: ["scaling", "srp", "flap_surgery", "gingivectomy", "gum_contouring"],
+  bleeding: ["scaling", "srp", "flap_surgery"],
+  calculus: ["scaling", "srp"],
+  pocket: ["srp", "flap_surgery", "gingivectomy"],
+  overgrowth: ["gingivectomy", "gum_contouring", "crown_lengthening"],
+  gum_abscess: ["srp", "flap_surgery"],
+};
+const REGION_GUM_WORK = new Set(["scaling", "srp", "flap_surgery", "gum_contouring"]);
 
 /** What done work covers of a finding on its tooth: the whole finding, some surfaces of it, or nothing. */
 type Cover = "all" | Surface[] | null;
@@ -49,6 +65,13 @@ function covers(f: Mark, w: Mark): Cover {
       return (w.look === "crown" && w.role !== "pontic") || w.look === "veneer" ? "all" : null;
     case "recession":
       return w.treatmentKey === "gum_graft" ? "all" : null;
+    case "inflamed":
+    case "bleeding":
+    case "calculus":
+    case "pocket":
+    case "overgrowth":
+    case "gum_abscess":
+      return GUM_ANSWERS[f.look].includes(w.treatmentKey) ? "all" : null;
     case "missing":
       return w.look === "implant" || w.look === "denture" || w.role === "pontic" ? "all" : null;
     case "dot":
@@ -61,6 +84,8 @@ function covers(f: Mark, w: Mark): Cover {
 /** Does work recorded on a site reach this tooth? The tooth itself — or, for whitening, the mouth or arch it is in. */
 function reaches(w: Mark, f: Mark): boolean {
   if (w.site === f.site) return true;
+  // Gum work on a quadrant, an arch or the mouth reaches every tooth in it.
+  if (REGION_GUM_WORK.has(w.treatmentKey) && !isToothSite(w.site)) return teethIn(w.site).includes(f.site);
   if (w.treatmentKey !== "whitening" || f.treatmentKey !== "discoloration" || isToothSite(w.site)) return false;
   const t = tooth(f.site);
   return w.site === "mouth" || w.site === t.arch || w.site === `Q${((t.quadrant - 1) % 4) + 1}`;

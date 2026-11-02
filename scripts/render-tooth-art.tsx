@@ -1,5 +1,7 @@
 /**
- * Bakes the dental chart's teeth and gum into shaded pictures.
+ * Bakes the dental chart's chewing surfaces and gum into shaded pictures.
+ * (The teeth from the side are photographs since 2026-11-03 — see
+ * bake-tooth-photos.tsx.)
  *
  * Yamen, 2026-11-03: "make the dental chart tooth look more realistic, kind of
  * like the face chart" — and the face chart is a 3D render, not a drawing.
@@ -24,7 +26,7 @@ import sharp from "sharp";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tooth, PERMANENT_UPPER, PERMANENT_LOWER, PRIMARY_UPPER, PRIMARY_LOWER, type Tooth } from "../src/lib/charts/dental/teeth";
-import { CW, SIDE_H, OCC, GEOM, GUM_PAD, shapeOf, crownPath, rootGeom, festoon, topOutline, sideArtKey, topArtKey } from "../src/components/charts/dental/tooth-art";
+import { CW, SIDE_H, OCC, GEOM, GUM_PAD, festoon, topOutline, topArtKey } from "../src/components/charts/dental/tooth-art";
 
 const OUT = join(process.cwd(), "public", "charts", "teeth");
 const SHOTS = join(process.cwd(), "scripts", "qa-shots", "tooth-art");
@@ -258,130 +260,16 @@ function normalAt(hf: Float32Array, w: number, h: number, x: number, y: number, 
   return norm([-dx * k, -dy * k, 1]);
 }
 
-/* ── The tooth from the side ─────────────────────────────────────────────── */
-const ENAMEL = hex("#f9f5eb");
-const ENAMEL_NECK = hex("#eddab0");
-const ENAMEL_EDGE = hex("#c9d0d6");
+/* ── Colours (the side view is photographs now: bake-tooth-photos.tsx) ──── */
+const ENAMEL = hex("#f4f2ed"); // the photographs' enamel: white with a cool cast
+const ENAMEL_NECK = hex("#e6dccb");
 const PRIMARY_ENAMEL = hex("#f9f6ee");
-const ROOT = hex("#efdcb4");
-const ROOT_APEX = hex("#dfc497");
-
-async function side(t: Tooth) {
-  const s = shapeOf(t);
-  const S = SIDE_S;
-  const w = CW * S;
-  const h = SIDE_H * S;
-  const flipY = t.arch === "lower";
-  const crown = crownPath(s);
-  const roots = rootGeom(s);
-  const covCrown = coverage([crown], w, h, S);
-  const covRoot = coverage([roots.body], w, h, S);
-  const covBack = roots.back ? coverage([roots.back], w, h, S) : null;
-  const dCrown = distance(covCrown, w, h);
-  const dRoot = distance(covRoot, w, h);
-  const dBack = covBack ? distance(covBack, w, h) : null;
-
-  // Heights, in pixels.
-  const Rc = s.mw * S * 0.9;
-  const hCrown = new Float32Array(w * h);
-  const front = s.cusp === "incisal" || s.cusp === "canine";
-  for (let y = 0; y < h; y++) {
-    const uy = y / S;
-    const f = (uy - Y0) / (YE - Y0); // 0 at the neck, 1 at the edge
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      if (covCrown[i] <= 0) continue;
-      const ux = x / S;
-      let v = bevel(dCrown[i], Rc) * 0.78;
-      // The height of contour: the crown is fullest a third of the way down.
-      v += Rc * 0.07 * gauss(uy - (Y0 + 9), 7);
-      const off = (ux - C) / s.mw; // -1 … 1 across the crown
-      if (s.cusp === "incisal") {
-        // Three lobes on the face of an incisor, two shallow grooves between them, fading up toward the neck.
-        v -= Rc * 0.05 * (gauss(off + 0.34, 0.14) + gauss(off - 0.34, 0.14)) * smooth(0.25, 0.95, f);
-      } else if (s.cusp === "canine") {
-        v += Rc * 0.1 * gauss(off, 0.28) * smooth(0.05, 0.9, f);
-      } else if (s.cusp === "premolar") {
-        v += Rc * 0.06 * gauss(off, 0.32) * smooth(0.1, 0.9, f);
-      } else {
-        // A molar's two buccal cusps, and the groove running up between them.
-        v += Rc * 0.06 * (gauss(off + 0.48, 0.3) + gauss(off - 0.48, 0.3)) * smooth(0.45, 1, f);
-        v -= Rc * 0.07 * gauss(off, 0.09) * smooth(0.35, 0.95, f);
-      }
-      hCrown[i] = v;
-    }
-  }
-  const hCrownSoft = soften(hCrown, covCrown, w, h, 1.6 * S);
-  for (let y = 0; y < h; y++) {
-    const uy = y / S;
-    const f = (uy - Y0) / (YE - Y0);
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      if (covCrown[i] <= 0) continue;
-      // Perikymata: fine horizontal ripples in the enamel, felt more than seen.
-      hCrownSoft[i] += 0.035 * Math.sin(uy * 7.3 + noise((x / S) * 0.6, uy * 0.6, 3) * 2) * smooth(0.1, 0.6, f) * (1 - smooth(0.85, 1, f));
-    }
-  }
-  const rootHeight = (dist: Float32Array, cov: Float32Array, R: number) => {
-    const out = new Float32Array(w * h);
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x;
-        if (cov[i] <= 0) continue;
-        out[i] = bevel(dist[i], R) * 0.85 + 0.25 * noise(x / S / 1.6, y / S / 4, 7);
-      }
-    return soften(out, cov, w, h, 1.1 * S);
-  };
-  const hRoot = rootHeight(dRoot, covRoot, s.nw * S * 0.55);
-  const hBack = covBack && dBack ? rootHeight(dBack, covBack, s.nw * S * 0.45) : null;
-
-  const enamelAt = (x: number, y: number): RGB => {
-    const uy = y / S;
-    const ux = x / S;
-    const f = (uy - Y0) / (YE - Y0);
-    let a = mix(ENAMEL_NECK, t.primary ? PRIMARY_ENAMEL : ENAMEL, smooth(0.0, 0.5, f));
-    // Translucent at the biting edge: most in incisors, a little in canines, barely in the back.
-    const edge = s.cusp === "incisal" ? 0.55 : s.cusp === "canine" ? 0.32 : 0.12;
-    a = mix(a, ENAMEL_EDGE, edge * smooth(0.8, 1.0, f) * (0.6 + 0.4 * noise(ux * 0.8, uy * 0.3, 11)));
-    // A whisper of mottling: real enamel is never one colour.
-    const m = (noise(ux * 0.35, uy * 0.35, 5) - 0.5) * 0.05 + (noise(ux * 1.4, uy * 1.4, 9) - 0.5) * 0.02;
-    return [a[0] + m, a[1] + m, a[2] + m * 0.8];
-  };
-
-  const crownLayer: Layer = {
-    cov: covCrown,
-    color: (x, y) => {
-      const i = y * w + x;
-      const n = normalAt(hCrownSoft, w, h, x, y);
-      const ao = 0.82 + 0.18 * smooth(0, 2.2 * S, dCrown[i]);
-      const c = shade(n, { albedo: enamelAt(x, y), gloss: front ? 0.85 : 0.75, wrap: 0.45, ao }, flipY);
-      // The finest dark line at the very edge, so a tooth still reads on white.
-      const rim = 1 - 0.16 * (1 - smooth(0, 1.4, dCrown[i]));
-      return [c[0] * rim, c[1] * rim * 0.98, c[2] * rim * 0.94];
-    },
-  };
-  const rootColor = (hf: Float32Array, dist: Float32Array, dim: number) => (x: number, y: number): RGB => {
-    const i = y * w + x;
-    const uy = y / S;
-    const toApex = clamp((Y0 - uy) / (Y0 - s.apex));
-    const alb = mix(ROOT, ROOT_APEX, smooth(0.3, 1, toApex));
-    const m = (noise(x / S * 0.5, uy * 0.25, 13) - 0.5) * 0.05;
-    const n = normalAt(hf, w, h, x, y);
-    const c = shade(n, { albedo: [alb[0] + m, alb[1] + m, alb[2] + m], gloss: 0.12, wrap: 0.25, ao: 0.86 + 0.14 * smooth(0, 1.6 * S, dist[i]) }, flipY);
-    const rim = 1 - 0.18 * (1 - smooth(0, 1.2, dist[i]));
-    return [c[0] * rim * dim, c[1] * rim * dim, c[2] * rim * dim];
-  };
-  const layers: Layer[] = [];
-  if (covBack && hBack && dBack) layers.push({ cov: covBack, color: rootColor(hBack, dBack, 0.78) });
-  layers.push({ cov: covRoot, color: rootColor(hRoot, dRoot, 1) });
-  layers.push(crownLayer);
-  return save(`side-${sideArtKey(t)}`, w, h, layers);
-}
 
 /* ── The gum, one column wide, tiling ────────────────────────────────────── */
-const GUM_MARGIN = hex("#f1a9a3");
-const GUM = hex("#e58f8f");
-const MUCOSA = hex("#c8596a");
+const GUM_MARGIN = hex("#f4b3ad");
+const GUM = hex("#ea9496");
+const MUCOSA = hex("#c4505f");
+const SHADOW = hex("#6e2f35");
 
 async function gum(arch: "upper" | "lower") {
   const S = SIDE_S;
@@ -411,26 +299,33 @@ async function gum(arch: "upper" | "lower") {
   const cov3 = new Float32Array(W3 * h);
   for (let i = 0; i < cov3.length; i++) cov3[i] = data[i * 4 + 3] / 255;
   const d3 = distance(cov3, W3, h);
+  // And from outside it: how far below the margin a point on the tooth is, for the shadow the gum casts.
+  const out3 = new Float32Array(W3 * h);
+  for (let i = 0; i < out3.length; i++) out3[i] = 1 - cov3[i];
+  const dOut3 = distance(out3, W3, h);
 
   const R = 5.5 * S;
   const hf = new Float32Array(wo * h);
   const cov = new Float32Array(wo * h);
   const dist = new Float32Array(wo * h);
+  const below = new Float32Array(wo * h);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < wo; x++) {
       const j = y * W3 + (x + w - P);
       const i = y * wo + x;
       cov[i] = cov3[j];
       dist[i] = d3[j];
+      below[i] = dOut3[j];
       if (cov3[j] <= 0) continue;
       const ux = (x - P) / S;
       const uy = y / S;
       // The free margin rolls over the tooth; above it the attached gum is firm and stippled.
       let v = bevel(d3[j], R);
-      v += 1.1 * (noise(ux * 1.7, uy * 1.7, 21, Math.round(CW * 1.7)) - 0.5) * smooth(Y0 - 30, Y0 - 4, uy);
-      v += 0.5 * (noise(ux * 4.4, uy * 4.4, 23, Math.round(CW * 4.4)) - 0.5);
+      // Each noise fits a whole number of cells across one column (75, 194), or every tile edge is a seam.
+      v += 1.1 * (noise((ux * 75) / CW, uy * 1.7, 21, 75) - 0.5) * smooth(Y0 - 30, Y0 - 4, uy);
+      v += 0.5 * (noise((ux * 194) / CW, uy * 4.4, 23, 194) - 0.5);
       // Each tooth's root shows as a gentle swelling under the gum (the juga), between soft hollows.
-      v += 1.6 * S * 0.4 * Math.cos(((ux - C) / CW) * Math.PI * 2) * smooth(GUM_TOP, Y0 - 6, uy) * (1 - smooth(Y0 - 6, Y0 + 2, uy));
+      v += 1.6 * S * 0.4 * Math.cos(((ux - C) / CW) * Math.PI * 2) * smooth(2, Y0 - 10, uy) * (1 - smooth(Y0 - 6, Y0 + 2, uy));
       hf[i] = v;
     }
   }
@@ -438,9 +333,9 @@ async function gum(arch: "upper" | "lower") {
     const i = y * wo + x;
     const uy = y / S;
     // Mucosa high up, coral attached gum, a paler rim at the margin.
-    let a = mix(MUCOSA, GUM, smooth(Y0 - 30, Y0 - 16, uy));
+    let a = mix(MUCOSA, GUM, smooth(Y0 - 34, Y0 - 14, uy));
     a = mix(a, GUM_MARGIN, 1 - smooth(0, 2.2 * S, dist[i]));
-    const m = (noise(((x - P) / S) * 0.5, uy * 0.5, 31, Math.round(CW * 0.5)) - 0.5) * 0.06;
+    const m = (noise((((x - P) / S) * 22) / CW, uy * 0.5, 31, 22) - 0.5) * 0.06;
     const n = normalAt(hf, wo, h, x, y, 1);
     const c = shade(n, { albedo: [a[0] + m, a[1] + m * 0.6, a[2] + m * 0.6], gloss: 0.55, wrap: 0.6, ao: 1 }, flipY);
     // The sulcus: a fine darker line where the gum meets the tooth.
@@ -448,23 +343,36 @@ async function gum(arch: "upper" | "lower") {
     return [c[0] * sulcus, c[1] * sulcus * 0.96, c[2] * sulcus * 0.96];
   };
   /*
-    How much of the root shows through: none at the margin, more toward the
-    mucosa, so an implant, a root canal or a graft drawn on the roots stays in
-    sight — the same fade the drawn gum had.
+    The gum covers the whole root now, the way it does in the mouth: the root
+    shows through it, tinted, more toward the top where the tissue is thin,
+    and an implant, a root canal or a graft drawn on the root is drawn over it
+    and stays plain to see. Nothing sticks out into white space any more.
   */
+  const opacityAt = (uy: number) => {
+    const t = clamp(uy / PAP);
+    const thin = smooth(0, 16, uy);
+    return thin * (t < 0.55 ? 0.5 + (t / 0.55) * 0.2 : t < 0.82 ? 0.7 + ((t - 0.55) / 0.27) * 0.26 : 0.96 + ((t - 0.82) / 0.18) * 0.04);
+  };
+  // Where two tiles overlap, the opacity two layers of which make `a`: 1 − (1 − b)² = a.
+  const share = (x: number, a: number) => (x < 2 * P || x >= w ? 1 - Math.sqrt(Math.max(0, 1 - a)) : a);
   const fade = new Float32Array(wo * h);
+  const shadow = new Float32Array(wo * h);
   for (let y = 0; y < h; y++) {
     const uy = y / S;
-    const t = clamp((uy - GUM_TOP) / (PAP - GUM_TOP));
-    const op = t < 0.32 ? (t / 0.32) * 0.42 : t < 0.6 ? 0.42 + ((t - 0.32) / 0.28) * 0.42 : t < 0.86 ? 0.84 + ((t - 0.6) / 0.26) * 0.13 : 0.97 + ((t - 0.86) / 0.14) * 0.03;
     for (let x = 0; x < wo; x++) {
-      const a = cov[y * wo + x] * (uy < GUM_TOP ? 0 : op);
-      // In the overlap: the opacity two layers of which make `a` (1 − (1 − b)² = a).
-      const shared = x < 2 * P || x >= w;
-      fade[y * wo + x] = shared ? 1 - Math.sqrt(Math.max(0, 1 - a)) : a;
+      const i = y * wo + x;
+      fade[i] = share(x, cov[i] * opacityAt(uy));
+      // Just below the margin, on the tooth, the soft shadow of the gum over it.
+      if (cov[i] < 1 && uy > Y0 - 4) shadow[i] = share(x, (1 - cov[i]) * 0.26 * (1 - smooth(0, 2.6 * S, below[i])));
     }
   }
-  return { w: wo, px: await save(`gum-${arch === "upper" ? "u" : "l"}`, wo, h, [{ cov: fade, color }]) };
+  return {
+    w: wo,
+    px: await save(`gum-${arch === "upper" ? "u" : "l"}`, wo, h, [
+      { cov: shadow, color: () => SHADOW },
+      { cov: fade, color },
+    ]),
+  };
 }
 
 /* ── The tooth from above ────────────────────────────────────────────────── */
@@ -592,7 +500,7 @@ function distToPolyline(x: number, y: number, pts: [number, number][]): number {
   return best;
 }
 
-const FISSURE = hex("#b79a70");
+const FISSURE = hex("#a98c6a");
 
 async function top(t: Tooth) {
   const S = TOP_S;
@@ -617,12 +525,12 @@ async function top(t: Tooth) {
       let v = domeSoft[i];
       for (const [cx, cy, r, k] of cusps) v += R * k * gauss(Math.hypot(ux - cx, uy - cy), r);
       let dip = 0;
-      for (const gr of grooves) dip += gr.depth * gauss(distToPolyline(ux, uy, gr.pts), gr.width);
+      for (const gr of grooves) dip += gr.depth * gauss(distToPolyline(ux, uy, gr.pts), gr.width * 0.62);
       for (const [cx, cy, r, k] of pits) dip += k * gauss(Math.hypot(ux - cx, uy - cy), r);
-      v -= R * dip;
+      v -= R * dip * 0.75;
       v += 0.3 * (noise(ux * 1.2, uy * 1.2, 41) - 0.5);
       hf[i] = v;
-      valley[i] = clamp(dip / 0.35);
+      valley[i] = clamp(dip / 0.42);
     }
   }
   const color = (x: number, y: number): RGB => {
@@ -632,11 +540,11 @@ async function top(t: Tooth) {
     let a: RGB = t.primary ? PRIMARY_ENAMEL : ENAMEL;
     // Warmer toward the middle of the table, the fissures stained the way they are in every mouth.
     a = mix(a, ENAMEL_NECK, 0.18 * (1 - smooth(0, 6 * S, dist[i])) + 0.12 * smooth(0.2, 0.9, valley[i]));
-    a = mix(a, FISSURE, 0.55 * smooth(0.45, 1, valley[i]));
+    a = mix(a, FISSURE, 0.42 * smooth(0.5, 1, valley[i]));
     const m = (noise(ux * 0.4, uy * 0.4, 45) - 0.5) * 0.05;
     const n = normalAt(hf, w, h, x, y);
     const ao = (0.8 + 0.2 * smooth(0, 2 * S, dist[i])) * (1 - 0.25 * valley[i]);
-    const c = shade(n, { albedo: [a[0] + m, a[1] + m, a[2] + m * 0.8], gloss: 0.72, wrap: 0.4, ao }, false);
+    const c = shade(n, { albedo: [a[0] + m, a[1] + m, a[2] + m * 0.8], gloss: 0.82, wrap: 0.4, ao }, false);
     const rim = 1 - 0.16 * (1 - smooth(0, 1.4, dist[i]));
     return [c[0] * rim, c[1] * rim * 0.98, c[2] * rim * 0.94];
   };
@@ -646,14 +554,9 @@ async function top(t: Tooth) {
 /* ── Everything, once each ───────────────────────────────────────────────── */
 async function main() {
   const all = [...PERMANENT_UPPER, ...PERMANENT_LOWER, ...PRIMARY_UPPER, ...PRIMARY_LOWER].map(tooth);
-  const sides = new Map<string, Tooth>();
   const tops = new Map<string, Tooth>();
-  for (const t of all) {
-    if (!sides.has(sideArtKey(t))) sides.set(sideArtKey(t), t);
-    if (!tops.has(topArtKey(t))) tops.set(topArtKey(t), t);
-  }
+  for (const t of all) if (!tops.has(topArtKey(t))) tops.set(topArtKey(t), t);
   const sheet: { name: string; w: number; h: number; px: Buffer }[] = [];
-  for (const [k, t] of sides) sheet.push({ name: `side-${k}`, w: CW * SIDE_S, h: SIDE_H * SIDE_S, px: await side(t) });
   for (const [k, t] of tops) sheet.push({ name: `top-${k}`, w: OCC * TOP_S, h: OCC * TOP_S, px: await top(t) });
   for (const a of ["upper", "lower"] as const) {
     const g = await gum(a);

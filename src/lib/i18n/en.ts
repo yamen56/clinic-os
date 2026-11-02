@@ -3981,7 +3981,7 @@ export const en = {
       cost: "Materials cost changed",
       lab: "Lab work",
     },
-    details: { material: "Material", canals: "Canals", grade: "Grade", type: "Type", implants: "Implants" },
+    details: { material: "Material", canals: "Canals", grade: "Grade", type: "Type", implants: "Implants", depth: "Pocket depth" },
     categories: {
       findings: "Findings",
       diagnostic: "Diagnostic",

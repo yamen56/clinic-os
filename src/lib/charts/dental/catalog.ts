@@ -77,6 +77,15 @@ export type Look =
   | "mobility"
   | "furcation"
   | "recession"
+  // The gum's own findings (2026-11-03), drawn on the gum itself.
+  | "inflamed"
+  | "bleeding"
+  | "calculus"
+  | "pocket"
+  | "overgrowth"
+  | "gum_abscess"
+  // Gum work recorded on a quadrant, an arch or the mouth, drawn on each tooth's gum it covers (state.ts).
+  | "perio"
   | "gum"
   | "rotation"
   | "graft"
@@ -90,7 +99,7 @@ export type Look =
 export const BORROWABLE_LOOKS: Look[] = ["filling", "crown", "veneer", "rct", "extraction", "implant", "gum", "bracket", "dot"];
 
 export type DetailOption = { key: string; en: string; ar: string };
-export type DetailField = { key: "material" | "canals" | "grade" | "type" | "implants"; options: DetailOption[] };
+export type DetailField = { key: "material" | "canals" | "grade" | "type" | "implants" | "depth"; options: DetailOption[] };
 
 export type Treatment = {
   key: string;
@@ -167,6 +176,12 @@ const MOBILITY_GRADE: DetailField = {
   ],
 };
 
+/** How deep a periodontal pocket probes: 4 mm is where a pocket starts to matter. */
+const POCKET_DEPTH: DetailField = {
+  key: "depth",
+  options: ["4", "5", "6", "7", "8"].map((mm) => ({ key: mm, en: mm === "8" ? "8 mm or more" : `${mm} mm`, ar: mm === "8" ? "8 مم أو أكثر" : `${mm} مم` })),
+};
+
 const BACK_TEETH: ToothKind[] = ["premolar", "molar"];
 
 export const BUILT_IN: Treatment[] = [
@@ -193,6 +208,13 @@ export const BUILT_IN: Treatment[] = [
   { key: "mobility", kind: "finding", category: "findings", en: "Mobility", ar: "حركة السن", scope: "tooth", look: "mobility", aliases: ["loose", "متحرك", "رخو"], details: [MOBILITY_GRADE] },
   { key: "furcation", kind: "finding", category: "findings", en: "Furcation involvement", ar: "إصابة مفترق الجذور", scope: "tooth", look: "furcation", fits: { kinds: ["molar"] } },
   { key: "recession", kind: "finding", category: "findings", en: "Gingival recession", ar: "انحسار اللثة", scope: "tooth", look: "recession", aliases: ["receding gum", "تراجع اللثة"] },
+  // The gum (2026-11-03: "make the gum related treatment and finding get shown in the chart").
+  { key: "gingivitis", kind: "finding", category: "findings", en: "Gingivitis", ar: "التهاب اللثة", scope: "tooth", look: "inflamed", aliases: ["inflamed gum", "swollen gum", "red gum", "لثة ملتهبة", "احمرار اللثة", "تورم اللثة"] },
+  { key: "bleeding_gums", kind: "finding", category: "findings", en: "Bleeding gums", ar: "نزيف اللثة", scope: "tooth", look: "bleeding", aliases: ["bleeding on probing", "BOP", "نزف", "دم من اللثة"] },
+  { key: "calculus", kind: "finding", category: "findings", en: "Calculus (tartar)", ar: "جير الأسنان", scope: "tooth", look: "calculus", aliases: ["tartar", "plaque", "deposits", "جير", "رواسب", "كلس"] },
+  { key: "pocket", kind: "finding", category: "findings", en: "Periodontal pocket", ar: "جيب لثوي", scope: "tooth", look: "pocket", aliases: ["pocket depth", "periodontitis", "probing depth", "جيب", "التهاب دواعم السن"], details: [POCKET_DEPTH] },
+  { key: "gum_overgrowth", kind: "finding", category: "findings", en: "Gum overgrowth", ar: "تضخم اللثة", scope: "tooth", look: "overgrowth", aliases: ["gingival enlargement", "hyperplasia", "تضخم", "لثة زائدة"] },
+  { key: "gum_abscess", kind: "finding", category: "findings", en: "Gum abscess", ar: "خراج لثوي", scope: "tooth", look: "gum_abscess", aliases: ["periodontal abscess", "gum boil", "swelling", "خراج اللثة", "انتفاخ اللثة"] },
   { key: "hypoplasia", kind: "finding", category: "findings", en: "Enamel hypoplasia / fluorosis", ar: "نقص تكلس المينا / تفلّور", scope: "tooth", look: "stain", aliases: ["fluorosis", "MIH"] },
   { key: "discoloration", kind: "finding", category: "findings", en: "Discoloration", ar: "تصبغ السن", scope: "tooth", look: "stain", aliases: ["stain", "اصفرار", "تلون"] },
 
