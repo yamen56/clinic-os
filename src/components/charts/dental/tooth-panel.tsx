@@ -192,6 +192,7 @@ export function ToothPanel({
   doctors,
   span,
   past,
+  afterPlan = false,
   canWrite,
   tz,
   images,
@@ -227,6 +228,8 @@ export function ToothPanel({
   span: Treatment | null;
   /** Looking at an earlier day: everything reads, nothing writes. */
   past: boolean;
+  /** Looking at the plan carried out (After the plan) — read-only, like the past. */
+  afterPlan?: boolean;
   /** May this member record on the chart? Without it, everything reads and nothing writes. */
   canWrite: boolean;
   tz: string;
@@ -442,7 +445,7 @@ export function ToothPanel({
   );
   const controlsFor = (withStatus: boolean) =>
     locked ? (
-      <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700" data-read-only>{past ? T.readOnlyPast : T.readOnly}</p>
+      <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700" data-read-only>{afterPlan ? T.readOnlyPlan : past ? T.readOnlyPast : T.readOnly}</p>
     ) : (
     <div className="flex flex-wrap items-center gap-2">
       {withStatus && statusGroup}

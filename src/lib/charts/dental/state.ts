@@ -95,6 +95,22 @@ export function paintAt(m: Mark, at: number | null): Paint | null {
   return m.status;
 }
 
+/** Treatment still to do: planned or under way, not voided. */
+export function isPlannedWork(m: Mark): boolean {
+  return m.kind === "procedure" && !m.voidedAt && m.status === "planned";
+}
+
+/**
+ * The mouth once the plan is carried out (Yamen, 2026-11-03: the whole-mouth
+ * treatment shown "like he did those whole treatment in this time"): every
+ * treatment planned or under way, done now. For showing a patient where their
+ * treatment ends up — drawn, never written. Findings the work answers go with
+ * it, the same way they do once the work is really done (resolve.ts).
+ */
+export function finishedPlan(marks: Mark[], now = new Date().toISOString()): Mark[] {
+  return marks.map((m) => (isPlannedWork(m) ? { ...m, status: "done" as const, doneAt: now, startedAt: m.startedAt ?? now } : m));
+}
+
 export type Layer = {
   markId: string;
   /** The treatment it draws — what a filling is made of, when the look alone does not say. */

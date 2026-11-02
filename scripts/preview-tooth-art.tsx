@@ -124,12 +124,14 @@ const body = renderToStaticMarkup(
     gallery(["planned", "done"])
   )
 );
+// The baked pictures live under public/; outside the app, point at them on disk.
+const publicDir = `file:///${join(process.cwd(), "public").replace(/\\/g, "/")}`;
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 :root { ${vars} }
 body { font: 13px system-ui; background: #fff; padding: 16px; margin: 0; }
 h2 { font-size: 14px; margin: 14px 0 6px; }
 .tooth-pop { }
-</style></head><body>${body}</body></html>`;
+</style></head><body>${body.replace(/href="\/charts\//g, `href="${publicDir}/charts/`)}</body></html>`;
 const file = join(OUT, "preview.html");
 writeFileSync(file, html);
 

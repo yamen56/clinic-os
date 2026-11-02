@@ -79,6 +79,33 @@ export function shapeOf(t: Tooth): Shape {
   return { ...w, cusp: "molar", apex: p === 6 ? 15 : p === 7 ? 18 : 23, roots: upper ? 3 : 2 };
 }
 
+/*
+  The baked art (scripts/render-tooth-art.ts → public/charts/teeth): one
+  picture per drawing, named by what decides its shape. A baby tooth's incisors
+  and canines share the grown-up drawing, as `shapeOf` does; its molars do not.
+*/
+export function sideArtKey(t: Tooth): string {
+  const a = t.arch === "upper" ? "u" : "l";
+  if (t.kind === "incisor") return `${a}-i${t.position === 1 ? 1 : 2}`;
+  if (t.kind === "canine") return `${a}-c`;
+  if (t.kind === "premolar") return `${a}-p`;
+  return t.primary ? `${a}-d${t.position === 4 ? 4 : 5}` : `${a}-m${t.position}`;
+}
+export function topArtKey(t: Tooth): string {
+  const a = t.arch === "upper" ? "u" : "l";
+  if (t.kind === "incisor") return a === "u" ? `u-i${t.position === 1 ? 1 : 2}` : "l-i";
+  if (t.kind === "canine") return `${a}-c`;
+  if (t.kind === "premolar") return `${a}-p`;
+  return t.primary ? `${a}-d` : `${a}-m${t.position}`;
+}
+/** Bump when the art is baked again, so a browser never paints yesterday's picture. */
+export const ART_VERSION = 1;
+/** How far each column's gum reaches into its neighbours', so the joint never shows (the renderer explains). */
+export const GUM_PAD = 0.6;
+export const sideArt = (t: Tooth) => `/charts/teeth/side-${sideArtKey(t)}.webp?v=${ART_VERSION}`;
+export const topArt = (t: Tooth) => `/charts/teeth/top-${topArtKey(t)}.webp?v=${ART_VERSION}`;
+export const gumArt = (t: Tooth) => `/charts/teeth/gum-${t.arch === "upper" ? "u" : "l"}.webp?v=${ART_VERSION}`;
+
 function crownPath(s: Shape): string {
   const { nw, mw } = s;
   let d = `M ${C - nw} ${Y0} C ${C - nw - 1.5} ${Y0 + 4} ${C - mw} ${YB - 6} ${C - mw} ${YB}`;
@@ -244,56 +271,11 @@ export function DentalDefs() {
   return (
     <svg width="0" height="0" aria-hidden className="absolute" focusable="false">
       <defs>
-        {/* Enamel across the crown: rounder at the middle, shaded at the sides. */}
-        <linearGradient id={`${DEFS}-enamel`} x1="0" y1="0" x2="1" y2="0">
-          {stop(0, "var(--color-tooth-shade)")}
-          {stop(0.28, "var(--color-tooth-enamel)")}
-          {stop(0.6, "var(--color-tooth-enamel)")}
-          {stop(1, "var(--color-tooth-shade)")}
-        </linearGradient>
-        {/* Down the crown: warmer at the neck, where the dentin shows through; translucent at the edge. */}
-        <linearGradient id={`${DEFS}-crown-v`} gradientUnits="userSpaceOnUse" x1="0" y1={Y0} x2="0" y2={YE}>
-          {stop(0, "var(--color-tooth-cervical)", 0.75)}
-          {stop(0.32, "var(--color-tooth-cervical)", 0)}
-          {stop(0.8, "var(--color-tooth-incisal)", 0)}
-          {stop(1, "var(--color-tooth-incisal)", 0.55)}
-        </linearGradient>
-        <linearGradient id={`${DEFS}-crown-v-back`} gradientUnits="userSpaceOnUse" x1="0" y1={Y0} x2="0" y2={YE}>
-          {stop(0, "var(--color-tooth-cervical)", 0.75)}
-          {stop(0.32, "var(--color-tooth-cervical)", 0)}
-        </linearGradient>
-        {/* The light on the enamel: a soft gloss, what makes a drawn tooth read as a tooth. */}
-        <radialGradient id={`${DEFS}-gloss`} cx="0.5" cy="0.5" r="0.5">
-          {stop(0, "white", 0.95)}
-          {stop(0.55, "white", 0.45)}
-          {stop(1, "white", 0)}
-        </radialGradient>
         <linearGradient id={`${DEFS}-root`} x1="0" y1="0" x2="1" y2="0">
           {stop(0, "var(--color-tooth-root-shade)")}
           {stop(0.42, "var(--color-tooth-root)")}
           {stop(1, "var(--color-tooth-root-shade)")}
         </linearGradient>
-        {/* The gingiva: deeper toward the mucosa, opaque at the margin, fading up the root. */}
-        <linearGradient id={`${DEFS}-gum`} gradientUnits="userSpaceOnUse" x1="0" y1={GUM_TOP} x2="0" y2={PAP}>
-          {stop(0, "var(--color-gum-deep)", 0)}
-          {stop(0.32, "var(--color-gum-deep)", 0.38)}
-          {stop(0.6, "var(--color-gum)", 0.82)}
-          {stop(0.86, "var(--color-gum-light)", 0.96)}
-          {stop(1, "var(--color-gum-light)", 1)}
-        </linearGradient>
-        <pattern id={`${DEFS}-stipple`} width="3.2" height="3.2" patternUnits="userSpaceOnUse">
-          <circle cx="0.8" cy="0.9" r="0.35" style={{ fill: "var(--color-gum-deep)" }} opacity={0.22} />
-          <circle cx="2.4" cy="2.3" r="0.3" style={{ fill: "white" }} opacity={0.35} />
-        </pattern>
-        <radialGradient id={`${DEFS}-top`} cx="0.42" cy="0.38" r="0.75">
-          {stop(0, "var(--color-tooth-enamel)")}
-          {stop(0.62, "var(--color-tooth-enamel)")}
-          {stop(1, "var(--color-tooth-shade)")}
-        </radialGradient>
-        <radialGradient id={`${DEFS}-cusp`} cx="0.5" cy="0.5" r="0.5">
-          {stop(0, "white", 0.85)}
-          {stop(1, "white", 0)}
-        </radialGradient>
         {/* Materials. */}
         <linearGradient id={`${DEFS}-ceramic`} x1="0" y1="0" x2="1" y2="0.3">
           {stop(0, "var(--color-mat-ceramic-shade)")}
@@ -350,6 +332,17 @@ export function DentalDefs() {
         <pattern id={`${DEFS}-hatch`} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="4" style={{ stroke: "var(--color-dental-finding)", strokeWidth: 1, opacity: 0.45 }} />
         </pattern>
+        {/*
+          Work in its material, keeping the tooth's own light: the baked
+          picture of the tooth, re-coloured. A zirconia crown is the tooth's
+          shape and gloss in white ceramic, a gold one in gold, amalgam in dark
+          metal — lit exactly as the enamel beside it.
+        */}
+        {(Object.keys(TINTS) as Material[]).map((m) => (
+          <filter key={m} id={`${DEFS}-tint-${m}`} colorInterpolationFilters="sRGB" x="0" y="0" width="1" height="1">
+            <feColorMatrix type="matrix" values={TINTS[m]} />
+          </filter>
+        ))}
       </defs>
     </svg>
   );
@@ -357,6 +350,26 @@ export function DentalDefs() {
 
 /** A material's fill. */
 const fillOf = (m: Material) => (m === "mta" ? url("mta") : url(m));
+
+/*
+  Each material as a colour matrix over the enamel's picture, from its
+  luminance: ceramic a cool porcelain white, composite a touch brighter and
+  less yellow than enamel (it reads by its edge, as it does in the mouth),
+  metal and amalgam grey with more contrast, gold gold, glass ionomer a matte
+  grey-white, a temporary the tan of acrylic.
+*/
+const lum = (k: number, add: number) => `${(0.2126 * k).toFixed(4)} ${(0.7152 * k).toFixed(4)} ${(0.0722 * k).toFixed(4)} 0 ${add}`;
+const TINTS: Partial<Record<Material, string>> = {
+  ceramic: `${lum(0.92, 0.1)} ${lum(0.92, 0.1)} ${lum(0.94, 0.12)} 0 0 0 1 0`,
+  composite: `0.9 0.08 0.02 0 0.03 0.04 0.92 0.04 0 0.03 0.04 0.1 0.86 0 0.07 0 0 0 1 0`,
+  metal: `${lum(1.35, -0.32)} ${lum(1.35, -0.31)} ${lum(1.35, -0.28)} 0 0 0 1 0`,
+  gold: `${lum(1.05, 0.02)} ${lum(0.88, -0.04)} ${lum(0.55, -0.1)} 0 0 0 1 0`,
+  amalgam: `${lum(1.05, -0.42)} ${lum(1.05, -0.41)} ${lum(1.05, -0.38)} 0 0 0 1 0`,
+  gic: `${lum(0.75, 0.19)} ${lum(0.75, 0.2)} ${lum(0.75, 0.17)} 0 0 0 1 0`,
+  temp: `${lum(0.94, 0.04)} ${lum(0.84, 0.02)} ${lum(0.65, 0)} 0 0 0 1 0`,
+};
+/** The tooth's picture in a material: the one filter for it, or none for what has no tint. */
+const tintOf = (m: Material) => (TINTS[m] ? url(`tint-${m}`) : url("tint-ceramic"));
 
 /** Where a surface is on the side view, for a spot of caries or a small filling. */
 function sideSpot(t: Tooth, s: Shape, sf: Surface): [number, number] {
@@ -407,17 +420,24 @@ function blob(x: number, y: number, r: number, seed: number): string {
   return `M ${pts[0]} ${pts.slice(1).map((p) => `L ${p}`).join(" ")} Z`;
 }
 
-function SideLayer({ l, t, s, crown, roots, clip }: { l: Layer; t: Tooth; s: Shape; crown: string; roots: Roots; clip: string }) {
+function SideLayer({ l, t, s, crown, roots, clip, uid }: { l: Layer; t: Tooth; s: Shape; crown: string; roots: Roots; clip: string; uid: string }) {
   const mat = materialOf(l);
   const on = presence(l.paint);
   switch (l.look) {
     case "filling":
     case "inlay":
+      // The tooth's own picture in the filling's material, on the surface it fills, with the status round it.
       return (
         <g className="tooth-pop" clipPath={`url(#${clip})`}>
           {l.surfaces.map((sf) => (
-            <g key={sf} style={{ fill: fillOf(mat), fillOpacity: on, ...edge(l.paint, l.look === "inlay" ? 1.3 : 1) }}>
-              <SidePatch t={t} s={s} sf={sf} />
+            <g key={sf}>
+              <clipPath id={`${uid}-${sf}`}>
+                <SidePatch t={t} s={s} sf={sf} />
+              </clipPath>
+              <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={`url(#${uid}-${sf})`} filter={tintOf(mat)} opacity={on} />
+              <g style={{ fill: "none", ...edge(l.paint, l.look === "inlay" ? 1.3 : 1) }}>
+                <SidePatch t={t} s={s} sf={sf} />
+              </g>
             </g>
           ))}
         </g>
@@ -507,15 +527,16 @@ function SideLayer({ l, t, s, crown, roots, clip }: { l: Layer; t: Tooth; s: Sha
               <path d={gumMargin()} style={{ fill: "none", ...edge(l.paint, 0.9) }} />
             </>
           )}
-          <path d={crown} transform={over} style={{ fill: url(l.look === "denture" ? "composite" : mat), fillOpacity: on, ...edge(l.paint, 1.3) }} />
+          {/* The crown is the tooth's own shape and light, made in its material. */}
+          <g transform={over}>
+            <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={`url(#${clip})`} filter={tintOf(l.look === "denture" ? "composite" : mat)} opacity={on} />
+            <path d={crown} style={{ fill: "none", ...edge(l.paint, 1.3) }} />
+          </g>
           {metalCollar && (
             <path
               d={`M ${C - s.nw - 0.5} ${Y0 + 0.5} Q ${C} ${Y0 - 4} ${C + s.nw + 0.5} ${Y0 + 0.5} L ${C + s.nw + 1.6} ${Y0 + 4.2} Q ${C} ${Y0} ${C - s.nw - 1.6} ${Y0 + 4.2} Z`}
               style={{ fill: url("metal"), fillOpacity: on }}
             />
-          )}
-          {(mat === "ceramic" || mat === "temp") && on === 1 && (
-            <ellipse cx={C - s.mw * 0.42} cy={YB + 6} rx={2.6} ry={8} style={{ fill: url("gloss") }} transform={`rotate(-6 ${C - s.mw * 0.42} ${YB + 6})`} />
           )}
         </g>
       );
@@ -524,8 +545,10 @@ function SideLayer({ l, t, s, crown, roots, clip }: { l: Layer; t: Tooth; s: Sha
       return (
         <g className="tooth-pop" clipPath={`url(#${clip})`}>
           {/* The shell covers the front, its margin just short of the neck. */}
-          <path d={crown} transform={`translate(${C} ${YE}) scale(1.02 0.9) translate(${-C} ${-YE})`} style={{ fill: url(mat === "composite" ? "composite" : "ceramic"), fillOpacity: 0.95 * on, ...edge(l.paint, 1.1) }} />
-          {on === 1 && <ellipse cx={C - s.mw * 0.4} cy={YB + 8} rx={2.2} ry={7} style={{ fill: url("gloss") }} />}
+          <g transform={`translate(${C} ${YE}) scale(1.02 0.9) translate(${-C} ${-YE})`}>
+            <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={`url(#${clip})`} filter={tintOf(mat === "composite" ? "composite" : "ceramic")} opacity={0.95 * on} />
+            <path d={crown} style={{ fill: "none", ...edge(l.paint, 1.1) }} />
+          </g>
         </g>
       );
     case "implant": {
@@ -699,6 +722,7 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
   const roots = rootGeom(s);
   const clip = `${uid}-c${t.fdi}`;
   const rootClip = `${uid}-r${t.fdi}`;
+  const stumpClip = `${uid}-s${t.fdi}`;
   const layers = st.layers.filter((l) => visible(l.paint) && l.look !== "mobility");
   const rootOnly = layers.some((l) => l.look === "root");
   // A root tip taken off (an apicectomy done): the roots end short of where they did.
@@ -706,43 +730,25 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
   const buried = st.buried && visible(st.buried.paint) ? st.buried : null;
   const flip = t.arch === "lower" ? `matrix(1 0 0 -1 0 ${SIDE_H})` : undefined;
   const move = buried ? `translate(0 ${buried.look === "impacted" ? -19 : -24}) rotate(${buried.look === "impacted" ? (t.side === "right" ? 16 : -16) : 0} ${C} ${Y0 + 12})` : undefined;
-  const front = t.kind === "incisor" || t.kind === "canine";
   // What is left of a broken-down tooth: the crown gone below a jagged edge, dark where it broke.
   const stump = `M ${C - s.nw - 0.5} ${Y0} L ${C - s.nw - 1} ${Y0 + 6} L ${C - s.nw / 2} ${Y0 + 9} L ${C - 2} ${Y0 + 5} L ${C + 2} ${Y0 + 10} L ${C + s.nw / 2} ${Y0 + 6} L ${C + s.nw + 1} ${Y0 + 8} L ${C + s.nw + 0.5} ${Y0} Q ${C} ${Y0 - 5} ${C - s.nw - 0.5} ${Y0} Z`;
 
+  /*
+    The tooth itself is a rendered picture (scripts/render-tooth-art.ts), baked
+    from these same outlines, so everything drawn below lands on it exactly.
+    A tooth broken down to its root shows only the root and the jagged stump.
+  */
   const natural = (
     <g transform={move} opacity={buried ? 0.9 : 1}>
       <g clipPath={cut ? `url(#${rootClip})` : undefined}>
-        {roots.back && <path d={roots.back} fill={url("root")} style={{ stroke: LINE, strokeWidth: 0.5 }} opacity={0.5} />}
-        <path d={roots.body} fill={url("root")} style={{ stroke: LINE, strokeWidth: 0.6 }} />
-        <g style={{ stroke: "var(--color-tooth-pulp)", strokeWidth: 1.2 }} opacity={0.5} strokeLinecap="round">
-          {roots.canals.map(([x1, y1, x2, y2], i) => (
-            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} />
-          ))}
-        </g>
+        <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={rootOnly ? `url(#${stumpClip})` : undefined} />
       </g>
-      {rootOnly ? (
-        <g>
-          <path d={stump} fill={url("root")} style={{ stroke: LINE, strokeWidth: 0.6 }} />
-          <polyline
-            points={`${C - s.nw - 1},${Y0 + 6} ${C - s.nw / 2},${Y0 + 9} ${C - 2},${Y0 + 5} ${C + 2},${Y0 + 10} ${C + s.nw / 2},${Y0 + 6} ${C + s.nw + 1},${Y0 + 8}`}
-            style={{ fill: "none", stroke: "var(--color-dental-caries)", strokeWidth: 1.6 }}
-            strokeLinejoin="round"
-          />
-        </g>
-      ) : (
-        <>
-          <path d={crown} fill={url("enamel")} style={{ stroke: LINE, strokeWidth: 0.65 }} />
-          <path d={crown} fill={url(front ? "crown-v" : "crown-v-back")} />
-          <path d={chamberPath(s)} style={{ fill: "var(--color-tooth-pulp)" }} opacity={0.22} />
-          {/* The gloss on the enamel, and a thinner one down the far side. */}
-          <ellipse cx={C - s.mw * 0.45} cy={YB + 7} rx={2.8} ry={10} style={{ fill: url("gloss") }} transform={`rotate(-5 ${C - s.mw * 0.45} ${YB + 7})`} />
-          <ellipse cx={C + s.mw * 0.55} cy={YB + 4} rx={1.2} ry={6} style={{ fill: url("gloss") }} opacity={0.5} />
-          {front && t.arch === "upper" && t.kind === "incisor" && (
-            // The faint lobes of an incisor's edge.
-            <path d={`M ${C - s.mw * 0.35} ${YE - 1} Q ${C - s.mw * 0.35} ${YE - 9} ${C - s.mw * 0.3} ${YE - 14} M ${C + s.mw * 0.35} ${YE - 1} Q ${C + s.mw * 0.35} ${YE - 9} ${C + s.mw * 0.3} ${YE - 14}`} style={{ fill: "none", stroke: "var(--color-tooth-shade)", strokeWidth: 0.8 }} opacity={0.7} />
-          )}
-        </>
+      {rootOnly && (
+        <polyline
+          points={`${C - s.nw - 1},${Y0 + 6} ${C - s.nw / 2},${Y0 + 9} ${C - 2},${Y0 + 5} ${C + 2},${Y0 + 10} ${C + s.nw / 2},${Y0 + 6} ${C + s.nw + 1},${Y0 + 8}`}
+          style={{ fill: "none", stroke: "var(--color-dental-caries)", strokeWidth: 1.6 }}
+          strokeLinejoin="round"
+        />
       )}
     </g>
   );
@@ -757,6 +763,13 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
           <clipPath id={rootClip}>
             <rect x={0} y={Math.min(...roots.apices.map(([, y]) => y)) + 5} width={CW} height={SIDE_H} />
           </clipPath>
+          {rootOnly && (
+            <clipPath id={stumpClip}>
+              {roots.back && <path d={roots.back} />}
+              <path d={roots.body} />
+              <path d={stump} />
+            </clipPath>
+          )}
         </defs>
         {/*
           The gum is drawn over the tooth, not under it: it covers the neck and
@@ -771,14 +784,11 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
         ) : (
           natural
         )}
-        <path d={gumPath()} fill={url("gum")} opacity={buried ? 1 : 0.97} />
-        <path d={gumPath()} fill={url("stipple")} opacity={0.35} />
-        {buried && <path d={gumPath()} style={{ fill: "var(--color-gum)" }} opacity={0.4} />}
-        {/* The free margin: a lighter rim, and the fine dark line where gum meets tooth. */}
-        <path d={gumMargin()} style={{ fill: "none", stroke: "var(--color-gum-light)", strokeWidth: 2.2 }} opacity={0.9} transform="translate(0 -1.2)" />
-        <path d={gumMargin()} style={{ fill: "none", stroke: "var(--color-gum-line)", strokeWidth: 0.8 }} opacity={0.8} />
+        {/* The gum, rendered too: wet, stippled, rolled over the neck, and clearer up the root so work there shows. */}
+        <image href={gumArt(t)} x={-GUM_PAD} y={0} width={CW + 2 * GUM_PAD} height={SIDE_H} />
+        {buried && <path d={gumPath()} style={{ fill: "var(--color-gum)" }} opacity={0.55} />}
         {layers.map((l) => (
-          <SideLayer key={l.markId + l.surfaces.join("")} l={l} t={t} s={s} crown={crown} roots={roots} clip={clip} />
+          <SideLayer key={l.markId + l.surfaces.join("")} l={l} t={t} s={s} crown={crown} roots={roots} clip={clip} uid={`${clip}-${l.markId}`} />
         ))}
       </g>
       <SideText t={t} st={st} visible={visible} />
@@ -836,61 +846,30 @@ function SurfaceFill({ t, outline, sf, style, dash }: { t: Tooth; outline: strin
   return <polygon points={REGIONS[r]} style={style} strokeDasharray={dash} />;
 }
 
-/** The chewing surface as it looks: cusps catching the light, the grooves between them. */
-function Anatomy({ t }: { t: Tooth }) {
-  const groove = { fill: "none", stroke: "var(--color-tooth-groove)", strokeWidth: 0.9, strokeLinecap: "round" as const };
-  const cusp = (cx: number, cy: number, r: number) => <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} style={{ fill: url("cusp") }} />;
-  if (t.kind === "molar") {
-    return (
-      <g>
-        {[cusp(13.5, 13.5, 6.5), cusp(30.5, 13.5, 6.5), cusp(13.5, 30.5, 6.5), cusp(30.5, 30.5, 6.5)]}
-        <path d="M 9 22 Q 15 20.5 18.5 22 Q 22 23.5 25.5 22 Q 29 20.5 35 22" style={groove} />
-        <path d="M 22 9 Q 20.5 15 22 18.5 Q 23.5 22 22 25.5 Q 20.5 29 22 35" style={groove} opacity={0.85} />
-        <circle cx={22} cy={22} r={1.3} style={{ fill: "var(--color-tooth-groove)" }} opacity={0.75} />
-      </g>
-    );
-  }
-  if (t.kind === "premolar") {
-    return (
-      <g>
-        {[cusp(22, 14, 6.5), cusp(22, 30, 5.5)]}
-        <path d="M 13 22 Q 17 20.6 22 22 Q 27 23.4 31 22" style={groove} />
-        <circle cx={14.5} cy={22} r={1} style={{ fill: "var(--color-tooth-groove)" }} opacity={0.7} />
-        <circle cx={29.5} cy={22} r={1} style={{ fill: "var(--color-tooth-groove)" }} opacity={0.7} />
-      </g>
-    );
-  }
-  if (t.kind === "canine") {
-    return (
-      <g>
-        {cusp(22, 20, 6)}
-        <path d="M 22 13 L 22 27 M 13 21 L 31 21" style={{ ...groove, stroke: "var(--color-tooth-shade)", strokeWidth: 0.8 }} opacity={0.8} />
-      </g>
-    );
-  }
-  // An incisor from above: its edge, and the hollow behind it.
-  return (
-    <g>
-      <path d="M 9 20 Q 22 16.5 35 20" style={{ ...groove, stroke: "var(--color-tooth-shade)", strokeWidth: 1.4 }} />
-      <ellipse cx={22} cy={25} rx={7} ry={3.2} style={{ fill: "var(--color-tooth-shade)" }} opacity={0.45} />
-    </g>
-  );
-}
-
 function TopLayer({ l, t, outline, clip }: { l: Layer; t: Tooth; outline: string; clip: string }) {
   const mat = materialOf(l);
   const on = presence(l.paint);
   const status = edge(l.paint);
   switch (l.look) {
-    case "filling":
-    case "inlay":
     case "sealant": {
-      const style = l.look === "sealant" ? { fill: "var(--color-mat-sealant)", fillOpacity: 0.75 * on, ...edge(l.paint, 0.8) } : { fill: fillOf(mat), fillOpacity: on, ...edge(l.paint, l.look === "inlay" ? 1.3 : 1) };
-      const surfaces = l.look === "sealant" ? (["O"] as Surface[]) : l.surfaces;
+      const style = { fill: "var(--color-mat-sealant)", fillOpacity: 0.75 * on, ...edge(l.paint, 0.8) };
       return (
         <g className="tooth-pop" clipPath={`url(#${clip})`}>
-          {surfaces.map((sf) => (
-            <SurfaceFill key={sf} t={t} outline={outline} sf={sf} style={style} dash={style.strokeDasharray} />
+          <SurfaceFill t={t} outline={outline} sf="O" style={style} dash={style.strokeDasharray} />
+        </g>
+      );
+    }
+    case "filling":
+    case "inlay": {
+      // The chewing surface's own picture in the filling's material, in the surface it fills.
+      const status = edge(l.paint, l.look === "inlay" ? 1.3 : 1);
+      return (
+        <g className="tooth-pop" clipPath={`url(#${clip})`}>
+          {l.surfaces.map((sf) => (
+            <g key={sf}>
+              <image href={topArt(t)} x={0} y={0} width={OCC} height={OCC} clipPath={`url(#${clip}-${regionOf(t, sf)})`} filter={tintOf(mat)} opacity={on} />
+              <SurfaceFill t={t} outline={outline} sf={sf} style={{ fill: "none", ...status }} dash={status.strokeDasharray} />
+            </g>
           ))}
         </g>
       );
@@ -908,15 +887,15 @@ function TopLayer({ l, t, outline, clip }: { l: Layer; t: Tooth; outline: string
     case "denture":
       return (
         <g className="tooth-pop">
-          <path d={outline} style={{ fill: url(l.look === "denture" ? "composite" : mat), fillOpacity: on, ...edge(l.paint, 1.4) }} />
-          <path d={outline} transform={INNER} style={{ fill: "none", stroke: "var(--color-tooth-groove)", strokeWidth: 1.6 }} opacity={0.35 * on} />
-          {mat !== "metal" && mat !== "gold" && on === 1 && <ellipse cx={17} cy={16} rx={7} ry={4.5} style={{ fill: url("gloss") }} />}
+          <image href={topArt(t)} x={0} y={0} width={OCC} height={OCC} filter={tintOf(l.look === "denture" ? "composite" : mat)} opacity={on} />
+          <path d={outline} style={{ fill: "none", ...edge(l.paint, 1.4) }} />
         </g>
       );
     case "veneer":
       return (
         <g className="tooth-pop" clipPath={`url(#${clip})`}>
-          <SurfaceFill t={t} outline={outline} sf="B" style={{ fill: url(mat === "composite" ? "composite" : "ceramic"), fillOpacity: on, ...edge(l.paint, 1.1) }} dash={status.strokeDasharray} />
+          <image href={topArt(t)} x={0} y={0} width={OCC} height={OCC} clipPath={`url(#${clip}-${regionOf(t, "B")})`} filter={tintOf(mat === "composite" ? "composite" : "ceramic")} opacity={on} />
+          <SurfaceFill t={t} outline={outline} sf="B" style={{ fill: "none", ...edge(l.paint, 1.1) }} dash={status.strokeDasharray} />
         </g>
       );
     case "rct":
@@ -1022,23 +1001,32 @@ export function ToothTop({
         <clipPath id={clip}>
           <path d={outline} />
         </clipPath>
+        {/* Each surface's area, for work drawn in it. */}
+        {(Object.keys(REGIONS) as Region[]).map((r) => (
+          <clipPath key={r} id={`${clip}-${r}`}>
+            <polygon points={REGIONS[r]} />
+          </clipPath>
+        ))}
+        <clipPath id={`${clip}-center`}>
+          <path d={outline} transform={INNER} />
+        </clipPath>
       </defs>
       {gone || buried ? (
         <path d={outline} style={{ fill: buried ? `url(#${DEFS}-hatch)` : "none", stroke: "var(--color-ink-300)", strokeWidth: 1 }} strokeDasharray="2.5 2" />
       ) : (
         <>
-          <path d={outline} fill={url("top")} style={{ stroke: LINE, strokeWidth: 0.7 }} />
-          {!covered && (
-            <g clipPath={`url(#${clip})`}>
-              <Anatomy t={t} />
-            </g>
-          )}
+          {/* The chewing surface, rendered: cusps catching the light, the fissures between them. */}
+          <image href={topArt(t)} x={0} y={0} width={OCC} height={OCC} />
           {/* The five surfaces, faintly: where a tap lands. */}
-          <g clipPath={`url(#${clip})`} style={{ stroke: LINE, strokeWidth: 0.5 }} opacity={0.3}>
-            <line x1={0} y1={0} x2={44} y2={44} />
-            <line x1={44} y1={0} x2={0} y2={44} />
-          </g>
-          <path d={outline} transform={INNER} style={{ fill: "none", stroke: LINE, strokeWidth: 0.5 / 0.42 }} opacity={0.35} />
+          {!covered && (
+            <>
+              <g clipPath={`url(#${clip})`} style={{ stroke: LINE, strokeWidth: 0.45 }} opacity={0.2}>
+                <line x1={0} y1={0} x2={44} y2={44} />
+                <line x1={44} y1={0} x2={0} y2={44} />
+              </g>
+              <path d={outline} transform={INNER} style={{ fill: "none", stroke: LINE, strokeWidth: 0.45 / 0.42 }} opacity={0.22} />
+            </>
+          )}
         </>
       )}
       {layers.map((l) => (
@@ -1111,4 +1099,6 @@ export function PaintSwatch({ paint, size = 16 }: { paint: Paint; size?: number 
   );
 }
 
-export { crownPath, rootGeom };
+export { crownPath, rootGeom, festoon, gumMargin };
+/** The drawing's landmarks, for the script that bakes the art (scripts/render-tooth-art.ts). */
+export const GEOM = { C, Y0, YB, YE, GUM_TOP, PAP, ZEN };

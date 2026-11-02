@@ -14,7 +14,7 @@
 */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MousePointer2, Paintbrush, History as HistoryIcon, Undo2, ChevronDown, X } from "lucide-react";
+import { MousePointer2, Paintbrush, History as HistoryIcon, Undo2, ChevronDown, X, Sparkles } from "lucide-react";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
@@ -24,7 +24,7 @@ import { buttonClass } from "@/components/ui/button-class";
 import { BORROWABLE_LOOKS, BUILT_IN, BUILT_IN_BY_KEY, PROCEDURE_CATEGORIES, findTreatment, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
 import { groupLeads, implantSitesOf, inChartOrder, isFullArch, leadOf, onImplants, prosthesisSites } from "@/lib/charts/dental/full-arch";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Arch, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
-import { endOfDay, eventDays, isToothSite, paintAt, toothStates, type Mark, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
+import { endOfDay, eventDays, finishedPlan, isPlannedWork, isToothSite, paintAt, toothStates, type Mark, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
 import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
 import { useDentalStore, type ChartFile, type DentalTabData } from "@/components/charts/dental/store";
 import { call, newId, useChartWriter, type FreshMark } from "@/components/charts/dental/writer";
@@ -276,6 +276,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const [half, setHalf] = useState<"right" | "left">("right");
   const [show, setShow] = useState<Record<Paint, boolean>>({ planned: true, progress: true, done: true, existing: true, finding: true });
   const [dayIdx, setDayIdx] = useState<number | null>(null);
+  /** The step after Today on the time bar: the mouth once every planned treatment is done. */
+  const [afterPlan, setAfterPlan] = useState(false);
   const [span, setSpan] = useState<Treatment | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [mouthOpen, setMouthOpen] = useState(false);
@@ -462,12 +464,21 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   };
 
   const days = useMemo(() => eventDays(marks, tz), [marks, tz]);
-  const at = dayIdx === null || dayIdx >= days.length ? null : endOfDay(days[dayIdx], tz);
-  const past = at !== null;
+  const planCount = useMemo(() => marks.filter(isPlannedWork).length, [marks]);
+  // Nothing left to plan (the last of it done or voided): back to today.
+  const showPlan = afterPlan && planCount > 0;
+  const at = showPlan || dayIdx === null || dayIdx >= days.length ? null : endOfDay(days[dayIdx], tz);
+  // Looking anywhere but today — a day gone by, or the plan carried out — reads and never writes.
+  const past = at !== null || showPlan;
   const locked = past || !canWrite;
+  /*
+    What the drawing shows: the chart as recorded, or — after the plan — the
+    same chart with every planned treatment drawn done (state.ts finishedPlan).
+  */
+  const shown = useMemo(() => (showPlan ? finishedPlan(marks) : marks), [showPlan, marks]);
   // Findings later work answered — caries under a filling — are drawn no more (resolve.ts).
-  const resolved = useMemo(() => resolutions(marks, at), [marks, at]);
-  const states = useMemo(() => toothStates(marks, at, resolved), [marks, at, resolved]);
+  const resolved = useMemo(() => resolutions(shown, at), [shown, at]);
+  const states = useMemo(() => toothStates(shown, at, resolved), [shown, at, resolved]);
   const visible = useCallback((p: Paint) => show[p], [show]);
   const catalog = useMemo(() => [...BUILT_IN, ...custom], [custom]);
   const categoryOf = useCallback((key: string) => findTreatment(key, custom)?.category, [custom]);
@@ -507,7 +518,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
 
   const regionMarks = useMemo<RegionMark[]>(
     () =>
-      marks
+      shown
         .filter((m) => !isToothSite(m.site))
         .flatMap((m) => {
           const paint = paintAt(m, at);
@@ -516,7 +527,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
           const when = fmtDateOnly(m.doneAt ?? m.createdAt, locale);
           return [{ id: m.id, site: m.site as MouthRegion, label, title: `${label} · ${siteLabel(m.site, T)} · ${T.status[paint]} · ${when}`, paint, category: categoryOf(m.treatmentKey) }];
         }),
-    [marks, at, visible, locale, categoryOf, T, fullArchName]
+    [shown, at, visible, locale, categoryOf, T, fullArchName]
   );
 
   /* ── X-rays and photos ───────────────────────────────────────────────── */
@@ -1092,6 +1103,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       doctors={roster}
       span={span}
       past={past}
+      afterPlan={showPlan}
       canWrite={canWrite}
       tz={tz}
       images={images}
@@ -1287,31 +1299,65 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
             onCamera={() => setCamera({})}
           />
 
-          {/* Time: the mouth on any day something happened. */}
-          {days.length > 0 && (
-            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-ctl bg-canvas px-3 py-2">
-              <HistoryIcon className="h-4 w-4 shrink-0 text-ink-400" />
-              <input
-                type="range"
-                min={0}
-                max={days.length}
-                step={1}
-                value={dayIdx ?? days.length}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setDayIdx(v >= days.length ? null : v);
-                }}
-                aria-label={T.history}
-                className="min-w-32 flex-1 accent-brand-600"
-                dir="ltr"
-              />
-              <span className="min-w-24 text-[13px] font-semibold text-ink-900 tnum" data-viewing={at === null ? "today" : days[dayIdx!]}>
-                {at === null ? T.today : T.viewing.replace("{date}", dayLabel)}
-              </span>
-              {past && (
-                <button type="button" onClick={() => setDayIdx(null)} className="text-[12.5px] font-semibold text-brand-700 hover:underline">
-                  {T.backToToday}
-                </button>
+          {/*
+            Time: the mouth on any day something happened — and, one step past
+            Today, the mouth once the plan is done, to show the patient where
+            their treatment ends up.
+          */}
+          {(days.length > 0 || planCount > 0) && (
+            <div className="mt-3 rounded-ctl bg-canvas px-3 py-2" data-time-bar>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <HistoryIcon className="h-4 w-4 shrink-0 text-ink-400" />
+                <input
+                  type="range"
+                  min={0}
+                  max={days.length + (planCount > 0 ? 1 : 0)}
+                  step={1}
+                  value={showPlan ? days.length + 1 : (dayIdx ?? days.length)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setAfterPlan(v > days.length);
+                    setDayIdx(v >= days.length ? null : v);
+                  }}
+                  aria-label={T.history}
+                  className="min-w-32 flex-1 accent-brand-600"
+                  dir="ltr"
+                />
+                <span
+                  className="min-w-24 text-[13px] font-semibold text-ink-900 tnum"
+                  data-viewing={showPlan ? "after-plan" : at === null ? "today" : days[dayIdx!]}
+                >
+                  {showPlan ? T.afterPlan : at === null ? T.today : T.viewing.replace("{date}", dayLabel)}
+                </span>
+                {past ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDayIdx(null);
+                      setAfterPlan(false);
+                    }}
+                    className="inline-flex h-9 items-center rounded-full px-2 text-[12.5px] font-semibold text-brand-700 hover:underline"
+                  >
+                    {T.backToToday}
+                  </button>
+                ) : (
+                  planCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAfterPlan(true)}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3.5 text-[12.5px] font-semibold text-ink-900 hover:bg-sunken"
+                      data-see-result
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-dental-done" />
+                      {T.seeResult}
+                    </button>
+                  )
+                )}
+              </div>
+              {showPlan && (
+                <p className="mt-1.5 text-[12.5px] text-ink-500" data-after-plan={planCount}>
+                  {planCount === 1 ? T.afterPlanNoteOne : T.afterPlanNote.replace("{n}", String(planCount))}
+                </p>
               )}
             </div>
           )}
