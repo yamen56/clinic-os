@@ -15,10 +15,10 @@ import { isUuid } from "../uuid";
  */
 
 /** What a run knows about, which decides what its steps can do. */
-export type Ctx = "patient" | "appointment" | "invoice" | "document" | "conversation";
+export type Ctx = "patient" | "appointment" | "invoice" | "document" | "conversation" | "treatment";
 
 /** Modules a trigger or step belongs to, named as in lib/features. */
-type Module = "calendar" | "conversations" | "invoices" | "documents" | "patients";
+type Module = "calendar" | "conversations" | "invoices" | "documents" | "patients" | "dental";
 
 const uuid = z.string().refine(isUuid, "uuid");
 const uuids = z.array(uuid).max(100).default([]);
@@ -29,7 +29,7 @@ const unit = z.enum(["minutes", "hours", "days"]);
    Triggers
    ------------------------------------------------------------------------- */
 
-export const TRIGGER_CATEGORIES = ["appointments", "patients", "messages", "billing", "documents"] as const;
+export const TRIGGER_CATEGORIES = ["appointments", "patients", "treatments", "messages", "billing", "documents"] as const;
 export type TriggerCategory = (typeof TRIGGER_CATEGORIES)[number];
 
 export const APPOINTMENT_SOURCES = ["staff", "booking_link", "ai_agent"] as const;
@@ -77,6 +77,18 @@ const TRIGGER_SCHEMAS = {
   document_unsigned: z.object({ days: z.number().int().min(1).max(365).default(3) }),
   document_expired: z.object({}),
   prescription_sent: z.object({}),
+  /*
+    The dental chart (2026-11-03): a treatment finished, and a treatment under
+    way whose next visit nobody booked. Narrowed by the catalog's categories
+    (surgery, endodontic…) and, for a recipe that means one thing, by the
+    treatments themselves.
+  */
+  treatment_done: z.object({ categories: z.array(z.string().max(30)).max(20).default([]), treatments: z.array(z.string().max(40)).max(60).default([]) }),
+  treatment_unbooked: z.object({
+    days: z.number().int().min(1).max(180).default(7),
+    categories: z.array(z.string().max(30)).max(20).default([]),
+    treatments: z.array(z.string().max(40)).max(60).default([]),
+  }),
 } as const;
 
 export type TriggerKey = keyof typeof TRIGGER_SCHEMAS;
@@ -106,6 +118,8 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "birthday", category: "patients", provides: ["patient"], module: "patients", timed: true },
   { key: "after_last_visit", category: "patients", provides: ["patient"], module: "patients", timed: true },
   { key: "prescription_sent", category: "patients", provides: ["patient"], module: "patients" },
+  { key: "treatment_done", category: "treatments", provides: ["patient", "treatment"], module: "dental" },
+  { key: "treatment_unbooked", category: "treatments", provides: ["patient", "treatment"], module: "dental", timed: true },
   { key: "inbound_message", category: "messages", provides: ["patient", "conversation"], module: "conversations" },
   {
     key: "conversation_unanswered", category: "messages", provides: ["patient", "conversation"],
@@ -532,5 +546,12 @@ export function defaultSettingsFor(trigger: string): FlowSettings {
     s.cooldown_days = 1;
   }
   if (trigger === "patient_created" || trigger === "birthday") s.reentry = "always";
+  // A patient has many treatments over the years: each one is its own reason to write.
+  if (trigger === "treatment_done") s.reentry = "always";
+  // Booking the visit is the whole point of the reminder; once it is booked, say nothing more.
+  if (trigger === "treatment_unbooked") {
+    s.reentry = "always";
+    s.exit_on = ["appointment_booked"];
+  }
   return s;
 }

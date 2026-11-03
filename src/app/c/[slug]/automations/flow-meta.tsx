@@ -2,7 +2,7 @@ import {
   ArrowRightLeft, BellRing, Bot, Cake, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, CheckCheck,
   CircleStop, Clock, DoorOpen, Eye, FileCheck, FileClock, FilePen, FileSignature, FileX, Flag, GitBranch,
   History, ListTodo, MessageCircle, MessageSquareWarning, Pill, Receipt, Reply, Send,
-  StickyNote, Tag, Tags, UserCheck, UserCog, UserPlus, UserX, Wallet, Globe, Hourglass,
+  StickyNote, Tag, Tags, UserCheck, UserCog, UserPlus, UserX, Wallet, Globe, Hourglass, Stethoscope, CalendarSearch,
 } from "lucide-react";
 import type { Dict } from "@/lib/i18n/en";
 import { normalizeStepConfig, type Rule, type StepCategory, stepDef } from "@/lib/automation/catalog";
@@ -56,6 +56,8 @@ export const TRIGGER_ICONS: Record<string, Icon> = {
   document_declined: FileX,
   document_unsigned: FileClock,
   document_expired: FileX,
+  treatment_done: Stethoscope,
+  treatment_unbooked: CalendarSearch,
 };
 
 export const PRESET_ICONS: Record<string, Icon> = {
@@ -233,8 +235,13 @@ export function triggerSummary(
     if (preset) title = (t.flow.presets as Record<string, string>)[preset];
   }
   if (type === "before_appointment") bits.push(`${cfg.hours ?? 24} ${t.flow.units.hours}`);
-  if (type === "after_last_visit" || type === "invoice_unpaid" || type === "document_unsigned") {
+  if (type === "after_last_visit" || type === "invoice_unpaid" || type === "document_unsigned" || type === "treatment_unbooked") {
     bits.push(`${cfg.days ?? ""} ${t.flow.units.days}`);
+  }
+  if (type === "treatment_done" || type === "treatment_unbooked") {
+    const cats = list("categories").map((c) => (t.flow.treatmentCategories as Record<string, string>)[c] ?? c);
+    if (cats.length) bits.push(cats.join(locale === "ar" ? "، " : ", "));
+    if (list("treatments").length) bits.push(t.flow.someTreatments.replace("{n}", String(list("treatments").length)));
   }
   if (type === "conversation_unanswered") bits.push(`${cfg.minutes ?? 15} ${t.flow.minutesShort}`);
   if ((type === "tag_added" || type === "tag_removed") && cfg.tag) bits.push(`“${cfg.tag}”`);

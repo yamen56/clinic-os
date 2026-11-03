@@ -17,6 +17,7 @@ import { loadRunContext } from "../src/lib/automation/context";
 import { renderMessage, type TemplateContext } from "../src/lib/automation/variables";
 import { normalizeForMatch, replyHandle, replyMatchesAny } from "../src/lib/automation/match";
 import { legacyTreeEdges } from "../src/lib/automation/graph";
+import { finishedTreatment, treatmentFits } from "../src/lib/charts/dental/treatment-events";
 
 /**
  * Automation engine.
@@ -386,6 +387,7 @@ export async function advanceRun(runId: string): Promise<void> {
 
     const ctx = (run.context ?? {}) as Record<string, unknown>;
     const reply = (ctx.reply as { text?: string } | undefined)?.text ?? null;
+    const treatment = (ctx.trigger as { treatment?: Record<string, string> } | undefined)?.treatment ?? null;
     let cache: TemplateContext | null = null;
     const env: Env = {
       c,
@@ -400,6 +402,7 @@ export async function advanceRun(runId: string): Promise<void> {
           invoiceId: run.invoice_id,
           documentId: run.document_id,
           reply,
+          treatment,
         })),
     };
 
@@ -1134,6 +1137,8 @@ async function matchesTrigger(
   if ((kind === "tag_added" || kind === "tag_removed") && cfg.tag && cfg.tag !== payload.tag) return false;
   if (kind === "payment_received" && cfg.fully_paid_only && !payload.fullyPaid) return false;
   if (kind === "booking_submitted" && cfg.needs_approval && payload.status !== "pending_approval") return false;
+  // A dental flow narrowed to some categories or treatments: is it about this one?
+  if ((kind === "treatment_done" || kind === "treatment_unbooked") && !treatmentFits(cfg, String(payload.treatmentKey ?? ""))) return false;
 
   if (kind === "inbound_message") {
     const body = String(payload.body ?? "");
@@ -1187,12 +1192,25 @@ async function matchesTrigger(
 export async function handleTrigger(
   kind: string,
   clinicId: string,
-  payload: Record<string, unknown>
+  event: Record<string, unknown>
 ): Promise<void> {
   await withSystem(async (c) => {
     // A switched-off module or a deleted clinic starts nothing.
     const live = await c.query(`select 1 from clinics cl where cl.id = $1 and ${licensed("automations")}`, [clinicId]);
     if (!live.rowCount) return;
+
+    /*
+      A treatment finished (migration 0090): looked at again now, after the
+      event's wait. Taken back with the chart's undo, voided or reopened since,
+      it starts nothing; still done, its name and teeth go on the run for the
+      messages to use.
+    */
+    let payload = event;
+    if (kind === "treatment_done") {
+      const done = await finishedTreatment(c, clinicId, event.markId);
+      if (!done) return;
+      payload = { ...event, patientId: done.patientId, treatmentKey: done.treatmentKey, treatment: done.treatment };
+    }
 
     const automations = await c.query(
       `select id, trigger_type, trigger_config from automations
@@ -1203,7 +1221,7 @@ export async function handleTrigger(
     // Only the event's own facts are kept on the run, for {{reply.text}} and
     // the keyword rules — not the whole payload, which can be large.
     const kept: Record<string, unknown> = {};
-    for (const k of ["status", "previousStatus", "tag", "source", "fullyPaid", "amount"]) {
+    for (const k of ["status", "previousStatus", "tag", "source", "fullyPaid", "amount", "treatment"]) {
       if (payload[k] !== undefined) kept[k] = payload[k];
     }
     if (typeof payload.body === "string") kept.body = payload.body.slice(0, 2000);

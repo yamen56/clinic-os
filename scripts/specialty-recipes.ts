@@ -24,10 +24,11 @@ const dental: Recipe[] = [
     key: "dental_post_extraction",
     name: "After an extraction",
     name_ar: "تعليمات بعد الخلع",
-    description: "Aftercare the moment a patient is tagged as having had a tooth out, then a check-in the next day.",
+    description: "Aftercare the moment an extraction is marked done on the dental chart, then a check-in the next day.",
     specialty: "dental",
-    trigger_type: "tag_added",
-    trigger_config: { tag: "خلع" },
+    // From the chart since 2026-11-03: it used to wait for reception to add the tag "خلع".
+    trigger_type: "treatment_done",
+    trigger_config: { treatments: ["extraction", "extraction_surgical", "extraction_wisdom", "root_removal", "extraction_primary"] },
     sort: 20,
     steps: [
       {
@@ -42,6 +43,105 @@ const dental: Recipe[] = [
         step_type: "send_whatsapp",
         config: {
           message: "كيف حالك اليوم {{patient.first_name}}؟ 🌸\nإذا في نزف أو ألم مستمر أو انتفاخ زايد، خبّرنا وبنشوفك.",
+        },
+      },
+    ],
+  },
+  {
+    key: "dental_implant_aftercare",
+    name: "After implant surgery",
+    name_ar: "تعليمات بعد الزراعة",
+    description: "Aftercare when an implant, a bone graft or a sinus lift is marked done on the chart, and a check-in two days later.",
+    specialty: "dental",
+    trigger_type: "treatment_done",
+    trigger_config: { treatments: ["implant", "bone_graft", "sinus_lift"] },
+    sort: 23,
+    steps: [
+      {
+        step_type: "send_whatsapp",
+        config: {
+          message:
+            "مرحباً {{patient.first_name}} 🦷\nتعليمات بعد العملية ({{treatment.name}}):\n• كمّادات باردة على الخد أول يومين\n• أكل طري وبارد، وامضغ على الجهة الثانية\n• لا تمضمض بقوة ولا تدخّن\n• خُذ الدواء بمواعيده كما وصفه الطبيب\n\nانتفاخ بسيط طبيعي لثلاثة أيام. إذا زاد الألم أو النزف أو الانتفاخ، راسلنا فوراً.",
+        },
+      },
+      { step_type: "wait", config: { minutes: 2880, until_time: "11:00" } },
+      {
+        step_type: "send_whatsapp",
+        config: { message: "كيف صرت اليوم {{patient.first_name}}؟ 🌸\nإذا في ألم مستمر أو انتفاخ زايد أو حرارة، خبّرنا وبنشوفك." },
+      },
+    ],
+  },
+  {
+    key: "dental_gum_surgery_aftercare",
+    name: "After gum surgery",
+    name_ar: "تعليمات بعد جراحة اللثة",
+    description: "Aftercare when gum surgery — a graft, a flap, crown lengthening, a gingivectomy — is marked done on the chart.",
+    specialty: "dental",
+    trigger_type: "treatment_done",
+    trigger_config: { treatments: ["gum_graft", "flap_surgery", "crown_lengthening", "gingivectomy"] },
+    sort: 24,
+    steps: [
+      {
+        step_type: "send_whatsapp",
+        config: {
+          message:
+            "مرحباً {{patient.first_name}} 🌿\nتعليمات بعد جراحة اللثة:\n• لا تفرّش مكان العملية أسبوعاً، وفرّش باقي الأسنان بلطف\n• استعمل المضمضة التي وصفها الطبيب\n• أكل طري، ولا تدخين\n• لا تشد الشفة لترى المكان\n\nموعد فك الغرز سيُرتّب معك. لأي نزف أو ألم زايد، راسلنا.",
+        },
+      },
+    ],
+  },
+  {
+    key: "dental_crown_after_root_canal",
+    name: "Crown after a root canal",
+    name_ar: "التلبيسة بعد علاج العصب",
+    description: "Two weeks after a root canal is finished, if nothing is booked: the tooth still needs its crown.",
+    specialty: "dental",
+    trigger_type: "treatment_done",
+    trigger_config: { treatments: ["rct", "rct_retreat"] },
+    sort: 25,
+    steps: [
+      { step_type: "wait", config: { minutes: 20160, until_time: "11:00" } },
+      {
+        step_type: "condition",
+        config: { match: "all", rules: [{ kind: "has_upcoming_appointment" }] },
+        children: {
+          yes: [{ step_type: "stop", config: {} }],
+          no: [
+            {
+              step_type: "send_whatsapp",
+              config: {
+                message:
+                  "مرحباً {{patient.first_name}} 👋\nسنّك ({{treatment.tooth}}) خلص علاج عصبه، بس لسا بحاجة تلبيسة تحميه — السن بعد علاج العصب بصير أضعف وممكن ينكسر.\nاحجز موعدك من هنا: {{clinic.booking_link}}\nأو راسلنا وبنرتبلك الوقت.",
+              },
+            },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    key: "dental_next_visit_unbooked",
+    name: "Book the next session",
+    name_ar: "احجز جلستك التالية",
+    description: "A treatment under way — a root canal, an implant, a crown — had its last step a week ago and nothing is booked.",
+    specialty: "dental",
+    trigger_type: "treatment_unbooked",
+    trigger_config: { days: 7 },
+    sort: 26,
+    steps: [
+      {
+        step_type: "send_whatsapp",
+        config: {
+          message:
+            "مرحباً {{patient.first_name}} 🦷\nعلاجك ({{treatment.name}}) لسا ما خلص، والجلسة الجاية مهمة حتى ما يرجع الألم أو يتضرر السن.\nاحجز موعدك من هنا: {{clinic.booking_link}}\nأو راسلنا وبنرتبلك أنسب وقت.",
+        },
+      },
+      {
+        step_type: "notify_staff",
+        config: {
+          title: "{{patient.name}} لم يحجز جلسته التالية",
+          body: "{{treatment.name}} — يُفضّل الاتصال به",
+          roles: ["receptionist"],
         },
       },
     ],

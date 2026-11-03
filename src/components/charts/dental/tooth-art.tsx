@@ -182,9 +182,14 @@ function rootGeom(s: Shape): Roots {
 }
 
 function chamberPath(s: Shape): string {
+  /*
+    Just inside the crown, under the gum's margin: on a photographed tooth a
+    chamber that started above the neck sat on the gum, not in the tooth
+    (2026-11-03).
+  */
   const w = Math.max(3, s.nw * 0.55);
-  const top = Y0 - 3;
-  const bottom = Y0 + (s.cusp === "molar" ? 13 : 16);
+  const top = Y0 + 3;
+  const bottom = Y0 + (s.cusp === "molar" ? 15 : 18);
   return `M ${C - w} ${top} Q ${C - w} ${bottom} ${C} ${bottom} Q ${C + w} ${bottom} ${C + w} ${top} Z`;
 }
 
@@ -381,7 +386,7 @@ const lum = (k: number, add: number) => `${(0.2126 * k).toFixed(4)} ${(0.7152 * 
 const TINTS: Partial<Record<Material, string>> = {
   ceramic: `${lum(0.92, 0.1)} ${lum(0.92, 0.1)} ${lum(0.94, 0.12)} 0 0 0 1 0`,
   composite: `0.9 0.08 0.02 0 0.03 0.04 0.92 0.04 0 0.03 0.04 0.1 0.86 0 0.07 0 0 0 1 0`,
-  metal: `${lum(1.35, -0.32)} ${lum(1.35, -0.31)} ${lum(1.35, -0.28)} 0 0 0 1 0`,
+  metal: `${lum(1.12, -0.3)} ${lum(1.12, -0.29)} ${lum(1.12, -0.25)} 0 0 0 1 0`,
   gold: `${lum(1.05, 0.02)} ${lum(0.88, -0.04)} ${lum(0.55, -0.1)} 0 0 0 1 0`,
   amalgam: `${lum(1.05, -0.42)} ${lum(1.05, -0.41)} ${lum(1.05, -0.38)} 0 0 0 1 0`,
   gic: `${lum(0.75, 0.19)} ${lum(0.75, 0.2)} ${lum(0.75, 0.17)} 0 0 0 1 0`,
@@ -542,7 +547,13 @@ function SideLayer({ l, t, s, crown, roots, clip, uid }: { l: Layer; t: Tooth; s
           {l.look === "denture" && (
             // The pink acrylic base, festooned like gum and the column wide, so a full arch reads as one piece.
             <>
-              <path d={festoon(Y0 - 16)} style={{ fill: url("acrylic"), fillOpacity: on }} />
+              <clipPath id={`${uid}-base`}>
+                <path d={festoon(Y0 - 16)} />
+              </clipPath>
+              <g clipPath={`url(#${uid}-base)`} opacity={on}>
+                <image href={gumArt(t)} x={-GUM_PAD} y={0} width={CW + 2 * GUM_PAD} height={SIDE_H} />
+                <path d={festoon(Y0 - 16)} style={{ fill: "var(--color-gum-deep)" }} opacity={0.18} />
+              </g>
               <path d={gumMargin()} style={{ fill: "none", ...edge(l.paint, 0.9) }} />
             </>
           )}
@@ -649,9 +660,14 @@ function SideLayer({ l, t, s, crown, roots, clip, uid }: { l: Layer; t: Tooth; s
     case "recession": {
       // The gum has drawn back: the root is bare between the neck and the new margin.
       const low = Y0 - 9;
+      const bare = `M ${C - s.nw - 0.5} ${Y0 + 1} L ${C - s.nw + 0.5} ${low} Q ${C} ${low - 3} ${C + s.nw - 0.5} ${low} L ${C + s.nw + 0.5} ${Y0 + 1} Q ${C} ${Y0 - 4} ${C - s.nw - 0.5} ${Y0 + 1} Z`;
       return (
         <g className="tooth-pop">
-          <path d={`M ${C - s.nw - 0.5} ${Y0 + 1} L ${C - s.nw + 0.5} ${low} Q ${C} ${low - 3} ${C + s.nw - 0.5} ${low} L ${C + s.nw + 0.5} ${Y0 + 1} Q ${C} ${Y0 - 4} ${C - s.nw - 0.5} ${Y0 + 1} Z`} style={{ fill: url("root") }} />
+          {/* The root as the photograph has it, in the stretch the gum no longer covers. */}
+          <clipPath id={`${uid}-bare`}>
+            <path d={bare} />
+          </clipPath>
+          <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={`url(#${uid}-bare)`} />
           <path d={`M ${C - s.nw - 3} ${low + 1} Q ${C} ${low - 4} ${C + s.nw + 3} ${low + 1}`} style={{ fill: "none", stroke: "var(--color-gum-line)", strokeWidth: 1.6 }} strokeLinecap="round" />
         </g>
       );
@@ -866,6 +882,7 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
     A tooth broken down to its root shows only the root and the jagged stump.
   */
   const natural = (
+    <g clipPath={buried ? `url(#${uid}-k${t.fdi})` : undefined}>
     <g transform={move} opacity={buried ? 0.9 : 1}>
       <g clipPath={cut ? `url(#${rootClip})` : undefined}>
         <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={rootOnly ? `url(#${stumpClip})` : undefined} />
@@ -877,6 +894,7 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
           strokeLinejoin="round"
         />
       )}
+    </g>
     </g>
   );
 
@@ -890,6 +908,12 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
           <clipPath id={rootClip}>
             <rect x={0} y={Math.min(...roots.apices.map(([, y]) => y)) + 5} width={CW} height={SIDE_H} />
           </clipPath>
+          {buried && (
+            // Pushed into the bone, the tooth stays in its own column.
+            <clipPath id={`${uid}-k${t.fdi}`}>
+              <rect x={-2} y={0} width={CW + 4} height={SIDE_H} />
+            </clipPath>
+          )}
           {rootOnly && (
             <clipPath id={stumpClip}>
               {roots.back && <path d={roots.back} />}
@@ -933,17 +957,42 @@ function roundRect(x: number, y: number, w: number, h: number, r: number): strin
   return `M ${x + r} ${y} H ${x + w - r} Q ${x + w} ${y} ${x + w} ${y + r} V ${y + h - r} Q ${x + w} ${y + h} ${x + w - r} ${y + h} H ${x + r} Q ${x} ${y + h} ${x} ${y + h - r} V ${y + r} Q ${x} ${y} ${x + r} ${y} Z`;
 }
 
+/** The chewing surface's half-width and half-height, from above. */
+function topHalf(t: Tooth): [number, number] {
+  if (t.kind === "molar") return [(t.primary ? 32 : t.position === 8 ? 34 : t.position === 7 ? 36 : 38) / 2, (t.arch === "upper" ? 35 : 33) / 2];
+  if (t.kind === "premolar") return [14.5, 17];
+  if (t.kind === "canine") return [14.5, 15.5];
+  if (t.arch === "upper") return t.position === 1 ? [17.5, 11.5] : [15, 10.5];
+  return [12.5, 10];
+}
+
 export function topOutline(t: Tooth): string {
   const c = OCC / 2;
-  if (t.kind === "molar") {
-    const w = t.primary ? 32 : t.position === 8 ? 34 : t.position === 7 ? 36 : 38;
-    const h = t.arch === "upper" ? 35 : 33;
-    return roundRect(c - w / 2, c - h / 2, w, h, 11);
+  const [rx, ry] = topHalf(t);
+  if (t.kind === "molar") return roundRect(c - rx, c - ry, rx * 2, ry * 2, 11);
+  return ellipse(c, c, rx, ry);
+}
+
+/**
+ * The middle of a surface's area on this tooth, for a spot of decay: halfway
+ * across the band between the tooth's edge and its centre. Fixed points made
+ * for a molar put a buccal spot on an incisor outside the tooth.
+ */
+function surfaceMiddle(t: Tooth, r: Region | "center"): [number, number] {
+  const [rx, ry] = topHalf(t);
+  const k = (1 + 0.42) / 2;
+  switch (r) {
+    case "top":
+      return [22, 22 - ry * k];
+    case "bottom":
+      return [22, 22 + ry * k];
+    case "left":
+      return [22 - rx * k, 22];
+    case "right":
+      return [22 + rx * k, 22];
+    default:
+      return [22, 22];
   }
-  if (t.kind === "premolar") return ellipse(c, c, 14.5, 17);
-  if (t.kind === "canine") return ellipse(c, c, 14.5, 15.5);
-  if (t.arch === "upper") return t.position === 1 ? ellipse(c, c, 17.5, 11.5) : ellipse(c, c, 15, 10.5);
-  return ellipse(c, c, 12.5, 10);
 }
 
 const REGIONS = {
@@ -953,13 +1002,6 @@ const REGIONS = {
   left: "0,44 0,0 22,22",
 } as const;
 type Region = keyof typeof REGIONS;
-const CENTROID: Record<Region | "center", [number, number]> = {
-  top: [22, 9],
-  bottom: [22, 35],
-  left: [9, 22],
-  right: [35, 22],
-  center: [22, 22],
-};
 const INNER = "translate(22 22) scale(0.42) translate(-22 -22)";
 
 function regionOf(t: Tooth, sf: Surface): Region | "center" {
@@ -967,10 +1009,39 @@ function regionOf(t: Tooth, sf: Surface): Region | "center" {
   return (Object.keys(REGIONS) as Region[]).find((r) => surfaceAt(t, r) === sf)!;
 }
 
-function SurfaceFill({ t, outline, sf, style, dash }: { t: Tooth; outline: string; sf: Surface; style: React.CSSProperties; dash?: string }) {
+/*
+  A surface's area, the way a dental chart divides a tooth from above: the
+  occlusal (incisal) surface in the middle, and the mesial, distal, buccal and
+  lingual surfaces each the band between the tooth's edge and the middle — not
+  a triangle running into the centre, which painted a mesial filling over part
+  of the occlusal surface and ran the surface lines through it (2026-11-03).
+  `clip` is the tooth's clip id: its surface clips (`-top`…, `-center`) and the
+  ring mask (`-ring`) are defined beside it in ToothTop.
+*/
+function SurfaceFill({ t, outline, sf, style, dash, clip }: { t: Tooth; outline: string; sf: Surface; style: React.CSSProperties; dash?: string; clip: string }) {
   const r = regionOf(t, sf);
   if (r === "center") return <path d={outline} transform={INNER} style={style} strokeDasharray={dash} />;
-  return <polygon points={REGIONS[r]} style={style} strokeDasharray={dash} />;
+  const width = typeof style.strokeWidth === "number" ? style.strokeWidth : 1;
+  return (
+    <g>
+      <g mask={`url(#${clip}-ring)`}>
+        <polygon points={REGIONS[r]} style={style} strokeDasharray={dash} />
+      </g>
+      {style.stroke && (
+        // The band's inner edge, where it meets the middle: its stretch of the centre's outline.
+        <g clipPath={`url(#${clip}-${r})`}>
+          <path d={outline} transform={INNER} style={{ fill: "none", stroke: style.stroke, strokeWidth: width / 0.42 }} strokeDasharray={dash ? dash.split(" ").map((v) => String(Number(v) / 0.42)).join(" ") : undefined} />
+        </g>
+      )}
+    </g>
+  );
+}
+
+/** The tooth's picture in one surface's area, in a material: the band for a side surface, the middle for O. */
+function SurfaceImage({ t, sf, clip, filter, opacity }: { t: Tooth; sf: Surface; clip: string; filter: string; opacity: number }) {
+  const r = regionOf(t, sf);
+  const img = <image href={topArt(t)} x={0} y={0} width={OCC} height={OCC} filter={filter} opacity={opacity} mask={r === "center" ? undefined : `url(#${clip}-ring)`} />;
+  return <g clipPath={`url(#${clip}-${r})`}>{img}</g>;
 }
 
 function TopLayer({ l, t, outline, clip }: { l: Layer; t: Tooth; outline: string; clip: string }) {
@@ -982,7 +1053,7 @@ function TopLayer({ l, t, outline, clip }: { l: Layer; t: Tooth; outline: string
       const style = { fill: "var(--color-mat-sealant)", fillOpacity: 0.75 * on, ...edge(l.paint, 0.8) };
       return (
         <g className="tooth-pop" clipPath={`url(#${clip})`}>
-          <SurfaceFill t={t} outline={outline} sf="O" style={style} dash={style.strokeDasharray} />
+          <SurfaceFill t={t} outline={outline} sf="O" style={style} dash={style.strokeDasharray} clip={clip} />
         </g>
       );
     }
@@ -994,22 +1065,25 @@ function TopLayer({ l, t, outline, clip }: { l: Layer; t: Tooth; outline: string
         <g className="tooth-pop" clipPath={`url(#${clip})`}>
           {l.surfaces.map((sf) => (
             <g key={sf}>
-              <image href={topArt(t)} x={0} y={0} width={OCC} height={OCC} clipPath={`url(#${clip}-${regionOf(t, sf)})`} filter={tintOf(mat)} opacity={on} />
-              <SurfaceFill t={t} outline={outline} sf={sf} style={{ fill: "none", ...status }} dash={status.strokeDasharray} />
+              <SurfaceImage t={t} sf={sf} clip={clip} filter={tintOf(mat)} opacity={on} />
+              <SurfaceFill t={t} outline={outline} sf={sf} style={{ fill: "none", ...status }} dash={status.strokeDasharray} clip={clip} />
             </g>
           ))}
         </g>
       );
     }
-    case "caries":
+    case "caries": {
+      // A spot as big as the surface's band allows: a slim incisor's is half a molar's.
+      const r = Math.min(4.6, Math.min(...topHalf(t)) * 0.29);
       return (
-        <g className="tooth-pop">
+        <g className="tooth-pop" clipPath={`url(#${clip})`}>
           {l.surfaces.map((sf, i) => {
-            const [x, y] = CENTROID[regionOf(t, sf)];
-            return <path key={sf} d={blob(x, y, 4.6, i * 1.7 + 0.6)} style={{ fill: url("decay") }} />;
+            const [x, y] = surfaceMiddle(t, regionOf(t, sf));
+            return <path key={sf} d={blob(x, y, sf === "O" ? Math.min(4.6, r * 1.15) : r, i * 1.7 + 0.6)} style={{ fill: url("decay") }} />;
           })}
         </g>
       );
+    }
     case "crown":
     case "denture":
       return (
@@ -1021,8 +1095,8 @@ function TopLayer({ l, t, outline, clip }: { l: Layer; t: Tooth; outline: string
     case "veneer":
       return (
         <g className="tooth-pop" clipPath={`url(#${clip})`}>
-          <image href={topArt(t)} x={0} y={0} width={OCC} height={OCC} clipPath={`url(#${clip}-${regionOf(t, "B")})`} filter={tintOf(mat === "composite" ? "composite" : "ceramic")} opacity={on} />
-          <SurfaceFill t={t} outline={outline} sf="B" style={{ fill: "none", ...edge(l.paint, 1.1) }} dash={status.strokeDasharray} />
+          <SurfaceImage t={t} sf="B" clip={clip} filter={tintOf(mat === "composite" ? "composite" : "ceramic")} opacity={on} />
+          <SurfaceFill t={t} outline={outline} sf="B" style={{ fill: "none", ...edge(l.paint, 1.1) }} dash={status.strokeDasharray} clip={clip} />
         </g>
       );
     case "rct":
@@ -1139,6 +1213,11 @@ export function ToothTop({
         <clipPath id={`${clip}-center`}>
           <path d={outline} transform={INNER} />
         </clipPath>
+        {/* Everything but the middle: what the four side surfaces share. */}
+        <mask id={`${clip}-ring`} maskUnits="userSpaceOnUse" x={0} y={0} width={OCC} height={OCC}>
+          <path d={outline} style={{ fill: "white" }} />
+          <path d={outline} transform={INNER} style={{ fill: "black" }} />
+        </mask>
       </defs>
       {gone || buried ? (
         <path d={outline} style={{ fill: buried ? `url(#${DEFS}-hatch)` : "none", stroke: "var(--color-ink-300)", strokeWidth: 1 }} strokeDasharray="2.5 2" />
@@ -1149,7 +1228,7 @@ export function ToothTop({
           {/* The five surfaces, faintly: where a tap lands. */}
           {!covered && (
             <>
-              <g clipPath={`url(#${clip})`} style={{ stroke: LINE, strokeWidth: 0.45 }} opacity={0.2}>
+              <g clipPath={`url(#${clip})`} mask={`url(#${clip}-ring)`} style={{ stroke: LINE, strokeWidth: 0.45 }} opacity={0.22}>
                 <line x1={0} y1={0} x2={44} y2={44} />
                 <line x1={44} y1={0} x2={0} y2={44} />
               </g>
@@ -1164,7 +1243,7 @@ export function ToothTop({
       {picked && picked.length > 0 && (
         <g clipPath={`url(#${clip})`} style={{ fill: "var(--color-night)", fillOpacity: 0.16, stroke: "var(--color-night)", strokeWidth: 1.4 }}>
           {picked.map((sf) => (
-            <SurfaceFill key={sf} t={t} outline={outline} sf={sf} style={{}} />
+            <SurfaceFill key={sf} t={t} outline={outline} sf={sf} style={{}} clip={clip} />
           ))}
         </g>
       )}

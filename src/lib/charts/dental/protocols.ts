@@ -279,6 +279,75 @@ const CROWN_STEPS = indirectSteps("Crown type");
 const VENEER_STEPS = indirectSteps("Veneer type");
 const INLAY_STEPS = indirectSteps("Material");
 
+/*
+  Surgery, and the visits after it (2026-11-03: "make sure that the treatment
+  that may need multiple sessions … have their steps recorded"). The surgery
+  finishes the treatment; the suture removal and the healing reviews are
+  recorded after it, as they happen, and are never what it waits on.
+*/
+const SUTURES: StepField = {
+  kind: "choice",
+  key: "sutures",
+  en: "Sutures",
+  options: [
+    { key: "resorbable", en: "Resorbable" },
+    { key: "nonresorbable", en: "Non-resorbable" },
+    { key: "none", en: "None" },
+  ],
+};
+const AFTER_SURGERY: StepDef[] = [
+  { key: "sutures", en: "Suture removal", optional: true },
+  { key: "review", en: "Healing review", optional: true, repeatable: true },
+];
+const GRAFT_MATERIAL: StepField = {
+  kind: "choice",
+  key: "material",
+  en: "Graft",
+  options: [
+    { key: "autogenous", en: "Autogenous" },
+    { key: "xenograft", en: "Xenograft" },
+    { key: "allograft", en: "Allograft" },
+    { key: "synthetic", en: "Synthetic" },
+  ],
+};
+const MEMBRANE: StepField = {
+  kind: "choice",
+  key: "membrane",
+  en: "Membrane",
+  options: [
+    { key: "none", en: "None" },
+    { key: "resorbable", en: "Resorbable" },
+    { key: "nonresorbable", en: "Non-resorbable" },
+  ],
+};
+const SURGICAL_EXTRACTION: StepDef[] = [
+  {
+    key: "surgery",
+    en: "Surgical removal",
+    fields: [
+      {
+        kind: "choice",
+        key: "approach",
+        en: "Approach",
+        multi: true,
+        options: [
+          { key: "flap", en: "Flap raised" },
+          { key: "bone", en: "Bone removal" },
+          { key: "section", en: "Tooth sectioned" },
+        ],
+      },
+      SUTURES,
+    ],
+  },
+  ...AFTER_SURGERY,
+];
+/** Something made in the lab to wear: taken, then fitted, then eased as needed. */
+const APPLIANCE: StepDef[] = [
+  { key: "impression", en: "Impression / scan", fields: [IMPRESSION] },
+  { key: "delivery", en: "Delivery" },
+  { key: "adjust", en: "Adjustment", optional: true, repeatable: true },
+];
+
 const DENTURE_STEPS: StepDef[] = [
   { key: "primary", en: "Primary impression", optional: true },
   { key: "final", en: "Final impression" },
@@ -412,6 +481,195 @@ export const PROTOCOLS: Record<string, StepDef[]> = {
     { key: "polish", en: "Polishing" },
     { key: "fluoride", en: "Fluoride", optional: true },
     { key: "ohi", en: "Oral hygiene instruction", optional: true },
+  ],
+
+  // ── Treatments of more than one visit, given their steps on 2026-11-03 ──
+  extraction_surgical: SURGICAL_EXTRACTION,
+  extraction_wisdom: SURGICAL_EXTRACTION,
+  apicoectomy: [
+    {
+      key: "surgery",
+      en: "Root-end surgery",
+      fields: [
+        {
+          kind: "choice",
+          key: "filling",
+          en: "Root-end filling",
+          options: [
+            { key: "mta", en: "MTA" },
+            { key: "biodentine", en: "Biodentine" },
+            { key: "none", en: "None" },
+          ],
+        },
+        SUTURES,
+      ],
+    },
+    ...AFTER_SURGERY,
+  ],
+  apexification: [
+    { key: "access", en: "Access & cleaning" },
+    { key: "dressing", en: "Calcium hydroxide dressing", optional: true, repeatable: true },
+    { key: "plug", en: "Apical plug (MTA)" },
+    { key: "obturation", en: "Obturation" },
+    {
+      key: "restoration",
+      en: "Final restoration",
+      optional: true,
+      fields: [
+        {
+          kind: "choice",
+          key: "restoration",
+          en: "Restored with",
+          options: [
+            { key: "composite", en: "Composite" },
+            { key: "core", en: "Core build-up" },
+          ],
+        },
+      ],
+    },
+  ],
+  post_core: [
+    {
+      key: "space",
+      en: "Post space preparation",
+      fields: [
+        {
+          kind: "choice",
+          key: "post",
+          en: "Post",
+          options: [
+            { key: "fiber", en: "Fibre" },
+            { key: "cast", en: "Cast metal" },
+            { key: "prefab", en: "Prefabricated metal" },
+          ],
+        },
+      ],
+    },
+    { key: "impression", en: "Impression (cast post)", optional: true },
+    { key: "cement", en: "Post cemented & core built" },
+  ],
+  bone_graft: [{ key: "surgery", en: "Graft placed", fields: [GRAFT_MATERIAL, MEMBRANE, SUTURES] }, ...AFTER_SURGERY],
+  sinus_lift: [
+    {
+      key: "surgery",
+      en: "Sinus lift",
+      fields: [
+        {
+          kind: "choice",
+          key: "approach",
+          en: "Approach",
+          options: [
+            { key: "lateral", en: "Lateral window" },
+            { key: "crestal", en: "Crestal (osteotome)" },
+          ],
+        },
+        GRAFT_MATERIAL,
+        SUTURES,
+      ],
+    },
+    ...AFTER_SURGERY,
+  ],
+  srp: [
+    { key: "srp", en: "Scaling & root planing" },
+    { key: "reeval", en: "Re-evaluation (4–6 weeks)", optional: true },
+  ],
+  flap_surgery: [{ key: "surgery", en: "Flap surgery", fields: [SUTURES] }, ...AFTER_SURGERY],
+  gum_graft: [
+    {
+      key: "surgery",
+      en: "Graft placed",
+      fields: [
+        {
+          kind: "choice",
+          key: "type",
+          en: "Graft",
+          options: [
+            { key: "fgg", en: "Free gingival graft" },
+            { key: "ctg", en: "Connective tissue graft" },
+            { key: "substitute", en: "Soft-tissue substitute" },
+          ],
+        },
+        SUTURES,
+      ],
+    },
+    ...AFTER_SURGERY,
+  ],
+  crown_lengthening: [{ key: "surgery", en: "Crown lengthening", fields: [SUTURES] }, ...AFTER_SURGERY],
+  gingivectomy: [
+    {
+      key: "surgery",
+      en: "Gingivectomy",
+      fields: [
+        {
+          kind: "choice",
+          key: "method",
+          en: "With",
+          options: [
+            { key: "scalpel", en: "Scalpel" },
+            { key: "laser", en: "Laser" },
+            { key: "electro", en: "Electrosurgery" },
+          ],
+        },
+      ],
+    },
+    { key: "review", en: "Healing review", optional: true, repeatable: true },
+  ],
+  biopsy: [
+    {
+      key: "biopsy",
+      en: "Biopsy taken",
+      fields: [
+        {
+          kind: "choice",
+          key: "type",
+          en: "Biopsy",
+          options: [
+            { key: "incisional", en: "Incisional" },
+            { key: "excisional", en: "Excisional" },
+          ],
+        },
+        SUTURES,
+      ],
+    },
+    // Not finished until the result is read: a biopsy nobody followed up is the one that mattered.
+    { key: "result", en: "Result reviewed", fields: [{ kind: "text", key: "result", en: "Result", placeholder: "Benign / refer / …" }] },
+  ],
+  aligners: [
+    { key: "records", en: "Records & scan", fields: [IMPRESSION] },
+    { key: "start", en: "Attachments & first aligners" },
+    { key: "review", en: "Progress review", optional: true, repeatable: true },
+    { key: "refinement", en: "Refinement scan", optional: true, repeatable: true },
+    { key: "finish", en: "Final aligners & retainers" },
+  ],
+  space_maintainer: [
+    { key: "fit", en: "Band fit & impression" },
+    { key: "cement", en: "Cementation" },
+    { key: "review", en: "Review", optional: true, repeatable: true },
+  ],
+  night_guard: APPLIANCE,
+  retainer: APPLIANCE,
+  denture_repair: [
+    { key: "taken", en: "Taken for repair / reline impression" },
+    { key: "returned", en: "Returned to the patient" },
+  ],
+  whitening: [
+    { key: "shade", en: "Shade before", optional: true, fields: [{ kind: "text", key: "shade", en: "Shade", placeholder: "A3" }] },
+    {
+      key: "session",
+      en: "Whitening session",
+      repeatable: true,
+      fields: [
+        {
+          kind: "choice",
+          key: "type",
+          en: "Whitening",
+          options: [
+            { key: "office", en: "In-office" },
+            { key: "home", en: "Home trays" },
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -576,7 +834,18 @@ export function stepSummary(def: StepDef | null, data: StepData, treatmentKey = 
 export const FOLLOW_UPS: Record<string, string[]> = {
   rct: ["crown", "core_buildup", "post_core"],
   rct_retreat: ["crown", "core_buildup"],
+  apexification: ["crown", "core_buildup"],
+  post_core: ["crown"],
+  endo_opening: ["rct"],
+  incision_drainage: ["rct", "extraction"],
+  pulpotomy: ["ssc"],
+  pulpectomy: ["ssc"],
   implant: ["implant_crown"],
+  bone_graft: ["implant"],
+  sinus_lift: ["implant"],
   extraction: ["implant", "bridge"],
   extraction_surgical: ["implant", "bridge"],
+  crown_lengthening: ["crown"],
+  aligners: ["retainer"],
+  debond: ["retainer"],
 };

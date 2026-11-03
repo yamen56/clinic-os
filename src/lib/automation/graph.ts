@@ -51,6 +51,7 @@ export type IssueCode =
   | "needs_invoice"
   | "needs_document"
   | "needs_conversation"
+  | "needs_treatment"
   | "bad_edge"
   | "cycle"
   | "unreachable"
@@ -76,6 +77,7 @@ const NEEDS_CODE: Record<Ctx, IssueCode> = {
   invoice: "needs_invoice",
   document: "needs_document",
   conversation: "needs_conversation",
+  treatment: "needs_treatment",
 };
 
 function stepIssues(node: FlowNode, provides: Ctx[], hasReplyStep: boolean): Issue[] {

@@ -20,6 +20,8 @@ export async function loadRunContext(
     invoiceId?: string | null;
     documentId?: string | null;
     reply?: string | null;
+    /** The chart's treatment the flow is about, as the trigger found it. */
+    treatment?: Record<string, string> | null;
   }
 ): Promise<TemplateContext> {
   const ctx: TemplateContext = {};
@@ -49,6 +51,7 @@ export async function loadRunContext(
     booking_link: clinic.booking_slug ? `${appUrl()}/book/${clinic.booking_slug}` : "",
   };
   if (ids.reply) ctx.reply = { text: ids.reply };
+  if (ids.treatment) ctx.treatment = { name: String(ids.treatment.name ?? ""), tooth: String(ids.treatment.tooth ?? "") };
 
   if (ids.patientId) {
     const p = (

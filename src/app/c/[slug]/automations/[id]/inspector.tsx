@@ -12,6 +12,7 @@ import {
   type Rule,
 } from "@/lib/automation/catalog";
 import type { FlowNode, Issue } from "@/lib/automation/graph";
+import { PROCEDURE_CATEGORIES } from "@/lib/charts/dental/catalog";
 import { STEP_ICONS, TRIGGER_ICONS, fill, toneOf, triggerSummary, type Lookups } from "../flow-meta";
 import {
   AmountUnit,
@@ -174,6 +175,31 @@ export function TriggerInspector({
         <Field label={f.daysUnsigned}>
           <NumberInput dir="ltr" min={1} max={365} value={Number(config.days ?? 3)} fallback={3} onChange={(v) => set({ days: Math.round(v) })} />
         </Field>
+      )}
+      {(trigger === "treatment_done" || trigger === "treatment_unbooked") && (
+        <>
+          {trigger === "treatment_unbooked" && (
+            <Field label={f.daysSinceStep} hint={f.daysSinceStepHint}>
+              <NumberInput dir="ltr" min={1} max={180} value={Number(config.days ?? 7)} fallback={7} onChange={(v) => set({ days: Math.round(v) })} />
+            </Field>
+          )}
+          {/* Which treatments: by kind (surgery, root canals…); a recipe may also name the treatments themselves. */}
+          <Section title={f.treatmentKinds} hint={list("categories").length ? undefined : f.anyTreatment}>
+            <Chips
+              options={PROCEDURE_CATEGORIES.map((c) => ({ value: c, label: (f.treatmentCategories as Record<string, string>)[c] ?? c }))}
+              value={list("categories")}
+              onChange={(categories) => set({ categories })}
+            />
+          </Section>
+          {list("treatments").length > 0 && (
+            <p className="flex flex-wrap items-center gap-2 text-[12px] text-ink-500" data-trigger-treatments>
+              {f.someTreatments.replace("{n}", String(list("treatments").length))}
+              <button type="button" className="font-semibold text-brand-700 hover:underline" onClick={() => set({ treatments: [] })}>
+                {f.anyOfThem}
+              </button>
+            </p>
+          )}
+        </>
       )}
       {trigger === "payment_received" && (
         <Check checked={Boolean(config.fully_paid_only)} onChange={(v) => set({ fully_paid_only: v })} label={f.fullyPaidOnly} />
