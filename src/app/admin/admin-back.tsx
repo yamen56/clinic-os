@@ -30,7 +30,7 @@ export function AdminBack() {
     to.length === 0 ? t.admin.clinics : to.length === 1 && sections[to[0]] ? sections[to[0]] : t.common.back;
 
   return (
-    <div className="-mt-4 mb-2">
+    <div className="-ms-2 -mt-4 mb-2">
       <BackLink href={href} label={label} />
     </div>
   );

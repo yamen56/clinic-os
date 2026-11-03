@@ -23,7 +23,7 @@ import { AppointmentNotes } from "@/components/appointment-notes";
 import { PatientPicker } from "@/components/appointments/patient-picker";
 import type { Appt, Doctor, PlannedItem, Room, Section, Service } from "./types";
 import { VisitLineView, whereOf } from "@/components/charts/dental/visit-work";
-import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert } from "lucide-react";
+import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock } from "lucide-react";
 import { flagAlerts } from "@/lib/medical-history";
 
 export type PanelState =
@@ -67,7 +67,10 @@ export function AppointmentPanel({
   canOpenPatient,
   canInvoice = false,
   onBookNext,
+  onLate,
 }: {
+  /** Running late — the same sheet as the board's, for a visit opened from the Schedule. */
+  onLate?: (a: Appt) => void;
   /** May raise an invoice — a finished visit offers to bill it. */
   canInvoice?: boolean;
   /** Book the next visit from a finished one, on the day its hand-off asked for. */
@@ -314,7 +317,18 @@ export function AppointmentPanel({
                 <Badge status={stageBadge[stage] ?? statusBadge[editAppt.status] ?? "neutral"}>
                   {(t.flow.stages as Record<string, string>)[stage]}
                 </Badge>
+                {!!editAppt.late_min && (stage === "expected" || stage === "late" || stage === "waiting") && (
+                  <span className="text-[12.5px] text-ink-500" data-panel-said-late>
+                    {t.flow.saidLate.replace("{n}", String(editAppt.late_min))}
+                  </span>
+                )}
                 <span className="ms-auto flex flex-wrap items-center gap-1.5">
+                  {onLate && (stage === "expected" || stage === "late" || stage === "waiting") && (
+                    <Button size="sm" variant="outline" onClick={() => onLate(editAppt)} disabled={pending} data-panel-late>
+                      <Clock className="h-4 w-4" />
+                      {t.flow.runningLate}
+                    </Button>
+                  )}
                   {(stage === "expected" || stage === "late") && (
                     <Button size="sm" onClick={() => flow("arrived")} loading={pending}>
                       <Armchair className="h-4 w-4" />

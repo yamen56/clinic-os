@@ -209,6 +209,22 @@ async function main() {
     await sheet.waitFor({ state: "detached", timeout: 30_000 });
     check((await appt(linaAppt)).late_min === 50 && (await sentTo("+962790771103")).length === 0, "Save only writes the minutes and sends nothing");
 
+    // The Schedule's panel offers the same sheet (2026-11-03).
+    await desk.goto(`${base}/calendar?open=${linaAppt}`);
+    const panelLate = desk.locator("[data-panel-flow] [data-panel-late]");
+    await panelLate.waitFor({ timeout: 60_000 });
+    check((await desk.locator("[data-panel-said-late]").innerText()).includes("50 min late"), "the Schedule's panel says how late they said");
+    await panelLate.click();
+    await sheet.waitFor({ timeout: 10_000 });
+    check(
+      (await sheet.locator("[data-late-custom]").inputValue()) === "50",
+      "and opens Running late at the minutes already given"
+    );
+    check((await sheet.locator(`[data-late-next="${omarAppt}"]`).innerText()).includes("told"), "knowing who was told");
+    await sheet.locator("[aria-label='Close']").last().click();
+    await sheet.waitFor({ state: "detached", timeout: 10_000 });
+    await desk.goto(`${base}/calendar`);
+
     /* ============================================================ drag and drop */
     console.log("\n[dragging cards on the board]");
     const col = (c: string) => `[data-flow-column="${c}"]`;
@@ -308,7 +324,7 @@ async function main() {
     const bp = await bctx.newPage();
     watch(bp);
     await signIn(bp, `desk-${slug}@test.local`);
-    await bp.goto(`${base}/invoices`);
+    await bp.goto(`${base}/invoices`, { timeout: 120_000 });
     await bp.waitForSelector("[data-ready-desk][data-ready-open]", { timeout: 90_000 });
     check(
       (await bp.locator("[data-ready-desk]").getAttribute("data-ready-open")) === "0" && (await bp.locator("[data-desk-patient]").count()) === 0,
@@ -339,7 +355,7 @@ async function main() {
 
     /* ============================================================ request from device: gone */
     console.log("\n[request from device is gone]");
-    await bp.goto(`${base}/patients/${lina}?tab=files`);
+    await bp.goto(`${base}/patients/${lina}?tab=files`, { timeout: 120_000 });
     await bp.waitForSelector("[data-files-hub]", { timeout: 90_000 });
     check((await bp.locator("[data-request-device]").count()) === 0, "the Files tab has no Request from device");
     check((await bp.locator("[data-take-photo]").count()) === 1 && (await bp.locator("[data-patient-upload-folder]").count()) === 1, "Upload a folder and Take photo stay");
@@ -352,6 +368,8 @@ async function main() {
       .composite([{ input: await sharp({ create: { width: 200, height: 200, channels: 3, background: { r: 220, g: 220, b: 220 } } }).png().toBuffer(), left: 300, top: 100 }])
       .png()
       .toBuffer();
+    // Hydrated first: a choice made on the server's HTML never reaches React, and the file goes up as "other".
+    await bp.waitForFunction(`(() => { const s = document.querySelector("[data-files-hub] select"); return !!s && Object.keys(s).some((k) => k.startsWith("__reactProps")); })()`, undefined, { timeout: 60_000 });
     await bp.selectOption("[data-files-hub] select", "view:panoramic");
     await bp.locator("[data-files-hub] input[type='file']:not([data-patient-folder-input])").setInputFiles({ name: "scan.png", mimeType: "image/png", buffer: png });
     check(await until(async () => (await q(`select 1 from patient_files where patient_id = $1`, [lina])).length === 1, 30_000), "uploaded");

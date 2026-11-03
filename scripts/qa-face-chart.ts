@@ -362,6 +362,14 @@ async function main() {
     // The patient's own card has Remove too.
     await cp.goto(`${BASE}/c/${centre.slug}/patients/${centre.patientId}?tab=invoices`, { timeout: 120000 });
     check(await until(async () => (await cp.locator(`[data-bill-remove='${crown.id}']`).count()) === 1, 30000), "the patient's Ready to bill offers Remove on the crown as well");
+    // One tap there too, and Undo puts the price back (2026-11-03).
+    await cp.locator(`[data-bill-remove='${crown.id}']`).click();
+    check(await until(async () => (await cp.locator(`[data-bill-remove='${crown.id}']`).count()) === 0, 10000), "the crown leaves the patient's Ready to bill at one tap");
+    check((await cp.locator("[role=dialog]").count()) === 0, "with no confirm box");
+    check(await until(async () => (await q(`select fee::float as fee from chart_marks where id = $1`, [crown.id]))[0].fee === 0), "and is at no charge in the record");
+    await cp.locator("[data-toast-action]").first().click();
+    check(await until(async () => (await q(`select fee::float as fee from chart_marks where id = $1`, [crown.id]))[0].fee === 300), "Undo puts its 300 back");
+    check(await until(async () => (await cp.locator(`[data-bill-remove='${crown.id}']`).count()) === 1, 30000), "and it is ready to bill again");
     await cp.context().close();
 
     check(errors.length === 0, "no page errors", errors.slice(0, 3).join(" | "));

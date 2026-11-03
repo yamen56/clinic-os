@@ -32,7 +32,7 @@ import { isToothSite, type Mark } from "@/lib/charts/dental/state";
 import { groupLeads, inChartOrder, leadOf } from "@/lib/charts/dental/full-arch";
 import { invoiceLineText } from "@/lib/charts/dental/pricing";
 import type { BilledInvoice } from "@/lib/charts/dental/billing-server";
-import { deleteBilledInvoiceAction, removeFromBillingAction } from "@/app/c/[slug]/(finance)/invoices/actions";
+import { deleteBilledInvoiceAction, removeFromBillingAction, restoreToBillingAction } from "@/app/c/[slug]/(finance)/invoices/actions";
 import { useOptionalDentalStore } from "./store";
 import { moneyOf } from "./money";
 
@@ -45,7 +45,8 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
   const [unticked, setUnticked] = useState<Set<string>>(new Set());
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<BilledInvoice | null>(null);
-  const [removing, setRemoving] = useState<Mark | null>(null);
+  // Taken off with one tap and gone at once; the toast's Undo brings the price back.
+  const [gone, setGone] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   if (!store || !store.canBill) return null;
 
@@ -54,7 +55,7 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
   const work = store.marks
     .filter((m) => !m.voidedAt && m.kind === "procedure" && m.status !== "existing" && !leadOf(m, leads))
     .map((m) => ({ m, cash: moneyOf(m, ctx) }));
-  const ready = work.filter((x) => x.cash.toBill);
+  const ready = work.filter((x) => x.cash.toBill && !gone.has(x.m.id));
   // Planned, not started, priced and on no invoice: billable ahead of the work.
   const ahead = work.filter((x) => x.m.status === "planned" && !x.m.startedAt && !x.cash.billed && x.m.fee != null && x.m.fee > 0);
   const isTicked = (id: string, isReady: boolean) => (isReady ? !unticked.has(id) : ticked.has(id));
@@ -109,19 +110,35 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
     void store.reload();
   };
 
-  // Off the list, still on the chart at no charge (removeFromBillingAction), 2026-10-28.
-  const takeOff = async () => {
-    if (!removing) return;
-    const m = removing;
-    setBusy(true);
+  /*
+    Off the list, still on the chart at no charge (removeFromBillingAction),
+    2026-10-28. One tap since 2026-11-03, as on the Invoices page's desk: no
+    question first, an Undo after.
+  */
+  const unhide = (id: string) =>
+    setGone((s) => {
+      const n = new Set(s);
+      n.delete(id);
+      return n;
+    });
+  const takeOff = async (m: Mark) => {
+    setGone((s) => new Set(s).add(m.id));
     const r = await store.write([m.id], removeFromBillingAction(store.slug, m.id));
-    setBusy(false);
-    setRemoving(null);
     if (r.error) {
+      unhide(m.id);
       toast(I.removeFailed, "error");
       return;
     }
-    toast(I.removed);
+    toast(I.removed, undefined, {
+      label: I.undo,
+      onClick: async () => {
+        const u = await store.write([m.id], restoreToBillingAction(store.slug, [m.id]));
+        if (u.error || !u.restored) return toast(I.restoreFailed, "error");
+        await store.reload();
+        unhide(m.id);
+        toast(I.restored);
+      },
+    });
     void store.reload();
   };
 
@@ -140,7 +157,7 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
       {isReady && (
         <button
           type="button"
-          onClick={() => setRemoving(m)}
+          onClick={() => void takeOff(m)}
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-500 hover:bg-danger-soft hover:text-danger"
           aria-label={`${I.remove}: ${lineOf(m)}`}
           title={I.remove}
@@ -234,16 +251,6 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
           </div>
         )}
       </Card>
-      <ConfirmDialog
-        open={!!removing}
-        onClose={() => setRemoving(null)}
-        onConfirm={() => void takeOff()}
-        title={I.removeTitle}
-        body={removing ? I.removeBody.replace("{line}", lineOf(removing)) : ""}
-        confirmLabel={I.remove}
-        cancelLabel={t.common.cancel}
-        loading={busy}
-      />
       <ConfirmDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}

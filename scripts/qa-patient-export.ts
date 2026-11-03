@@ -316,15 +316,17 @@ async function main() {
       String(bulkAnonApi.status())
     );
 
-    /* Staff may export one file and may not export all of them. This is the
-       assertion the whole owner gate exists for. */
+    /* Staff without patients.export may not export all of them — the
+       assertion the whole owner gate exists for — and, since 08e742b
+       (2026-09-17), not one file either: that route asks for the same
+       capability. */
     const staffCtx = await browser.newContext();
     const staffPage = await staffCtx.newPage();
     await signIn(staffPage, `staff-${slug}@test.local`);
     const staffOne = await staffPage.request.get(
       `${BASE}/api/c/${slug}/patients/${patient}/export`
     );
-    check("staff may still export one file", staffOne.status() === 200, String(staffOne.status()));
+    check("staff without the export capability may not export one file", staffOne.status() === 403, String(staffOne.status()));
     const staffAll = await staffPage.request.get(`${BASE}/api/c/${slug}/patients/export-all`);
     /*
       Refused for lacking the capability, and it matters that it says so.

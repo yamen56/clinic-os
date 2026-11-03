@@ -467,6 +467,11 @@ export function AppointmentsClient({
         canSendDocuments={!isDoctor}
         canOpenPatient={caps.patients}
         canInvoice={caps.invoices}
+        // The sheet takes over from the panel, and reads the visit as Today has it — that copy carries who was told.
+        onLate={(a) => {
+          setPanel(null);
+          setLate(today?.appointments.find((x) => x.id === a.id) ?? a);
+        }}
         onBookNext={(a) => bookFrom({ id: a.patient_id, name: a.patient_name }, nextVisitOf(a, tz))}
       />
 

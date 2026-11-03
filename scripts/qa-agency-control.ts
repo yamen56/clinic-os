@@ -105,7 +105,7 @@ async function main() {
 
     // The demo clinic starts on the full product; take one module away and
     // confirm the workspace loses it.
-    const demo = (await db.query(`select id, slug from clinics where slug = 'rima-dental'`)).rows[0];
+    const demo = (await db.query(`select id, slug, features from clinics where slug = 'rima-dental'`)).rows[0];
     if (!demo) fail("demo clinic missing — run `npm run seed`");
 
     // In through a support visit: typing the address no longer opens a clinic.
@@ -134,7 +134,8 @@ async function main() {
       fail(`a disabled module's route was still reachable: ${page.url()}`);
     ok("the disabled module's route redirects, so the gate is not just the nav");
 
-    await db.query(`update clinics set features = '{}'::jsonb where id = $1`, [demo.id]);
+    // Back to what it had, not to {}: dental is opt-in, and {} would switch the demo clinic's chart off for every later suite.
+    await db.query(`update clinics set features = $2 where id = $1`, [demo.id, JSON.stringify(demo.features ?? {})]);
     await page.goto(`${BASE}/c/${demo.slug}`);
     await page.waitForSelector("nav", { timeout: 20000 });
     if (!((await page.textContent("nav")) ?? "").includes("Campaigns"))

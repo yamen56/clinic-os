@@ -240,17 +240,25 @@ async function main() {
   // ---- Treatment prices: the kinds table (Ceramic, Zirconia…) once pushed the
   //      page 9px past the screen, and the phone zoomed the whole page out.
   await go(page, `/c/${SLUG}/settings/prices`);
-  await page.waitForSelector("[data-price-variant]", { timeout: 60000 });
+  // The kind's row is `display: contents` — attached, never "visible" to Playwright.
+  await page.waitForSelector("[data-price-variant]", { state: "attached", timeout: 60000 });
   await noSideScroll(page, "treatment prices");
+  // One price per treatment since 10-18 (per-visit prices went), and each kind's price beside its name.
   const priceCols = (await page.evaluate(`(() => {
-    const row = document.querySelector("[data-price-variant]").closest("[data-price-row]");
-    const a = row.querySelector("[data-price-col=item] input").getBoundingClientRect();
-    const b = row.querySelector("[data-price-col=session] input").getBoundingClientRect();
-    return { item: Math.round(a.width), visit: Math.round(b.width), sameLine: Math.abs(a.top - b.top) < 2 };
-  })()`)) as { item: number; visit: number; sameLine: boolean };
+    const v = document.querySelector("[data-price-variant]");
+    const a = v.closest("[data-price-row]").querySelector("[data-price-col=price] input").getBoundingClientRect();
+    const n = v.querySelector("bdi").getBoundingClientRect();
+    const b = v.querySelector("input").getBoundingClientRect();
+    return {
+      price: Math.round(a.width),
+      kind: Math.round(b.width),
+      sameLine: Math.abs((n.top + n.bottom) / 2 - (b.top + b.bottom) / 2) < 4,
+      onScreen: b.left >= 0 && b.right <= innerWidth,
+    };
+  })()`)) as { price: number; kind: number; sameLine: boolean; onScreen: boolean };
   check(
-    priceCols.sameLine && priceCols.item >= 90 && priceCols.visit >= 90,
-    "a treatment's two prices sit side by side, each wide enough to type in",
+    priceCols.price >= 90 && priceCols.kind >= 80 && priceCols.sameLine && priceCols.onScreen,
+    "a treatment's price, and each kind's beside its name, are on the screen and wide enough to type in",
     JSON.stringify(priceCols)
   );
   await page.screenshot({ path: join(SHOTS, "mobile-treatment-prices.png") });

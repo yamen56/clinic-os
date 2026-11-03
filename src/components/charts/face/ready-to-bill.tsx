@@ -27,7 +27,7 @@ import { fmtMoney } from "@/lib/dates";
 import { faceLineText } from "@/lib/charts/face/catalog";
 import type { FaceMark } from "@/lib/charts/face/db";
 import type { BilledInvoice } from "@/lib/charts/dental/billing-server";
-import { deleteBilledInvoiceAction, removeFromBillingAction } from "@/app/c/[slug]/(finance)/invoices/actions";
+import { deleteBilledInvoiceAction, removeFromBillingAction, restoreToBillingAction } from "@/app/c/[slug]/(finance)/invoices/actions";
 import { useOptionalFaceStore } from "./store";
 
 export function FaceReadyToBill({ className = "mb-4 p-4" }: { className?: string }) {
@@ -36,7 +36,6 @@ export function FaceReadyToBill({ className = "mb-4 p-4" }: { className?: string
   const { toast } = useToast();
   const store = useOptionalFaceStore();
   const [unticked, setUnticked] = useState<Set<string>>(new Set());
-  const [removing, setRemoving] = useState<FaceMark | null>(null);
   const [deleting, setDeleting] = useState<BilledInvoice | null>(null);
   const [busy, setBusy] = useState(false);
   if (!store || !store.canBill) return null;
@@ -72,16 +71,25 @@ export function FaceReadyToBill({ className = "mb-4 p-4" }: { className?: string
       return n;
     });
 
-  const remove = async () => {
-    if (!removing) return;
-    const m = removing;
-    setBusy(true);
+  // One tap, gone at once, with an Undo that brings the price back — as on the Invoices page's desk (2026-11-03).
+  const remove = async (m: FaceMark) => {
+    const was = { fee: m.fee, feeManual: m.feeManual };
+    const put = (v: Partial<FaceMark>) => store.setMarks((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...v } : x)));
+    put({ fee: 0, feeManual: true });
     const r = await store.write([m.id], removeFromBillingAction(store.slug, m.id));
-    setBusy(false);
-    setRemoving(null);
-    if (r.error) return toast(I.removeFailed, "error");
-    store.setMarks((prev) => prev.map((x) => (x.id === m.id ? { ...x, fee: 0, feeManual: true } : x)));
-    toast(I.removed);
+    if (r.error) {
+      put(was);
+      return toast(I.removeFailed, "error");
+    }
+    toast(I.removed, undefined, {
+      label: I.undo,
+      onClick: async () => {
+        const u = await store.write([m.id], restoreToBillingAction(store.slug, [m.id]));
+        if (u.error || !u.restored) return toast(I.restoreFailed, "error");
+        put(was);
+        toast(I.restored);
+      },
+    });
   };
 
   const deleteInvoice = async () => {
@@ -137,7 +145,7 @@ export function FaceReadyToBill({ className = "mb-4 p-4" }: { className?: string
                     )}
                     <button
                       type="button"
-                      onClick={() => setRemoving(m)}
+                      onClick={() => void remove(m)}
                       className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-500 hover:bg-danger-soft hover:text-danger"
                       aria-label={`${I.remove}: ${lineOf(m)}`}
                       title={I.remove}
@@ -200,16 +208,6 @@ export function FaceReadyToBill({ className = "mb-4 p-4" }: { className?: string
           </div>
         )}
       </Card>
-      <ConfirmDialog
-        open={!!removing}
-        onClose={() => setRemoving(null)}
-        onConfirm={() => void remove()}
-        title={I.removeTitle}
-        body={removing ? I.removeBody.replace("{line}", lineOf(removing)) : ""}
-        confirmLabel={I.remove}
-        cancelLabel={t.common.cancel}
-        loading={busy}
-      />
       <ConfirmDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}

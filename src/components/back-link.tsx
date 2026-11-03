@@ -79,7 +79,8 @@ export function BackLink({ href, label, icon = false }: { href: string; label: s
       onClick={onClick}
       aria-label={spoken}
       data-back
-      className="-ms-2 inline-flex h-9 touch-manipulation items-center gap-1.5 rounded-ctl px-2 text-[13px] font-medium text-ink-500 transition-colors duration-140 ease-out hover:bg-sunken hover:text-ink-900"
+      // No negative margin of its own: the wrapper pulls it to the page's edge, or it spills 8px out of its box.
+      className="inline-flex h-9 touch-manipulation items-center gap-1.5 rounded-ctl px-2 text-[13px] font-medium text-ink-500 transition-colors duration-140 ease-out hover:bg-sunken hover:text-ink-900"
     >
       <ArrowLeft className="h-4 w-4 shrink-0 rtl:rotate-180" />
       {label}
