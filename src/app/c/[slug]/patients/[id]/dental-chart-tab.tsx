@@ -1001,10 +1001,19 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     setRedo(null);
   };
 
-  /** What usually comes next — a crown after a root canal — planned on the same tooth. */
+  /*
+    What usually comes next — a crown after a root canal — planned on the same
+    tooth, and opened: pressing it takes the doctor to that treatment, its
+    steps and price, rather than leaving them on the one just finished (Yamen,
+    2026-11-03: "when I press What usually comes next I want it to make me go
+    there"). Opened whether or not it has steps: a core build-up has none, and
+    is still where the doctor wanted to go.
+  */
   const planFollowUp = (key: string, site: string) => {
     const tr = BUILT_IN_BY_KEY.get(key);
-    if (tr) record(tr, [{ site, surfaces: [] }], undefined, undefined, { status: "planned", open: false });
+    if (!tr) return;
+    const [fresh] = record(tr, [{ site, surfaces: [] }], undefined, undefined, { status: "planned", open: false });
+    if (fresh) setOpenItem(fresh.id);
   };
 
   // No reason asked: the history keeps who voided it and when, and a doctor at the chair has no time for an essay.

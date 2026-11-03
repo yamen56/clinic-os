@@ -101,6 +101,7 @@ async function main() {
       const body = { marks: marks.map((m) => ({ id: randomUUID(), eventId: randomUUID(), surfaces: [], detail: {}, ...m })) };
       const res = await page.request.post(`${api}/marks`, { data: body });
       if (!res.ok()) throw new Error(`record ${res.status()} ${await res.text()}`);
+      return body.marks.map((m) => m.id);
     };
     // A mouth with history and a plan.
     await record([{ site: "16", surfaces: ["O", "M"], treatmentKey: "caries", status: "existing" }]);
@@ -199,6 +200,28 @@ async function main() {
     check(await until(async () => (await viewing.getAttribute("data-viewing")) === "after-plan"), "the bar's last step is After the plan");
     await page.keyboard.press("ArrowLeft");
     check(await until(async () => (await viewing.getAttribute("data-viewing")) === "today"), "one step back is Today");
+
+    /* ── What usually comes next ─────────────────────────────────────── */
+    console.log("What usually comes next");
+    const [rct37] = await record([{ site: "37", treatmentKey: "rct", status: "done", detail: { canals: "3" } }]);
+    await openFile(page, fileUrl);
+    await chart(page).locator("[data-tooth='37']").first().click();
+    await page.locator(`[data-dental-panel] [data-mark='${rct37}'] [data-open-item]`).first().click();
+    const rctCard = page.locator(`[data-procedure='${rct37}']`);
+    await rctCard.waitFor({ timeout: 15000 });
+    const planCrown = rctCard.locator("[data-follow-up='crown']");
+    check(await planCrown.isVisible(), "a finished root canal suggests the crown");
+    await planCrown.click();
+    const crown37 = async () => (await q(`select id, status from chart_marks where patient_id = $1 and site = '37' and treatment_key = 'crown' and voided_at is null`, [patient.id]))[0];
+    check(await until(async () => (await crown37())?.status === "planned"), "pressing it plans a crown on 37");
+    const crownId = (await crown37())?.id;
+    check(await until(async () => (await page.locator(`[data-procedure='${crownId}']`).count()) > 0, 15000), "and goes there: the crown's own card opens");
+    check(
+      (await page.locator(`[data-procedure='${crownId}']`).first().innerText()).includes("Preparation & impression"),
+      "showing its first step, ready to record"
+    );
+    await page.screenshot({ path: join(SHOTS, "follow-up-crown.png") });
+    for (let i = 0; i < 3 && (await page.locator("[role='dialog'][aria-modal='true']").count()); i++) await page.keyboard.press("Escape");
 
     /* ── On a phone ──────────────────────────────────────────────────── */
     console.log("On a phone");
