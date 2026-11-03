@@ -389,6 +389,34 @@ export async function earningsByDoctor(
 }
 
 /**
+ * Every doctor's earnings month by month, in the clinic's own calendar.
+ *
+ * What the payout list needs to say which months are still owed (0091). The
+ * same rows as every total above, grouped by the month each was earned in, so
+ * a month here is always the figure the earnings screen shows for it.
+ */
+export async function earningsByDoctorMonth(
+  c: PoolClient,
+  scope: EarningsScope,
+  timezone: string
+): Promise<{ doctorMemberId: string; period: string; earned: number }[]> {
+  const { sql, params } = scopeSql(scope);
+  const r = await c.query(
+    `select doctor_member_id,
+            to_char(date_trunc('month', paid_at at time zone $4), 'YYYY-MM-DD') as period,
+            coalesce(sum(earned), 0) as earned
+       from (${sql}) e
+      group by 1, 2`,
+    [...params, timezone]
+  );
+  return r.rows.map((row) => ({
+    doctorMemberId: row.doctor_member_id as string,
+    period: row.period as string,
+    earned: Number(row.earned),
+  }));
+}
+
+/**
  * What the clinic collected, and what is left after the doctors' shares.
  *
  * `gross` is the same figure the revenue tiles show — the sum of payments on

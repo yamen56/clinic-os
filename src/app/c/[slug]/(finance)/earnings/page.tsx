@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { DateTime } from "luxon";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { can, hasFullControl } from "@/lib/auth";
@@ -13,6 +14,7 @@ import {
   type EarningsLine,
 } from "@/lib/earnings";
 import { clinicProfit } from "@/lib/expenses";
+import { offsetOf, owedEarlier, payoutsForPeriod, periodOf, type OwedMonth, type Payout } from "@/lib/payouts";
 import { EarningsClient } from "./earnings-client";
 
 /**
@@ -30,7 +32,7 @@ export default async function EarningsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ m?: string }>;
+  searchParams: Promise<{ m?: string; month?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -60,9 +62,15 @@ export default async function EarningsPage({
     (await inClinic(access, (c) => memberHasEarnings(c, access.clinicId, access.memberId)));
   if (!hasOwn && !clinicWide) redirect(`/c/${slug}`);
 
-  // Clamped: this is a URL, and a two-thousand-month offset is a date library
-  // exception rather than an empty page.
-  const offset = Math.min(0, Math.max(-60, Number(sp.m) || 0));
+  /*
+    Clamped: this is a URL, and a two-thousand-month offset is a date library
+    exception rather than an empty page. `?month=2026-10` names a month
+    outright, for a link that has to mean the same month next month too — the
+    doctor's "you were paid" notification, the owner's list of months owed.
+  */
+  const named = sp.month ? offsetOf(access.clinic.timezone, sp.month) : null;
+  const offset = Math.min(0, Math.max(-60, named ?? (Number(sp.m) || 0)));
+  const period = periodOf(access.clinic.timezone, offset);
   const { start, end } = monthRangeUtc(access.clinic.timezone, offset);
   // The same month as calendar dates, for the expenses side — `spent_on` is a
   // `date` and comparing it against a UTC instant moves a day across the border.
@@ -105,6 +113,28 @@ export default async function EarningsPage({
     const team = clinicWide && hasCommission ? await earningsByDoctor(c, scope) : [];
 
     /*
+      What was paid for this month (0091): every doctor's for the owner, only
+      their own for a doctor. What the earlier months still owe is the owner's
+      to-do, and nobody else's business.
+    */
+    const payouts: Payout[] =
+      clinicWide && hasCommission
+        ? await payoutsForPeriod(c, access.clinicId, period)
+        : hasOwn && access.memberId
+          ? await payoutsForPeriod(c, access.clinicId, period, access.memberId)
+          : [];
+    const owed: OwedMonth[] =
+      clinicWide && hasCommission ? await owedEarlier(c, access.clinicId, access.clinic.timezone, period) : [];
+    // Paid an advance in a month that has earned them nothing yet: still a row, or the payment would be invisible.
+    if (clinicWide) {
+      for (const p of payouts) {
+        if (!team.some((x) => x.doctorMemberId === p.doctorMemberId)) {
+          team.push({ doctorMemberId: p.doctorMemberId, produced: 0, costs: 0, earned: 0 });
+        }
+      }
+    }
+
+    /*
       The profit chain. Expenses are only subtracted for somebody who may see
       them — `invoices.analytics` is the takings and `expenses` is the spending,
       and they are separate grants on purpose. A member with the takings but not
@@ -125,7 +155,7 @@ export default async function EarningsPage({
     // Names for the payout table, and the viewer's own rate. Only the rate of
     // the person reading is selected — `members_access` would happily return
     // everybody's, and what a colleague is paid is not this screen's business.
-    const ids = [...new Set(team.map((t) => t.doctorMemberId))];
+    const ids = [...new Set([...team, ...owed].map((t) => t.doctorMemberId))];
     const names: Record<string, string> = {};
     if (ids.length) {
       const r = await c.query(
@@ -135,7 +165,7 @@ export default async function EarningsPage({
       );
       for (const row of r.rows) names[row.id as string] = row.full_name as string;
     }
-    return { hasCommission, self, detail, team, net, names, showSpend };
+    return { hasCommission, self, detail, team, net, names, showSpend, payouts, owed };
   });
 
   // The viewer's own deal: their rate, and how a treatment's costs come into it — or their fee by the visit.
@@ -156,6 +186,8 @@ export default async function EarningsPage({
 
   return (
     <EarningsClient
+      // A new month is a new page: what the last one held locally must not carry over.
+      key={period}
       slug={slug}
       currency={access.clinic.currency}
       timezone={access.clinic.timezone}
@@ -172,6 +204,11 @@ export default async function EarningsPage({
       names={data.names}
       showTeam={clinicWide}
       canOpenInvoices={can(access, "invoices")}
+      period={period}
+      today={DateTime.now().setZone(access.clinic.timezone).toISODate()!}
+      myMemberId={access.memberId}
+      payouts={data.payouts}
+      owed={data.owed}
     />
   );
 }

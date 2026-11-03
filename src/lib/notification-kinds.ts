@@ -46,6 +46,7 @@ export const PREF_KEYS = [
   "whatsapp",
   "automation",
   "visit_handoff",
+  "payouts",
 ] as const;
 export type PrefKey = (typeof PREF_KEYS)[number];
 
@@ -117,6 +118,8 @@ export const PREF_DEFS: PrefDef[] = [
   { key: "billing", group: "clinic", shownTo: (a) => frontDesk(a) && a.caps.invoices === true },
   { key: "whatsapp", group: "clinic", lockOff: true, shownTo: (a) => a.isOwner },
   { key: "automation", group: "clinic", shownTo: () => true },
+  // Being told the clinic has paid you (0091) — whoever has earnings of their own to be paid.
+  { key: "payouts", group: "clinic", shownTo: (a) => a.caps.earnings === true },
 ];
 
 const PREF_BY_KEY = new Map(PREF_DEFS.map((d) => [d.key, d]));
@@ -153,6 +156,8 @@ export function prefKeyFor(kind: string): PrefKey | null {
       return "prescriptions";
     case "einvoice_failed":
       return "billing";
+    case "payout_paid":
+      return "payouts";
     case "document_integrity":
     case "test":
       return null;

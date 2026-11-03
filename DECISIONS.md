@@ -285,3 +285,13 @@ The brief specified Supabase and BullMQ/Redis. Neither was installable here — 
 135. **Lab work goes on the treatment's lead** — a bridge is billed once, on its lead tooth (0074), so its lab case is sent from the lead and nowhere else. The share finds a line's lab cost through `invoice_item_marks`, and a case on another tooth would never reach it. A full arch's case is on the arch entry, for the same reason.
 
 136. **Material costs were taken out again** — added on 2026-10-17 (#133) and removed on 2026-10-19: "it only makes things more complicated". Migration `0083` drops the materials cost on prices, on a patient's treatment and on the doctor's line. It was applied after the code that stopped reading those columns was live. Lab costs and each doctor's deal on them stay. A line billed in those two days lost its frozen materials, so its doctor's share is what it would have been without them.
+
+## Paying the doctors
+
+137. **What a doctor is owed is earned less paid, never a flag** — Yamen asked on 2026-11-03 for "doctor payouts that can be marked as paid". A payout (0091) is money handed over for one month, and the month's status is computed: its earnings, read by the same ledger as the earnings screen, less what was paid for it. A stored "paid" would go stale, because a month's share moves after the fact (an instalment dated into it, a lab bill corrected, an invoice cancelled), and a paid month must then say "owed again" or "paid over" rather than keep saying paid. One month at a time, because clinics here pay monthly and a doctor asks about a month.
+
+138. **A payout is not an expense** — the doctors' share is already taken off what the clinic kept, so writing a payout to Expenses as well would count it twice. Salaries are the other way round: a repeating Salaries bill (0086), with no payout row.
+
+139. **Only months after the first payout are listed as owed** — every clinic paid its doctors by hand before this existed, so listing every earlier month would put debts in front of the owner that nobody has. From the first month a doctor is paid here, a finished month left short is something forgotten, and it is listed (at most a year back).
+
+140. **The doctor is told, and untold** — marking a month paid notifies the doctor in their own language, with a link to that month by name (`?month=`), not by offset, so the link means the same month next month too. Removing a payout deletes that notification, from system context because a colleague's notifications are theirs alone: "you were paid" left standing for money never handed over is the one notification here that would be a lie.

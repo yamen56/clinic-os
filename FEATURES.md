@@ -1334,6 +1334,21 @@ clinic has actually agreed a share with, or who has earnings on record from one 
 since ended. A doctor with no arrangement gets no nav item and no page — enforced in the
 page itself, not merely hidden in the nav.
 
+**Payouts** ([src/lib/payouts.ts](src/lib/payouts.ts), 0091) — the by-doctor table has a
+Paid column. **Mark paid** opens the amount still owed for the month on screen (editable),
+the day, how (cash, CliQ, transfer, cheque) and a note; the row turns paid at once, with
+Undo on the toast. A month can be paid in parts ("15.00 · 25.00 left", **Pay the rest**),
+and the badge opens the month's payments, where one recorded by mistake is removed. What is
+owed is never stored: it is the month's earnings, read live, less `doctor_payouts` — so a
+month that grows after it was paid shows as owed again, and one that shrinks as paid over.
+A payout is **not** an expense: the doctors' share is already off what the clinic kept.
+**Still owed from earlier months** lists finished months left short, from the first month
+the clinic paid that doctor here (earlier months were paid by hand, before this existed),
+at most a year back, each opening its month (`?month=YYYY-MM`). The doctor sees their own
+month — not paid yet, paid on which day, or what is still to come — and is notified
+(`payout_paid`, switch "You've been paid") with a link to that month; removing the payout
+takes the notification back. Owner and full access only, like the table itself.
+
 **Who sees the clinic's takings.** `invoices.analytics` gates every clinic-wide money
 figure: the dashboard's revenue tile, its 14-day chart and its "what earns" breakdowns, and
 the Today / This week / This month / Outstanding tiles on the invoices list. It is **off by
