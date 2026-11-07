@@ -1580,6 +1580,26 @@ adds one at the chair ("Add a treatment", on the areas just picked) or a kind of
 - Each entry freezes how it counted and which kind it was in `chart_marks.detail`, because the
   clinic may rename or archive its own treatment later; `shapeOf` reads it when the catalog cannot.
   The invoice line names the kind.
+- Settings → Face prices adds one too, with the same form, and lists it at once for its price.
+- Built in since 2026-11-08: six more treatments in code (biostimulator, exosomes, IPL, carbon
+  laser peel, microdermabrasion, dermaplaning), and 26 kinds of the built-in ones as rows (0097:
+  `face_seed_kinds`, once per clinic, on the migration and when `aesthetic` is switched on;
+  a kind the clinic switched off is not brought back).
+
+### Face chart: points, and the head turned (2026-11-08)
+
+Any treatment is recorded on any part of the face; a treatment's usual parts only order the
+list. The price is a box when recording (`fee_manual`), and Retouch records a top-up against an
+earlier entry (`redo_of`) at the price the doctor says, 0 if free.
+
+- A tap stores the exact spot, `areas[].points [{x, y, v}]`, as shares of its picture; the part
+  follows from where it is (`zoneAt(x, y, view)`, which the server re-asks of every point). Quick
+  picks and the keyboard still choose whole parts, which tint as before.
+- Five pictures, `VIEW_SRC`: left, front-left, front, front-right, right, the patient's sides.
+  The turned ones were cut from one Canva sheet (page 2 of design DAHZTbj2560) and set at the
+  front's 945 × 1264; `zonesOn(view)` places only the parts each one shows.
+- Past spots are dots on the view they were marked on; one opens a card with what was done, by
+  whom, how much and with which product, and Treat here again. Repeat starts on the same spots.
 
 ### What the clinic kept
 

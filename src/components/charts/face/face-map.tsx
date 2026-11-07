@@ -3,8 +3,9 @@
 /*
   The face, and the exact spots a doctor worked on.
 
-  The picture is a mannequin head (public/charts/face/face-front.webp): real
-  in shape, nobody's face. A tap puts a point exactly where it lands, and the
+  The picture is a mannequin head, real in shape and nobody's face, from the
+  front or turned (public/charts/face/face-*.webp): each view has its own
+  picture and its own places for the parts of the face (catalog `zonesOn`). A tap puts a point exactly where it lands, and the
   part of the face it is in follows from where that is (Yamen, 2026-11-08: "add
   a point instead of choosing a whole area"). A new point is tapped again to
   take it off. Points from past visits stay on the face in the colour of the
@@ -20,14 +21,13 @@
 */
 
 import type { ReactNode } from "react";
-import { FACE_ZONES, FAMILY_COLOR, zoneAt, type Family } from "@/lib/charts/face/catalog";
+import { FAMILY_COLOR, VIEW_CAPTION, VIEW_NAME, VIEW_SRC, zoneAt, zonesOn, type Family, type FaceView } from "@/lib/charts/face/catalog";
 
-export const FACE_SRC = "/charts/face/face-front.webp";
-
-export type PendingPoint = { x: number; y: number; zone: string };
-export type PastPoint = { key: string; markId: string; x: number; y: number; family: Family };
+export type PendingPoint = { x: number; y: number; zone: string; v: FaceView };
+export type PastPoint = { key: string; markId: string; x: number; y: number; v: FaceView; family: Family };
 
 export function FaceMap({
+  view,
   selected,
   points,
   past,
@@ -42,8 +42,10 @@ export function FaceMap({
   labels,
   children,
 }: {
+  /** Which picture: the front, or the head turned. */
+  view: FaceView;
   selected: string[];
-  /** The points being recorded now. */
+  /** The points being recorded now, on every view; only this view's are drawn. */
   points: PendingPoint[];
   /** Points from the treatments already recorded. */
   past: PastPoint[];
@@ -66,8 +68,8 @@ export function FaceMap({
     const r = box.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width;
     const y = (e.clientY - r.top) / r.height;
-    const zone = zoneAt(x, y);
-    if (zone) onPoint({ x, y, zone });
+    const zone = zoneAt(x, y, view);
+    if (zone) onPoint({ x, y, zone, v: view });
   };
 
   return (
@@ -80,10 +82,11 @@ export function FaceMap({
           if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.faceImg !== undefined) place(e, e.currentTarget);
         }}
         data-face-map
+        data-face-view={view}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- a fixed local picture, drawn under buttons placed by percentage */}
-        <img src={FACE_SRC} alt="" draggable={false} className="absolute inset-0 h-full w-full select-none rounded-ctl" data-face-img />
-        {FACE_ZONES.map((z) => {
+        <img src={VIEW_SRC[view]} alt={VIEW_NAME[view]} draggable={false} className="absolute inset-0 h-full w-full select-none rounded-ctl" data-face-img />
+        {zonesOn(view).map((z) => {
           const on = selected.includes(z.key);
           const tint = tints.get(z.key);
           return (
@@ -120,7 +123,7 @@ export function FaceMap({
         })}
 
         {/* Before: what was done where, each spot in the colour of its kind of work. */}
-        {past.map((p) => {
+        {past.filter((p) => p.v === view).map((p) => {
           const open = openKey === p.key;
           return (
             <button
@@ -145,7 +148,8 @@ export function FaceMap({
         })}
 
         {/* Now: the spots being recorded, tapped again to take one off. */}
-        {points.map((p, i) => (
+        {points.map((p, i) =>
+          p.v !== view ? null : (
           <button
             key={`${p.x}:${p.y}:${i}`}
             type="button"
@@ -160,14 +164,22 @@ export function FaceMap({
           >
             <span className="block h-3.5 w-3.5 rounded-full bg-brand-600 shadow-[0_0_0_2.5px_white,0_0_0_4px_rgba(11,18,32,0.35)]" />
           </button>
-        ))}
+          )
+        )}
 
         {children}
       </div>
-      <div className="mt-1.5 flex justify-between px-1 text-[12px] text-ink-500">
-        <span>{labels.right}</span>
-        <span>{labels.left}</span>
-      </div>
+      {/* Which side is which: across the front, and which side a turned head shows. */}
+      {view === "front" ? (
+        <div className="mt-1.5 flex justify-between px-1 text-[12px] text-ink-500">
+          <span>{labels.right}</span>
+          <span>{labels.left}</span>
+        </div>
+      ) : (
+        <div className="mt-1.5 text-center text-[12px] text-ink-500" data-face-view-caption>
+          {VIEW_CAPTION[view]}
+        </div>
+      )}
     </div>
   );
 }

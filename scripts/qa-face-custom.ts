@@ -210,15 +210,48 @@ async function main() {
     check((await page.locator("[data-zone='lips']").getAttribute("aria-pressed")) === "true" && (await page.locator("[data-face-point]").count()) === 0, "from the keyboard a part is chosen whole");
     await page.locator("[data-face-panel='areas'] button", { hasText: "Clear" }).click();
 
+    console.log("The head turned (2026-11-08)");
+    check((await page.locator("[data-face-view-tab]").count()) === 5, "five views: left, front-left, front, front-right, right");
+    await page.locator("[data-face-view-tab='left']").click();
+    check((await page.locator("[data-face-map]").getAttribute("data-face-view")) === "left" && (await page.locator("[data-face-img]").getAttribute("src"))?.includes("face-left"), "the left view shows the head from the left");
+    check((await page.locator("[data-zone='cheek_r']").count()) === 0 && (await page.locator("[data-zone='cheek_l']").count()) === 1, "with only the parts it shows");
+    check((await page.locator(`[data-face-past='${pointed.id}']`).count()) === 0, "and none of the front's points");
+    const lb = (await map.boundingBox())!;
+    await map.click({ position: { x: lb.width * 0.31, y: lb.height * 0.53 } });
+    check((await page.locator("[data-face-point='cheek_l']").count()) === 1, "a tap on the left cheek is the left cheek");
+    check((await page.locator("[data-face-view-tab='left']").innerText()).includes("1"), "the view counts the points on it");
+    await page.locator("[data-face-view-tab='front']").click();
+    check((await page.locator("[data-face-point]").count()) === 0 && (await page.locator("[data-face-panel='areas']").count()) === 1, "on the front it is not drawn, but it is still being recorded");
+    await page.locator("[data-face-treatment='aes_filler']").click();
+    await page.waitForSelector("[data-face-panel='record']");
+    await page.locator("[data-face-save]").click();
+    check(
+      await until(async () => (await q(`select 1 from chart_marks where clinic_id = $1 and treatment_key = 'aes_filler' and areas @> '[{"zone":"cheek_l"}]'`, [clinic.id])).length === 1),
+      "the filler is saved on the left cheek"
+    );
+    const [side] = await q(`select id, areas from chart_marks where clinic_id = $1 and treatment_key = 'aes_filler' and areas @> '[{"zone":"cheek_l"}]'`, [clinic.id]);
+    check((side.areas as { points?: { v?: string }[] }[])[0]?.points?.[0]?.v === "left", "with the view it was marked on", JSON.stringify(side.areas));
+    await page.reload();
+    await page.waitForSelector("[data-face-map]", { timeout: 120000 });
+    check((await page.locator(`[data-face-past='${side.id}']`).count()) === 0, "after, its dot is not on the front");
+    check((await page.locator("[data-face-view-tab='left'] span[aria-hidden]").count()) === 1, "the left view says it has points");
+    await page.locator("[data-face-view-tab='left']").click();
+    check((await page.locator(`[data-face-past='${side.id}']`).count()) === 1, "it is on the left view");
+    const wrongView = await page.request.post(`${BASE}/api/c/${slug}/patients/${patient.id}/face/marks`, {
+      data: { id: crypto.randomUUID(), eventId: crypto.randomUUID(), treatmentKey: "aes_filler", areas: [{ zone: "cheek_l", points: [{ x: 0.31, y: 0.53, v: "front" }] }] },
+    });
+    check(wrongView.status() === 400, "a point is checked against the picture it says it was on", String(wrongView.status()));
+    await page.locator("[data-face-view-tab='front']").click();
+
     console.log("A treatment added from the price list");
     await page.goto(`${BASE}/c/${slug}/settings/face-prices`, { timeout: 180000 });
     await page.waitForSelector("[data-face-prices]", { timeout: 120000 });
     await page.locator("[data-face-prices-add]").click();
-    await page.locator("[data-face-new-name]").fill("Exosomes");
+    await page.locator("[data-face-new-name]").fill("Salmon PDRN");
     await page.locator("[data-face-new-family]").selectOption("skin");
     await page.locator("[data-face-new-save]").click();
     let exo: { key: string } | undefined;
-    check(await until(async () => !!(exo = (await q(`select key from aesthetic_treatments where clinic_id = $1 and name = 'Exosomes'`, [clinic.id]))[0])), "Face prices adds a treatment");
+    check(await until(async () => !!(exo = (await q(`select key from aesthetic_treatments where clinic_id = $1 and name = 'Salmon PDRN'`, [clinic.id]))[0])), "Face prices adds a treatment");
     check(await until(async () => (await page.locator(`[data-face-price-row='${exo?.key}']`).count()) === 1), "and lists it at once");
     check(await until(async () => (await page.evaluate("document.activeElement && document.activeElement.getAttribute('data-price-box')")) === exo?.key), "with its price box ready to type in");
 

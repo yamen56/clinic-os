@@ -37,9 +37,9 @@ const bodySchema = z.object({
       z.object({
         zone: z.string().max(24),
         units: z.number().int().min(0).max(1000).optional(),
-        /** The exact spots worked on in this area, on its picture (2026-11-08). */
+        /** The exact spots worked on in this area, each on the picture it was marked on (2026-11-08). */
         points: z
-          .array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), v: z.enum(["front"]).optional() }))
+          .array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), v: z.enum(["left", "front_left", "front", "front_right", "right"]).optional() }))
           .max(40)
           .optional(),
       })
@@ -81,7 +81,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     // Each area once, and a real one. Any treatment may be done anywhere: the doctor says where they worked.
     if (new Set(zones).size !== zones.length || !zones.every((z) => isZone(z))) return { error: "invalid_area" as const };
     // A spot is in the area it is filed under, as the chart worked it out.
-    if (!d.areas.every((a) => (a.points ?? []).every((p) => zoneAt(p.x, p.y) === a.zone))) return { error: "invalid_area" as const };
+    if (!d.areas.every((a) => (a.points ?? []).every((p) => zoneAt(p.x, p.y, p.v ?? "front") === a.zone))) return { error: "invalid_area" as const };
     // Units only where the treatment is dosed in them.
     const areas = inFaceOrder(
       d.areas.map((a) => ({

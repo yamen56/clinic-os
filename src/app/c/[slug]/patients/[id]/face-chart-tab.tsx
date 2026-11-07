@@ -53,7 +53,11 @@ import {
   type FaceVariant,
   type PricedBy,
   FACE_ZONES,
+  FACE_VIEWS,
+  VIEW_NAME,
+  VIEW_SHORT,
   zoneAt,
+  type FaceView,
 } from "@/lib/charts/face/catalog";
 import type { FaceMark } from "@/lib/charts/face/db";
 import type { StockProduct } from "@/lib/charts/face/stock";
@@ -119,6 +123,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const sel = useMemo(() => inFaceOrder([...new Set([...whole, ...pts.map((p) => p.zone)])].map((zone) => ({ zone }))).map((a) => a.zone), [whole, pts]);
   // A past spot whose card is open, and whether past spots are drawn at all.
   const [spot, setSpot] = useState<PastPoint | null>(null);
+  // The picture in front of the doctor: the face from the front, or turned.
+  const [view, setView] = useState<FaceView>("front");
   const [showPast, setShowPast] = useState(true);
   const [tKey, setTKey] = useState<string | null>(null);
   const [units, setUnits] = useState<Record<string, number>>({});
@@ -173,7 +179,9 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const pastPoints = useMemo<PastPoint[]>(
     () =>
       showPast
-        ? live.flatMap((m) => m.areas.flatMap((a, ai) => (a.points ?? []).map((p, pi) => ({ key: `${m.id}:${ai}:${pi}`, markId: m.id, x: p.x, y: p.y, family: m.family }))))
+        ? live.flatMap((m) =>
+            m.areas.flatMap((a, ai) => (a.points ?? []).map((p, pi) => ({ key: `${m.id}:${ai}:${pi}`, markId: m.id, x: p.x, y: p.y, v: p.v ?? "front", family: m.family })))
+          )
         : [],
     [live, showPast]
   );
@@ -247,7 +255,10 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     // A repeat is on the same spots, and the parts done whole are whole again.
     if (from) {
       setWhole(from.areas.filter((a) => !a.points?.length).map((a) => a.zone));
-      setPts(from.areas.flatMap((a) => (a.points ?? []).map((p) => ({ x: p.x, y: p.y, zone: a.zone }))));
+      setPts(from.areas.flatMap((a) => (a.points ?? []).map((p) => ({ x: p.x, y: p.y, zone: a.zone, v: p.v ?? "front" }))));
+      // On the picture its points were marked on.
+      const firstView = from.areas.flatMap((a) => a.points ?? [])[0]?.v;
+      if (firstView) setView(firstView);
     }
     setSpot(null);
     setTKey(k);
@@ -277,7 +288,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const areasNow = (x: FaceTreatment): Area[] =>
     inFaceOrder(
       sel.map((z) => {
-        const here = pts.filter((p) => p.zone === z).map(({ x: px, y: py }) => ({ x: px, y: py, v: "front" as const }));
+        const here = pts.filter((p) => p.zone === z).map(({ x: px, y: py, v }) => ({ x: px, y: py, v }));
         return { zone: z, ...(x.units ? { units: units[z] ?? 0 } : {}), ...(here.length ? { points: here } : {}) };
       })
     );
@@ -575,7 +586,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const spotCard = (p: PastPoint) => {
     const m = s.marks.find((x) => x.id === p.markId);
     if (!m) return null;
-    const area = m.areas.find((a) => a.points?.some((q) => q.x === p.x && q.y === p.y));
+    const area = m.areas.find((a) => a.points?.some((q) => q.x === p.x && q.y === p.y && (q.v ?? "front") === p.v));
     const used = usedOn(m.id);
     const right = p.x > 0.5;
     const below = p.y < 0.55;
@@ -629,8 +640,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             <button
               type="button"
               onClick={() => {
-                const zone = zoneAt(p.x, p.y);
-                if (zone) addPoint({ x: p.x, y: p.y, zone });
+                const zone = zoneAt(p.x, p.y, p.v);
+                if (zone) addPoint({ x: p.x, y: p.y, zone, v: p.v });
               }}
               className="inline-flex h-8 items-center gap-1 rounded-full bg-brand-600 px-3 text-[12.5px] font-semibold text-on-brand"
               data-face-spot-again
@@ -712,7 +723,39 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               </button>
             </span>
           </div>
+          {/* The picture: from the front, or the head turned, each way, as it turns. */}
+          <div className="mb-2 flex justify-center" role="tablist" aria-label={F.views}>
+            <div className="flex w-full rounded-full bg-sunken p-0.5 sm:inline-flex sm:w-auto">
+              {FACE_VIEWS.map((v) => {
+                const pending = pts.filter((p) => p.v === v).length;
+                const before = pastPoints.some((p) => p.v === v);
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    role="tab"
+                    aria-selected={view === v}
+                    onClick={() => (setView(v), setSpot(null))}
+                    aria-label={VIEW_NAME[v]}
+                    className={`relative flex min-h-9 min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-full px-1.5 text-[12.5px] font-semibold transition-colors sm:flex-none sm:px-3.5 ${
+                      view === v ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
+                    }`}
+                    data-face-view-tab={v}
+                  >
+                    <span className="sm:hidden">{VIEW_SHORT[v]}</span>
+                    <span className="max-sm:hidden">{VIEW_NAME[v]}</span>
+                    {pending > 0 ? (
+                      <span className="absolute -top-1 end-0 min-w-[17px] rounded-full bg-brand-600 px-1 text-center text-[10px] leading-[17px] text-on-brand tnum">{pending}</span>
+                    ) : (
+                      before && <span className="absolute end-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-ink-400" aria-hidden />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <FaceMap
+            view={view}
             selected={sel}
             points={pts}
             past={pastPoints}

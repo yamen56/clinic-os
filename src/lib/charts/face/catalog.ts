@@ -189,6 +189,21 @@ export const FACE_TREATMENTS: FaceTreatment[] = [
   { key: "aes_laser_skin", en: "Fractional laser", ar: "ليزر فراكشنال", family: "laser", pricedBy: "session", fits: SKIN, aliases: ["co2", "fraxel", "فراكشنال"] },
   { key: "aes_tightening", en: "Skin tightening (HIFU / RF)", ar: "شد البشرة (هايفو)", family: "laser", pricedBy: "session", fits: SKIN, aliases: ["hifu", "rf", "هايفو"] },
   { key: "aes_fat", en: "Fat dissolving", ar: "إذابة الدهون", family: "contour", pricedBy: "session", fits: ["chin", "jaw_r", "jaw_l", "cheek_r", "cheek_l", "neck"], aliases: ["lipolysis", "kybella", "تذويب"] },
+  // Added 2026-11-08, from the list Yamen approved (their kinds are rows: 0097).
+  {
+    key: "aes_biostim",
+    en: "Biostimulator",
+    ar: "محفّز الكولاجين",
+    family: "filler",
+    pricedBy: "syringe",
+    fits: ["temple_r", "temple_l", "cheek_r", "cheek_l", "nasolabial_r", "nasolabial_l", "marionette_r", "marionette_l", "jaw_r", "jaw_l", "chin", "neck"],
+    aliases: ["sculptra", "radiesse", "collagen", "كولاجين"],
+  },
+  { key: "aes_exosomes", en: "Exosomes", ar: "إكسوسومات", family: "skin", pricedBy: "session", fits: ALL, aliases: ["exosome", "إكسوسوم"] },
+  { key: "aes_ipl", en: "IPL", ar: "آي بي إل", family: "laser", pricedBy: "session", fits: SKIN, aliases: ["photofacial", "فوتوفيشال"] },
+  { key: "aes_carbon_peel", en: "Carbon laser peel", ar: "تقشير الكربون بالليزر", family: "laser", pricedBy: "session", fits: SKIN, aliases: ["carbon", "hollywood peel", "كربون"] },
+  { key: "aes_microderm", en: "Microdermabrasion", ar: "صنفرة البشرة", family: "skin", pricedBy: "session", fits: SKIN, aliases: ["microdermabrasion", "صنفرة"] },
+  { key: "aes_dermaplaning", en: "Dermaplaning", ar: "ديرمابلانينج", family: "skin", pricedBy: "session", fits: SKIN.filter((z) => z !== "neck"), aliases: ["dermaplane"] },
 ];
 
 export const FACE_TREATMENT_BY_KEY = new Map(FACE_TREATMENTS.map((t) => [t.key, t]));
@@ -207,13 +222,140 @@ export const DEFAULT_UNITS: Record<string, number> = {
   neck: 30,
 };
 
-/** One area of a treatment as recorded: where, and the units given there when it is dosed. */
 /**
- * The picture a point was marked on. Only the front for now; the side views
- * join it (Yamen, 2026-11-07: front, left, right, and front-angled each way).
+ * The picture a point was marked on: the front, and the head turned each way
+ * (Yamen, 2026-11-07: "front, left, right, lateral frontal to the right and
+ * left"). Left and right are the patient's: the left view shows their left side.
+ * In the order the head turns, which is the order the chart offers them.
  */
-export type FaceView = "front";
-export const FACE_VIEWS: FaceView[] = ["front"];
+export type FaceView = "left" | "front_left" | "front" | "front_right" | "right";
+export const FACE_VIEWS: FaceView[] = ["left", "front_left", "front", "front_right", "right"];
+export const VIEW_NAME: Record<FaceView, string> = {
+  left: "Left",
+  front_left: "Front-left",
+  front: "Front",
+  front_right: "Front-right",
+  right: "Right",
+};
+/** On a phone, where five names have to fit across. */
+export const VIEW_SHORT: Record<FaceView, string> = {
+  left: "Left",
+  front_left: "¾ Left",
+  front: "Front",
+  front_right: "¾ Right",
+  right: "Right",
+};
+/** Under a turned picture, which side of the patient it shows. */
+export const VIEW_CAPTION: Record<Exclude<FaceView, "front">, string> = {
+  left: "The patient's left side",
+  front_left: "Turned to show the patient's left side",
+  front_right: "Turned to show the patient's right side",
+  right: "The patient's right side",
+};
+export const VIEW_SRC: Record<FaceView, string> = {
+  left: "/charts/face/face-left.webp",
+  front_left: "/charts/face/face-front-left.webp",
+  front: "/charts/face/face-front.webp",
+  front_right: "/charts/face/face-front-right.webp",
+  right: "/charts/face/face-right.webp",
+};
+
+type Place = { key: string; x: number; y: number; w: number; h: number };
+
+/*
+  Where each part is on the turned pictures, as on the front. They are cut from
+  one generated sheet of the same mannequin (Canva MAHaQMeL7D8, saved as page 2
+  of design DAHZTbj2560) and set at the front picture's size, 945 × 1264. A part
+  hidden by the turn is simply not on that picture. The right-hand pictures are
+  the left-hand places mirrored, checked on the pictures themselves.
+*/
+const SIDE: Record<Exclude<FaceView, "front">, Place[]> = {
+  left: [
+    { key: "scalp", x: 0.55, y: 0.13, w: 0.42, h: 0.14 },
+    { key: "forehead", x: 0.22, y: 0.28, w: 0.2, h: 0.11 },
+    { key: "glabella", x: 0.13, y: 0.375, w: 0.06, h: 0.04 },
+    { key: "temple_l", x: 0.35, y: 0.365, w: 0.09, h: 0.08 },
+    { key: "crows_l", x: 0.265, y: 0.425, w: 0.07, h: 0.05 },
+    { key: "tear_l", x: 0.195, y: 0.462, w: 0.09, h: 0.03 },
+    { key: "nose", x: 0.085, y: 0.48, w: 0.1, h: 0.1 },
+    { key: "cheek_l", x: 0.31, y: 0.53, w: 0.2, h: 0.1 },
+    { key: "nasolabial_l", x: 0.155, y: 0.57, w: 0.06, h: 0.06 },
+    { key: "lips", x: 0.1, y: 0.625, w: 0.1, h: 0.06 },
+    { key: "marionette_l", x: 0.17, y: 0.67, w: 0.06, h: 0.05 },
+    { key: "chin", x: 0.13, y: 0.735, w: 0.1, h: 0.06 },
+    { key: "jaw_l", x: 0.33, y: 0.705, w: 0.24, h: 0.07 },
+    { key: "neck", x: 0.55, y: 0.83, w: 0.36, h: 0.16 },
+  ],
+  front_left: [
+    { key: "scalp", x: 0.48, y: 0.11, w: 0.46, h: 0.13 },
+    { key: "forehead", x: 0.34, y: 0.255, w: 0.42, h: 0.1 },
+    { key: "glabella", x: 0.28, y: 0.36, w: 0.07, h: 0.04 },
+    { key: "temple_r", x: 0.11, y: 0.33, w: 0.05, h: 0.07 },
+    { key: "temple_l", x: 0.63, y: 0.33, w: 0.08, h: 0.08 },
+    { key: "crows_r", x: 0.105, y: 0.42, w: 0.04, h: 0.05 },
+    { key: "crows_l", x: 0.56, y: 0.415, w: 0.06, h: 0.06 },
+    { key: "tear_r", x: 0.18, y: 0.455, w: 0.08, h: 0.03 },
+    { key: "tear_l", x: 0.42, y: 0.45, w: 0.12, h: 0.03 },
+    { key: "nose", x: 0.255, y: 0.47, w: 0.1, h: 0.1 },
+    { key: "cheek_r", x: 0.135, y: 0.53, w: 0.08, h: 0.08 },
+    { key: "cheek_l", x: 0.47, y: 0.535, w: 0.18, h: 0.1 },
+    { key: "nasolabial_r", x: 0.175, y: 0.575, w: 0.04, h: 0.05 },
+    { key: "nasolabial_l", x: 0.335, y: 0.57, w: 0.05, h: 0.06 },
+    { key: "lips", x: 0.27, y: 0.615, w: 0.19, h: 0.055 },
+    { key: "marionette_r", x: 0.175, y: 0.665, w: 0.04, h: 0.05 },
+    { key: "marionette_l", x: 0.37, y: 0.665, w: 0.05, h: 0.05 },
+    { key: "jaw_r", x: 0.12, y: 0.66, w: 0.04, h: 0.08 },
+    { key: "jaw_l", x: 0.53, y: 0.68, w: 0.17, h: 0.1 },
+    { key: "chin", x: 0.27, y: 0.725, w: 0.14, h: 0.055 },
+    { key: "neck", x: 0.48, y: 0.865, w: 0.4, h: 0.14 },
+  ],
+  right: [
+    { key: "scalp", x: 0.45, y: 0.13, w: 0.42, h: 0.14 },
+    { key: "forehead", x: 0.78, y: 0.28, w: 0.2, h: 0.11 },
+    { key: "glabella", x: 0.87, y: 0.375, w: 0.06, h: 0.04 },
+    { key: "temple_r", x: 0.65, y: 0.365, w: 0.09, h: 0.08 },
+    { key: "crows_r", x: 0.735, y: 0.425, w: 0.07, h: 0.05 },
+    { key: "tear_r", x: 0.805, y: 0.462, w: 0.09, h: 0.03 },
+    { key: "nose", x: 0.915, y: 0.48, w: 0.1, h: 0.1 },
+    { key: "cheek_r", x: 0.69, y: 0.53, w: 0.2, h: 0.1 },
+    { key: "nasolabial_r", x: 0.845, y: 0.57, w: 0.06, h: 0.06 },
+    { key: "lips", x: 0.9, y: 0.625, w: 0.1, h: 0.06 },
+    { key: "marionette_r", x: 0.83, y: 0.67, w: 0.06, h: 0.05 },
+    { key: "chin", x: 0.87, y: 0.735, w: 0.1, h: 0.06 },
+    { key: "jaw_r", x: 0.67, y: 0.705, w: 0.24, h: 0.07 },
+    { key: "neck", x: 0.45, y: 0.83, w: 0.36, h: 0.16 },
+  ],
+  front_right: [
+    { key: "scalp", x: 0.52, y: 0.11, w: 0.46, h: 0.13 },
+    { key: "forehead", x: 0.66, y: 0.255, w: 0.42, h: 0.1 },
+    { key: "glabella", x: 0.72, y: 0.36, w: 0.07, h: 0.04 },
+    { key: "temple_l", x: 0.89, y: 0.33, w: 0.05, h: 0.07 },
+    { key: "temple_r", x: 0.37, y: 0.33, w: 0.08, h: 0.08 },
+    { key: "crows_l", x: 0.895, y: 0.42, w: 0.04, h: 0.05 },
+    { key: "crows_r", x: 0.44, y: 0.415, w: 0.06, h: 0.06 },
+    { key: "tear_l", x: 0.82, y: 0.455, w: 0.08, h: 0.03 },
+    { key: "tear_r", x: 0.58, y: 0.45, w: 0.12, h: 0.03 },
+    { key: "nose", x: 0.745, y: 0.47, w: 0.1, h: 0.1 },
+    { key: "cheek_l", x: 0.865, y: 0.53, w: 0.08, h: 0.08 },
+    { key: "cheek_r", x: 0.53, y: 0.535, w: 0.18, h: 0.1 },
+    { key: "nasolabial_l", x: 0.825, y: 0.575, w: 0.04, h: 0.05 },
+    { key: "nasolabial_r", x: 0.665, y: 0.57, w: 0.05, h: 0.06 },
+    { key: "lips", x: 0.73, y: 0.615, w: 0.19, h: 0.055 },
+    { key: "marionette_l", x: 0.825, y: 0.665, w: 0.04, h: 0.05 },
+    { key: "marionette_r", x: 0.63, y: 0.665, w: 0.05, h: 0.05 },
+    { key: "jaw_l", x: 0.88, y: 0.66, w: 0.04, h: 0.08 },
+    { key: "jaw_r", x: 0.47, y: 0.68, w: 0.17, h: 0.1 },
+    { key: "chin", x: 0.73, y: 0.725, w: 0.14, h: 0.055 },
+    { key: "neck", x: 0.52, y: 0.865, w: 0.4, h: 0.14 },
+  ],
+};
+
+/** The parts drawn on a picture, with their names. */
+export function zonesOn(view: FaceView): Zone[] {
+  if (view === "front") return FACE_ZONES;
+  return SIDE[view].map((p) => ({ ...ZONE_BY_KEY.get(p.key)!, x: p.x, y: p.y, w: p.w, h: p.h }));
+}
+export const isView = (v: unknown): v is FaceView => typeof v === "string" && (FACE_VIEWS as string[]).includes(v);
 
 /** An exact spot the doctor worked on, as a share of its picture, 0–1 (2026-11-08). */
 export type FacePoint = { x: number; y: number; v?: FaceView };
@@ -225,17 +367,17 @@ export type Area = { zone: string; units?: number; points?: FacePoint[] };
 const ASPECT = 945 / 1264;
 
 /**
- * The part of the face a spot is in: the area whose oval it is deepest inside;
- * between areas, the one whose edge is nearest on the picture, up to a short way
- * off. A tap on the background beside the head belongs to none. The server asks
- * the same question of every point it is sent.
+ * The part of the face a spot is in, on its picture: the area whose oval it is
+ * deepest inside; between areas, the one whose edge is nearest on the picture, up
+ * to a short way off. A tap on the background beside the head belongs to none.
+ * The server asks the same question of every point it is sent.
  */
-export function zoneAt(x: number, y: number): string | null {
+export function zoneAt(x: number, y: number, view: FaceView = "front"): string | null {
   let inside: string | null = null;
   let insideD = Infinity;
   let near: string | null = null;
   let nearGap = Infinity;
-  for (const z of FACE_ZONES) {
+  for (const z of zonesOn(view)) {
     const dx = (x - z.x) / (z.w / 2);
     const dy = (y - z.y) / (z.h / 2);
     const d = dx * dx + dy * dy;

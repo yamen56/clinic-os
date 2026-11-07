@@ -4359,6 +4359,7 @@ export const en = {
     addTitle: "Add a treatment",
     addHint: "Tap the exact spots you treated, or use a quick select. A dot from an earlier visit shows what was done there.",
     removePoint: "Remove this point",
+    views: "Views of the face",
     pastPoint: "What was done here",
     showPast: "Past points",
     points: "{n} points",
