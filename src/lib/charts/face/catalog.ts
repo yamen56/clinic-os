@@ -69,10 +69,16 @@ export const ZONE_BY_KEY = new Map(FACE_ZONES.map((z) => [z.key, z]));
 export const isZone = (k: string) => ZONE_BY_KEY.has(k);
 
 /** Quick picks: the areas doctors treat together. */
+/**
+ * The usual sets, one tap each (Yamen, 2026-11-07: "the full face, maybe the lips,
+ * or the upper parts of the head, in addition to the neck").
+ */
 export const PRESETS: { key: string; en: string; zones: string[] }[] = [
+  { key: "full", en: "Full face", zones: FACE_ZONES.filter((z) => z.key !== "scalp" && z.key !== "neck").map((z) => z.key) },
   { key: "upper", en: "Upper face · 3 areas", zones: ["forehead", "glabella", "crows_r", "crows_l"] },
   { key: "lips", en: "Lips", zones: ["lips"] },
-  { key: "full", en: "Full face", zones: FACE_ZONES.filter((z) => z.key !== "scalp" && z.key !== "neck").map((z) => z.key) },
+  { key: "head", en: "Upper head", zones: ["scalp", "forehead", "temple_r", "temple_l"] },
+  { key: "neck", en: "Neck", zones: ["neck"] },
 ];
 
 /** What a treatment is, for its colour on the face and in the lists. */

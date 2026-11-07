@@ -125,6 +125,36 @@ async function main() {
     await page.getByRole("button", { name: /new/i }).first().click();
     check(await until(async () => (await page.locator(`option[value='${made.key}']`).count()) > 0), "and a package can include it");
 
+    console.log("Anywhere, at the doctor's price, and retouched");
+    const anywhere = await page.request.post(`${BASE}/api/c/${slug}/patients/${patient.id}/face/marks`, {
+      data: { id: crypto.randomUUID(), eventId: crypto.randomUUID(), treatmentKey: "aes_filler", areas: [{ zone: "forehead" }], count: 1 },
+    });
+    check(anywhere.ok(), "a treatment is recorded wherever the doctor says, not only where it is usual", String(anywhere.status()));
+    await page.goto(chart, { timeout: 180000 });
+    await page.waitForSelector("[data-face-map]", { timeout: 120000 });
+    check((await page.locator("[data-face-preset='neck']").count()) === 1 && (await page.locator("[data-face-preset='full']").count()) === 1, "the neck and the full face are one tap each");
+    await page.locator("[data-zone='neck']").click();
+    await page.locator(`[data-face-treatment='${made.key}']`).click();
+    await page.waitForSelector("[data-face-panel='record']");
+    await page.locator("[data-face-price-input]").fill("80");
+    await page.locator("[data-face-save]").click();
+    check(
+      await until(async () => (await q(`select 1 from chart_marks where clinic_id = $1 and treatment_key = $2 and fee = 80 and fee_manual`, [clinic.id, made.key])).length === 1),
+      "the doctor sets this patient's price while recording, and it is kept as theirs"
+    );
+    await page.reload();
+    await page.waitForSelector("[data-face-map]", { timeout: 120000 });
+    await page.locator(`[data-face-retouch='${mark.id}']`).first().click();
+    await page.waitForSelector("[data-face-retouching]");
+    check(await page.locator("[data-face-save]").isDisabled(), "a retouch waits for the doctor to say what it costs");
+    await page.locator("[data-face-price-input]").fill("0");
+    await page.locator("[data-face-save]").click();
+    check(
+      await until(async () => (await q(`select 1 from chart_marks where redo_of = $1 and fee = 0 and fee_manual`, [mark.id])).length === 1),
+      "and is recorded against the treatment it retouches, free when they say so"
+    );
+    check(await until(async () => (await page.locator(`[data-face-retouched='1']`).count()) > 0), "the original says it was retouched");
+
     console.log("Archived");
     const r = await page.request.post(`${BASE}/api/c/${slug}/face/treatments`, { data: { op: "archive", key: made.key, archived: true } });
     check(r.ok(), "the treatment is archived");

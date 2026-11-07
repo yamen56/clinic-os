@@ -19,6 +19,8 @@ type Person = { id: string; name: string };
 
 /** A treatment on the patient's face, as the chart draws it. */
 export type FaceMark = {
+  /** The earlier treatment this one retouches (`chart_marks.redo_of`). */
+  redoOf: string | null;
   /** What the entry froze when it was recorded: how it counted, and the kind of work. */
   detail: MarkDetail;
   id: string;
@@ -85,6 +87,7 @@ export function toFaceMark(r: Record<string, unknown>): FaceMark {
     id: r.id as string,
     treatmentKey: key,
     detail: (r.detail as MarkDetail) ?? {},
+    redoOf: (r.redo_of as string) ?? null,
     label: r.label as string,
     labelAr: r.label_ar as string,
     family: FACE_TREATMENT_BY_KEY.get(key)?.family ?? ((r.look as Family) || "skin"),

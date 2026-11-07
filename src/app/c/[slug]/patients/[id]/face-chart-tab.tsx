@@ -129,6 +129,9 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
 
   const tr = tKey ? (s.catalog.byKey.get(tKey) ?? null) : null;
   const [variantId, setVariantId] = useState("");
+  // The price as the doctor typed it; null means the list's.
+  const [priceText, setPriceText] = useState<string | null>(null);
+  const [retouchOf, setRetouchOf] = useState<FaceMark | null>(null);
   const [adding, setAdding] = useState(false);
   const kinds = tr ? s.variants.filter((v) => v.treatmentKey === tr.key && v.active) : [];
   const variant = kinds.find((v) => v.id === variantId) ?? null;
@@ -174,10 +177,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
 
   const toggleZone = (zone: string) => {
     const on = sel.includes(zone);
-    if (tr && !on && !tr.fits.includes(zone)) {
-      toast(F.notDoneOn.replace("{treatment}", tr.en).replace("{area}", ZONE_BY_KEY.get(zone)?.en ?? zone), "error");
-      return;
-    }
     const next = on ? sel.filter((z) => z !== zone) : [...sel, zone];
     setSel(next);
     if (tr?.units && !on) setUnits((u) => ({ ...u, [zone]: unitsFor(zone) }));
@@ -185,7 +184,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   };
 
   const preset = (zones: string[]) => {
-    const fit = tr ? zones.filter((z) => tr.fits.includes(z)) : zones;
+    const fit = zones;
     setSel(fit);
     if (tr?.units) setUnits(Object.fromEntries(fit.map((z) => [z, unitsFor(z)])));
     if (!fit.length) setTKey(null);
@@ -197,9 +196,12 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   };
 
   // `given` is a treatment made a moment ago, before the catalog this render read has it.
-  const start = (k: string, from?: FaceMark, given?: FaceTreatment) => {
+  const start = (k: string, from?: FaceMark, given?: FaceTreatment, retouch?: boolean) => {
     const t2 = given ?? s.catalog.byKey.get(k);
     if (!t2 || t2.archived) return;
+    // A retouch has no list price: the doctor says what it costs, 0 if it is free.
+    setRetouchOf(retouch && from ? from : null);
+    setPriceText(retouch ? "" : null);
     // The kind done last time, when it was a repeat.
     setVariantId(from?.detail.variant?.id ?? "");
     const zones = from ? from.areas.map((a) => a.zone) : sel;
@@ -218,7 +220,12 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     setNote("");
   };
 
-  const fits = useMemo(() => (sel.length ? s.catalog.offered.filter((x) => sel.every((z) => x.fits.includes(z))) : []), [sel, s.catalog]);
+  // Every treatment, the usual ones for these areas first.
+  const fits = useMemo(() => {
+    if (!sel.length) return [];
+    const usual = (x: FaceTreatment) => sel.every((z) => x.fits.includes(z));
+    return [...s.catalog.offered.filter(usual), ...s.catalog.offered.filter((x) => !usual(x))];
+  }, [sel, s.catalog]);
   const here = useMemo(() => newestFirst.filter((m) => !m.voidedAt && m.areas.some((a) => sel.includes(a.zone))), [newestFirst, sel]);
 
   /* ---- the record panel's numbers ---- */
@@ -234,7 +241,10 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const covering = tr ? usableItem(s.packages, tr.key, today) : null;
   const covered = !!covering && fromPackage;
   const listPrice = tr ? pickFacePrice(s.prices, tr.key, product?.id ?? null, variant?.id ?? null) : null;
-  const fee = tr ? (covered ? 0 : feeOf(listPrice?.price ?? null, quantity)) : null;
+  const listFee = tr ? feeOf(listPrice?.price ?? null, quantity) : null;
+  const typedFee = priceText === null || priceText.trim() === "" ? null : Number(priceText);
+  const fee = tr ? (covered ? 0 : priceText !== null ? typedFee : listFee) : null;
+  const priceMissing = !!retouchOf && !covered && (typedFee == null || Number.isNaN(typedFee));
   const worth = covering ? (covering.item.value / covering.item.sessions) : null;
 
   /* ---- writing ---- */
@@ -256,8 +266,9 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       areas,
       quantity,
       fee,
-      feeManual: false,
+      feeManual: priceText !== null && !covered,
       serviceId: listPrice?.serviceId ?? null,
+      redoOf: retouchOf?.id ?? null,
       note: note.trim(),
       performedBy: performer,
       recordedBy: s.me,
@@ -286,6 +297,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
         product: product && qty > 0 ? { id: product.id, qty } : null,
         packageItemId: fresh.packageItemId,
         variantId: variant?.id ?? null,
+        fee: priceText !== null && !covered ? typedFee : null,
+        retouchOf: retouchOf?.id ?? null,
       })
     )
       .then((r) => {
@@ -394,6 +407,16 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             {billed && !m.voidedAt && <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-ink-500">{F.billed}</span>}
           </div>
           {!isSale && <div className="text-[13px] text-ink-700">{whereText(m.areas.map((a) => a.zone), "en")}</div>}
+          {(() => {
+            const orig = m.redoOf ? s.marks.find((x) => x.id === m.redoOf) : null;
+            const times = work.filter((x) => x.redoOf === m.id && !x.voidedAt).length;
+            return (
+              <>
+                {orig && <div className="text-[12.5px] font-medium text-brand-700" data-face-retouch-of={m.id}>{F.retouchOf.replace("{date}", fmtDate(orig.doneAt ?? orig.createdAt, tz, locale))}</div>}
+                {times > 0 && <div className="text-[12.5px] font-medium text-ink-700" data-face-retouched={times}>{F.retouched.replace("{n}", String(times))}</div>}
+              </>
+            );
+          })()}
           {session && (
             <div className="text-[12.5px] font-medium text-ink-700" data-face-session={m.id}>
               {F.sessionFrom.replace("{package}", session.pkg.name)} · {F.sessionOf.replace("{n}", String(session.n)).replace("{total}", String(session.total))}
@@ -455,10 +478,16 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
           {!m.voidedAt && (
             <div className="flex flex-wrap justify-end gap-1">
               {s.canWrite && s.catalog.byKey.has(m.treatmentKey) && !s.catalog.byKey.get(m.treatmentKey)?.archived && (
+<>
                 <button type="button" onClick={() => start(m.treatmentKey, m)} className={`${action} text-brand-700`} aria-label={F.repeatOf.replace("{treatment}", m.label)} data-face-repeat={m.id}>
                   <Repeat2 className="h-3.5 w-3.5" />
                   {F.repeat}
                 </button>
+                <button type="button" onClick={() => start(m.treatmentKey, m, undefined, true)} className={`${action} text-brand-700`} data-face-retouch={m.id}>
+                  <Undo2 className="h-3.5 w-3.5 -scale-x-100" />
+                  {F.retouch}
+                </button>
+                </>
               )}
               {!compact && s.canWrite && noting?.id !== m.id && (
                 <button type="button" onClick={() => setNoting({ id: m.id, value: m.note })} className={`${action} text-ink-500`} data-face-note={m.id}>
@@ -636,6 +665,11 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                     <FamilyTag family={tr.family} label={F.families[tr.family]} />
                   </h3>
                   <div className="text-[13px] text-ink-700">{whereText(sel, "en")}</div>
+                  {retouchOf && (
+                    <div className="text-[12.5px] font-semibold text-brand-700" data-face-retouching>
+                      {F.retouchOf.replace("{date}", fmtDate(retouchOf.doneAt ?? retouchOf.createdAt, tz, locale))} · {F.retouchHint}
+                    </div>
+                  )}
                 </div>
                 <Button size="sm" variant="outline" className="ms-auto shrink-0" onClick={() => setTKey(null)}>
                   {F.change}
@@ -832,16 +866,21 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                     <span className="text-[14px] font-bold" data-face-fee="0">
                       {F.covered}
                     </span>
-                  ) : fee != null ? (
-                    <span className="text-[16px] font-bold tnum" data-face-fee={fee}>
-                      {money(fee)}
-                    </span>
                   ) : (
-                    s.canPrice && (
-                      <Link href={`/c/${s.slug}/settings/face-prices`} className="text-[12.5px] font-semibold text-brand-700 hover:underline">
-                        {F.setPrices}
-                      </Link>
-                    )
+                    /* The doctor may set this patient's price here, and must for a retouch. */
+                    <span className="flex items-center gap-1.5" data-face-fee={fee ?? ""}>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={priceText ?? (listFee != null ? String(listFee) : "")}
+                        onChange={(e) => /^\d{0,7}(\.\d{0,2})?$/.test(e.target.value) && setPriceText(e.target.value)}
+                        placeholder={retouchOf ? "0" : "—"}
+                        aria-label={retouchOf ? F.retouchPrice : F.price}
+                        className="h-10 w-24 rounded-ctl border border-line-strong bg-surface px-2 text-end text-base font-bold tnum focus:border-brand-600 focus:outline-none md:text-sm"
+                        data-face-price-input
+                      />
+                      <span className="text-[12.5px] text-ink-500">{s.currency}</span>
+                    </span>
                   )}
                 </div>
                 {s.canStock && preview && (
@@ -866,7 +905,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               </div>
 
               <div className="flex gap-2">
-                <Button className="flex-1" onClick={save} data-face-save disabled={!!tr.units && (unitsTotal ?? 0) <= 0}>
+                <Button className="flex-1" onClick={save} data-face-save disabled={(!!tr.units && (unitsTotal ?? 0) <= 0) || priceMissing}>
                   {F.save}
                 </Button>
                 <Button variant="outline" onClick={clear}>

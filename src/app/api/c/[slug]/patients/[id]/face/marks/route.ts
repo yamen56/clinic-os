@@ -46,6 +46,10 @@ const bodySchema = z.object({
   packageItemId: z.string().uuid().nullish(),
   /** The kind of work (0094): a TCA peel, PDO threads. */
   variantId: z.string().uuid().nullish(),
+  /** What the doctor says it costs, over the list's price. */
+  fee: z.number().min(0).max(1_000_000).nullish(),
+  /** The earlier treatment this retouches: a top-up two weeks after the toxin. */
+  retouchOf: z.string().uuid().nullish(),
 });
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
@@ -64,8 +68,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     // The clinic's own treatments are found here as readily as the catalog's. An archived one is not offered.
     const t: FaceTreatment | null = await resolveTreatment(c, access.clinicId, d.treatmentKey);
     if (!t || t.archived) return { error: "unknown_treatment" as const };
-    // Each area once, a real one, one this treatment is done on.
-    if (new Set(zones).size !== zones.length || !zones.every((z) => isZone(z) && t.fits.includes(z))) return { error: "invalid_area" as const };
+    // Each area once, and a real one. Any treatment may be done anywhere: the doctor says where they worked.
+    if (new Set(zones).size !== zones.length || !zones.every((z) => isZone(z))) return { error: "invalid_area" as const };
     // Units only where the treatment is dosed in them.
     const areas = inFaceOrder(d.areas.map((a) => (t.units ? { zone: a.zone, units: a.units ?? 0 } : { zone: a.zone })));
     const variant = d.variantId ? await resolveVariant(c, access.clinicId, t.key, d.variantId) : null;
@@ -91,6 +95,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       ]);
       if (!ok.rowCount) return { error: "invalid_product" as const };
     }
+    // A retouch is of this patient's own face work, still standing.
+    if (d.retouchOf) {
+      const orig = await c.query(`select 1 from chart_marks where id = $1 and clinic_id = $2 and patient_id = $3 and chart = 'aesthetic' and voided_at is null`, [
+        d.retouchOf,
+        access.clinicId,
+        id,
+      ]);
+      if (!orig.rowCount) return { error: "invalid_retouch" as const };
+    }
     if (d.packageItemId) {
       const item = await usablePackageItem(c, access.clinicId, id, d.packageItemId, t.key);
       if ("error" in item) return { error: item.error };
@@ -100,13 +113,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     const price = pickFacePrice(await loadFacePrices(c, access.clinicId, t.key), t.key, d.product?.id ?? null, variant?.id ?? null);
     const quantity = quantityOf(t, areas, d.count);
     // From a package: paid for in the package, so nothing more to bill.
-    const fee = d.packageItemId ? 0 : feeOf(price?.price ?? null, quantity);
+    /*
+      The doctor's price, when they set one: a retouch's is theirs to decide, and
+      any treatment can cost what was agreed in the chair rather than the list's.
+      Kept as set by hand, so a later list price never overwrites it.
+    */
+    const manual = !d.packageItemId && d.fee != null;
+    const fee = d.packageItemId ? 0 : manual ? d.fee! : feeOf(price?.price ?? null, quantity);
     await c.query(
       `insert into chart_marks (id, clinic_id, patient_id, chart, site, treatment_key, label, label_ar, look, kind, detail, status,
                                 performed_by, recorded_by, done_at, appointment_id, fee, service_id, note, areas, quantity,
-                                package_item_id, commission_percent, costs_rule)
+                                package_item_id, commission_percent, costs_rule, fee_manual, redo_of)
        values ($1, $2, $3, 'aesthetic', 'face', $4, $5, $6, $7, 'procedure', $19, 'done',
-               $8, $9, now(), $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+               $8, $9, now(), $10, $11, $12, $13, $14, $15, $16, $17, $18, $20, $21)`,
       [
         d.id,
         access.clinicId,
@@ -129,6 +148,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         d.packageItemId ? deal.rate : null,
         d.packageItemId ? deal.rule : null,
         JSON.stringify(detail),
+        manual,
+        d.retouchOf ?? null,
       ]
     );
     if (d.product) await takeStock(c, access.clinicId, d.product.id, d.product.qty, d.id, access.session.user.id);
@@ -145,7 +166,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       action: "face.mark.create",
       entity: "patient",
       entityId: id,
-      detail: { mark: d.id, treatment: t.key, areas: zones, quantity, ...(variant ? { variant: variant.id } : {}), ...(d.product ? { product: d.product } : {}), ...(d.packageItemId ? { packageItem: d.packageItemId } : {}) },
+      detail: { mark: d.id, treatment: t.key, areas: zones, quantity, ...(variant ? { variant: variant.id } : {}), ...(d.retouchOf ? { retouchOf: d.retouchOf } : {}), ...(manual ? { fee } : {}), ...(d.product ? { product: d.product } : {}), ...(d.packageItemId ? { packageItem: d.packageItemId } : {}) },
     });
     const mark = (await c.query(`${FACE_MARK_SELECT} where m.id = $1 and m.clinic_id = $2`, [d.id, access.clinicId])).rows[0];
     const events = await c.query(

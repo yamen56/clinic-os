@@ -132,9 +132,10 @@ async function main() {
     });
     check(tooth.status() === 403, "without the dental chart it cannot write a tooth, though it may record on charts", String(tooth.status()));
     const badArea = await page.request.post(`${BASE}/api/c/${face.slug}/patients/${face.patientId}/face/marks`, {
-      data: { id: crypto.randomUUID(), eventId: crypto.randomUUID(), treatmentKey: "aes_toxin", areas: [{ zone: "cheek_r", units: 10 }] },
+      data: { id: crypto.randomUUID(), eventId: crypto.randomUUID(), treatmentKey: "aes_toxin", areas: [{ zone: "elbow", units: 10 }] },
     });
-    check(badArea.status() === 400, "a toxin on the cheek is refused: the catalog says where each treatment is done", String(badArea.status()));
+    // Any treatment may go on any part of the face (Yamen, 2026-11-07), but only on a real one.
+    check(badArea.status() === 400, "an area the chart does not have is refused", String(badArea.status()));
 
     const fileUrl = `${BASE}/c/${face.slug}/patients/${face.patientId}?tab=face`;
     await page.goto(fileUrl, { timeout: 180000 });
@@ -146,12 +147,13 @@ async function main() {
     );
     check((await page.locator("[data-zone]").count()) === 21, "21 parts of the face to tap", String(await page.locator("[data-zone]").count()));
 
-    // Upper face, one tap; the toxin is offered and the filler is not.
+    // Upper face, one tap; the toxin comes first, and any other treatment can still be picked (Yamen, 2026-11-07).
     await page.locator("[data-face-preset='upper']").click();
     await page.waitForSelector("[data-face-panel='areas']", { timeout: 10000 });
     check((await page.locator("[data-zone][aria-pressed='true']").count()) === 4, "Upper face selects forehead, glabella and both crow's feet");
-    check((await page.locator("[data-face-treatment='aes_toxin']").count()) === 1, "Botulinum toxin fits all four");
-    check((await page.locator("[data-face-treatment='aes_filler']").count()) === 0, "a filler does not");
+    const offered = await page.locator("[data-face-treatment]").evaluateAll((els) => els.map((e) => e.getAttribute("data-face-treatment")));
+    check(offered.indexOf("aes_toxin") >= 0 && offered.indexOf("aes_toxin") < offered.indexOf("aes_filler"), "Botulinum toxin, usual there, comes before a filler", offered.join(","));
+    check(offered.includes("aes_filler"), "and a filler can still be recorded there");
     await page.locator("[data-face-treatment='aes_toxin']").click();
     await page.waitForSelector("[data-face-panel='record']", { timeout: 10000 });
     check((await page.locator("[data-face-panel='record']").innerText()).includes("54u in total"), "units start where they usually do: 10 + 20 + 12 + 12 = 54");
