@@ -5,6 +5,8 @@ import { inClinic } from "@/lib/clinic-api";
 import { DateTime } from "luxon";
 import { loadCompanies, loadStockProducts } from "@/lib/charts/face/stock";
 import { StockClient } from "./stock-client";
+import { loadClinicTreatments } from "@/lib/charts/face/treatments";
+import { FaceCatalogProvider } from "@/components/charts/face/catalog-context";
 
 /*
   Products and stock: what the face chart uses. The companies the clinic buys
@@ -18,8 +20,10 @@ export default async function StockPage({ params }: { params: Promise<{ slug: st
   const data = await inClinic(access, async (c) => ({
     products: await loadStockProducts(c, access.clinicId, { withBatches: true }),
     companies: await loadCompanies(c, access.clinicId),
+    custom: (await loadClinicTreatments(c, access.clinicId)).custom,
   }));
   return (
+    <FaceCatalogProvider custom={data.custom}>
     <StockClient
       slug={slug}
       currency={access.clinic.currency}
@@ -29,5 +33,6 @@ export default async function StockPage({ params }: { params: Promise<{ slug: st
       canPatients={can(access, "patients")}
       pricesHref={can(access, "settings.services") ? `/c/${slug}/settings/face-prices` : null}
     />
+    </FaceCatalogProvider>
   );
 }

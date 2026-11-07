@@ -8,12 +8,12 @@
   box is left; an empty box means no price.
 */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
-import { FACE_TREATMENTS, FAMILIES } from "@/lib/charts/face/catalog";
+import { FAMILIES, mergeCatalog, type FaceTreatment, type FaceVariant } from "@/lib/charts/face/catalog";
 import type { FacePrice } from "@/lib/charts/face/db";
 import { FamilyTag } from "@/components/charts/face/family-tag";
 import { PriceBox } from "../prices/dental-prices";
@@ -28,6 +28,8 @@ export function FacePrices({
   products,
   usage,
   stockHref,
+  custom,
+  variants,
 }: {
   slug: string;
   currency: string;
@@ -35,7 +37,11 @@ export function FacePrices({
   products: Product[];
   usage: Record<string, { used: number; unpriced: number }>;
   stockHref: string | null;
+  /** The clinic's own treatments and every treatment's kinds (0094). */
+  custom: FaceTreatment[];
+  variants: FaceVariant[];
 }) {
+  const offered = useMemo(() => mergeCatalog(custom).offered, [custom]);
   const { t, locale } = useI18n();
   const P = t.services.facePrices;
   const { toast } = useToast();
@@ -68,7 +74,7 @@ export function FacePrices({
         )}
       </div>
       {FAMILIES.map((f) => {
-        const list = FACE_TREATMENTS.filter((x) => x.family === f);
+        const list = offered.filter((x) => x.family === f);
         if (!list.length) return null;
         return (
           <Card key={f} className="overflow-hidden">
@@ -106,6 +112,32 @@ export function FacePrices({
                         <span className="text-[12.5px] text-ink-500">{currency}</span>
                       </span>
                     </div>
+                    {variants.some((v) => v.treatmentKey === x.key && v.active) && (
+                      <ul className="mt-2 grid gap-1.5 border-s-2 border-line ps-3">
+                        {variants
+                          .filter((v) => v.treatmentKey === x.key && v.active)
+                          .map((v) => {
+                            const mine = priceOf(x.key, v.id);
+                            return (
+                              <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1" data-face-variant-price={`${x.key}:${v.name}`}>
+                                <span className="min-w-0 flex-[1_1_12rem] text-[13px]" dir="auto">
+                                  {P.kind.replace("{kind}", locale === "ar" ? v.nameAr || v.name : v.name)}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <PriceBox
+                                    value={mine?.price ?? null}
+                                    placeholder={base ? String(base.price) : P.noPrice}
+                                    label={`${P.price} — ${v.name}`}
+                                    hook={`${x.key}:${v.id}`}
+                                    onSave={(val) => save(x.key, v.id, val)}
+                                  />
+                                  <span className="text-[12.5px] text-ink-500">{currency}</span>
+                                </span>
+                              </li>
+                            );
+                          })}
+                      </ul>
+                    )}
                     {own.length > 0 && (
                       <ul className="mt-2 grid gap-1.5 border-s-2 border-line ps-3">
                         {own.map((p) => {

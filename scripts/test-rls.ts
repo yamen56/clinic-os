@@ -478,6 +478,13 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   const teamRoom = (await q(`select id from team_threads where clinic_id = $1 and kind = 'clinic'`, [clinic])).id;
   await q(`insert into team_messages (clinic_id, thread_id, sender_id, body) values ($1, $2, $3, 'RLS fixture') returning id`, [clinic, teamRoom, user]);
 
+  // The clinic's own face treatment and a kind of it (0094).
+  await q(
+    `insert into aesthetic_treatments (clinic_id, key, name, family, priced_by, fits) values ($1, $2, 'RLS treatment', 'skin', 'session', '{forehead}') returning id`,
+    [clinic, `aes_c_rls${tag}`]
+  );
+  await q(`insert into aesthetic_treatment_variants (clinic_id, treatment_key, name) values ($1, $2, 'RLS kind') returning id`, [clinic, `aes_c_rls${tag}`]);
+
   return { clinic, user, member, patient, service, appointment, conversation, invoice, automation, step, run };
 }
 

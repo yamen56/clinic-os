@@ -10,7 +10,8 @@ import type { PoolClient } from "pg";
 import type { MarkEvent } from "@/lib/charts/dental/state";
 import type { Billed } from "@/lib/charts/dental/billing-server";
 import { toEvent } from "@/lib/charts/dental/db";
-import { FACE_TREATMENT_BY_KEY, type Area, type Family } from "./catalog";
+import { FACE_TREATMENT_BY_KEY, type Area, type Family, type FaceTreatment, type FaceVariant, type MarkDetail } from "./catalog";
+import { loadClinicTreatments } from "./treatments";
 import { loadMarkProducts, loadStockProducts, withoutCosts, type MarkProduct, type StockProduct } from "./stock";
 import { loadPatientPackages, loadPlans, type PackagePlan, type PatientPackage } from "./packages";
 
@@ -18,6 +19,8 @@ type Person = { id: string; name: string };
 
 /** A treatment on the patient's face, as the chart draws it. */
 export type FaceMark = {
+  /** What the entry froze when it was recorded: how it counted, and the kind of work. */
+  detail: MarkDetail;
   id: string;
   treatmentKey: string;
   /** The names as they were when recorded: renaming a treatment never rewrites a record. */
@@ -61,6 +64,9 @@ export type FaceChartData = {
   packages: PatientPackage[];
   /** What the clinic sells, for selling one here. */
   plans: PackagePlan[];
+  /** The clinic's own treatments, archived ones too so old entries keep their names, and every variant (0094). */
+  custom: FaceTreatment[];
+  variants: FaceVariant[];
 };
 
 const iso = (v: unknown): string | null => (v ? new Date(v as string).toISOString() : null);
@@ -78,6 +84,7 @@ export function toFaceMark(r: Record<string, unknown>): FaceMark {
   return {
     id: r.id as string,
     treatmentKey: key,
+    detail: (r.detail as MarkDetail) ?? {},
     label: r.label as string,
     labelAr: r.label_ar as string,
     family: FACE_TREATMENT_BY_KEY.get(key)?.family ?? ((r.look as Family) || "skin"),
@@ -160,5 +167,6 @@ export async function loadFaceChart(c: PoolClient, clinicId: string, patientId: 
     markProducts: await loadMarkProducts(c, clinicId, patientId, opts.stockCosts),
     packages: await loadPatientPackages(c, clinicId, patientId),
     plans: await loadPlans(c, clinicId, true),
+    ...(await loadClinicTreatments(c, clinicId)),
   };
 }

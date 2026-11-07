@@ -18,7 +18,7 @@ import { z } from "zod";
 import { requireClinic, can, type ClinicAccess } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
-import { FACE_TREATMENT_BY_KEY } from "@/lib/charts/face/catalog";
+import { clinicTreatmentKeys, resolveTreatment } from "@/lib/charts/face/treatments";
 import {
   PRODUCT_UNITS,
   loadCompanies,
@@ -139,9 +139,10 @@ export async function saveProductAction(slug: string, data: unknown): Promise<An
   const parsed = productSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
-  // Only the face chart's own treatments.
-  const treatments = [...new Set(d.treatments)].filter((k) => FACE_TREATMENT_BY_KEY.has(k));
   return inClinic(access, async (c) => {
+    // Only the face chart's treatments, the clinic's own included.
+    const known = await clinicTreatmentKeys(c, access.clinicId);
+    const treatments = [...new Set(d.treatments)].filter((k) => known.has(k));
     // A foreign key does not see row security: the company is checked against this clinic by hand.
     if (d.companyId && !(await c.query(`select 1 from aesthetic_companies where id = $1 and clinic_id = $2`, [d.companyId, access.clinicId])).rowCount) {
       return { error: "invalid" };
@@ -176,7 +177,7 @@ export async function saveProductAction(slug: string, data: unknown): Promise<An
       */
       const own = (await c.query(`select id, chart_key from services where clinic_id = $1 and chart_variant = $2 and chart_owned`, [access.clinicId, id])).rows;
       for (const s of own) {
-        const tr = FACE_TREATMENT_BY_KEY.get(s.chart_key);
+        const tr = await resolveTreatment(c, access.clinicId, s.chart_key);
         if (!tr) continue;
         await c.query(`update services set name = $2, name_ar = $3 where id = $1`, [
           s.id,

@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import { EMERGENCY_STEP, stepOf, stepSummary } from "./charts/dental/protocols";
 import { readHistory, type MedicalHistory } from "./medical-history";
-import { FACE_TREATMENT_BY_KEY, amountText, totalUnits, unitsText, whereText, type Area } from "./charts/face/catalog";
+import { amountText, shapeOf, unitsText, whereText, type Area } from "./charts/face/catalog";
 
 /**
  * Everything that belongs in a patient's record when it leaves the clinic.
@@ -325,7 +325,7 @@ export async function loadPatientExportBatch(
   const docsBy = bucket(documents);
   const dental = (
     await c.query(
-      `select m.patient_id, m.id, m.chart, m.site, m.label, m.surfaces, m.status, m.kind, m.note, m.treatment_key, m.areas, m.quantity,
+      `select m.patient_id, m.id, m.chart, m.site, m.label, m.surfaces, m.status, m.kind, m.note, m.treatment_key, m.areas, m.quantity, m.detail,
               coalesce(m.done_at, m.created_at) as at, m.voided_at, u.full_name as doctor
          from chart_marks m
          left join clinic_members cm on cm.id = m.performed_by
@@ -445,9 +445,9 @@ export async function loadPatientExportBatch(
         voided: !!m.voided_at,
       })),
       face: (faceBy.get(id) ?? []).map((m) => {
-        const t = FACE_TREATMENT_BY_KEY.get(m.treatment_key);
+        const t = shapeOf(m.treatment_key, m.detail);
         const areas = (m.areas ?? []) as Area[];
-        const u = t ? totalUnits(t, areas) : null;
+        const u = t?.units ? areas.reduce((n, a) => n + (a.units ?? 0), 0) : null;
         return {
           id: m.id,
           label: m.label,

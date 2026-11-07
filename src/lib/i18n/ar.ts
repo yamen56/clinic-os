@@ -1283,6 +1283,7 @@ export const ar: Dict = {
       failed: "تعذّر حفظ السعر",
       noPrice: "بدون سعر",
       withProduct: "مع {product}",
+      kind: "{kind}",
       pricedBy: { area: "للمنطقة", unit: "للوحدة", syringe: "للسرنجة", thread: "للخيط", session: "للجلسة" },
       families: { toxin: "التوكسين (بوتوكس)", filler: "الفيلر", skin: "البشرة", laser: "الليزر والأجهزة", threads: "الخيوط", contour: "النحت" },
       servicesLink: "أسعار علاجات مخطط الوجه خدمات أيضاً، ولها صفحتها الخاصة.",

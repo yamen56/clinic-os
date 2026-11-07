@@ -5,7 +5,8 @@ import { z } from "zod";
 import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
-import { FACE_TREATMENT_BY_KEY, feeOf, pickFacePrice } from "@/lib/charts/face/catalog";
+import { feeOf, pickFacePrice } from "@/lib/charts/face/catalog";
+import { resolveTreatment } from "@/lib/charts/face/treatments";
 import { loadFacePrices, type FacePrice } from "@/lib/charts/face/db";
 
 const schema = z.object({
@@ -35,13 +36,19 @@ export async function saveFacePriceAction(slug: string, data: unknown): Promise<
   const parsed = schema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
-  const t = FACE_TREATMENT_BY_KEY.get(d.key);
-  if (!t) return { error: "invalid" };
-
   return inClinic(access, async (c) => {
+    const t = await resolveTreatment(c, access.clinicId, d.key);
+    if (!t) return { error: "invalid" };
+    /*
+      The second slot is a product's or a kind of the work's (0094): both are the
+      price's variant, and both name the service after themselves.
+    */
     let product: { name: string } | null = null;
     if (d.productId) {
-      product = (await c.query(`select name from aesthetic_products where id = $1 and clinic_id = $2 and $3 = any(treatments)`, [d.productId, access.clinicId, t.key])).rows[0] ?? null;
+      product =
+        (await c.query(`select name from aesthetic_products where id = $1 and clinic_id = $2 and $3 = any(treatments)`, [d.productId, access.clinicId, t.key])).rows[0] ??
+        (await c.query(`select name from aesthetic_treatment_variants where id = $1 and clinic_id = $2 and treatment_key = $3`, [d.productId, access.clinicId, t.key])).rows[0] ??
+        null;
       if (!product) return { error: "invalid" };
     }
     const cur = (
@@ -88,16 +95,16 @@ export async function saveFacePriceAction(slug: string, data: unknown): Promise<
       const list = await loadFacePrices(c, access.clinicId, t.key);
       const waiting = (
         await c.query(
-          `select m.id, m.quantity, (select cmp.product_id from chart_mark_products cmp where cmp.mark_id = m.id limit 1) as product_id
+          `select m.id, m.quantity, m.detail->'variant'->>'id' as variant_id, (select cmp.product_id from chart_mark_products cmp where cmp.mark_id = m.id limit 1) as product_id
              from chart_marks m
             where m.clinic_id = $1 and m.chart = 'aesthetic' and m.treatment_key = $2
               and m.fee is null and not m.fee_manual and m.voided_at is null and m.package_item_id is null
               and not exists (select 1 from invoice_item_marks iim where iim.mark_id = m.id)`,
           [access.clinicId, t.key]
         )
-      ).rows as { id: string; quantity: string | null; product_id: string | null }[];
+      ).rows as { id: string; quantity: string | null; product_id: string | null; variant_id: string | null }[];
       for (const m of waiting) {
-        const p = pickFacePrice(list, t.key, m.product_id);
+        const p = pickFacePrice(list, t.key, m.product_id, m.variant_id);
         if (!p) continue;
         const fee = feeOf(p.price, Number(m.quantity ?? 1));
         await c.query(

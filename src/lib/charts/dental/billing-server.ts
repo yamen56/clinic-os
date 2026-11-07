@@ -212,7 +212,7 @@ async function linesFor(
         markId: m.id,
         serviceId: m.service_id ?? null,
         description: faceLineText(
-          { treatmentKey: m.treatment_key, label: m.label, labelAr: m.label_ar, areas: m.areas ?? [], quantity: m.quantity == null ? null : Number(m.quantity) },
+          { treatmentKey: m.treatment_key, label: m.label, labelAr: m.label_ar, areas: m.areas ?? [], quantity: m.quantity == null ? null : Number(m.quantity), detail: m.detail ?? null },
           m.service_name ? { name: m.service_name, nameAr: m.service_name_ar ?? null } : null,
           locale
         ),

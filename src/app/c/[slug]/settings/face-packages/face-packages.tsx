@@ -16,13 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Field, Input, Select, Toggle } from "@/components/ui/input";
 import { fmtMoney } from "@/lib/dates";
-import { FACE_TREATMENTS, FACE_TREATMENT_BY_KEY } from "@/lib/charts/face/catalog";
+import { useFaceCatalog } from "@/components/charts/face/catalog-context";
 import type { PackagePlan, PlanItem } from "@/lib/charts/face/packages";
 import { FamilyTag } from "@/components/charts/face/family-tag";
 import { savePlanAction } from "./actions";
 
 export function FacePackages({ slug, currency, plans: initial }: { slug: string; currency: string; plans: PackagePlan[] }) {
   const { t, locale } = useI18n();
+  const cat = useFaceCatalog();
   const P = t.services.facePackages;
   const { toast } = useToast();
   const [plans, setPlans] = useState(initial);
@@ -73,7 +74,7 @@ export function FacePackages({ slug, currency, plans: initial }: { slug: string;
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5" dir="ltr">
                   {p.items.map((i, n) => {
-                    const tr = FACE_TREATMENT_BY_KEY.get(i.treatmentKey);
+                    const tr = cat.byKey.get(i.treatmentKey);
                     return tr ? <FamilyTag key={n} family={tr.family} label={`${tr.en} × ${i.sessions}`} /> : null;
                   })}
                 </div>
@@ -96,6 +97,7 @@ export function FacePackages({ slug, currency, plans: initial }: { slug: string;
 
 function PlanForm({ plan, currency, onClose, onSave }: { plan: PackagePlan | null; currency: string; onClose: () => void; onSave: (d: Record<string, unknown>) => Promise<unknown> }) {
   const { t } = useI18n();
+  const cat = useFaceCatalog();
   const P = t.services.facePackages;
   const [name, setName] = useState(plan?.name ?? "");
   const [nameAr, setNameAr] = useState(plan?.nameAr ?? "");
@@ -162,7 +164,7 @@ function PlanForm({ plan, currency, onClose, onSave }: { plan: PackagePlan | nul
           {items.map((it, n) => (
             <div key={n} className="flex items-center gap-2" data-plan-item={n}>
               <Select value={it.treatmentKey} onChange={(e) => setItem(n, { treatmentKey: e.target.value })} className="min-w-0 flex-1">
-                {FACE_TREATMENTS.map((x) => (
+                {cat.offered.map((x) => (
                   <option key={x.key} value={x.key}>
                     {x.en}
                   </option>

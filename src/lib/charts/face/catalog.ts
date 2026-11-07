@@ -111,7 +111,34 @@ export type FaceTreatment = {
   units?: boolean;
   /** What staff actually type: "botox", "بوتوكس". Searched, never shown. */
   aliases?: string[];
+  /** The clinic's own (0094), not one of the thirteen below. */
+  custom?: boolean;
+  /** No longer offered, still named by what was recorded with it. */
+  archived?: boolean;
 };
+
+/** A kind of a treatment (0094): a TCA peel, PDO threads. It may have its own price and preselect a product. */
+export type FaceVariant = { id: string; treatmentKey: string; name: string; nameAr: string | null; productId: string | null; active: boolean };
+
+/**
+ * What a recorded treatment's price counted, frozen on the entry (`chart_marks.detail`).
+ * A built-in treatment's shape is in the code; a clinic's own can be renamed or
+ * archived, so the entry keeps what it was when it was recorded.
+ */
+export type MarkDetail = { pricedBy?: PricedBy; units?: boolean; variant?: { id: string; name: string; nameAr: string | null } };
+
+/** How a treatment counts, from the catalog or else from what its entry froze. */
+export function shapeOf(key: string, detail?: MarkDetail | null): { pricedBy: PricedBy; units: boolean } | null {
+  const t = FACE_TREATMENT_BY_KEY.get(key);
+  if (t) return { pricedBy: t.pricedBy, units: !!t.units };
+  return detail?.pricedBy ? { pricedBy: detail.pricedBy, units: !!detail.units } : null;
+}
+
+/** The thirteen and the clinic's own, as one: what is offered, and everything that can be named. */
+export function mergeCatalog(custom: FaceTreatment[]): { offered: FaceTreatment[]; byKey: Map<string, FaceTreatment> } {
+  const all = [...FACE_TREATMENTS, ...custom];
+  return { offered: all.filter((t) => !t.archived), byKey: new Map(all.map((t) => [t.key, t])) };
+}
 
 const ALL = FACE_ZONES.map((z) => z.key);
 const SKIN = ALL.filter((k) => k !== "scalp");
@@ -239,8 +266,10 @@ export function totalUnits(t: FaceTreatment, areas: Area[]): number | null {
  * it by product (a Juvederm syringe dearer than another), else the
  * treatment's own — as a crown's price follows its material.
  */
-export function pickFacePrice<T extends { chartKey: string; variant: string | null }>(list: T[], key: string, productId: string | null): T | null {
-  return (productId ? list.find((p) => p.chartKey === key && p.variant === productId) : undefined) ?? list.find((p) => p.chartKey === key && p.variant === null) ?? null;
+export function pickFacePrice<T extends { chartKey: string; variant: string | null }>(list: T[], key: string, productId: string | null, variantId: string | null = null): T | null {
+  // The kind of work first (a TCA peel costs more than a glycolic), then the product, then the treatment.
+  const exact = (id: string | null) => (id ? list.find((p) => p.chartKey === key && p.variant === id) : undefined);
+  return exact(variantId) ?? exact(productId) ?? list.find((p) => p.chartKey === key && p.variant === null) ?? null;
 }
 
 /** What a product is counted in (0085 aesthetic_products.unit). */
@@ -307,16 +336,20 @@ export function unitsText(n: number, locale: string): string {
  * "فيلر — الشفاه (سرنجة واحدة)".
  */
 export function faceLineText(
-  m: { treatmentKey: string; label: string; labelAr: string; areas: Area[]; quantity: number | null },
+  m: { treatmentKey: string; label: string; labelAr: string; areas: Area[]; quantity: number | null; detail?: MarkDetail | null },
   serviceName: { name: string; nameAr: string | null } | null,
   locale: string
 ): string {
-  const t = FACE_TREATMENT_BY_KEY.get(m.treatmentKey);
-  const name = serviceName ? (locale === "ar" ? serviceName.nameAr || serviceName.name : serviceName.name) : locale === "ar" ? m.labelAr || m.label : m.label;
+  const t = shapeOf(m.treatmentKey, m.detail);
+  const v = m.detail?.variant;
+  const variant = v ? (locale === "ar" ? v.nameAr || v.name : v.name) : null;
+  let name = serviceName ? (locale === "ar" ? serviceName.nameAr || serviceName.name : serviceName.name) : locale === "ar" ? m.labelAr || m.label : m.label;
+  // The variant's own price is already named after it; any other line says which kind it was.
+  if (variant && !name.includes(variant)) name = `${name} (${variant})`;
   const where = whereText(m.areas.map((a) => a.zone), locale);
   const parts: string[] = [];
   if (t && t.pricedBy !== "session" && m.quantity != null) parts.push(amountText(t.pricedBy, Number(m.quantity), locale));
-  const units = t ? totalUnits(t, m.areas) : null;
+  const units = t?.units ? m.areas.reduce((n, a) => n + (a.units ?? 0), 0) : null;
   if (units && t?.pricedBy !== "unit") parts.push(unitsText(units, locale));
   return `${name}${where ? ` — ${where}` : ""}${parts.length ? ` (${parts.join(" · ")})` : ""}`.slice(0, 200);
 }

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
-import { FACE_TREATMENT_BY_KEY } from "@/lib/charts/face/catalog";
+import { clinicTreatmentKeys } from "@/lib/charts/face/treatments";
 import { loadPlans, type PackagePlan } from "@/lib/charts/face/packages";
 
 const schema = z.object({
@@ -34,9 +34,10 @@ export async function savePlanAction(slug: string, data: unknown): Promise<{ pla
   const parsed = schema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
-  if (!d.items.every((i) => FACE_TREATMENT_BY_KEY.has(i.treatmentKey))) return { error: "invalid" };
-
   return inClinic(access, async (c) => {
+    // The face chart's treatments, the clinic's own included.
+    const known = await clinicTreatmentKeys(c, access.clinicId);
+    if (!d.items.every((i) => known.has(i.treatmentKey))) return { error: "invalid" };
     let id = d.id;
     if (id) {
       const u = await c.query(`update package_plans set name = $3, name_ar = $4, price = $5, valid_months = $6, active = $7 where id = $1 and clinic_id = $2`, [

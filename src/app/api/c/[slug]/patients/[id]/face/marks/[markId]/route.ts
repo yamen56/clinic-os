@@ -7,7 +7,8 @@ import { audit } from "@/lib/audit";
 import { toEvent } from "@/lib/charts/dental/db";
 import { loadBilled } from "@/lib/charts/dental/billing-server";
 import { FACE_MARK_SELECT, loadFacePrices, toFaceMark } from "@/lib/charts/face/db";
-import { FACE_TREATMENT_BY_KEY, feeOf, pickFacePrice } from "@/lib/charts/face/catalog";
+import { feeOf, pickFacePrice } from "@/lib/charts/face/catalog";
+import { resolveTreatment } from "@/lib/charts/face/treatments";
 import { dropStock, returnStock } from "@/lib/charts/face/stock";
 import { PACKAGE_KEY } from "@/lib/charts/face/packages";
 
@@ -103,9 +104,10 @@ export async function PATCH(req: Request, ctx: Params) {
         // Once on an invoice that stands, the invoice is the price.
         if ((await loadBilled(c, access.clinicId, [markId])).some((x) => x.qty > 0)) return { error: "billed" as const };
         if (b.fee === null) {
-          const t = FACE_TREATMENT_BY_KEY.get(cur.treatment_key);
+          const t = await resolveTreatment(c, access.clinicId, cur.treatment_key);
           const used = (await c.query(`select product_id from chart_mark_products where mark_id = $1 limit 1`, [markId])).rows[0]?.product_id ?? null;
-          const price = t ? pickFacePrice(await loadFacePrices(c, access.clinicId, t.key), t.key, used) : null;
+          const variantId = (cur.detail as { variant?: { id: string } } | null)?.variant?.id ?? null;
+          const price = t ? pickFacePrice(await loadFacePrices(c, access.clinicId, t.key), t.key, used, variantId) : null;
           const fee = feeOf(price?.price ?? null, Number(cur.quantity ?? 1));
           await c.query(`update chart_marks set fee = $2, fee_manual = false, service_id = coalesce($3, service_id) where id = $1`, [
             markId,

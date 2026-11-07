@@ -17,6 +17,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRealtimeRefresh, type RealtimeEvent } from "@/lib/use-realtime";
 import type { FaceChartData, FaceMark, FacePrice } from "@/lib/charts/face/db";
+import { mergeCatalog, type FaceTreatment, type FaceVariant } from "@/lib/charts/face/catalog";
 import type { MarkProduct, StockProduct } from "@/lib/charts/face/stock";
 import type { PackagePlan, PatientPackage } from "@/lib/charts/face/packages";
 import type { MarkEvent } from "@/lib/charts/dental/state";
@@ -81,6 +82,11 @@ export type FaceStore = Omit<FaceTabData, "chart"> & {
   packages: PatientPackage[];
   setPackages: Setter<PatientPackage[]>;
   plans: PackagePlan[];
+  /** The catalog's treatments and the clinic's own: what is offered, and everything that can be named. */
+  catalog: { offered: FaceTreatment[]; byKey: Map<string, FaceTreatment> };
+  variants: FaceVariant[];
+  /** The clinic's own treatments and variants, as the server now has them. */
+  setTreatments(custom: FaceTreatment[], variants: FaceVariant[]): void;
   /** Send a write through the store: a re-read waits for it, and its echo is not taken for a colleague's change. */
   write<T>(ids: string[], p: Promise<T>): Promise<T>;
   reload(): Promise<void>;
@@ -125,6 +131,13 @@ export function FaceProvider({
   const [markProducts, setMarkProducts] = useState<MarkProduct[]>(data.chart.markProducts);
   const [packages, setPackages] = useState<PatientPackage[]>(data.chart.packages);
   const [plans, setPlans] = useState<PackagePlan[]>(data.chart.plans);
+  const [custom, setCustom] = useState<FaceTreatment[]>(data.chart.custom);
+  const [variants, setVariants] = useState<FaceVariant[]>(data.chart.variants);
+  const catalog = useMemo(() => mergeCatalog(custom), [custom]);
+  const setTreatments = useCallback((c: FaceTreatment[], v: FaceVariant[]) => {
+    setCustom(c);
+    setVariants(v);
+  }, []);
   const sync = useRef({ inflight: 0, writes: 0, owed: false, mine: new Map<string, number>() });
   const [staleOnMount] = useState(() => Date.now() - renderedAt > STALE_AFTER_MS);
 
@@ -152,6 +165,8 @@ export function FaceProvider({
     setMarkProducts(body.chart.markProducts);
     setPackages(body.chart.packages);
     setPlans(body.chart.plans);
+    setCustom(body.chart.custom);
+    setVariants(body.chart.variants);
   }, [slug, patientId]);
 
   const write = useCallback(
@@ -213,10 +228,13 @@ export function FaceProvider({
       packages,
       setPackages,
       plans,
+      catalog,
+      variants,
+      setTreatments,
       write,
       reload,
     }),
-    [slug, patientId, data, marks, events, prices, billing, products, markProducts, packages, plans, write, reload]
+    [slug, patientId, data, marks, events, prices, billing, products, markProducts, packages, plans, catalog, variants, setTreatments, write, reload]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

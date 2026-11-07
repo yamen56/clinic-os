@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { loadPlans } from "@/lib/charts/face/packages";
+import { loadClinicTreatments } from "@/lib/charts/face/treatments";
+import { FaceCatalogProvider } from "@/components/charts/face/catalog-context";
 import { FacePackages } from "./face-packages";
 
 /*
@@ -12,6 +14,13 @@ export default async function FacePackagesPage({ params }: { params: Promise<{ s
   const { slug } = await params;
   const access = await guardCap(slug, "settings.services");
   if (!access.clinic.features.aesthetic) redirect(`/c/${slug}/settings/services`);
-  const plans = await inClinic(access, (c) => loadPlans(c, access.clinicId, false));
-  return <FacePackages slug={slug} currency={access.clinic.currency} plans={plans} />;
+  const { plans, custom } = await inClinic(access, async (c) => ({
+    plans: await loadPlans(c, access.clinicId, false),
+    custom: (await loadClinicTreatments(c, access.clinicId)).custom,
+  }));
+  return (
+    <FaceCatalogProvider custom={custom}>
+      <FacePackages slug={slug} currency={access.clinic.currency} plans={plans} />
+    </FaceCatalogProvider>
+  );
 }

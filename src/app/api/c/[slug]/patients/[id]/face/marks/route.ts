@@ -6,7 +6,8 @@ import { audit } from "@/lib/audit";
 import { todaysVisit } from "@/lib/charts/dental/server";
 import { toEvent } from "@/lib/charts/dental/db";
 import { FACE_MARK_SELECT, loadFacePrices, toFaceMark } from "@/lib/charts/face/db";
-import { FACE_TREATMENT_BY_KEY, feeOf, inFaceOrder, isZone, pickFacePrice, quantityOf } from "@/lib/charts/face/catalog";
+import { feeOf, inFaceOrder, isZone, pickFacePrice, quantityOf, type FaceTreatment, type MarkDetail } from "@/lib/charts/face/catalog";
+import { resolveTreatment, resolveVariant } from "@/lib/charts/face/treatments";
 import { takeStock } from "@/lib/charts/face/stock";
 import { usablePackageItem } from "@/lib/charts/face/packages";
 
@@ -43,6 +44,8 @@ const bodySchema = z.object({
   product: z.object({ id: z.string().uuid(), qty: z.number().positive().max(100000) }).nullish(),
   /** A session from one of the patient's packages. */
   packageItemId: z.string().uuid().nullish(),
+  /** The kind of work (0094): a TCA peel, PDO threads. */
+  variantId: z.string().uuid().nullish(),
 });
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
@@ -55,17 +58,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
   if (!parsed.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const d = parsed.data;
 
-  const t = FACE_TREATMENT_BY_KEY.get(d.treatmentKey);
-  if (!t) return NextResponse.json({ error: "unknown_treatment" }, { status: 400 });
-  // Each area once, a real one, one this treatment is done on.
   const zones = d.areas.map((a) => a.zone);
-  if (new Set(zones).size !== zones.length || !zones.every((z) => isZone(z) && t.fits.includes(z))) {
-    return NextResponse.json({ error: "invalid_area" }, { status: 400 });
-  }
-  // Units only where the treatment is dosed in them.
-  const areas = inFaceOrder(d.areas.map((a) => (t.units ? { zone: a.zone, units: a.units ?? 0 } : { zone: a.zone })));
 
   const result = await inClinic(access, async (c) => {
+    // The clinic's own treatments are found here as readily as the catalog's. An archived one is not offered.
+    const t: FaceTreatment | null = await resolveTreatment(c, access.clinicId, d.treatmentKey);
+    if (!t || t.archived) return { error: "unknown_treatment" as const };
+    // Each area once, a real one, one this treatment is done on.
+    if (new Set(zones).size !== zones.length || !zones.every((z) => isZone(z) && t.fits.includes(z))) return { error: "invalid_area" as const };
+    // Units only where the treatment is dosed in them.
+    const areas = inFaceOrder(d.areas.map((a) => (t.units ? { zone: a.zone, units: a.units ?? 0 } : { zone: a.zone })));
+    const variant = d.variantId ? await resolveVariant(c, access.clinicId, t.key, d.variantId) : null;
+    if (d.variantId && !variant) return { error: "invalid_variant" as const };
+    // How it counted, and which kind it was, frozen: the clinic may rename or archive its own later.
+    const detail: MarkDetail = { pricedBy: t.pricedBy, units: !!t.units, ...(variant ? { variant: { id: variant.id, name: variant.name, nameAr: variant.nameAr } } : {}) };
+
     const p = await c.query(`select 1 from patients where id = $1 and clinic_id = $2 and merged_into is null`, [id, access.clinicId]);
     if (!p.rowCount) return { error: "not_found" as const };
 
@@ -90,7 +97,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     }
 
     const visit = await todaysVisit(c, access.clinicId, id, null, d.performedBy ?? null);
-    const price = pickFacePrice(await loadFacePrices(c, access.clinicId, t.key), t.key, d.product?.id ?? null);
+    const price = pickFacePrice(await loadFacePrices(c, access.clinicId, t.key), t.key, d.product?.id ?? null, variant?.id ?? null);
     const quantity = quantityOf(t, areas, d.count);
     // From a package: paid for in the package, so nothing more to bill.
     const fee = d.packageItemId ? 0 : feeOf(price?.price ?? null, quantity);
@@ -98,7 +105,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       `insert into chart_marks (id, clinic_id, patient_id, chart, site, treatment_key, label, label_ar, look, kind, detail, status,
                                 performed_by, recorded_by, done_at, appointment_id, fee, service_id, note, areas, quantity,
                                 package_item_id, commission_percent, costs_rule)
-       values ($1, $2, $3, 'aesthetic', 'face', $4, $5, $6, $7, 'procedure', '{}', 'done',
+       values ($1, $2, $3, 'aesthetic', 'face', $4, $5, $6, $7, 'procedure', $19, 'done',
                $8, $9, now(), $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
       [
         d.id,
@@ -121,6 +128,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         // The deal is frozen only on a package session: any other work freezes it on its invoice line.
         d.packageItemId ? deal.rate : null,
         d.packageItemId ? deal.rule : null,
+        JSON.stringify(detail),
       ]
     );
     if (d.product) await takeStock(c, access.clinicId, d.product.id, d.product.qty, d.id, access.session.user.id);
@@ -137,7 +145,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       action: "face.mark.create",
       entity: "patient",
       entityId: id,
-      detail: { mark: d.id, treatment: t.key, areas: zones, quantity, ...(d.product ? { product: d.product } : {}), ...(d.packageItemId ? { packageItem: d.packageItemId } : {}) },
+      detail: { mark: d.id, treatment: t.key, areas: zones, quantity, ...(variant ? { variant: variant.id } : {}), ...(d.product ? { product: d.product } : {}), ...(d.packageItemId ? { packageItem: d.packageItemId } : {}) },
     });
     const mark = (await c.query(`${FACE_MARK_SELECT} where m.id = $1 and m.clinic_id = $2`, [d.id, access.clinicId])).rows[0];
     const events = await c.query(

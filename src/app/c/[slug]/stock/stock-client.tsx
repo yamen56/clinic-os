@@ -24,7 +24,8 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { fmtDateOnly, fmtMoney } from "@/lib/dates";
-import { FACE_TREATMENTS, FACE_TREATMENT_BY_KEY, productAmount } from "@/lib/charts/face/catalog";
+import { productAmount } from "@/lib/charts/face/catalog";
+import { useFaceCatalog } from "@/components/charts/face/catalog-context";
 import { EXPIRY_WARN_DAYS, PRODUCT_UNITS, needsRestock, type Company, type ProductUnit, type StockBatch, type StockMove, type StockProduct } from "@/lib/charts/face/stock";
 import { FamilyTag } from "@/components/charts/face/family-tag";
 import {
@@ -70,6 +71,7 @@ export function StockClient({
   pricesHref: string | null;
 }) {
   const { t, locale } = useI18n();
+  const cat = useFaceCatalog();
   const S = t.stock;
   const { toast } = useToast();
   const [products, setProducts] = useState(initialProducts);
@@ -208,7 +210,7 @@ export function StockClient({
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {p.treatments.length ? (
                       p.treatments.map((k) => {
-                        const tr = FACE_TREATMENT_BY_KEY.get(k);
+                        const tr = cat.byKey.get(k);
                         return tr ? <FamilyTag key={k} family={tr.family} label={tr.en} /> : null;
                       })
                     ) : (
@@ -470,6 +472,7 @@ function ProductForm({
   onSave: (data: Record<string, unknown>) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const cat = useFaceCatalog();
   const S = t.stock;
   const P = S.product;
   const [name, setName] = useState(product?.name ?? "");
@@ -555,7 +558,7 @@ function ProductForm({
         <div className="text-[13px] font-semibold text-ink-900">{P.treatments}</div>
         <div className="text-xs text-ink-500">{P.treatmentsHint}</div>
         <div className="mt-2 grid gap-1.5 sm:grid-cols-2" dir="ltr">
-          {FACE_TREATMENTS.map((x) => (
+          {cat.offered.map((x) => (
             <label key={x.key} className="flex items-center gap-2 text-[13px]">
               <input
                 type="checkbox"

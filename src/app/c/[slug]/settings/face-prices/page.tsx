@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { guardCap } from "@/lib/guard";
 import { can } from "@/lib/auth";
+import { loadClinicTreatments } from "@/lib/charts/face/treatments";
 import { inClinic } from "@/lib/clinic-api";
 import { loadFacePrices } from "@/lib/charts/face/db";
 import { loadStockProducts } from "@/lib/charts/face/stock";
@@ -29,7 +30,7 @@ export default async function FacePricesPage({ params }: { params: Promise<{ slu
         [access.clinicId]
       )
     ).rows as { treatment_key: string; used: number; unpriced: number }[];
-    return { prices, products, used };
+    return { prices, products, used, ...(await loadClinicTreatments(c, access.clinicId)) };
   });
 
   return (
@@ -40,6 +41,8 @@ export default async function FacePricesPage({ params }: { params: Promise<{ slu
       products={data.products.map((p) => ({ id: p.id, name: p.name, company: p.company, treatments: p.treatments }))}
       usage={Object.fromEntries(data.used.map((u) => [u.treatment_key, { used: u.used, unpriced: u.unpriced }]))}
       stockHref={can(access, "stock") ? `/c/${slug}/stock` : null}
+      custom={data.custom}
+      variants={data.variants}
     />
   );
 }

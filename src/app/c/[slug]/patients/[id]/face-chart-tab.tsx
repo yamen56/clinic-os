@@ -22,7 +22,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { PackagePlus, Repeat2, Undo2, X } from "lucide-react";
+import { PackagePlus, Plus, Repeat2, Undo2, X } from "lucide-react";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
@@ -32,8 +32,6 @@ import { Input, Select, Textarea } from "@/components/ui/input";
 import { fmtDate, fmtDateOnly, fmtMoney } from "@/lib/dates";
 import {
   DEFAULT_UNITS,
-  FACE_TREATMENTS,
-  FACE_TREATMENT_BY_KEY,
   FAMILIES,
   FAMILY_COLOR,
   PRESETS,
@@ -50,6 +48,9 @@ import {
   type Area,
   type Family,
   type FaceTreatment,
+  type FaceVariant,
+  type PricedBy,
+  FACE_ZONES,
 } from "@/lib/charts/face/catalog";
 import type { FaceMark } from "@/lib/charts/face/db";
 import type { StockProduct } from "@/lib/charts/face/stock";
@@ -126,7 +127,11 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const [selling, setSelling] = useState(false);
   const [now] = useState(() => Date.now());
 
-  const tr = tKey ? (FACE_TREATMENT_BY_KEY.get(tKey) ?? null) : null;
+  const tr = tKey ? (s.catalog.byKey.get(tKey) ?? null) : null;
+  const [variantId, setVariantId] = useState("");
+  const [adding, setAdding] = useState(false);
+  const kinds = tr ? s.variants.filter((v) => v.treatmentKey === tr.key && v.active) : [];
+  const variant = kinds.find((v) => v.id === variantId) ?? null;
   // The package sales are entries too, but nothing is done on the face by selling one.
   const work = useMemo(() => s.marks.filter((m) => m.treatmentKey !== PACKAGE_KEY), [s.marks]);
   const live = useMemo(() => work.filter((m) => !m.voidedAt), [work]);
@@ -191,9 +196,12 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     setTKey(null);
   };
 
-  const start = (k: string, from?: FaceMark) => {
-    const t2 = FACE_TREATMENT_BY_KEY.get(k);
-    if (!t2) return;
+  // `given` is a treatment made a moment ago, before the catalog this render read has it.
+  const start = (k: string, from?: FaceMark, given?: FaceTreatment) => {
+    const t2 = given ?? s.catalog.byKey.get(k);
+    if (!t2 || t2.archived) return;
+    // The kind done last time, when it was a repeat.
+    setVariantId(from?.detail.variant?.id ?? "");
     const zones = from ? from.areas.map((a) => a.zone) : sel;
     setSel(zones);
     setTKey(k);
@@ -210,7 +218,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     setNote("");
   };
 
-  const fits = useMemo(() => (sel.length ? FACE_TREATMENTS.filter((x) => sel.every((z) => x.fits.includes(z))) : []), [sel]);
+  const fits = useMemo(() => (sel.length ? s.catalog.offered.filter((x) => sel.every((z) => x.fits.includes(z))) : []), [sel, s.catalog]);
   const here = useMemo(() => newestFirst.filter((m) => !m.voidedAt && m.areas.some((a) => sel.includes(a.zone))), [newestFirst, sel]);
 
   /* ---- the record panel's numbers ---- */
@@ -225,7 +233,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const preview = product && qty > 0 ? costPreview(product, qty) : null;
   const covering = tr ? usableItem(s.packages, tr.key, today) : null;
   const covered = !!covering && fromPackage;
-  const listPrice = tr ? pickFacePrice(s.prices, tr.key, product?.id ?? null) : null;
+  const listPrice = tr ? pickFacePrice(s.prices, tr.key, product?.id ?? null, variant?.id ?? null) : null;
   const fee = tr ? (covered ? 0 : feeOf(listPrice?.price ?? null, quantity)) : null;
   const worth = covering ? (covering.item.value / covering.item.sessions) : null;
 
@@ -241,6 +249,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     const fresh: FaceMark = {
       id,
       treatmentKey: tr.key,
+      detail: { pricedBy: tr.pricedBy, units: !!tr.units, ...(variant ? { variant: { id: variant.id, name: variant.name, nameAr: variant.nameAr } } : {}) },
       label: tr.en,
       labelAr: tr.ar,
       family: tr.family,
@@ -276,6 +285,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
         note: fresh.note,
         product: product && qty > 0 ? { id: product.id, qty } : null,
         packageItemId: fresh.packageItemId,
+        variantId: variant?.id ?? null,
       })
     )
       .then((r) => {
@@ -349,7 +359,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   /* ---- reading ---- */
 
   const amountOf = (m: FaceMark) => {
-    const x = FACE_TREATMENT_BY_KEY.get(m.treatmentKey);
+    const x = s.catalog.byKey.get(m.treatmentKey);
     const parts: string[] = [];
     if (x && x.pricedBy !== "session" && m.quantity != null) parts.push(amountText(x.pricedBy, m.quantity, "en"));
     const u = x ? totalUnits(x, m.areas) : null;
@@ -444,7 +454,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
           {!compact && <span className="text-[13px] font-semibold tnum">{session ? F.covered : m.fee != null ? money(m.fee) : "—"}</span>}
           {!m.voidedAt && (
             <div className="flex flex-wrap justify-end gap-1">
-              {s.canWrite && FACE_TREATMENT_BY_KEY.has(m.treatmentKey) && (
+              {s.canWrite && s.catalog.byKey.has(m.treatmentKey) && !s.catalog.byKey.get(m.treatmentKey)?.archived && (
                 <button type="button" onClick={() => start(m.treatmentKey, m)} className={`${action} text-brand-700`} aria-label={F.repeatOf.replace("{treatment}", m.label)} data-face-repeat={m.id}>
                   <Repeat2 className="h-3.5 w-3.5" />
                   {F.repeat}
@@ -595,7 +605,24 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                   ) : (
                     <p className="mt-1 text-[13px] text-ink-500">{F.noneFits}</p>
                   )}
+                  {/* The clinic's own, made at the chair: the thirteen are a start, not the list. */}
+                  <Button size="sm" variant="outline" className="mt-2 min-h-10" onClick={() => setAdding(true)} data-face-add-treatment>
+                    <Plus className="h-4 w-4" />
+                    {F.addTreatment}
+                  </Button>
                 </>
+              )}
+              {adding && (
+                <AddTreatment
+                  slug={s.slug}
+                  zones={sel}
+                  onClose={() => setAdding(false)}
+                  onAdded={(key, custom, variants) => {
+                    s.setTreatments(custom, variants);
+                    setAdding(false);
+                    start(key, undefined, custom.find((c) => c.key === key));
+                  }}
+                />
               )}
             </div>
           )}
@@ -656,6 +683,23 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                   <div className="mt-1 text-end text-[13px] font-bold tnum">{F.unitsTotal.replace("{n}", String(unitsTotal ?? 0))}</div>
                 </div>
               )}
+
+              <VariantPicker
+                slug={s.slug}
+                treatmentKey={tr.key}
+                kinds={kinds}
+                value={variantId}
+                onChange={(id) => {
+                  setVariantId(id);
+                  // A kind can bring its product with it.
+                  const v = kinds.find((k) => k.id === id);
+                  if (v?.productId && productsFor(tr.key).some((p) => p.id === v.productId)) setProductId(v.productId);
+                }}
+                onAdded={(id, custom, variants) => {
+                  s.setTreatments(custom, variants);
+                  setVariantId(id);
+                }}
+              />
 
               {tr.pricedBy === "syringe" && stepper(F.count.syringe, count, setCount)}
               {tr.pricedBy === "thread" && stepper(F.count.thread, count, setCount)}
@@ -867,7 +911,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                     </div>
                     <div className="mt-1.5 grid gap-1.5">
                       {p.items.map((i) => {
-                        const x = FACE_TREATMENT_BY_KEY.get(i.treatmentKey);
+                        const x = s.catalog.byKey.get(i.treatmentKey);
                         return (
                           <div key={i.id} className="flex items-center gap-2" data-face-package-item={i.id} data-used={i.used}>
                             <span className="min-w-0 flex-[0_1_12rem] truncate text-[12.5px]">{x?.en ?? i.treatmentKey}</span>
@@ -920,6 +964,192 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       </ConfirmDialog>
 
       {selling && <SellPackage base={base} onClose={() => setSelling(false)} />}
+    </div>
+  );
+}
+
+type TreatmentsAnswer = { ok?: boolean; key?: string; variantId?: string; custom: FaceTreatment[]; variants: FaceVariant[]; error?: string };
+
+async function treatmentsCall(slug: string, body: Record<string, unknown>): Promise<TreatmentsAnswer> {
+  const res = await fetch(`/api/c/${slug}/face/treatments`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  return ((await res.json().catch(() => ({ error: "failed" }))) as TreatmentsAnswer) ?? { error: "failed" };
+}
+
+/**
+ * A treatment the clinic does that the chart does not list, made at the chair.
+ * It starts on the areas the doctor picked, which is where it was just done.
+ */
+function AddTreatment({
+  slug,
+  zones,
+  onClose,
+  onAdded,
+}: {
+  slug: string;
+  zones: string[];
+  onClose: () => void;
+  onAdded: (key: string, custom: FaceTreatment[], variants: FaceVariant[]) => void;
+}) {
+  const { t } = useI18n();
+  const F = t.face;
+  const N = F.newTreatment;
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [family, setFamily] = useState<Family>("skin");
+  const [pricedBy, setPricedBy] = useState<PricedBy>("session");
+  const [units, setUnits] = useState(false);
+  const [anywhere, setAnywhere] = useState(zones.length === 0);
+  const [busy, setBusy] = useState(false);
+
+  const create = async () => {
+    setBusy(true);
+    const r = await treatmentsCall(slug, {
+      op: "create",
+      name: name.trim(),
+      nameAr: nameAr.trim() || null,
+      family,
+      pricedBy,
+      units: units || pricedBy === "unit",
+      fits: anywhere || !zones.length ? FACE_ZONES.map((z) => z.key) : zones,
+    });
+    setBusy(false);
+    if (!r.key) return toast(r.error === "exists" ? N.exists : t.common.genericError, "error");
+    onAdded(r.key, r.custom, r.variants);
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={N.title}
+      footer={
+        <Button onClick={() => void create()} loading={busy} disabled={!name.trim()} data-face-new-save>
+          {N.create}
+        </Button>
+      }
+    >
+      <div className="grid gap-3">
+        <label className="grid gap-1 text-[13px] font-semibold">
+          {N.name}
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} data-face-new-name />
+        </label>
+        <label className="grid gap-1 text-[13px] font-semibold">
+          {N.nameAr}
+          <Input value={nameAr} onChange={(e) => setNameAr(e.target.value)} maxLength={80} dir="rtl" />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="grid gap-1 text-[13px] font-semibold">
+            {N.family}
+            <Select value={family} onChange={(e) => setFamily(e.target.value as Family)} data-face-new-family>
+              {FAMILIES.map((f) => (
+                <option key={f} value={f}>
+                  {F.families[f]}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="grid gap-1 text-[13px] font-semibold">
+            {N.pricedBy}
+            <Select value={pricedBy} onChange={(e) => setPricedBy(e.target.value as PricedBy)} data-face-new-priced>
+              {(["session", "area", "unit", "syringe", "thread"] as const).map((p) => (
+                <option key={p} value={p}>
+                  {F.pricedBy[p]}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+        <label className="flex min-h-10 items-center gap-2 text-[13.5px]">
+          <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={units || pricedBy === "unit"} disabled={pricedBy === "unit"} onChange={(e) => setUnits(e.target.checked)} />
+          {N.units}
+        </label>
+        <div className="grid gap-1">
+          <div className="text-[13px] font-semibold">{N.where}</div>
+          {zones.length > 0 && (
+            <label className="flex min-h-10 items-center gap-2 text-[13.5px]">
+              <input type="radio" name="where" className="h-4 w-4 accent-brand-600" checked={!anywhere} onChange={() => setAnywhere(false)} />
+              {N.whereSelected}: {whereText(zones, "en")}
+            </label>
+          )}
+          <label className="flex min-h-10 items-center gap-2 text-[13.5px]">
+            <input type="radio" name="where" className="h-4 w-4 accent-brand-600" checked={anywhere} onChange={() => setAnywhere(true)} data-face-new-anywhere />
+            {N.whereAll}
+          </label>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * The kind of work, when a treatment comes in kinds: TCA or glycolic, PDO or PLLA.
+ * Optional, and a new kind is typed in place: the doctor is mid-treatment.
+ */
+function VariantPicker({
+  slug,
+  treatmentKey,
+  kinds,
+  value,
+  onChange,
+  onAdded,
+}: {
+  slug: string;
+  treatmentKey: string;
+  kinds: FaceVariant[];
+  value: string;
+  onChange: (id: string) => void;
+  onAdded: (id: string, custom: FaceTreatment[], variants: FaceVariant[]) => void;
+}) {
+  const { t } = useI18n();
+  const F = t.face;
+  const { toast } = useToast();
+  const [typing, setTyping] = useState(false);
+  const [name, setName] = useState("");
+  const add = async () => {
+    if (!name.trim()) return;
+    const r = await treatmentsCall(slug, { op: "variant", treatmentKey, name: name.trim() });
+    if (!r.variantId) return toast(r.error === "exists" ? F.newTreatment.exists : t.common.genericError, "error");
+    setName("");
+    setTyping(false);
+    onAdded(r.variantId, r.custom, r.variants);
+  };
+  const chip = (on: boolean) => `inline-flex min-h-9 items-center rounded-full border px-3 text-[13px] font-semibold ${on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line-strong hover:bg-sunken"}`;
+  return (
+    <div data-face-variants>
+      <h4 className="text-[12px] font-semibold uppercase tracking-wide text-ink-500">{F.variant}</h4>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <button type="button" className={chip(!value)} onClick={() => onChange("")} aria-pressed={!value}>
+          {F.variantAny}
+        </button>
+        {kinds.map((k) => (
+          <button key={k.id} type="button" className={chip(value === k.id)} onClick={() => onChange(k.id)} aria-pressed={value === k.id} data-face-variant={k.name}>
+            {k.name}
+          </button>
+        ))}
+        {typing ? (
+          <span className="flex items-center gap-1.5">
+            <Input
+              value={name}
+              autoFocus
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), void add())}
+              placeholder={F.variantPlaceholder}
+              maxLength={60}
+              className="h-9 w-40"
+              data-face-variant-name
+            />
+            <Button size="sm" onClick={() => void add()} disabled={!name.trim()} data-face-variant-save>
+              {F.addVariant}
+            </Button>
+          </span>
+        ) : (
+          <button type="button" className="inline-flex min-h-9 items-center gap-1 px-2 text-[13px] font-semibold text-brand-700 hover:underline" onClick={() => setTyping(true)} data-face-variant-add>
+            <Plus className="h-3.5 w-3.5" />
+            {F.addVariant}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -998,7 +1228,7 @@ function SellPackage({ base, onClose }: { base: string; onClose: () => void }) {
                 </span>
                 <span className="mt-1 flex flex-wrap gap-1.5">
                   {p.items.map((i, n) => {
-                    const x = FACE_TREATMENT_BY_KEY.get(i.treatmentKey);
+                    const x = s.catalog.byKey.get(i.treatmentKey);
                     return x ? <FamilyTag key={n} family={x.family} label={`${x.en} × ${i.sessions}`} /> : null;
                   })}
                 </span>

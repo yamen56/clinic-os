@@ -1549,6 +1549,22 @@ never stored: it is the sum of the moves.
   Stock, once per occurrence (claimed in `jobs` by `dedupe_key`), between 09:00 and 21:00.
 - People without `stock` are not sent product costs on the chart (`withoutCosts`).
 
+### Face chart: the clinic's own treatments and their kinds (0094)
+
+The thirteen treatments in `src/lib/charts/face/catalog.ts` are a start, not the list. A doctor
+adds one at the chair ("Add a treatment", on the areas just picked) or a kind of any treatment
+("Add a kind": TCA or glycolic, PDO or PLLA).
+
+- `aesthetic_treatments` keys are `aes_c_<id>`: the `aes_` prefix keeps them with the face prices
+  and off the dental list. Never deleted, archived: past entries name them. `resolveTreatment`
+  finds built-in and own alike, and every reader (recording, prices, packages, products) uses it.
+- `aesthetic_treatment_variants` belong to any treatment. A kind may have its own price (a service
+  whose `chart_variant` is the kind's id) and may preselect a product. Pricing picks the kind's
+  price, then the product's, then the treatment's (`pickFacePrice`).
+- Each entry freezes how it counted and which kind it was in `chart_marks.detail`, because the
+  clinic may rename or archive its own treatment later; `shapeOf` reads it when the catalog cannot.
+  The invoice line names the kind.
+
 ### What the clinic kept
 
 On the Earnings tab, gated on `invoices.analytics` **and** full control, the chain rather
