@@ -58,7 +58,17 @@ export type StockProduct = {
   batches: StockBatch[];
 };
 
-export type Company = { id: string; name: string; phone: string; note: string; active: boolean };
+export type Company = {
+  id: string;
+  name: string;
+  phone: string;
+  note: string;
+  active: boolean;
+  /** How many of the clinic's products come from it, archived ones included. */
+  products: number;
+  /** What every delivery from it cost, at the price each came in at. */
+  spent: number;
+};
 
 const day = (v: unknown): string | null => (v ? String(v).slice(0, 10) : null);
 
@@ -160,8 +170,23 @@ export function withoutCosts(p: StockProduct): StockProduct {
 }
 
 export async function loadCompanies(c: PoolClient, clinicId: string): Promise<Company[]> {
-  const r = await c.query(`select id, name, phone, note, active from aesthetic_companies where clinic_id = $1 order by sort, name`, [clinicId]);
-  return r.rows.map((x) => ({ id: x.id, name: x.name, phone: x.phone, note: x.note, active: !!x.active }));
+  const r = await c.query(
+    `select co.id, co.name, co.phone, co.note, co.active,
+            (select count(*)::int from aesthetic_products p where p.company_id = co.id) as products,
+            coalesce((select sum(b.qty * b.unit_cost) from stock_batches b join aesthetic_products p on p.id = b.product_id
+                       where p.company_id = co.id), 0)::float as spent
+       from aesthetic_companies co where co.clinic_id = $1 order by co.sort, co.name`,
+    [clinicId]
+  );
+  return r.rows.map((x) => ({
+    id: x.id,
+    name: x.name,
+    phone: x.phone,
+    note: x.note,
+    active: !!x.active,
+    products: Number(x.products),
+    spent: Math.round(Number(x.spent) * 100) / 100,
+  }));
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -313,11 +338,23 @@ export async function loadProductMoves(c: PoolClient, clinicId: string, productI
 }
 
 /** What each of these treatments used, for the chart. Costs only for a member who sees stock. */
-export type MarkProduct = { markId: string; productId: string; name: string; company: string | null; unit: ProductUnit; qty: number; cost: number | null };
+export type MarkProduct = {
+  markId: string;
+  productId: string;
+  name: string;
+  company: string | null;
+  unit: ProductUnit;
+  qty: number;
+  cost: number | null;
+  /** The lots it came out of, so a recall can be traced to the patient. */
+  lots: string[];
+};
 
 export async function loadMarkProducts(c: PoolClient, clinicId: string, patientId: string, withCost: boolean): Promise<MarkProduct[]> {
   const r = await c.query(
-    `select cmp.mark_id, cmp.product_id, p.name, co.name as company, p.unit, cmp.qty::float as qty, cmp.cost::float as cost
+    `select cmp.mark_id, cmp.product_id, p.name, co.name as company, p.unit, cmp.qty::float as qty, cmp.cost::float as cost,
+            coalesce((select array_agg(distinct b.lot order by b.lot) from stock_moves m join stock_batches b on b.id = m.batch_id
+                       where m.mark_id = cmp.mark_id and m.product_id = cmp.product_id and m.kind = 'use' and b.lot <> ''), '{}') as lots
        from chart_mark_products cmp
        join chart_marks m on m.id = cmp.mark_id
        join aesthetic_products p on p.id = cmp.product_id
@@ -334,5 +371,81 @@ export async function loadMarkProducts(c: PoolClient, clinicId: string, patientI
     unit: x.unit,
     qty: Number(x.qty),
     cost: withCost ? Number(x.cost) : null,
+    lots: (x.lots as string[]) ?? [],
   }));
+}
+
+/**
+ * Something on the shelf that needs a person: running low, run out, about to
+ * expire, or expired and still there.
+ *
+ * `episode` names this occurrence, so it is told once. Running low is keyed by
+ * the latest delivery: it is news again only after stock has come in and run
+ * down again, not every morning it stays low.
+ */
+export type StockAttention = {
+  kind: "low" | "out" | "expiring" | "expired";
+  productId: string;
+  name: string;
+  unit: ProductUnit;
+  /** What is left: usable for low and out, in the batch for the rest. */
+  amount: number;
+  lot: string | null;
+  expiresOn: string | null;
+  episode: string;
+};
+
+export async function loadStockAttention(c: PoolClient, clinicId: string): Promise<StockAttention[]> {
+  const low = (
+    await c.query(
+      `select p.id, p.name, p.unit, ${usableSql("p", "$1")}::float as usable,
+              (select b.id from stock_batches b where b.product_id = p.id order by b.created_at desc limit 1) as last_batch
+         from aesthetic_products p
+        where p.clinic_id = $1 and ${needsRestockSql("p", "$1")}
+        order by p.sort, p.name`,
+      [clinicId]
+    )
+  ).rows;
+  const dated = (
+    await c.query(
+      `select * from (
+         select b.id, b.lot, b.expires_on::text as expires_on, p.id as product_id, p.name, p.unit,
+                b.expires_on < ${clinicToday("$1")} as expired,
+                coalesce((select sum(m.qty) from stock_moves m where m.batch_id = b.id), 0)::float as on_hand
+           from stock_batches b join aesthetic_products p on p.id = b.product_id
+          where b.clinic_id = $1 and p.active and b.expires_on is not null
+            and b.expires_on <= ${clinicToday("$1")} + ${EXPIRY_WARN_DAYS}) x
+        where x.on_hand > 0
+        order by x.expires_on`,
+      [clinicId]
+    )
+  ).rows;
+  return [
+    ...low.map((p) => {
+      const kind = Number(p.usable) <= 0 ? ("out" as const) : ("low" as const);
+      return {
+        kind,
+        productId: p.id as string,
+        name: p.name as string,
+        unit: p.unit as ProductUnit,
+        amount: Math.max(0, Number(p.usable)),
+        lot: null,
+        expiresOn: null,
+        episode: `stock:${kind}:${p.id}:${p.last_batch ?? "none"}`,
+      };
+    }),
+    ...dated.map((b) => {
+      const kind = b.expired ? ("expired" as const) : ("expiring" as const);
+      return {
+        kind,
+        productId: b.product_id as string,
+        name: b.name as string,
+        unit: b.unit as ProductUnit,
+        amount: Number(b.on_hand),
+        lot: (b.lot as string) || null,
+        expiresOn: b.expires_on as string,
+        episode: `stock:${kind}:${b.id}`,
+      };
+    }),
+  ];
 }

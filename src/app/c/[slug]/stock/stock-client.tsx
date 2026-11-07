@@ -58,6 +58,7 @@ export function StockClient({
   products: initialProducts,
   companies: initialCompanies,
   canPatients,
+  pricesHref,
 }: {
   slug: string;
   currency: string;
@@ -65,6 +66,8 @@ export function StockClient({
   products: StockProduct[];
   companies: Company[];
   canPatients: boolean;
+  /** The face chart's prices, for somebody who may set them. A product's price lives there. */
+  pricesHref: string | null;
 }) {
   const { t, locale } = useI18n();
   const S = t.stock;
@@ -147,6 +150,11 @@ export function StockClient({
         sub={S.sub}
         action={
           <>
+            {pricesHref && (
+              <Link href={pricesHref} className="inline-flex min-h-10 items-center px-2 text-[13px] font-semibold text-brand-700 hover:underline" data-stock-prices>
+                {S.prices}
+              </Link>
+            )}
             <Button variant="outline" onClick={() => setCompaniesOpen(true)}>
               <Building2 className="h-4 w-4" />
               {S.companies}
@@ -390,6 +398,7 @@ export function StockClient({
         onRestore={async (c) => {
           apply(await restoreCompanyAction(slug, c.id), S.restored);
         }}
+        money={money}
       />
       {history && <HistoryList slug={slug} product={history} canPatients={canPatients} onClose={() => setHistory(null)} />}
     </div>
@@ -750,6 +759,7 @@ function CompaniesForm({
   onSave,
   onDelete,
   onRestore,
+  money,
 }: {
   open: boolean;
   companies: Company[];
@@ -757,6 +767,7 @@ function CompaniesForm({
   onSave: (data: Record<string, unknown>) => Promise<boolean>;
   onDelete: (c: Company) => void;
   onRestore: (c: Company) => void;
+  money: (n: number) => string;
 }) {
   const { t } = useI18n();
   const S = t.stock;
@@ -795,6 +806,11 @@ function CompaniesForm({
                 {c.name}
                 {c.phone && <span className="ms-2 text-[12.5px] text-ink-500" dir="ltr">{c.phone}</span>}
                 {c.note && <span className="block text-[12.5px] font-normal text-ink-500">{c.note}</span>}
+                {c.products > 0 && (
+                  <span className="block text-[12px] font-normal text-ink-500 tnum" data-company-summary>
+                    {C.summary.replace("{n}", String(c.products)).replace("{spent}", money(c.spent))}
+                  </span>
+                )}
               </span>
               <button type="button" onClick={() => edit(c)} className="text-[12.5px] font-semibold text-brand-700 hover:underline" data-company-edit>
                 {C.edit}

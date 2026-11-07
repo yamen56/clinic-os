@@ -343,6 +343,7 @@ export const en = {
     color: "Colour",
     unfiled: "Uncategorised",
     recurring: "Repeating",
+    fromDelivery: "Delivery of {product}",
     methods: {
       cash: "Cash",
       cliq: "CliQ",
@@ -368,6 +369,7 @@ export const en = {
     repeatingNote:
       "Counted in the month it falls in, whatever day it lands on — so a bill due on the 25th is part of this month's expenses from the start of the month. The first one is recorded for this month, so check you have not already entered it by hand.",
     confirmDeleteBody: "This expense will be removed and the month's total will change.",
+    confirmDeleteStock: "This was paid for a delivery of {product}. The delivery stays on hand in Stock; only the money is removed.",
     confirmDeleteCategoryBody:
       "Expenses filed under it stay, and become uncategorised.",
     confirmDeleteScheduleBody:
@@ -575,6 +577,9 @@ export const en = {
     todayAppointments: "Today's appointments",
     myPatientsToday: "My patients today",
     todo: "To do",
+    stock: "Stock",
+    stockOpen: "Open Stock",
+    stockExpires: "Expires {date}",
     todoDone: "Done",
     unreadConversations: "Unread conversations",
     revenueWeek: "Revenue this week",
@@ -1319,6 +1324,7 @@ export const en = {
       pricedBy: { area: "per area", unit: "per unit", syringe: "per syringe", thread: "per thread", session: "per session" },
       families: { toxin: "Toxin", filler: "Fillers", skin: "Skin", laser: "Laser & energy", threads: "Threads", contour: "Contouring" },
       servicesLink: "The face chart's treatment prices are services too, with a page of their own.",
+      stockLink: "Products and stock",
     },
     title: "Services",
     sub: "What patients can book, with durations and prices.",
@@ -1871,6 +1877,7 @@ export const en = {
     installHint: "Add it to your home screen to get notifications on your phone.",
     kinds: {
       booking: "New booking",
+      stock_alert: "Stock",
       ai_escalation: "AI needs you",
       ai_booking: "AI booked an appointment",
       whatsapp_disconnected: "WhatsApp disconnected",
@@ -1986,6 +1993,10 @@ export const en = {
       doctor_hours: {
         label: "A doctor changes their hours",
         hint: "When a doctor edits their own working hours, and any booked visits now outside them.",
+      },
+      stock: {
+        label: "Stock running low or expiring",
+        hint: "When a face chart product runs low or out, or a batch is about to expire.",
       },
     },
     reminderMinutes: "Remind me this many minutes before",
@@ -4186,6 +4197,7 @@ export const en = {
     archived: "Archived ({n})",
     expiredOnHand: "{n} expired",
     history: "History",
+    prices: "Prices",
     historyTitle: "History of {name}",
     historyEmpty: "Nothing has happened to this product yet.",
     moves: { receive: "Delivery", use: "Used", return: "Returned", adjust: "Correction" },
@@ -4248,6 +4260,7 @@ export const en = {
       cancelEdit: "Cancel",
       none: "No companies yet.",
       archive: "Not in use",
+      summary: "{n} products · {spent} bought",
       restore: "In use",
     },
     save: "Save",

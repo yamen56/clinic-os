@@ -32,7 +32,9 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCw,
+  Package,
 } from "lucide-react";
+import Link from "next/link";
 
 const METHODS = ["cash", "cliq", "card", "transfer", "cheque"] as const;
 type Method = (typeof METHODS)[number];
@@ -95,6 +97,7 @@ export function ExpensesClient({
   byCategory,
   categories,
   schedules,
+  stockHref,
 }: {
   slug: string;
   currency: string;
@@ -109,6 +112,8 @@ export function ExpensesClient({
   byCategory: ExpenseCategoryTotal[];
   categories: Category[];
   schedules: Schedule[];
+  /** Where an expense from a delivery points, for somebody who may open Stock. */
+  stockHref: string | null;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -357,6 +362,18 @@ export function ExpensesClient({
                             {t.expenses.recurring}
                           </span>
                         )}
+                        {e.fromStock &&
+                          (stockHref ? (
+                            <Link href={stockHref} className="ms-2 inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-brand-700 hover:underline" data-expense-stock>
+                              <Package className="h-3 w-3" />
+                              {t.expenses.fromDelivery.replace("{product}", e.fromStock)}
+                            </Link>
+                          ) : (
+                            <span className="ms-2 inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500" data-expense-stock>
+                              <Package className="h-3 w-3" />
+                              {t.expenses.fromDelivery.replace("{product}", e.fromStock)}
+                            </span>
+                          ))}
                         {e.note && <div className="text-[12px] text-ink-400">{e.note}</div>}
                       </td>
                       <td className="px-5 py-2.5">
@@ -907,7 +924,10 @@ export function ExpensesClient({
         cancelLabel={t.common.cancel}
         danger
         loading={pending}
-        body={t.expenses.confirmDeleteBody}
+        body={(() => {
+          const product = rows.find((r) => r.id === deleteId)?.fromStock;
+          return product ? t.expenses.confirmDeleteStock.replace("{product}", product) : t.expenses.confirmDeleteBody;
+        })()}
         onConfirm={() =>
           run(() => deleteExpenseAction(slug, deleteId!), () => setDeleteId(null))
         }

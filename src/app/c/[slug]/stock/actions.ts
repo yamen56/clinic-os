@@ -169,6 +169,21 @@ export async function saveProductAction(slug: string, data: unknown): Promise<An
         [id, access.clinicId, ...values]
       );
       if (!u.rowCount) return { error: "not_found" };
+      /*
+        A product's own prices are named after it, "Toxin (Botox 100u)", and were
+        left saying the old name: the price list and every new invoice line
+        named a product the clinic no longer called that.
+      */
+      const own = (await c.query(`select id, chart_key from services where clinic_id = $1 and chart_variant = $2 and chart_owned`, [access.clinicId, id])).rows;
+      for (const s of own) {
+        const tr = FACE_TREATMENT_BY_KEY.get(s.chart_key);
+        if (!tr) continue;
+        await c.query(`update services set name = $2, name_ar = $3 where id = $1`, [
+          s.id,
+          `${tr.en} (${d.name})`.slice(0, 80),
+          `${tr.ar} (${d.name})`.slice(0, 80),
+        ]);
+      }
     } else {
       id = (
         await c.query(

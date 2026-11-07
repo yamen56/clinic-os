@@ -51,6 +51,7 @@ const SUITES = [
   ["hours: a doctor cannot open the clinic", "scripts/qa-doctor-hours-bound.ts"],
   ["hours: a doctor keeps their own", "scripts/qa-my-hours.ts"],
   ["stock: what can be deleted, and what cannot", "scripts/qa-stock-delete.ts"],
+  ["stock: who is told, and where it shows", "scripts/qa-stock-alerts.ts"],
   ["notes: versions, categories, voice", "scripts/qa-notes.ts"],
   ["notes: the tab and the merged booking step", "scripts/qa-notes-ui.ts"],
   ["notes: filed against a visit", "scripts/qa-notes-visits.ts"],

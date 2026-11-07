@@ -369,7 +369,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     const meta = [
       fmtDate(m.doneAt ?? m.createdAt, tz, locale),
       isSale ? null : amountOf(m),
-      ...used.map((u) => `${u.name} · ${productAmount(u.unit, u.qty, "en")}${u.cost != null ? ` (${money(u.cost)})` : ""}`),
+      ...used.map((u) => `${u.name}${u.lots.length ? ` ${u.lots.join(", ")}` : ""} · ${productAmount(u.unit, u.qty, "en")}${u.cost != null ? ` (${money(u.cost)})` : ""}`),
       m.performedBy ? F.by.replace("{name}", m.performedBy.name) : null,
     ]
       .filter(Boolean)

@@ -20,6 +20,7 @@ import {
   TriangleAlert,
   Workflow,
   X,
+  Package,
 } from "lucide-react";
 
 export type LiveNotif = {
@@ -198,6 +199,8 @@ function iconFor(kind: string) {
       return TriangleAlert;
     case "automation":
       return Workflow;
+    case "stock":
+      return Package;
     case "daily_summary":
     case "tomorrow_schedule":
     case "unconfirmed_tomorrow":

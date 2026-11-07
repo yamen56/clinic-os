@@ -1501,6 +1501,30 @@ so anything off the inline allowlist is an attachment rather than a scripting do
 **Access**: the `expenses` capability — top-level, in no role's defaults, never inherited,
 included in `full`. Granted per person by an owner.
 
+An expense paid for a face chart delivery says so ("Delivery of Botox"), links to Stock for
+somebody who keeps it, and warns before it is deleted that the units stay on hand.
+
+### Products and stock (`/c/{slug}/stock`)
+
+What the face chart uses, for aesthetic clinics only (the `aesthetic` module, the `stock`
+capability). Tables from 0085: companies → products → batches (a delivery) → moves. On hand is
+never stored: it is the sum of the moves.
+
+- **Receiving** makes a batch and a Supplies expense in one step, dated the day it came.
+- **Using**: a treatment takes the batch that expires first; expired batches come last, and the
+  chart warns when they are all that is left. Used with none on hand still records, and the
+  next delivery settles it; voiding afterwards gives the units back to that delivery.
+- **Deleting** is one tap with an Undo (read back from `audit_log`, same person, 30 minutes).
+  A product or company something reaches back to is archived instead; a delivery a treatment
+  drew from cannot be deleted; a delivery's expense goes with it unless somebody changed it.
+- **Connected**: each product has a history (patients named only with `patients`); the chart
+  names the lot a patient received; renaming or archiving a product carries to its price;
+  companies show what was bought from them; Stock and Face prices link to each other.
+- **Running low** has one rule (`needsRestockSql`), shared by the nav badge, the page, the
+  dashboard card and the worker. `worker/stock-alerts.ts` tells the owner and the desk who keep
+  Stock, once per occurrence (claimed in `jobs` by `dedupe_key`), between 09:00 and 21:00.
+- People without `stock` are not sent product costs on the chart (`withoutCosts`).
+
 ### What the clinic kept
 
 On the Earnings tab, gated on `invoices.analytics` **and** full control, the chain rather

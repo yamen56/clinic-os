@@ -13,6 +13,8 @@ import { BarChart, RowBar, type Point } from "@/components/ui/chart";
 import { QuickActions, type QuickAction } from "./quick-actions";
 import { TodayList } from "./today-list";
 import { TodoCard } from "./todo-card";
+import { StockCard } from "./stock-card";
+import { loadStockAttention } from "@/lib/charts/face/stock";
 import { owedSql } from "@/lib/invoices";
 import { dueBackCount } from "@/lib/due-back";
 import { setupChecklist, type SetupItem } from "@/lib/setup-checklist";
@@ -335,7 +337,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             )
           ).rows
         : [];
-    return { appts, stats, series, doctors, services, sections, dueBack, setup, todo };
+    // What on the face chart's shelf needs ordering or throwing out, for whoever keeps Stock.
+    const stock = a.clinic.features.aesthetic && can(a, "stock") ? await loadStockAttention(c, a.clinicId) : [];
+    return { appts, stats, series, doctors, services, sections, dueBack, setup, todo, stock };
   });
 
   const revThis = Number(data.stats.rev_this);
@@ -499,6 +503,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       <div className="flex flex-col gap-4">
       {data.setup && data.setup.some((i) => !i.done) && <SetupCard base={base} items={data.setup} t={t} />}
       {data.todo.length > 0 && <TodoCard slug={slug} rows={JSON.parse(JSON.stringify(data.todo))} canOpenPatient={showPatients} />}
+      <StockCard slug={slug} items={data.stock} t={t} locale={locale} />
       <div className={`grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4 ${ownDay ? "max-lg:order-last" : ""}`}>
         {tiles.slice(0, 4).map((tile) => {
           const Icon = tileIcons[tile.key];

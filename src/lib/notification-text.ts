@@ -80,6 +80,12 @@ const ar = {
   hoursTitle: (doctor: string) => `تغيّرت ساعات دوام ${doctor}`,
   hoursClash: (n: number) => `مواعيد محجوزة خارج الساعات الجديدة: ${n}`,
   hoursNoClash: "لا مواعيد محجوزة خارج الساعات الجديدة",
+  stockTitle: (n: number) => `المخزون: ${n} أمور تحتاج انتباهك`,
+  stockLow: (name: string, left: string) => `${name} على وشك النفاد: بقي ${left}`,
+  stockOut: (name: string) => `نفد ${name}`,
+  stockExpiring: (name: string, lot: string | null, date: string) => `${name}${lot ? ` (${lot})` : ""} تنتهي صلاحيته ${date}`,
+  stockExpired: (name: string, lot: string | null, left: string) => `${name}${lot ? ` (${lot})` : ""} منتهي الصلاحية وما زال منه ${left}`,
+  stockMore: (n: number) => `و${n} غيرها`,
 };
 
 const en: typeof ar = {
@@ -122,6 +128,12 @@ const en: typeof ar = {
   hoursTitle: (doctor) => `${doctor}'s working hours changed`,
   hoursClash: (n) => `Booked visits outside the new hours: ${n}`,
   hoursNoClash: "No booked visits fall outside the new hours",
+  stockTitle: (n) => `Stock: ${n} things need attention`,
+  stockLow: (name, left) => `${name} is running low: ${left} left`,
+  stockOut: (name) => `${name} has run out`,
+  stockExpiring: (name, lot, date) => `${name}${lot ? ` ${lot}` : ""} expires ${date}`,
+  stockExpired: (name, lot, left) => `${name}${lot ? ` ${lot}` : ""} has expired, ${left} still on the shelf`,
+  stockMore: (n) => `and ${n} more`,
 };
 
 export const NT: Record<NLocale, typeof ar> = { ar, en };

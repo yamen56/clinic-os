@@ -40,6 +40,8 @@ export type ExpenseRow = {
   hasReceipt: boolean;
   /** Posted by a recurring rule rather than typed by somebody. */
   recurring: boolean;
+  /** Paid for a face chart delivery: the product's name. Deleting the expense leaves the units on hand. */
+  fromStock: string | null;
 };
 
 export type ExpenseCategoryTotal = {
@@ -91,6 +93,8 @@ export async function listExpenses(c: PoolClient, scope: ExpenseScope): Promise<
     `select e.id, e.amount, e.vendor, e.note, e.spent_on, e.method,
             e.category_id, e.receipt_path is not null as has_receipt,
             e.schedule_id is not null as recurring,
+            (select p.name from stock_batches b join aesthetic_products p on p.id = b.product_id
+              where b.expense_id = e.id limit 1) as from_stock,
             ec.name, ec.name_ar, ec.color
        from expenses e
        left join expense_categories ec on ec.id = e.category_id
@@ -115,6 +119,7 @@ export async function listExpenses(c: PoolClient, scope: ExpenseScope): Promise<
     categoryColor: row.color as string | null,
     hasReceipt: row.has_receipt === true,
     recurring: row.recurring === true,
+    fromStock: (row.from_stock as string) ?? null,
   }));
 }
 

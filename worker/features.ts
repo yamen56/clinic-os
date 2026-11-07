@@ -15,8 +15,14 @@
  * modules, where absent means off and only an explicit `true` counts.
  */
 
-/** Kept in step with OPT_IN_FEATURES in src/lib/features.ts. */
-const OPT_IN = new Set(["einvoicing"]);
+/**
+ * Kept in step with OPT_IN_FEATURES in src/lib/features.ts (qa-stock-alerts
+ * checks they agree). It had only e-invoicing, which read every clinic with
+ * `features = {}` as licensed for the dental and face charts: harmless while no
+ * worker job asked about them, and a dental clinic told its Botox was running
+ * low the first time one did.
+ */
+export const OPT_IN = new Set(["einvoicing", "dental", "aesthetic"]);
 
 /** True while the clinic still has this module. Expects `clinics` aliased `cl`. */
 export function hasFeature(feature: string, alias = "cl"): string {

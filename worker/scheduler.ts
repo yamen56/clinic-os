@@ -15,6 +15,7 @@ import { enqueueEinvoiceSubmit } from "../src/lib/einvoice/jobs";
 import { opsWatch } from "../src/lib/ops-alert";
 import { postRecurringExpenses } from "./expenses";
 import { unbookedTreatments } from "./treatments";
+import { stockAlerts } from "./stock-alerts";
 
 /**
  * Threads that arrived addressed by identity rather than number, every ten
@@ -559,6 +560,7 @@ export function startScheduler() {
       birthdays,
       unpaidInvoices,
       unbookedTreatments,
+      stockAlerts,
       unansweredConversations,
       sweepStalledRuns,
       sweepEinvoices,

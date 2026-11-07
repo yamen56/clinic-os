@@ -1,4 +1,5 @@
 import { guardCap } from "@/lib/guard";
+import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { monthDateRange } from "@/lib/dates";
 import {
@@ -82,6 +83,7 @@ export default async function ExpensesPage({
       byCategory={JSON.parse(JSON.stringify(data.byCategory))}
       categories={JSON.parse(JSON.stringify(data.categories))}
       schedules={JSON.parse(JSON.stringify(data.schedules))}
+      stockHref={access.clinic.features.aesthetic && can(access, "stock") ? `/c/${slug}/stock` : null}
     />
   );
 }

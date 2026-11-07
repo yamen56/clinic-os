@@ -9,6 +9,7 @@
 */
 
 import { useState } from "react";
+import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
@@ -26,12 +27,14 @@ export function FacePrices({
   prices: initial,
   products,
   usage,
+  stockHref,
 }: {
   slug: string;
   currency: string;
   prices: FacePrice[];
   products: Product[];
   usage: Record<string, { used: number; unpriced: number }>;
+  stockHref: string | null;
 }) {
   const { t, locale } = useI18n();
   const P = t.services.facePrices;
@@ -58,6 +61,11 @@ export function FacePrices({
       <div>
         <h2 className="text-[17px] font-semibold">{P.title}</h2>
         <p className="mt-1 max-w-3xl text-[13px] text-ink-500">{P.sub}</p>
+        {stockHref && (
+          <Link href={stockHref} className="mt-2 inline-block text-[13px] font-semibold text-brand-700 hover:underline" data-face-prices-stock>
+            {P.stockLink}
+          </Link>
+        )}
       </div>
       {FAMILIES.map((f) => {
         const list = FACE_TREATMENTS.filter((x) => x.family === f);

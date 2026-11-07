@@ -27,6 +27,7 @@ export default async function StockPage({ params }: { params: Promise<{ slug: st
       products={data.products}
       companies={data.companies}
       canPatients={can(access, "patients")}
+      pricesHref={can(access, "settings.services") ? `/c/${slug}/settings/face-prices` : null}
     />
   );
 }

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { guardCap } from "@/lib/guard";
+import { can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { loadFacePrices } from "@/lib/charts/face/db";
 import { loadStockProducts } from "@/lib/charts/face/stock";
@@ -38,6 +39,7 @@ export default async function FacePricesPage({ params }: { params: Promise<{ slu
       prices={data.prices}
       products={data.products.map((p) => ({ id: p.id, name: p.name, company: p.company, treatments: p.treatments }))}
       usage={Object.fromEntries(data.used.map((u) => [u.treatment_key, { used: u.used, unpriced: u.unpriced }]))}
+      stockHref={can(access, "stock") ? `/c/${slug}/stock` : null}
     />
   );
 }
