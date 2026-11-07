@@ -31,6 +31,7 @@ import {
   AlertCircle,
   Sparkles,
   UserRound,
+  UserPlus,
   CalendarPlus,
   ReceiptText,
   ArrowLeft,
@@ -395,8 +396,14 @@ export function InboxClient({
               >
                 <ArrowLeft className="h-5 w-5 rtl:rotate-180" strokeWidth={1.75} />
               </button>
-              <Avatar name={displayName(cv)} size={36} />
-              <div className="min-w-0 flex-1">
+              {/* Where this conversation lives: the patient is writing on WhatsApp, and the reply goes there. */}
+              <span className="relative shrink-0" title={t.conversations.viaWhatsApp}>
+                <Avatar name={displayName(cv)} size={36} />
+                <span className="absolute -bottom-0.5 -end-0.5 grid h-[18px] w-[18px] place-items-center rounded-full bg-st-confirmed text-surface ring-2 ring-surface" aria-hidden>
+                  <MessageCircle className="h-2.5 w-2.5" strokeWidth={2.75} />
+                </span>
+              </span>
+              <div className="min-w-[5.5rem] flex-1">
                 <div className="truncate text-sm font-semibold"><Title cv={cv} /></div>
                 {/*
                   A LID thread has no phone number. `phone_e164` is holding the
@@ -415,12 +422,12 @@ export function InboxClient({
                     {t.conversations.numberNotShared}
                   </div>
                 ) : (
-                  <div className="text-[12px] text-ink-400 tnum" dir="ltr">
+                  <div className="truncate text-[12px] text-ink-400 tnum" dir="ltr">
                     {formatPhone(cv.phone_e164)}
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
                 <label className="flex items-center gap-1.5">
                   <Sparkles className={`h-4 w-4 ${aiActive(cv) ? "text-brand-700" : "text-ink-300"}`} />
                   <Toggle
@@ -433,23 +440,21 @@ export function InboxClient({
                   <Badge status="pending">{t.conversations.aiPaused}</Badge>
                 )}
                 {cv.assigned_to ? (
-                  <Badge status="brand">{cv.assigned_to === selfId ? t.conversations.mine : cv.assigned_name}</Badge>
+                  <span className="max-w-24 truncate sm:max-w-40">
+                    <Badge status="brand">{cv.assigned_to === selfId ? t.conversations.mine : cv.assigned_name}</Badge>
+                  </span>
                 ) : (
-                  <Button variant="ghost" size="sm" onClick={() => void command("assign")}>
-                    {t.conversations.assignToMe}
+                  // An icon on a phone, so the patient's name keeps its room.
+                  <Button variant="ghost" size="sm" onClick={() => void command("assign")} aria-label={t.conversations.assignToMe} title={t.conversations.assignToMe}>
+                    <UserPlus className="h-4 w-4 sm:hidden" />
+                    <span className="max-sm:sr-only">{t.conversations.assignToMe}</span>
                   </Button>
                 )}
-                {/* Answered and nothing left to do: off the open list, flag and all, until they write again. */}
-                {cv.status === "closed" ? (
-                  <Button variant="ghost" size="sm" onClick={() => void command("status", { status: "open" })} data-thread-reopen>
-                    {t.conversations.reopen}
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={() => void command("status", { status: "closed" })} data-thread-done>
-                    <CheckCheck className="h-4 w-4" />
-                    <span className="max-sm:sr-only">{t.conversations.done}</span>
-                  </Button>
-                )}
+                {/*
+                  No Done button (Yamen, 2026-11-07: "I don't see how it helps"). It
+                  closed the thread, which no list hides, so all anybody saw was the
+                  flag clearing, and the flag has its own Handled.
+                */}
                 <button
                   type="button"
                   onClick={() => setPanelOpen(true)}
@@ -464,6 +469,11 @@ export function InboxClient({
 
             {/* Messages */}
             <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto bg-subtle px-4 py-4">
+              {/* Said once, where the thread starts, the way WhatsApp itself opens a chat. */}
+              <div className="mx-auto mb-2 flex max-w-full items-center gap-1.5 rounded-full bg-st-confirmed-soft px-3 py-1 text-[12px] font-semibold text-st-confirmed" data-thread-whatsapp>
+                <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
+                <span className="truncate">{t.conversations.viaWhatsApp}</span>
+              </div>
               {cv.flagged && (
                 <div className="mx-auto mb-2 flex items-center gap-2 rounded-full bg-st-pending-soft py-1 pe-1 ps-4 text-[12px] font-medium text-st-pending" data-thread-flag>
                   <span>{cv.flag_reason || t.conversations.flagged}</span>
@@ -525,7 +535,8 @@ export function InboxClient({
                           {m.media_name ?? m.msg_type}
                         </a>
                       )}
-                      {m.body && <div className="whitespace-pre-wrap break-words text-sm">{m.body}</div>}
+                      {/* Each message in its own direction: an English one in the Arabic app ends with its "?", not starts. */}
+                      {m.body && <div className="whitespace-pre-wrap break-words text-sm" dir="auto">{m.body}</div>}
                       <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${out && m.sender_kind !== "ai" ? "text-white/60" : "text-ink-400"}`}>
                         {m.status === "failed" && (
                           <span className="font-medium text-danger">

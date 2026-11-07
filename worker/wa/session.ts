@@ -7,7 +7,7 @@ import pino from "pino";
 import { withSystem } from "../db";
 import { useDbAuthState } from "./auth-state";
 import { handleUpsert } from "./inbound";
-import { handleReceipts } from "./receipts";
+import { handleChatsRead, handleReceipts } from "./receipts";
 import { learnLidMapping, pairsFromContacts, resolvePendingLids } from "./lid-mapping";
 import { notifyUser } from "../../src/lib/notify";
 
@@ -191,10 +191,16 @@ export class WASession {
         );
       });
 
-      // Delivered and read arrive here, long after the send returned.
+      // Delivered and read arrive here, long after the send returned; so does a patient's message read on the clinic's phone.
       sock.ev.on("messages.update", (u) => {
         handleReceipts(this.clinicId, u).catch((e) =>
           console.error(`[wa ${this.clinicId}] receipts`, (e as Error).message)
+        );
+      });
+      // A chat marked read on the phone's chat list.
+      sock.ev.on("chats.update", (u) => {
+        handleChatsRead(this.clinicId, u).catch((e) =>
+          console.error(`[wa ${this.clinicId}] chat read`, (e as Error).message)
         );
       });
 

@@ -54,6 +54,7 @@ const SUITES = [
   ["stock: who is told, and where it shows", "scripts/qa-stock-alerts.ts"],
   ["team chat: private, live, everybody on the staff", "scripts/qa-team-chat.ts"],
   ["face chart: the clinic's own treatments and their kinds", "scripts/qa-face-custom.ts"],
+  ["inbox: read on the clinic's phone is read here", "scripts/qa-wa-read-sync.ts"],
   ["notes: versions, categories, voice", "scripts/qa-notes.ts"],
   ["notes: the tab and the merged booking step", "scripts/qa-notes-ui.ts"],
   ["notes: filed against a visit", "scripts/qa-notes-visits.ts"],

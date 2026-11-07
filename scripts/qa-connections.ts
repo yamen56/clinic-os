@@ -336,8 +336,9 @@ async function main() {
     await desk.waitForSelector("[data-thread-flag]", { timeout: 60_000 });
     await desk.click("[data-thread-unflag]");
     check("a flag clears without switching the AI on", await until(async () => !(await db.query(`select flagged from conversations where id = $1`, [thread])).rows[0].flagged));
-    await desk.click("[data-thread-done]");
-    check("Done closes the thread", await until(async () => (await db.query(`select status from conversations where id = $1`, [thread])).rows[0].status === "closed"));
+    // Done is gone (Yamen, 2026-11-07); the thread says where it lives instead.
+    check("the thread says it is a WhatsApp conversation", (await desk.locator("[data-thread-whatsapp]").innerText()).includes("WhatsApp"));
+    check("and has no Done button", (await desk.locator("[data-thread-done]").count()) === 0);
 
     console.log("\n[unconfirmed tomorrow, as a list]");
     await desk.goto(`${base}/calendar?show=unconfirmed&date=${tomorrow.toISODate()}`);
