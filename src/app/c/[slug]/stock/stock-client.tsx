@@ -9,10 +9,14 @@
   top. Receive stock puts a delivery on hand and records what it cost; Correct
   sets a batch's count right, with the reason. Each answer brings the lists
   back as they now stand.
+
+  Deleting is one tap with an Undo on the toast, no confirm box. The row leaves
+  on the tap and comes back if the server says no.
 */
 
-import { useMemo, useState } from "react";
-import { Building2, ChevronDown, PackagePlus, Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Building2, ChevronDown, History, PackagePlus, Plus, Trash2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card, PageHeader } from "@/components/ui/card";
@@ -21,11 +25,24 @@ import { Modal } from "@/components/ui/modal";
 import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { fmtDateOnly, fmtMoney } from "@/lib/dates";
 import { FACE_TREATMENTS, FACE_TREATMENT_BY_KEY, productAmount } from "@/lib/charts/face/catalog";
-import { EXPIRY_WARN_DAYS, PRODUCT_UNITS, type Company, type ProductUnit, type StockBatch, type StockProduct } from "@/lib/charts/face/stock";
+import { EXPIRY_WARN_DAYS, PRODUCT_UNITS, needsRestock, type Company, type ProductUnit, type StockBatch, type StockMove, type StockProduct } from "@/lib/charts/face/stock";
 import { FamilyTag } from "@/components/charts/face/family-tag";
-import { adjustStockAction, receiveStockAction, saveCompanyAction, saveProductAction } from "./actions";
+import {
+  adjustStockAction,
+  deleteBatchAction,
+  deleteCompanyAction,
+  deleteProductAction,
+  productHistoryAction,
+  receiveStockAction,
+  restoreBatchAction,
+  restoreCompanyAction,
+  restoreProductAction,
+  saveCompanyAction,
+  saveProductAction,
+  undoAdjustAction,
+} from "./actions";
 
-type Answer = { products?: StockProduct[]; companies?: Company[]; error?: string };
+type Answer = { products?: StockProduct[]; companies?: Company[]; error?: string; outcome?: "deleted" | "archived"; expenseKept?: boolean; moveId?: string };
 
 const num = (s: string) => (s.trim() === "" ? null : Number(s));
 const addDays = (iso: string, n: number) => {
@@ -40,12 +57,14 @@ export function StockClient({
   today,
   products: initialProducts,
   companies: initialCompanies,
+  canPatients,
 }: {
   slug: string;
   currency: string;
   today: string;
   products: StockProduct[];
   companies: Company[];
+  canPatients: boolean;
 }) {
   const { t, locale } = useI18n();
   const S = t.stock;
@@ -57,30 +76,66 @@ export function StockClient({
   const [adjusting, setAdjusting] = useState<{ product: StockProduct; batch: StockBatch } | null>(null);
   const [companiesOpen, setCompaniesOpen] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [history, setHistory] = useState<StockProduct | null>(null);
+  const [archivedOpen, setArchivedOpen] = useState(false);
 
-  const apply = (r: Answer, done: string) => {
+  const failure = (error: string) => (S.errors as Record<string, string>)[error] ?? S.failed;
+
+  const apply = (r: Answer, done: string | null, undo?: () => void) => {
     if (r.error) {
-      toast(S.failed, "error");
+      toast(failure(r.error), "error");
       return false;
     }
     if (r.products) setProducts(r.products);
     if (r.companies) setCompanies(r.companies);
-    toast(done);
+    if (done) toast(done, "success", undo ? { label: S.undo, onClick: undo } : undefined);
     return true;
+  };
+
+  const removeProduct = async (p: StockProduct) => {
+    const before = products;
+    setProducts(before.filter((x) => x.id !== p.id));
+    const r = await deleteProductAction(slug, p.id);
+    if (r.error) setProducts(before);
+    apply(r, (r.outcome === "archived" ? S.archivedToast : S.deleted).replace("{name}", p.name), async () => {
+      apply(await restoreProductAction(slug, p.id), S.restored);
+    });
+  };
+
+  const removeBatch = async (p: StockProduct, b: StockBatch) => {
+    const before = products;
+    setProducts(before.map((x) => (x.id === p.id ? { ...x, batches: x.batches.filter((y) => y.id !== b.id) } : x)));
+    const r = await deleteBatchAction(slug, b.id);
+    if (r.error) setProducts(before);
+    apply(r, r.expenseKept ? S.deliveryDeletedKept : S.deliveryDeleted, async () => {
+      apply(await restoreBatchAction(slug, b.id), S.restored);
+    });
+  };
+
+  const removeCompany = async (c: Company) => {
+    const before = companies;
+    setCompanies(before.filter((x) => x.id !== c.id));
+    const r = await deleteCompanyAction(slug, c.id);
+    if (r.error) setCompanies(before);
+    apply(r, (r.outcome === "archived" ? S.archivedToast : S.deleted).replace("{name}", c.name), async () => {
+      apply(await restoreCompanyAction(slug, c.id), S.restored);
+    });
   };
 
   const soon = addDays(today, EXPIRY_WARN_DAYS);
   const state = (p: StockProduct) => ({
-    out: p.active && p.onHand <= 0,
+    out: p.active && p.usable <= 0,
     owed: p.onHand < 0 ? -p.onHand : 0,
-    low: p.active && p.onHand > 0 && p.lowStock != null && p.onHand <= p.lowStock,
-    expiring: p.batches.filter((b) => b.onHand > 0 && b.expiresOn && b.expiresOn <= soon).length,
+    low: p.active && p.usable > 0 && p.lowStock != null && p.usable <= p.lowStock,
+    expiring: p.batches.filter((b) => b.onHand > 0 && !b.expired && b.expiresOn && b.expiresOn <= soon).length,
   });
   const alerts = useMemo(() => {
     const all = products.map(state);
-    return { low: all.filter((x) => x.low || x.out).length, expiring: all.reduce((n, x) => n + x.expiring, 0), owed: all.filter((x) => x.owed > 0).length };
+    return { low: products.filter(needsRestock).length, expiring: all.reduce((n, x) => n + x.expiring, 0), owed: all.filter((x) => x.owed > 0).length };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `state` reads only `soon`, which follows `today`
   }, [products, soon]);
+  const inUse = products.filter((p) => p.active);
+  const archived = products.filter((p) => !p.active);
 
   const amount = (u: ProductUnit, n: number) => productAmount(u, n, locale);
   const money = (n: number) => fmtMoney(n, currency, locale);
@@ -118,21 +173,20 @@ export function StockClient({
         </div>
       )}
 
-      {products.length === 0 ? (
+      {inUse.length === 0 ? (
         <Card className="p-6 text-[14px] text-ink-500">{S.empty}</Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {products.map((p) => {
+          {inUse.map((p) => {
             const st = state(p);
             const shown = open.has(p.id);
             return (
-              <Card key={p.id} className={`p-4 ${p.active ? "" : "opacity-70"}`}>
+              <Card key={p.id} className="p-4">
                 <div data-stock-product={p.id}>
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="text-[15px] font-semibold" dir="auto">
                         {p.name}
-                        {!p.active && <span className="ms-2 text-[12px] font-medium text-ink-500">· {S.inactive}</span>}
                       </div>
                       <div className="text-[12.5px] text-ink-500">{p.company ?? S.product.noCompany}</div>
                     </div>
@@ -164,6 +218,7 @@ export function StockClient({
                     {st.out && <span className="font-semibold text-danger">{S.out}</span>}
                     {st.low && <span className="font-semibold text-ink-900">{S.low}</span>}
                     {st.expiring > 0 && <span className="font-semibold text-ink-900">{S.expiring}</span>}
+                    {p.expired > 0 && <span className="font-semibold text-danger" data-stock-expired={p.expired}>{S.expiredOnHand.replace("{n}", amount(p.unit, p.expired))}</span>}
                     {st.owed > 0 && <span className="font-semibold text-danger">{S.owed.replace("{n}", amount(p.unit, st.owed))}</span>}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -172,6 +227,13 @@ export function StockClient({
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => setEditing(p)}>
                       {S.edit}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setHistory(p)} data-stock-history>
+                      <History className="h-3.5 w-3.5" />
+                      {S.history}
+                    </Button>
+                    <Button size="sm" variant="ghost" aria-label={S.delete} onClick={() => void removeProduct(p)} data-stock-delete>
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                     {p.batches.length > 0 && (
                       <button
@@ -221,9 +283,16 @@ export function StockClient({
                                 <td className="px-2 py-1.5 text-end font-semibold tnum">{amount(p.unit, b.onHand)}</td>
                                 <td className="px-2 py-1.5 text-end tnum">{money(b.unitCost)}</td>
                                 <td className="px-2 py-1.5 text-end">
-                                  <button type="button" onClick={() => setAdjusting({ product: p, batch: b })} className="text-[12px] font-semibold text-brand-700 hover:underline">
-                                    {S.adjust}
-                                  </button>
+                                  <span className="inline-flex items-center gap-3">
+                                    <button type="button" onClick={() => setAdjusting({ product: p, batch: b })} className="text-[12px] font-semibold text-brand-700 hover:underline">
+                                      {S.adjust}
+                                    </button>
+                                    {b.untouched && (
+                                      <button type="button" aria-label={S.delete} onClick={() => void removeBatch(p, b)} className="text-ink-400 hover:text-danger" data-batch-delete>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                  </span>
                                 </td>
                               </tr>
                             );
@@ -236,6 +305,39 @@ export function StockClient({
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {archived.length > 0 && (
+        <div className="mt-4" data-stock-archived>
+          <button
+            type="button"
+            onClick={() => setArchivedOpen((v) => !v)}
+            className="inline-flex min-h-10 items-center gap-1 text-[13px] font-semibold text-ink-700 hover:text-ink-900"
+          >
+            {S.archived.replace("{n}", String(archived.length))}
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${archivedOpen ? "rotate-180" : ""}`} />
+          </button>
+          {archivedOpen && (
+            <Card className="mt-2">
+              <ul className="divide-y divide-line">
+                {archived.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5" data-stock-archived-product={p.id}>
+                    <span className="min-w-0 flex-1 text-[14px]" dir="auto">
+                      {p.name}
+                      {p.company && <span className="ms-2 text-[12.5px] text-ink-500">{p.company}</span>}
+                    </span>
+                    <Button size="sm" variant="outline" onClick={() => setHistory(p)}>
+                      {S.history}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={async () => apply(await restoreProductAction(slug, p.id), S.restored)} data-stock-restore>
+                      {S.restore}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
       )}
 
@@ -255,6 +357,7 @@ export function StockClient({
           products={products.filter((p) => p.active)}
           initial={receiving}
           currency={currency}
+          today={today}
           onClose={() => setReceiving(null)}
           onSave={async (data) => {
             const r = await receiveStockAction(slug, data);
@@ -269,7 +372,12 @@ export function StockClient({
           onClose={() => setAdjusting(null)}
           onSave={async (data) => {
             const r = await adjustStockAction(slug, data);
-            if (apply(r, S.adjustForm.done)) setAdjusting(null);
+            const undo = r.moveId
+              ? async () => {
+                  apply(await undoAdjustAction(slug, r.moveId!), S.restored);
+                }
+              : undefined;
+            if (apply(r, S.adjustForm.done, undo)) setAdjusting(null);
           }}
         />
       )}
@@ -278,8 +386,66 @@ export function StockClient({
         companies={companies}
         onClose={() => setCompaniesOpen(false)}
         onSave={async (data) => apply(await saveCompanyAction(slug, data), S.saved)}
+        onDelete={(c) => void removeCompany(c)}
+        onRestore={async (c) => {
+          apply(await restoreCompanyAction(slug, c.id), S.restored);
+        }}
       />
+      {history && <HistoryList slug={slug} product={history} canPatients={canPatients} onClose={() => setHistory(null)} />}
     </div>
+  );
+}
+
+/** Everything that happened to a product, newest first, each line pointing at the patient it went to. */
+function HistoryList({ slug, product, canPatients, onClose }: { slug: string; product: StockProduct; canPatients: boolean; onClose: () => void }) {
+  const { t, locale } = useI18n();
+  const S = t.stock;
+  const [moves, setMoves] = useState<StockMove[] | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void productHistoryAction(slug, product.id).then((r) => {
+      if (live) setMoves(r.moves ?? []);
+    });
+    return () => {
+      live = false;
+    };
+  }, [slug, product.id]);
+
+  return (
+    <Modal open onClose={onClose} title={S.historyTitle.replace("{name}", product.name)} wide>
+      {moves === null ? (
+        <p className="py-6 text-center text-[13px] text-ink-500">…</p>
+      ) : moves.length === 0 ? (
+        <p className="py-6 text-center text-[13px] text-ink-500">{S.historyEmpty}</p>
+      ) : (
+        <ul className="divide-y divide-line" data-stock-moves>
+          {moves.map((m) => (
+            <li key={m.id} className="flex items-start gap-3 py-2 text-[13px]" data-stock-move={m.kind}>
+              <span className="min-w-0 flex-1">
+                <span className="font-semibold">{S.moves[m.kind]}</span>
+                {m.lot && <bdi className="ms-2 text-ink-500">{m.lot}</bdi>}
+                {m.treatment && <span className="ms-2 text-ink-500">{m.treatment}</span>}
+                <span className="block text-[12px] text-ink-500">
+                  {fmtDateOnly(m.at.slice(0, 10), locale)}
+                  {m.by && ` · ${m.by}`}
+                  {m.reason && ` · ${m.reason}`}
+                </span>
+                {canPatients && m.patient && (
+                  <Link href={`/c/${slug}/patients/${m.patient.id}`} className="block text-[12px] font-semibold text-brand-700 hover:underline" dir="auto">
+                    {m.patient.name}
+                  </Link>
+                )}
+              </span>
+              <span className={`shrink-0 font-semibold tnum ${m.qty < 0 ? "text-ink-700" : "text-ok"}`} dir="ltr">
+                {m.qty > 0 ? "+" : "−"}
+                {productAmount(product.unit, Math.abs(m.qty), locale)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   );
 }
 
@@ -357,8 +523,8 @@ function ProductForm({
               ))}
           </Select>
         </Field>
-        <Field label={P.unit}>
-          <Select value={unit} onChange={(e) => setUnit(e.target.value as ProductUnit)} data-product-unit>
+        <Field label={P.unit} hint={product?.everStocked ? P.unitLocked : undefined}>
+          <Select value={unit} onChange={(e) => setUnit(e.target.value as ProductUnit)} disabled={!!product?.everStocked} data-product-unit>
             {PRODUCT_UNITS.map((u) => (
               <option key={u} value={u}>
                 {P.units[u]}
@@ -408,12 +574,14 @@ function ReceiveForm({
   products,
   initial,
   currency,
+  today,
   onClose,
   onSave,
 }: {
   products: StockProduct[];
   initial: string;
   currency: string;
+  today: string;
   onClose: () => void;
   onSave: (data: Record<string, unknown>) => Promise<void>;
 }) {
@@ -425,6 +593,7 @@ function ReceiveForm({
   const [packPrice, setPackPrice] = useState("");
   const [lot, setLot] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
+  const [receivedOn, setReceivedOn] = useState(today);
   const [method, setMethod] = useState("cash");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -443,7 +612,7 @@ function ReceiveForm({
 
   const submit = async () => {
     setBusy(true);
-    await onSave({ productId, packs: nPacks, packPrice: price, lot: lot.trim(), expiresOn: expiresOn || null, method, note: note.trim() });
+    await onSave({ productId, packs: nPacks, packPrice: price, lot: lot.trim(), expiresOn: expiresOn || null, receivedOn: receivedOn || null, method, note: note.trim() });
     setBusy(false);
   };
 
@@ -486,6 +655,9 @@ function ReceiveForm({
           </Field>
           <Field label={R.expiresOn}>
             <Input type="date" value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} dir="ltr" data-receive-expires />
+          </Field>
+          <Field label={R.receivedOn}>
+            <Input type="date" value={receivedOn} max={today} onChange={(e) => setReceivedOn(e.target.value)} dir="ltr" data-receive-on />
           </Field>
         </div>
         <Field label={R.method}>
@@ -576,24 +748,40 @@ function CompaniesForm({
   companies,
   onClose,
   onSave,
+  onDelete,
+  onRestore,
 }: {
   open: boolean;
   companies: Company[];
   onClose: () => void;
   onSave: (data: Record<string, unknown>) => Promise<boolean>;
+  onDelete: (c: Company) => void;
+  onRestore: (c: Company) => void;
 }) {
   const { t } = useI18n();
   const S = t.stock;
   const C = S.companyForm;
+  const [editing, setEditing] = useState<Company | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const clear = () => {
+    setEditing(null);
+    setName("");
+    setPhone("");
+    setNote("");
+  };
+  const edit = (c: Company) => {
+    setEditing(c);
+    setName(c.name);
+    setPhone(c.phone);
+    setNote(c.note);
+  };
   const add = async () => {
     setBusy(true);
-    if (await onSave({ name: name.trim(), phone: phone.trim() })) {
-      setName("");
-      setPhone("");
-    }
+    const data = { name: name.trim(), phone: phone.trim(), note: note.trim() };
+    if (await onSave(editing ? { ...data, id: editing.id } : data)) clear();
     setBusy(false);
   };
   return (
@@ -602,18 +790,24 @@ function CompaniesForm({
         {companies.length === 0 && <p className="text-[13px] text-ink-500">{C.none}</p>}
         <ul className="divide-y divide-line">
           {companies.map((c) => (
-            <li key={c.id} className={`flex items-center gap-3 py-2 ${c.active ? "" : "opacity-60"}`}>
+            <li key={c.id} className={`flex items-center gap-3 py-2 ${c.active ? "" : "opacity-60"}`} data-company={c.id}>
               <span className="min-w-0 flex-1 text-[14px] font-medium" dir="auto">
                 {c.name}
                 {c.phone && <span className="ms-2 text-[12.5px] text-ink-500" dir="ltr">{c.phone}</span>}
+                {c.note && <span className="block text-[12.5px] font-normal text-ink-500">{c.note}</span>}
               </span>
-              <button
-                type="button"
-                onClick={() => void onSave({ id: c.id, name: c.name, phone: c.phone, note: c.note, active: !c.active })}
-                className="text-[12.5px] font-semibold text-brand-700 hover:underline"
-              >
-                {c.active ? C.archive : C.restore}
+              <button type="button" onClick={() => edit(c)} className="text-[12.5px] font-semibold text-brand-700 hover:underline" data-company-edit>
+                {C.edit}
               </button>
+              {c.active ? (
+                <button type="button" aria-label={S.delete} onClick={() => onDelete(c)} className="text-ink-400 hover:text-danger" data-company-delete>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              ) : (
+                <button type="button" onClick={() => onRestore(c)} className="text-[12.5px] font-semibold text-brand-700 hover:underline" data-company-restore>
+                  {C.restore}
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -628,9 +822,19 @@ function CompaniesForm({
               <Input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={40} dir="ltr" />
             </Field>
           </div>
+          <div className="min-w-0 basis-full">
+            <Field label={C.note}>
+              <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} dir="auto" data-company-note />
+            </Field>
+          </div>
           <Button onClick={() => void add()} loading={busy} disabled={!name.trim()} data-company-add>
-            {C.add}
+            {editing ? S.save : C.add}
           </Button>
+          {editing && (
+            <Button variant="outline" onClick={clear}>
+              {C.cancelEdit}
+            </Button>
+          )}
         </div>
       </div>
     </Modal>

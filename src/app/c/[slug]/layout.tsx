@@ -10,6 +10,7 @@ import { I18nProvider } from "@/lib/i18n/client";
 import { chartColorsFor } from "@/lib/brand-chart";
 import { cookies } from "next/headers";
 import { SIDEBAR_COOKIE, parseSidebarPref } from "@/lib/theme";
+import { needsRestockSql } from "@/lib/charts/face/stock";
 
 export default async function ClinicLayout({
   children,
@@ -71,8 +72,7 @@ export default async function ClinicLayout({
            where clinic_id = $1 and status = 'sent' and due_on < (now() at time zone (select timezone from clinics where id = $1))::date) as labs_late,
          -- The Stock entry's badge: face chart products in use that are running low or out.
          (select count(*)::int from aesthetic_products p
-           where p.clinic_id = $1 and p.active and p.low_stock is not null
-             and coalesce((select sum(m.qty) from stock_moves m where m.product_id = p.id), 0) <= p.low_stock) as stock_low,
+           where p.clinic_id = $1 and ${needsRestockSql("p", "$1")}) as stock_low,
          coalesce((
            select json_agg(json_build_object('id', a.id, 'title', a.title, 'body', a.body))
            from (

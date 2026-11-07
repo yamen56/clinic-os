@@ -27,6 +27,10 @@ export type StockBatch = {
   unitCost: number;
   expenseId: string | null;
   note: string;
+  /** Past its date, by the clinic's clock. Still on hand, but the last thing a treatment takes. */
+  expired: boolean;
+  /** Nothing has happened to it since it came in, which is what lets it be deleted. */
+  untouched: boolean;
 };
 
 export type StockProduct = {
@@ -43,6 +47,12 @@ export type StockProduct = {
   active: boolean;
   /** Everything received, less everything used, returned and adjusted. Below zero: used without stock. */
   onHand: number;
+  /** What a treatment can still take: on hand, less whatever sits in an expired batch. */
+  usable: number;
+  /** On hand but past its date. */
+  expired: number;
+  /** Stock has moved at least once, so "none left" means it ran out rather than never came. */
+  everStocked: boolean;
   /** The batch the next treatment takes from: the one that expires first, with units left. */
   next: { lot: string; expiresOn: string | null } | null;
   batches: StockBatch[];
@@ -51,6 +61,31 @@ export type StockProduct = {
 export type Company = { id: string; name: string; phone: string; note: string; active: boolean };
 
 const day = (v: unknown): string | null => (v ? String(v).slice(0, 10) : null);
+
+/** Today by the clinic's clock, as SQL. A batch that expires today is still good today. */
+const clinicToday = (clinic: string) => `(now() at time zone (select timezone from clinics where id = ${clinic}))::date`;
+
+/** Units a treatment can still take, for the product aliased `p`. The no-batch line counts: it is what is owed. */
+export const usableSql = (p: string, clinic: string) =>
+  `coalesce((select sum(m.qty) from stock_moves m left join stock_batches b on b.id = m.batch_id
+     where m.product_id = ${p}.id and (b.expires_on is null or b.expires_on >= ${clinicToday(clinic)})), 0)`;
+
+/**
+ * "Running low", once.
+ *
+ * The nav badge and the page's chips used to answer this separately and disagree:
+ * the badge wanted a warning level set, the chip also counted anything at zero.
+ * A product in use counts when what it can still give is at or below its warning
+ * level, which with no level set means run out. One that has never had stock is
+ * not counted: it has not run out of anything, and a clinic listing its products
+ * should not be told so ten times.
+ */
+export const needsRestockSql = (p: string, clinic: string) =>
+  `${p}.active and exists (select 1 from stock_moves m where m.product_id = ${p}.id)
+     and ${usableSql(p, clinic)} <= coalesce(${p}.low_stock, 0)`;
+
+/** The same rule, for a product already loaded. */
+export const needsRestock = (p: StockProduct) => p.active && p.everStocked && p.usable <= (p.lowStock ?? 0);
 
 /**
  * The clinic's products with what is on hand, batch by batch, in one statement.
@@ -61,9 +96,13 @@ export async function loadStockProducts(c: PoolClient, clinicId: string, opts: {
   const r = await c.query(
     `select p.id, p.name, p.company_id, co.name as company, p.treatments, p.unit, p.pack_size, p.low_stock, p.last_cost, p.active,
             coalesce((select sum(m.qty) from stock_moves m where m.product_id = p.id), 0)::float as on_hand,
+            ${usableSql("p", "$1")}::float as usable,
+            exists (select 1 from stock_moves m where m.product_id = p.id) as ever_stocked,
             (select coalesce(json_agg(b order by b.expires_on nulls last, b.received_on, b.created_at), '[]'::json)
                from (select sb.id, sb.lot, sb.expires_on::text as expires_on, sb.received_on::text as received_on, sb.qty::float as qty,
                             sb.unit_cost::float as unit_cost, sb.expense_id, sb.note, sb.created_at,
+                            coalesce(sb.expires_on < ${clinicToday("$1")}, false) as expired,
+                            not exists (select 1 from stock_moves m where m.batch_id = sb.id and m.kind <> 'receive') as untouched,
                             coalesce((select sum(m.qty) from stock_moves m where m.batch_id = sb.id), 0)::float as on_hand
                        from stock_batches sb where sb.product_id = p.id) b
               where $3::boolean or b.on_hand > 0) as batches
@@ -84,8 +123,10 @@ export async function loadStockProducts(c: PoolClient, clinicId: string, opts: {
       unitCost: Number(b.unit_cost),
       expenseId: (b.expense_id as string) ?? null,
       note: (b.note as string) ?? "",
+      expired: !!b.expired,
+      untouched: !!b.untouched,
     }));
-    const next = batches.find((b) => b.onHand > 0) ?? null;
+    const next = batches.find((b) => b.onHand > 0 && !b.expired) ?? null;
     return {
       id: x.id,
       name: x.name,
@@ -98,10 +139,24 @@ export async function loadStockProducts(c: PoolClient, clinicId: string, opts: {
       lastCost: x.last_cost == null ? null : Number(x.last_cost),
       active: !!x.active,
       onHand: Number(x.on_hand),
+      usable: Number(x.usable),
+      expired: Math.max(0, Math.round((Number(x.on_hand) - Number(x.usable)) * 100) / 100),
+      everStocked: !!x.ever_stocked,
       next: next ? { lot: next.lot, expiresOn: next.expiresOn } : null,
       batches,
     };
   });
+}
+
+/**
+ * A product as somebody without Stock may see it.
+ *
+ * The chart needs a product's name and what is left of it, and anybody who can
+ * open a patient opens the chart. What a clinic pays for its Botox is not theirs
+ * to read, and leaving it out of the screen does not keep it out of the page.
+ */
+export function withoutCosts(p: StockProduct): StockProduct {
+  return { ...p, lastCost: null, batches: p.batches.map((b) => ({ ...b, unitCost: 0, expenseId: null, note: "" })) };
 }
 
 export async function loadCompanies(c: PoolClient, clinicId: string): Promise<Company[]> {
@@ -116,6 +171,11 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * first, then the next; whatever is not on hand is taken at the product's last
  * cost with no batch. The cost is frozen on the treatment (chart_mark_products).
  *
+ * Expired batches come last, not never. Sorting by date alone made the oldest
+ * expired vial the first thing every treatment took. The doctor is warned on the
+ * chart, but what they say was used is recorded, because it was: a product that
+ * has gone into a patient is a fact the record has to hold, however it got there.
+ *
  * The product row is locked first, so two treatments saved at once never take
  * the same last units.
  */
@@ -127,7 +187,7 @@ export async function takeStock(c: PoolClient, clinicId: string, productId: stri
               coalesce((select sum(m.qty) from stock_moves m where m.batch_id = b.id), 0)::float as on_hand
          from stock_batches b
         where b.product_id = $1 and b.clinic_id = $2
-        order by b.expires_on nulls last, b.received_on, b.created_at`,
+        order by coalesce(b.expires_on < ${clinicToday("$2")}, false), b.expires_on nulls last, b.received_on, b.created_at`,
       [productId, clinicId]
     )
   ).rows as { id: string; unit_cost: number; on_hand: number }[];
@@ -157,6 +217,41 @@ export async function takeStock(c: PoolClient, clinicId: string, productId: stri
   return { cost };
 }
 
+/**
+ * Units left stranded on the no-batch line go to the deliveries that settled it.
+ *
+ * A treatment recorded with nothing on hand overdraws that line, and the next
+ * delivery settles it out of its own batch. Voiding the treatment afterwards puts
+ * the units back on the line, where no treatment can reach them, and leaves the
+ * delivery short by as much. See 0092, which repaired what had already happened.
+ */
+async function settleStranded(c: PoolClient, clinicId: string, productId: string, by: string): Promise<void> {
+  let owing = Number((await c.query(`select coalesce(sum(qty), 0) as n from stock_moves where product_id = $1 and batch_id is null`, [productId])).rows[0].n);
+  if (owing <= 0) return;
+  const settled = (
+    await c.query(
+      `select batch_id, -sum(qty)::float as amount, max(unit_cost)::float as unit_cost
+         from stock_moves
+        where product_id = $1 and batch_id is not null and kind = 'adjust'
+          and reason in ('used before it was received', 'voided after it was settled')
+        group by batch_id
+        order by max(at) desc`,
+      [productId]
+    )
+  ).rows as { batch_id: string; amount: number; unit_cost: number }[];
+  for (const s of settled) {
+    if (owing <= 0) break;
+    const take = Math.min(owing, s.amount);
+    if (take <= 0) continue;
+    await c.query(
+      `insert into stock_moves (clinic_id, product_id, batch_id, kind, qty, unit_cost, by_user, reason)
+       values ($1, $2, $3, 'adjust', $4, $5, $6, 'voided after it was settled'), ($1, $2, null, 'adjust', $7, 0, $6, 'voided after it was settled')`,
+      [clinicId, productId, s.batch_id, take, s.unit_cost, by, -take]
+    );
+    owing = round2(owing - take);
+  }
+}
+
 /** A voided treatment's units go back where they came from: each batch, and the no-batch line it overdrew. */
 export async function returnStock(c: PoolClient, clinicId: string, markId: string, by: string): Promise<void> {
   await c.query(
@@ -167,11 +262,54 @@ export async function returnStock(c: PoolClient, clinicId: string, markId: strin
      having sum(qty) < 0`,
     [clinicId, markId, by]
   );
+  const touched = (await c.query(`select distinct product_id from stock_moves where mark_id = $1 and clinic_id = $2`, [markId, clinicId])).rows;
+  for (const t of touched) await settleStranded(c, clinicId, t.product_id, by);
 }
 
 /** A mis-tap undone: as if it never happened, so its moves go with it. */
 export async function dropStock(c: PoolClient, clinicId: string, markId: string): Promise<void> {
   await c.query(`delete from stock_moves where mark_id = $1 and clinic_id = $2`, [markId, clinicId]);
+}
+
+/** One line of a product's history. The patient is there only for somebody who may open patients. */
+export type StockMove = {
+  id: string;
+  kind: "receive" | "use" | "return" | "adjust";
+  qty: number;
+  at: string;
+  lot: string | null;
+  reason: string;
+  by: string | null;
+  patient: { id: string; name: string } | null;
+  treatment: string | null;
+};
+
+/** Everything that happened to a product, newest first: the numbers on the Stock page, taken apart. */
+export async function loadProductMoves(c: PoolClient, clinicId: string, productId: string, withPatients: boolean): Promise<StockMove[]> {
+  const r = await c.query(
+    `select m.id, m.kind, m.qty::float as qty, m.at, m.reason, b.lot, u.full_name as by_name,
+            cm.patient_id, p.full_name as patient, cm.label
+       from stock_moves m
+       left join stock_batches b on b.id = m.batch_id
+       left join users u on u.id = m.by_user
+       left join chart_marks cm on cm.id = m.mark_id
+       left join patients p on p.id = cm.patient_id
+      where m.clinic_id = $1 and m.product_id = $2
+      order by m.at desc, m.id
+      limit 200`,
+    [clinicId, productId]
+  );
+  return r.rows.map((x) => ({
+    id: x.id,
+    kind: x.kind,
+    qty: Number(x.qty),
+    at: new Date(x.at).toISOString(),
+    lot: x.lot ?? null,
+    reason: x.reason ?? "",
+    by: x.by_name ?? null,
+    patient: withPatients && x.patient_id ? { id: x.patient_id, name: x.patient ?? "" } : null,
+    treatment: x.label ?? null,
+  }));
 }
 
 /** What each of these treatments used, for the chart. Costs only for a member who sees stock. */

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { can } from "@/lib/auth";
 import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { DateTime } from "luxon";
@@ -25,6 +26,7 @@ export default async function StockPage({ params }: { params: Promise<{ slug: st
       today={DateTime.now().setZone(access.clinic.timezone).toISODate()!}
       products={data.products}
       companies={data.companies}
+      canPatients={can(access, "patients")}
     />
   );
 }

@@ -11,7 +11,7 @@ import type { MarkEvent } from "@/lib/charts/dental/state";
 import type { Billed } from "@/lib/charts/dental/billing-server";
 import { toEvent } from "@/lib/charts/dental/db";
 import { FACE_TREATMENT_BY_KEY, type Area, type Family } from "./catalog";
-import { loadMarkProducts, loadStockProducts, type MarkProduct, type StockProduct } from "./stock";
+import { loadMarkProducts, loadStockProducts, withoutCosts, type MarkProduct, type StockProduct } from "./stock";
 import { loadPatientPackages, loadPlans, type PackagePlan, type PatientPackage } from "./packages";
 
 type Person = { id: string; name: string };
@@ -156,7 +156,7 @@ export async function loadFaceChart(c: PoolClient, clinicId: string, patientId: 
     })),
     billing: r.billing.map((b) => ({ markId: b.markId, qty: Number(b.qty), charged: Number(b.charged ?? 0), paid: Number(b.paid ?? 0), invoices: b.invoices ?? [] })),
     // One after another: one connection runs one statement at a time whatever Promise.all suggests.
-    products: await loadStockProducts(c, clinicId, { activeOnly: true }),
+    products: (await loadStockProducts(c, clinicId, { activeOnly: true })).map((p) => (opts.stockCosts ? p : withoutCosts(p))),
     markProducts: await loadMarkProducts(c, clinicId, patientId, opts.stockCosts),
     packages: await loadPatientPackages(c, clinicId, patientId),
     plans: await loadPlans(c, clinicId, true),

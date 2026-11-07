@@ -76,11 +76,11 @@ export function FaceChartTab({ tz, today }: { tz: string; today: string }) {
   );
 }
 
-/** What a product would cost for so much, taken as the chart takes it: the batch that expires first, then the next. */
+/** What a product would cost for so much, taken as the chart takes it: the batch that expires first, then the next, expired ones last. */
 function costPreview(p: StockProduct, qty: number): { cost: number; short: boolean } {
   let left = qty;
   let cost = 0;
-  for (const b of p.batches) {
+  for (const b of [...p.batches].sort((x, y) => Number(x.expired) - Number(y.expired))) {
     if (left <= 0) break;
     if (b.onHand <= 0) continue;
     const take = Math.min(left, b.onHand);
@@ -667,7 +667,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                   <div className="mt-1.5 grid gap-1.5" data-face-products>
                     {productsFor(tr.key).map((p) => {
                       const on = p.id === productId;
-                      const low = p.onHand > 0 && p.lowStock != null && p.onHand <= p.lowStock;
+                      const low = p.usable > 0 && p.lowStock != null && p.usable <= p.lowStock;
                       return (
                         <button
                           key={p.id}
@@ -694,7 +694,15 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                             )}
                           </span>
                           <span className="shrink-0 text-end text-[12.5px] font-semibold tnum">
-                            {p.onHand > 0 ? F.onHand.replace("{n}", productAmount(p.unit, p.onHand, "en")) : <span className="text-danger">{F.noneOnHand}</span>}
+                            {p.usable > 0 ? (
+                              F.onHand.replace("{n}", productAmount(p.unit, p.usable, "en"))
+                            ) : p.expired > 0 ? (
+                              <span className="text-danger" data-face-product-expired>
+                                {F.onlyExpired}
+                              </span>
+                            ) : (
+                              <span className="text-danger">{F.noneOnHand}</span>
+                            )}
                             {low && <span className="block text-[11px] text-ink-500">{F.low}</span>}
                           </span>
                         </button>
