@@ -91,7 +91,12 @@ export function toFaceMark(r: Record<string, unknown>): FaceMark {
     label: r.label as string,
     labelAr: r.label_ar as string,
     family: FACE_TREATMENT_BY_KEY.get(key)?.family ?? ((r.look as Family) || "skin"),
-    areas: ((r.areas as Area[]) ?? []).map((a) => ({ zone: a.zone, ...(a.units != null ? { units: Number(a.units) } : {}) })),
+    areas: ((r.areas as Area[]) ?? []).map((a) => ({
+      zone: a.zone,
+      ...(a.units != null ? { units: Number(a.units) } : {}),
+      // The exact spots, when the doctor marked them (2026-11-08).
+      ...(Array.isArray(a.points) && a.points.length ? { points: a.points.map((p) => ({ x: Number(p.x), y: Number(p.y), ...(p.v ? { v: p.v } : {}) })) } : {}),
+    })),
     quantity: r.quantity == null ? null : Number(r.quantity),
     fee: r.fee == null ? null : Number(r.fee),
     feeManual: !!r.fee_manual,

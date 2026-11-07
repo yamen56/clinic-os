@@ -41,8 +41,9 @@ export const FACE_ZONES: Zone[] = [
   { key: "tear_r", en: "Tear trough (R)", ar: "تحت العين اليمنى", group: "tear", x: 0.361, y: 0.419, w: 0.13, h: 0.03 },
   { key: "tear_l", en: "Tear trough (L)", ar: "تحت العين اليسرى", group: "tear", x: 0.639, y: 0.419, w: 0.13, h: 0.03 },
   { key: "nose", en: "Nose", ar: "الأنف", x: 0.5, y: 0.446, w: 0.13, h: 0.108 },
-  { key: "cheek_r", en: "Cheek (R)", ar: "الخد الأيمن", group: "cheeks", x: 0.322, y: 0.473, w: 0.14, h: 0.09 },
-  { key: "cheek_l", en: "Cheek (L)", ar: "الخد الأيسر", group: "cheeks", x: 0.678, y: 0.473, w: 0.14, h: 0.09 },
+  // Reaching in to the side of the nose, so a point on the inner cheek is the cheek's (2026-11-08).
+  { key: "cheek_r", en: "Cheek (R)", ar: "الخد الأيمن", group: "cheeks", x: 0.335, y: 0.475, w: 0.17, h: 0.1 },
+  { key: "cheek_l", en: "Cheek (L)", ar: "الخد الأيسر", group: "cheeks", x: 0.665, y: 0.475, w: 0.17, h: 0.1 },
   { key: "nasolabial_r", en: "Nasolabial fold (R)", ar: "خط الابتسامة الأيمن", group: "nasolabial", x: 0.405, y: 0.528, w: 0.045, h: 0.06 },
   { key: "nasolabial_l", en: "Nasolabial fold (L)", ar: "خط الابتسامة الأيسر", group: "nasolabial", x: 0.595, y: 0.528, w: 0.045, h: 0.06 },
   { key: "lips", en: "Lips", ar: "الشفاه", x: 0.5, y: 0.582, w: 0.21, h: 0.06 },
@@ -207,7 +208,53 @@ export const DEFAULT_UNITS: Record<string, number> = {
 };
 
 /** One area of a treatment as recorded: where, and the units given there when it is dosed. */
-export type Area = { zone: string; units?: number };
+/**
+ * The picture a point was marked on. Only the front for now; the side views
+ * join it (Yamen, 2026-11-07: front, left, right, and front-angled each way).
+ */
+export type FaceView = "front";
+export const FACE_VIEWS: FaceView[] = ["front"];
+
+/** An exact spot the doctor worked on, as a share of its picture, 0–1 (2026-11-08). */
+export type FacePoint = { x: number; y: number; v?: FaceView };
+
+/** An area of the face as recorded: its units, when dosed in them, and the exact spots, when marked. */
+export type Area = { zone: string; units?: number; points?: FacePoint[] };
+
+/** The picture's width over its height (945 × 1264): a step across is shorter than a step down. */
+const ASPECT = 945 / 1264;
+
+/**
+ * The part of the face a spot is in: the area whose oval it is deepest inside;
+ * between areas, the one whose edge is nearest on the picture, up to a short way
+ * off. A tap on the background beside the head belongs to none. The server asks
+ * the same question of every point it is sent.
+ */
+export function zoneAt(x: number, y: number): string | null {
+  let inside: string | null = null;
+  let insideD = Infinity;
+  let near: string | null = null;
+  let nearGap = Infinity;
+  for (const z of FACE_ZONES) {
+    const dx = (x - z.x) / (z.w / 2);
+    const dy = (y - z.y) / (z.h / 2);
+    const d = dx * dx + dy * dy;
+    if (d <= 1) {
+      if (d < insideD) {
+        insideD = d;
+        inside = z.key;
+      }
+      continue;
+    }
+    // How far outside the oval, along the line from its middle, in the picture's own proportions.
+    const gap = Math.hypot((x - z.x) * ASPECT, y - z.y) * (1 - 1 / Math.sqrt(d));
+    if (gap < nearGap) {
+      nearGap = gap;
+      near = z.key;
+    }
+  }
+  return inside ?? (nearGap <= 0.06 ? near : null);
+}
 
 /** The areas in face order — the order the chart lists them in, whatever order they were tapped. */
 export function inFaceOrder<T extends { zone: string }>(areas: T[]): T[] {

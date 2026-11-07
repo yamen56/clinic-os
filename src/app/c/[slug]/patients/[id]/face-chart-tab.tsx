@@ -3,8 +3,8 @@
 /*
   The face chart tab: aesthetic work on the patient's face, saved.
 
-  Tap the parts of the face treated, pick what was done, say how much and with
-  which product, save. Four taps for a routine Botox. Each saved treatment is
+  Tap the exact spots treated (or a whole part, from the quick picks), pick
+  what was done, say how much and with which product, save. Four taps for a routine Botox. Each saved treatment is
   drawn at once and stored behind it with an id the browser chose, so the
   tinted area and the row are the same entry from the start; if the server
   refuses, the tint goes and the chart says so. Saved work is on Ready to bill
@@ -16,11 +16,13 @@
   note edited later, is in the patient's Notes too (notes-feed.tsx).
 
   Who may record is `patients.charts`; everybody else who can open the file
-  reads the chart and its history. Colour says what kind of work it was —
-  tinted areas and labels, never dots (Yamen, 2026-10-28).
+  reads the chart and its history. Colour says what kind of work it was. The
+  spots themselves are dots on the face, and tapping one says what was done
+  there, when and by whom (Yamen, 2026-11-08, after 2026-10-28's tints alone).
 */
 
 import { useMemo, useState } from "react";
+import { CornerDownRight } from "lucide-react";
 import Link from "next/link";
 import { PackagePlus, Plus, Repeat2, Undo2, X } from "lucide-react";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
@@ -51,15 +53,17 @@ import {
   type FaceVariant,
   type PricedBy,
   FACE_ZONES,
+  zoneAt,
 } from "@/lib/charts/face/catalog";
 import type { FaceMark } from "@/lib/charts/face/db";
 import type { StockProduct } from "@/lib/charts/face/stock";
 import { PACKAGE_KEY, type PatientPackage } from "@/lib/charts/face/packages";
 import type { MarkEvent } from "@/lib/charts/dental/state";
 import { call, newId, useFaceStore } from "@/components/charts/face/store";
-import { FaceMap } from "@/components/charts/face/face-map";
+import { FaceMap, type PastPoint, type PendingPoint } from "@/components/charts/face/face-map";
 import { FaceReadyToBill } from "@/components/charts/face/ready-to-bill";
 import { FamilyTag } from "@/components/charts/face/family-tag";
+import { AddTreatment, treatmentsCall } from "@/components/charts/face/add-treatment";
 
 /** How long a toxin lasts, near enough to say when the patient is due again. */
 const TOXIN_DAYS = 120;
@@ -109,7 +113,13 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const { toast } = useToast();
   const base = `/api/c/${s.slug}/patients/${s.patientId}/face`;
 
-  const [sel, setSel] = useState<string[]>([]);
+  // Parts chosen whole (quick picks, the keyboard), and exact spots tapped; the parts recorded are both.
+  const [whole, setWhole] = useState<string[]>([]);
+  const [pts, setPts] = useState<PendingPoint[]>([]);
+  const sel = useMemo(() => inFaceOrder([...new Set([...whole, ...pts.map((p) => p.zone)])].map((zone) => ({ zone }))).map((a) => a.zone), [whole, pts]);
+  // A past spot whose card is open, and whether past spots are drawn at all.
+  const [spot, setSpot] = useState<PastPoint | null>(null);
+  const [showPast, setShowPast] = useState(true);
   const [tKey, setTKey] = useState<string | null>(null);
   const [units, setUnits] = useState<Record<string, number>>({});
   const [count, setCount] = useState(1);
@@ -152,12 +162,21 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     return m;
   }, [s.packages, live]);
 
-  // The kind of work last done on each part of the face, for its tint.
+  // The kind of work last done on each part of the face, for its tint: the parts recorded whole, without spots.
   const tints = useMemo(() => {
     const m = new Map<string, Family>();
-    for (const x of [...live].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) for (const a of x.areas) m.set(a.zone, x.family);
+    for (const x of [...live].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) for (const a of x.areas) if (!a.points?.length) m.set(a.zone, x.family);
     return m;
   }, [live]);
+
+  // Every spot recorded, as a dot in its kind of work's colour.
+  const pastPoints = useMemo<PastPoint[]>(
+    () =>
+      showPast
+        ? live.flatMap((m) => m.areas.flatMap((a, ai) => (a.points ?? []).map((p, pi) => ({ key: `${m.id}:${ai}:${pi}`, markId: m.id, x: p.x, y: p.y, family: m.family }))))
+        : [],
+    [live, showPast]
+  );
 
   // The latest toxin, and when it wears off.
   const dueAgain = useMemo(() => {
@@ -175,23 +194,43 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
 
   const unitsFor = (zone: string, from?: Area[]) => from?.find((a) => a.zone === zone)?.units ?? DEFAULT_UNITS[zone] ?? 10;
 
+  // A part, whole: on, or off with every spot in it.
   const toggleZone = (zone: string) => {
+    setSpot(null);
     const on = sel.includes(zone);
-    const next = on ? sel.filter((z) => z !== zone) : [...sel, zone];
-    setSel(next);
-    if (tr?.units && !on) setUnits((u) => ({ ...u, [zone]: unitsFor(zone) }));
-    if (!next.length) setTKey(null);
+    if (on) {
+      setWhole((w) => w.filter((z) => z !== zone));
+      setPts((p) => p.filter((x) => x.zone !== zone));
+      if (sel.length === 1) setTKey(null);
+    } else {
+      setWhole((w) => [...w, zone]);
+      if (tr?.units) setUnits((u) => ({ ...u, [zone]: unitsFor(zone) }));
+    }
+  };
+
+  // An exact spot. Its part joins the treatment, at that part's usual units.
+  const addPoint = (p: PendingPoint) => {
+    setSpot(null);
+    if (tr?.units && !sel.includes(p.zone)) setUnits((u) => ({ ...u, [p.zone]: unitsFor(p.zone) }));
+    setPts((x) => [...x, p]);
+  };
+  const removePoint = (i: number) => {
+    const next = pts.filter((_, j) => j !== i);
+    setPts(next);
+    if (!whole.length && !next.length) setTKey(null);
   };
 
   const preset = (zones: string[]) => {
-    const fit = zones;
-    setSel(fit);
-    if (tr?.units) setUnits(Object.fromEntries(fit.map((z) => [z, unitsFor(z)])));
-    if (!fit.length) setTKey(null);
+    setSpot(null);
+    setWhole(zones);
+    setPts([]);
+    if (tr?.units) setUnits(Object.fromEntries(zones.map((z) => [z, unitsFor(z)])));
+    if (!zones.length) setTKey(null);
   };
 
   const clear = () => {
-    setSel([]);
+    setWhole([]);
+    setPts([]);
     setTKey(null);
   };
 
@@ -205,7 +244,12 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     // The kind done last time, when it was a repeat.
     setVariantId(from?.detail.variant?.id ?? "");
     const zones = from ? from.areas.map((a) => a.zone) : sel;
-    setSel(zones);
+    // A repeat is on the same spots, and the parts done whole are whole again.
+    if (from) {
+      setWhole(from.areas.filter((a) => !a.points?.length).map((a) => a.zone));
+      setPts(from.areas.flatMap((a) => (a.points ?? []).map((p) => ({ x: p.x, y: p.y, zone: a.zone }))));
+    }
+    setSpot(null);
     setTKey(k);
     setUnits(t2.units ? Object.fromEntries(zones.map((z) => [z, unitsFor(z, from?.areas)])) : {});
     setCount(from && from.quantity && (t2.pricedBy === "syringe" || t2.pricedBy === "thread") ? from.quantity : t2.pricedBy === "thread" ? 4 : 1);
@@ -230,7 +274,14 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
 
   /* ---- the record panel's numbers ---- */
 
-  const areasNow = (x: FaceTreatment): Area[] => inFaceOrder(sel.map((z) => (x.units ? { zone: z, units: units[z] ?? 0 } : { zone: z })));
+  const areasNow = (x: FaceTreatment): Area[] =>
+    inFaceOrder(
+      sel.map((z) => {
+        const here = pts.filter((p) => p.zone === z).map(({ x: px, y: py }) => ({ x: px, y: py, v: "front" as const }));
+        return { zone: z, ...(x.units ? { units: units[z] ?? 0 } : {}), ...(here.length ? { points: here } : {}) };
+      })
+    );
+  const pointsIn = (zone: string) => pts.filter((p) => p.zone === zone).length;
   const areasPreview = tr ? areasNow(tr) : [];
   const quantity = tr ? quantityOf(tr, areasPreview, count) : 0;
   const unitsTotal = tr ? totalUnits(tr, areasPreview) : null;
@@ -517,6 +568,94 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     );
   };
 
+  /**
+   * What was done at a past spot: the card that opens on the face where the dot is,
+   * toward the middle so it never runs off the picture.
+   */
+  const spotCard = (p: PastPoint) => {
+    const m = s.marks.find((x) => x.id === p.markId);
+    if (!m) return null;
+    const area = m.areas.find((a) => a.points?.some((q) => q.x === p.x && q.y === p.y));
+    const used = usedOn(m.id);
+    const right = p.x > 0.5;
+    const below = p.y < 0.55;
+    // Beside the dot, toward the middle, and never past either edge of the picture.
+    const w = "min(17rem, 92%)";
+    return (
+      <div
+        className="absolute z-[4] rounded-card border border-line bg-surface p-3 text-start shadow-pop"
+        style={{
+          width: w,
+          left: `clamp(0px, ${right ? `calc(${p.x * 100}% - ${w} - 10px)` : `calc(${p.x * 100}% + 10px)`}, calc(100% - ${w}))`,
+          top: `${p.y * 100}%`,
+          transform: `translateY(${below ? "10px" : "calc(-100% - 10px)"})`,
+        }}
+        onClick={(e) => e.stopPropagation()}
+        data-face-spot={m.id}
+      >
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5 text-[14px] font-semibold">
+              {m.label}
+              {m.detail.variant && <span className="font-normal text-ink-500">· {m.detail.variant.name}</span>}
+            </div>
+            <FamilyTag family={m.family} label={F.families[m.family]} />
+          </div>
+          <button type="button" onClick={() => setSpot(null)} aria-label={t.common.close} className="-me-1 -mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-500 hover:bg-sunken">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <dl className="mt-2 grid gap-0.5 text-[12.5px] text-ink-700">
+          <div>{fmtDate(m.doneAt ?? m.createdAt, tz, locale)}{m.performedBy ? ` · ${F.by.replace("{name}", m.performedBy.name)}` : ""}</div>
+          {area && (
+            <div>
+              {area.units != null
+                ? F.unitsHere.replace("{n}", String(area.units)).replace("{area}", ZONE_BY_KEY.get(area.zone)?.en ?? area.zone)
+                : ZONE_BY_KEY.get(area.zone)?.en}
+              {area.points && area.points.length > 1 ? ` · ${F.points.replace("{n}", String(area.points.length))}` : ""}
+            </div>
+          )}
+          {used.map((u) => (
+            <div key={u.productId}>
+              {u.name}
+              {u.lots.length ? ` · ${u.lots.join(", ")}` : ""}
+            </div>
+          ))}
+          {m.redoOf && <div className="font-medium text-brand-700">{F.retouch}</div>}
+          {m.note && <div className="line-clamp-3 whitespace-pre-line text-ink-500">{m.note}</div>}
+        </dl>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {s.canWrite && (
+            <button
+              type="button"
+              onClick={() => {
+                const zone = zoneAt(p.x, p.y);
+                if (zone) addPoint({ x: p.x, y: p.y, zone });
+              }}
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-brand-600 px-3 text-[12.5px] font-semibold text-on-brand"
+              data-face-spot-again
+            >
+              <CornerDownRight className="h-3.5 w-3.5 rtl:-scale-x-100" />
+              {F.sameSpot}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSpot(null);
+              const el = document.querySelector(`[data-face-history] [data-face-entry="${m.id}"]`);
+              el?.scrollIntoView({ block: "center", behavior: "smooth" });
+            }}
+            className="inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-semibold hover:bg-sunken"
+            data-face-spot-entry
+          >
+            {F.seeEntry}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const recent = newestFirst.filter((m) => !m.voidedAt).slice(0, 5);
   const voidedCount = s.marks.filter((m) => m.voidedAt).length;
   const shown = showVoided ? newestFirst : newestFirst.filter((m) => !m.voidedAt);
@@ -553,16 +692,42 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                 {p.en}
               </button>
             ))}
-            <button
-              type="button"
-              aria-pressed={showAreas}
-              onClick={() => setShowAreas((v) => !v)}
-              className={`ms-auto inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium ${showAreas ? "bg-sunken" : "hover:bg-sunken"}`}
-            >
-              {F.showAreas}
-            </button>
+            <span className="ms-auto flex gap-1.5">
+              <button
+                type="button"
+                aria-pressed={showPast}
+                onClick={() => (setShowPast((v) => !v), setSpot(null))}
+                className={`inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium ${showPast ? "bg-sunken" : "hover:bg-sunken"}`}
+                data-face-show-past
+              >
+                {F.showPast}
+              </button>
+              <button
+                type="button"
+                aria-pressed={showAreas}
+                onClick={() => setShowAreas((v) => !v)}
+                className={`inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium ${showAreas ? "bg-sunken" : "hover:bg-sunken"}`}
+              >
+                {F.showAreas}
+              </button>
+            </span>
           </div>
-          <FaceMap selected={sel} tints={tints} showAreas={showAreas} onToggle={toggleZone} labels={{ right: F.patientRight, left: F.patientLeft }} />
+          <FaceMap
+            selected={sel}
+            points={pts}
+            past={pastPoints}
+            pastActive={!sel.length}
+            openKey={spot?.key ?? null}
+            tints={tints}
+            showAreas={showAreas}
+            onToggle={toggleZone}
+            onPoint={addPoint}
+            onRemovePoint={removePoint}
+            onPast={(p) => setSpot((cur) => (cur?.key === p.key ? null : p))}
+            labels={{ right: F.patientRight, left: F.patientLeft, removePoint: F.removePoint, pastPoint: F.pastPoint }}
+          >
+            {spot && spotCard(spot)}
+          </FaceMap>
           <div className="mt-3 flex flex-wrap justify-center gap-1.5 border-t border-line pt-3">
             {FAMILIES.map((f) => (
               <FamilyTag key={f} family={f} label={F.families[f]} />
@@ -584,7 +749,10 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
           {sel.length > 0 && !tr && (
             <div data-face-panel="areas">
               <div className="flex items-center gap-2">
-                <h3 className="text-[16px] font-semibold">{sel.length === 1 ? ZONE_BY_KEY.get(sel[0])?.en : F.areas.replace("{n}", String(sel.length))}</h3>
+                <h3 className="text-[16px] font-semibold">
+                  {sel.length === 1 ? ZONE_BY_KEY.get(sel[0])?.en : F.areas.replace("{n}", String(sel.length))}
+                  {pts.length > 0 && <span className="ms-2 text-[13px] font-medium text-ink-500" data-face-points={pts.length}>{pts.length === 1 ? F.onePoint : F.points.replace("{n}", String(pts.length))}</span>}
+                </h3>
                 <Button size="sm" variant="outline" className="ms-auto" onClick={clear}>
                   {F.clear}
                 </Button>
@@ -599,6 +767,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                     className="inline-flex h-8 items-center gap-1.5 rounded-full border border-brand-600 bg-sunken ps-3 pe-2 text-[12.5px] font-semibold"
                   >
                     {ZONE_BY_KEY.get(zone)?.en}
+                    {pointsIn(zone) > 0 && <span className="text-ink-500 tnum">· {pointsIn(zone)}</span>}
                     <X className="h-3.5 w-3.5" />
                   </button>
                 ))}
@@ -1004,120 +1173,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
 
       {selling && <SellPackage base={base} onClose={() => setSelling(false)} />}
     </div>
-  );
-}
-
-type TreatmentsAnswer = { ok?: boolean; key?: string; variantId?: string; custom: FaceTreatment[]; variants: FaceVariant[]; error?: string };
-
-async function treatmentsCall(slug: string, body: Record<string, unknown>): Promise<TreatmentsAnswer> {
-  const res = await fetch(`/api/c/${slug}/face/treatments`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  return ((await res.json().catch(() => ({ error: "failed" }))) as TreatmentsAnswer) ?? { error: "failed" };
-}
-
-/**
- * A treatment the clinic does that the chart does not list, made at the chair.
- * It starts on the areas the doctor picked, which is where it was just done.
- */
-function AddTreatment({
-  slug,
-  zones,
-  onClose,
-  onAdded,
-}: {
-  slug: string;
-  zones: string[];
-  onClose: () => void;
-  onAdded: (key: string, custom: FaceTreatment[], variants: FaceVariant[]) => void;
-}) {
-  const { t } = useI18n();
-  const F = t.face;
-  const N = F.newTreatment;
-  const { toast } = useToast();
-  const [name, setName] = useState("");
-  const [nameAr, setNameAr] = useState("");
-  const [family, setFamily] = useState<Family>("skin");
-  const [pricedBy, setPricedBy] = useState<PricedBy>("session");
-  const [units, setUnits] = useState(false);
-  const [anywhere, setAnywhere] = useState(zones.length === 0);
-  const [busy, setBusy] = useState(false);
-
-  const create = async () => {
-    setBusy(true);
-    const r = await treatmentsCall(slug, {
-      op: "create",
-      name: name.trim(),
-      nameAr: nameAr.trim() || null,
-      family,
-      pricedBy,
-      units: units || pricedBy === "unit",
-      fits: anywhere || !zones.length ? FACE_ZONES.map((z) => z.key) : zones,
-    });
-    setBusy(false);
-    if (!r.key) return toast(r.error === "exists" ? N.exists : t.common.genericError, "error");
-    onAdded(r.key, r.custom, r.variants);
-  };
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={N.title}
-      footer={
-        <Button onClick={() => void create()} loading={busy} disabled={!name.trim()} data-face-new-save>
-          {N.create}
-        </Button>
-      }
-    >
-      <div className="grid gap-3">
-        <label className="grid gap-1 text-[13px] font-semibold">
-          {N.name}
-          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} data-face-new-name />
-        </label>
-        <label className="grid gap-1 text-[13px] font-semibold">
-          {N.nameAr}
-          <Input value={nameAr} onChange={(e) => setNameAr(e.target.value)} maxLength={80} dir="rtl" />
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1 text-[13px] font-semibold">
-            {N.family}
-            <Select value={family} onChange={(e) => setFamily(e.target.value as Family)} data-face-new-family>
-              {FAMILIES.map((f) => (
-                <option key={f} value={f}>
-                  {F.families[f]}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="grid gap-1 text-[13px] font-semibold">
-            {N.pricedBy}
-            <Select value={pricedBy} onChange={(e) => setPricedBy(e.target.value as PricedBy)} data-face-new-priced>
-              {(["session", "area", "unit", "syringe", "thread"] as const).map((p) => (
-                <option key={p} value={p}>
-                  {F.pricedBy[p]}
-                </option>
-              ))}
-            </Select>
-          </label>
-        </div>
-        <label className="flex min-h-10 items-center gap-2 text-[13.5px]">
-          <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={units || pricedBy === "unit"} disabled={pricedBy === "unit"} onChange={(e) => setUnits(e.target.checked)} />
-          {N.units}
-        </label>
-        <div className="grid gap-1">
-          <div className="text-[13px] font-semibold">{N.where}</div>
-          {zones.length > 0 && (
-            <label className="flex min-h-10 items-center gap-2 text-[13.5px]">
-              <input type="radio" name="where" className="h-4 w-4 accent-brand-600" checked={!anywhere} onChange={() => setAnywhere(false)} />
-              {N.whereSelected}: {whereText(zones, "en")}
-            </label>
-          )}
-          <label className="flex min-h-10 items-center gap-2 text-[13.5px]">
-            <input type="radio" name="where" className="h-4 w-4 accent-brand-600" checked={anywhere} onChange={() => setAnywhere(true)} data-face-new-anywhere />
-            {N.whereAll}
-          </label>
-        </div>
-      </div>
-    </Modal>
   );
 }
 

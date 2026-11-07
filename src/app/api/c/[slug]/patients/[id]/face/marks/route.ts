@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 import { todaysVisit } from "@/lib/charts/dental/server";
 import { toEvent } from "@/lib/charts/dental/db";
 import { FACE_MARK_SELECT, loadFacePrices, toFaceMark } from "@/lib/charts/face/db";
-import { feeOf, inFaceOrder, isZone, pickFacePrice, quantityOf, type FaceTreatment, type MarkDetail } from "@/lib/charts/face/catalog";
+import { feeOf, inFaceOrder, isZone, pickFacePrice, quantityOf, zoneAt, type FaceTreatment, type MarkDetail } from "@/lib/charts/face/catalog";
 import { resolveTreatment, resolveVariant } from "@/lib/charts/face/treatments";
 import { takeStock } from "@/lib/charts/face/stock";
 import { usablePackageItem } from "@/lib/charts/face/packages";
@@ -33,7 +33,17 @@ const bodySchema = z.object({
   eventId: z.string().uuid(),
   treatmentKey: z.string().min(1).max(64),
   areas: z
-    .array(z.object({ zone: z.string().max(24), units: z.number().int().min(0).max(1000).optional() }))
+    .array(
+      z.object({
+        zone: z.string().max(24),
+        units: z.number().int().min(0).max(1000).optional(),
+        /** The exact spots worked on in this area, on its picture (2026-11-08). */
+        points: z
+          .array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), v: z.enum(["front"]).optional() }))
+          .max(40)
+          .optional(),
+      })
+    )
     .min(1)
     .max(24),
   /** Syringes or threads, for a treatment priced by them. */
@@ -70,8 +80,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     if (!t || t.archived) return { error: "unknown_treatment" as const };
     // Each area once, and a real one. Any treatment may be done anywhere: the doctor says where they worked.
     if (new Set(zones).size !== zones.length || !zones.every((z) => isZone(z))) return { error: "invalid_area" as const };
+    // A spot is in the area it is filed under, as the chart worked it out.
+    if (!d.areas.every((a) => (a.points ?? []).every((p) => zoneAt(p.x, p.y) === a.zone))) return { error: "invalid_area" as const };
     // Units only where the treatment is dosed in them.
-    const areas = inFaceOrder(d.areas.map((a) => (t.units ? { zone: a.zone, units: a.units ?? 0 } : { zone: a.zone })));
+    const areas = inFaceOrder(
+      d.areas.map((a) => ({
+        zone: a.zone,
+        ...(t.units ? { units: a.units ?? 0 } : {}),
+        ...(a.points?.length ? { points: a.points.map((p) => ({ x: Math.round(p.x * 10000) / 10000, y: Math.round(p.y * 10000) / 10000, v: p.v ?? "front" })) } : {}),
+      }))
+    );
     const variant = d.variantId ? await resolveVariant(c, access.clinicId, t.key, d.variantId) : null;
     if (d.variantId && !variant) return { error: "invalid_variant" as const };
     // How it counted, and which kind it was, frozen: the clinic may rename or archive its own later.

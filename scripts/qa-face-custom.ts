@@ -43,6 +43,13 @@ async function until(fn: () => Promise<boolean>, ms = 15000): Promise<boolean> {
   return false;
 }
 
+/** A tap on a part of the face, beside its middle: an earlier visit's dot may sit in the middle, and a tap there opens it. */
+async function tapBeside(page: Page, zone: string, dx = 24) {
+  const el = page.locator(`[data-zone='${zone}']`);
+  const b = (await el.boundingBox())!;
+  await el.click({ position: { x: b.width / 2 + dx, y: b.height / 2 } });
+}
+
 async function main() {
   const db = new Client({ connectionString: PG });
   await db.connect();
@@ -133,7 +140,7 @@ async function main() {
     await page.goto(chart, { timeout: 180000 });
     await page.waitForSelector("[data-face-map]", { timeout: 120000 });
     check((await page.locator("[data-face-preset='neck']").count()) === 1 && (await page.locator("[data-face-preset='full']").count()) === 1, "the neck and the full face are one tap each");
-    await page.locator("[data-zone='neck']").click();
+    await tapBeside(page, "neck");
     await page.locator(`[data-face-treatment='${made.key}']`).click();
     await page.waitForSelector("[data-face-panel='record']");
     await page.locator("[data-face-price-input]").fill("80");
@@ -155,13 +162,73 @@ async function main() {
     );
     check(await until(async () => (await page.locator(`[data-face-retouched='1']`).count()) > 0), "the original says it was retouched");
 
+    console.log("Exact points (2026-11-08)");
+    await page.goto(chart, { timeout: 180000 });
+    await page.waitForSelector("[data-face-map]", { timeout: 120000 });
+    const map = page.locator("[data-face-map]");
+    const mb = (await map.boundingBox())!;
+    const at = (x: number, y: number) => map.click({ position: { x: mb.width * x, y: mb.height * y } });
+    await at(0.42, 0.262);
+    await at(0.58, 0.27);
+    await at(0.5, 0.341);
+    check((await page.locator("[data-face-point]").count()) === 3, "each tap puts a point where it lands");
+    check((await page.locator("[data-face-point='forehead']").count()) === 2 && (await page.locator("[data-face-point='glabella']").count()) === 1, "and each point knows the part of the face it is in");
+    check((await page.locator("[data-face-points]").getAttribute("data-face-points")) === "3", "the panel counts them");
+    await page.locator("[data-face-point='glabella']").click();
+    check((await page.locator("[data-face-point]").count()) === 2 && (await page.locator("[data-zone='glabella']").getAttribute("aria-pressed")) === "false", "a point tapped again comes off, and its part with it");
+    await at(0.5, 0.341);
+    await page.locator("[data-face-treatment='aes_toxin']").click();
+    await page.waitForSelector("[data-face-panel='record']");
+    await page.locator("[data-face-save]").click();
+    check(
+      await until(async () => (await q(`select 1 from chart_marks where clinic_id = $1 and treatment_key = 'aes_toxin'`, [clinic.id])).length === 1),
+      "the treatment is saved"
+    );
+    const [pointed] = await q(`select id, areas from chart_marks where clinic_id = $1 and treatment_key = 'aes_toxin'`, [clinic.id]);
+    const byZone = Object.fromEntries((pointed.areas as { zone: string; units?: number; points?: { x: number; y: number }[] }[]).map((a) => [a.zone, a]));
+    check(byZone.forehead?.points?.length === 2 && byZone.glabella?.points?.length === 1, "with its points, by part", JSON.stringify(pointed.areas));
+    check(Math.abs((byZone.forehead?.points?.[0]?.x ?? 0) - 0.42) < 0.02, "where they were tapped");
+    check(byZone.forehead?.units === 10 && byZone.glabella?.units === 20, "and the parts keep their units");
+    await page.reload();
+    await page.waitForSelector("[data-face-map]", { timeout: 120000 });
+    check((await page.locator(`[data-face-past='${pointed.id}']`).count()) === 3, "after, the points stay on the face as dots");
+    // The forehead is tinted by the filler recorded on it whole, above; the glabella only ever had points.
+    check((await page.locator("[data-zone='glabella']").getAttribute("data-tint")) === null, "instead of tinting the whole part");
+    await page.locator(`[data-face-past='${pointed.id}']`).first().click();
+    await page.waitForSelector(`[data-face-spot='${pointed.id}']`);
+    const card = await page.locator(`[data-face-spot='${pointed.id}']`).innerText();
+    check(card.includes("Botulinum toxin") && card.includes("Dr Custom") && card.includes("10u in Forehead"), "tapping a dot says what was done there, by whom, how much", card.replace(/\n/g, " | "));
+    await page.locator("[data-face-spot-again]").click();
+    check((await page.locator("[data-face-point]").count()) === 1 && (await page.locator("[data-face-panel='areas']").count()) === 1, "and Treat here again starts a new one on that spot");
+    await page.locator("[data-face-panel='areas'] button", { hasText: "Clear" }).click();
+    const misplaced = await page.request.post(`${BASE}/api/c/${slug}/patients/${patient.id}/face/marks`, {
+      data: { id: crypto.randomUUID(), eventId: crypto.randomUUID(), treatmentKey: "aes_toxin", areas: [{ zone: "forehead", units: 10, points: [{ x: 0.5, y: 0.83 }] }] },
+    });
+    check(misplaced.status() === 400, "a point is refused under a part it is not in", String(misplaced.status()));
+    await page.locator("[data-zone='lips']").focus();
+    await page.keyboard.press("Enter");
+    check((await page.locator("[data-zone='lips']").getAttribute("aria-pressed")) === "true" && (await page.locator("[data-face-point]").count()) === 0, "from the keyboard a part is chosen whole");
+    await page.locator("[data-face-panel='areas'] button", { hasText: "Clear" }).click();
+
+    console.log("A treatment added from the price list");
+    await page.goto(`${BASE}/c/${slug}/settings/face-prices`, { timeout: 180000 });
+    await page.waitForSelector("[data-face-prices]", { timeout: 120000 });
+    await page.locator("[data-face-prices-add]").click();
+    await page.locator("[data-face-new-name]").fill("Exosomes");
+    await page.locator("[data-face-new-family]").selectOption("skin");
+    await page.locator("[data-face-new-save]").click();
+    let exo: { key: string } | undefined;
+    check(await until(async () => !!(exo = (await q(`select key from aesthetic_treatments where clinic_id = $1 and name = 'Exosomes'`, [clinic.id]))[0])), "Face prices adds a treatment");
+    check(await until(async () => (await page.locator(`[data-face-price-row='${exo?.key}']`).count()) === 1), "and lists it at once");
+    check(await until(async () => (await page.evaluate("document.activeElement && document.activeElement.getAttribute('data-price-box')")) === exo?.key), "with its price box ready to type in");
+
     console.log("Archived");
     const r = await page.request.post(`${BASE}/api/c/${slug}/face/treatments`, { data: { op: "archive", key: made.key, archived: true } });
     check(r.ok(), "the treatment is archived");
     await page.goto(chart, { timeout: 180000 });
     await page.waitForSelector("[data-face-map]", { timeout: 120000 });
     check((await page.locator(`[data-face-entry='${mark.id}']`).first().innerText()).includes("Polynucleotides"), "its past entry still names it");
-    await page.locator("[data-zone='neck']").click();
+    await tapBeside(page, "neck", -24);
     check((await page.locator(`[data-face-treatment='${made.key}']`).count()) === 0, "but it is not offered any more");
     const again = await page.request.post(`${BASE}/api/c/${slug}/patients/${patient.id}/face/marks`, {
       data: { id: crypto.randomUUID(), eventId: crypto.randomUUID(), treatmentKey: made.key, areas: [{ zone: "neck" }] },
