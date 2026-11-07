@@ -85,6 +85,7 @@ const IDENTITY_AUTHORISED = [
   "saveNotificationPrefsAction",
   "deleteMyAccountAction",
   "updateMyNameAction",
+  "saveMyHoursAction",
 ];
 
 /** Reads every `"use server"` file under src and reports the unguarded actions. */

@@ -49,6 +49,7 @@ const SUITES = [
   ["booking: settings and the public page, in a browser", "scripts/qa-booking-ui.ts"],
   ["booking: a link that is about one service", "scripts/qa-booking-single-service.ts"],
   ["hours: a doctor cannot open the clinic", "scripts/qa-doctor-hours-bound.ts"],
+  ["hours: a doctor keeps their own", "scripts/qa-my-hours.ts"],
   ["notes: versions, categories, voice", "scripts/qa-notes.ts"],
   ["notes: the tab and the merged booking step", "scripts/qa-notes-ui.ts"],
   ["notes: filed against a visit", "scripts/qa-notes-visits.ts"],

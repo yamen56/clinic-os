@@ -9,6 +9,7 @@ import { appUrl } from "@/lib/urls";
 import { inClinic } from "@/lib/clinic-api";
 import { withSystem } from "@/lib/db";
 import { audit } from "@/lib/audit";
+import { parseWeeklyHours } from "@/lib/hours";
 import { z } from "zod";
 import {
   CAPABILITIES,
@@ -335,6 +336,18 @@ export async function updateMemberAction(
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "settings.staff")) return { error: "forbidden" };
+  /*
+    An empty map means the clinic's hours and stays that; anything else is held
+    to the same rules as the doctor's own page. A row that fails was typed wrong
+    in this same form, so saying so is more useful than saving a range that
+    offers nobody a slot.
+  */
+  let workingHours = patch.workingHours;
+  if (workingHours && Object.keys(workingHours).length === 0) workingHours = null;
+  if (workingHours) {
+    workingHours = parseWeeklyHours(workingHours);
+    if (!workingHours) return { error: "invalid_hours" };
+  }
 
   return inClinic(access, async (c) => {
     const target = (
@@ -503,8 +516,8 @@ export async function updateMemberAction(
       );
       push("permissions", JSON.stringify(toAccessSetting(patch.access.level, caps)));
     }
-    if (patch.workingHours !== undefined)
-      push("working_hours", patch.workingHours ? JSON.stringify(patch.workingHours) : null);
+    if (workingHours !== undefined)
+      push("working_hours", workingHours ? JSON.stringify(workingHours) : null);
     const renaming = newName !== null && newName !== target.full_name;
     if (!sets.length && !renaming && !pay) return {};
     if (sets.length) {

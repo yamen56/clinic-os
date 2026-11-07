@@ -65,6 +65,7 @@ export function WeeklyHoursEditor({
                 />
                 {!disabled && (
                   <button
+                    type="button"
                     aria-label={t.common.delete}
                     onClick={() => setDay(day, ranges.filter((_, j) => j !== i))}
                     className="text-ink-300 hover:text-danger"
@@ -76,6 +77,7 @@ export function WeeklyHoursEditor({
             ))}
             {!disabled && (
               <button
+                type="button"
                 onClick={() => setDay(day, [...ranges, ranges.length ? ["14:00", "18:00"] : ["09:00", "17:00"]] as [string, string][])}
                 className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-brand-700 hover:bg-brand-50"
               >

@@ -1424,6 +1424,21 @@ export const en = {
     nameHint: "The name that appears on your appointments, your notes and the documents you sign.",
     nameTooShort: "Please write your full name.",
   },
+  myHours: {
+    title: "My working hours",
+    sub: "When patients can book you. The clinic's opening hours are the limit.",
+    rowOwn: "Your own hours",
+    rowClinic: "Uses the clinic's hours",
+    clinicOpen: "Clinic opening hours",
+    dayClosed: "{day}: the clinic is closed, so you can't be booked.",
+    dayLimited: "{day}: the clinic is open {hours}, so you can only be booked then.",
+    noHours: "You have no hours set, so patients can't book you online.",
+    saved: "Your hours are saved.",
+    clashTitle: "Booked visits outside these hours: {n}",
+    clashBody: "These stay booked. Nothing moves unless you or the desk change it.",
+    clashMore: "And {n} more",
+    saveAnyway: "Save anyway",
+  },
   tags: {
     title: "Patient tags",
     sub: "The labels you file patients under — diabetic, insurance, VIP, whatever your clinic tracks.",
@@ -1777,6 +1792,7 @@ export const en = {
     blockedDates: "Blocked dates",
     blockedSub: "Holidays and days the clinic is fully closed.",
     addBlocked: "Block a date",
+    invalid: "Check the hours: each start must come before its end, and ranges can't overlap.",
     days: {
       sun: "Sunday",
       mon: "Monday",
@@ -1966,6 +1982,10 @@ export const en = {
       payouts: {
         label: "You've been paid",
         hint: "When the clinic marks your share or visit fees for a month as paid.",
+      },
+      doctor_hours: {
+        label: "A doctor changes their hours",
+        hint: "When a doctor edits their own working hours, and any booked visits now outside them.",
       },
     },
     reminderMinutes: "Remind me this many minutes before",

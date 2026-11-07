@@ -53,6 +53,46 @@ function minToHm(min: number): string {
   return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 }
 
+/** More ranges than this in one day is a mistake, not a split shift. */
+const MAX_RANGES_PER_DAY = 6;
+
+const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * A week of hours as it should be stored, or null if this cannot be one.
+ *
+ * Both the staff screen and a doctor's own page write a member's hours, and
+ * neither used to look at what they wrote: a range ending before it starts is
+ * saved happily and then quietly offers nobody any slots.
+ *
+ * Always returns all seven days. That is not tidiness: `effectiveHours` reads an
+ * empty map as "use the clinic's hours", so a doctor who cleared every day would
+ * otherwise be opened for the clinic's whole week by the act of closing it.
+ */
+export function parseWeeklyHours(raw: unknown): WeeklyHours | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const src = raw as Record<string, unknown>;
+  const out: WeeklyHours = {};
+  for (const day of DAY_KEYS) {
+    const ranges = src[day] ?? [];
+    if (!Array.isArray(ranges) || ranges.length > MAX_RANGES_PER_DAY) return null;
+    const clean: [string, string][] = [];
+    for (const r of ranges) {
+      if (!Array.isArray(r) || r.length !== 2) return null;
+      const [open, close] = r;
+      if (typeof open !== "string" || typeof close !== "string") return null;
+      if (!HM.test(open) || !HM.test(close) || hmToMin(close) <= hmToMin(open)) return null;
+      clean.push([open, close]);
+    }
+    clean.sort((x, y) => hmToMin(x[0]) - hmToMin(y[0]));
+    for (let i = 1; i < clean.length; i++) {
+      if (hmToMin(clean[i][0]) < hmToMin(clean[i - 1][1])) return null;
+    }
+    out[day] = clean;
+  }
+  return out;
+}
+
 /**
  * A doctor's bookable hours: their own, bounded by the clinic's.
  *

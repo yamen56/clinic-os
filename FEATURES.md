@@ -518,7 +518,7 @@ confirmation or consent form to somebody already in the waiting room.
 - `clinics.working_hours` — weekly jsonb, per-day arrays of `[from, to]` ranges
   (multiple ranges per day supported). Default Sun–Thu + Sat 09:00–17:00, Friday closed.
 - `clinics.blocked_dates` — holidays / full closures.
-- `clinic_members.working_hours` — optional per-doctor override; otherwise clinic hours apply.
+- `clinic_members.working_hours` — a doctor's own hours, bounded by the clinic's (`effectiveHours`): a doctor can be open for less than the clinic, never more; empty means the clinic's hours. Doctors edit their own at Profile → My working hours; Settings → Staff edits a colleague's. Booked visits never move: the doctor sees any left outside before saving, and the owner and desk are told.
 
 ### Booking race safety
 

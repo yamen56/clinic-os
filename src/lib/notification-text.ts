@@ -77,6 +77,9 @@ const ar = {
   handoffDone: "لا يحتاج موعداً آخر",
   payoutTitle: (month: string, amount: string) => `دُفع لك عن ${month}: ${amount}`,
   payoutMethods: { cash: "نقداً", cliq: "كليك", transfer: "تحويل بنكي", cheque: "شيك" } as Record<string, string>,
+  hoursTitle: (doctor: string) => `تغيّرت ساعات دوام ${doctor}`,
+  hoursClash: (n: number) => `مواعيد محجوزة خارج الساعات الجديدة: ${n}`,
+  hoursNoClash: "لا مواعيد محجوزة خارج الساعات الجديدة",
 };
 
 const en: typeof ar = {
@@ -116,6 +119,9 @@ const en: typeof ar = {
   handoffDone: "No further visit needed",
   payoutTitle: (month, amount) => `Paid for ${month}: ${amount}`,
   payoutMethods: { cash: "Cash", cliq: "CliQ", transfer: "Bank transfer", cheque: "Cheque" },
+  hoursTitle: (doctor) => `${doctor}'s working hours changed`,
+  hoursClash: (n) => `Booked visits outside the new hours: ${n}`,
+  hoursNoClash: "No booked visits fall outside the new hours",
 };
 
 export const NT: Record<NLocale, typeof ar> = { ar, en };

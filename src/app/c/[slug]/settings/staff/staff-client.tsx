@@ -932,7 +932,9 @@ function EditMember({
                     ? t.staff.nameShared
                     : r.error === "invalid_name"
                       ? t.profile.nameTooShort
-                      : t.common.genericError,
+                      : r.error === "invalid_hours"
+                        ? t.hours.invalid
+                        : t.common.genericError,
                   "error"
                 );
                 return;

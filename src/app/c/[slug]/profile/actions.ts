@@ -5,9 +5,44 @@ import { requireClinic, destroySession } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { withSystem } from "@/lib/db";
+import { DateTime } from "luxon";
+import type { PoolClient } from "pg";
+import { effectiveHours, isWithinHours, parseWeeklyHours, type WeeklyHours } from "@/lib/hours";
+import { resolveCapabilities, type MemberRole } from "@/lib/permissions";
+import { notifyUser, staffMembersInRoles } from "@/lib/notify";
+import { NT, asLocale } from "@/lib/notification-text";
 
 /** Long enough for a full Arabic name with a grandfather in it; `users.full_name` is text. */
 const NAME_MAX = 80;
+
+/** How many clashing visits the doctor is shown by name before "and N more". */
+const CLASHES_LISTED = 8;
+
+/**
+ * Told once per save, to whoever books this doctor. Not the doctor: they just
+ * did it. Only people who may open the calendar, which is where it points.
+ */
+async function tellTheDeskHoursChanged(
+  c: PoolClient,
+  clinicId: string,
+  slug: string,
+  doctor: string,
+  actorUserId: string,
+  clashes: number
+) {
+  for (const m of await staffMembersInRoles(c, clinicId, ["owner", "receptionist"])) {
+    if (m.userId === actorUserId) continue;
+    if (!resolveCapabilities(m.permissions, { isOwner: m.isOwner, role: m.role as MemberRole }).calendar) continue;
+    const L = NT[asLocale(m.locale)];
+    await notifyUser(c, m.userId, {
+      clinicId,
+      kind: "doctor_hours",
+      title: L.hoursTitle(doctor),
+      body: clashes ? L.hoursClash(clashes) : L.hoursNoClash,
+      url: `/c/${slug}/calendar`,
+    });
+  }
+}
 
 /**
  * A person changing their own name.
@@ -61,6 +96,117 @@ export async function updateMyNameAction(
     revalidatePath(`/c/${slug}/profile`);
     return {};
   });
+}
+
+export type HoursClash = { id: string; startsAt: string; patient: string | null };
+
+/**
+ * A doctor setting their own working hours.
+ *
+ * Writes only the caller's own membership, which is why it answers to who is
+ * asking rather than to a capability: `settings.staff` is what lets somebody
+ * change a colleague's hours, and most doctors rightly do not hold it.
+ *
+ * `hours` null means "use the clinic's hours". Anything else is stored with all
+ * seven days (see `parseWeeklyHours`).
+ *
+ * Bookings never move. A visit the new hours leave outside is reported, and the
+ * first call stops there so the doctor sees them before anything changes;
+ * calling again with `confirmed` saves regardless. Patient names need the
+ * calendar, because this list is a window onto it.
+ */
+export async function saveMyHoursAction(
+  slug: string,
+  hours: unknown,
+  opts: { confirmed?: boolean } = {}
+): Promise<{
+  error?: "forbidden" | "invalid";
+  saved?: boolean;
+  clashes?: { total: number; list: HoursClash[] };
+}> {
+  const access = await requireClinic(slug);
+  const memberId = access.memberId;
+  if (!memberId || access.role !== "doctor") return { error: "forbidden" };
+
+  const next: WeeklyHours | null = hours === null ? null : parseWeeklyHours(hours);
+  if (hours !== null && !next) return { error: "invalid" };
+
+  const userId = access.session.user.id;
+  const tz = access.clinic.timezone;
+  const seesNames = access.caps.calendar === true;
+
+  const r = await inClinic(access, async (c) => {
+    const row = (
+      await c.query(
+        `select cm.working_hours, cl.working_hours as clinic_hours
+           from clinic_members cm join clinics cl on cl.id = cm.clinic_id
+          where cm.id = $1 and cm.clinic_id = $2`,
+        [memberId, access.clinicId]
+      )
+    ).rows[0] as { working_hours: WeeklyHours | null; clinic_hours: WeeklyHours } | undefined;
+    if (!row) return { error: "forbidden" as const };
+
+    const stored = row.working_hours && Object.keys(row.working_hours).length ? row.working_hours : null;
+    const before = stored ? (parseWeeklyHours(stored) ?? stored) : null;
+    if (JSON.stringify(before) === JSON.stringify(next)) return { saved: true };
+
+    const bookable = effectiveHours(row.clinic_hours, next);
+    const upcoming = (
+      await c.query(
+        `select a.id, a.starts_at, a.ends_at, p.full_name as patient
+           from appointments a left join patients p on p.id = a.patient_id
+          where a.clinic_id = $1 and a.doctor_member_id = $2 and a.starts_at >= now()
+            and a.status in ('pending_approval', 'scheduled', 'confirmed')
+          order by a.starts_at
+          limit 500`,
+        [access.clinicId, memberId]
+      )
+    ).rows as { id: string; starts_at: Date; ends_at: Date; patient: string | null }[];
+    const outside = upcoming.filter(
+      (a) =>
+        !isWithinHours(
+          bookable,
+          DateTime.fromJSDate(new Date(a.starts_at)).setZone(tz),
+          DateTime.fromJSDate(new Date(a.ends_at)).setZone(tz)
+        )
+    );
+
+    if (outside.length && !opts.confirmed) {
+      return {
+        clashes: {
+          total: outside.length,
+          list: outside.slice(0, CLASHES_LISTED).map((a) => ({
+            id: a.id,
+            startsAt: new Date(a.starts_at).toISOString(),
+            patient: seesNames ? a.patient : null,
+          })),
+        },
+      };
+    }
+
+    await c.query(`update clinic_members set working_hours = $3 where id = $1 and clinic_id = $2`, [
+      memberId,
+      access.clinicId,
+      next ? JSON.stringify(next) : null,
+    ]);
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "member.own_hours",
+      entity: "clinic_member",
+      entityId: memberId,
+      detail: { from: before, to: next, outsideNewHours: outside.length },
+    });
+    await tellTheDeskHoursChanged(c, access.clinicId, slug, access.session.user.fullName, userId, outside.length);
+    return { saved: true };
+  });
+
+  if (r.saved) {
+    revalidatePath(`/c/${slug}/profile`);
+    revalidatePath(`/c/${slug}/profile/hours`);
+  }
+  return r;
 }
 
 /**

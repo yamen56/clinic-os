@@ -179,7 +179,7 @@ export function useLiveNotifications(
 function iconFor(kind: string) {
   if (kind === "patient_arrived") return DoorOpen;
   if (kind === "appointment_cancelled") return CalendarX;
-  if (kind === "appointment_rescheduled" || kind === "doctor_reminder") return CalendarClock;
+  if (kind === "appointment_rescheduled" || kind === "doctor_reminder" || kind === "doctor_hours") return CalendarClock;
   const pref = prefKeyFor(kind);
   switch (pref) {
     case "new_booking":

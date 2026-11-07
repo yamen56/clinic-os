@@ -13,7 +13,7 @@ import { DeleteAccount } from "./delete-account";
 import { NameEditor } from "./name-editor";
 import { CLINICTI_PRIVACY_URL, CLINICTI_TERMS_URL } from "@/components/powered-by";
 import { CAPABILITY_GROUPS, accessLevelOf, resolveCapabilities } from "@/lib/permissions";
-import { PenTool, Bell, LogOut, ChevronLeft, Building2, Lock } from "lucide-react";
+import { PenTool, Bell, LogOut, ChevronLeft, Building2, Lock, Clock } from "lucide-react";
 
 /**
  * A member's own account.
@@ -35,6 +35,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
       `select u.full_name, u.email, u.avatar_path is not null as has_photo,
               u.signature_png_path is not null as has_signature,
               cm.color, cm.title, cm.specialty,
+              (cm.working_hours is not null and cm.working_hours <> '{}'::jsonb) as own_hours,
               (select count(*) from notifications n where n.user_id = u.id and n.read_at is null)::int as unread
          from users u
          left join clinic_members cm on cm.id = $2
@@ -49,6 +50,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
       color: string | null;
       title: string | null;
       specialty: string | null;
+      own_hours: boolean | null;
       unread: number;
     };
   });
@@ -65,6 +67,16 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
       label: t.settings.mySignature,
       hint: me?.has_signature ? t.mySignature.saved : t.mySignature.firstTime,
     },
+    ...(access.role === "doctor" && access.memberId
+      ? [
+          {
+            href: `${base}/profile/hours`,
+            icon: <Clock className="h-[18px] w-[18px] text-ink-400" />,
+            label: t.myHours.title,
+            hint: me?.own_hours ? t.myHours.rowOwn : t.myHours.rowClinic,
+          },
+        ]
+      : []),
     {
       href: `${base}/notifications`,
       icon: <Bell className="h-[18px] w-[18px] text-ink-400" />,
