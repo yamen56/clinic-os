@@ -171,6 +171,7 @@ export function prefKeyFor(kind: string): PrefKey | null {
     case "stock_alert":
       return "stock";
     case "team_message":
+    case "team_reaction":
       return "team";
     case "document_integrity":
     case "test":

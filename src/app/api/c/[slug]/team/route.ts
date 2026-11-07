@@ -1,17 +1,24 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { inClinic } from "@/lib/clinic-api";
-import { apiTeam, loadTeamPeople, loadThreads, teamUnread } from "@/lib/team-chat";
+import { apiTeam, loadTeamPeople, loadThreads, searchMessages, teamUnread } from "@/lib/team-chat";
 
 export const dynamic = "force-dynamic";
 
-/** This person's threads and the staff, or with `?count` just what is unread, for the badge. */
+/**
+ * This person's threads and the staff; with `?count` just what is unread, for the badge; with
+ * `?q=` the messages, across their threads, that say it.
+ */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
   const g = await apiTeam(slug);
   if (!g.ok) return g.res;
   const { access } = g;
   const userId = access.session.user.id;
+  const q = (new URL(req.url).searchParams.get("q") ?? "").trim().slice(0, 100);
+  if (q.length >= 2) {
+    return NextResponse.json({ hits: await inClinic(access, (c) => searchMessages(c, access.clinicId, q)) });
+  }
   if (new URL(req.url).searchParams.has("count")) {
     return NextResponse.json({ unread: await inClinic(access, (c) => teamUnread(c, access.clinicId, userId)) });
   }

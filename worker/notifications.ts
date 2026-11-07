@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
-import type { PoolClient } from "pg";
+import { Client, type PoolClient } from "pg";
 import { withSystem } from "./db";
-import { pushToUser, pushConfigured } from "../src/lib/push";
+import { pushToUser, pushConfigured, type PushPayload } from "../src/lib/push";
 import { notifyUser, staffMembersInRoles, type StaffMember } from "../src/lib/notify";
 import { resolveCapabilities, type CapabilityMap, type MemberRole } from "../src/lib/permissions";
 import {
@@ -52,6 +52,10 @@ export type Pending = {
   locale: string;
   tz: string;
   slug: string | null;
+  /** Who it is from, when it is a colleague: their member row and whether they have a photo. */
+  actor_id?: string | null;
+  actor_member_id?: string | null;
+  actor_has_photo?: boolean | null;
 };
 
 async function unreadCount(c: PoolClient, userId: string): Promise<number> {
@@ -135,10 +139,13 @@ export async function deliverPending() {
       await c.query(
         `select n.id, n.user_id, n.clinic_id, n.kind, n.title, n.body, n.url, n.read_at, n.push_after, n.dedupe_key,
                 u.phone_e164, u.notification_prefs, u.locale,
-                coalesce(cl.timezone, 'Asia/Amman') as tz, cl.slug
+                coalesce(cl.timezone, 'Asia/Amman') as tz, cl.slug,
+                n.actor_id, acm.id as actor_member_id, au.avatar_path is not null as actor_has_photo
            from notifications n
            join users u on u.id = n.user_id
            left join clinics cl on cl.id = n.clinic_id
+           left join users au on au.id = n.actor_id
+           left join clinic_members acm on acm.clinic_id = n.clinic_id and acm.user_id = n.actor_id
           where not n.push_sent
             and coalesce(n.push_after, n.created_at) <= now()
             and coalesce(n.push_after, n.created_at) > now() - interval '1 day'
@@ -181,10 +188,40 @@ export async function deliverPending() {
   });
 }
 
+/**
+ * A colleague's message, dressed as a chat app would: their face, the photo they
+ * sent, and Reply / Mark as read on the notification. Platforms that cannot show
+ * a part (an iPhone shows neither picture nor buttons) simply leave it out.
+ */
+async function teamExtras(c: PoolClient, n: Pending): Promise<Partial<PushPayload>> {
+  if ((n.kind !== "team_message" && n.kind !== "team_reaction") || !n.slug || !n.url) return {};
+  const threadId = new URL(n.url, "https://x").searchParams.get("t");
+  if (!threadId) return {};
+  const L = asLocale(n.locale) === "en";
+  const extras: Partial<PushPayload> = { team: { slug: n.slug, threadId } };
+  if (n.actor_has_photo && n.actor_member_id) extras.icon = `/api/c/${n.slug}/staff/${n.actor_member_id}/photo`;
+  if (n.kind === "team_message") {
+    extras.actions = [
+      { action: "reply", title: L ? "Reply" : "رد" },
+      { action: "read", title: L ? "Mark as read" : "تحديد كمقروء" },
+    ];
+    // The photo itself, when that is what they sent.
+    const last = (
+      await c.query(
+        `select id, file_mime from team_messages where thread_id = $1 and sender_id = $2 and deleted_at is null order by created_at desc limit 1`,
+        [threadId, n.actor_id]
+      )
+    ).rows[0];
+    if (last?.file_mime?.startsWith("image/")) extras.image = `/api/c/${n.slug}/team/messages/${last.id}?thumb=1`;
+  }
+  return extras;
+}
+
 async function pushOne(c: PoolClient, n: Pending) {
   const d = deliveryFor(n.kind);
   let sent = 0;
   try {
+    const extras = await teamExtras(c, n).catch(() => ({}));
     sent = await pushToUser(
       c,
       n.user_id,
@@ -202,6 +239,7 @@ async function pushOne(c: PoolClient, n: Pending) {
         lang: ARABIC.test(`${n.title} ${n.body}`) ? "ar" : "en",
         id: n.id,
         badge: await unreadCount(c, n.user_id),
+        ...extras,
       },
       { urgency: d.prompt ? "high" : "normal", ttl: d.ttl }
     );
@@ -795,15 +833,80 @@ export async function appointmentAlerts(
   });
 }
 
-export function startNotificationLoop() {
-  const fast = async () => {
+/*
+  One delivery at a time, whoever asks. The five-second sweep and the instant
+  wake-up below both come here, so a notification is never pushed twice by two
+  runs reading it as unsent at the same moment.
+*/
+let delivering: Promise<void> | null = null;
+let deliverAgain = false;
+function deliverSoon() {
+  if (delivering) {
+    deliverAgain = true;
+    return;
+  }
+  delivering = deliverPending()
+    .catch((e) => console.error("[notify]", (e as Error).message))
+    .finally(() => {
+      delivering = null;
+      if (deliverAgain) {
+        deliverAgain = false;
+        deliverSoon();
+      }
+    });
+}
+
+/**
+ * Pushed the moment it is written, not at the next sweep.
+ *
+ * A colleague's message that reaches the phone up to five seconds later feels
+ * broken next to WhatsApp. The database announces every new notification on
+ * `app_events` (0001's emit_notification); listening for it makes the push
+ * near-instant. If the connection cannot listen, the sweep still delivers.
+ */
+function listenForNew() {
+  let retry = 2000;
+  const connect = async () => {
+    const client = new Client({ connectionString: process.env.DATABASE_URL || "postgres://clinicos_app:clinicos_app@127.0.0.1:5544/clinicos" });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // Once per connection: an error is usually followed by an end, and both land here.
+    let gone = false;
+    const again = () => {
+      if (gone) return;
+      gone = true;
+      client.end().catch(() => {});
+      setTimeout(connect, (retry = Math.min(retry * 2, 60_000)));
+    };
     try {
-      await deliverPending();
-    } catch (e) {
-      console.error("[notify]", (e as Error).message);
+      await client.connect();
+      await client.query("listen app_events");
+      retry = 2000;
+      client.on("notification", (msg) => {
+        try {
+          if (JSON.parse(msg.payload ?? "{}").t !== "notifications") return;
+        } catch {
+          return;
+        }
+        timer ??= setTimeout(() => {
+          timer = null;
+          deliverSoon();
+        }, 150);
+      });
+      client.on("error", again);
+      client.on("end", again);
+    } catch {
+      again();
     }
+  };
+  void connect();
+}
+
+export function startNotificationLoop() {
+  const fast = () => {
+    deliverSoon();
     setTimeout(fast, 5000);
   };
+  listenForNew();
   const slow = async () => {
     for (const fn of [doctorReminders, dailyDigests, sweepStale]) {
       try {

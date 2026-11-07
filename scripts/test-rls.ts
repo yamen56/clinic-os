@@ -476,7 +476,9 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
 
   // Team chat (0093): the member joined the clinic's room on joining; one message in it.
   const teamRoom = (await q(`select id from team_threads where clinic_id = $1 and kind = 'clinic'`, [clinic])).id;
-  await q(`insert into team_messages (clinic_id, thread_id, sender_id, body) values ($1, $2, $3, 'RLS fixture') returning id`, [clinic, teamRoom, user]);
+  const teamMsg = (await q(`insert into team_messages (clinic_id, thread_id, sender_id, body) values ($1, $2, $3, 'RLS fixture') returning id`, [clinic, teamRoom, user])).id;
+  // And a reaction to it (0095).
+  await q(`insert into team_reactions (message_id, thread_id, clinic_id, user_id, emoji) values ($1, $2, $3, $4, '👍') returning message_id`, [teamMsg, teamRoom, clinic, user]);
 
   // The clinic's own face treatment and a kind of it (0094).
   await q(

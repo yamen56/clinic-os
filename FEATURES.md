@@ -723,7 +723,7 @@ workspace keeps the platform accent so agency support isn't relearning a skin pe
 
 ### Team chat (`/c/{slug}/conversations/team`, 0093)
 
-The staff talking to each other, beside the patient inbox (a Patients · Team switch in the
+The staff talking to each other, beside the patient inbox (a WhatsApp · Team switch in the
 list pane). One room for the whole clinic, private threads between two people, named groups;
 text, photos, files and voice notes. Separate tables (`team_threads`, `team_thread_members`,
 `team_messages`): WhatsApp's `messages` need a phone and the worker sends anything queued there.
@@ -743,7 +743,23 @@ text, photos, files and voice notes. Separate tables (`team_threads`, `team_thre
   to drop where they were taken. 16 MB.
 - **Realtime**: a private thread's events carry `user_ids` and reach only those tabs; unread
   counts carry `user_id`. The events route filters both.
-- A sender may delete their own message ("Message deleted"); nobody edits one.
+- A sender may delete their own message ("Message deleted").
+- **Like the chat apps on everybody's phone (0095)**: reply with a quote, one reaction per person
+  per message (the sender is told, `team_reaction`), correct your own words for 15 minutes
+  ("edited", nobody re-notified), forward what you can read, pin a message for the thread and a
+  thread for yourself, mark one unread, @mention, search every thread (`?q=`), paste or drop a
+  photo. Hover tools on a desk; long press for a sheet on a phone.
+- **Reaching a muted thread**: an @mention or a reply to your own message rings anyway, titled
+  "… mentioned you" / "… replied to you".
+- **Typing and seen**: typing is a `team_typing` event to the thread's people, never stored; seen
+  is each member's `last_read_at`, and a read in a private thread or group reaches the others so
+  the ticks turn blue live.
+- **The premium notification**: `notifications.actor_id` says who it is from. In the app, a
+  colleague's pop-up shows their face, answers from where it is and has Mark as read, with its own
+  sound, and never covers the thread already open (`teamView`). On the phone the push carries their
+  photo, a small copy of a photo they sent (`?thumb=1`), and Reply / Mark as read; the service
+  worker fetches the pictures itself, since they sit behind the session. The worker listens for new
+  notifications and pushes in well under a second; the 5-second sweep is the fallback.
 
 ### Number-protection rails (`worker/outbound.ts`) — always on
 

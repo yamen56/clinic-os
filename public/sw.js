@@ -44,6 +44,32 @@ function setBadge(n) {
   return Promise.resolve();
 }
 
+/**
+ * A picture behind the session (a colleague's photo, the photo they sent), as a
+ * data URL. The notification would fetch a plain URL on its own, without the
+ * session on every platform, so this worker fetches it, briefly: a slow picture
+ * must not hold the notification back, which then comes without it.
+ */
+async function picture(path) {
+  if (!path || !path.startsWith("/")) return null;
+  try {
+    const res = await Promise.race([
+      fetch(path, { credentials: "same-origin" }),
+      new Promise((resolve) => setTimeout(() => resolve(null), 2500)),
+    ]);
+    if (!res || !res.ok) return null;
+    const type = res.headers.get("content-type") || "";
+    if (!type.startsWith("image/")) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length > 1500000) return null;
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return `data:${type};base64,${btoa(bin)}`;
+  } catch {
+    return null;
+  }
+}
+
 self.addEventListener("push", (event) => {
   let payload = {};
   try {
@@ -55,28 +81,74 @@ self.addEventListener("push", (event) => {
   // The direction follows the words, not the product's default: a notification
   // written in English was laid out right-to-left with its punctuation flipped.
   const lang = payload.lang === "en" ? "en" : "ar";
-  event.waitUntil(
-    Promise.all([
-      self.registration.showNotification(title, {
-        body: payload.body || "",
+  const show = async () => {
+    const [icon, image] = await Promise.all([picture(payload.icon), picture(payload.image)]);
+    const options = {
+      body: payload.body || "",
+      icon: icon || "/icons/icon-192.png",
+      badge: "/icons/badge.png",
+      dir: lang === "ar" ? "rtl" : "ltr",
+      lang,
+      tag: payload.tag || undefined,
+      renotify: !!payload.tag,
+      timestamp: Date.now(),
+      data: { url: payload.url || "/", id: payload.id || null, team: payload.team || null },
+    };
+    if (image) options.image = image;
+    // A colleague's message buzzes like one, and can be answered from where it is.
+    if (payload.team) options.vibrate = [90, 50, 90];
+    if (Array.isArray(payload.actions) && payload.actions.length) options.actions = payload.actions.slice(0, 2);
+    try {
+      await self.registration.showNotification(title, options);
+    } catch {
+      // A platform that refuses a part (actions without a worker, an odd image) still gets the words.
+      await self.registration.showNotification(title, {
+        body: options.body,
         icon: "/icons/icon-192.png",
-        badge: "/icons/badge.png",
-        dir: lang === "ar" ? "rtl" : "ltr",
+        badge: options.badge,
+        dir: options.dir,
         lang,
-        tag: payload.tag || undefined,
-        renotify: !!payload.tag,
-        timestamp: Date.now(),
-        data: { url: payload.url || "/", id: payload.id || null },
-      }),
-      setBadge(payload.badge),
-    ])
-  );
+        tag: options.tag,
+        renotify: options.renotify,
+        data: options.data,
+      });
+    }
+  };
+  event.waitUntil(Promise.all([show(), setBadge(payload.badge)]));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data || {};
-  const url = new URL(data.url || "/", self.location.origin).href;
+
+  // "Mark as read" on a colleague's message: read here, without opening the app.
+  if (event.action === "read" && data.team) {
+    const { slug, threadId } = data.team;
+    event.waitUntil(
+      Promise.all([
+        fetch(`/api/c/${slug}/team/${threadId}`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ op: "read" }),
+        }).catch(() => {}),
+        data.id
+          ? fetch("/api/me/notifications", {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: data.id }),
+            }).catch(() => {})
+          : null,
+      ])
+    );
+    return;
+  }
+
+  // "Reply" opens the thread with the box ready to type in.
+  const target = new URL(data.url || "/", self.location.origin);
+  if (event.action === "reply" && data.team) target.searchParams.set("reply", "1");
+  const url = target.href;
 
   // Opening it on the phone is reading it: the bell in the app should agree.
   const markRead = data.id

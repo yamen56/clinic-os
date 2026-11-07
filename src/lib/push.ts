@@ -24,6 +24,16 @@ export type PushPayload = {
   id?: string;
   /** Unread count after this one, for the badge on the installed app's icon. */
   badge?: number;
+  /**
+   * A colleague's message (Yamen, 2026-11-07: "notify the one who got the message
+   * in a premium way"): the sender's photo for the icon, the photo they sent as
+   * the picture, Reply and Mark as read on the notification itself. The images
+   * sit behind the session, so the service worker fetches them itself.
+   */
+  icon?: string;
+  image?: string;
+  actions?: { action: "reply" | "read"; title: string }[];
+  team?: { slug: string; threadId: string };
 };
 
 /**

@@ -53,6 +53,7 @@ const SUITES = [
   ["stock: what can be deleted, and what cannot", "scripts/qa-stock-delete.ts"],
   ["stock: who is told, and where it shows", "scripts/qa-stock-alerts.ts"],
   ["team chat: private, live, everybody on the staff", "scripts/qa-team-chat.ts"],
+  ["team chat: replies, reactions, mentions, typing, seen, the pop-up", "scripts/qa-team-chat-more.ts"],
   ["face chart: the clinic's own treatments and their kinds", "scripts/qa-face-custom.ts"],
   ["inbox: read on the clinic's phone is read here", "scripts/qa-wa-read-sync.ts"],
   ["notes: versions, categories, voice", "scripts/qa-notes.ts"],

@@ -53,8 +53,13 @@ export async function GET(req: Request) {
           the row written at .068500 back again — a pop-up shown twice.
         */
         `select n.id, n.kind, n.title, n.body, n.url, n.read_at, n.created_at, cl.name as clinic_name,
-                to_char(n.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor
+                to_char(n.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor,
+                -- Who it is from, when somebody is: their face on the pop-up.
+                case when au.id is null then null else json_build_object('userId', au.id, 'name', au.full_name,
+                  'memberId', acm.id, 'hasPhoto', au.avatar_path is not null, 'color', acm.color, 'slug', cl.slug) end as actor
            from notifications n left join clinics cl on cl.id = n.clinic_id
+           left join users au on au.id = n.actor_id
+           left join clinic_members acm on acm.clinic_id = n.clinic_id and acm.user_id = n.actor_id
           where n.user_id = $1
             and ($2::timestamptz is null or n.created_at > $2)
             and ($3::timestamptz is null or n.created_at < $3)

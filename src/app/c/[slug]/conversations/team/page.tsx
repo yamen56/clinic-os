@@ -14,7 +14,7 @@ export default async function TeamPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ t?: string }>;
+  searchParams: Promise<{ t?: string; m?: string; reply?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -27,6 +27,8 @@ export default async function TeamPage({
       meId={access.session.user.id}
       showPatients={can(access, "conversations")}
       initialOpenId={sp.t && isUuid(sp.t) ? sp.t : null}
+      initialMessageId={sp.m && isUuid(sp.m) ? sp.m : null}
+      initialReply={sp.reply === '1'}
     />
   );
 }
