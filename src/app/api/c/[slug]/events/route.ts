@@ -47,8 +47,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       send(`retry: 3000\n\n`);
       cleanupClinic = await subscribeClinic(clinicId, (e: AppEvent) => {
         if (wanted && !wanted.has(e.t)) return;
-        // A notification belongs to one person; a colleague's is not this tab's news.
-        if (e.t === "notifications" && e.user_id && e.user_id !== userId) return;
+        // A notification, or a team thread's unread count, belongs to one person;
+        // a colleague's is not this tab's news. A private team thread's messages
+        // are news only to the people in it.
+        if (e.user_id && e.user_id !== userId) return;
+        if (e.user_ids && !e.user_ids.includes(userId)) return;
         send(`data: ${JSON.stringify(e)}\n\n`);
       });
       /*

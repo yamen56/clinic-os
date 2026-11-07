@@ -11,6 +11,8 @@ export type AppEvent = {
   id?: string;
   clinic_id?: string;
   user_id?: string;
+  /** For a private team thread: the only people whose tabs may hear of it. */
+  user_ids?: string[] | null;
 };
 
 type Listener = (e: AppEvent) => void;

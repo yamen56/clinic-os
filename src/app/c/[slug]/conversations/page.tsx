@@ -14,7 +14,8 @@ export default async function ConversationsPage({
   const { slug } = await params;
   const sp = await searchParams;
   const access = await guardClinic(slug);
-  if (!can(access, "conversations")) redirect(`/c/${slug}`);
+  // Without the patient inbox there is still the team. A support visit has neither.
+  if (!can(access, "conversations")) redirect(access.memberId ? `/c/${slug}/conversations/team` : `/c/${slug}`);
 
   const data = await inClinic(access, async (c) => {
     const quickReplies = (
@@ -32,6 +33,7 @@ export default async function ConversationsPage({
       selfId={access.session.user.id}
       initialOpenId={sp.open ?? null}
       initialQuickReplies={JSON.parse(JSON.stringify(data.quickReplies))}
+      hasTeam={!!access.memberId}
     />
   );
 }

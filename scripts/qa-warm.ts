@@ -17,6 +17,7 @@ const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544
 const ROUTES = [
   "",
   "/conversations",
+  "/conversations/team",
   "/calendar",
   "/patients",
   "/invoices",

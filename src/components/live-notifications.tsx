@@ -21,6 +21,7 @@ import {
   Workflow,
   X,
   Package,
+  MessagesSquare,
 } from "lucide-react";
 
 export type LiveNotif = {
@@ -116,9 +117,11 @@ export function useLiveNotifications(
   // Belt and braces with the cursor: whatever has popped up once never pops up again.
   const shown = useRef(new Set<string>());
   const onList = pathname === `/c/${slug}/notifications`;
+  // The team chat shows its own messages as they arrive; a pop-up on top would say it twice.
+  const onTeam = pathname === `/c/${slug}/conversations/team`;
 
-  const live = useRef({ prefs, onList });
-  live.current = { prefs, onList };
+  const live = useRef({ prefs, onList, onTeam });
+  live.current = { prefs, onList, onTeam };
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/me/notifications?since=${encodeURIComponent(since.current)}`, {
@@ -169,6 +172,7 @@ export function useLiveNotifications(
     if (shown.current.has(n.id)) return;
     shown.current.add(n.id);
     const { prefs: p } = live.current;
+    if (n.kind === "team_message" && live.current.onTeam) return;
     if (p.sound) chime();
     if (!p.popups) return;
     setPopups((cur) => [...cur.filter((x) => x.id !== n.id), n].slice(-MAX_POPUPS));
@@ -201,6 +205,8 @@ function iconFor(kind: string) {
       return Workflow;
     case "stock":
       return Package;
+    case "team":
+      return MessagesSquare;
     case "daily_summary":
     case "tomorrow_schedule":
     case "unconfirmed_tomorrow":

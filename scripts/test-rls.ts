@@ -466,6 +466,18 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     [clinic, user]
   );
 
+  // A doctor paid for a month (0091), and a device's name for a patient learned (0087).
+  await q(
+    `insert into doctor_payouts (clinic_id, doctor_member_id, period, amount, paid_on, created_by)
+     values ($1, $2, date_trunc('month', now())::date, 100, current_date, $3) returning id`,
+    [clinic, member, user]
+  );
+  await q(`insert into imaging_patient_links (clinic_id, patient_id, key, label) values ($1, $2, $3, 'RLS link') returning id`, [clinic, patient, `rls-${tag}`]);
+
+  // Team chat (0093): the member joined the clinic's room on joining; one message in it.
+  const teamRoom = (await q(`select id from team_threads where clinic_id = $1 and kind = 'clinic'`, [clinic])).id;
+  await q(`insert into team_messages (clinic_id, thread_id, sender_id, body) values ($1, $2, $3, 'RLS fixture') returning id`, [clinic, teamRoom, user]);
+
   return { clinic, user, member, patient, service, appointment, conversation, invoice, automation, step, run };
 }
 

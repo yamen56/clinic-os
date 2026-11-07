@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { useI18n } from "@/lib/i18n/client";
 import { LanguageToggle } from "@/components/language-toggle";
 import { InstallApp } from "@/components/pwa";
@@ -37,6 +38,7 @@ import {
   Settings,
   MoreHorizontal,
   Bell,
+  MessagesSquare,
   PenTool,
   UserRound,
   ChevronRight,
@@ -94,6 +96,7 @@ export function Shell({
   hasPhoto,
   isImpersonating,
   unreadCount,
+  teamUnread,
   notifications,
   pendingDocuments,
   hasEarnings,
@@ -127,6 +130,8 @@ export function Shell({
   hasPhoto: boolean;
   isImpersonating: boolean;
   unreadCount: number;
+  /** What this person has not read in the team chat. Null without a membership: no team to talk to. */
+  teamUnread: number | null;
   /** This person's own unread notifications, and what they asked the app to do with new ones. */
   notifications: { unread: number; serverNow: string; prefs: InAppPrefs };
   pendingDocuments: number;
@@ -176,6 +181,17 @@ export function Shell({
   };
   const [hiddenAnnouncements, setHiddenAnnouncements] = useState<string[]>([]);
   const live = useLiveNotifications(clinic.slug, notifications);
+  /*
+    The team chat's count, kept live. Each person hears only of their own threads'
+    counts (the events route filters by user), so this re-reads only when it changed.
+  */
+  const [team, setTeam] = useState(teamUnread);
+  useRealtimeRefresh(clinic.slug, ["team_thread_members"], async () => {
+    if (teamUnread === null) return;
+    const r = await fetch(`/api/c/${clinic.slug}/team?count=1`, { cache: "no-store" });
+    if (r.ok) setTeam(((await r.json()) as { unread: number }).unread);
+  });
+  const teamHref = `/c/${clinic.slug}/conversations/team`;
 
   const base = `/c/${clinic.slug}`;
 
@@ -239,7 +255,13 @@ export function Shell({
     /* The face chart's products and stock. The badge is what runs low. */
     { key: "stock", href: `${base}/stock`, show: stock.kept && caps.stock, badge: stock.low },
     ...(caps.invoices ? [] : [finance]),
-    { key: "conversations", href: `${base}/conversations`, show: caps.conversations, badge: unreadCount },
+    /* Patients' WhatsApp for whoever has it; the team chat for everybody on the staff. */
+    {
+      key: "conversations",
+      href: caps.conversations ? `${base}/conversations` : teamHref,
+      show: caps.conversations || team !== null,
+      badge: (caps.conversations ? unreadCount : 0) + (team ?? 0),
+    },
     { key: "campaigns", href: `${base}/campaigns`, show: caps.campaigns },
     { key: "automations", href: `${base}/automations`, show: caps.automations },
     { key: "aiAgent", href: `${base}/ai`, show: caps.ai },
@@ -347,7 +369,9 @@ export function Shell({
   const isInner =
     here.length > 0 &&
     !(here.length === 1 && here[0] in sections) &&
-    !(here[0] === "settings" && here.length === 2);
+    !(here[0] === "settings" && here.length === 2) &&
+    // The team chat is a tab of Conversations, not a page inside it.
+    !(here[0] === "conversations" && here[1] === "team" && here.length === 2);
   const upHref = here.length > 1 ? `${base}/${here.slice(0, -1).join("/")}` : (visible[0]?.href ?? base);
   const backHref = useBackHref(upHref, base);
   /* Named when it is a section, so the link says where it goes; "Back" for a patient, an invoice. */
@@ -647,6 +671,24 @@ export function Shell({
             >
               <Search className="h-5 w-5" strokeWidth={1.75} />
             </button>
+            {/* One tap to the team chat for everybody, doctors too: their bottom bar keeps its four. */}
+            {team !== null && (
+              <Link
+                href={teamHref}
+                aria-label={t.team.title}
+                className={`relative grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full transition-colors duration-140 ease-out active:bg-sunken ${
+                  team ? "text-ink-900" : "text-ink-500"
+                }`}
+                data-team-header
+              >
+                <MessagesSquare className="h-5 w-5" strokeWidth={1.75} />
+                {team > 0 && (
+                  <span className="absolute end-0.5 top-0.5 min-w-[18px] rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-[18px] text-white ring-2 ring-surface tnum">
+                    {fmtCount(team)}
+                  </span>
+                )}
+              </Link>
+            )}
             <Link
               href={`${base}/notifications`}
               aria-label={bellLabel}

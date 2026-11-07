@@ -721,6 +721,30 @@ workspace keeps the platform accent so agency support isn't relearning a skin pe
   `unknown`. Inbound media is downloaded and served through an authenticated route.
 - Message status: `queued` | `sending` | `sent` | `delivered` | `read` | `failed` | `cancelled`.
 
+### Team chat (`/c/{slug}/conversations/team`, 0093)
+
+The staff talking to each other, beside the patient inbox (a Patients · Team switch in the
+list pane). One room for the whole clinic, private threads between two people, named groups;
+text, photos, files and voice notes. Separate tables (`team_threads`, `team_thread_members`,
+`team_messages`): WhatsApp's `messages` need a phone and the worker sends anything queued there.
+
+- **Everybody on the staff** has it, with no capability: it shows only what colleagues wrote to
+  them. Doctors without the inbox land on Team; phones have a chat icon in the header. A support
+  visit has no membership, so `apiTeam` answers 404.
+- **Privacy is in the policies**: a thread is read by its people only. No `app_is_admin()` escape,
+  so neither the owner nor a super admin reads a private thread. `app_team_member` also checks
+  `clinic_members.active`, so leaving the staff ends access at once. Joining goes through
+  security definer functions that admit only this clinic's active staff.
+- **Notifications**: `app_team_notify` gives each other member one more unread and one bell line
+  per thread (`team:<thread>:<user>`), replaced by the latest, so the lock screen shows the thread
+  once too. Muted threads count but do not ring. The pref is `team`.
+- **Files** live under `team-media`, served by `/api/c/{slug}/team/messages/{id}` under row
+  security, not cached, with byte ranges (iPhone voice notes need them). Photos are re-encoded
+  to drop where they were taken. 16 MB.
+- **Realtime**: a private thread's events carry `user_ids` and reach only those tabs; unread
+  counts carry `user_id`. The events route filters both.
+- A sender may delete their own message ("Message deleted"); nobody edits one.
+
 ### Number-protection rails (`worker/outbound.ts`) — always on
 
 1. **Randomized 3–10 second gap** between sends, per clinic.

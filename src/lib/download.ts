@@ -92,3 +92,25 @@ export function fileResponseHeaders(opts: {
   */
   return headers;
 }
+
+/**
+ * One `bytes=` range, inclusive. Null means serve the whole file — no header,
+ * or a multi-range request, which no media element sends and a full 200
+ * answers correctly anyway.
+ */
+export function byteRange(header: string | null, size: number): [number, number] | "unsatisfiable" | null {
+  const m = header?.match(/^bytes=(\d*)-(\d*)$/);
+  if (!m || (!m[1] && !m[2])) return null;
+  let start: number;
+  let end: number;
+  if (!m[1]) {
+    // `bytes=-500`: the last five hundred.
+    start = Math.max(0, size - Number(m[2]));
+    end = size - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+  }
+  if (start >= size || start > end) return "unsatisfiable";
+  return [start, end];
+}

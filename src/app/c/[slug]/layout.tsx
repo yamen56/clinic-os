@@ -33,6 +33,9 @@ export default async function ClinicLayout({
          (select avatar_path is not null from users where id = $2) as has_photo,
          -- The bell's count, and what this person wants done with a new one.
          (select count(*)::int from notifications where user_id = $2 and read_at is null) as notif_unread,
+         -- The team chat's badge: what this person has not read in threads they have not muted.
+         (select coalesce(sum(unread), 0)::int from team_thread_members
+           where clinic_id = $1 and user_id = $2 and left_at is null and not muted) as team_unread,
          (select notification_prefs from users where id = $2) as notification_prefs,
          now() as server_now,
          /*
@@ -95,6 +98,7 @@ export default async function ClinicLayout({
       has_labs: boolean;
       labs_late: number;
       stock_low: number;
+      team_unread: number;
       announcements: { id: string; title: string; body: string }[];
     };
   });
@@ -172,6 +176,7 @@ export default async function ClinicLayout({
       hasPhoto={!!chrome.has_photo}
       isImpersonating={access.isImpersonating}
       unreadCount={chrome.unread}
+      teamUnread={access.memberId ? chrome.team_unread : null}
       notifications={{
         unread: chrome.notif_unread,
         serverNow: new Date(chrome.server_now).toISOString(),

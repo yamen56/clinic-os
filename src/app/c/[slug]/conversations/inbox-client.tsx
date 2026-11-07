@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ConversationsSwitch } from "./conversations-switch";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
@@ -93,12 +94,15 @@ export function InboxClient({
   selfId,
   initialOpenId,
   initialQuickReplies,
+  hasTeam,
 }: {
   slug: string;
   tz: string;
   selfId: string;
   initialOpenId: string | null;
   initialQuickReplies: QuickReply[];
+  /** A member of the staff, so the team chat is a tab away. */
+  hasTeam: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -287,6 +291,12 @@ export function InboxClient({
       {/* ------ List pane ------ */}
       <div className={`flex w-full flex-col border-e border-line lg:w-[17rem] xl:w-80 ${openId ? "hidden lg:flex" : ""}`}>
         <div className="border-b border-line p-3">
+          {/* A support visit has no membership, so no team to switch to. */}
+          {hasTeam && (
+            <div className="mb-2 flex">
+              <ConversationsSwitch slug={slug} active="patients" />
+            </div>
+          )}
           <div className="relative mb-2">
             <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
             <input

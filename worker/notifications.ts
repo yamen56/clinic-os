@@ -45,6 +45,8 @@ export type Pending = {
   url: string | null;
   read_at: string | null;
   push_after: string | null;
+  /** A team thread's line is keyed by thread and person, and its lock-screen entry follows it. */
+  dedupe_key: string | null;
   phone_e164: string | null;
   notification_prefs: Record<string, unknown> | null;
   locale: string;
@@ -131,7 +133,7 @@ export async function deliverPending() {
   await withSystem(async (c) => {
     const rows = (
       await c.query(
-        `select n.id, n.user_id, n.clinic_id, n.kind, n.title, n.body, n.url, n.read_at, n.push_after,
+        `select n.id, n.user_id, n.clinic_id, n.kind, n.title, n.body, n.url, n.read_at, n.push_after, n.dedupe_key,
                 u.phone_e164, u.notification_prefs, u.locale,
                 coalesce(cl.timezone, 'Asia/Amman') as tz, cl.slug
            from notifications n
@@ -195,7 +197,8 @@ async function pushOne(c: PoolClient, n: Pending) {
           used to be the kind for everything, so a second booking replaced the
           first on the phone and reception only ever saw the latest one.
         */
-        tag: REPLACEABLE.has(n.kind) ? n.kind : n.id,
+        // A team thread replaces its own line on the lock screen, as it does on the bell.
+        tag: REPLACEABLE.has(n.kind) ? n.kind : n.kind === "team_message" && n.dedupe_key ? n.dedupe_key : n.id,
         lang: ARABIC.test(`${n.title} ${n.body}`) ? "ar" : "en",
         id: n.id,
         badge: await unreadCount(c, n.user_id),

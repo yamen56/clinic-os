@@ -49,6 +49,7 @@ export const PREF_KEYS = [
   "payouts",
   "doctor_hours",
   "stock",
+  "team",
 ] as const;
 export type PrefKey = (typeof PREF_KEYS)[number];
 
@@ -126,6 +127,8 @@ export const PREF_DEFS: PrefDef[] = [
   { key: "payouts", group: "clinic", shownTo: (a) => a.caps.earnings === true },
   // The face chart's products running low or expiring (0092) — to the desk and the owner who keep Stock.
   { key: "stock", group: "clinic", shownTo: (a) => frontDesk(a) && a.caps.stock === true },
+  // Colleagues writing in the team chat (0093). Everybody on the staff has it.
+  { key: "team", group: "clinic", shownTo: () => true },
 ];
 
 const PREF_BY_KEY = new Map(PREF_DEFS.map((d) => [d.key, d]));
@@ -167,6 +170,8 @@ export function prefKeyFor(kind: string): PrefKey | null {
       return "payouts";
     case "stock_alert":
       return "stock";
+    case "team_message":
+      return "team";
     case "document_integrity":
     case "test":
       return null;
@@ -224,6 +229,8 @@ export function deliveryFor(kind: string): KindDelivery {
     kind === "ai_booking" ||
     kind === "waitlist_booked" ||
     kind.startsWith("appointment_") ||
+    // A colleague who needs something now.
+    kind === "team_message" ||
     kind === "test"
   ) {
     return { urgent: false, prompt: true, dropWhenQuiet: false, ttl: 3 * 3600 };
