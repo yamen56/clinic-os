@@ -90,6 +90,14 @@ async function readOnThePhone(clinicId: string, waIds: string[]) {
         where cv.id = seen.conversation_id and cv.clinic_id = $1 and cv.unread_count > 0`,
       [clinicId, waIds]
     );
+    // Read there, so the app has nothing left to tell WhatsApp about them (wa:read).
+    await c.query(
+      `update messages m set read_at = now()
+         from (select conversation_id, max(created_at) as upto from messages
+                where clinic_id = $1 and direction = 'in' and wa_message_id = any($2::text[]) group by conversation_id) seen
+        where m.conversation_id = seen.conversation_id and m.direction = 'in' and m.created_at <= seen.upto and m.read_at is null`,
+      [clinicId, waIds]
+    );
   });
 }
 
@@ -105,10 +113,14 @@ export async function handleChatsRead(clinicId: string, chats: { id?: string | n
   if (!users.length) return;
   await withSystem(async (c) => {
     await c.query(
-      `update conversations set unread_count = 0
-        where clinic_id = $1 and unread_count > 0
-          and (split_part(split_part(wa_jid, '@', 1), ':', 1) = any($2::text[])
-               or split_part(split_part(wa_lid, '@', 1), ':', 1) = any($2::text[]))`,
+      `with done as (
+         update conversations set unread_count = 0
+          where clinic_id = $1 and unread_count > 0
+            and (split_part(split_part(wa_jid, '@', 1), ':', 1) = any($2::text[])
+                 or split_part(split_part(wa_lid, '@', 1), ':', 1) = any($2::text[]))
+          returning id)
+       update messages set read_at = now()
+        where conversation_id in (select id from done) and direction = 'in' and read_at is null`,
       [clinicId, users]
     );
   });

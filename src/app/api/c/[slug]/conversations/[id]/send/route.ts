@@ -76,6 +76,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
        where id = $1`,
       [id, conv.ai_paused_minutes ?? 30]
     );
+    // Answering is reading: WhatsApp is told, as it would be from the phone (worker/wa/read.ts).
+    await c.query(
+      `insert into jobs (clinic_id, kind, payload)
+       select $1, 'wa:read', $2 where exists (
+         select 1 from messages where conversation_id = $3 and direction = 'in' and wa_message_id is not null
+            and read_at is null and created_at > now() - interval '7 days')`,
+      [access.clinicId, JSON.stringify({ conversationId: id }), id]
+    );
     return q;
   });
 

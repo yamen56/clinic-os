@@ -382,8 +382,8 @@ export async function recordMessage(
 
     await c.query(
       `insert into messages (clinic_id, conversation_id, direction, sender_kind, wa_message_id,
-                             msg_type, body, media_path, media_mime, media_name, status, sent_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())`,
+                             msg_type, body, media_path, media_mime, media_name, status, sent_at, wa_remote_jid)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), $12)`,
       [
         clinicId,
         convId,
@@ -396,6 +396,8 @@ export async function recordMessage(
         m.mediaMime,
         m.mediaName,
         m.fromMe ? "sent" : "delivered",
+        // The chat it came in on, for the read receipt (0096).
+        m.jid ?? null,
       ]
     );
 

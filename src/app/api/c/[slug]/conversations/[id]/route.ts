@@ -78,6 +78,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         `update conversations set unread_count = 0 where id = $1 and clinic_id = $2`,
         [id, g.access.clinicId]
       );
+      // Read here is read on WhatsApp too: the worker sends the receipt (worker/wa/read.ts).
+      await c.query(
+        `insert into jobs (clinic_id, kind, payload)
+         select $1, 'wa:read', $2 where exists (
+           select 1 from messages where conversation_id = $3 and direction = 'in' and wa_message_id is not null
+              and read_at is null and created_at > now() - interval '7 days')`,
+        [g.access.clinicId, JSON.stringify({ conversationId: id }), id]
+      );
       return true;
     }
     if (body.op === "ai") {

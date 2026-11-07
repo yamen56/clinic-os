@@ -24,6 +24,7 @@ import { startNotificationLoop } from "./notifications";
 import { startCampaignLoop } from "./campaigns";
 import { registerEsignJobs } from "./esign";
 import { registerEinvoiceJobs } from "./einvoice";
+import { registerReadJobs } from "./wa/read";
 import { startStatusHeartbeat } from "./status";
 
 /**
@@ -150,6 +151,7 @@ async function main() {
   );
   registerEsignJobs();
   registerEinvoiceJobs();
+  registerReadJobs();
   startOutboundLoop();
   startCampaignLoop();
   startJobLoop();
