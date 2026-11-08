@@ -145,12 +145,17 @@ async function main() {
       await until(async () => (await page.locator("[data-face-map] img").evaluate((i) => (i as HTMLImageElement).naturalWidth)) > 0),
       "and the face picture loads"
     );
-    check((await page.locator("[data-zone]").count()) === 21, "21 parts of the face to tap", String(await page.locator("[data-zone]").count()));
+    check((await page.locator("[data-zone]").count()) === 21, "21 parts of the face a dot can go on", String(await page.locator("[data-zone]").count()));
+    check((await page.locator("[data-face-preset]").count()) === 0, "and no quick picks of whole areas: dots alone say where (2026-11-08)");
 
-    // Upper face, one tap; the toxin comes first, and any other treatment can still be picked (Yamen, 2026-11-07).
-    await page.locator("[data-face-preset='upper']").click();
+    // A dot on each of the upper face's parts; the toxin comes first, and any other treatment can still be picked (Yamen, 2026-11-07).
+    for (const z of ["forehead", "glabella", "crows_r", "crows_l"]) await page.locator(`[data-zone='${z}']`).click();
     await page.waitForSelector("[data-face-panel='areas']", { timeout: 10000 });
-    check((await page.locator("[data-zone][aria-pressed='true']").count()) === 4, "Upper face selects forehead, glabella and both crow's feet");
+    check(
+      (await page.locator("[data-face-point]").count()) === 4 && (await page.locator("[data-face-where]").innerText()) === "Forehead, Glabella, Crow's feet",
+      "four dots: forehead, glabella and both crow's feet",
+      await page.locator("[data-face-where]").innerText()
+    );
     const usual = await page.locator("[data-face-treatment]").evaluateAll((els) => els.map((e) => e.getAttribute("data-face-treatment")));
     check(usual.includes("aes_toxin") && !usual.includes("aes_filler"), "what is usual there is offered first: the toxin, not a filler", usual.join(","));
     await page.locator("[data-face-all-treatments]").click();
@@ -178,9 +183,9 @@ async function main() {
     check(units.forehead === 10 && units.glabella === 20 && units.crows_r === 12 && units.crows_l === 12, "with the units on each area", JSON.stringify(units));
     check(toxin.quantity === 3 && toxin.fee === null, "priced by the area: 3 areas (both crow's feet are one), no price yet", JSON.stringify({ q: toxin.quantity, fee: toxin.fee }));
     check(await until(async () => (await page.locator(`[data-face-entry='${toxin.id}']`).count()) > 0), "it is in the history at once");
-    // Colour, not dots (Yamen, 2026-10-28): the area itself is tinted.
-    check((await page.locator("[data-zone='forehead']").getAttribute("data-tint")) === "toxin", "and the forehead is tinted as toxin work");
-    check((await page.locator("[data-face-map] [data-zone] span").count()) === 0, "with no dots anywhere on the face");
+    // Dots, in the colour of the work (2026-11-08), where they were put; no part is tinted whole.
+    check(await until(async () => (await page.locator(`[data-face-past='${toxin.id}']`).count()) === 4), "and its four dots stay on the face");
+    check((await page.locator("[data-face-map] [data-tint]").count()) === 0, "with no part tinted whole");
 
     /* ── Prices ─────────────────────────────────────────────────────── */
     console.log("Prices");
@@ -258,7 +263,7 @@ async function main() {
     // Repeat: the toxin again, same areas and units.
     await page.locator(`[data-face-repeat='${toxin.id}']`).first().click();
     await page.waitForSelector("[data-face-panel='record']", { timeout: 10000 });
-    check((await page.locator("[data-zone][aria-pressed='true']").count()) === 4 && (await page.locator("[data-face-panel='record']").innerText()).includes("54u in total"), "Repeat starts the same toxin on the same areas, the same units");
+    check((await page.locator("[data-face-point]").count()) === 4 && (await page.locator("[data-face-panel='record']").innerText()).includes("54u in total"), "Repeat starts the same toxin on the same dots, the same units");
     await page.locator("[data-face-save]").click();
     check(await until(async () => (await marksOf(face.id, "aes_toxin")).length === 2), "and saves it");
     const repeat = (await marksOf(face.id, "aes_toxin"))[1];

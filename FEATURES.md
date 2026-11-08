@@ -1593,8 +1593,10 @@ list. The price is a box when recording (`fee_manual`), and Retouch records a to
 earlier entry (`redo_of`) at the price the doctor says, 0 if free.
 
 - A tap stores the exact spot, `areas[].points [{x, y, v}]`, as shares of its picture; the part
-  follows from where it is (`zoneAt(x, y, view)`, which the server re-asks of every point). Quick
-  picks and the keyboard still choose whole parts, which tint as before.
+  follows from where it is (`zoneAt(x, y, view)`, which the server re-asks of every point). Dots
+  alone choose where (Yamen, 2026-11-08: "just depend on the dot"): no quick picks, no outlines,
+  no tinted parts. The parts are invisible buttons for the keyboard; Enter puts a dot in the middle.
+  Work recorded on a whole part before dots is drawn as a dot in that part's middle on the front.
 - Five pictures, `VIEW_SRC`: left, front-left, front, front-right, right, the patient's sides.
   The turned ones were cut from one Canva sheet (page 2 of design DAHZTbj2560) and set at the
   front's 945 × 1264; `zonesOn(view)` places only the parts each one shows.

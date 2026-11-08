@@ -3,8 +3,9 @@
 /*
   The face chart tab: aesthetic work on the patient's face, saved.
 
-  Tap the exact spots treated (or a whole part, from the quick picks), pick
-  what was done, say how much and with which product, save. Four taps for a routine Botox. Each saved treatment is
+  Tap the exact spots treated, pick what was done, say how much and with which
+  product, save. Where the doctor worked is chosen by dots alone (Yamen,
+  2026-11-08); the part of the face each is in follows from where it is. Four taps for a routine Botox. Each saved treatment is
   drawn at once and stored behind it with an id the browser chose, so the
   tinted area and the row are the same entry from the start; if the server
   refuses, the tint goes and the chart says so. Saved work is on Ready to bill
@@ -36,7 +37,6 @@ import {
   DEFAULT_UNITS,
   FAMILIES,
   FAMILY_COLOR,
-  PRESETS,
   ZONE_BY_KEY,
   amountText,
   feeOf,
@@ -68,6 +68,12 @@ import { FaceMap, type PastPoint, type PendingPoint } from "@/components/charts/
 import { FaceReadyToBill } from "@/components/charts/face/ready-to-bill";
 import { FamilyTag } from "@/components/charts/face/family-tag";
 import { AddTreatment, treatmentsCall } from "@/components/charts/face/add-treatment";
+
+/** The middle of a part on the front picture: where work recorded on a whole part, before dots, is drawn. */
+function centreOf(zone: string): { x: number; y: number; v: "front" } | null {
+  const z = ZONE_BY_KEY.get(zone);
+  return z ? { x: z.x, y: z.y, v: "front" } : null;
+}
 
 /** How long a toxin lasts, near enough to say when the patient is due again. */
 const TOXIN_DAYS = 120;
@@ -118,9 +124,9 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const base = `/api/c/${s.slug}/patients/${s.patientId}/face`;
 
   // Parts chosen whole (quick picks, the keyboard), and exact spots tapped; the parts recorded are both.
-  const [whole, setWhole] = useState<string[]>([]);
+
   const [pts, setPts] = useState<PendingPoint[]>([]);
-  const sel = useMemo(() => inFaceOrder([...new Set([...whole, ...pts.map((p) => p.zone)])].map((zone) => ({ zone }))).map((a) => a.zone), [whole, pts]);
+  const sel = useMemo(() => inFaceOrder([...new Set(pts.map((p) => p.zone))].map((zone) => ({ zone }))).map((a) => a.zone), [pts]);
   // A past spot whose card is open, and whether past spots are drawn at all.
   const [spot, setSpot] = useState<PastPoint | null>(null);
   // The picture in front of the doctor: the face from the front, or turned.
@@ -137,7 +143,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const [productId, setProductId] = useState<string>("");
   const [qtyText, setQtyText] = useState<string | null>(null);
   const [fromPackage, setFromPackage] = useState(true);
-  const [showAreas, setShowAreas] = useState(true);
   const [showVoided, setShowVoided] = useState(false);
   const [voiding, setVoiding] = useState<FaceMark | null>(null);
   const [voidReason, setVoidReason] = useState("");
@@ -171,19 +176,19 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     return m;
   }, [s.packages, live]);
 
-  // The kind of work last done on each part of the face, for its tint: the parts recorded whole, without spots.
-  const tints = useMemo(() => {
-    const m = new Map<string, Family>();
-    for (const x of [...live].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) for (const a of x.areas) if (!a.points?.length) m.set(a.zone, x.family);
-    return m;
-  }, [live]);
-
-  // Every spot recorded, as a dot in its kind of work's colour.
+  /*
+    Every spot recorded, as a dot in its kind of work's colour. Work recorded on a
+    whole part, before dots, is a dot in the middle of that part on the front, so
+    it can still be found and opened.
+  */
   const pastPoints = useMemo<PastPoint[]>(
     () =>
       showPast
         ? live.flatMap((m) =>
-            m.areas.flatMap((a, ai) => (a.points ?? []).map((p, pi) => ({ key: `${m.id}:${ai}:${pi}`, markId: m.id, x: p.x, y: p.y, v: p.v ?? "front", family: m.family })))
+            m.areas.flatMap((a, ai) => {
+              const spots = a.points?.length ? a.points : [centreOf(a.zone)].filter((c) => c !== null);
+              return spots.map((p, pi) => ({ key: `${m.id}:${ai}:${pi}`, markId: m.id, zone: a.zone, x: p.x, y: p.y, v: p.v ?? "front", family: m.family }));
+            })
           )
         : [],
     [live, showPast]
@@ -205,20 +210,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
 
   const unitsFor = (zone: string, from?: Area[]) => from?.find((a) => a.zone === zone)?.units ?? DEFAULT_UNITS[zone] ?? 10;
 
-  // A part, whole: on, or off with every spot in it.
-  const toggleZone = (zone: string) => {
-    setSpot(null);
-    const on = sel.includes(zone);
-    if (on) {
-      setWhole((w) => w.filter((z) => z !== zone));
-      setPts((p) => p.filter((x) => x.zone !== zone));
-      if (sel.length === 1) setTKey(null);
-    } else {
-      setWhole((w) => [...w, zone]);
-      if (tr?.units) setUnits((u) => ({ ...u, [zone]: unitsFor(zone) }));
-    }
-  };
-
   // An exact spot. Its part joins the treatment, at that part's usual units.
   const addPoint = (p: PendingPoint) => {
     setSpot(null);
@@ -228,19 +219,10 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const removePoint = (i: number) => {
     const next = pts.filter((_, j) => j !== i);
     setPts(next);
-    if (!whole.length && !next.length) setTKey(null);
-  };
-
-  const preset = (zones: string[]) => {
-    setSpot(null);
-    setWhole(zones);
-    setPts([]);
-    if (tr?.units) setUnits(Object.fromEntries(zones.map((z) => [z, unitsFor(z)])));
-    if (!zones.length) setTKey(null);
+    if (!next.length) setTKey(null);
   };
 
   const clear = () => {
-    setWhole([]);
     setPts([]);
     setTKey(null);
     setFindT("");
@@ -257,10 +239,15 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     // The kind done last time, when it was a repeat.
     setVariantId(from?.detail.variant?.id ?? "");
     const zones = from ? from.areas.map((a) => a.zone) : sel;
-    // A repeat is on the same spots, and the parts done whole are whole again.
+    // A repeat is on the same spots; a part recorded whole, before dots, is a dot in its middle.
     if (from) {
-      setWhole(from.areas.filter((a) => !a.points?.length).map((a) => a.zone));
-      setPts(from.areas.flatMap((a) => (a.points ?? []).map((p) => ({ x: p.x, y: p.y, zone: a.zone, v: p.v ?? "front" }))));
+      setPts(
+        from.areas.flatMap((a) =>
+          a.points?.length
+            ? a.points.map((p) => ({ x: p.x, y: p.y, zone: a.zone, v: p.v ?? "front" }))
+            : [centreOf(a.zone)].filter((c) => c !== null).map((c) => ({ x: c.x, y: c.y, zone: a.zone, v: "front" as const }))
+        )
+      );
       // On the picture its points were marked on.
       const firstView = from.areas.flatMap((a) => a.points ?? [])[0]?.v;
       if (firstView) setView(firstView);
@@ -312,7 +299,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
         return { zone: z, ...(x.units ? { units: units[z] ?? 0 } : {}), ...(here.length ? { points: here } : {}) };
       })
     );
-  const pointsIn = (zone: string) => pts.filter((p) => p.zone === zone).length;
   const areasPreview = tr ? areasNow(tr) : [];
   const quantity = tr ? quantityOf(tr, areasPreview, count) : 0;
   const unitsTotal = tr ? totalUnits(tr, areasPreview) : null;
@@ -607,7 +593,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const spotCard = (p: PastPoint) => {
     const m = s.marks.find((x) => x.id === p.markId);
     if (!m) return null;
-    const area = m.areas.find((a) => a.points?.some((q) => q.x === p.x && q.y === p.y && (q.v ?? "front") === p.v));
+    const area = m.areas.find((a) => a.zone === p.zone);
     const used = usedOn(m.id);
     const right = p.x > 0.5;
     const below = p.y < 0.55;
@@ -699,14 +685,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       >
         {F.showPast}
       </button>
-      <button
-        type="button"
-        aria-pressed={showAreas}
-        onClick={() => setShowAreas((v) => !v)}
-        className={`inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium ${showAreas ? "bg-sunken" : "hover:bg-sunken"}`}
-      >
-        {F.showAreas}
-      </button>
     </>
   );
 
@@ -733,21 +711,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* The face */}
         <Card className="p-4">
-          {/* One row: on a phone it scrolls sideways, so the face is in view without scrolling down. */}
-          <div className="-mx-4 mb-3 flex items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0">
-            <span className="shrink-0 text-[12.5px] text-ink-500">{F.quickSelect}</span>
-            {PRESETS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => preset(p.zones)}
-                className="inline-flex h-9 shrink-0 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium hover:bg-sunken sm:h-8"
-                data-face-preset={p.key}
-              >
-                {p.en}
-              </button>
-            ))}
-          </div>
           {/* The picture: from the front, or the head turned, each way, as it turns. */}
           <div className="mb-2 flex justify-center" role="tablist" aria-label={F.views}>
             <div className="flex w-full rounded-full bg-sunken p-0.5 sm:inline-flex sm:w-auto">
@@ -781,18 +744,14 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
           </div>
           <FaceMap
             view={view}
-            selected={sel}
             points={pts}
             past={pastPoints}
             pastActive={!sel.length}
             openKey={spot?.key ?? null}
-            tints={tints}
-            showAreas={showAreas}
-            onToggle={toggleZone}
             onPoint={addPoint}
             onRemovePoint={removePoint}
             onPast={(p) => setSpot((cur) => (cur?.key === p.key ? null : p))}
-            labels={{ right: F.patientRight, left: F.patientLeft, removePoint: F.removePoint, pastPoint: F.pastPoint }}
+            labels={{ right: F.patientRight, left: F.patientLeft, removePoint: F.removePoint, pastPoint: F.pastPoint, addPointIn: F.addPointIn }}
           >
             {spot && spotCard(spot)}
           </FaceMap>
@@ -819,28 +778,25 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
           {sel.length > 0 && !tr && (
             <div data-face-panel="areas">
               <div className="flex items-center gap-2">
-                <h3 className="text-[16px] font-semibold">
-                  {sel.length === 1 ? ZONE_BY_KEY.get(sel[0])?.en : F.areas.replace("{n}", String(sel.length))}
-                  {pts.length > 0 && <span className="ms-2 text-[13px] font-medium text-ink-500" data-face-points={pts.length}>{pts.length === 1 ? F.onePoint : F.points.replace("{n}", String(pts.length))}</span>}
+                <h3 className="text-[16px] font-semibold" data-face-points={pts.length}>
+                  {pts.length === 1 ? F.onePoint : F.points.replace("{n}", String(pts.length))}
                 </h3>
                 <Button size="sm" variant="outline" className="ms-auto" onClick={clear}>
                   {F.clear}
                 </Button>
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {inFaceOrder(sel.map((zone) => ({ zone }))).map(({ zone }) => (
-                  <button
-                    key={zone}
-                    type="button"
-                    onClick={() => toggleZone(zone)}
-                    aria-label={F.remove.replace("{area}", ZONE_BY_KEY.get(zone)?.en ?? zone)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-brand-600 bg-sunken ps-3 pe-2 text-[12.5px] font-semibold"
-                  >
-                    {ZONE_BY_KEY.get(zone)?.en}
-                    {pointsIn(zone) > 0 && <span className="text-ink-500 tnum">· {pointsIn(zone)}</span>}
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                ))}
+              {/* Where, in words; a dot comes off by tapping it on the face, or the last one here. */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-[13px] text-ink-700" data-face-where>{whereText(sel, "en")}</span>
+                <button
+                  type="button"
+                  onClick={() => removePoint(pts.length - 1)}
+                  className="inline-flex min-h-9 items-center gap-1 text-[12.5px] font-semibold text-brand-700 hover:underline"
+                  data-face-undo-dot
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                  {F.removeLast}
+                </button>
               </div>
 
               <h4 className={`mt-4 ${heading}`}>{F.doneHere}</h4>

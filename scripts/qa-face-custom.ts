@@ -139,7 +139,7 @@ async function main() {
     check(anywhere.ok(), "a treatment is recorded wherever the doctor says, not only where it is usual", String(anywhere.status()));
     await page.goto(chart, { timeout: 180000 });
     await page.waitForSelector("[data-face-map]", { timeout: 120000 });
-    check((await page.locator("[data-face-preset='neck']").count()) === 1 && (await page.locator("[data-face-preset='full']").count()) === 1, "the neck and the full face are one tap each");
+    check((await page.locator("[data-face-preset]").count()) === 0, "there are no whole-area picks: a dot says where");
     await tapBeside(page, "neck");
     await page.locator(`[data-face-treatment='${made.key}']`).click();
     await page.waitForSelector("[data-face-panel='record']");
@@ -175,7 +175,7 @@ async function main() {
     check((await page.locator("[data-face-point='forehead']").count()) === 2 && (await page.locator("[data-face-point='glabella']").count()) === 1, "and each point knows the part of the face it is in");
     check((await page.locator("[data-face-points]").getAttribute("data-face-points")) === "3", "the panel counts them");
     await page.locator("[data-face-point='glabella']").click();
-    check((await page.locator("[data-face-point]").count()) === 2 && (await page.locator("[data-zone='glabella']").getAttribute("aria-pressed")) === "false", "a point tapped again comes off, and its part with it");
+    check((await page.locator("[data-face-point]").count()) === 2 && !(await page.locator("[data-face-where]").innerText()).includes("Glabella"), "a point tapped again comes off, and its part with it");
     await at(0.5, 0.341);
     await page.locator("[data-face-treatment='aes_toxin']").click();
     await page.waitForSelector("[data-face-panel='record']");
@@ -193,7 +193,9 @@ async function main() {
     await page.waitForSelector("[data-face-map]", { timeout: 120000 });
     check((await page.locator(`[data-face-past='${pointed.id}']`).count()) === 3, "after, the points stay on the face as dots");
     // The forehead is tinted by the filler recorded on it whole, above; the glabella only ever had points.
-    check((await page.locator("[data-zone='glabella']").getAttribute("data-tint")) === null, "instead of tinting the whole part");
+    check((await page.locator("[data-face-map] [data-tint]").count()) === 0, "and no part is tinted whole");
+    // Work recorded on a whole part before dots (the filler on the forehead, by the API) is a dot in its middle.
+    check((await page.locator("[data-face-past]").count()) >= 4, "older whole-part work shows as a dot too", String(await page.locator("[data-face-past]").count()));
     await page.locator(`[data-face-past='${pointed.id}']`).first().click();
     await page.waitForSelector(`[data-face-spot='${pointed.id}']`);
     const card = await page.locator(`[data-face-spot='${pointed.id}']`).innerText();
@@ -207,8 +209,9 @@ async function main() {
     check(misplaced.status() === 400, "a point is refused under a part it is not in", String(misplaced.status()));
     await page.locator("[data-zone='lips']").focus();
     await page.keyboard.press("Enter");
-    check((await page.locator("[data-zone='lips']").getAttribute("aria-pressed")) === "true" && (await page.locator("[data-face-point]").count()) === 0, "from the keyboard a part is chosen whole");
-    await page.locator("[data-face-panel='areas'] button", { hasText: "Clear" }).click();
+    check((await page.locator("[data-face-point='lips']").count()) === 1, "from the keyboard, Enter on a part puts a dot in its middle");
+    await page.locator("[data-face-undo-dot]").click();
+    check((await page.locator("[data-face-point]").count()) === 0 && (await page.locator("[data-face-panel='idle']").count()) === 1, "and Undo last dot takes it off");
 
     console.log("The head turned (2026-11-08)");
     check((await page.locator("[data-face-view-tab]").count()) === 5, "five views: left, front-left, front, front-right, right");

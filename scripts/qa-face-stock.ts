@@ -175,7 +175,7 @@ async function main() {
     const fileUrl = `${BASE}/c/${slug}/patients/${patient.id}?tab=face`;
     await page.goto(fileUrl, { timeout: 180000 });
     await page.waitForSelector("[data-face-map]", { timeout: 120000 });
-    await page.locator("[data-face-preset='upper']").click();
+    for (const z of ["forehead", "glabella", "crows_r", "crows_l"]) await page.locator(`[data-zone='${z}']`).click();
     await page.locator("[data-face-treatment='aes_toxin']").click();
     await page.waitForSelector("[data-face-panel='record']");
     check((await page.locator(`[data-face-product='${botox.id}']`).getAttribute("aria-pressed")) === "true", "Botox, which is on hand, is picked for the toxin");
