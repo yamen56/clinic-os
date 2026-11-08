@@ -53,6 +53,9 @@ export const FACE_ZONES: Zone[] = [
   { key: "jaw_l", en: "Jawline (L)", ar: "خط الفك الأيسر", group: "jaw", x: 0.69, y: 0.61, w: 0.06, h: 0.1 },
   { key: "chin", en: "Chin", ar: "الذقن", x: 0.5, y: 0.677, w: 0.16, h: 0.055 },
   { key: "neck", en: "Neck", ar: "الرقبة", x: 0.5, y: 0.83, w: 0.34, h: 0.13 },
+  // An ear is a place of its own (2026-11-08: "if I put something on the left ear it should not disturb my work on the right ear").
+  { key: "ear_r", en: "Ear (R)", ar: "الأذن اليمنى", group: "ears", x: 0.195, y: 0.435, w: 0.075, h: 0.175 },
+  { key: "ear_l", en: "Ear (L)", ar: "الأذن اليسرى", group: "ears", x: 0.805, y: 0.435, w: 0.075, h: 0.175 },
 ];
 
 /** A pair read as one, when both sides were done: "Crow's feet", not "Crow's feet (R), Crow's feet (L)". */
@@ -64,6 +67,7 @@ const GROUPS: Record<string, { en: string; ar: string }> = {
   nasolabial: { en: "Nasolabial folds", ar: "خطوط الابتسامة" },
   marionette: { en: "Marionette lines", ar: "خطوط الماريونيت" },
   jaw: { en: "Jawline", ar: "خط الفك" },
+  ears: { en: "Ears", ar: "الأذنين" },
 };
 
 /**
@@ -86,7 +90,7 @@ export const isZone = (k: string) => ZONE_BY_KEY.has(k);
  * or the upper parts of the head, in addition to the neck").
  */
 export const PRESETS: { key: string; en: string; zones: string[] }[] = [
-  { key: "full", en: "Full face", zones: FACE_ZONES.filter((z) => z.key !== "scalp" && z.key !== "neck").map((z) => z.key) },
+  { key: "full", en: "Full face", zones: FACE_ZONES.filter((z) => z.key !== "scalp" && z.key !== "neck" && z.group !== "ears").map((z) => z.key) },
   { key: "upper", en: "Upper face · 3 areas", zones: ["forehead", "glabella", "crows_r", "crows_l"] },
   { key: "lips", en: "Lips", zones: ["lips"] },
   { key: "head", en: "Upper head", zones: ["scalp", "forehead", "temple_r", "temple_l"] },
@@ -187,7 +191,7 @@ export function mergeCatalog(custom: FaceTreatment[], looks: TreatmentLook[] = [
 export const treatmentColor = (t: { color?: string; family: Family } | undefined, family: Family): string => t?.color ?? FAMILY_COLOR[t?.family ?? family];
 
 const ALL = FACE_ZONES.map((z) => z.key);
-const SKIN = ALL.filter((k) => k !== "scalp");
+const SKIN = ALL.filter((k) => k !== "scalp" && k !== "ear_r" && k !== "ear_l");
 
 export const FACE_TREATMENTS: FaceTreatment[] = [
   {
@@ -206,7 +210,7 @@ export const FACE_TREATMENTS: FaceTreatment[] = [
     ar: "فيلر",
     family: "filler",
     pricedBy: "syringe",
-    fits: ["lips", "cheek_r", "cheek_l", "tear_r", "tear_l", "nasolabial_r", "nasolabial_l", "marionette_r", "marionette_l", "chin", "jaw_r", "jaw_l", "temple_r", "temple_l", "nose"],
+    fits: ["lips", "cheek_r", "cheek_l", "tear_r", "tear_l", "nasolabial_r", "nasolabial_l", "marionette_r", "marionette_l", "chin", "jaw_r", "jaw_l", "temple_r", "temple_l", "nose", "ear_r", "ear_l"],
     aliases: ["filler", "hyaluronic", "فلر"],
   },
   { key: "aes_booster", en: "Skin booster", ar: "محفز بشرة", family: "skin", pricedBy: "session", fits: SKIN, aliases: ["profhilo", "booster", "بروفايلو"] },
@@ -331,6 +335,7 @@ const SIDE: Record<Exclude<FaceView, "front">, Place[]> = {
     { key: "neck", x: 0.55, y: 0.83, w: 0.36, h: 0.16 },
     { key: "occipital", x: 0.82, y: 0.44, w: 0.14, h: 0.2 },
     { key: "nape", x: 0.74, y: 0.74, w: 0.12, h: 0.12 },
+    { key: "ear_l", x: 0.628, y: 0.498, w: 0.17, h: 0.2 },
   ],
   front_left: [
     { key: "scalp", x: 0.48, y: 0.11, w: 0.46, h: 0.13 },
@@ -354,6 +359,7 @@ const SIDE: Record<Exclude<FaceView, "front">, Place[]> = {
     { key: "jaw_l", x: 0.53, y: 0.68, w: 0.17, h: 0.1 },
     { key: "chin", x: 0.27, y: 0.725, w: 0.14, h: 0.055 },
     { key: "neck", x: 0.48, y: 0.865, w: 0.4, h: 0.14 },
+    { key: "ear_l", x: 0.812, y: 0.495, w: 0.15, h: 0.19 },
   ],
   right: [
     { key: "scalp", x: 0.45, y: 0.13, w: 0.42, h: 0.14 },
@@ -372,6 +378,7 @@ const SIDE: Record<Exclude<FaceView, "front">, Place[]> = {
     { key: "neck", x: 0.45, y: 0.83, w: 0.36, h: 0.16 },
     { key: "occipital", x: 0.18, y: 0.44, w: 0.14, h: 0.2 },
     { key: "nape", x: 0.26, y: 0.74, w: 0.12, h: 0.12 },
+    { key: "ear_r", x: 0.372, y: 0.498, w: 0.17, h: 0.2 },
   ],
   front_right: [
     { key: "scalp", x: 0.52, y: 0.11, w: 0.46, h: 0.13 },
@@ -395,6 +402,7 @@ const SIDE: Record<Exclude<FaceView, "front">, Place[]> = {
     { key: "jaw_r", x: 0.47, y: 0.68, w: 0.17, h: 0.1 },
     { key: "chin", x: 0.73, y: 0.725, w: 0.14, h: 0.055 },
     { key: "neck", x: 0.52, y: 0.865, w: 0.4, h: 0.14 },
+    { key: "ear_r", x: 0.188, y: 0.495, w: 0.15, h: 0.19 },
   ],
 };
 
@@ -404,30 +412,6 @@ export function zonesOn(view: FaceView): Zone[] {
   return SIDE[view].map((p) => ({ ...ZONE_BY_KEY.get(p.key)!, x: p.x, y: p.y, w: p.w, h: p.h }));
 }
 
-/**
- * Where a spot marked on one picture is on another (Yamen, 2026-11-08: "when I put
- * a treatment on the front I want to see it when I press on the right"). It keeps
- * its place within its part: as far across and down that part's oval as it was.
- * Null when the other picture does not show that part (the left cheek from the
- * right). Near enough to find the work, which is what the turned views are for.
- */
-export function placeOn(p: { x: number; y: number; v?: FaceView }, zone: string, view: FaceView): { x: number; y: number } | null {
-  const from = p.v ?? "front";
-  if (from === view) return { x: p.x, y: p.y };
-  const a = zonesOn(from).find((z) => z.key === zone);
-  const b = zonesOn(view).find((z) => z.key === zone);
-  if (!b) return null;
-  if (!a) return { x: b.x, y: b.y };
-  let dx = (p.x - a.x) / (a.w / 2);
-  let dy = (p.y - a.y) / (a.h / 2);
-  // A spot just outside its part (it went to the nearest) stays just outside, not far off.
-  const r = Math.hypot(dx, dy);
-  if (r > 1.2) {
-    dx = (dx / r) * 1.2;
-    dy = (dy / r) * 1.2;
-  }
-  return { x: b.x + (dx * b.w) / 2, y: b.y + (dy * b.h) / 2 };
-}
 export const isView = (v: unknown): v is FaceView => typeof v === "string" && (FACE_VIEWS as string[]).includes(v);
 
 /** An exact spot the doctor worked on, as a share of its picture, 0–1 (2026-11-08). */

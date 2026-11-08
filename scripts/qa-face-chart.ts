@@ -145,7 +145,7 @@ async function main() {
       await until(async () => (await page.locator("[data-face-map] img").evaluate((i) => (i as HTMLImageElement).naturalWidth)) > 0),
       "and the face picture loads"
     );
-    check((await page.locator("[data-zone]").count()) === 21, "21 parts of the face a dot can go on", String(await page.locator("[data-zone]").count()));
+    check((await page.locator("[data-zone]").count()) === 23, "23 parts of the face a dot can go on, the ears among them", String(await page.locator("[data-zone]").count()));
     check((await page.locator("[data-face-preset]").count()) === 0, "and no quick picks of whole areas: dots alone say where (2026-11-08)");
 
     // A dot on each of the upper face's parts; the toxin comes first, and any other treatment can still be picked (Yamen, 2026-11-07).

@@ -15,15 +15,18 @@
   middle. Dots from past visits stay in the colour of the work done there, and
   tapping one shows what was done (the chart draws that card, as `children`).
 
-  Every dot is on every picture that shows its part, wherever it was marked
+  Every dot is on every picture that sees that spot, wherever it was marked
   (Yamen, 2026-11-08: "when I put a treatment on the front I want to see it when I
-  press on the right"): `placeOn` keeps its place within its part.
+  press on the right"), and on no picture that does not: the five pictures are
+  one head (lib/charts/face/head.ts), so a dot on the left ear is never drawn on
+  the right one.
 
   Paper that stays white in the dark theme: the picture has a white ground.
 */
 
 import type { ReactNode } from "react";
-import { VIEW_CAPTION, VIEW_NAME, VIEW_SRC, placeOn, zoneAt, zonesOn, type FaceView } from "@/lib/charts/face/catalog";
+import { VIEW_CAPTION, VIEW_NAME, VIEW_SRC, zoneAt, zonesOn, type FaceView } from "@/lib/charts/face/catalog";
+import { placeOn } from "@/lib/charts/face/head";
 
 export type PendingPoint = { x: number; y: number; zone: string; v: FaceView };
 /** A recorded spot, where it was marked, and the colour of its treatment. */
@@ -103,7 +106,7 @@ export function FaceMap({
 
         {/* Before: what was done where, each spot in the colour of its kind of work. */}
         {past.map((p) => {
-            const at = placeOn(p, p.zone, view);
+            const at = placeOn(p, view);
             if (!at) return null;
             const open = openKey === p.key;
             return (
@@ -130,7 +133,7 @@ export function FaceMap({
 
         {/* Now: the spots being recorded, tapped again to take one off. */}
         {points.map((p, i) => {
-          const at = placeOn(p, p.zone, view);
+          const at = placeOn(p, view);
           return !at ? null : (
             <button
               key={`${p.x}:${p.y}:${i}`}

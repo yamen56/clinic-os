@@ -58,6 +58,7 @@ import {
   VIEW_NAME,
   VIEW_SHORT,
   zoneAt,
+  zonesOn,
   type FaceView,
 } from "@/lib/charts/face/catalog";
 import type { FaceMark } from "@/lib/charts/face/db";
@@ -70,10 +71,14 @@ import { FaceReadyToBill } from "@/components/charts/face/ready-to-bill";
 import { FamilyTag } from "@/components/charts/face/family-tag";
 import { AddTreatment, treatmentsCall } from "@/components/charts/face/add-treatment";
 
-/** The middle of a part on the front picture: where work recorded on a whole part, before dots, is drawn. */
-function centreOf(zone: string): { x: number; y: number; v: "front" } | null {
-  const z = ZONE_BY_KEY.get(zone);
-  return z ? { x: z.x, y: z.y, v: "front" } : null;
+/** The middle of a part, on the front or (the back of the head and neck) the left profile: where work recorded on a whole part, before dots, is drawn. */
+function centreOf(zone: string): { x: number; y: number; v: FaceView } | null {
+  if (!ZONE_BY_KEY.has(zone)) return null;
+  for (const v of ["front", "left"] as const) {
+    const z = zonesOn(v).find((p) => p.key === zone);
+    if (z) return { x: z.x, y: z.y, v };
+  }
+  return null;
 }
 
 /** How long a toxin lasts, near enough to say when the patient is due again. */
@@ -245,7 +250,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
         from.areas.flatMap((a) =>
           a.points?.length
             ? a.points.map((p) => ({ x: p.x, y: p.y, zone: a.zone, v: p.v ?? "front" }))
-            : [centreOf(a.zone)].filter((c) => c !== null).map((c) => ({ x: c.x, y: c.y, zone: a.zone, v: "front" as const }))
+            : [centreOf(a.zone)].filter((c) => c !== null).map((c) => ({ ...c, zone: a.zone }))
         )
       );
       // On the picture its points were marked on.

@@ -218,8 +218,9 @@ async function main() {
     await page.locator("[data-face-view-tab='left']").click();
     check((await page.locator("[data-face-map]").getAttribute("data-face-view")) === "left" && (await page.locator("[data-face-img]").getAttribute("src"))?.includes("face-left"), "the left view shows the head from the left");
     check((await page.locator("[data-zone='cheek_r']").count()) === 0 && (await page.locator("[data-zone='cheek_l']").count()) === 1, "with only the parts it shows");
-    // The front's dots, where those parts are on this side (2026-11-08: the views line up).
-    check((await page.locator(`[data-face-past='${pointed.id}']`).count()) === 3, "the dots put on the front are on the left view too", String(await page.locator(`[data-face-past='${pointed.id}']`).count()));
+    // The front's dots, where this side of the head sees them (2026-11-08: the views line up): the
+    // forehead's left half and the glabella in the middle, not the forehead's right half.
+    check((await page.locator(`[data-face-past='${pointed.id}']`).count()) === 2, "the dots put on the front that the left side shows are on the left view too", String(await page.locator(`[data-face-past='${pointed.id}']`).count()));
     const lb = (await map.boundingBox())!;
     await map.click({ position: { x: lb.width * 0.31, y: lb.height * 0.53 } });
     check((await page.locator("[data-face-point='cheek_l']").count()) === 1, "a tap on the left cheek is the left cheek");
@@ -246,6 +247,51 @@ async function main() {
       data: { id: crypto.randomUUID(), eventId: crypto.randomUUID(), treatmentKey: "aes_filler", areas: [{ zone: "cheek_l", points: [{ x: 0.31, y: 0.53, v: "front" }] }] },
     });
     check(wrongView.status() === 400, "a point is checked against the picture it says it was on", String(wrongView.status()));
+
+    console.log("One head behind the views (2026-11-08)");
+    // Where a dot is on the picture in front of the doctor, as a share of it.
+    const dotAt = async (sel: string) => {
+      const m = (await map.boundingBox())!;
+      const d = await page.locator(sel).first().boundingBox();
+      return d ? { x: (d.x + d.width / 2 - m.x) / m.width, y: (d.y + d.height / 2 - m.y) / m.height } : null;
+    };
+    const near = (p: { x: number; y: number } | null, x: number, y: number, by = 0.02) => !!p && Math.abs(p.x - x) <= by && Math.abs(p.y - y) <= by;
+    // The left ear, tapped on the left profile.
+    const lb3 = (await map.boundingBox())!;
+    await map.click({ position: { x: lb3.width * 0.62, y: lb3.height * 0.47 } });
+    check((await page.locator("[data-face-point='ear_l']").count()) === 1, "a tap on the left ear is the left ear");
+    await page.locator("[data-face-view-tab='front']").click();
+    const earFront = await dotAt("[data-face-point='ear_l']");
+    check(!!earFront && earFront.x > 0.77 && earFront.x < 0.85 && earFront.y > 0.35 && earFront.y < 0.52, "on the front it is on the left ear", JSON.stringify(earFront));
+    for (const v of ["right", "front_right"]) {
+      await page.locator(`[data-face-view-tab='${v}']`).click();
+      check((await page.locator("[data-face-point='ear_l']").count()) === 0, `the ${v.replace("_", "-")} view, which shows the right ear, does not draw it`);
+    }
+    await page.locator("[data-face-undo-dot]").click();
+    // The outer corner of the left eye, tapped on the front: the same corner on every view that shows it.
+    await page.locator("[data-face-view-tab='front']").click();
+    const fb = (await map.boundingBox())!;
+    await map.click({ position: { x: fb.width * 0.7, y: fb.height * 0.38 } });
+    await page.locator("[data-face-view-tab='left']").click();
+    const eyeSide = await dotAt("[data-face-point]");
+    check(near(eyeSide, 0.243, 0.41), "the left eye's outer corner on the front is the eye's corner on the profile", JSON.stringify(eyeSide));
+    await page.locator("[data-face-view-tab='front_left']").click();
+    const eyeQuarter = await dotAt("[data-face-point]");
+    check(near(eyeQuarter, 0.5, 0.397), "and on the front-left view", JSON.stringify(eyeQuarter));
+    await page.locator("[data-face-view-tab='right']").click();
+    check((await page.locator("[data-face-point]").count()) === 0, "and not on the right profile");
+    await page.locator("[data-face-view-tab='front']").click();
+    await page.locator("[data-face-undo-dot]").click();
+    // A dot in the middle of the face is on both profiles, on the profile itself.
+    await map.click({ position: { x: fb.width * 0.5, y: fb.height * 0.577 } });
+    await page.locator("[data-face-view-tab='left']").click();
+    const lipsLeft = await dotAt("[data-face-point]");
+    await page.locator("[data-face-view-tab='right']").click();
+    const lipsRight = await dotAt("[data-face-point]");
+    check(near(lipsLeft, 0.1, 0.618) && near(lipsRight, 0.9, 0.618, 0.03), "the middle of the lips is on the lips on both profiles", JSON.stringify([lipsLeft, lipsRight]));
+    await page.locator("[data-face-view-tab='front']").click();
+    await page.locator("[data-face-undo-dot]").click();
+    await page.locator("[data-face-view-tab='left']").click();
 
     console.log("Botox anywhere it goes (2026-11-08)");
     // The back of the head, on the left view, where a migraine's toxin goes.

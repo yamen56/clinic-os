@@ -1596,13 +1596,22 @@ earlier entry (`redo_of`) at the price the doctor says, 0 if free.
   follows from where it is (`zoneAt(x, y, view)`, which the server re-asks of every point). Dots
   alone choose where (Yamen, 2026-11-08: "just depend on the dot"): no quick picks, no outlines,
   no tinted parts. The parts are invisible buttons for the keyboard; Enter puts a dot in the middle.
-  Work recorded on a whole part before dots is drawn as a dot in that part's middle on the front.
+  Work recorded on a whole part before dots is drawn as a dot in that part's middle (the back of the
+  head and neck on the left profile).
 - Five pictures, `VIEW_SRC`: left, front-left, front, front-right, right, the patient's sides.
   The turned ones were cut from one Canva sheet (page 2 of design DAHZTbj2560) and set at the
   front's 945 × 1264; `zonesOn(view)` places only the parts each one shows.
-- Every dot shows on every view that shows its part, wherever it was marked (`placeOn` keeps its
-  place within the part). One opens a card with what was done, by whom, how much and with which
-  product, and Treat here again. Repeat starts on the same spots.
+- The five pictures are one head (`lib/charts/face/head.ts`, fitted by
+  `scripts/bake-face-head.ts`): each height a closed curve fitted to the outlines on the front,
+  profile and three-quarter pictures and to where the eye corners, cheekbones and mouth corners
+  are; each turned picture keeps its own heights and is pulled to meet its own eyes, nose, lips
+  and chin. A dot is a spot on that head, drawn on every view whose picture faces that skin and
+  on no other (Yamen, 2026-11-08: "if I put something on the left ear it should not disturb my
+  work on the right ear"): the right half of the forehead is not on the left profile, the middle
+  of the lips is on both. The ears are parts of their own (`ear_r`, `ear_l`) and are matched
+  outline to outline. Stored points are unchanged: the spot is worked out from the picture and
+  place they were tapped on. One opens a card with what was done, by whom, how much and with
+  which product, and Treat here again. Repeat starts on the same spots.
 - The profiles add the back of the head and of the neck (`BACK_ZONES`), where a migraine's toxin goes.
   Every treatment is always offered, the usual ones for the dots first.
 - Colours and deleting (0098 `aesthetic_treatment_looks`): Settings → Face prices picks each
