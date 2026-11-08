@@ -4,7 +4,6 @@ import { useMemo, useState, useTransition } from "react";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Toggle } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { WeeklyHoursEditor } from "@/components/weekly-hours-editor";
@@ -73,10 +72,26 @@ export function MyHoursClient({
   return (
     <div className="grid grid-cols-1 gap-4">
       <Card className="p-5">
-        <label className="mb-3 flex items-center gap-2.5">
-          <Toggle checked={own} onChange={setOwn} />
-          <span className="text-[13px] font-medium">{own ? t.staff.ownHours : t.staff.useClinicHours}</span>
-        </label>
+        {/*
+          Two choices, both named. A switch labelled "Uses clinic hours" read the
+          wrong way round when off, and a doctor could not tell which state they were in.
+        */}
+        <div role="radiogroup" aria-label={t.myHours.title} className="grid grid-cols-2 gap-1 rounded-full bg-sunken p-1">
+          {[false, true].map((v) => (
+            <button
+              key={String(v)}
+              type="button"
+              role="radio"
+              aria-checked={own === v}
+              onClick={() => setOwn(v)}
+              className={`min-h-10 rounded-full px-3 text-[13.5px] font-semibold transition-colors ${own === v ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"}`}
+              data-hours-choice={v ? "own" : "clinic"}
+            >
+              {v ? t.myHours.choiceOwn : t.myHours.choiceClinic}
+            </button>
+          ))}
+        </div>
+        <p className="mb-3 mt-2 text-[12.5px] text-ink-500">{own ? t.myHours.ownHint : t.myHours.clinicHint}</p>
 
         {own && <WeeklyHoursEditor value={hours} onChange={setHours} />}
 

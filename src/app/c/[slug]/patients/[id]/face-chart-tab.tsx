@@ -126,6 +126,9 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   // The picture in front of the doctor: the face from the front, or turned.
   const [view, setView] = useState<FaceView>("front");
   const [showPast, setShowPast] = useState(true);
+  // The treatment list: what is usual for the parts chosen first, the rest a tap away, or found by name.
+  const [findT, setFindT] = useState("");
+  const [allT, setAllT] = useState(false);
   const [tKey, setTKey] = useState<string | null>(null);
   const [units, setUnits] = useState<Record<string, number>>({});
   const [count, setCount] = useState(1);
@@ -240,6 +243,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     setWhole([]);
     setPts([]);
     setTKey(null);
+    setFindT("");
+    setAllT(false);
   };
 
   // `given` is a treatment made a moment ago, before the catalog this render read has it.
@@ -275,12 +280,27 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     setNote("");
   };
 
-  // Every treatment, the usual ones for these areas first.
+  /*
+    Every treatment, those usual on more of the parts chosen first. Usual on any of
+    them counts: crow's feet and a tear trough together are a toxin and a filler,
+    neither of which is usual on both, and asking for both hid the two most common.
+  */
+  const usualOn = (x: FaceTreatment) => sel.filter((z) => x.fits.includes(z)).length;
   const fits = useMemo(() => {
     if (!sel.length) return [];
-    const usual = (x: FaceTreatment) => sel.every((z) => x.fits.includes(z));
-    return [...s.catalog.offered.filter(usual), ...s.catalog.offered.filter((x) => !usual(x))];
+    return s.catalog.offered
+      .map((x, i) => ({ x, i, n: sel.filter((z) => x.fits.includes(z)).length }))
+      .sort((a, b) => b.n - a.n || a.i - b.i)
+      .map((e) => e.x);
   }, [sel, s.catalog]);
+  const usualCount = fits.filter((x) => usualOn(x) > 0).length;
+  // Typed as staff say it: "botox", "فيلر", a brand.
+  const term = findT.trim().toLowerCase();
+  const shownFits = term
+    ? fits.filter((x) => [x.en, x.ar, ...(x.aliases ?? [])].some((w) => w.toLowerCase().includes(term)))
+    : allT || usualCount === 0
+      ? fits
+      : fits.slice(0, usualCount);
   const here = useMemo(() => newestFirst.filter((m) => !m.voidedAt && m.areas.some((a) => sel.includes(a.zone))), [newestFirst, sel]);
 
   /* ---- the record panel's numbers ---- */
@@ -442,7 +462,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     return parts.join(" · ");
   };
 
-  const action = "inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-semibold hover:bg-sunken";
+  const action = "inline-flex h-9 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-semibold hover:bg-sunken sm:h-7 sm:text-[12px]";
 
   // A plain function, not a component: a component made here would be a new type each render, and remount — a box being typed in would lose its cursor.
   const row = (m: FaceMark, compact?: boolean) => {
@@ -460,7 +480,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       .filter(Boolean)
       .join(" · ");
     return (
-      <li key={m.id} className={`flex items-start gap-2.5 py-2.5 ${m.voidedAt ? "opacity-60" : ""}`} data-face-entry={m.id} data-voided={m.voidedAt ? "" : undefined}>
+      <li key={m.id} className={`py-2.5 ${m.voidedAt ? "opacity-60" : ""}`} data-face-entry={m.id} data-voided={m.voidedAt ? "" : undefined}>
+        <div className="flex items-start gap-2.5">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold">
             {isSale ? <span className="inline-flex h-5 items-center rounded-md border border-line-strong bg-sunken px-1.5 text-[11px] font-semibold">{F.packageEntry}</span> : <FamilyTag family={m.family} label={F.families[m.family]} />}
@@ -535,10 +556,11 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             </div>
           )}
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          {!compact && <span className="text-[13px] font-semibold tnum">{session ? F.covered : m.fee != null ? money(m.fee) : "—"}</span>}
+          {!compact && <span className="shrink-0 text-[13px] font-semibold tnum">{session ? F.covered : m.fee != null ? money(m.fee) : "—"}</span>}
+        </div>
+          {/* Under the entry, in a row that wraps: beside it, they squeezed its words to a column on a phone. */}
           {!m.voidedAt && (
-            <div className="flex flex-wrap justify-end gap-1">
+            <div className="-ms-2.5 mt-1 flex flex-wrap gap-0.5" data-face-actions={m.id}>
               {s.canWrite && s.catalog.byKey.has(m.treatmentKey) && !s.catalog.byKey.get(m.treatmentKey)?.archived && (
 <>
                 <button type="button" onClick={() => start(m.treatmentKey, m)} className={`${action} text-brand-700`} aria-label={F.repeatOf.replace("{treatment}", m.label)} data-face-repeat={m.id}>
@@ -574,7 +596,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               )}
             </div>
           )}
-        </div>
       </li>
     );
   };
@@ -667,6 +688,28 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     );
   };
 
+  const toggles = (
+    <>
+      <button
+        type="button"
+        aria-pressed={showPast}
+        onClick={() => (setShowPast((v) => !v), setSpot(null))}
+        className={`inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium ${showPast ? "bg-sunken" : "hover:bg-sunken"}`}
+        data-face-show-past
+      >
+        {F.showPast}
+      </button>
+      <button
+        type="button"
+        aria-pressed={showAreas}
+        onClick={() => setShowAreas((v) => !v)}
+        className={`inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium ${showAreas ? "bg-sunken" : "hover:bg-sunken"}`}
+      >
+        {F.showAreas}
+      </button>
+    </>
+  );
+
   const recent = newestFirst.filter((m) => !m.voidedAt).slice(0, 5);
   const voidedCount = s.marks.filter((m) => m.voidedAt).length;
   const shown = showVoided ? newestFirst : newestFirst.filter((m) => !m.voidedAt);
@@ -690,38 +733,20 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* The face */}
         <Card className="p-4">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="text-[12.5px] text-ink-500">{F.quickSelect}</span>
+          {/* One row: on a phone it scrolls sideways, so the face is in view without scrolling down. */}
+          <div className="-mx-4 mb-3 flex items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0">
+            <span className="shrink-0 text-[12.5px] text-ink-500">{F.quickSelect}</span>
             {PRESETS.map((p) => (
               <button
                 key={p.key}
                 type="button"
                 onClick={() => preset(p.zones)}
-                className="inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium hover:bg-sunken"
+                className="inline-flex h-9 shrink-0 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium hover:bg-sunken sm:h-8"
                 data-face-preset={p.key}
               >
                 {p.en}
               </button>
             ))}
-            <span className="ms-auto flex gap-1.5">
-              <button
-                type="button"
-                aria-pressed={showPast}
-                onClick={() => (setShowPast((v) => !v), setSpot(null))}
-                className={`inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium ${showPast ? "bg-sunken" : "hover:bg-sunken"}`}
-                data-face-show-past
-              >
-                {F.showPast}
-              </button>
-              <button
-                type="button"
-                aria-pressed={showAreas}
-                onClick={() => setShowAreas((v) => !v)}
-                className={`inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium ${showAreas ? "bg-sunken" : "hover:bg-sunken"}`}
-              >
-                {F.showAreas}
-              </button>
-            </span>
           </div>
           {/* The picture: from the front, or the head turned, each way, as it turns. */}
           <div className="mb-2 flex justify-center" role="tablist" aria-label={F.views}>
@@ -776,6 +801,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               <FamilyTag key={f} family={f} label={F.families[f]} />
             ))}
           </div>
+          {/* What the face shows: rarely changed, so under it rather than above. */}
+          <div className="mt-2.5 flex justify-center gap-1.5">{toggles}</div>
         </Card>
 
         {/* What was done */}
@@ -821,10 +848,25 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
 
               {s.canWrite && (
                 <>
-                  <h4 className={`mt-4 ${heading}`}>{F.whatDone}</h4>
+                  <h4 className={`mt-4 ${heading}`} data-face-what>
+                    {F.whatDone}
+                  </h4>
+                  {fits.length > 8 && (
+                    <input
+                      type="search"
+                      value={findT}
+                      onChange={(e) => setFindT(e.target.value)}
+                      placeholder={F.findTreatment}
+                      aria-label={F.findTreatment}
+                      dir="auto"
+                      className="mt-2 h-10 w-full rounded-full border border-line bg-sunken px-4 text-base outline-none focus:border-brand-400 md:text-sm"
+                      data-face-find
+                    />
+                  )}
+                  {term && !shownFits.length && <p className="mt-2 text-[13px] text-ink-500">{F.noMatch}</p>}
                   {fits.length ? (
                     <div className="mt-2 grid grid-cols-2 gap-2" data-face-fits={fits.length}>
-                      {fits.map((x) => {
+                      {shownFits.map((x) => {
                         const p = pickFacePrice(s.prices, x.key, null);
                         return (
                           <button
@@ -837,7 +879,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                             <span className="text-[13.5px] font-semibold">{x.en}</span>
                             <span className="flex flex-wrap items-center gap-1.5">
                               <FamilyTag family={x.family} label={F.families[x.family]} />
-                              <span className="text-[12px] text-ink-500 tnum">{p ? `${money(p.price)} ${F.pricedBy[x.pricedBy]}` : F.noPrice}</span>
+                              <span className="text-[12px] text-ink-500 tnum">{p ? `${money(p.price)} ${F.pricedBy[x.pricedBy]}` : F.noPriceShort}</span>
                             </span>
                           </button>
                         );
@@ -845,6 +887,11 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                     </div>
                   ) : (
                     <p className="mt-1 text-[13px] text-ink-500">{F.noneFits}</p>
+                  )}
+                  {!term && !allT && usualCount > 0 && usualCount < fits.length && (
+                    <button type="button" onClick={() => setAllT(true)} className="mt-2 inline-flex min-h-10 items-center text-[13px] font-semibold text-brand-700 hover:underline" data-face-all-treatments>
+                      {F.allTreatments.replace("{n}", String(fits.length))}
+                    </button>
                   )}
                   {/* The clinic's own, made at the chair: the thirteen are a start, not the list. */}
                   <Button size="sm" variant="outline" className="mt-2 min-h-10" onClick={() => setAdding(true)} data-face-add-treatment>
@@ -1128,6 +1175,42 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
           )}
         </Card>
       </div>
+
+      {/*
+        On a phone (and a tablet held upright) the face and what to do next are one
+        above the other, and the next step was a scroll away every time: after the
+        points, the treatments; after the units, Save. This bar keeps it under the
+        thumb, above the tab bar.
+      */}
+      {s.canWrite && sel.length > 0 && (
+        <>
+          <div className="h-20 lg:hidden" aria-hidden />
+          <div
+            className="fixed inset-x-3 bottom-[calc(4.1rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 rounded-card border border-line bg-surface/95 p-2 ps-3.5 shadow-pop backdrop-blur md:bottom-4 lg:hidden"
+            data-face-bar={tr ? "save" : "choose"}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13.5px] font-semibold">
+                {tr ? tr.en : pts.length ? (pts.length === 1 ? F.onePoint : F.points.replace("{n}", String(pts.length))) : F.areas.replace("{n}", String(sel.length))}
+              </div>
+              <div className="truncate text-[12px] text-ink-500 tnum">{tr ? (covered ? F.covered : fee != null ? money(fee) : F.noPriceShort) : whereText(sel, "en")}</div>
+            </div>
+            {tr ? (
+              <Button className="min-h-11 shrink-0 px-5" onClick={save} disabled={(!!tr.units && (unitsTotal ?? 0) <= 0) || priceMissing} data-face-bar-save>
+                {F.save}
+              </Button>
+            ) : (
+              <Button
+                className="min-h-11 shrink-0"
+                onClick={() => document.querySelector("[data-face-what]")?.scrollIntoView({ block: "start", behavior: "smooth" })}
+                data-face-bar-choose
+              >
+                {F.chooseTreatment}
+              </Button>
+            )}
+          </div>
+        </>
+      )}
 
       {/* The patient's packages: what each holds, used and left. */}
       {(s.packages.length > 0 || (s.canSell && s.plans.length > 0)) && (

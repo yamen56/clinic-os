@@ -867,7 +867,10 @@ export function Shell({
           ink: grey on a slightly darker grey was the whole difference before,
           and in sunlight at a front desk the two were the same colour.
         */}
-        <div className="grid auto-cols-fr grid-flow-col border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur">
+        <div
+          className="grid auto-cols-fr grid-flow-col border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur"
+          data-mobile-tabbar
+        >
           {mobileMain.map(({ key, href, badge }) => {
             const Icon = icons[key];
             const active = isActive({ key, href });

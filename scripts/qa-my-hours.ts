@@ -175,7 +175,7 @@ async function main() {
   await receptionist.ctx.close();
 
   console.log("\n[saving]");
-  await page.locator('button[role="switch"], input[type="checkbox"]').first().click();
+  await page.locator("[data-hours-choice='own']").click();
   const save = page.getByRole("button", { name: "Save", exact: true });
 
   // The clinic is shut on Friday: giving a doctor Friday hours must be named.
@@ -230,7 +230,7 @@ async function main() {
 
   console.log("\n[back to the clinic's hours]");
   await page.reload();
-  await page.locator('button[role="switch"], input[type="checkbox"]').first().click();
+  await page.locator("[data-hours-choice='clinic']").click();
   await save.click();
   await page.waitForFunction(() => document.body.innerText.includes("Your hours are saved"), undefined, {
     timeout: 15000,
@@ -241,7 +241,7 @@ async function main() {
   await ctx.close();
   const phone = await session("doctor", { width: 360, height: 740 });
   await phone.page.goto(`${base}/profile/hours`);
-  await phone.page.locator('button[role="switch"], input[type="checkbox"]').first().click();
+  await phone.page.locator("[data-hours-choice='own']").click();
   await phone.page.getByText("Sunday", { exact: true }).first().waitFor();
   const width = await phone.page.evaluate("document.documentElement.scrollWidth");
   check("the page does not scroll sideways", (width as number) <= 360, String(width));

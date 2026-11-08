@@ -13,7 +13,7 @@ import { DeleteAccount } from "./delete-account";
 import { NameEditor } from "./name-editor";
 import { CLINICTI_PRIVACY_URL, CLINICTI_TERMS_URL } from "@/components/powered-by";
 import { CAPABILITY_GROUPS, accessLevelOf, resolveCapabilities } from "@/lib/permissions";
-import { PenTool, Bell, LogOut, ChevronLeft, Building2, Lock, Clock } from "lucide-react";
+import { PenTool, Bell, LogOut, ChevronRight, Building2, Lock, Clock } from "lucide-react";
 
 /**
  * A member's own account.
@@ -160,7 +160,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
                       {r.badge > 99 ? "99+" : r.badge}
                     </span>
                   )}
-                  <ChevronLeft className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
                 </Link>
               </li>
             ))}

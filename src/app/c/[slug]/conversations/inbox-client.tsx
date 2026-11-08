@@ -5,6 +5,7 @@ import { ConversationsSwitch } from "./conversations-switch";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
+import { useFillHeight } from "@/lib/use-fill-height";
 import { fmtRelative, fmtTime, fmtMoney, fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { Badge } from "@/components/ui/badge";
@@ -140,6 +141,9 @@ export function InboxClient({
   const [qrTitle, setQrTitle] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // As tall as the screen has room for, the box to type in always above the tab bar.
+  const frame = useRef<HTMLDivElement>(null);
+  useFillHeight(frame);
 
   const refreshList = useCallback(async () => {
     // Only the latest answer is shown: a filter or search changed mid-flight
@@ -288,7 +292,7 @@ export function InboxClient({
   const cv = thread?.conversation;
 
   return (
-    <div className="flex h-[calc(100dvh_-_11.5rem_-_env(safe-area-inset-top))] overflow-hidden rounded-card border border-line bg-surface shadow-card md:h-[calc(100dvh-5rem)]">
+    <div ref={frame} className="flex h-[calc(100dvh_-_11.5rem_-_env(safe-area-inset-top))] overflow-hidden rounded-card border border-line bg-surface shadow-card md:h-[calc(100dvh-5rem)]">
       {/* ------ List pane ------ */}
       <div className={`flex w-full flex-col border-e border-line lg:w-[17rem] xl:w-80 ${openId ? "hidden lg:flex" : ""}`}>
         <div className="border-b border-line p-3">

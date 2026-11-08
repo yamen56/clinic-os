@@ -49,6 +49,7 @@ import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import { useRealtime, useRealtimeRefresh } from "@/lib/use-realtime";
+import { useFillHeight } from "@/lib/use-fill-height";
 import { teamView } from "@/lib/team-view";
 import { EDIT_MINUTES, QUICK_REACTIONS, shortName } from "@/lib/team-chat-shared";
 import { ConversationsSwitch } from "../conversations-switch";
@@ -111,6 +112,9 @@ export function TeamClient({
   const unreadAtOpen = useRef<Record<string, number>>({});
   const firstLoad = useRef<Set<string>>(new Set());
   const lastTyping = useRef(0);
+  // As tall as the screen has room for, the box to type in always above the tab bar.
+  const frame = useRef<HTMLDivElement>(null);
+  useFillHeight(frame);
   const pendingJump = useRef<string | null>(initialMessageId);
   const wantReply = useRef(initialReply);
 
@@ -625,7 +629,7 @@ export function TeamClient({
   const typingNow = openId ? typingLine(openId) : null;
 
   return (
-    <div className="flex h-[calc(100dvh_-_11.5rem_-_env(safe-area-inset-top))] overflow-hidden rounded-card border border-line bg-surface shadow-card md:h-[calc(100dvh-5rem)]" data-team>
+    <div ref={frame} className="flex h-[calc(100dvh_-_11.5rem_-_env(safe-area-inset-top))] overflow-hidden rounded-card border border-line bg-surface shadow-card md:h-[calc(100dvh-5rem)]" data-team>
       {/* ------ List pane ------ */}
       <div className={`flex w-full flex-col border-e border-line lg:w-[17rem] xl:w-80 ${openId ? "hidden lg:flex" : ""}`}>
         <div className="grid gap-2 border-b border-line p-3">
@@ -1031,7 +1035,9 @@ export function TeamClient({
                   }}
                   rows={1}
                   maxLength={4000}
-                  placeholder={canMention ? `${T.write} · ${T.mentionHint}` : T.write}
+                  // The @ list opens as soon as someone types @; said in the hint, it no longer fitted a phone.
+                  placeholder={T.write}
+                  title={canMention ? T.mentionHint : undefined}
                   dir="auto"
                   className="max-h-32 min-h-10 flex-1 resize-none rounded-2xl border border-line bg-sunken px-3 py-2 text-[16px] outline-none focus:border-brand-400 sm:text-[14px]"
                   data-team-input

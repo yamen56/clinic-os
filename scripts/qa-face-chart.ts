@@ -151,9 +151,14 @@ async function main() {
     await page.locator("[data-face-preset='upper']").click();
     await page.waitForSelector("[data-face-panel='areas']", { timeout: 10000 });
     check((await page.locator("[data-zone][aria-pressed='true']").count()) === 4, "Upper face selects forehead, glabella and both crow's feet");
+    const usual = await page.locator("[data-face-treatment]").evaluateAll((els) => els.map((e) => e.getAttribute("data-face-treatment")));
+    check(usual.includes("aes_toxin") && !usual.includes("aes_filler"), "what is usual there is offered first: the toxin, not a filler", usual.join(","));
+    await page.locator("[data-face-all-treatments]").click();
     const offered = await page.locator("[data-face-treatment]").evaluateAll((els) => els.map((e) => e.getAttribute("data-face-treatment")));
-    check(offered.indexOf("aes_toxin") >= 0 && offered.indexOf("aes_toxin") < offered.indexOf("aes_filler"), "Botulinum toxin, usual there, comes before a filler", offered.join(","));
-    check(offered.includes("aes_filler"), "and a filler can still be recorded there");
+    check(offered.indexOf("aes_toxin") >= 0 && offered.indexOf("aes_toxin") < offered.indexOf("aes_filler"), "and All treatments shows the rest after it", offered.join(","));
+    await page.locator("[data-face-find]").fill("fille");
+    check((await page.locator("[data-face-treatment]").count()) === 1 && (await page.locator("[data-face-treatment='aes_filler']").count()) === 1, "a treatment is found by typing part of its name");
+    await page.locator("[data-face-find]").fill("");
     await page.locator("[data-face-treatment='aes_toxin']").click();
     await page.waitForSelector("[data-face-panel='record']", { timeout: 10000 });
     check((await page.locator("[data-face-panel='record']").innerText()).includes("54u in total"), "units start where they usually do: 10 + 20 + 12 + 12 = 54");
