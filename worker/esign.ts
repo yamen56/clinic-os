@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { withSystem } from "./db";
+import { dailyWindowOpen, rest, resting } from "./daily";
 import { registerJobHandler } from "./jobs";
 import { startRun } from "./automations";
 import { generateFinalPdf } from "../src/lib/esign/pdf";
@@ -238,7 +239,7 @@ export async function sendPendingDigest(): Promise<void> {
  * "Document unsigned after X days" — the automation trigger, evaluated once a
  * day per clinic so a flow can chase what reminders did not.
  */
-export async function sweepUnsignedDocuments(): Promise<void> {
+export async function sweepUnsignedDocuments(opts: { force?: boolean } = {}): Promise<void> {
   await withSystem(async (c) => {
     const autos = await c.query(
       `select a.id, a.clinic_id, a.trigger_config, cl.timezone from automations a
@@ -247,16 +248,18 @@ export async function sweepUnsignedDocuments(): Promise<void> {
     );
     for (const auto of autos.rows) {
       const local = DateTime.now().setZone(auto.timezone);
-      if (local.hour !== 10 || local.minute > 2) continue;
+      if (!opts.force && (!dailyWindowOpen(local, 10) || resting(`unsigned:${auto.id}`))) continue;
       const days = Number((auto.trigger_config ?? {}).days ?? 3);
       const docs = await c.query(
-        `select id, patient_id from documents
-         where clinic_id = $1 and status in ('sent', 'partially_signed')
-           and sent_at is not null
-           and sent_at::date = (current_date - ($2::text || ' days')::interval)::date
+        `select d.id, d.patient_id from documents d
+         where d.clinic_id = $1 and d.status in ('sent', 'partially_signed')
+           and d.sent_at is not null
+           and (d.sent_at at time zone $3)::date = $4::date - $2::int
+           and not exists (select 1 from automation_runs ar where ar.automation_id = $5 and ar.document_id = d.id)
          limit 200`,
-        [auto.clinic_id, days]
+        [auto.clinic_id, days, auto.timezone, local.toISODate(), auto.id]
       );
+      let started = 0;
       for (const d of docs.rows) {
         const runId = await startRun(c, auto.clinic_id, auto.id, {
           patientId: d.patient_id,
@@ -268,8 +271,10 @@ export async function sweepUnsignedDocuments(): Promise<void> {
              values ($1, 'automation:advance', $2, $3) on conflict (dedupe_key) do nothing`,
             [auto.clinic_id, JSON.stringify({ runId }), `docunsigned:${auto.id}:${d.id}`]
           );
+          started++;
         }
       }
+      rest(`unsigned:${auto.id}`, started);
     }
   });
 }

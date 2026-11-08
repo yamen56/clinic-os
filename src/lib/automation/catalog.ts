@@ -61,6 +61,14 @@ const TRIGGER_SCHEMAS = {
   tag_removed: z.object({ tag: text(40) }),
   birthday: z.object({}),
   after_last_visit: z.object({ days: z.number().int().min(1).max(3650).default(180) }),
+  /*
+    The doctor's own recall (2026-11-08): the finish sheet's "come back in N
+    days" (migration 0088), on the day it falls due — or `days_before` it, to
+    leave time to book — for a patient nobody has booked since. The run is
+    about the visit that asked for it, so "same doctor" is the one the doctor
+    named for the next visit.
+  */
+  next_visit_due: z.object({ days_before: z.number().int().min(0).max(30).default(2) }),
   inbound_message: z.object({
     mode: z.enum(["any", "keywords", "first_message"]).default("keywords"),
     keywords: z.array(z.string().min(1).max(60)).max(30).default([]),
@@ -117,6 +125,7 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "tag_removed", category: "patients", provides: ["patient"], module: "patients" },
   { key: "birthday", category: "patients", provides: ["patient"], module: "patients", timed: true },
   { key: "after_last_visit", category: "patients", provides: ["patient"], module: "patients", timed: true },
+  { key: "next_visit_due", category: "appointments", provides: appt, module: "calendar", timed: true },
   { key: "prescription_sent", category: "patients", provides: ["patient"], module: "patients" },
   { key: "treatment_done", category: "treatments", provides: ["patient", "treatment"], module: "dental" },
   { key: "treatment_unbooked", category: "treatments", provides: ["patient", "treatment"], module: "dental", timed: true },
@@ -341,9 +350,10 @@ const STEP_SCHEMAS = {
     {{appointment.date}}.
   */
   book_appointment: z.object({
-    service: z.enum(["trigger", "pick"]).default("trigger"),
+    /* "last": the patient's most recent finished visit — what a recall with no appointment of its own books. */
+    service: z.enum(["trigger", "last", "pick"]).default("trigger"),
     service_id: z.string().default(""),
-    doctor: z.enum(["trigger", "any", "pick"]).default("trigger"),
+    doctor: z.enum(["trigger", "last", "any", "pick"]).default("trigger"),
     member_id: z.string().default(""),
     after_days: z.number().int().min(0).max(730).default(7),
     from: z.enum(["now", "appointment"]).default("now"),
@@ -355,9 +365,9 @@ const STEP_SCHEMAS = {
   }),
   /* Puts the patient on the waitlist, so the desk and the waitlist's offers find them when a time frees up. */
   add_to_waitlist: z.object({
-    service: z.enum(["trigger", "pick", "none"]).default("trigger"),
+    service: z.enum(["trigger", "last", "pick", "none"]).default("trigger"),
     service_id: z.string().default(""),
-    doctor: z.enum(["trigger", "any", "pick"]).default("trigger"),
+    doctor: z.enum(["trigger", "last", "any", "pick"]).default("trigger"),
     member_id: z.string().default(""),
     within_days: z.number().int().min(1).max(365).default(30),
     note: text(300),
@@ -587,6 +597,11 @@ export function defaultSettingsFor(trigger: string): FlowSettings {
   if (trigger === "treatment_done") s.reentry = "always";
   // Booking the visit is the whole point of the reminder; once it is booked, say nothing more.
   if (trigger === "treatment_unbooked") {
+    s.reentry = "always";
+    s.exit_on = ["appointment_booked"];
+  }
+  // The visit it is about is over; what ends the chase is the patient booking (a booking the run makes itself does not count).
+  if (trigger === "next_visit_due") {
     s.reentry = "always";
     s.exit_on = ["appointment_booked"];
   }

@@ -110,4 +110,15 @@ export const RECIPES_ON_BY_DEFAULT = new Set([
   */
   "confirm_on_booking",
   "reminder_24h",
+  /*
+    The doctor's own recall (2026-11-08): it only ever writes when a doctor
+    set "come back in…" on the finish sheet and nothing is booked — the
+    clinic asked for it at the chair, so it is on from the first day.
+  */
+  "next_visit_due_book",
+  /*
+    A psychiatry clinic's reminder: installed in place of reminder_24h, which
+    names the clinic and the service on a lock screen (see clinic-provision).
+  */
+  "psych_discreet_reminder",
 ]);

@@ -283,7 +283,7 @@ export function BuilderClient({
       of from a step that is wrong the moment it is added.
     */
     if ((type === "book_appointment" || type === "add_to_waitlist") && !providesAfter(provides, s.nodes, s.edges, req.from, req.handle).includes("appointment")) {
-      Object.assign(config, { service: "pick", doctor: "any" }, type === "book_appointment" ? { from: "now", part_of_day: "any" } : {});
+      Object.assign(config, { service: "last", doctor: "last" }, type === "book_appointment" ? { from: "now", part_of_day: "any" } : {});
     }
     const node: FlowNode = { id: newId(), type, config, position: null, label: "" };
     let nodes = s.nodes;

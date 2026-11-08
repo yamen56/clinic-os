@@ -162,7 +162,7 @@ function stepIssues(node: FlowNode, provides: Ctx[], hasReplyStep: boolean): Iss
     }
     case "book_appointment":
     case "add_to_waitlist": {
-      // "The same as the appointment" only means something when there is one.
+      // "The same as the appointment" only means something when there is one. "The last visit" needs only the patient.
       const fromAppt =
         cfg.service === "trigger" ||
         cfg.doctor === "trigger" ||

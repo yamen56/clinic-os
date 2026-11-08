@@ -91,7 +91,7 @@ export default async function AutomationsPage({
     ).rows;
     const recipes = (
       await c.query(
-        `select key, name, name_ar, trigger_type, trigger_config, steps, specialty
+        `select key, name, name_ar, description, description_ar, trigger_type, trigger_config, steps, specialty
            from recipe_templates where active order by sort, key`
       )
     ).rows;
@@ -103,6 +103,8 @@ export default async function AutomationsPage({
     key: r.key,
     name: r.name,
     name_ar: r.name_ar,
+    about: String(r.description ?? ""),
+    about_ar: String(r.description_ar ?? ""),
     trigger: r.trigger_type,
     triggerConfig: normalizeTriggerConfig(r.trigger_type, r.trigger_config),
     steps: stepTypes(Array.isArray(r.steps) ? (r.steps as RecipeStep[]) : []),

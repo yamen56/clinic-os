@@ -166,6 +166,11 @@ export function TriggerInspector({
           <NumberInput dir="ltr" min={1} max={3650} value={Number(config.days ?? 180)} fallback={180} onChange={(v) => set({ days: Math.round(v) })} />
         </Field>
       )}
+      {trigger === "next_visit_due" && (
+        <Field label={f.daysBeforeDue} hint={f.daysBeforeDueHint}>
+          <NumberInput dir="ltr" min={0} max={30} value={Number(config.days_before ?? 2)} fallback={0} onChange={(v) => set({ days_before: Math.round(v) })} />
+        </Field>
+      )}
       {trigger === "invoice_unpaid" && (
         <Field label={f.daysAfterSent}>
           <NumberInput dir="ltr" min={1} max={365} value={Number(config.days ?? 3)} fallback={3} onChange={(v) => set({ days: Math.round(v) })} />
@@ -607,8 +612,8 @@ function BookingFields({
   const b = t.automations.flow.book;
   const str = (k: string) => String(cfg[k] ?? "");
   const doctors = lookups.members.filter((m) => m.role === "doctor");
-  const serviceModes = (booking ? (["trigger", "pick"] as const) : (["trigger", "pick", "none"] as const)).filter((m) => m !== "trigger" || hasAppt);
-  const doctorModes = (["trigger", "any", "pick"] as const).filter((m) => m !== "trigger" || hasAppt);
+  const serviceModes = (booking ? (["trigger", "last", "pick"] as const) : (["trigger", "last", "pick", "none"] as const)).filter((m) => m !== "trigger" || hasAppt);
+  const doctorModes = (["trigger", "last", "any", "pick"] as const).filter((m) => m !== "trigger" || hasAppt);
   const parts = (["any", "morning", "afternoon", "evening", "same_time"] as const).filter((p) => p !== "same_time" || hasAppt);
 
   return (

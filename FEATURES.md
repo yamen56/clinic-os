@@ -1040,7 +1040,7 @@ action's enum had never heard of, so those flows could not be saved).
 | Trigger | Fires on | Filters |
 |---|---|---|
 | `appointment_created` | Appointment is booked | services, doctors, booked by (team / online / AI), first visit only |
-| `before_appointment` | X hours before (`hours`, default 24) | services, doctors |
+| `before_appointment` | X hours before (`hours`, default 24). Caught up to 6 hours late (a tick gap or a deploy), and an appointment **booked inside the lead time** (at 3pm for 10am tomorrow) is reminded an hour after booking while a quarter of the lead is still ahead, for leads of 6 hours or more. A run counts as "already reminded" only inside the window leading up to the appointment's *current* time, so a rescheduled appointment is reminded again. | services, doctors |
 | `appointment_status_changed` | Confirmed / finished / cancelled / no-show. The picker offers these as "Visit is finished", "Appointment is cancelled"… | status, services, doctors |
 | `appointment_rescheduled` | Moved to another time or doctor | services, doctors |
 | `patient_arrived` | Marked arrived on the board, walk-ins included (once per appointment) | services, doctors |
@@ -1048,8 +1048,9 @@ action's enum had never heard of, so those flows could not be saved).
 | `waitlist_booked` | A waitlist offer turned into a booking | |
 | `patient_created` | New patient file | source |
 | `tag_added` / `tag_removed` | Tag change — from the desk **or** a flow (the desk used to fire nothing) | one tag, or any |
-| `birthday` | Patient's birthday, 09:00 | |
-| `after_last_visit` | X days after the last finished visit (`days`, default 180) | |
+| `birthday` | Patient's birthday, from 09:00 | |
+| `after_last_visit` | X days after the last finished visit (`days`, default 180), from 10:00, in the clinic's calendar | |
+| `next_visit_due` | The finish sheet's "come back in N days" (0088) falls due — `days_before` it (default 2) — and nothing is booked since; the run is about that visit, so "same doctor" is the one named for the next visit | days before |
 | `prescription_sent` | A prescription is sent (once per prescription) | |
 | `inbound_message` | A patient writes | any message / keywords (whole words, Arabic-normalised, ١٢٣ = 123) / first message from a new number |
 | `conversation_unanswered` | A patient waited N minutes for a reply (only inside the sending window) | minutes |
@@ -1133,7 +1134,10 @@ not switched on.
 - **Replies**: an inbound message first goes to runs waiting for one — claimed with a
   conditional update so a reply and a timeout cannot both win. An answered message does not
   start message flows and does not wake the AI receptionist (it would answer a bare "1").
-- **A send is additionally deduplicated by body + attachment** per context.
+- **A send is additionally deduplicated by body + attachment** per context — within the same run, or the last 24 hours. (It used to be for ever, so a message that legitimately repeats — next year's birthday, the second recall, a second extraction's aftercare — was sent once in a patient's life and then skipped as "already sent".)
+- **Daily triggers** (recall, next visit, birthday, unpaid invoice, stalled treatment, unsigned document) run on every tick from their hour until 20:00 local, guarded by "a run already started today for this", and rest 30 minutes per flow once a pass starts nothing (`worker/daily.ts`). They used to fire only in the first three minutes of the hour, so a deploy or a slow tick then lost the day. Scheduler-started runs are advanced by a job keyed by the run (`advance:<runId>`): job keys are unique for ever, and a reminder keyed by appointment never advanced after a reschedule.
+- **Stale automation messages are cancelled, not sent** (`worker/outbound.ts`): one written before its appointment began, once that appointment has started, and anything queued 72 hours ago — a disconnected phone or the daily cap must not deliver "see you tomorrow" after the visit. Status `cancelled` with the reason in `error`.
+- **Empty values drop their whole line**: a line whose every `{{value}}` came back empty goes, lead-in and emoji included ("Rate us on Google: …" without a review link), shared with the system messages.
 - Automated sends land inside the clinic's **sending window**.
 - **Test run** uses the patient's own next appointment, open invoice, latest document and thread.
 
@@ -1147,17 +1151,39 @@ per-step 30-day counts, a list of problems that pans to the step. Tabs: Flow · 
 
 ### Templates
 
-`recipe_templates`, seeded from `scripts/seed-recipes.ts` (19 general) and
-`scripts/specialty-recipes.ts` (37 across 14 specialties), offered in the **New automation**
-gallery — the clinic's own field first. New clinics install only `RECIPES_ON_BY_DEFAULT`
-(`welcome_new_patient` and the three document alerts, switched on); everything else is a
-choice, not an inheritance. Clinics created before keep the copies they already have.
+`recipe_templates`, seeded from `scripts/seed-recipes.ts` (20 general) and
+`scripts/specialty-recipes.ts` (39 across 14 specialties), offered in the **New automation**
+gallery — the clinic's own field first. Each card says **what problem it solves and what the
+patient receives** (`description` / `description_ar`, migration 0101), not only its name. A
+template removed from the code is set `active = false` by the seeder and leaves the gallery.
+New clinics install `RECIPES_ON_BY_DEFAULT` switched on: the welcome (team-added patients
+only), the booking confirmation, the day-before reminder, the doctor's follow-up
+(`next_visit_due_book`) and the three document tasks; a psychiatry clinic gets the discreet
+reminder instead of the standard one. Clinics created before keep the copies they already have.
+
+**Every template is run end to end by `scripts/qa-recipes.ts`** in a throwaway database (so a
+day-old worker on the main one cannot take its jobs): its trigger fired, waits fast-forwarded,
+replies sent, and the message, booking, task or tag read back.
+
+**Reviewed 2026-11-08** against "does it solve a real problem, reach the right patients, and
+work": recalls end on **"reply 1"** (`scripts/recipe-kit.ts`), which books the first free time
+like the last visit, waitlists when nothing is free and passes any other answer to a person;
+recalls that fit some patients filter by tag (`تقويم` — put on automatically when braces or
+aligners are charted —, `حامل`, `مزمن`, `جلسات ليزر`) or age (vaccines, under two) instead of
+writing to everybody; preparation that needs days (retinoids, a driver after dilation,
+fasting) goes out **at booking**, not beside the day-before reminder; the plastic-surgery
+pre-op is on the `موعد عملية` tag, not every appointment, and never tells a patient to stop a
+medicine on their own. Removed: "tell the doctor the patient arrived" (the built-in arrival
+chime already does), the ENT "allergy season" recall (it fired 180 days after any visit,
+whatever the season), and the two specialty "results ready" copies (one general template now).
+The document and booking-approval templates create tasks only: the events already notify.
 
 Notable general templates: a day-before reminder where "1" confirms the appointment and "2"
-flags the chat for reception; a post-visit 1–5 rating that sends happy patients to Google and
-unhappy ones to the clinic admin; no-show and cancellation rebooking with the booking link,
-skipped if they have already rebooked; the doctor told when their patient arrives; reception
-told when a chat has waited 15 minutes; a check-in three days after a prescription.
+gives reception a call to make; the doctor's follow-up, booked by a reply; a post-visit 1–5
+rating that sends happy patients to Google and unhappy ones to the owner; no-show and
+cancellation rebooking by a reply, skipped if they have already rebooked; results ready, booked
+by a reply; reception told when a chat has waited 15 minutes; a check-in three days after a
+prescription.
 
 The two **patient-facing document reminders (24h / 72h) are built in, not recipes** — they
 run off the clinic's own "first reminder after" setting so they're hour-accurate and can't be

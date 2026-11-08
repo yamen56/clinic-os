@@ -286,13 +286,32 @@ export type Lang = "ar" | "en";
  * only when it held a token and rendered to nothing, so a deliberate blank line
  * between paragraphs survives.
  */
+/*
+  A line goes when every value it asked for came back empty and those values
+  end it — whatever is left is a label or a lead-in with nothing after it.
+  "📍 {{clinic.address}}" for a clinic with no address used to leave a lone
+  "📍", and "Rate us on Google: {{clinic.review_link}}" without a review link
+  sent the invitation with nothing to tap. An empty value in the middle of a
+  sentence ("your tooth ({{treatment.tooth}}) still needs…") keeps the
+  sentence, and a line with one value filled keeps what it has.
+*/
 export function renderSystemMessage(template: string, vars: Record<string, string>): string {
   return template
     .split("\n")
     .map((line) => {
-      const hadToken = /\{\{\s*[\w.]+\s*\}\}/.test(line);
-      const out = line.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, path: string) => vars[path] ?? "");
-      return hadToken && !out.trim() ? null : out;
+      let tokens = 0;
+      let filled = 0;
+      let lastEnd = 0;
+      const out = line.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (m: string, path: string, at: number) => {
+        tokens++;
+        lastEnd = at + m.length;
+        const v = vars[path] ?? "";
+        if (v.trim()) filled++;
+        return v;
+      });
+      // Only spaces, punctuation or emoji after the last value: the empty values ended the line.
+      const trailing = !/[\p{L}\p{N}]/u.test(line.slice(lastEnd));
+      return tokens > 0 && filled === 0 && trailing ? null : out;
     })
     .filter((line): line is string => line !== null)
     .join("\n")

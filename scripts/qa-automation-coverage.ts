@@ -100,9 +100,16 @@ async function main() {
     renderSystemMessage("{{a}}\n\n{{b}}", { a: "1", b: "2" }) === "1\n\n2"
   );
   check(
-    "a line with text around an empty variable is kept",
-    renderSystemMessage("total: {{n}}", { n: "" }) === "total:",
-    renderSystemMessage("total: {{n}}", { n: "" })
+    // Since 2026-11-08: a label left with nothing after it goes ("Rate us on Google:" with no link)…
+    "a label whose only value is empty goes with it",
+    renderSystemMessage("a\ntotal: {{n}}", { n: "" }) === "a",
+    JSON.stringify(renderSystemMessage("a\ntotal: {{n}}", { n: "" }))
+  );
+  check(
+    // …but a sentence that goes on after an empty value is kept.
+    "text that goes on after an empty value is kept",
+    renderSystemMessage("your tooth ({{t}}) needs a crown", { t: "" }) === "your tooth () needs a crown",
+    renderSystemMessage("your tooth ({{t}}) needs a crown", { t: "" })
   );
 
   /* ================================================================== fixture */

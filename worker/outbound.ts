@@ -167,6 +167,39 @@ export async function processOnce() {
         if (!row) return null;
 
         /*
+          An automation's message that went stale while it waited.
+
+          Queued messages wait out a disconnected phone, the daily cap and the
+          warm-up ramp (both of which push to tomorrow's window), and the
+          sending hours. A reminder for this morning's appointment that
+          finally leaves this afternoon is worse than none: the patient reads
+          "see you tomorrow" about a visit that has passed. So one written
+          before its appointment began is cancelled once that appointment has
+          started, and anything an automation queued three days ago is no
+          longer news either. Cancelled, with the reason, where the thread
+          shows it — not silently dropped.
+        */
+        if (row.sender_kind === "automation" && row.automation_run_id) {
+          const stale = (
+            await c.query(
+              `select m.created_at < now() - interval '72 hours' as old,
+                      coalesce(ap.starts_at <= now() and m.created_at < ap.starts_at, false) as passed
+                 from messages m
+                 left join automation_runs r on r.id = m.automation_run_id
+                 left join appointments ap on ap.id = r.appointment_id
+                where m.id = $1`,
+              [row.id]
+            )
+          ).rows[0];
+          if (stale?.old || stale?.passed) {
+            const why = stale.passed ? "appointment_passed" : "expired";
+            await c.query(`update messages set status = 'cancelled', error = $2 where id = $1`, [row.id, why]);
+            console.log(`[outbound ${clinicId}] automation message ${row.id} cancelled: ${why}`);
+            return null;
+          }
+        }
+
+        /*
           Daily cap: push overflow to the next day's window.
 
           The number's own age can lower this. A newly linked number ramps from

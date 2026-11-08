@@ -761,15 +761,35 @@ const DAY_PARTS: Record<string, [number, number]> = {
   evening: [17 * 60, 24 * 60],
 };
 
-/** The appointment the run is about, as the booking steps copy it. */
-async function runAppointment(env: Env) {
+type VisitRef = { id: string; service_id: string | null; doctor_member_id: string | null; starts_at: Date };
+
+/**
+ * The appointment the run is about, as the booking steps copy it. Its doctor
+ * is the one the finish sheet named for the next visit when it named one —
+ * "same doctor" after a hand-off means who the patient should see next.
+ */
+async function runAppointment(env: Env): Promise<VisitRef | null> {
   const { c, run } = env;
   if (!run.appointment_id) return null;
   const r = await c.query(
-    `select id, service_id, doctor_member_id, starts_at from appointments where id = $1 and clinic_id = $2`,
+    `select id, service_id, coalesce(next_visit_member_id, doctor_member_id) as doctor_member_id, starts_at
+       from appointments where id = $1 and clinic_id = $2`,
     [run.appointment_id, run.clinic_id]
   );
-  return (r.rows[0] as { id: string; service_id: string | null; doctor_member_id: string | null; starts_at: Date } | undefined) ?? null;
+  return (r.rows[0] as VisitRef | undefined) ?? null;
+}
+
+/** The patient's most recent finished visit: what a recall with no appointment of its own books again. */
+async function lastVisit(env: Env): Promise<VisitRef | null> {
+  const { c, run } = env;
+  if (!run.patient_id) return null;
+  const r = await c.query(
+    `select id, service_id, doctor_member_id, starts_at from appointments
+      where clinic_id = $1 and patient_id = $2 and status = 'completed' and starts_at < now()
+      order by starts_at desc limit 1`,
+    [run.clinic_id, run.patient_id]
+  );
+  return (r.rows[0] as VisitRef | undefined) ?? null;
 }
 
 /**
@@ -834,19 +854,34 @@ async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<
     }
   }
 
-  const serviceId = cfg.service === "pick" ? String(cfg.service_id ?? "") : (prior?.service_id ?? "");
+  const last = cfg.service === "last" || cfg.doctor === "last" ? await lastVisit(env) : null;
+  const serviceId =
+    cfg.service === "pick" ? String(cfg.service_id ?? "") : cfg.service === "last" ? (last?.service_id ?? "") : (prior?.service_id ?? "");
   const svc = UUID.test(serviceId)
     ? (await c.query(`select id, duration_min from services where id = $1 and clinic_id = $2 and active`, [serviceId, run.clinic_id])).rows[0]
     : null;
   if (!svc) return take("no_slot", "skipped", { reason: "no_service" });
+  /*
+    The service's own length, which is what the free-time search measured.
+    The finish sheet's "next visit: 60 min" is not used here: a slot found for
+    a 30-minute service is not known to be free for an hour.
+  */
+  const minutes = Number(svc.duration_min) || 30;
 
-  let doctorId: string | null = cfg.doctor === "pick" ? String(cfg.member_id ?? "") : cfg.doctor === "trigger" ? (prior?.doctor_member_id ?? null) : null;
+  let doctorId: string | null =
+    cfg.doctor === "pick"
+      ? String(cfg.member_id ?? "")
+      : cfg.doctor === "trigger"
+        ? (prior?.doctor_member_id ?? null)
+        : cfg.doctor === "last"
+          ? (last?.doctor_member_id ?? null)
+          : null;
   if (doctorId) {
     const active = UUID.test(doctorId)
       ? await c.query(`select 1 from clinic_members where id = $1 and clinic_id = $2 and active`, [doctorId, run.clinic_id])
       : null;
     if (!active?.rowCount) {
-      // A chosen doctor who has left is the flow's mistake; the previous visit's doctor having left is not — anyone will do.
+      // A chosen doctor who has left is the flow's mistake; a previous visit's doctor having left is not — anyone will do.
       if (cfg.doctor === "pick") return take("no_slot", "skipped", { reason: "no_doctor" });
       doctorId = null;
     }
@@ -906,7 +941,7 @@ async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<
   if (!slot) return take("no_slot", "ok", { reason: "no_free_time", from: first.toISODate(), days: span });
 
   const start = DateTime.fromISO(slot.startISO);
-  const end = start.plus({ minutes: Number(svc.duration_min) || 30 });
+  const end = start.plus({ minutes });
   const flow = (await c.query(`select name from automations where id = $1`, [run.automation_id])).rows[0]?.name as string | undefined;
   const note =
     clinic.default_locale === "en"
@@ -948,8 +983,11 @@ async function addToWaitlist(env: Env, cfg: Record<string, unknown>): Promise<St
   const { c, run } = env;
   if (!run.patient_id) return next("skipped", { reason: "no_patient" });
   const prior = await runAppointment(env);
-  const rawService = cfg.service === "pick" ? String(cfg.service_id ?? "") : cfg.service === "trigger" ? (prior?.service_id ?? "") : "";
-  const rawDoctor = cfg.doctor === "pick" ? String(cfg.member_id ?? "") : cfg.doctor === "trigger" ? (prior?.doctor_member_id ?? "") : "";
+  const last = cfg.service === "last" || cfg.doctor === "last" ? await lastVisit(env) : null;
+  const from = (mode: unknown, picked: unknown, key: "service_id" | "doctor_member_id"): string =>
+    mode === "pick" ? String(picked ?? "") : mode === "trigger" ? (prior?.[key] ?? "") : mode === "last" ? (last?.[key] ?? "") : "";
+  const rawService = from(cfg.service, cfg.service_id, "service_id");
+  const rawDoctor = from(cfg.doctor, cfg.member_id, "doctor_member_id");
   const serviceId = UUID.test(rawService)
     ? ((await c.query(`select id from services where id = $1 and clinic_id = $2`, [rawService, run.clinic_id])).rows[0]?.id ?? null)
     : null;
@@ -1058,8 +1096,17 @@ async function sendWhatsapp(env: Env, cfg: Record<string, unknown>): Promise<Ste
     conversationId = conv.rows[0].id as string;
   }
 
-  // Idempotent across retries AND replayed triggers: the same automation never
-  // sends the same text twice for the same patient/appointment/invoice.
+  /*
+    Idempotent across retries and replayed triggers: the same automation does
+    not send the same text twice for the same patient, appointment and invoice
+    within a day — this run, or a replay of the event that started it.
+
+    Within a day, not for ever. With no limit, every message that legitimately
+    repeats was sent once in the patient's life and then silently skipped as
+    "already sent": next year's birthday greeting, the second six-month recall,
+    the aftercare for a second extraction, the monthly braces reminder. That is
+    a large part of "the automations don't work".
+  */
   const existing = await c.query(
     `select 1 from messages m
      join automation_runs r on r.id = m.automation_run_id
@@ -1070,10 +1117,11 @@ async function sendWhatsapp(env: Env, cfg: Record<string, unknown>): Promise<Ste
        and r.appointment_id is not distinct from $5
        and r.invoice_id is not distinct from $6
        and r.conversation_id is not distinct from $8
+       and (r.id = $9 or m.created_at > now() - interval '24 hours')
      limit 1`,
     [
       run.clinic_id, body, run.automation_id, run.patient_id, run.appointment_id, run.invoice_id,
-      media?.path ?? null, run.conversation_id,
+      media?.path ?? null, run.conversation_id, run.id,
     ]
   );
   if (existing.rowCount) return next("skipped", { reason: "already_sent" });

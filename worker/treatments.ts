@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { dailyWindowOpen, rest, resting } from "./daily";
 import { withSystem } from "./db";
 import { licensed } from "./features";
 import { startRun } from "./automations";
@@ -35,7 +36,7 @@ export async function unbookedTreatments(opts: { force?: boolean } = {}) {
     );
     for (const auto of autos.rows) {
       const localNow = DateTime.now().setZone(auto.timezone);
-      if (!opts.force && (localNow.hour !== 11 || localNow.minute > 2)) continue;
+      if (!opts.force && (!dailyWindowOpen(localNow, 11) || resting(`unbooked:${auto.id}`))) continue;
       const cfg = normalizeTriggerConfig("treatment_unbooked", auto.trigger_config);
       const days = Number(cfg.days ?? 7);
       const stalled = await c.query(
@@ -67,6 +68,7 @@ export async function unbookedTreatments(opts: { force?: boolean } = {}) {
         byPatient.set(r.patient_id, p);
       }
       const sep = auto.default_locale === "en" ? ", " : "، ";
+      let started = 0;
       for (const [patientId, p] of byPatient) {
         /*
           Once a day per patient. The 11:00 window is up to three ticks, and a
@@ -82,6 +84,7 @@ export async function unbookedTreatments(opts: { force?: boolean } = {}) {
           payload: { treatment: { name: p.names.join(sep), tooth: p.teeth.join(", ") } },
         });
         if (runId) {
+          started++;
           await c.query(
             `insert into jobs (clinic_id, kind, payload, dedupe_key)
              values ($1, 'automation:advance', $2, $3) on conflict (dedupe_key) do nothing`,
@@ -89,6 +92,7 @@ export async function unbookedTreatments(opts: { force?: boolean } = {}) {
           );
         }
       }
+      if (!opts.force) rest(`unbooked:${auto.id}`, started);
     }
   });
 }

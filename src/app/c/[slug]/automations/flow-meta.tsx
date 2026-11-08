@@ -45,6 +45,7 @@ export const TRIGGER_ICONS: Record<string, Icon> = {
   tag_removed: Tags,
   birthday: Cake,
   after_last_visit: History,
+  next_visit_due: CalendarSearch,
   prescription_sent: Pill,
   inbound_message: MessageCircle,
   conversation_unanswered: MessageSquareWarning,
@@ -205,6 +206,7 @@ export function stepSummary(dict: Dict, type: string, raw: Record<string, unknow
       if (cfg.service === "pick") bits.push(name(look.services.find((s) => s.id === str("service_id"))) || "…");
       if (cfg.doctor === "pick") bits.push(look.members.find((m) => m.id === str("member_id"))?.name ?? "…");
       else if (cfg.doctor === "any") bits.push(b.summaryAny);
+      else if (cfg.doctor === "last" || cfg.service === "last") bits.push(b.summaryLast);
       if (type === "book_appointment") {
         bits.push(fill(b.summaryDays, { n: Number(cfg.after_days) || 0 }));
         if (cfg.part_of_day !== "any") bits.push((b.parts as Record<string, string>)[str("part_of_day")] ?? "");
@@ -252,6 +254,10 @@ export function triggerSummary(
     if (preset) title = (t.flow.presets as Record<string, string>)[preset];
   }
   if (type === "before_appointment") bits.push(`${cfg.hours ?? 24} ${t.flow.units.hours}`);
+  if (type === "next_visit_due") {
+    const n = Number(cfg.days_before ?? 2);
+    bits.push(n > 0 ? fill(t.flow.daysBeforeShort, { n }) : t.flow.onDueDay);
+  }
   if (type === "after_last_visit" || type === "invoice_unpaid" || type === "document_unsigned" || type === "treatment_unbooked") {
     bits.push(`${cfg.days ?? ""} ${t.flow.units.days}`);
   }

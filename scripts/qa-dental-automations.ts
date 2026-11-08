@@ -178,7 +178,8 @@ async function main() {
 
     // What the patient will read, with the run's own treatment.
     const ctx = await loadRunContext(db as unknown as PoolClient, { clinicId: clinic.id, patientId: pC, treatment: runC.context?.trigger?.treatment });
-    const crownMsg = (ALL_RECIPES.find((r) => r.key === "dental_crown_after_root_canal")!.steps[1].children!.no![0].config!.message as string);
+    // Found by what it is, not where it sits: the recipe's shape changes as it is improved.
+    const crownMsg = ALL_RECIPES.find((r) => r.key === "dental_crown_after_root_canal")!.steps.find((s) => s.step_type === "send_whatsapp")!.config!.message as string;
     const rendered = renderMessage(crownMsg, ctx);
     check(rendered.includes("(36)") && rendered.includes("Cyrine"), "the message names the patient and the tooth", rendered.slice(0, 120));
 
@@ -213,9 +214,13 @@ async function main() {
     check((await page.locator("main").innerText()).includes("Root canals"), "with the kinds a dentist would name");
     await page.screenshot({ path: "scripts/qa-shots/dental-result/automation-builder.png" });
     await page.goto(`${BASE}/c/${slug}/automations`, { timeout: 180000 });
-    await page.waitForLoadState("networkidle");
-    const list = await page.locator("main").innerText();
-    check(["احجز جلستك التالية", "التلبيسة بعد علاج العصب", "تعليمات بعد الخلع"].every((n) => list.includes(n)), "the automations list shows the three dental flows", list.slice(0, 200));
+    // The names the templates carry now, not copies of them that go stale when a template is renamed.
+    const names = ["dental_next_visit_unbooked", "dental_crown_after_root_canal", "dental_post_extraction"].map((k) => ALL_RECIPES.find((r) => r.key === k)!.name_ar);
+    const listed = await until(async () => {
+      const list = await page.locator("main").innerText();
+      return names.every((n) => list.includes(n));
+    }, 60000);
+    check(listed, "the automations list shows the three dental flows", names.join(" · "));
   } finally {
     await browser.close();
     await db.end();

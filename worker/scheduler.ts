@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { dailyWindowOpen, rest, resting } from "./daily";
 import { withSystem } from "./db";
 import { startRun } from "./automations";
 import { sweepExpiredDocuments, sweepUnsignedDocuments, sendPendingDigest } from "./esign";
@@ -81,7 +82,7 @@ async function wakeSleepingRuns() {
  * number would abort the whole statement: before, a hand-edited config broke one
  * clinic's reminders, and it must not now break everybody's.
  */
-async function appointmentReminders() {
+export async function appointmentReminders() {
   await withSystem(async (c) => {
     const due = await c.query(
       `with reminder as (
@@ -101,24 +102,55 @@ async function appointmentReminders() {
          join appointments ap
            on ap.clinic_id = r.clinic_id
           /*
-            The window written as a range on starts_at rather than on
-            starts_at - hours, which is the same arithmetic and a completely
-            different query plan. Subtracting inside the comparison makes the
-            column non-indexable, so Postgres read every future appointment on
-            the platform and filtered them one by one; this way each reminder
-            does a ninety-second index range scan over
-            appointments_clinic_time_idx and touches nothing else.
+            Everything from now to the lead time ahead, as a range on
+            starts_at so it stays an index range scan over
+            appointments_clinic_time_idx (subtracting inside the comparison
+            made Postgres read every future appointment on the platform).
           */
-          and ap.starts_at >  now() + (r.hours * interval '1 hour') - interval '90 seconds'
+          and ap.starts_at > now()
           and ap.starts_at <= now() + (r.hours * interval '1 hour')
         where ap.status in ('scheduled', 'confirmed')
-          -- Redundant above unless somebody sets a lead time under 90 seconds.
-          and ap.starts_at > now()
           -- Already in the waiting room: "see you in an hour" would be read there.
           and ap.arrived_at is null
           -- Only the services and doctors this reminder is for, when it names any.
           and (jsonb_array_length(r.services) = 0 or r.services ? ap.service_id::text)
           and (jsonb_array_length(r.doctors) = 0 or r.doctors ? ap.doctor_member_id::text)
+          /*
+            Which of them are due. This used to be a ninety-second window
+            exactly the lead time ahead, and two kinds of appointment never
+            passed through it:
+
+            - One booked inside the lead time — at 3pm for ten tomorrow morning
+              — which is a very ordinary booking and got no 24-hour reminder at
+              all. It now gets it once an hour has passed since booking (so it
+              does not land on top of the confirmation), while a quarter of the
+              lead time is still ahead, for reminders of six hours or more.
+            - One whose moment fell in a gap between ticks: the loop runs every
+              minute *plus* however long the tick took, and a deploy restarts
+              the worker. A reminder is now caught up to six hours late.
+          */
+          and (
+            (ap.created_at < ap.starts_at - (r.hours * interval '1 hour')
+               and ap.starts_at - (r.hours * interval '1 hour') > now() - interval '6 hours')
+            or
+            (r.hours >= 6
+               and ap.created_at >= ap.starts_at - (r.hours * interval '1 hour')
+               and ap.created_at <= now() - interval '1 hour'
+               and ap.created_at >  now() - interval '6 hours'
+               and ap.starts_at > now() + (r.hours * interval '15 minutes'))
+          )
+          /*
+            And not reminded already for this time. A run counts if it began
+            in the window leading up to the appointment's current time — from
+            its reminder moment, or from when it was booked if that was later —
+            so an appointment moved to next week is reminded again before its
+            new time, and one moved by half an hour is not reminded twice.
+          */
+          and not exists (
+            select 1 from automation_runs ar
+             where ar.automation_id = r.id and ar.appointment_id = ap.id
+               and ar.started_at > greatest(ap.created_at, ap.starts_at - (r.hours * interval '1 hour')) - interval '1 hour'
+          )
         limit 500`
     );
     for (const row of due.rows) {
@@ -126,23 +158,31 @@ async function appointmentReminders() {
         patientId: row.patient_id,
         appointmentId: row.appointment_id,
       });
-      if (runId) {
-        await c.query(
-          `insert into jobs (clinic_id, kind, payload, dedupe_key)
-           values ($1, 'automation:advance', $2, $3) on conflict (dedupe_key) do nothing`,
-          [
-            row.clinic_id,
-            JSON.stringify({ runId }),
-            `reminder:${row.automation_id}:${row.appointment_id}`,
-          ]
-        );
-      }
+      /*
+        Keyed by the run. It used to be keyed by automation and appointment,
+        and job keys are unique for ever: an appointment rescheduled after its
+        reminder got a new run whose advance job was silently dropped, so the
+        run sat "running" until the sweep marked it failed and the patient was
+        never reminded of the new time.
+      */
+      if (runId) await advanceOnce(c, row.clinic_id, runId);
     }
   });
 }
 
+/** The advance job for a run the scheduler just started, keyed by the run so it is queued exactly once. */
+async function advanceOnce(c: import("pg").PoolClient, clinicId: string, runId: string) {
+  await c.query(
+    `insert into jobs (clinic_id, kind, payload, dedupe_key)
+     values ($1, 'automation:advance', $2, $3) on conflict (dedupe_key) do nothing`,
+    [clinicId, JSON.stringify({ runId }), `advance:${runId}`]
+  );
+}
+
+
 /** "X days after last visit" (recall) — evaluated once per clinic-local day. */
-async function recallReminders() {
+/** `force`: ignore the hour and the rest — for QA, which cannot wait for ten o'clock. */
+export async function recallReminders(opts: { force?: boolean } = {}) {
   await withSystem(async (c) => {
     const autos = await c.query(
       `select a.id, a.clinic_id, a.trigger_config, cl.timezone
@@ -151,36 +191,88 @@ async function recallReminders() {
     );
     for (const auto of autos.rows) {
       const localNow = DateTime.now().setZone(auto.timezone);
-      if (localNow.hour !== 10 || localNow.minute > 2) continue; // once daily at ~10:00 local
+      if (!opts.force && (!dailyWindowOpen(localNow, 10) || resting(`recall:${auto.id}`))) continue;
       const days = Number((auto.trigger_config ?? {}).days ?? 180);
+      /*
+        The visit's date in the clinic's own calendar (a 1am visit in Amman is
+        the previous day in UTC), and not already reached by this flow today.
+      */
       const patients = await c.query(
-        `select id from patients
-         where clinic_id = $1 and merged_into is null and status = 'active'
-           and last_visit_at is not null
-           and last_visit_at::date = (current_date - ($2::text || ' days')::interval)::date
+        `select p.id from patients p
+         where p.clinic_id = $1 and p.merged_into is null and p.status = 'active'
+           and p.last_visit_at is not null
+           and (p.last_visit_at at time zone $3)::date = $4::date - $2::int
+           and not exists (
+             select 1 from automation_runs ar
+              where ar.automation_id = $5 and ar.patient_id = p.id and ar.started_at > now() - interval '20 hours')
          limit 200`,
-        [auto.clinic_id, days]
+        [auto.clinic_id, days, auto.timezone, localNow.toISODate(), auto.id]
       );
+      let started = 0;
       for (const p of patients.rows) {
         const runId = await startRun(c, auto.clinic_id, auto.id, { patientId: p.id });
         if (runId) {
-          await c.query(
-            `insert into jobs (clinic_id, kind, payload, dedupe_key)
-             values ($1, 'automation:advance', $2, $3) on conflict (dedupe_key) do nothing`,
-            [
-              auto.clinic_id,
-              JSON.stringify({ runId }),
-              `recall:${auto.id}:${p.id}:${localNow.toISODate()}`,
-            ]
-          );
+          started++;
+          await advanceOnce(c, auto.clinic_id, runId);
         }
       }
+      rest(`recall:${auto.id}`, started);
+    }
+  });
+}
+
+/**
+ * The doctor's next visit, due (migration 0088's hand-off): the newest
+ * finished visit per patient that asked for another, falling due `days_before`
+ * from today in the clinic's calendar, with nothing booked for the patient
+ * since — the same rule as the due-back list reception sees (lib/due-back).
+ * The run is about that visit, so "same doctor" books the one the doctor named.
+ */
+export async function nextVisitsDue(opts: { force?: boolean } = {}) {
+  await withSystem(async (c) => {
+    const autos = await c.query(
+      `select a.id, a.clinic_id, a.trigger_config, cl.timezone
+       from automations a join clinics cl on cl.id = a.clinic_id
+       where a.active and a.trigger_type = 'next_visit_due' and ${licensed("automations")}`
+    );
+    for (const auto of autos.rows) {
+      const localNow = DateTime.now().setZone(auto.timezone);
+      if (!opts.force && (!dailyWindowOpen(localNow, 10) || resting(`next:${auto.id}`))) continue;
+      const before = Math.max(0, Math.min(30, Number((auto.trigger_config ?? {}).days_before ?? 2) || 0));
+      const due = await c.query(
+        `with latest as (
+           select distinct on (a.patient_id) a.id, a.patient_id, a.starts_at,
+                  coalesce(a.finished_at, a.starts_at) + make_interval(days => a.next_visit_days) as due_at
+             from appointments a
+            where a.clinic_id = $1 and a.status = 'completed' and a.next_visit_days is not null
+            order by a.patient_id, coalesce(a.finished_at, a.starts_at) desc
+         )
+         select l.id, l.patient_id from latest l
+           join patients p on p.id = l.patient_id and p.merged_into is null and p.status <> 'archived'
+          where (l.due_at at time zone $2)::date = $3::date + $4::int
+            and not exists (
+              select 1 from appointments b
+               where b.clinic_id = $1 and b.patient_id = l.patient_id and b.starts_at > l.starts_at
+                 and b.status not in ('cancelled', 'no_show'))
+            and not exists (select 1 from automation_runs ar where ar.automation_id = $5 and ar.appointment_id = l.id)
+          limit 200`,
+        [auto.clinic_id, auto.timezone, localNow.toISODate(), before, auto.id]
+      );
+      let started = 0;
+      for (const v of due.rows) {
+        const runId = await startRun(c, auto.clinic_id, auto.id, { patientId: v.patient_id, appointmentId: v.id });
+        if (runId) {
+          started++;
+          await advanceOnce(c, auto.clinic_id, runId);
+        }
+      }
+      rest(`next:${auto.id}`, started);
     }
   });
 }
 
 /** Birthdays — clinic-local date comparison, so midnight boundaries are correct. */
-async function birthdays() {
+export async function birthdays(opts: { force?: boolean } = {}) {
   await withSystem(async (c) => {
     const autos = await c.query(
       `select a.id, a.clinic_id, cl.timezone from automations a
@@ -189,24 +281,26 @@ async function birthdays() {
     );
     for (const auto of autos.rows) {
       const localNow = DateTime.now().setZone(auto.timezone);
-      if (localNow.hour !== 9 || localNow.minute > 2) continue;
+      if (!opts.force && (!dailyWindowOpen(localNow, 9) || resting(`bday:${auto.id}`))) continue;
       const patients = await c.query(
-        `select id from patients
-         where clinic_id = $1 and merged_into is null and status <> 'archived' and birth_date is not null
-           and extract(month from birth_date) = $2 and extract(day from birth_date) = $3
+        `select p.id from patients p
+         where p.clinic_id = $1 and p.merged_into is null and p.status <> 'archived' and p.birth_date is not null
+           and extract(month from p.birth_date) = $2 and extract(day from p.birth_date) = $3
+           and not exists (
+             select 1 from automation_runs ar
+              where ar.automation_id = $4 and ar.patient_id = p.id and ar.started_at > now() - interval '20 hours')
          limit 200`,
-        [auto.clinic_id, localNow.month, localNow.day]
+        [auto.clinic_id, localNow.month, localNow.day, auto.id]
       );
+      let started = 0;
       for (const p of patients.rows) {
         const runId = await startRun(c, auto.clinic_id, auto.id, { patientId: p.id });
         if (runId) {
-          await c.query(
-            `insert into jobs (clinic_id, kind, payload, dedupe_key)
-             values ($1, 'automation:advance', $2, $3) on conflict (dedupe_key) do nothing`,
-            [auto.clinic_id, JSON.stringify({ runId }), `bday:${auto.id}:${p.id}:${localNow.year}`]
-          );
+          started++;
+          await advanceOnce(c, auto.clinic_id, runId);
         }
       }
+      rest(`bday:${auto.id}`, started);
     }
   });
 }
@@ -350,7 +444,7 @@ async function sweepEinvoices() {
 }
 
 /** "Invoice unpaid after X days". */
-async function unpaidInvoices() {
+export async function unpaidInvoices(opts: { force?: boolean } = {}) {
   await withSystem(async (c) => {
     const autos = await c.query(
       `select a.id, a.clinic_id, a.trigger_config, cl.timezone from automations a
@@ -359,29 +453,29 @@ async function unpaidInvoices() {
     );
     for (const auto of autos.rows) {
       const localNow = DateTime.now().setZone(auto.timezone);
-      if (localNow.hour !== 11 || localNow.minute > 2) continue;
+      if (!opts.force && (!dailyWindowOpen(localNow, 11) || resting(`unpaid:${auto.id}`))) continue;
       const days = Number((auto.trigger_config ?? {}).days ?? 3);
       const invoices = await c.query(
-        `select id, patient_id from invoices
-         where clinic_id = $1 and status in ('sent', 'partially_paid')
-           and sent_at is not null
-           and sent_at::date = (current_date - ($2::text || ' days')::interval)::date
+        `select i.id, i.patient_id from invoices i
+         where i.clinic_id = $1 and i.status in ('sent', 'partially_paid')
+           and i.sent_at is not null
+           and (i.sent_at at time zone $3)::date = $4::date - $2::int
+           and not exists (select 1 from automation_runs ar where ar.automation_id = $5 and ar.invoice_id = i.id)
          limit 200`,
-        [auto.clinic_id, days]
+        [auto.clinic_id, days, auto.timezone, localNow.toISODate(), auto.id]
       );
+      let started = 0;
       for (const inv of invoices.rows) {
         const runId = await startRun(c, auto.clinic_id, auto.id, {
           patientId: inv.patient_id,
           invoiceId: inv.id,
         });
         if (runId) {
-          await c.query(
-            `insert into jobs (clinic_id, kind, payload, dedupe_key)
-             values ($1, 'automation:advance', $2, $3) on conflict (dedupe_key) do nothing`,
-            [auto.clinic_id, JSON.stringify({ runId }), `unpaid:${auto.id}:${inv.id}`]
-          );
+          started++;
+          await advanceOnce(c, auto.clinic_id, runId);
         }
       }
+      rest(`unpaid:${auto.id}`, started);
     }
   });
 }
@@ -557,6 +651,7 @@ export function startScheduler() {
       wakeSleepingRuns,
       appointmentReminders,
       recallReminders,
+      nextVisitsDue,
       birthdays,
       unpaidInvoices,
       unbookedTreatments,

@@ -109,6 +109,8 @@ export async function pendingDefaultRecipes(
   const recipes = await c.query(
     `select * from recipe_templates
       where active and specialty in ('general', $1) and key = any($3::text[])
+        -- A psychiatry clinic gets the discreet reminder instead of the one that names it.
+        and not (key = 'reminder_24h' and $1 = 'psychiatry')
         and key not in (select recipe_key from automations where clinic_id = $2 and recipe_key is not null)
         /*
           Nor beside a flow of the clinic's own that already does the same

@@ -62,6 +62,9 @@ export type GalleryTemplate = {
   key: string;
   name: string;
   name_ar: string | null;
+  /** What it solves and what the patient gets, in each language. */
+  about: string;
+  about_ar: string;
   trigger: string;
   triggerConfig: Record<string, unknown>;
   steps: string[];
@@ -537,6 +540,12 @@ function TemplateGallery({
             </span>
           </span>
         </div>
+        {/* What it is for — the problem it solves and what the patient receives — not only its name. */}
+        {(locale === "ar" ? tp.about_ar || tp.about : tp.about) && (
+          <p className="line-clamp-3 text-[12.5px] leading-relaxed text-ink-700" data-template-about>
+            {locale === "ar" ? tp.about_ar || tp.about : tp.about}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-1">
           {tp.steps.slice(0, 7).map((s, i) => {
             const S = STEP_ICONS[s] ?? Zap;
