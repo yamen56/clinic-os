@@ -14,8 +14,15 @@ import { LabsClient, type LabWork } from "./labs-client";
   money side for whoever records what the clinic spends. A dental clinic only:
   the Lab work entry appears once it keeps a lab (Settings → Dental labs).
 */
-export default async function LabsPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function LabsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { slug } = await params;
+  const sp = await searchParams;
   const access = await guardClinic(slug);
   if (!access.clinic.features.dental || !(can(access, "patients.charts") || can(access, "invoices"))) redirect(`/c/${slug}`);
   const canPay = can(access, "expenses");
@@ -60,6 +67,7 @@ export default async function LabsPage({ params }: { params: Promise<{ slug: str
       labs={data.labs}
       work={JSON.parse(JSON.stringify(data.work))}
       canPay={canPay}
+      tab={sp.tab === "pay" || sp.tab === "back" ? sp.tab : undefined}
     />
   );
 }

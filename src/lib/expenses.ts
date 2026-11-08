@@ -42,6 +42,8 @@ export type ExpenseRow = {
   recurring: boolean;
   /** Paid for a face chart delivery: the product's name. Deleting the expense leaves the units on hand. */
   fromStock: string | null;
+  /** Paid toward a bill (0099). Deleting it makes the bill owed again. */
+  towardBill: boolean;
 };
 
 export type ExpenseCategoryTotal = {
@@ -94,7 +96,8 @@ export async function listExpenses(c: PoolClient, scope: ExpenseScope): Promise<
             e.category_id, e.receipt_path is not null as has_receipt,
             e.schedule_id is not null as recurring,
             (select p.name from stock_batches b join aesthetic_products p on p.id = b.product_id
-              where b.expense_id = e.id limit 1) as from_stock,
+              where b.expense_id = e.id or (e.bill_id is not null and b.bill_id = e.bill_id) limit 1) as from_stock,
+            e.bill_id is not null as toward_bill,
             ec.name, ec.name_ar, ec.color
        from expenses e
        left join expense_categories ec on ec.id = e.category_id
@@ -120,6 +123,7 @@ export async function listExpenses(c: PoolClient, scope: ExpenseScope): Promise<
     hasReceipt: row.has_receipt === true,
     recurring: row.recurring === true,
     fromStock: (row.from_stock as string) ?? null,
+    towardBill: row.toward_bill === true,
   }));
 }
 

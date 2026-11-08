@@ -34,6 +34,7 @@ export function LabsClient({
   labs,
   work: initial,
   canPay,
+  tab: initialTab,
 }: {
   slug: string;
   currency: string;
@@ -41,12 +42,14 @@ export function LabsClient({
   labs: LabRow[];
   work: LabWork[];
   canPay: boolean;
+  /** Opened on a tab — `?tab=pay` from what Expenses says is owed to the labs. */
+  tab?: Tab;
 }) {
   const { t, locale } = useI18n();
   const L = t.labs;
   const { toast } = useToast();
   const [work, setWork] = useState<LabWork[]>(initial);
-  const [tab, setTab] = useState<Tab>("out");
+  const [tab, setTab] = useState<Tab>(initialTab === "pay" && !canPay ? "out" : initialTab ?? "out");
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [method, setMethod] = useState("transfer");
   const [pending, start] = useTransition();

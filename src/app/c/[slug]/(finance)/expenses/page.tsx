@@ -9,6 +9,7 @@ import {
   type ExpenseCategoryTotal,
   type ExpenseRow,
 } from "@/lib/expenses";
+import { bySupplier, labsOwed, openBills } from "@/lib/bills";
 import { ExpensesClient } from "./expenses-client";
 
 /**
@@ -67,7 +68,16 @@ export default async function ExpensesPage({
       )
     ).rows;
 
-    return { total, rows, byCategory, categories, schedules };
+    /*
+      What is owed (ذمم, 0099): every supplier's open bills, and what the
+      outside labs are owed for work not paid for yet — the same debt, kept on
+      the Lab work page, counted here so the figure is everything the clinic
+      owes. Not scoped to the month on screen: a debt is owed until it is paid.
+    */
+    const suppliers = bySupplier(await openBills(c, access.clinicId));
+    const labs = access.clinic.features.dental ? await labsOwed(c, access.clinicId) : { owed: 0, labs: 0 };
+
+    return { total, rows, byCategory, categories, schedules, suppliers, labs };
   });
 
   return (
@@ -84,6 +94,16 @@ export default async function ExpensesPage({
       categories={JSON.parse(JSON.stringify(data.categories))}
       schedules={JSON.parse(JSON.stringify(data.schedules))}
       stockHref={access.clinic.features.aesthetic && can(access, "stock") ? `/c/${slug}/stock` : null}
+      suppliers={data.suppliers}
+      labsOwed={
+        data.labs.owed > 0
+          ? {
+              ...data.labs,
+              // The Lab work page's own door: charts or invoices.
+              href: can(access, "patients.charts") || can(access, "invoices") ? `/c/${slug}/labs?tab=pay` : null,
+            }
+          : null
+      }
     />
   );
 }

@@ -6,6 +6,8 @@ import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { deleteFile } from "@/lib/storage";
 import { postScheduleMonth } from "@/lib/expenses";
+import { SETTLED, allocate, billsById } from "@/lib/bills";
+import { round2 } from "@/lib/invoices";
 import { DateTime } from "luxon";
 import { z } from "zod";
 import type { PoolClient } from "pg";
@@ -353,6 +355,207 @@ export async function deleteExpenseScheduleAction(
       detail: { vendor: r.rows[0].vendor, amount: Number(r.rows[0].amount) },
     });
     revalidatePath(`/c/${slug}/expenses`);
+    return {};
+  });
+}
+
+/* ------------------------------------------------------------------ bills */
+
+const billSchema = z.object({
+  id: z.string().uuid().optional(),
+  categoryId: z.string().uuid().nullable().default(null),
+  amount: z.coerce.number().positive().max(1_000_000),
+  vendor: z.string().trim().min(1).max(120),
+  note: z.string().max(500).optional().default(""),
+  /** The day the goods came or the bill arrived. */
+  incurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+});
+
+/**
+ * Something bought and not paid for yet (0099): a bill, not an expense. It
+ * reaches Expenses when it is paid, on the day it is paid.
+ *
+ * An edit may not take the amount below what has already been paid toward it —
+ * that would leave the supplier owing the clinic, which is a refund to record,
+ * not a bill to shrink.
+ */
+export async function saveBillAction(slug: string, data: unknown): Promise<{ error?: string; id?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "expenses")) return { error: "forbidden" };
+  const parsed = billSchema.safeParse(data);
+  if (!parsed.success) return { error: "invalid" };
+  const d = parsed.data;
+
+  return inClinic(access, async (c): Promise<{ error?: string; id?: string }> => {
+    if (!(await categoryBelongs(c, access.clinicId, d.categoryId))) return { error: "invalid" };
+    let id = d.id;
+    if (id) {
+      const paid = Number(
+        (await c.query(`select coalesce(sum(amount), 0) as n from expenses where bill_id = $1 and clinic_id = $2`, [id, access.clinicId]))
+          .rows[0].n
+      );
+      if (d.amount + SETTLED < paid) return { error: "below_paid" };
+      /*
+        A stock company's bill keeps its company: the name shown is the
+        company's, so what is typed only replaces the vendor of a bill that has
+        none.
+      */
+      const r = await c.query(
+        `update supplier_bills set category_id = $3, amount = $4, vendor = case when company_id is null then $5 else vendor end,
+                                   note = $6, incurred_on = $7::date, due_on = $8::date
+          where id = $1 and clinic_id = $2`,
+        [id, access.clinicId, d.categoryId, d.amount, d.vendor, d.note.trim(), d.incurredOn, d.dueOn]
+      );
+      if (!r.rowCount) return { error: "not_found" };
+    } else {
+      id = (
+        await c.query(
+          `insert into supplier_bills (clinic_id, category_id, amount, vendor, note, incurred_on, due_on, created_by)
+           values ($1, $2, $3, $4, $5, $6::date, $7::date, $8) returning id`,
+          [access.clinicId, d.categoryId, d.amount, d.vendor, d.note.trim(), d.incurredOn, d.dueOn, access.session.user.id]
+        )
+      ).rows[0].id as string;
+    }
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: d.id ? "bill.update" : "bill.create",
+      entity: "supplier_bill",
+      entityId: id!,
+      detail: { amount: d.amount, vendor: d.vendor, incurredOn: d.incurredOn, dueOn: d.dueOn },
+    });
+    revalidatePath(`/c/${slug}/expenses`);
+    revalidatePath(`/c/${slug}/stock`);
+    return { id };
+  });
+}
+
+/**
+ * A bill that is not owed after all. What was already paid toward it stays in
+ * Expenses — that money left — and simply stops pointing at a bill.
+ */
+export async function deleteBillAction(slug: string, id: string): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "expenses")) return { error: "forbidden" };
+  if (!z.string().uuid().safeParse(id).success) return { error: "invalid" };
+
+  return inClinic(access, async (c) => {
+    const r = await c.query(`delete from supplier_bills where id = $1 and clinic_id = $2 returning amount, vendor`, [id, access.clinicId]);
+    if (!r.rowCount) return { error: "not_found" };
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "bill.delete",
+      entity: "supplier_bill",
+      entityId: id,
+      detail: { amount: Number(r.rows[0].amount), vendor: r.rows[0].vendor },
+    });
+    revalidatePath(`/c/${slug}/expenses`);
+    revalidatePath(`/c/${slug}/stock`);
+    return {};
+  });
+}
+
+const paySchema = z.object({
+  billIds: z.array(z.string().uuid()).min(1).max(200),
+  amount: z.coerce.number().positive().max(1_000_000),
+  paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  method: z.enum(METHODS).default("cash"),
+});
+
+/**
+ * Paying a supplier: the money is split over the bills given, oldest first,
+ * and each share is an expense on the day it was paid, pointing at its bill.
+ * Never more than they are owed — an overpayment is a credit with the
+ * supplier, and nothing here would know to spend it.
+ */
+export async function payBillsAction(
+  slug: string,
+  data: unknown
+): Promise<{ error?: string; expenseIds?: string[] }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "expenses")) return { error: "forbidden" };
+  const parsed = paySchema.safeParse(data);
+  if (!parsed.success) return { error: "invalid" };
+  const d = parsed.data;
+
+  return inClinic(access, async (c): Promise<{ error?: string; expenseIds?: string[] }> => {
+    // Locked, so two people paying the same supplier at once cannot both pay the last of it.
+    await c.query(`select 1 from supplier_bills where clinic_id = $1 and id = any($2::uuid[]) for update`, [access.clinicId, d.billIds]);
+    const bills = await billsById(c, access.clinicId, d.billIds);
+    const owed = round2(bills.reduce((s, b) => s + Math.max(b.owed, 0), 0));
+    if (owed <= SETTLED) return { error: "nothing_owed" };
+    if (d.amount > owed + SETTLED) return { error: "too_much" };
+
+    // A delivery's bill with no category of its own is supplies, as a delivery paid on the day always was.
+    const supplies = (
+      await c.query(`select id from expense_categories where clinic_id = $1 and key = 'supplies' and active limit 1`, [access.clinicId])
+    ).rows[0]?.id as string | undefined;
+    const expenseIds: string[] = [];
+    for (const part of allocate(bills, d.amount)) {
+      const b = part.bill;
+      const id = (
+        await c.query(
+          `insert into expenses (clinic_id, category_id, amount, vendor, note, spent_on, method, created_by, bill_id)
+           values ($1, $2, $3, $4, $5, $6::date, $7, $8, $9) returning id`,
+          [
+            access.clinicId,
+            b.categoryId ?? (b.product ? supplies ?? null : null),
+            part.amount,
+            b.vendor.trim().replace(/\s+/g, " ").slice(0, 120),
+            (b.note || b.product || "").slice(0, 500),
+            d.paidOn,
+            d.method,
+            access.session.user.id,
+            b.id,
+          ]
+        )
+      ).rows[0].id as string;
+      expenseIds.push(id);
+    }
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "bill.pay",
+      entity: "supplier_bill",
+      entityId: bills[0].id,
+      detail: { amount: d.amount, method: d.method, paidOn: d.paidOn, bills: d.billIds, expenses: expenseIds },
+    });
+    revalidatePath(`/c/${slug}/expenses`);
+    revalidatePath(`/c/${slug}/stock`);
+    return { expenseIds };
+  });
+}
+
+/** Undo on a payment just made: its expenses go, and the bills are owed again. */
+export async function undoBillPaymentAction(slug: string, expenseIds: string[]): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "expenses")) return { error: "forbidden" };
+  if (!z.array(z.string().uuid()).min(1).max(200).safeParse(expenseIds).success) return { error: "invalid" };
+
+  return inClinic(access, async (c) => {
+    // Only payments toward a bill, and only ones nobody has attached a receipt to since.
+    const r = await c.query(
+      `delete from expenses where clinic_id = $1 and id = any($2::uuid[]) and bill_id is not null and receipt_path is null
+       returning id, amount, bill_id`,
+      [access.clinicId, expenseIds]
+    );
+    if (!r.rowCount) return { error: "not_found" };
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "bill.pay.undo",
+      entity: "supplier_bill",
+      entityId: r.rows[0].bill_id as string,
+      detail: { expenses: r.rows.map((x) => x.id), amount: round2(r.rows.reduce((s, x) => s + Number(x.amount), 0)) },
+    });
+    revalidatePath(`/c/${slug}/expenses`);
+    revalidatePath(`/c/${slug}/stock`);
     return {};
   });
 }

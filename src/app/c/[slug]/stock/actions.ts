@@ -39,6 +39,8 @@ type Answer = {
   outcome?: "deleted" | "archived";
   /** The delivery is gone but its expense stayed, because somebody had changed it. */
   expenseKept?: boolean;
+  /** The delivery is gone but what it was owed stayed, because some of it was paid or the bill was changed. */
+  billKept?: boolean;
   /** The correction just made, so it can be undone. */
   moveId?: string;
 };
@@ -217,6 +219,9 @@ const receiveSchema = z.object({
   receivedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
   method: z.enum(["cash", "cliq", "card", "transfer", "cheque"]).default("cash"),
   note: z.string().trim().max(500).default(""),
+  /** False: taken on credit — owed to the company, not spent yet (0099). */
+  paid: z.boolean().default(true),
+  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
 });
 
 /**
@@ -225,6 +230,11 @@ const receiveSchema = z.object({
  * recorded as an expense under Supplies in the same step — so the clinic's
  * profit counts the money once, here, and a treatment's cost only decides its
  * doctor's share.
+ *
+ * Taken on credit, it is owed instead (ذمم, 0099): a bill to the product's
+ * company, which reaches Expenses on the day it is paid. The units are on hand
+ * either way, and cost what they cost — a doctor's share does not wait for the
+ * clinic to settle with its supplier.
  *
  * Anything used before the delivery was recorded (on hand below zero) is
  * taken from the new batch, so the batch says what is really left in it.
@@ -238,7 +248,7 @@ export async function receiveStockAction(slug: string, data: unknown): Promise<A
   return inClinic(access, async (c) => {
     const p = (
       await c.query(
-        `select p.id, p.name, p.pack_size::float as pack_size, co.name as company
+        `select p.id, p.name, p.pack_size::float as pack_size, p.company_id, co.name as company
            from aesthetic_products p left join aesthetic_companies co on co.id = p.company_id
           where p.id = $1 and p.clinic_id = $2 and p.active for update of p`,
         [d.productId, access.clinicId]
@@ -252,8 +262,28 @@ export async function receiveStockAction(slug: string, data: unknown): Promise<A
     // A delivery entered late still belongs to the day it came. Not to a day still to come.
     const receivedOn = d.receivedOn && d.receivedOn <= today ? d.receivedOn : today;
 
+    const what = `${p.name} × ${d.packs}${d.lot ? ` · ${d.lot}` : ""}`.slice(0, 500);
     let expenseId: string | null = null;
-    if (total > 0) {
+    let billId: string | null = null;
+    if (total > 0 && !d.paid) {
+      billId = (
+        await c.query(
+          `insert into supplier_bills (clinic_id, company_id, vendor, category_id, amount, incurred_on, due_on, note, created_by)
+           values ($1, $2, $3, (select id from expense_categories where clinic_id = $1 and key = 'supplies' and active limit 1), $4, $5, $6, $7, $8)
+           returning id`,
+          [
+            access.clinicId,
+            p.company_id ?? null,
+            String(p.company ?? "").slice(0, 120),
+            total,
+            receivedOn,
+            d.dueOn && d.dueOn >= receivedOn ? d.dueOn : null,
+            what,
+            access.session.user.id,
+          ]
+        )
+      ).rows[0].id as string;
+    } else if (total > 0) {
       expenseId = (
         await c.query(
           `insert into expenses (clinic_id, category_id, amount, vendor, note, spent_on, method, created_by)
@@ -263,7 +293,7 @@ export async function receiveStockAction(slug: string, data: unknown): Promise<A
             access.clinicId,
             total,
             String(p.company ?? "").slice(0, 120),
-            `${p.name} × ${d.packs}${d.lot ? ` · ${d.lot}` : ""}`.slice(0, 500),
+            what,
             receivedOn,
             d.method,
             access.session.user.id,
@@ -273,9 +303,9 @@ export async function receiveStockAction(slug: string, data: unknown): Promise<A
     }
     const batch = (
       await c.query(
-        `insert into stock_batches (clinic_id, product_id, lot, expires_on, received_on, qty, unit_cost, expense_id, note, created_by)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
-        [access.clinicId, p.id, d.lot, d.expiresOn, receivedOn, qty, unitCost, expenseId, d.note, access.session.user.id]
+        `insert into stock_batches (clinic_id, product_id, lot, expires_on, received_on, qty, unit_cost, expense_id, bill_id, note, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
+        [access.clinicId, p.id, d.lot, d.expiresOn, receivedOn, qty, unitCost, expenseId, billId, d.note, access.session.user.id]
       )
     ).rows[0].id as string;
     await c.query(`insert into stock_moves (clinic_id, product_id, batch_id, kind, qty, unit_cost, by_user) values ($1, $2, $3, 'receive', $4, $5, $6)`, [
@@ -304,7 +334,7 @@ export async function receiveStockAction(slug: string, data: unknown): Promise<A
       action: "stock.receive",
       entity: "aesthetic_product",
       entityId: p.id,
-      detail: { batch, packs: d.packs, qty, unitCost, total, expense: expenseId },
+      detail: { batch, packs: d.packs, qty, unitCost, total, expense: expenseId, bill: billId },
     });
     revalidatePath(`/c/${slug}/stock`);
     return lists(c, access.clinicId);
@@ -527,6 +557,8 @@ export async function restoreCompanyAction(slug: string, id: string): Promise<An
  * Its expense goes too, because that money was never spent. Unless somebody has
  * changed the expense or attached the bill since: then it is a record a person
  * has worked on, not a by-product of a mistake, so it stays and they are told.
+ * A delivery taken on credit does the same with what it is owed: the bill goes,
+ * unless anything has been paid toward it or it has been changed by hand.
  */
 export async function deleteBatchAction(slug: string, batchId: string): Promise<Answer> {
   const access = await guard(slug);
@@ -541,9 +573,13 @@ export async function deleteBatchAction(slug: string, batchId: string): Promise<
 
     const expense = b.expense_id ? (await c.query(`select * from expenses where id = $1 and clinic_id = $2`, [b.expense_id, access.clinicId])).rows[0] : null;
     const expenseGoes = !!expense && !expense.receipt_path && new Date(expense.updated_at).getTime() === new Date(expense.created_at).getTime();
+    const bill = b.bill_id ? (await c.query(`select * from supplier_bills where id = $1 and clinic_id = $2`, [b.bill_id, access.clinicId])).rows[0] : null;
+    const billPaid = bill ? !!(await c.query(`select 1 from expenses where bill_id = $1 limit 1`, [bill.id])).rowCount : false;
+    const billGoes = !!bill && !billPaid && new Date(bill.updated_at).getTime() === new Date(bill.created_at).getTime();
 
     await c.query(`delete from stock_batches where id = $1`, [batchId]);
     if (expenseGoes) await c.query(`delete from expenses where id = $1`, [expense.id]);
+    if (billGoes) await c.query(`delete from supplier_bills where id = $1`, [bill.id]);
 
     const newest = (
       await c.query(`select unit_cost from stock_batches where product_id = $1 order by received_on desc, created_at desc limit 1`, [b.product_id])
@@ -557,11 +593,24 @@ export async function deleteBatchAction(slug: string, batchId: string): Promise<
       action: "stock.batch.delete",
       entity: "stock_batch",
       entityId: batchId,
-      detail: { batch: b, moves, expense: expenseGoes ? expense : null, expenseId: expense?.id ?? null, lastCost: product?.last_cost ?? null },
+      detail: {
+        batch: b,
+        moves,
+        expense: expenseGoes ? expense : null,
+        expenseId: expense?.id ?? null,
+        bill: billGoes ? bill : null,
+        billId: bill?.id ?? null,
+        lastCost: product?.last_cost ?? null,
+      },
     });
     revalidatePath(`/c/${slug}/stock`);
     revalidatePath(`/c/${slug}/expenses`);
-    return { ...(await lists(c, access.clinicId)), outcome: "deleted", expenseKept: !!expense && !expenseGoes };
+    return {
+      ...(await lists(c, access.clinicId)),
+      outcome: "deleted",
+      expenseKept: !!expense && !expenseGoes,
+      billKept: !!bill && !billGoes,
+    };
   });
 }
 
@@ -585,9 +634,31 @@ export async function restoreBatchAction(slug: string, batchId: string): Promise
       );
     }
     const kept = d.expenseId ? (await c.query(`select id from expenses where id = $1 and clinic_id = $2`, [d.expenseId, access.clinicId])).rows[0]?.id ?? null : null;
+    const bill = d.bill as Record<string, unknown> | null | undefined;
+    if (bill) {
+      await c.query(
+        `insert into supplier_bills (id, clinic_id, company_id, vendor, category_id, amount, incurred_on, due_on, note, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          bill.id,
+          access.clinicId,
+          bill.company_id,
+          bill.vendor,
+          bill.category_id,
+          bill.amount,
+          String(bill.incurred_on).slice(0, 10),
+          bill.due_on ? String(bill.due_on).slice(0, 10) : null,
+          bill.note,
+          bill.created_by,
+        ]
+      );
+    }
+    const keptBill = d.billId
+      ? (await c.query(`select id from supplier_bills where id = $1 and clinic_id = $2`, [d.billId, access.clinicId])).rows[0]?.id ?? null
+      : null;
     await c.query(
-      `insert into stock_batches (id, clinic_id, product_id, lot, expires_on, received_on, qty, unit_cost, expense_id, note, created_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `insert into stock_batches (id, clinic_id, product_id, lot, expires_on, received_on, qty, unit_cost, expense_id, bill_id, note, created_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $12, $10, $11)`,
       [
         batchId,
         access.clinicId,
@@ -600,6 +671,7 @@ export async function restoreBatchAction(slug: string, batchId: string): Promise
         kept,
         b.note,
         b.created_by,
+        keptBill,
       ]
     );
     for (const m of moves) {

@@ -14,6 +14,7 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { RowBar } from "@/components/ui/chart";
 import type { ExpenseCategoryTotal, ExpenseRow } from "@/lib/expenses";
+import type { Bill, SupplierOwed } from "@/lib/bills";
 import {
   saveExpenseAction,
   deleteExpenseAction,
@@ -21,6 +22,10 @@ import {
   deleteExpenseCategoryAction,
   saveExpenseScheduleAction,
   deleteExpenseScheduleAction,
+  saveBillAction,
+  deleteBillAction,
+  payBillsAction,
+  undoBillPaymentAction,
 } from "./actions";
 import {
   Plus,
@@ -70,7 +75,17 @@ type Draft = {
   spentOn: string;
   method: Method;
   hasReceipt: boolean;
+  /** Not paid yet: saved as a bill to pay (0099), not as an expense. `spentOn` is then the bill's date. */
+  unpaid: boolean;
+  dueOn: string;
+  /** Editing a bill rather than an expense. */
+  billId?: string;
+  /** A stock company's bill: who it is owed to is the company, not something typed. */
+  fixedVendor?: boolean;
 };
+
+/** Paying a supplier: how much of what they are owed, on which day, how. */
+type PayDraft = { group: SupplierOwed; amount: string; paidOn: string; method: Method };
 
 type CatDraft = { id?: string; name: string; nameAr: string; color: string; active: boolean };
 
@@ -98,6 +113,8 @@ export function ExpensesClient({
   categories,
   schedules,
   stockHref,
+  suppliers,
+  labsOwed,
 }: {
   slug: string;
   currency: string;
@@ -114,8 +131,13 @@ export function ExpensesClient({
   schedules: Schedule[];
   /** Where an expense from a delivery points, for somebody who may open Stock. */
   stockHref: string | null;
+  /** What is owed (ذمم, 0099), supplier by supplier, the most owed first. */
+  suppliers: SupplierOwed[];
+  /** What the outside labs are owed, paid from the Lab work page; null when nothing is. */
+  labsOwed: { owed: number; labs: number; href: string | null } | null;
 }) {
   const { t, locale } = useI18n();
+  const E = t.expenses;
   const router = useRouter();
   const { toast } = useToast();
   const [pending, start] = useTransition();
@@ -134,8 +156,10 @@ export function ExpensesClient({
     saving, reopening and attaching.
   */
   const [pendingReceipt, setPendingReceipt] = useState<File | null>(null);
+  const [paying, setPaying] = useState<PayDraft | null>(null);
+  const [deleteBillId, setDeleteBillId] = useState<string | null>(null);
 
-  const money = (n: number | string) => fmtMoney(n, currency, locale);
+  const money =(n: number | string) => fmtMoney(n, currency, locale);
   const label = (x: { name: string | null; name_ar?: string | null; nameAr?: string | null }) => {
     const ar = x.name_ar ?? x.nameAr ?? null;
     return (locale === "ar" ? ar || x.name : x.name) ?? t.expenses.unfiled;
@@ -185,7 +209,59 @@ export function ExpensesClient({
     spentOn: defaultDate,
     method: "cash",
     hasReceipt: false,
+    unpaid: false,
+    dueOn: "",
   });
+
+  const billDraft = (b: Bill): Draft => ({
+    billId: b.id,
+    unpaid: true,
+    fixedVendor: !!b.companyId,
+    categoryId: b.categoryId,
+    amount: String(b.amount),
+    vendor: b.vendor,
+    note: b.note,
+    spentOn: b.incurredOn,
+    dueOn: b.dueOn ?? "",
+    method: "cash",
+    hasReceipt: false,
+  });
+
+  const owedTotal = Math.round((suppliers.reduce((s, g) => s + g.owed, 0) + (labsOwed?.owed ?? 0)) * 100) / 100;
+
+  /*
+    Paying closes the dialog at once and says so when the server has the
+    expenses written, with Undo — which takes back exactly the expenses that
+    payment wrote, nothing a person has added since.
+  */
+  const pay = (p: PayDraft) => {
+    setPaying(null);
+    start(async () => {
+      const r = await payBillsAction(slug, {
+        billIds: p.group.bills.map((b) => b.id),
+        amount: p.amount,
+        paidOn: p.paidOn,
+        method: p.method,
+      });
+      if (r.error || !r.expenseIds) {
+        toast(r.error === "too_much" ? E.payTooMuch : t.common.genericError, "error");
+        setPaying(p);
+        return;
+      }
+      const ids = r.expenseIds;
+      toast(E.paidToast.replace("{amount}", money(Number(p.amount))).replace("{name}", p.group.name || "—"), "success", {
+        label: E.undo,
+        onClick: () =>
+          start(async () => {
+            const u = await undoBillPaymentAction(slug, ids);
+            if (u.error) return toast(t.common.genericError, "error");
+            toast(E.payUndone);
+            router.refresh();
+          }),
+      });
+      router.refresh();
+    });
+  };
 
   /*
     Close first, write second.
@@ -221,7 +297,11 @@ export function ExpensesClient({
       const r = await fn();
       if (r.error) {
         toast(
-          r.error === "duplicate" ? t.expenses.duplicateCategory : t.common.genericError,
+          r.error === "duplicate"
+            ? t.expenses.duplicateCategory
+            : r.error === "below_paid"
+              ? E.belowPaid
+              : t.common.genericError,
           "error"
         );
         undo?.();
@@ -295,6 +375,114 @@ export function ExpensesClient({
           </div>
           <div className="mt-1 text-2xl font-bold tabular-nums text-ink-900">{money(total)}</div>
         </Card>
+
+        {/*
+          What is owed (ذمم): never scoped to the month on screen, because a debt
+          is owed until it is paid. A wrapper, not the Card, carries the anchor —
+          Card does not pass ids or data attributes through.
+        */}
+        <div id="to-pay" className="scroll-mt-24" data-to-pay={owedTotal}>
+          <Card>
+            <CardHeader
+              title={E.toPay}
+              sub={E.toPaySub}
+              action={
+                <Button size="sm" variant="outline" onClick={() => setDraft({ ...emptyDraft(), unpaid: true })} data-bill-add>
+                  <Plus className="h-4 w-4" />
+                  {E.addBill}
+                </Button>
+              }
+            />
+            {owedTotal <= 0 ? (
+              <p className="px-5 pb-5 text-[13px] text-ink-400">{E.nothingOwed}</p>
+            ) : (
+              <>
+                <div className="px-5 pb-3">
+                  <div className="text-[11px] uppercase tracking-wide text-ink-400">{E.owedTotal}</div>
+                  <div className="mt-1 text-2xl font-bold tabular-nums text-ink-900">{money(owedTotal)}</div>
+                </div>
+                <ul className="divide-y divide-line border-t border-line">
+                  {suppliers.map((s) => (
+                    <li key={s.key} className="px-5 py-3" data-supplier={s.name}>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[14px] font-semibold" dir="auto">
+                            {s.name || "—"}
+                          </div>
+                          <div className="text-[12px] text-ink-500">
+                            {E.since.replace("{date}", fmtDateOnly(s.bills[0].incurredOn, locale))}
+                          </div>
+                        </div>
+                        <span className="whitespace-nowrap text-[15px] font-bold tabular-nums" data-supplier-owed={s.owed}>
+                          {money(s.owed)}
+                        </span>
+                        <Button
+                          size="sm"
+                          onClick={() => setPaying({ group: s, amount: s.owed.toFixed(2), paidOn: todayLocal, method: "cash" })}
+                          data-supplier-pay
+                        >
+                          {E.pay}
+                        </Button>
+                      </div>
+                      <ul className="mt-2 grid gap-1.5">
+                        {s.bills.map((b) => {
+                          const late = !!b.dueOn && b.dueOn < todayLocal;
+                          return (
+                            <li key={b.id} className="flex items-center gap-2 rounded-ctl bg-sunken ps-3 pe-1 py-1.5 text-[12.5px]" data-bill={b.id}>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-ink-900" dir="auto">
+                                  {b.product || b.note || E.billFallback}
+                                </div>
+                                <div className="text-ink-500">
+                                  {fmtDateOnly(b.incurredOn, locale)}
+                                  {b.dueOn && (
+                                    <span className={late ? "font-semibold text-danger" : ""} data-bill-due={late ? "late" : "due"}>
+                                      {" · "}
+                                      {(late ? E.overdue : E.dueBy).replace("{date}", fmtDateOnly(b.dueOn, locale))}
+                                    </span>
+                                  )}
+                                  {b.paid > 0 && (
+                                    <>
+                                      {" · "}
+                                      {E.paidOf.replace("{paid}", money(b.paid)).replace("{amount}", money(b.amount))}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="whitespace-nowrap font-semibold tabular-nums" data-bill-owed={b.owed}>
+                                {money(b.owed)}
+                              </span>
+                              <Button variant="ghost" size="icon" aria-label={t.common.edit} onClick={() => setDraft(billDraft(b))} data-bill-edit>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" aria-label={t.common.delete} onClick={() => setDeleteBillId(b.id)} data-bill-delete>
+                                <Trash2 className="h-4 w-4 text-danger" />
+                              </Button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </li>
+                  ))}
+                  {labsOwed && (
+                    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3" data-labs-owed={labsOwed.owed}>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[14px] font-semibold">{E.labWork}</div>
+                        <div className="text-[12px] text-ink-500">{E.labsSub}</div>
+                      </div>
+                      <span className="whitespace-nowrap text-[15px] font-bold tabular-nums">{money(labsOwed.owed)}</span>
+                      {labsOwed.href && (
+                        <Link href={labsOwed.href} className={buttonClass({ variant: "outline", size: "sm" })}>
+                          {E.openLabs}
+                        </Link>
+                      )}
+                    </li>
+                  )}
+                </ul>
+              </>
+            )}
+          </Card>
+        </div>
 
         {byCategory.length > 0 && (
           <Card>
@@ -374,6 +562,12 @@ export function ExpensesClient({
                               {t.expenses.fromDelivery.replace("{product}", e.fromStock)}
                             </span>
                           ))}
+                        {/* A delivery's payment already says which delivery; anything else paid toward a bill says so. */}
+                        {e.towardBill && !e.fromStock && (
+                          <span className="ms-2 inline-flex items-center whitespace-nowrap rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500" data-expense-bill>
+                            {E.towardBill}
+                          </span>
+                        )}
                         {e.note && <div className="text-[12px] text-ink-400">{e.note}</div>}
                       </td>
                       <td className="px-5 py-2.5">
@@ -406,6 +600,8 @@ export function ExpensesClient({
                                 spentOn: e.spentOn,
                                 method: e.method as Method,
                                 hasReceipt: e.hasReceipt,
+                                unpaid: false,
+                                dueOn: "",
                               })
                             }
                           >
@@ -572,10 +768,23 @@ export function ExpensesClient({
           setDraft(null);
           setPendingReceipt(null);
         }}
-        title={draft?.id ? t.common.edit : t.expenses.add}
+        title={draft?.billId ? E.editBill : draft?.id ? t.common.edit : draft?.unpaid ? E.addBill : t.expenses.add}
       >
         {draft && (
-          <div className="grid gap-4">
+          <div className="grid gap-4" data-expense-form={draft.unpaid ? "bill" : "expense"}>
+            {/* Only while adding: an expense stays an expense and a bill a bill once saved. */}
+            {!draft.id && !draft.billId && (
+              <Field label={E.payment}>
+                <Select
+                  value={draft.unpaid ? "owed" : "paid"}
+                  onChange={(e) => setDraft({ ...draft, unpaid: e.target.value === "owed" })}
+                  data-expense-payment
+                >
+                  <option value="paid">{E.paidNow}</option>
+                  <option value="owed">{E.notPaidYet}</option>
+                </Select>
+              </Field>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t.expenses.amount} required>
                 <Input
@@ -586,9 +795,10 @@ export function ExpensesClient({
                   dir="ltr"
                   value={draft.amount}
                   onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+                  data-expense-amount
                 />
               </Field>
-              <Field label={t.common.date} required>
+              <Field label={draft.unpaid ? E.billDate : t.common.date} required>
                 <Input
                   type="date"
                   value={draft.spentOn}
@@ -612,24 +822,43 @@ export function ExpensesClient({
                     ))}
                 </Select>
               </Field>
-              <Field label={t.expenses.method}>
-                <Select
-                  value={draft.method}
-                  onChange={(e) => setDraft({ ...draft, method: e.target.value as Method })}
-                >
-                  {METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {t.expenses.methods[m]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              {draft.unpaid ? (
+                <Field label={E.dueOn} hint={t.common.optional}>
+                  <Input
+                    type="date"
+                    value={draft.dueOn}
+                    min={draft.spentOn || undefined}
+                    onChange={(e) => setDraft({ ...draft, dueOn: e.target.value })}
+                    data-bill-due-input
+                  />
+                </Field>
+              ) : (
+                <Field label={t.expenses.method}>
+                  <Select
+                    value={draft.method}
+                    onChange={(e) => setDraft({ ...draft, method: e.target.value as Method })}
+                  >
+                    {METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {t.expenses.methods[m]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
             </div>
-            <Field label={t.expenses.vendor} hint={t.common.optional}>
+            {/* Who is owed is what a bill is about, so it is asked for; on an expense it is optional. */}
+            <Field
+              label={draft.unpaid ? E.supplier : t.expenses.vendor}
+              required={draft.unpaid}
+              hint={draft.unpaid ? undefined : t.common.optional}
+            >
               <Input
                 value={draft.vendor}
                 maxLength={120}
+                disabled={draft.fixedVendor}
                 onChange={(e) => setDraft({ ...draft, vendor: e.target.value })}
+                data-expense-vendor
               />
             </Field>
             {/*
@@ -637,7 +866,10 @@ export function ExpensesClient({
               addressed by id and so has to wait for the row, but that is a
               mechanical detail and not something to make somebody live with:
               a file chosen now is held and sent the moment Save returns one.
+              Not on a bill: the receipt belongs to the payment, which is an
+              expense of its own.
             */}
+            {!draft.unpaid && (
             <Field label={t.expenses.receipt} hint={t.expenses.receiptHint}>
                 <div className="flex flex-wrap items-center gap-2">
                   {draft.hasReceipt && (
@@ -687,6 +919,7 @@ export function ExpensesClient({
                   </label>
                 </div>
             </Field>
+            )}
             <Field label={t.expenses.note} hint={t.common.optional}>
               <Textarea
                 value={draft.note}
@@ -706,9 +939,25 @@ export function ExpensesClient({
               </Button>
               <Button
                 loading={pending}
-                disabled={!draft.amount || !draft.spentOn}
+                disabled={!draft.amount || !draft.spentOn || (draft.unpaid && !draft.vendor.trim())}
+                data-expense-save
                 onClick={() =>
-                  start(async () => {
+                  draft.unpaid
+                    ? run(
+                        () =>
+                          saveBillAction(slug, {
+                            id: draft.billId,
+                            categoryId: draft.categoryId,
+                            amount: draft.amount,
+                            vendor: draft.vendor,
+                            note: draft.note,
+                            incurredOn: draft.spentOn,
+                            dueOn: draft.dueOn || null,
+                          }),
+                        () => setDraft(null),
+                        () => setDraft(draft)
+                      )
+                    : start(async () => {
                     const r = await saveExpenseAction(slug, {
                       id: draft.id,
                       categoryId: draft.categoryId,
@@ -925,8 +1174,10 @@ export function ExpensesClient({
         danger
         loading={pending}
         body={(() => {
-          const product = rows.find((r) => r.id === deleteId)?.fromStock;
-          return product ? t.expenses.confirmDeleteStock.replace("{product}", product) : t.expenses.confirmDeleteBody;
+          const row = rows.find((r) => r.id === deleteId);
+          // A payment toward a bill puts the bill back under To pay, whatever it paid for.
+          if (row?.towardBill) return E.confirmDeletePayment;
+          return row?.fromStock ? t.expenses.confirmDeleteStock.replace("{product}", row.fromStock) : t.expenses.confirmDeleteBody;
         })()}
         onConfirm={() =>
           run(() => deleteExpenseAction(slug, deleteId!), () => setDeleteId(null))
@@ -958,6 +1209,67 @@ export function ExpensesClient({
           run(() => deleteExpenseScheduleAction(slug, deleteSchedId!), () => setDeleteSchedId(null))
         }
       />
+      <ConfirmDialog
+        open={!!deleteBillId}
+        onClose={() => setDeleteBillId(null)}
+        title={t.common.confirmDeleteTitle}
+        confirmLabel={t.common.delete}
+        cancelLabel={t.common.cancel}
+        danger
+        loading={pending}
+        body={E.confirmDeleteBill}
+        onConfirm={() => run(() => deleteBillAction(slug, deleteBillId!), () => setDeleteBillId(null))}
+      />
+
+      {/* ------------------------------------------------------------- pay */}
+      <Modal open={!!paying} onClose={() => setPaying(null)} title={paying ? E.payTitle.replace("{name}", paying.group.name || "—") : undefined}>
+        {paying &&
+          (() => {
+            const amt = Number(paying.amount);
+            const left = Math.round((paying.group.owed - (amt || 0)) * 100) / 100;
+            return (
+              <div className="grid gap-4" data-pay-form>
+                <p className="text-[13px] leading-relaxed text-ink-500">{E.payOwed.replace("{amount}", money(paying.group.owed))}</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label={t.expenses.amount} required>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={0.01}
+                      dir="ltr"
+                      value={paying.amount}
+                      onChange={(e) => setPaying({ ...paying, amount: e.target.value })}
+                      data-pay-amount
+                    />
+                  </Field>
+                  <Field label={E.paidOn} required>
+                    <Input type="date" value={paying.paidOn} onChange={(e) => setPaying({ ...paying, paidOn: e.target.value })} />
+                  </Field>
+                </div>
+                <Field label={t.expenses.method}>
+                  <Select value={paying.method} onChange={(e) => setPaying({ ...paying, method: e.target.value as Method })} data-pay-method>
+                    {METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {t.expenses.methods[m]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {amt > 0 && left > 0.005 && <p className="text-[12.5px] text-ink-700">{E.payPart.replace("{left}", money(left))}</p>}
+                {left < -0.005 && <p className="text-[12.5px] font-semibold text-danger">{E.payTooMuch}</p>}
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setPaying(null)}>
+                    {t.common.cancel}
+                  </Button>
+                  <Button disabled={!(amt > 0) || left < -0.005 || !paying.paidOn} onClick={() => pay(paying)} data-pay-save>
+                    {E.paySave.replace("{amount}", money(amt || 0))}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+      </Modal>
     </>
   );
 }

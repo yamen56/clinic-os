@@ -43,7 +43,15 @@ import {
   undoAdjustAction,
 } from "./actions";
 
-type Answer = { products?: StockProduct[]; companies?: Company[]; error?: string; outcome?: "deleted" | "archived"; expenseKept?: boolean; moveId?: string };
+type Answer = {
+  products?: StockProduct[];
+  companies?: Company[];
+  error?: string;
+  outcome?: "deleted" | "archived";
+  expenseKept?: boolean;
+  billKept?: boolean;
+  moveId?: string;
+};
 
 const num = (s: string) => (s.trim() === "" ? null : Number(s));
 const addDays = (iso: string, n: number) => {
@@ -60,6 +68,7 @@ export function StockClient({
   companies: initialCompanies,
   canPatients,
   pricesHref,
+  toPayHref,
 }: {
   slug: string;
   currency: string;
@@ -69,6 +78,8 @@ export function StockClient({
   canPatients: boolean;
   /** The face chart's prices, for somebody who may set them. A product's price lives there. */
   pricesHref: string | null;
+  /** Where deliveries not paid for yet are paid (Expenses → To pay), for somebody who may record spending. */
+  toPayHref: string | null;
 }) {
   const { t, locale } = useI18n();
   const cat = useFaceCatalog();
@@ -112,7 +123,7 @@ export function StockClient({
     setProducts(before.map((x) => (x.id === p.id ? { ...x, batches: x.batches.filter((y) => y.id !== b.id) } : x)));
     const r = await deleteBatchAction(slug, b.id);
     if (r.error) setProducts(before);
-    apply(r, r.expenseKept ? S.deliveryDeletedKept : S.deliveryDeleted, async () => {
+    apply(r, r.billKept ? S.deliveryDeletedBillKept : r.expenseKept ? S.deliveryDeletedKept : S.deliveryDeleted, async () => {
       apply(await restoreBatchAction(slug, b.id), S.restored);
     });
   };
@@ -141,6 +152,8 @@ export function StockClient({
   }, [products, soon]);
   const inUse = products.filter((p) => p.active);
   const archived = products.filter((p) => !p.active);
+  // What the clinic still owes its companies for deliveries taken on credit (0099).
+  const toPay = Math.round(companies.reduce((s, c) => s + c.owed, 0) * 100) / 100;
 
   const amount = (u: ProductUnit, n: number) => productAmount(u, n, locale);
   const money = (n: number) => fmtMoney(n, currency, locale);
@@ -173,13 +186,24 @@ export function StockClient({
         }
       />
 
-      {(alerts.low > 0 || alerts.expiring > 0 || alerts.owed > 0) && (
+      {(alerts.low > 0 || alerts.expiring > 0 || alerts.owed > 0 || toPay > 0) && (
         <div className="mb-4 flex flex-wrap gap-2" data-stock-alerts>
           {alerts.low > 0 && <span className="rounded-full bg-st-noshow-soft px-3 py-1 text-[12.5px] font-semibold text-ink-900">{S.alerts.low.replace("{n}", String(alerts.low))}</span>}
           {alerts.expiring > 0 && (
             <span className="rounded-full bg-st-noshow-soft px-3 py-1 text-[12.5px] font-semibold text-ink-900">{S.alerts.expiring.replace("{n}", String(alerts.expiring))}</span>
           )}
           {alerts.owed > 0 && <span className="rounded-full bg-danger-soft px-3 py-1 text-[12.5px] font-semibold text-danger">{S.alerts.owed.replace("{n}", String(alerts.owed))}</span>}
+          {/* Money, not units: what the companies are still owed for deliveries taken on credit. */}
+          {toPay > 0 &&
+            (toPayHref ? (
+              <Link href={toPayHref} className="rounded-full bg-sunken px-3 py-1 text-[12.5px] font-semibold text-ink-900 hover:underline" data-stock-to-pay={toPay}>
+                {S.alerts.toPay.replace("{amount}", money(toPay))}
+              </Link>
+            ) : (
+              <span className="rounded-full bg-sunken px-3 py-1 text-[12.5px] font-semibold text-ink-900" data-stock-to-pay={toPay}>
+                {S.alerts.toPay.replace("{amount}", money(toPay))}
+              </span>
+            ))}
         </div>
       )}
 
@@ -284,6 +308,11 @@ export function StockClient({
                                 <td className="px-2 py-1.5">
                                   {/* A lot is Latin whatever the page: isolated, so it does not run into the date beside it. */}
                                   {b.lot ? <bdi>{b.lot}</bdi> : <span className="text-ink-500">{S.noLot}</span>}
+                                  {b.owed != null && b.owed > 0.005 && (
+                                    <span className="ms-2 whitespace-nowrap rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-ink-700" data-batch-unpaid={b.owed}>
+                                      {S.unpaidBatch.replace("{amount}", money(b.owed))}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className={`px-2 py-1.5 tnum ${expired ? "font-semibold text-danger" : ""}`}>
                                   {b.expiresOn ? fmtDateOnly(b.expiresOn, locale) : "—"}
@@ -607,6 +636,9 @@ function ReceiveForm({
   const [expiresOn, setExpiresOn] = useState("");
   const [receivedOn, setReceivedOn] = useState(today);
   const [method, setMethod] = useState("cash");
+  // Paid on the day, or taken on credit and owed to the company until it is (ذمم, 0099).
+  const [paid, setPaid] = useState(true);
+  const [dueOn, setDueOn] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const p = products.find((x) => x.id === productId);
@@ -616,15 +648,27 @@ function ReceiveForm({
   const qty = p ? nPacks * p.packSize : 0;
   const money = (n: number) => fmtMoney(n, currency, locale);
   const summary = p && valid
-    ? (price > 0 ? R.summary : R.free)
+    ? (price > 0 ? (paid ? R.summary : R.summaryOwed) : R.free)
         .replace("{qty}", productAmount(p.unit, qty, locale))
         .replace("{each}", money(price / p.packSize))
         .replace("{total}", money(nPacks * price))
+        .replace("{company}", p.company ?? R.theCompany)
     : "";
 
   const submit = async () => {
     setBusy(true);
-    await onSave({ productId, packs: nPacks, packPrice: price, lot: lot.trim(), expiresOn: expiresOn || null, receivedOn: receivedOn || null, method, note: note.trim() });
+    await onSave({
+      productId,
+      packs: nPacks,
+      packPrice: price,
+      lot: lot.trim(),
+      expiresOn: expiresOn || null,
+      receivedOn: receivedOn || null,
+      method,
+      note: note.trim(),
+      paid,
+      dueOn: paid ? null : dueOn || null,
+    });
     setBusy(false);
   };
 
@@ -672,15 +716,29 @@ function ReceiveForm({
             <Input type="date" value={receivedOn} max={today} onChange={(e) => setReceivedOn(e.target.value)} dir="ltr" data-receive-on />
           </Field>
         </div>
-        <Field label={R.method}>
-          <Select value={method} onChange={(e) => setMethod(e.target.value)}>
-            {(["cash", "cliq", "card", "transfer", "cheque"] as const).map((m) => (
-              <option key={m} value={m}>
-                {R.methods[m]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={R.payment}>
+            <Select value={paid ? "paid" : "owed"} onChange={(e) => setPaid(e.target.value === "paid")} data-receive-payment>
+              <option value="paid">{R.paidNow}</option>
+              <option value="owed">{R.notPaid}</option>
+            </Select>
+          </Field>
+          {paid ? (
+            <Field label={R.method}>
+              <Select value={method} onChange={(e) => setMethod(e.target.value)}>
+                {(["cash", "cliq", "card", "transfer", "cheque"] as const).map((m) => (
+                  <option key={m} value={m}>
+                    {R.methods[m]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            <Field label={R.dueOn} hint={t.common.optional}>
+              <Input type="date" value={dueOn} min={receivedOn || today} onChange={(e) => setDueOn(e.target.value)} dir="ltr" data-receive-due />
+            </Field>
+          )}
+        </div>
         <Field label={R.note}>
           <Textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className="min-h-14" />
         </Field>
@@ -812,6 +870,11 @@ function CompaniesForm({
                 {c.products > 0 && (
                   <span className="block text-[12px] font-normal text-ink-500 tnum" data-company-summary>
                     {C.summary.replace("{n}", String(c.products)).replace("{spent}", money(c.spent))}
+                  </span>
+                )}
+                {c.owed > 0 && (
+                  <span className="block text-[12px] font-semibold text-ink-900 tnum" data-company-to-pay={c.owed}>
+                    {C.toPay.replace("{amount}", money(c.owed))}
                   </span>
                 )}
               </span>

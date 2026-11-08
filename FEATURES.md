@@ -1557,13 +1557,32 @@ included in `full`. Granted per person by an owner.
 An expense paid for a face chart delivery says so ("Delivery of Botox"), links to Stock for
 somebody who keeps it, and warns before it is deleted that the units stay on hand.
 
+**What is owed — To pay (ذمم, 0099, [src/lib/bills.ts](src/lib/bills.ts))**. Goods taken on
+credit and bills not paid yet are `supplier_bills` (who is owed, amount, the bill's date, an
+optional pay-by date, a note), never expenses. **Add a bill to pay**, or **Payment → Not paid
+yet** in Add expense, writes one; **Receive stock → Not paid yet** writes one for the product's
+company, and the delivery carries it (`stock_batches.bill_id`). The To pay card, above the
+month's expenses and never scoped to it, lists what each supplier is owed (a name typed two
+ways is one supplier), each bill with its date, its pay-by (red once it has passed) and what
+was paid of it, plus what the outside labs are owed (read from Lab work, opened on its To pay
+tab). **Pay** takes all or part of what a supplier is owed, never more, settles the oldest
+bills first, and writes one expense per bill paid on the day it is paid (`expenses.bill_id`;
+a delivery's bill under Supplies), with Undo. What is owed is never stored: a bill less the
+expenses pointing at it, so deleting a payment in Expenses makes the bill owed again. A bill
+cannot be cut below what was paid toward it; deleting one leaves its payments in Expenses.
+Profit counts the money when it is paid, as it always counted expenses. Stock shows what is
+still to pay the companies, a delivery not paid for, and each company's balance; deleting a
+delivery on credit takes its bill with it unless something was paid toward it (Undo restores
+both). Access: `expenses` to add, edit and pay bills; `stock` to receive on credit.
+
 ### Products and stock (`/c/{slug}/stock`)
 
 What the face chart uses, for aesthetic clinics only (the `aesthetic` module, the `stock`
 capability). Tables from 0085: companies → products → batches (a delivery) → moves. On hand is
 never stored: it is the sum of the moves.
 
-- **Receiving** makes a batch and a Supplies expense in one step, dated the day it came.
+- **Receiving** makes a batch and a Supplies expense in one step, dated the day it came — or,
+  taken on credit, a bill to the company under To pay (0099), which reaches Expenses when paid.
 - **Using**: a treatment takes the batch that expires first; expired batches come last, and the
   chart warns when they are all that is left. Used with none on hand still records, and the
   next delivery settles it; voiding afterwards gives the units back to that delivery.

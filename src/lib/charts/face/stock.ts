@@ -26,6 +26,8 @@ export type StockBatch = {
   onHand: number;
   unitCost: number;
   expenseId: string | null;
+  /** Taken on credit (0099): what is still owed for it. Null when it was paid on the day; 0 once settled. */
+  owed: number | null;
   note: string;
   /** Past its date, by the clinic's clock. Still on hand, but the last thing a treatment takes. */
   expired: boolean;
@@ -68,6 +70,8 @@ export type Company = {
   products: number;
   /** What every delivery from it cost, at the price each came in at. */
   spent: number;
+  /** What the clinic still owes it for deliveries taken on credit (0099). */
+  owed: number;
 };
 
 const day = (v: unknown): string | null => (v ? String(v).slice(0, 10) : null);
@@ -111,6 +115,8 @@ export async function loadStockProducts(c: PoolClient, clinicId: string, opts: {
             (select coalesce(json_agg(b order by b.expires_on nulls last, b.received_on, b.created_at), '[]'::json)
                from (select sb.id, sb.lot, sb.expires_on::text as expires_on, sb.received_on::text as received_on, sb.qty::float as qty,
                             sb.unit_cost::float as unit_cost, sb.expense_id, sb.note, sb.created_at,
+                            (select (sbl.amount - coalesce((select sum(e.amount) from expenses e where e.bill_id = sbl.id), 0))::float
+                               from supplier_bills sbl where sbl.id = sb.bill_id) as owed,
                             coalesce(sb.expires_on < ${clinicToday("$1")}, false) as expired,
                             not exists (select 1 from stock_moves m where m.batch_id = sb.id and m.kind <> 'receive') as untouched,
                             coalesce((select sum(m.qty) from stock_moves m where m.batch_id = sb.id), 0)::float as on_hand
@@ -132,6 +138,7 @@ export async function loadStockProducts(c: PoolClient, clinicId: string, opts: {
       onHand: Number(b.on_hand),
       unitCost: Number(b.unit_cost),
       expenseId: (b.expense_id as string) ?? null,
+      owed: b.owed == null ? null : Math.max(0, Math.round(Number(b.owed) * 100) / 100),
       note: (b.note as string) ?? "",
       expired: !!b.expired,
       untouched: !!b.untouched,
@@ -166,7 +173,7 @@ export async function loadStockProducts(c: PoolClient, clinicId: string, opts: {
  * to read, and leaving it out of the screen does not keep it out of the page.
  */
 export function withoutCosts(p: StockProduct): StockProduct {
-  return { ...p, lastCost: null, batches: p.batches.map((b) => ({ ...b, unitCost: 0, expenseId: null, note: "" })) };
+  return { ...p, lastCost: null, batches: p.batches.map((b) => ({ ...b, unitCost: 0, expenseId: null, owed: null, note: "" })) };
 }
 
 export async function loadCompanies(c: PoolClient, clinicId: string): Promise<Company[]> {
@@ -174,7 +181,9 @@ export async function loadCompanies(c: PoolClient, clinicId: string): Promise<Co
     `select co.id, co.name, co.phone, co.note, co.active,
             (select count(*)::int from aesthetic_products p where p.company_id = co.id) as products,
             coalesce((select sum(b.qty * b.unit_cost) from stock_batches b join aesthetic_products p on p.id = b.product_id
-                       where p.company_id = co.id), 0)::float as spent
+                       where p.company_id = co.id), 0)::float as spent,
+            coalesce((select sum(sbl.amount - coalesce((select sum(e.amount) from expenses e where e.bill_id = sbl.id), 0))
+                        from supplier_bills sbl where sbl.company_id = co.id), 0)::float as owed
        from aesthetic_companies co where co.clinic_id = $1 order by co.sort, co.name`,
     [clinicId]
   );
@@ -186,6 +195,7 @@ export async function loadCompanies(c: PoolClient, clinicId: string): Promise<Co
     active: !!x.active,
     products: Number(x.products),
     spent: Math.round(Number(x.spent) * 100) / 100,
+    owed: Math.max(0, Math.round(Number(x.owed) * 100) / 100),
   }));
 }
 
