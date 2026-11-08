@@ -1600,8 +1600,14 @@ earlier entry (`redo_of`) at the price the doctor says, 0 if free.
 - Five pictures, `VIEW_SRC`: left, front-left, front, front-right, right, the patient's sides.
   The turned ones were cut from one Canva sheet (page 2 of design DAHZTbj2560) and set at the
   front's 945 × 1264; `zonesOn(view)` places only the parts each one shows.
-- Past spots are dots on the view they were marked on; one opens a card with what was done, by
-  whom, how much and with which product, and Treat here again. Repeat starts on the same spots.
+- Every dot shows on every view that shows its part, wherever it was marked (`placeOn` keeps its
+  place within the part). One opens a card with what was done, by whom, how much and with which
+  product, and Treat here again. Repeat starts on the same spots.
+- The profiles add the back of the head and of the neck (`BACK_ZONES`), where a migraine's toxin goes.
+  Every treatment is always offered, the usual ones for the dots first.
+- Colours and deleting (0098 `aesthetic_treatment_looks`): Settings → Face prices picks each
+  treatment's colour (dots, cards, the key under the face) and deletes it with Undo; a deleted one
+  is not offered anywhere and refused for new work, and can be brought back.
 
 ### What the clinic kept
 
