@@ -20,10 +20,10 @@ export default async function StockPage({ params }: { params: Promise<{ slug: st
   const data = await inClinic(access, async (c) => ({
     products: await loadStockProducts(c, access.clinicId, { withBatches: true }),
     companies: await loadCompanies(c, access.clinicId),
-    custom: (await loadClinicTreatments(c, access.clinicId)).custom,
+    ...(await loadClinicTreatments(c, access.clinicId)),
   }));
   return (
-    <FaceCatalogProvider custom={data.custom}>
+    <FaceCatalogProvider custom={data.custom} looks={data.looks}>
     <StockClient
       slug={slug}
       currency={access.clinic.currency}

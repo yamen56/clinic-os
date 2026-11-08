@@ -9,17 +9,22 @@
 
   A treatment the clinic does that is not listed is added here as well as at the
   chair (Yamen, 2026-11-08), and is shown at once, waiting for its price.
+
+  Each treatment's colour on the face is chosen here, and a treatment the clinic
+  does not do is deleted here, with Undo (0098). Deleted ones wait at the bottom
+  to be brought back; their past entries keep their names.
 */
 
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Trash2, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AddTreatment } from "@/components/charts/face/add-treatment";
-import { FAMILIES, mergeCatalog, type FaceTreatment, type FaceVariant } from "@/lib/charts/face/catalog";
+import { FAMILIES, TREATMENT_COLORS, mergeCatalog, treatmentColor, type FaceTreatment, type FaceVariant, type TreatmentLook } from "@/lib/charts/face/catalog";
+import { treatmentsCall } from "@/components/charts/face/add-treatment";
 import type { FacePrice } from "@/lib/charts/face/db";
 import { FamilyTag } from "@/components/charts/face/family-tag";
 import { PriceBox } from "../prices/dental-prices";
@@ -36,6 +41,7 @@ export function FacePrices({
   stockHref,
   custom: initialCustom,
   variants: initialVariants,
+  looks: initialLooks = [],
 }: {
   slug: string;
   currency: string;
@@ -46,11 +52,50 @@ export function FacePrices({
   /** The clinic's own treatments and every treatment's kinds (0094). */
   custom: FaceTreatment[];
   variants: FaceVariant[];
+  looks?: TreatmentLook[];
 }) {
   const [custom, setCustom] = useState(initialCustom);
   const [variants, setVariants] = useState(initialVariants);
   const [adding, setAdding] = useState(false);
-  const offered = useMemo(() => mergeCatalog(custom).offered, [custom]);
+  const [looks, setLooks] = useState<TreatmentLook[]>(initialLooks);
+  const [painting, setPainting] = useState<string | null>(null);
+  const catalog = useMemo(() => mergeCatalog(custom, looks), [custom, looks]);
+  const offered = catalog.offered;
+  const removedList = useMemo(() => [...catalog.byKey.values()].filter((t) => t.archived), [catalog]);
+
+  // Colour and delete answer the tap at once; the server's lists follow.
+  const changeLook = async (body: Record<string, unknown>, optimistic: (l: TreatmentLook[], c: FaceTreatment[]) => [TreatmentLook[], FaceTreatment[]]) => {
+    const before = { looks, custom };
+    const [nl, nc] = optimistic(looks, custom);
+    setLooks(nl);
+    setCustom(nc);
+    const r = await treatmentsCall(slug, body);
+    if (r.error) {
+      setLooks(before.looks);
+      setCustom(before.custom);
+      toast(t.common.genericError, "error");
+      return false;
+    }
+    setLooks(r.looks ?? []);
+    setCustom(r.custom);
+    setVariants(r.variants);
+    return true;
+  };
+  const upsert = (l: TreatmentLook[], key: string, change: Partial<TreatmentLook>) => {
+    const had = l.find((x) => x.key === key);
+    return had ? l.map((x) => (x.key === key ? { ...x, ...change } : x)) : [...l, { key, color: null, removed: false, ...change }];
+  };
+  const paint = (x: FaceTreatment, color: string | null) => {
+    setPainting(null);
+    void changeLook({ op: "color", key: x.key, color }, (l, c) => [upsert(l, x.key, { color }), c]);
+  };
+  const remove = (x: FaceTreatment, removed: boolean) => {
+    void changeLook({ op: "remove", key: x.key, removed }, (l, c) =>
+      x.custom ? [l, c.map((y) => (y.key === x.key ? { ...y, archived: removed } : y))] : [upsert(l, x.key, { removed }), c]
+    ).then((ok) => {
+      if (ok && removed) toast(P.removed.replace("{name}", x.en), "success", { label: P.undo, onClick: () => remove(x, false) });
+    });
+  };
   const { t, locale } = useI18n();
   const P = t.services.facePrices;
   const { toast } = useToast();
@@ -93,9 +138,10 @@ export function FacePrices({
           slug={slug}
           zones={[]}
           onClose={() => setAdding(false)}
-          onAdded={(key, nextCustom, nextVariants) => {
+          onAdded={(key, nextCustom, nextVariants, nextLooks) => {
             setCustom(nextCustom);
             setVariants(nextVariants);
+            if (nextLooks) setLooks(nextLooks);
             setAdding(false);
             const made = nextCustom.find((c) => c.key === key);
             toast(P.added.replace("{name}", made?.en ?? ""));
@@ -124,7 +170,40 @@ export function FacePrices({
                 return (
                   <li key={x.key} className="px-4 py-2.5" data-face-price-row={x.key}>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                      <div className="min-w-0 flex-[1_1_14rem]">
+                      <div className="flex min-w-0 flex-[1_1_14rem] items-start gap-2.5">
+                        {/* Its colour on the face: tap, pick. */}
+                        <span className="relative shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setPainting((p) => (p === x.key ? null : x.key))}
+                            aria-label={P.color.replace("{name}", x.en)}
+                            aria-expanded={painting === x.key}
+                            className="mt-0.5 grid h-8 w-8 place-items-center rounded-full border border-line hover:bg-sunken"
+                            data-face-color={x.key}
+                          >
+                            <span className="h-4 w-4 rounded-full" style={{ background: treatmentColor(x, x.family) }} />
+                          </button>
+                          {painting === x.key && (
+                            <span className="absolute start-0 top-9 z-20 grid w-[13.5rem] grid-cols-6 gap-1.5 rounded-card border border-line bg-surface p-2.5 shadow-pop" data-face-palette={x.key}>
+                              {TREATMENT_COLORS.map((c) => (
+                                <button
+                                  key={c}
+                                  type="button"
+                                  onClick={() => paint(x, c)}
+                                  aria-label={c}
+                                  aria-pressed={x.color === c}
+                                  className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-surface ${x.color === c ? "ring-2 ring-ink-900" : ""}`}
+                                  style={{ background: c }}
+                                  data-face-swatch={c}
+                                />
+                              ))}
+                              <button type="button" onClick={() => paint(x, null)} className="col-span-6 mt-1 min-h-8 rounded-ctl text-[12.5px] font-semibold text-brand-700 hover:bg-sunken" data-face-swatch-reset>
+                                {P.familyColor}
+                              </button>
+                            </span>
+                          )}
+                        </span>
+                        <div className="min-w-0">
                         <div className="text-[13.5px] font-semibold" dir="ltr">
                           {x.en} <span className="font-normal text-ink-500">· {x.ar}</span>
                         </div>
@@ -134,6 +213,7 @@ export function FacePrices({
                             {u.unpriced > 0 && <span className="text-danger"> · {P.unpriced.replace("{n}", String(u.unpriced))}</span>}
                           </div>
                         )}
+                        </div>
                       </div>
                       <span className="text-[12.5px] text-ink-500">{P.pricedBy[x.pricedBy]}</span>
                       <span className="flex items-center gap-1.5">
@@ -146,6 +226,16 @@ export function FacePrices({
                         />
                         <span className="text-[12.5px] text-ink-500">{currency}</span>
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => remove(x, true)}
+                        aria-label={P.remove.replace("{name}", x.en)}
+                        title={P.remove.replace("{name}", x.en)}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-400 hover:bg-danger-soft hover:text-danger"
+                        data-face-remove={x.key}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                     {variants.some((v) => v.treatmentKey === x.key && v.active) && (
                       <ul className="mt-2 grid gap-1.5 border-s-2 border-line ps-3">
@@ -205,6 +295,28 @@ export function FacePrices({
           </Card>
         );
       })}
+      {removedList.length > 0 && (
+        <Card className="overflow-hidden" data-face-removed={removedList.length}>
+          <div className="border-b border-line px-4 py-2.5">
+            <div className="text-[13.5px] font-semibold">{P.removedTitle}</div>
+            <div className="text-[12px] text-ink-500">{P.removedHint}</div>
+          </div>
+          <ul className="divide-y divide-line">
+            {removedList.map((x) => (
+              <li key={x.key} className="flex items-center gap-3 px-4 py-2" data-face-removed-row={x.key}>
+                <span className="h-3 w-3 shrink-0 rounded-full opacity-60" style={{ background: treatmentColor(x, x.family) }} aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink-700" dir="ltr">
+                  {x.en} <span className="text-ink-500">· {x.ar}</span>
+                </span>
+                <Button size="sm" variant="outline" className="min-h-9" onClick={() => remove(x, false)} data-face-bring-back={x.key}>
+                  <RotateCcw className="h-4 w-4" />
+                  {P.bringBack}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
     </div>
   );
 }

@@ -133,6 +133,8 @@ export type FaceTreatment = {
   custom?: boolean;
   /** No longer offered, still named by what was recorded with it. */
   archived?: boolean;
+  /** The clinic's own colour for it (0098), over its family's. */
+  color?: string;
 };
 
 /** A kind of a treatment (0094): a TCA peel, PDO threads. It may have its own price and preselect a product. */
@@ -153,10 +155,36 @@ export function shapeOf(key: string, detail?: MarkDetail | null): { pricedBy: Pr
 }
 
 /** The thirteen and the clinic's own, as one: what is offered, and everything that can be named. */
-export function mergeCatalog(custom: FaceTreatment[]): { offered: FaceTreatment[]; byKey: Map<string, FaceTreatment> } {
-  const all = [...FACE_TREATMENTS, ...custom];
+/** A clinic's own colour for a treatment, and whether it removed a built-in one (0098). */
+export type TreatmentLook = { key: string; color: string | null; removed: boolean };
+
+/** The colours a treatment can be given: told apart from each other on the face and in a list. */
+export const TREATMENT_COLORS = [
+  "#0f7f8a",
+  "#b83d68",
+  "#a8701a",
+  "#6a46c0",
+  "#3f4753",
+  "#2f7d4f",
+  "#c0392b",
+  "#2563eb",
+  "#d97706",
+  "#0891b2",
+  "#be185d",
+  "#65a30d",
+];
+
+export function mergeCatalog(custom: FaceTreatment[], looks: TreatmentLook[] = []): { offered: FaceTreatment[]; byKey: Map<string, FaceTreatment> } {
+  const look = new Map(looks.map((l) => [l.key, l]));
+  const all = [...FACE_TREATMENTS, ...custom].map((t) => {
+    const l = look.get(t.key);
+    return l ? { ...t, color: l.color ?? undefined, archived: t.archived || l.removed } : t;
+  });
   return { offered: all.filter((t) => !t.archived), byKey: new Map(all.map((t) => [t.key, t])) };
 }
+
+/** The colour a treatment is drawn in: the clinic's choice, else its family's. */
+export const treatmentColor = (t: { color?: string; family: Family } | undefined, family: Family): string => t?.color ?? FAMILY_COLOR[t?.family ?? family];
 
 const ALL = FACE_ZONES.map((z) => z.key);
 const SKIN = ALL.filter((k) => k !== "scalp");

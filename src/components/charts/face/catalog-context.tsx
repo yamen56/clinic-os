@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo } from "react";
-import { mergeCatalog, type FaceTreatment } from "@/lib/charts/face/catalog";
+import { mergeCatalog, type FaceTreatment, type TreatmentLook } from "@/lib/charts/face/catalog";
 
 /*
   The face chart's treatments with the clinic's own (0094), for the screens
@@ -12,8 +12,9 @@ import { mergeCatalog, type FaceTreatment } from "@/lib/charts/face/catalog";
 
 const Ctx = createContext(mergeCatalog([]));
 
-export function FaceCatalogProvider({ custom, children }: { custom: FaceTreatment[]; children: React.ReactNode }) {
-  const value = useMemo(() => mergeCatalog(custom), [custom]);
+export function FaceCatalogProvider({ custom, looks = [], children }: { custom: FaceTreatment[]; looks?: TreatmentLook[]; children: React.ReactNode }) {
+  // A treatment the clinic removed (0098) is not offered here either.
+  const value = useMemo(() => mergeCatalog(custom, looks), [custom, looks]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

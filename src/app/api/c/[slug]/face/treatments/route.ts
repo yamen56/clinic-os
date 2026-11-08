@@ -35,6 +35,9 @@ const op = z.discriminatedUnion("op", [
   z.object({ op: z.literal("archive"), key: z.string().max(64), archived: z.boolean() }),
   z.object({ op: z.literal("variant"), treatmentKey: z.string().max(64), name: z.string().trim().min(1).max(60), nameAr, productId: z.string().uuid().nullish() }),
   z.object({ op: z.literal("variant_off"), id: z.string().uuid(), active: z.boolean() }),
+  // Its colour on the face (null: its family's), and removing it from the clinic's list or bringing it back (0098).
+  z.object({ op: z.literal("color"), key: z.string().max(64), color: z.string().regex(/^#[0-9a-f]{6}$/).nullable() }),
+  z.object({ op: z.literal("remove"), key: z.string().max(64), removed: z.boolean() }),
 ]);
 
 async function gate(slug: string) {
@@ -95,6 +98,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       } else {
         await c.query(`update services set active = $3 where clinic_id = $1 and chart_key = $2 and chart_owned`, [access.clinicId, d.key, !d.archived]);
       }
+      await audit(c, { clinicId: access.clinicId, userId: access.session.user.id, impersonatedBy: access.session.impersonatedBy, action: `face.treatment.${d.op}`, entity: "aesthetic_treatment", entityId: d.key, detail: d });
+      return { key: d.key };
+    }
+    if (d.op === "color" || d.op === "remove") {
+      const known = FACE_TREATMENT_BY_KEY.has(d.key) || (await c.query(`select 1 from aesthetic_treatments where clinic_id = $1 and key = $2`, [access.clinicId, d.key])).rowCount;
+      if (!known) return { error: "not_found" };
+      if (d.op === "remove" && d.key.startsWith(CUSTOM_PREFIX)) {
+        // The clinic's own: archived, as it always was, its prices with it.
+        await c.query(`update aesthetic_treatments set archived_at = case when $3 then now() else null end where clinic_id = $1 and key = $2`, [access.clinicId, d.key, d.removed]);
+      } else {
+        await c.query(
+          d.op === "color"
+            ? `insert into aesthetic_treatment_looks (clinic_id, treatment_key, color) values ($1, $2, $3)
+               on conflict (clinic_id, treatment_key) do update set color = excluded.color`
+            : `insert into aesthetic_treatment_looks (clinic_id, treatment_key, removed_at) values ($1, $2, case when $3 then now() end)
+               on conflict (clinic_id, treatment_key) do update set removed_at = excluded.removed_at`,
+          [access.clinicId, d.key, d.op === "color" ? d.color : d.removed]
+        );
+      }
+      // Its prices go off the invoice builder's list with it, and come back with it.
+      if (d.op === "remove") await c.query(`update services set active = $3 where clinic_id = $1 and chart_key = $2 and chart_owned`, [access.clinicId, d.key, !d.removed]);
       await audit(c, { clinicId: access.clinicId, userId: access.session.user.id, impersonatedBy: access.session.impersonatedBy, action: `face.treatment.${d.op}`, entity: "aesthetic_treatment", entityId: d.key, detail: d });
       return { key: d.key };
     }

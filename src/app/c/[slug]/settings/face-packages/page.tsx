@@ -14,12 +14,12 @@ export default async function FacePackagesPage({ params }: { params: Promise<{ s
   const { slug } = await params;
   const access = await guardCap(slug, "settings.services");
   if (!access.clinic.features.aesthetic) redirect(`/c/${slug}/settings/services`);
-  const { plans, custom } = await inClinic(access, async (c) => ({
+  const { plans, custom, looks } = await inClinic(access, async (c) => ({
     plans: await loadPlans(c, access.clinicId, false),
-    custom: (await loadClinicTreatments(c, access.clinicId)).custom,
+    ...(await loadClinicTreatments(c, access.clinicId)),
   }));
   return (
-    <FaceCatalogProvider custom={custom}>
+    <FaceCatalogProvider custom={custom} looks={looks}>
       <FacePackages slug={slug} currency={access.clinic.currency} plans={plans} />
     </FaceCatalogProvider>
   );

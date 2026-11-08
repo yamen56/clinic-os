@@ -10,7 +10,7 @@ import type { PoolClient } from "pg";
 import type { MarkEvent } from "@/lib/charts/dental/state";
 import type { Billed } from "@/lib/charts/dental/billing-server";
 import { toEvent } from "@/lib/charts/dental/db";
-import { FACE_TREATMENT_BY_KEY, type Area, type Family, type FaceTreatment, type FaceVariant, type MarkDetail } from "./catalog";
+import { FACE_TREATMENT_BY_KEY, type Area, type Family, type FaceTreatment, type FaceVariant, type MarkDetail, type TreatmentLook } from "./catalog";
 import { loadClinicTreatments } from "./treatments";
 import { loadMarkProducts, loadStockProducts, withoutCosts, type MarkProduct, type StockProduct } from "./stock";
 import { loadPatientPackages, loadPlans, type PackagePlan, type PatientPackage } from "./packages";
@@ -68,6 +68,8 @@ export type FaceChartData = {
   plans: PackagePlan[];
   /** The clinic's own treatments, archived ones too so old entries keep their names, and every variant (0094). */
   custom: FaceTreatment[];
+  /** The clinic's colours for treatments, and the built-in ones it removed (0098). */
+  looks: TreatmentLook[];
   variants: FaceVariant[];
 };
 

@@ -269,7 +269,12 @@ async function main() {
     const staleBatch = await deliver(stale, 20, { lot: "STALE", expires: yesterday });
     await page.goto(`${BASE}/c/${slug}/patients/${patient.id}?tab=face`, { timeout: 180000 });
     await page.waitForSelector("[data-face-map]", { timeout: 120000 });
-    await page.locator("[data-face-preset='upper']").click();
+    // Beside each part's middle: work recorded there earlier, by the API, is a dot in the middle, and a tap on it opens it.
+    for (const z of ["forehead", "glabella", "crows_r", "crows_l"]) {
+      const el = page.locator(`[data-zone='${z}']`);
+      const b = (await el.boundingBox())!;
+      await el.click({ position: { x: b.width / 2 + 12, y: b.height / 2 } });
+    }
     await page.locator("[data-face-treatment='aes_toxin']").click();
     await page.waitForSelector("[data-face-panel='record']");
     check((await page.locator(`[data-face-product='${stale}'] [data-face-product-expired]`).count()) === 1, "the chart warns when expired stock is all that is left");

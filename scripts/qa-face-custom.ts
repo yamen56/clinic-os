@@ -280,6 +280,51 @@ async function main() {
     check(await until(async () => (await page.locator(`[data-face-price-row='${exo?.key}']`).count()) === 1), "and lists it at once");
     check(await until(async () => (await page.evaluate("document.activeElement && document.activeElement.getAttribute('data-price-box')")) === exo?.key), "with its price box ready to type in");
 
+    console.log("Colours, and deleting (2026-11-08)");
+    await page.keyboard.press("Escape");
+    await page.locator("[data-face-color='aes_toxin']").click();
+    await page.locator("[data-face-palette='aes_toxin'] [data-face-swatch='#2563eb']").click();
+    check(
+      await until(async () => (await q(`select color from aesthetic_treatment_looks where clinic_id = $1 and treatment_key = 'aes_toxin'`, [clinic.id]))[0]?.color === "#2563eb"),
+      "Botox is given a colour of its own"
+    );
+    await page.locator("[data-face-remove='aes_ipl']").click();
+    check(
+      await until(async () => !!(await q(`select removed_at from aesthetic_treatment_looks where clinic_id = $1 and treatment_key = 'aes_ipl'`, [clinic.id]))[0]?.removed_at),
+      "a built-in treatment the clinic does not do is deleted"
+    );
+    check((await page.locator("[data-face-removed-row='aes_ipl']").count()) === 1 && (await page.locator("[data-face-price-row='aes_ipl']").count()) === 0, "and waits under Deleted treatments");
+    await page.locator("[data-toast-action]").first().click();
+    check(
+      await until(async () => (await q(`select removed_at from aesthetic_treatment_looks where clinic_id = $1 and treatment_key = 'aes_ipl'`, [clinic.id]))[0]?.removed_at === null),
+      "Undo brings it straight back"
+    );
+    await page.locator("[data-face-remove='aes_ipl']").click();
+    await until(async () => !!(await q(`select removed_at from aesthetic_treatment_looks where clinic_id = $1 and treatment_key = 'aes_ipl'`, [clinic.id]))[0]?.removed_at);
+    const ipl = await page.request.post(`${BASE}/api/c/${slug}/patients/${patient.id}/face/marks`, {
+      data: { id: crypto.randomUUID(), eventId: crypto.randomUUID(), treatmentKey: "aes_ipl", areas: [{ zone: "forehead" }] },
+    });
+    check(ipl.status() === 400, "a deleted treatment is not recorded", String(ipl.status()));
+    await page.goto(chart, { timeout: 180000 });
+    await page.waitForSelector("[data-face-map]", { timeout: 120000 });
+    const blue = "rgb(37, 99, 235)";
+    check(
+      (await page.locator(`[data-face-past='${pointed.id}'] span`).first().evaluate((e) => getComputedStyle(e).backgroundColor)) === blue,
+      "the Botox already on the face is drawn in its new colour"
+    );
+    check((await page.locator("[data-face-legend='aes_toxin']").count()) === 1, "and the key under the face names it");
+    await tapBeside(page, "chin", 0);
+    check((await page.locator("[data-face-treatment='aes_ipl']").count()) === 0, "the deleted treatment is not offered");
+    check(
+      (await page.locator("[data-face-treatment='aes_toxin'] span[aria-hidden]").first().evaluate((e) => getComputedStyle(e).backgroundColor)) === blue,
+      "Botox is offered in its colour"
+    );
+    await page.locator("[data-face-undo-dot]").click();
+    await page.goto(`${BASE}/c/${slug}/settings/face-prices`, { timeout: 180000 });
+    await page.waitForSelector("[data-face-prices]", { timeout: 120000 });
+    await page.locator("[data-face-bring-back='aes_ipl']").click();
+    check(await until(async () => (await page.locator("[data-face-price-row='aes_ipl']").count()) === 1), "a deleted treatment can be brought back");
+
     console.log("Archived");
     const r = await page.request.post(`${BASE}/api/c/${slug}/face/treatments`, { data: { op: "archive", key: made.key, archived: true } });
     check(r.ok(), "the treatment is archived");

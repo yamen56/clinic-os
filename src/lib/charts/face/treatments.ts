@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import { FACE_TREATMENT_BY_KEY, type FaceTreatment, type FaceVariant, type Family, type PricedBy } from "./catalog";
+import { FACE_TREATMENT_BY_KEY, type FaceTreatment, type FaceVariant, type Family, type PricedBy, type TreatmentLook } from "./catalog";
 
 /**
  * The clinic's own face treatments and variants (0094), on the server.
@@ -38,17 +38,29 @@ const toVariant = (r: Row): FaceVariant => ({
   active: !!r.active,
 });
 
-/** The clinic's own treatments, archived ones included, and every variant. */
-export async function loadClinicTreatments(c: PoolClient, clinicId: string): Promise<{ custom: FaceTreatment[]; variants: FaceVariant[] }> {
+/** The clinic's own treatments, archived ones included, every variant, and its colours and removals (0098). */
+export async function loadClinicTreatments(
+  c: PoolClient,
+  clinicId: string
+): Promise<{ custom: FaceTreatment[]; variants: FaceVariant[]; looks: TreatmentLook[] }> {
   const t = await c.query(`select * from aesthetic_treatments where clinic_id = $1 order by created_at`, [clinicId]);
   const v = await c.query(`select * from aesthetic_treatment_variants where clinic_id = $1 order by sort, created_at`, [clinicId]);
-  return { custom: t.rows.map(toTreatment), variants: v.rows.map(toVariant) };
+  const l = await c.query(`select treatment_key, color, removed_at from aesthetic_treatment_looks where clinic_id = $1`, [clinicId]);
+  return {
+    custom: t.rows.map(toTreatment),
+    variants: v.rows.map(toVariant),
+    looks: l.rows.map((r) => ({ key: r.treatment_key as string, color: (r.color as string) ?? null, removed: !!r.removed_at })),
+  };
 }
 
-/** A treatment by key, built-in or this clinic's own, archived or not. */
+/** A treatment by key, built-in or this clinic's own, archived (or removed) or not. */
 export async function resolveTreatment(c: PoolClient, clinicId: string, key: string): Promise<FaceTreatment | null> {
   const built = FACE_TREATMENT_BY_KEY.get(key);
-  if (built) return built;
+  if (built) {
+    // A built-in the clinic removed is still found, as archived: past entries name it, new work may not.
+    const removed = (await c.query(`select 1 from aesthetic_treatment_looks where clinic_id = $1 and treatment_key = $2 and removed_at is not null`, [clinicId, key])).rowCount;
+    return removed ? { ...built, archived: true } : built;
+  }
   if (!key.startsWith(CUSTOM_PREFIX)) return null;
   const r = await c.query(`select * from aesthetic_treatments where clinic_id = $1 and key = $2`, [clinicId, key]);
   return r.rows[0] ? toTreatment(r.rows[0]) : null;

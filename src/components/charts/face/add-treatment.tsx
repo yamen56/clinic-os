@@ -13,9 +13,9 @@ import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
-import { BACK_ZONES, FACE_ZONES, FAMILIES, whereText, type Family, type FaceTreatment, type FaceVariant, type PricedBy } from "@/lib/charts/face/catalog";
+import { BACK_ZONES, FACE_ZONES, FAMILIES, whereText, type Family, type FaceTreatment, type FaceVariant, type PricedBy, type TreatmentLook } from "@/lib/charts/face/catalog";
 
-export type TreatmentsAnswer = { ok?: boolean; key?: string; variantId?: string; custom: FaceTreatment[]; variants: FaceVariant[]; error?: string };
+export type TreatmentsAnswer = { ok?: boolean; key?: string; variantId?: string; custom: FaceTreatment[]; variants: FaceVariant[]; looks?: TreatmentLook[]; error?: string };
 
 export async function treatmentsCall(slug: string, body: Record<string, unknown>): Promise<TreatmentsAnswer> {
   const res = await fetch(`/api/c/${slug}/face/treatments`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -35,7 +35,7 @@ export function AddTreatment({
   slug: string;
   zones: string[];
   onClose: () => void;
-  onAdded: (key: string, custom: FaceTreatment[], variants: FaceVariant[]) => void;
+  onAdded: (key: string, custom: FaceTreatment[], variants: FaceVariant[], looks?: TreatmentLook[]) => void;
 }) {
   const { t } = useI18n();
   const F = t.face;
@@ -62,7 +62,7 @@ export function AddTreatment({
     });
     setBusy(false);
     if (!r.key) return toast(r.error === "exists" ? N.exists : t.common.genericError, "error");
-    onAdded(r.key, r.custom, r.variants);
+    onAdded(r.key, r.custom, r.variants, r.looks);
   };
 
   return (

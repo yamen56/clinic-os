@@ -43,6 +43,7 @@ export default async function FacePricesPage({ params }: { params: Promise<{ slu
       stockHref={can(access, "stock") ? `/c/${slug}/stock` : null}
       custom={data.custom}
       variants={data.variants}
+      looks={data.looks}
     />
   );
 }

@@ -486,6 +486,8 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
     [clinic, `aes_c_rls${tag}`]
   );
   await q(`insert into aesthetic_treatment_variants (clinic_id, treatment_key, name) values ($1, $2, 'RLS kind') returning id`, [clinic, `aes_c_rls${tag}`]);
+  // A colour of its own for a treatment (0098).
+  await q(`insert into aesthetic_treatment_looks (clinic_id, treatment_key, color) values ($1, 'aes_toxin', '#2563eb') returning treatment_key`, [clinic]);
 
   return { clinic, user, member, patient, service, appointment, conversation, invoice, automation, step, run };
 }

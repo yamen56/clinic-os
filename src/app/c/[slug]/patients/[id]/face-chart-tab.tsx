@@ -54,6 +54,7 @@ import {
   type PricedBy,
   FACE_ZONES,
   FACE_VIEWS,
+  treatmentColor,
   VIEW_NAME,
   VIEW_SHORT,
   zoneAt,
@@ -73,11 +74,6 @@ import { AddTreatment, treatmentsCall } from "@/components/charts/face/add-treat
 function centreOf(zone: string): { x: number; y: number; v: "front" } | null {
   const z = ZONE_BY_KEY.get(zone);
   return z ? { x: z.x, y: z.y, v: "front" } : null;
-}
-
-/** The colour a treatment's dots are drawn in. */
-function colorOf(m: { family: Family }): string {
-  return FAMILY_COLOR[m.family];
 }
 
 /** How long a toxin lasts, near enough to say when the patient is due again. */
@@ -191,11 +187,12 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
         ? live.flatMap((m) =>
             m.areas.flatMap((a, ai) => {
               const spots = a.points?.length ? a.points : [centreOf(a.zone)].filter((c) => c !== null);
-              return spots.map((p, pi) => ({ key: `${m.id}:${ai}:${pi}`, markId: m.id, zone: a.zone, x: p.x, y: p.y, v: p.v ?? "front", color: colorOf(m) }));
+              const color = treatmentColor(s.catalog.byKey.get(m.treatmentKey), m.family);
+              return spots.map((p, pi) => ({ key: `${m.id}:${ai}:${pi}`, markId: m.id, zone: a.zone, x: p.x, y: p.y, v: p.v ?? "front", color }));
             })
           )
         : [],
-    [live, showPast]
+    [live, showPast, s.catalog]
   );
 
   // The latest toxin, and when it wears off.
@@ -672,6 +669,16 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     );
   };
 
+  // What is on this face, once each, in its colour: the key to its dots.
+  const onFace = (() => {
+    const seen = new Map<string, { key: string; name: string; color: string }>();
+    for (const p of pastPoints) {
+      const m = s.marks.find((x) => x.id === p.markId);
+      if (m && !seen.has(m.treatmentKey)) seen.set(m.treatmentKey, { key: m.treatmentKey, name: s.catalog.byKey.get(m.treatmentKey)?.en ?? m.label, color: p.color });
+    }
+    return [...seen.values()];
+  })();
+
   const toggles = (
     <>
       <button
@@ -747,8 +754,11 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             {spot && spotCard(spot)}
           </FaceMap>
           <div className="mt-3 flex flex-wrap justify-center gap-1.5 border-t border-line pt-3">
-            {FAMILIES.map((f) => (
-              <FamilyTag key={f} family={f} label={F.families[f]} />
+            {onFace.map((t) => (
+              <span key={t.key} className="inline-flex h-6 items-center gap-1.5 rounded-full border border-line px-2 text-[12px] font-medium" data-face-legend={t.key}>
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: t.color }} aria-hidden />
+                {t.name}
+              </span>
             ))}
           </div>
           {/* What the face shows: rarely changed, so under it rather than above. */}
@@ -823,7 +833,10 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                             className="flex min-h-14 flex-col items-start justify-center gap-1 rounded-ctl border border-line-strong px-3 py-2 text-start hover:bg-sunken"
                             data-face-treatment={x.key}
                           >
-                            <span className="text-[13.5px] font-semibold">{x.en}</span>
+                            <span className="flex items-center gap-1.5 text-[13.5px] font-semibold">
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: treatmentColor(x, x.family) }} aria-hidden />
+                              {x.en}
+                            </span>
                             <span className="flex flex-wrap items-center gap-1.5">
                               <FamilyTag family={x.family} label={F.families[x.family]} />
                               <span className="text-[12px] text-ink-500 tnum">{p ? `${money(p.price)} ${F.pricedBy[x.pricedBy]}` : F.noPriceShort}</span>
@@ -847,8 +860,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                   slug={s.slug}
                   zones={sel}
                   onClose={() => setAdding(false)}
-                  onAdded={(key, custom, variants) => {
-                    s.setTreatments(custom, variants);
+                  onAdded={(key, custom, variants, looks) => {
+                    s.setTreatments(custom, variants, looks);
                     setAdding(false);
                     start(key, undefined, custom.find((c) => c.key === key));
                   }}
