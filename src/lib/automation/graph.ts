@@ -3,6 +3,7 @@ import {
   type Rule,
   RULE_NEEDS,
   EXIT_NEEDS,
+  BOOKED_HANDLES,
   isStepKey,
   normalizeStepConfig,
   parseStepConfig,
@@ -44,6 +45,7 @@ export type IssueCode =
   | "no_recipients"
   | "no_member"
   | "no_field"
+  | "no_service"
   | "empty_note"
   | "option_no_keywords"
   | "needs_patient"
@@ -158,8 +160,61 @@ function stepIssues(node: FlowNode, provides: Ctx[], hasReplyStep: boolean): Iss
       if (cfg.appointment_doctor && !provides.includes("appointment")) err("needs_appointment");
       break;
     }
+    case "book_appointment":
+    case "add_to_waitlist": {
+      // "The same as the appointment" only means something when there is one.
+      const fromAppt =
+        cfg.service === "trigger" ||
+        cfg.doctor === "trigger" ||
+        (node.type === "book_appointment" && (cfg.from === "appointment" || cfg.part_of_day === "same_time"));
+      if (fromAppt && !provides.includes("appointment")) err("needs_appointment");
+      if (cfg.service === "pick" && !str("service_id")) err("no_service");
+      if (cfg.doctor === "pick" && !str("member_id")) err("no_member");
+      break;
+    }
   }
   return out;
+}
+
+/**
+ * What each step can see.
+ *
+ * The trigger's context, everywhere — and an appointment as well for a step
+ * that can only be reached through a booking ("Book an appointment" → booked,
+ * or already booked), because from there on the run is about that
+ * appointment. Only when *every* way to the step goes through one: a step also
+ * reachable straight from a trigger with no appointment would find none there.
+ */
+export function providesByNode(base: Ctx[], nodes: FlowNode[], edges: FlowEdge[]): Map<string, Ctx[]> {
+  const out = new Map<string, Ctx[]>();
+  if (base.includes("appointment") || !nodes.some((n) => n.type === "book_appointment")) {
+    for (const n of nodes) out.set(n.id, base);
+    return out;
+  }
+  const type = new Map(nodes.map((n) => [n.id, n.type]));
+  const booking = (e: FlowEdge) =>
+    e.from !== null && type.get(e.from) === "book_appointment" && (BOOKED_HANDLES as readonly string[]).includes(e.handle);
+  // Everything the trigger reaches without passing a booking.
+  const plain = new Set<string>();
+  const queue = edges.filter((e) => e.from === null).map((e) => e.to);
+  while (queue.length) {
+    const id = queue.shift()!;
+    if (plain.has(id)) continue;
+    plain.add(id);
+    for (const e of edges) if (e.from === id && !booking(e)) queue.push(e.to);
+  }
+  for (const n of nodes) out.set(n.id, plain.has(n.id) ? base : [...base, "appointment"]);
+  return out;
+}
+
+/** What a step added after `from`'s `handle` would see. */
+export function providesAfter(base: Ctx[], nodes: FlowNode[], edges: FlowEdge[], from: string | null, handle: string): Ctx[] {
+  if (from === null) return base;
+  const node = nodes.find((n) => n.id === from);
+  if (node?.type === "book_appointment" && (BOOKED_HANDLES as readonly string[]).includes(handle) && !base.includes("appointment")) {
+    return [...base, "appointment"];
+  }
+  return providesByNode(base, nodes, edges).get(from) ?? base;
 }
 
 /**
@@ -187,7 +242,10 @@ export function validateFlow(flow: {
 
   if (!flow.nodes.length) issues.push({ nodeId: null, code: "empty", severity: "error" });
 
-  for (const n of flow.nodes) issues.push(...stepIssues({ ...n, config: normalizeStepConfig(n.type, n.config) }, provides, hasReplyStep));
+  const seesAt = providesByNode(provides, flow.nodes, flow.edges);
+  for (const n of flow.nodes) {
+    issues.push(...stepIssues({ ...n, config: normalizeStepConfig(n.type, n.config) }, seesAt.get(n.id) ?? provides, hasReplyStep));
+  }
 
   for (const ev of flow.settings?.exit_on ?? []) {
     const need = EXIT_NEEDS[ev];

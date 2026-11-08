@@ -1058,7 +1058,7 @@ action's enum had never heard of, so those flows could not be saved).
 | `payment_received` | A payment is recorded at the desk (insurer payments are not) | fully paid only |
 | `document_*` | sent / viewed / signed / completed / declined / unsigned (X days) / expired | |
 
-### Steps (18)
+### Steps (20)
 
 | Group | Steps |
 |---|---|
@@ -1066,7 +1066,25 @@ action's enum had never heard of, so those flows could not be saved).
 | Timing | `wait` (for a while · until a time of day, optionally on chosen weekdays · X before/after the appointment) · `wait_for_reply` (one way out per expected answer, plus "anything else" and "no reply") |
 | Logic | `condition` (all/any of up to 10 rules, each negatable) · `goto_automation` · `stop` |
 | Patient file | `add_tag` · `remove_tag` · `update_patient` (status or a custom field) · `add_note` |
-| Appointment | `update_appointment` (confirm / cancel — through `applyAppointmentStatus`, the desk's own path, so consent forms, the waitlist offer and doctor alerts all follow) |
+| Appointment | `update_appointment` (confirm / cancel — through `applyAppointmentStatus`, the desk's own path, so consent forms, the waitlist offer and doctor alerts all follow) · `book_appointment` · `add_to_waitlist` (below) |
+
+**Book an appointment** (`book_appointment`, migration 0100). Books the patient's next visit
+at the first free time: the service and doctor are the run's appointment's ("same doctor") or
+chosen, or the first free doctor; about N days from today or from the appointment; searched
+over up to 60 days; in the morning / afternoon / evening, or at the same time of day as the last
+visit (nearest within an hour); booked as *scheduled* or *confirmed*. Same availability engine
+as the booking page (`computeDayCounts` / `computeSlots`), under `lockClinicSchedule`, at least
+an hour ahead. Three ways out: **Booked**, **Had a visit** (by default a patient with a visit
+ahead is not booked twice) and **Nothing free**. After Booked or Had a visit the run *is about
+that appointment* — `automation_runs.appointment_id` moves to it (unless another live run of the
+flow already has it), so `{{appointment.date}}`, Confirm/Cancel and the cancel exit all follow;
+the builder and validation know it per step (`providesByNode`), so a birthday flow may use
+appointment words after a booking and not before. The booking is `source = 'automation'`
+("Booked automatically" on the board), audited with the automation's id, and emits
+`appointment_created` one level deeper in the chain — the doctor's alert, the clinic's
+confirmation flows and closing a waitlist entry all follow. **Add to the waitlist**
+(`add_to_waitlist`): the same service/doctor choice, from today for N days, a note for the desk;
+a patient already waiting for that doctor is left as they are. QA: `scripts/qa-automation-booking.ts`.
 | Chat | `assign_conversation` · `set_ai` (pause for a while / off / on) · `flag_conversation` · `close_conversation` |
 | Team | `create_task` (assign to a member or the appointment's doctor) · `notify_staff` (roles, named people, the appointment's doctor) |
 
@@ -1759,8 +1777,12 @@ The one screen everybody can open. Tiles respect the same capabilities as the na
 - **Set up your clinic** (owner / full access, until done): only the steps left get a row;
   finished ones are a line of ticked chips under them, so a clinic one step from done is not
   shown a screen of struck-through items.
-- Today's appointments (count + the day's list with time, patient, service, doctor, status).
-  A doctor on a phone gets their own list first and the numbers after it.
+- Today's appointments: **the same list for every role** (2026-11-08) — the clinic's whole day,
+  with counts across the top that also filter (in the waiting room · with the doctor · coming ·
+  finished), each row's stage, and the next step (Arrived / Call in / Finish). A doctor's own
+  patients read "You" where the others name their doctor. On a phone the list comes before the
+  number tiles, for everybody. The calendar's Patients today board likewise opens on Everyone for
+  every role, with Mine and each doctor as chips.
 - Unread conversations (requires `conversations`)
 - Revenue this week vs last week, with direction (requires `invoices`) — no comparison line
   when both weeks are empty.

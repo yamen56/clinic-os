@@ -23,7 +23,7 @@ import {
   type StepKey,
   type TriggerKey,
 } from "@/lib/automation/catalog";
-import { blocking, validateFlow, type FlowEdge, type FlowNode, type Issue } from "@/lib/automation/graph";
+import { blocking, providesAfter, providesByNode, validateFlow, type FlowEdge, type FlowNode, type Issue } from "@/lib/automation/graph";
 import type { RunRow } from "@/lib/automation/store";
 import type { FeatureMap } from "@/lib/features";
 import {
@@ -276,7 +276,16 @@ export function BuilderClient({
     setStepPicker(null);
     if (!req) return;
     const s = stateRef.current;
-    const node: FlowNode = { id: newId(), type, config: defaultStepConfig(type), position: null, label: "" };
+    const config = defaultStepConfig(type);
+    /*
+      Booking or waitlisting "like the appointment" needs one to copy. Where the
+      run has none at this point, start from settings that work there instead
+      of from a step that is wrong the moment it is added.
+    */
+    if ((type === "book_appointment" || type === "add_to_waitlist") && !providesAfter(provides, s.nodes, s.edges, req.from, req.handle).includes("appointment")) {
+      Object.assign(config, { service: "pick", doctor: "any" }, type === "book_appointment" ? { from: "now", part_of_day: "any" } : {});
+    }
+    const node: FlowNode = { id: newId(), type, config, position: null, label: "" };
     let nodes = s.nodes;
     let edges = s.edges;
     if (req.insertOn) {
@@ -505,7 +514,7 @@ export function BuilderClient({
         key={selectedNode.id}
         slug={slug}
         node={selectedNode}
-        provides={provides}
+        provides={providesByNode(provides, state.nodes, state.edges).get(selectedNode.id) ?? provides}
         hasReplyStep={hasReplyStep}
         lookups={lookups}
         issues={issues.filter((i) => i.nodeId === selectedNode.id)}
@@ -742,7 +751,13 @@ export function BuilderClient({
         </Modal>
       )}
 
-      <StepPicker open={Boolean(stepPicker)} onClose={() => setStepPicker(null)} onPick={addStep} provides={provides} modules={modules} />
+      <StepPicker
+        open={Boolean(stepPicker)}
+        onClose={() => setStepPicker(null)}
+        onPick={addStep}
+        provides={stepPicker ? providesAfter(provides, state.nodes, state.edges, stepPicker.from, stepPicker.handle) : provides}
+        modules={modules}
+      />
       <TriggerPicker open={triggerPicker} onClose={() => setTriggerPicker(false)} onPick={pickTrigger} modules={modules} />
 
       <ConfirmDialog

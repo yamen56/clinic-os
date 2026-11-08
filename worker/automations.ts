@@ -4,7 +4,10 @@ import { withSystem } from "./db";
 import { licensed } from "./features";
 import { createAndSendFromTemplate } from "../src/lib/esign/flow";
 import { notifyUser, staffInRoles } from "../src/lib/notify";
-import { applyAppointmentStatus } from "../src/lib/appointments";
+import { applyAppointmentStatus, lockClinicSchedule } from "../src/lib/appointments";
+import { computeDayCounts, computeSlots, type SlotResult } from "../src/lib/slots";
+import { audit } from "../src/lib/audit";
+import { emitTrigger } from "../src/lib/triggers";
 import {
   normalizeSettings,
   normalizeStepConfig,
@@ -227,6 +230,8 @@ type Env = {
   clinic: { timezone: string; message_window_start: string; message_window_end: string; features: unknown };
   steps: Step[];
   tmpl: () => Promise<TemplateContext>;
+  /** Forget the variables read so far: the run is about a different appointment now. */
+  resetTmpl: () => void;
 };
 
 type StepResult =
@@ -404,6 +409,9 @@ export async function advanceRun(runId: string): Promise<void> {
           reply,
           treatment,
         })),
+      resetTmpl: () => {
+        cache = null;
+      },
     };
 
     // Where to carry on: the trigger's edge, or the output the last step took.
@@ -634,6 +642,12 @@ async function runStep(env: Env, step: Step): Promise<StepResult> {
       return next(r.changed ? "ok" : "skipped", r.changed ? { status } : { status, reason: "unchanged" });
     }
 
+    case "book_appointment":
+      return bookAppointment(env, cfg);
+
+    case "add_to_waitlist":
+      return addToWaitlist(env, cfg);
+
     case "assign_conversation": {
       const conv = await conversationOf(env);
       if (!conv) return next("skipped", { reason: "no_conversation" });
@@ -732,6 +746,238 @@ async function runStep(env: Env, step: Step): Promise<StepResult> {
     }
   }
   return next("skipped", { reason: "unknown_step" });
+}
+
+/* -------------------------------------------------------------------------
+   Booking and the waitlist
+   ------------------------------------------------------------------------- */
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Minutes after midnight each part of the day covers, in the clinic's time. */
+const DAY_PARTS: Record<string, [number, number]> = {
+  morning: [0, 12 * 60],
+  afternoon: [12 * 60, 17 * 60],
+  evening: [17 * 60, 24 * 60],
+};
+
+/** The appointment the run is about, as the booking steps copy it. */
+async function runAppointment(env: Env) {
+  const { c, run } = env;
+  if (!run.appointment_id) return null;
+  const r = await c.query(
+    `select id, service_id, doctor_member_id, starts_at from appointments where id = $1 and clinic_id = $2`,
+    [run.appointment_id, run.clinic_id]
+  );
+  return (r.rows[0] as { id: string; service_id: string | null; doctor_member_id: string | null; starts_at: Date } | undefined) ?? null;
+}
+
+/**
+ * Makes the rest of the run about `appointmentId`: its variables, the
+ * conditions that read it, Confirm/Cancel, and the early exit on cancelling.
+ * Not when another live run of this flow already has that context — the
+ * dedupe index allows one — in which case the run keeps the one it had.
+ */
+async function followAppointment(env: Env, appointmentId: string): Promise<boolean> {
+  const { c, run } = env;
+  if (run.appointment_id === appointmentId) return true;
+  const clash = await c.query(
+    `select 1 from automation_runs
+      where automation_id = $1 and id <> $2 and status in ('running', 'waiting')
+        and patient_id is not distinct from $3::uuid and appointment_id = $4::uuid
+        and invoice_id is not distinct from $5::uuid and document_id is not distinct from $6::uuid
+        and conversation_id is not distinct from $7::uuid
+      limit 1`,
+    [run.automation_id, run.id, run.patient_id, appointmentId, run.invoice_id, run.document_id, run.conversation_id]
+  );
+  if (clash.rowCount) return false;
+  await c.query(
+    `update automation_runs set appointment_id = $2,
+            context = coalesce(context, '{}'::jsonb) || jsonb_build_object('booked_from', $3::text)
+      where id = $1`,
+    [run.id, appointmentId, run.appointment_id]
+  );
+  run.appointment_id = appointmentId;
+  env.resetTmpl();
+  return true;
+}
+
+/**
+ * Books the patient's next visit: the first free time for the service, from
+ * about `after_days` on, over `search_days`, in the part of the day asked for.
+ * The same availability engine the booking page uses, under the schedule lock
+ * so nothing can take the time between the look and the insert. The booking
+ * then goes out as any other does — the doctor's alert, the clinic's
+ * confirmation flows, closing a waitlist entry — one level deeper in the chain.
+ */
+async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<StepResult> {
+  const { c, run } = env;
+  const take = (handle: string, status: LogStatus, detail?: Record<string, unknown>): StepResult => ({ kind: "next", handle, status, detail });
+  if (!run.patient_id) return take("no_slot", "skipped", { reason: "no_patient" });
+  const prior = await runAppointment(env);
+
+  // A visit already ahead is the answer, not a reason to book a second one.
+  if (cfg.skip_if_booked) {
+    const ahead = (
+      await c.query(
+        `select id from appointments
+          where clinic_id = $1 and patient_id = $2 and starts_at > now()
+            and status in ('pending_approval', 'scheduled', 'confirmed')
+            and ($3::uuid is null or id <> $3::uuid)
+          order by starts_at limit 1`,
+        [run.clinic_id, run.patient_id, prior?.id ?? null]
+      )
+    ).rows[0];
+    if (ahead) {
+      const followed = await followAppointment(env, ahead.id as string);
+      return take("already_booked", "ok", { appointmentId: ahead.id, ...(followed ? {} : { kept: "context" }) });
+    }
+  }
+
+  const serviceId = cfg.service === "pick" ? String(cfg.service_id ?? "") : (prior?.service_id ?? "");
+  const svc = UUID.test(serviceId)
+    ? (await c.query(`select id, duration_min from services where id = $1 and clinic_id = $2 and active`, [serviceId, run.clinic_id])).rows[0]
+    : null;
+  if (!svc) return take("no_slot", "skipped", { reason: "no_service" });
+
+  let doctorId: string | null = cfg.doctor === "pick" ? String(cfg.member_id ?? "") : cfg.doctor === "trigger" ? (prior?.doctor_member_id ?? null) : null;
+  if (doctorId) {
+    const active = UUID.test(doctorId)
+      ? await c.query(`select 1 from clinic_members where id = $1 and clinic_id = $2 and active`, [doctorId, run.clinic_id])
+      : null;
+    if (!active?.rowCount) {
+      // A chosen doctor who has left is the flow's mistake; the previous visit's doctor having left is not — anyone will do.
+      if (cfg.doctor === "pick") return take("no_slot", "skipped", { reason: "no_doctor" });
+      doctorId = null;
+    }
+  }
+
+  const clinic = (
+    await c.query(`select working_hours, blocked_dates, timezone, default_locale from clinics where id = $1`, [run.clinic_id])
+  ).rows[0];
+  const tz = String(clinic.timezone);
+  const link = (
+    await c.query(`select slot_granularity_min from booking_links where clinic_id = $1 and active order by created_at limit 1`, [run.clinic_id])
+  ).rows[0];
+  const today = DateTime.now().setZone(tz).startOf("day");
+  const from = cfg.from === "appointment" && prior ? DateTime.fromJSDate(new Date(prior.starts_at)).setZone(tz) : DateTime.now().setZone(tz);
+  let first = from.plus({ days: Number(cfg.after_days) || 0 }).startOf("day");
+  if (first < today) first = today;
+  const span = Math.min(60, Math.max(1, Number(cfg.search_days) || 14));
+
+  // Nothing else may book between the look and the insert (see lockClinicSchedule).
+  await lockClinicSchedule(c, run.clinic_id);
+  const opts = {
+    clinicId: run.clinic_id,
+    tz,
+    clinicHours: clinic.working_hours,
+    blockedDates: clinic.blocked_dates ?? [],
+    serviceId: svc.id as string,
+    doctorMemberId: doctorId,
+    // An hour's notice at least, so a booking for today is never a time already upon the desk.
+    minNoticeMin: 60,
+    granularityMin: Number(link?.slot_granularity_min) || 30,
+    linkDoctorIds: [] as string[],
+  };
+  const counts = await computeDayCounts(c, { ...opts, fromISO: first.toISODate()!, days: span });
+  const part = String(cfg.part_of_day ?? "any");
+  const minuteOf = (s: SlotResult) => {
+    const l = DateTime.fromISO(s.startISO).setZone(tz);
+    return l.hour * 60 + l.minute;
+  };
+  const was = prior ? DateTime.fromJSDate(new Date(prior.starts_at)).setZone(tz) : null;
+  let slot: SlotResult | null = null;
+  for (const day of Object.keys(counts).sort()) {
+    if (!counts[day]) continue;
+    let fit = await computeSlots(c, { ...opts, dateISO: day });
+    if (DAY_PARTS[part]) {
+      const [lo, hi] = DAY_PARTS[part];
+      fit = fit.filter((s) => minuteOf(s) >= lo && minuteOf(s) < hi);
+    } else if (part === "same_time" && was) {
+      // The same time of day, or the nearest within an hour of it.
+      const want = was.hour * 60 + was.minute;
+      fit = fit.filter((s) => Math.abs(minuteOf(s) - want) <= 60).sort((a, b) => Math.abs(minuteOf(a) - want) - Math.abs(minuteOf(b) - want));
+    }
+    if (fit.length) {
+      slot = fit[0];
+      break;
+    }
+  }
+  if (!slot) return take("no_slot", "ok", { reason: "no_free_time", from: first.toISODate(), days: span });
+
+  const start = DateTime.fromISO(slot.startISO);
+  const end = start.plus({ minutes: Number(svc.duration_min) || 30 });
+  const flow = (await c.query(`select name from automations where id = $1`, [run.automation_id])).rows[0]?.name as string | undefined;
+  const note =
+    clinic.default_locale === "en"
+      ? `Booked automatically${flow ? ` by “${flow}”` : ""}`
+      : `حُجز تلقائياً${flow ? ` عبر «${flow}»` : ""}`;
+  const id = (
+    await c.query(
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, room_id)
+       values ($1, $2, $3, $4, $5, $6, $7, 'automation', $8, $9) returning id`,
+      [
+        run.clinic_id, run.patient_id, slot.doctorMemberId, svc.id, start.toUTC().toISO(), end.toUTC().toISO(),
+        cfg.status === "confirmed" ? "confirmed" : "scheduled", note, slot.roomId,
+      ]
+    )
+  ).rows[0].id as string;
+  await audit(c, {
+    clinicId: run.clinic_id,
+    action: "appointment.create",
+    entity: "appointment",
+    entityId: id,
+    detail: { patientId: run.patient_id, startsAt: start.toUTC().toISO(), automationId: run.automation_id, runId: run.id },
+  });
+  await emitTrigger(c, run.clinic_id, "appointment_created", {
+    appointmentId: id,
+    patientId: run.patient_id,
+    source: "automation",
+    chainDepth: run.chain_depth + 1,
+  });
+  await followAppointment(env, id);
+  return take("booked", "ok", { appointmentId: id, startsAt: start.toUTC().toISO(), doctorMemberId: slot.doctorMemberId });
+}
+
+/**
+ * Puts the patient on the waitlist, from today for `within_days`. One live
+ * entry per patient and doctor (the index in 0024): a patient already waiting
+ * is left as they are.
+ */
+async function addToWaitlist(env: Env, cfg: Record<string, unknown>): Promise<StepResult> {
+  const { c, run } = env;
+  if (!run.patient_id) return next("skipped", { reason: "no_patient" });
+  const prior = await runAppointment(env);
+  const rawService = cfg.service === "pick" ? String(cfg.service_id ?? "") : cfg.service === "trigger" ? (prior?.service_id ?? "") : "";
+  const rawDoctor = cfg.doctor === "pick" ? String(cfg.member_id ?? "") : cfg.doctor === "trigger" ? (prior?.doctor_member_id ?? "") : "";
+  const serviceId = UUID.test(rawService)
+    ? ((await c.query(`select id from services where id = $1 and clinic_id = $2`, [rawService, run.clinic_id])).rows[0]?.id ?? null)
+    : null;
+  const doctorId = UUID.test(rawDoctor)
+    ? ((await c.query(`select id from clinic_members where id = $1 and clinic_id = $2 and active`, [rawDoctor, run.clinic_id])).rows[0]?.id ?? null)
+    : null;
+
+  const already = await c.query(
+    `select id from waitlist_entries
+      where clinic_id = $1 and patient_id = $2 and doctor_member_id is not distinct from $3::uuid
+        and status in ('waiting', 'offered')`,
+    [run.clinic_id, run.patient_id, doctorId]
+  );
+  if (already.rowCount) return next("skipped", { reason: "already_waiting", entryId: already.rows[0].id });
+
+  const tz = String((await c.query(`select timezone from clinics where id = $1`, [run.clinic_id])).rows[0].timezone);
+  const today = DateTime.now().setZone(tz).startOf("day");
+  const note = renderMessage(String(cfg.note ?? ""), await env.tmpl()).slice(0, 300);
+  const r = await c.query(
+    `insert into waitlist_entries (clinic_id, patient_id, doctor_member_id, service_id, earliest_date, latest_date, note)
+     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+    [
+      run.clinic_id, run.patient_id, doctorId, serviceId, today.toISODate(),
+      today.plus({ days: Math.max(1, Number(cfg.within_days) || 30) }).toISODate(), note,
+    ]
+  );
+  await audit(c, { clinicId: run.clinic_id, action: "waitlist.add", entity: "patient", entityId: run.patient_id, detail: { automationId: run.automation_id } });
+  return next("ok", { entryId: r.rows[0].id });
 }
 
 async function memberUser(c: PoolClient, clinicId: string, memberId: string): Promise<string | null> {

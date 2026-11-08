@@ -32,7 +32,7 @@ const unit = z.enum(["minutes", "hours", "days"]);
 export const TRIGGER_CATEGORIES = ["appointments", "patients", "treatments", "messages", "billing", "documents"] as const;
 export type TriggerCategory = (typeof TRIGGER_CATEGORIES)[number];
 
-export const APPOINTMENT_SOURCES = ["staff", "booking_link", "ai_agent"] as const;
+export const APPOINTMENT_SOURCES = ["staff", "booking_link", "ai_agent", "automation"] as const;
 export const PATIENT_SOURCES = ["staff", "booking_link", "whatsapp", "ai_agent", "import"] as const;
 export const PATIENT_STATUSES = ["lead", "active", "archived"] as const;
 
@@ -332,6 +332,36 @@ const STEP_SCHEMAS = {
   }),
   add_note: z.object({ body: text(4000) }),
   update_appointment: z.object({ status: z.enum(["confirmed", "cancelled"]).default("confirmed") }),
+  /*
+    Books the patient's next visit on its own: the first free time, about
+    `after_days` from now (or from the trigger's appointment), searched forward
+    for `search_days`. The service and doctor are the trigger appointment's or
+    ones the clinic picks; "any" doctor takes whoever is free first. From here
+    on the run is about the new appointment, so a message after it can say
+    {{appointment.date}}.
+  */
+  book_appointment: z.object({
+    service: z.enum(["trigger", "pick"]).default("trigger"),
+    service_id: z.string().default(""),
+    doctor: z.enum(["trigger", "any", "pick"]).default("trigger"),
+    member_id: z.string().default(""),
+    after_days: z.number().int().min(0).max(730).default(7),
+    from: z.enum(["now", "appointment"]).default("now"),
+    search_days: z.number().int().min(1).max(60).default(14),
+    part_of_day: z.enum(["any", "morning", "afternoon", "evening", "same_time"]).default("any"),
+    status: z.enum(["scheduled", "confirmed"]).default("scheduled"),
+    /* A patient who already has a visit ahead is not booked a second one. */
+    skip_if_booked: z.boolean().default(true),
+  }),
+  /* Puts the patient on the waitlist, so the desk and the waitlist's offers find them when a time frees up. */
+  add_to_waitlist: z.object({
+    service: z.enum(["trigger", "pick", "none"]).default("trigger"),
+    service_id: z.string().default(""),
+    doctor: z.enum(["trigger", "any", "pick"]).default("trigger"),
+    member_id: z.string().default(""),
+    within_days: z.number().int().min(1).max(365).default(30),
+    note: text(300),
+  }),
   assign_conversation: z.object({
     target: z.enum(["member", "appointment_doctor", "nobody"]).default("member"),
     member_id: z.string().default(""),
@@ -384,6 +414,8 @@ export const STEPS: StepDef[] = [
   { key: "update_patient", category: "patient", needs: ["patient"] },
   { key: "add_note", category: "patient", needs: ["patient"] },
   { key: "update_appointment", category: "appointment", needs: ["appointment"], module: "calendar" },
+  { key: "book_appointment", category: "appointment", needs: ["patient"], module: "calendar" },
+  { key: "add_to_waitlist", category: "appointment", needs: ["patient"], module: "calendar" },
   { key: "assign_conversation", category: "conversation", needs: [], module: "conversations" },
   { key: "set_ai", category: "conversation", needs: [], module: "conversations" },
   { key: "flag_conversation", category: "conversation", needs: [], module: "conversations" },
@@ -391,6 +423,9 @@ export const STEPS: StepDef[] = [
   { key: "create_task", category: "team", needs: [] },
   { key: "notify_staff", category: "team", needs: [] },
 ];
+
+/** The outputs of a booking step after which the run is about an appointment, whatever the trigger was. */
+export const BOOKED_HANDLES = ["booked", "already_booked"] as const;
 
 export function stepDef(key: string): StepDef | undefined {
   return STEPS.find((s) => s.key === key);
@@ -410,6 +445,8 @@ export function isStepKey(key: string): key is StepKey {
 export function stepOutputs(key: string, config: Record<string, unknown> = {}): string[] {
   if (key === "stop") return [];
   if (key === "condition") return ["yes", "no"];
+  // Booked; nothing needed (a visit was already ahead); or no free time in the window.
+  if (key === "book_appointment") return ["booked", "already_booked", "no_slot"];
   if (key === "wait_for_reply") {
     const options = Array.isArray(config.options) ? config.options : [];
     return options.length ? [...options.map((_, i) => `opt:${i}`), "other", "timeout"] : ["replied", "timeout"];

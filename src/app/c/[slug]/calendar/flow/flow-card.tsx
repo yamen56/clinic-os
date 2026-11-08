@@ -118,6 +118,7 @@ export function FlowCard({
   if (appt.walk_in) tags.push({ key: "walk", text: t.flow.walkInTag, status: "neutral" });
   else if (appt.source === "booking_link") tags.push({ key: "online", text: t.flow.bookedOnline, status: "neutral" });
   else if (appt.source === "ai_agent") tags.push({ key: "ai", text: t.flow.bookedByAi, status: "neutral" });
+  else if (appt.source === "automation") tags.push({ key: "auto", text: t.flow.bookedByAutomation, status: "neutral" });
   if (appt.status === "pending_approval") tags.push({ key: "pending", text: t.flow.awaitingApproval, status: "pending" });
   // What the desk was told: how late this patient said they would be, and whether they were warned of a wait themselves.
   const notHereYet = stage === "expected" || stage === "late";

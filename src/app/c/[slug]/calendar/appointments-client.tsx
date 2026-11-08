@@ -92,7 +92,12 @@ export function AppointmentsClient({
     groupBy: "doctor",
     unconfirmedOnly,
   }));
-  const [boardDoctor, setBoardDoctor] = useState(isDoctor ? (selfMemberId ?? "") : "");
+  /*
+    The board opens on the whole clinic for everybody — who is waiting, who
+    is with a doctor (Yamen, 2026-11-08: the same day for every role). A
+    doctor narrows it to their own with the Mine chip.
+  */
+  const [boardDoctor, setBoardDoctor] = useState("");
   const [today, setToday] = useState<CalendarData | null>(null);
   const [scheduleData, setScheduleData] = useState<CalendarData | null>(null);
   const [panel, setPanel] = useState<PanelState>(

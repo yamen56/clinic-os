@@ -245,15 +245,18 @@ async function main() {
     check("A starts a booking from any screen, not only the dashboard", await until(async () => desk.url().includes("/calendar?new=1"), 15_000), desk.url());
 
     /* ============================================================ the doctor's day */
-    console.log("\n[a doctor's dashboard is their own day]");
+    // The same day for every role (2026-11-08): the clinic's whole list, the doctor's own marked as theirs.
+    console.log("\n[a doctor's dashboard shows the clinic's day, theirs marked]");
     const doc = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     watch(doc);
     await signIn(doc, `doca-${slug}@test.local`);
     await doc.goto(base);
     await doc.waitForSelector("[data-today-list]", { timeout: 90_000 });
-    check("titled as theirs", (await doc.locator("main").innerText()).includes("My patients today"));
     const rows = await doc.locator("[data-today-row]").evaluateAll((els) => els.map((e) => e.getAttribute("data-today-row")));
-    check("only their patients", rows.length === 1 && rows[0] === waiting, rows.join(","));
+    const mineRows = await doc.locator("[data-today-row][data-today-mine]").evaluateAll((els) => els.map((e) => e.getAttribute("data-today-row")));
+    check("the whole clinic's day, not only theirs", rows.length > 1 && rows.includes(waiting), rows.join(","));
+    check("their own patient is marked as theirs", mineRows.length === 1 && mineRows[0] === waiting, mineRows.join(","));
+    check("who is in the waiting room is counted", ((await doc.locator('[data-today-group="waiting"]').innerText().catch(() => "")) || "").includes("1"));
     await doc.click(`[data-today-row="${waiting}"] [data-today-action="seated"]`);
     check(
       "Call in from the dashboard seats the patient",
@@ -358,9 +361,10 @@ async function main() {
     await ph.waitForSelector("[data-today-list]", { timeout: 90_000 });
     const listTop = (await ph.locator("[data-today-list]").boundingBox())?.y ?? 9999;
     check("their list is on the first screen, above the numbers", listTop < 420, String(listTop));
-    const btn = await ph.locator("[data-today-action]").first().boundingBox();
+    const own = ph.locator("[data-today-row][data-today-mine] [data-today-action]").first();
+    const btn = await own.boundingBox();
     check("the step is a thumb's height", (btn?.height ?? 0) >= 40, String(btn?.height));
-    check("and says what it does", ((await ph.locator("[data-today-action]").first().innerText()) || "").trim() === "Finish");
+    check("and says what it does", ((await own.innerText()) || "").trim() === "Finish");
     const sideways = (await ph.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")) as number;
     check("nothing scrolls sideways", sideways <= 0, String(sideways));
     await ph.click("header [data-open-search]");

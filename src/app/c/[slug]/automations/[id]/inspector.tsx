@@ -474,6 +474,16 @@ export function StepInspector({
         </>
       )}
 
+      {(node.type === "book_appointment" || node.type === "add_to_waitlist") && (
+        <BookingFields
+          booking={node.type === "book_appointment"}
+          cfg={cfg}
+          set={set}
+          hasAppt={hasAppt}
+          lookups={lookups}
+        />
+      )}
+
       {node.type === "assign_conversation" && (
         <>
           <Segmented
@@ -571,3 +581,122 @@ export function StepInspector({
   );
 }
 
+
+/**
+ * "Book an appointment" and "Add to the waitlist": what to book, with whom,
+ * and when. The two share the service and doctor choices; booking adds when
+ * to look and what to do if the patient is already booked.
+ *
+ * "Same as the appointment" is only offered where the run has one — the
+ * trigger's, or one an earlier step booked.
+ */
+function BookingFields({
+  booking,
+  cfg,
+  set,
+  hasAppt,
+  lookups,
+}: {
+  booking: boolean;
+  cfg: Record<string, unknown>;
+  set: (patch: Record<string, unknown>) => void;
+  hasAppt: boolean;
+  lookups: Lookups;
+}) {
+  const { t, locale } = useI18n();
+  const b = t.automations.flow.book;
+  const str = (k: string) => String(cfg[k] ?? "");
+  const doctors = lookups.members.filter((m) => m.role === "doctor");
+  const serviceModes = (booking ? (["trigger", "pick"] as const) : (["trigger", "pick", "none"] as const)).filter((m) => m !== "trigger" || hasAppt);
+  const doctorModes = (["trigger", "any", "pick"] as const).filter((m) => m !== "trigger" || hasAppt);
+  const parts = (["any", "morning", "afternoon", "evening", "same_time"] as const).filter((p) => p !== "same_time" || hasAppt);
+
+  return (
+    <>
+      <Section title={b.service}>
+        <Chips
+          single
+          options={serviceModes.map((m) => ({ value: m, label: b.serviceFrom[m] }))}
+          value={[str("service")]}
+          onChange={(v) => set({ service: v[0] ?? serviceModes[0] })}
+        />
+        {cfg.service === "pick" && (
+          <div className="mt-2">
+            <Select value={str("service_id")} onChange={(e) => set({ service_id: e.target.value })} data-book-service>
+              <option value="">{t.automations.flow.choose}</option>
+              {lookups.services.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {locale === "ar" ? s.name_ar || s.name : s.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+      </Section>
+
+      <Section title={b.doctor}>
+        <Chips
+          single
+          options={doctorModes.map((m) => ({ value: m, label: b.doctorFrom[m] }))}
+          value={[str("doctor")]}
+          onChange={(v) => set({ doctor: v[0] ?? doctorModes[0] })}
+        />
+        {cfg.doctor === "pick" && (
+          <div className="mt-2">
+            <MemberSelect value={str("member_id")} onChange={(member_id) => set({ member_id })} members={doctors.length ? doctors : lookups.members} />
+          </div>
+        )}
+      </Section>
+
+      {booking ? (
+        <>
+          <Section title={b.after}>
+            <div className="grid grid-cols-[minmax(0,0.8fr)_auto_minmax(0,1.2fr)] items-center gap-2">
+              <NumberInput dir="ltr" min={0} max={730} value={Number(cfg.after_days) || 0} onChange={(after_days) => set({ after_days })} data-book-after />
+              <span className="text-[13px] text-ink-500">{b.afterDays}</span>
+              <Select value={str("from")} onChange={(e) => set({ from: e.target.value })}>
+                {(["now", "appointment"] as const)
+                  .filter((v) => v !== "appointment" || hasAppt)
+                  .map((v) => (
+                    <option key={v} value={v}>
+                      {b.from[v]}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+          </Section>
+          <Section title={b.searchDays}>
+            <div className="grid grid-cols-[minmax(0,0.8fr)_auto] items-center gap-2">
+              <NumberInput dir="ltr" min={1} max={60} value={Number(cfg.search_days) || 14} onChange={(search_days) => set({ search_days })} />
+              <span className="text-[13px] text-ink-500">{b.searchDaysUnit}</span>
+            </div>
+          </Section>
+          <Section title={b.partOfDay}>
+            <Chips single options={parts.map((p) => ({ value: p, label: b.parts[p] }))} value={[str("part_of_day")]} onChange={(v) => set({ part_of_day: v[0] ?? "any" })} />
+          </Section>
+          <Section title={b.status}>
+            <Segmented
+              value={str("status") as "scheduled" | "confirmed"}
+              onChange={(status) => set({ status })}
+              options={(["scheduled", "confirmed"] as const).map((s) => ({ value: s, label: b.statuses[s] }))}
+            />
+          </Section>
+          <Check checked={Boolean(cfg.skip_if_booked)} onChange={(skip_if_booked) => set({ skip_if_booked })} label={b.skipIfBooked} />
+          <p className="rounded-md bg-sunken px-2.5 py-2 text-[12px] leading-snug text-ink-500">{b.outputsHint}</p>
+        </>
+      ) : (
+        <>
+          <Section title={b.withinDays}>
+            <div className="grid grid-cols-[minmax(0,0.8fr)_auto] items-center gap-2">
+              <NumberInput dir="ltr" min={1} max={365} value={Number(cfg.within_days) || 30} onChange={(within_days) => set({ within_days })} />
+              <span className="text-[13px] text-ink-500">{t.automations.flow.units.days}</span>
+            </div>
+          </Section>
+          <Field label={b.waitNote}>
+            <Input value={str("note")} maxLength={300} onChange={(e) => set({ note: e.target.value })} />
+          </Field>
+        </>
+      )}
+    </>
+  );
+}

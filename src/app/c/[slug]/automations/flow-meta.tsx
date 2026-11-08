@@ -22,6 +22,8 @@ export const STEP_ICONS: Record<string, Icon> = {
   update_patient: UserCog,
   add_note: StickyNote,
   update_appointment: CalendarCheck,
+  book_appointment: CalendarPlus,
+  add_to_waitlist: Hourglass,
   assign_conversation: UserCheck,
   set_ai: Bot,
   flag_conversation: Flag,
@@ -196,6 +198,21 @@ export function stepSummary(dict: Dict, type: string, raw: Record<string, unknow
       return snippet(str("body"));
     case "update_appointment":
       return (t.flow.apptAction as Record<string, string>)[str("status")] ?? "";
+    case "book_appointment":
+    case "add_to_waitlist": {
+      const b = t.flow.book;
+      const bits: string[] = [];
+      if (cfg.service === "pick") bits.push(name(look.services.find((s) => s.id === str("service_id"))) || "…");
+      if (cfg.doctor === "pick") bits.push(look.members.find((m) => m.id === str("member_id"))?.name ?? "…");
+      else if (cfg.doctor === "any") bits.push(b.summaryAny);
+      if (type === "book_appointment") {
+        bits.push(fill(b.summaryDays, { n: Number(cfg.after_days) || 0 }));
+        if (cfg.part_of_day !== "any") bits.push((b.parts as Record<string, string>)[str("part_of_day")] ?? "");
+      } else {
+        bits.push(`${b.withinDays} ${Number(cfg.within_days) || 0} ${t.flow.units.days}`);
+      }
+      return bits.filter(Boolean).join(" · ");
+    }
     case "assign_conversation":
       if (cfg.target === "member") return look.members.find((m) => m.id === str("member_id"))?.name ?? "";
       return (t.flow.assignTarget as Record<string, string>)[str("target")] ?? "";

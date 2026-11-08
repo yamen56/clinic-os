@@ -103,7 +103,6 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
   const showInbox = can(a, "conversations");
   const showCalendar = can(a, "calendar");
   const showPatients = can(a, "patients");
-  const ownDay = a.role === "doctor" && !!a.memberId;
   const intl = locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB";
 
   const data = await inClinic(a, async (c) => {
@@ -113,14 +112,18 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
     const month = monthRangeUtc(tz);
 
     /*
-      A doctor's front page is their own day: who is waiting for them, who is
-      in their room, who is next. Everyone else sees the clinic's.
+      The clinic's day, the same for everybody (Yamen, 2026-11-08): the desk,
+      the doctors and the owner all see who is in the waiting room, who is with
+      a doctor and who is still to come. A doctor's own patients are marked
+      as theirs rather than being the only ones shown — a doctor between rooms
+      also needs to know the waiting room is full. The list filters itself
+      (TodayList) for whoever wants one part of it.
     */
     const appts = (
       await c.query(
         `select ap.id, ap.patient_id, ap.starts_at, ap.status, ap.arrived_at, ap.seated_at, p.full_name as patient_name,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
-                du.full_name as doctor_name
+                ap.doctor_member_id, du.full_name as doctor_name
          from appointments ap
          join patients p on p.id = ap.patient_id
          left join services s on s.id = ap.service_id
@@ -128,10 +131,9 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
          left join users du on du.id = dm.user_id
          where ap.clinic_id = $1 and ap.starts_at >= $2 and ap.starts_at < $3
            and ap.status not in ('cancelled')
-           and ($4::uuid is null or ap.doctor_member_id = $4)
          order by ap.starts_at
-         limit 30`,
-        [a.clinicId, today.start, today.end, ownDay ? a.memberId : null]
+         limit 200`,
+        [a.clinicId, today.start, today.end]
       )
     ).rows;
 
@@ -497,15 +499,15 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         other phone keeps the pair.
       */}
       {/*
-        A doctor opens this on a phone between patients, and the question is
-        who is next — so on a phone their own list comes first and the numbers
-        after it. Everybody else, and every wider screen, keeps the tiles on top.
+        On a phone the question is who is here and who is next — for the desk
+        as much as for a doctor between rooms — so today's list comes first and
+        the numbers after it, for everybody. Wider screens keep the tiles on top.
       */}
       <div className="flex flex-col gap-4">
       {data.setup && data.setup.some((i) => !i.done) && <SetupCard base={base} items={data.setup} t={t} />}
       {data.todo.length > 0 && <TodoCard slug={slug} rows={JSON.parse(JSON.stringify(data.todo))} canOpenPatient={showPatients} />}
       <StockCard slug={slug} items={data.stock} t={t} locale={locale} />
-      <div className={`grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4 ${ownDay ? "max-lg:order-last" : ""}`}>
+      <div className="grid grid-cols-1 gap-3 max-lg:order-last min-[360px]:grid-cols-2 xl:grid-cols-4">
         {tiles.slice(0, 4).map((tile) => {
           const Icon = tileIcons[tile.key];
           const body = (
@@ -569,7 +571,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
-            title={ownDay ? t.dashboard.myPatientsToday : t.dashboard.todayAppointments}
+            title={t.dashboard.todayAppointments}
             action={
               <Link
                 href={`${base}/calendar`}
@@ -595,7 +597,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
               rows={JSON.parse(JSON.stringify(data.appts))}
               canFlow={showCalendar}
               canOpenPatient={showPatients}
-              showDoctor={!ownDay}
+              selfMemberId={a.memberId ?? null}
             />
           )}
         </Card>

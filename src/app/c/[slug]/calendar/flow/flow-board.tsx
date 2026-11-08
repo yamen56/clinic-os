@@ -196,19 +196,24 @@ export function FlowBoard({
 
   return (
     <div className="grid grid-cols-1 gap-4" data-flow-board data-dragging={drag?.id} data-drag-over={drag?.over ?? undefined}>
-      {/* Whose patients: a doctor starts on their own. */}
+      {/*
+        Whose patients. Everybody starts on the whole clinic and has the same
+        chips; a doctor's own is Mine, first after Everyone, rather than their
+        name among the others.
+      */}
       {doctors.length > 1 || (isDoctor && selfMemberId) ? (
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+          <button type="button" aria-pressed={!doctorFilter} className={chip(!doctorFilter)} onClick={() => setDoctorFilter("")}>
+            {t.calendar.everyone}
+          </button>
           {isDoctor && selfMemberId && (
             <button type="button" aria-pressed={doctorFilter === selfMemberId} className={chip(doctorFilter === selfMemberId)} onClick={() => setDoctorFilter(selfMemberId)}>
               {t.calendar.mine}
             </button>
           )}
-          <button type="button" aria-pressed={!doctorFilter} className={chip(!doctorFilter)} onClick={() => setDoctorFilter("")}>
-            {t.calendar.everyone}
-          </button>
-          {!isDoctor &&
-            doctors.map((d) => (
+          {doctors
+            .filter((d) => !(isDoctor && d.id === selfMemberId))
+            .map((d) => (
               <button key={d.id} type="button" aria-pressed={doctorFilter === d.id} className={chip(doctorFilter === d.id)} onClick={() => setDoctorFilter(d.id)}>
                 {d.name}
               </button>

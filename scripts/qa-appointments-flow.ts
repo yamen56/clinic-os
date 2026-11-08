@@ -477,7 +477,10 @@ async function main() {
 
     await doctor.goto(`${BASE}/c/${slug}/calendar`);
     await doctor.waitForSelector("[data-flow-board]", { timeout: 60000 });
-    check("a doctor's board starts on their own patients", (await doctor.getByRole("button", { name: "Mine", exact: true }).getAttribute("aria-pressed")) === "true");
+    // The same day for every role (2026-11-08): a doctor opens on the whole clinic, and Mine narrows it.
+    check("a doctor's board starts on the whole clinic", (await doctor.getByRole("button", { name: "Everyone", exact: true }).getAttribute("aria-pressed")) === "true");
+    await doctor.getByRole("button", { name: "Mine", exact: true }).click();
+    check("and Mine narrows it to their own", (await doctor.getByRole("button", { name: "Mine", exact: true }).getAttribute("aria-pressed")) === "true");
 
     check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
     await browser.close();
