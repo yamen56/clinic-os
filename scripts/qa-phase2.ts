@@ -84,7 +84,8 @@ async function main() {
   // 6. File upload
   await page.click('[role="tab"]:has-text("Files")');
   fs.writeFileSync("scripts/qa-shots/test-xray.png", Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"));
-  const fileInput = page.locator('input[type="file"]');
+  // The file picker, not the folder picker beside it (Upload a folder, 00409ca).
+  const fileInput = page.locator('input[type="file"]:not([webkitdirectory])');
   await fileInput.setInputFiles("scripts/qa-shots/test-xray.png");
   await page.waitForSelector("text=test-xray.png", { timeout: 10000 });
   console.log("✓ file uploaded and listed");

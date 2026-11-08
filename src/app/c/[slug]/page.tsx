@@ -386,7 +386,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             key: "revenue",
             label: t.dashboard.revenueWeek,
             value: fmtMoney(revThis, a.clinic.currency, locale),
-            foot: (
+            /* Two empty weeks are not a trend: a green "up" arrow over 0.00 vs 0.00 read as good news about nothing. */
+            foot: revThis === 0 && revLast === 0 ? undefined : (
               <span
                 className={`flex items-center gap-1 text-xs font-semibold ${revUp ? "text-ok" : "text-danger"}`}
               >
@@ -626,13 +627,22 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       </div>
       </div>
 
+      {/*
+        A fortnight of zeros is a sentence, not a chart: fourteen flat stubs
+        took a screen of a phone to say "nothing yet", which is what a new
+        clinic sees for its first weeks.
+      */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {showRevenue && (
           <Card>
             <CardHeader title={t.dashboard.revenueTrend} />
-            <div className="px-5 py-4">
-              <BarChart data={revenuePoints} locale={intl} />
-            </div>
+            {revenuePoints.some((p) => p.value > 0) ? (
+              <div className="px-5 py-4">
+                <BarChart data={revenuePoints} locale={intl} />
+              </div>
+            ) : (
+              <p className="px-5 py-4 text-[13px] text-ink-500" data-chart-quiet>{t.dashboard.quietFortnight}</p>
+            )}
           </Card>
         )}
         {/* Widens to fill the row when the chart beside it is not there, so a
@@ -640,9 +650,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             half-empty one. */}
         <Card className={showRevenue ? "" : "lg:col-span-2"}>
           <CardHeader title={t.dashboard.appointmentsTrend} />
-          <div className="px-5 py-4">
-            <BarChart data={apptPoints} locale={intl} />
-          </div>
+          {apptPoints.some((p) => p.value > 0) ? (
+            <div className="px-5 py-4">
+              <BarChart data={apptPoints} locale={intl} />
+            </div>
+          ) : (
+            <p className="px-5 py-4 text-[13px] text-ink-500" data-chart-quiet>{t.dashboard.quietFortnight}</p>
+          )}
         </Card>
       </div>
 
@@ -755,21 +769,27 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
  * than the same bold digit either way.
  */
 /*
-  What is left to set up, each item a link to the page that does it. Done
-  items stay, ticked, so the progress is visible; the card goes when the last
-  one is done.
+  What is left to set up, each item a link to the page that does it; the card
+  goes when the last one is done.
+
+  Only what is left gets a full row. Finished items used to keep theirs, struck
+  through, so a clinic one step from done opened its front page to seven rows
+  of checklist — the whole first screen of a phone — to learn about one. The
+  count and the bar say how far along it is; what is done shrinks to a line of
+  ticked chips under the list, still links, for whoever wants to revisit one.
 */
 function SetupCard({ base, items, t }: { base: string; items: SetupItem[]; t: Awaited<ReturnType<typeof dictForClinic>> }) {
-  const done = items.filter((i) => i.done).length;
+  const left = items.filter((i) => !i.done);
+  const finished = items.filter((i) => i.done);
   return (
     <div data-setup-card>
       <Card>
-        <CardHeader title={t.setup.title} sub={t.setup.progress.replace("{done}", String(done)).replace("{total}", String(items.length))} />
+        <CardHeader title={t.setup.title} sub={t.setup.progress.replace("{done}", String(finished.length)).replace("{total}", String(items.length))} />
         <div className="mx-5 mb-2 h-1.5 overflow-hidden rounded-full bg-sunken">
-          <div className="h-full rounded-full bg-brand-600" style={{ width: `${Math.round((done / items.length) * 100)}%` }} />
+          <div className="h-full rounded-full bg-brand-600" style={{ width: `${Math.round((finished.length / items.length) * 100)}%` }} />
         </div>
-        <ul className="grid gap-1 p-3 sm:grid-cols-2">
-          {items.map((i) => {
+        <ul className={`grid gap-1 p-3 ${left.length > 1 ? "sm:grid-cols-2" : ""}`}>
+          {left.map((i) => {
             const words = t.setup.items[i.key];
             return (
               <li key={i.key}>
@@ -777,19 +797,35 @@ function SetupCard({ base, items, t }: { base: string; items: SetupItem[]; t: Aw
                   href={`${base}${i.path}`}
                   className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-sunken"
                   data-setup-item={i.key}
-                  data-done={i.done ? "1" : "0"}
+                  data-done="0"
                 >
-                  {i.done ? <CheckCircle2 className="h-5 w-5 shrink-0 text-brand-700" /> : <Circle className="h-5 w-5 shrink-0 text-ink-300" />}
+                  <Circle className="h-5 w-5 shrink-0 text-ink-300" />
                   <span className="min-w-0 flex-1">
-                    <span className={`block text-sm font-medium ${i.done ? "text-ink-500 line-through" : "text-ink-900"}`}>{words.label}</span>
-                    {!i.done && <span className="block text-[12.5px] text-ink-500">{words.hint}</span>}
+                    <span className="block text-sm font-medium text-ink-900">{words.label}</span>
+                    <span className="block text-[12.5px] text-ink-500">{words.hint}</span>
                   </span>
-                  {!i.done && <ChevronRight className="h-4 w-4 shrink-0 text-ink-400 rtl:rotate-180" />}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-400 rtl:rotate-180" />
                 </Link>
               </li>
             );
           })}
         </ul>
+        {finished.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 border-t border-line px-5 py-3">
+            {finished.map((i) => (
+              <Link
+                key={i.key}
+                href={`${base}${i.path}`}
+                className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-[12px] text-ink-500 transition-colors hover:text-ink-900"
+                data-setup-item={i.key}
+                data-done="1"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-brand-700" />
+                {t.setup.items[i.key].label}
+              </Link>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );

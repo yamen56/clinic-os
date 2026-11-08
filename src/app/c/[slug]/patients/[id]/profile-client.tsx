@@ -60,6 +60,7 @@ import { PrescriptionComposer, useComposerData, type RxDraft } from "./prescript
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
 import { coverState } from "@/lib/insurance";
 import { addedByLabel, type AddedBy } from "@/lib/added-by";
+import { foldActivity } from "@/lib/patient-activity";
 import {
   MessageCircle,
   Phone as PhoneIcon,
@@ -798,10 +799,24 @@ export function PatientProfile(props: {
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
       <div className="mt-5">
+        {/*
+          Two columns on a desktop; one on a phone, in the order the file is
+          read rather than the order it is typed. The columns used to stack
+          whole, so a doctor at the chair scrolled past the entire edit form
+          before reaching the medical history, and reception scrolled past it
+          to find what the patient owes and when they are next in. Below lg the
+          columns dissolve (`contents`) and each card takes its place by
+          `order`: medical, the pinned summary, money, next visit, then the
+          details to edit, then the rest.
+        */}
         {tab === "overview" && (
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="grid gap-4 lg:col-span-2">
-              <Card className="p-5">
+          <div className="grid gap-4 lg:grid-cols-3" data-overview>
+            <div className="grid gap-4 max-lg:contents lg:col-span-2">
+              {/* The medical history, for every clinic; its alerts head the file. First, because it is what changes how the patient is treated. */}
+              <div className="max-lg:order-1">
+                <PatientMedical tz={tz} history={medical} onSave={saveMedical} />
+              </div>
+              <Card className="p-5 max-lg:order-5">
                 <h3 className="mb-4 text-[15px] font-semibold">{t.patients.overview.details}</h3>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={defLabel("patient.phone", t.patients.phone)}>
@@ -954,6 +969,7 @@ export function PatientProfile(props: {
                 about insurance on every file.
               */}
               {props.insurers.length > 0 && (
+                <div className="max-lg:order-6">
                 <InsuranceCard
                   slug={slug}
                   patientId={p.id}
@@ -972,10 +988,9 @@ export function PatientProfile(props: {
                     patch({ insurance_valid_until: v });
                   }}
                 />
+                </div>
               )}
-              {/* The medical history, for every clinic; its alerts head the file. */}
-              <PatientMedical tz={tz} history={medical} onSave={saveMedical} />
-              <Card className="p-5">
+              <Card className="p-5 max-lg:order-2">
                 <h3 className="mb-3 text-[15px] font-semibold">{t.patients.overview.summary}</h3>
                 <Textarea
                   defaultValue={p.notes_summary}
@@ -985,7 +1000,7 @@ export function PatientProfile(props: {
                 />
               </Card>
             </div>
-            <div className="grid content-start gap-4">
+            <div className="grid content-start gap-4 max-lg:contents">
               {/*
                 One switch covering every automation and every campaign.
 
@@ -1003,7 +1018,7 @@ export function PatientProfile(props: {
                 on the one control, rather than in the schema and every query
                 that reads it.
               */}
-              <Card className="p-5">
+              <Card className="p-5 max-lg:order-7">
                 <div className="flex items-start gap-3">
                   <Toggle
                     checked={!p.automation_opt_out}
@@ -1027,7 +1042,7 @@ export function PatientProfile(props: {
                   screen. A zero here would be worse than nothing: it is wrong,
                   and it reads as fact. */}
               {caps.invoices && (
-                <Card className="p-5">
+                <Card className="p-5 max-lg:order-3">
                   <h3 className="text-[13px] font-semibold text-ink-500">{t.patients.overview.balanceDue}</h3>
                   <div className={`mt-1 text-2xl font-semibold tnum ${props.balanceDue > 0 ? "text-st-pending" : ""}`}>
                     {fmtMoney(props.balanceDue, currency, locale)}
@@ -1040,7 +1055,7 @@ export function PatientProfile(props: {
                 </Card>
               )}
               {caps.calendar && (
-                <Card className="p-5">
+                <Card className="p-5 max-lg:order-4">
                   <h3 className="text-[13px] font-semibold text-ink-500">{t.patients.overview.upcoming}</h3>
                   {upcoming ? (
                     <div className="spine mt-2 ps-3" style={{ "--spine-color": "var(--color-st-confirmed)" } as React.CSSProperties}>
@@ -1064,21 +1079,27 @@ export function PatientProfile(props: {
                   )}
                 </Card>
               )}
-              <Card className="p-5">
+              <Card className="p-5 max-lg:order-8">
                 <h3 className="mb-2 text-[13px] font-semibold text-ink-500">
                   {t.patients.overview.recentActivity}
                 </h3>
                 {props.activity.length === 0 ? (
                   <p className="text-sm text-ink-400">{t.patients.overview.noActivity}</p>
                 ) : (
-                  <ul className="grid gap-2 text-[13px]">
-                    {props.activity.slice(0, 8).map((a, i) => (
-                      <li key={i} className="flex justify-between gap-2">
-                        <span className="truncate text-ink-700">
-                          {a.action.replace("patient.", "")} {a.actor ? `· ${a.actor}` : ""}
+                  <ul className="grid gap-2.5 text-[13px]" data-activity>
+                    {foldActivity(props.activity, 8).map((a, i) => (
+                      <li key={i} className="flex justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="block truncate text-ink-700">
+                            {t.patients.overview.activity[a.key]}
+                            {a.count > 1 && (
+                              <span className="ms-1.5 text-ink-400 tnum">{t.patients.overview.activity.times.replace("{n}", String(a.count))}</span>
+                            )}
+                          </span>
+                          {a.actor && <span className="block truncate text-[12px] text-ink-400">{a.actor}</span>}
                         </span>
-                        <span className="shrink-0 text-ink-400" suppressHydrationWarning>
-                          {fmtRelative(a.created_at, locale)}
+                        <span className="shrink-0 text-[12px] text-ink-400" suppressHydrationWarning>
+                          {fmtRelative(a.at, locale)}
                         </span>
                       </li>
                     ))}

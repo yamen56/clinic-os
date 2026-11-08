@@ -194,7 +194,7 @@ export default async function PatientProfilePage({
           `select al.action, al.created_at, al.detail, u.full_name as actor
            from audit_log al left join users u on u.id = al.user_id
            where al.clinic_id = $1 and al.entity = 'patient' and al.entity_id = $2
-           order by al.created_at desc limit 15`,
+           order by al.created_at desc limit 40`,
           [access.clinicId, id]
         ),
         () => caps.invoices

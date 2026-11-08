@@ -110,7 +110,15 @@ export async function spills(page: Page, root = "main"): Promise<Spill[]> {
       if (el.parentElement?.closest("[data-pannable]")) continue;
       const r = el.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) continue;
-      const p = el.parentElement;
+      /*
+        The box that holds it. A `display: contents` element draws no box of
+        its own — its rect is all zeros — so its children are laid out by the
+        nearest ancestor that does (the patient Overview's columns dissolve this
+        way below lg to reorder the cards). Measured against the empty rect,
+        every card "spilled" by its full width.
+      */
+      let p = el.parentElement;
+      while (p && getComputedStyle(p).display === "contents") p = p.parentElement;
       if (!p) continue;
       const pcs = getComputedStyle(p);
       if (pcs.overflowX === "auto" || pcs.overflowX === "scroll") continue;

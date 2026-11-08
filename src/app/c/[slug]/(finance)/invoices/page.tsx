@@ -16,7 +16,13 @@ import { deskLines, readyToBillDesk } from "@/lib/charts/dental/billing-server";
 import { ReadyToBillDesk, type DeskGroup } from "./ready-to-bill-desk";
 import { billsFromCharts } from "@/lib/features";
 import { DELETABLE_INVOICE_SQL, owedSql } from "@/lib/invoices";
+import { patientSearchClause } from "@/lib/patients";
 import { DeleteCancelled } from "./delete-cancelled";
+import { InvoiceSearch } from "./invoice-search";
+
+/* The list grows a page at a time from the newest; past this it is a search, not a scroll. */
+const PAGE = 100;
+const MAX_ROWS = 1000;
 
 const invStatus: Record<string, StatusKey> = {
   draft: "neutral",
@@ -31,7 +37,7 @@ export default async function InvoicesPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ tab?: string; status?: string }>;
+  searchParams: Promise<{ tab?: string; status?: string; q?: string; n?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -41,6 +47,8 @@ export default async function InvoicesPage({
   const locale = await getLocale();
   const tab = sp.tab === "payments" ? "payments" : "invoices";
   const cancelledView = tab === "invoices" && sp.status === "cancelled";
+  const q = (sp.q ?? "").trim().slice(0, 80);
+  const limit = Math.min(MAX_ROWS, Math.max(PAGE, Math.ceil((Number(sp.n) || PAGE) / PAGE) * PAGE));
 
   const tz = access.clinic.timezone;
   /*
@@ -127,14 +135,28 @@ export default async function InvoicesPage({
       else if (sp.status === "cancelled") conds.push(`i.status = 'void'`);
       else conds.push(`i.status <> 'void'`);
       const scope = invoiceScopeSql(access, "i", 2);
+      const args: unknown[] = [access.clinicId, ...scope.params];
+      /*
+        Who it is for, the way the patients screen finds people — Arabic
+        spellings folded, any phone format, the file number — or the invoice's
+        own number and title.
+      */
+      if (q) {
+        const who = patientSearchClause(q, args.length + 1);
+        args.push(...who.params);
+        args.push(`%${q}%`);
+        const n = args.length;
+        conds.push(`(${who.clause} or i.number ilike $${n} or ar_normalize(coalesce(i.title, '')) like ar_normalize($${n}))`);
+      }
+      // One row past the page says whether there is an older page to offer.
       invoices = (
         await c.query(
           `select i.id, i.number, i.title, i.status, i.total, i.amount_paid, i.created_at, i.sent_at,
                   p.full_name as patient_name
            from invoices i join patients p on p.id = i.patient_id
            where ${conds.join(" and ")}${scope.sql}
-           order by i.created_at desc limit 100`,
-          [access.clinicId, ...scope.params]
+           order by i.created_at desc limit ${limit + 1}`,
+          args
         )
       ).rows;
     } else {
@@ -172,10 +194,21 @@ export default async function InvoicesPage({
         ready = rows.map((r) => ({ patientId: r.patientId, name: r.name, lastAt: r.lastAt, lines: lines.filter((l) => l.patientId === r.patientId) }));
       }
     }
-    return { stats, invoices, payments, ready };
+    const more = invoices.length > limit;
+    return { stats, invoices: more ? invoices.slice(0, limit) : invoices, more, payments, ready };
   });
 
   const base = `/c/${slug}/invoices`;
+  /* A link inside this list keeps whatever else is chosen: the filter, the search, how far back it reaches. */
+  const listHref = (o: { status?: string; n?: number }) => {
+    const u = new URLSearchParams();
+    const status = "status" in o ? o.status : sp.status;
+    if (status) u.set("status", status);
+    if (q) u.set("q", q);
+    if (o.n) u.set("n", String(o.n));
+    const s = u.toString();
+    return s ? `${base}?${s}` : base;
+  };
 
   return (
     <>
@@ -242,7 +275,10 @@ export default async function InvoicesPage({
         which belongs to this list and not to the section.
       */}
       {tab === "invoices" && (
-        <div className="mb-4 flex flex-wrap items-center gap-1">
+        <div className="mb-4 flex flex-wrap items-center gap-x-1 gap-y-2">
+          <div className="w-full sm:order-last sm:ms-auto sm:w-auto">
+            <InvoiceSearch initial={q} />
+          </div>
           {(
             [
               ["", t.invoices.allFilter, 0],
@@ -256,7 +292,7 @@ export default async function InvoicesPage({
             return (
               <Link
                 key={key || "all"}
-                href={key ? `${base}?status=${key}` : base}
+                href={listHref({ status: key || undefined })}
                 className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-140 ease-out ${
                   on ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8 hover:text-ink-700"
                 }`}
@@ -268,7 +304,7 @@ export default async function InvoicesPage({
           })}
           {/* Under Cancelled: clear them away, all at once. */}
           {cancelledView && Number(data.stats.deletable_count) > 0 && can(access, "invoices.void") && (
-            <span className="ms-auto">
+            <span className="max-sm:ms-auto">
               <DeleteCancelled slug={slug} count={Number(data.stats.deletable_count)} />
             </span>
           )}
@@ -283,7 +319,9 @@ export default async function InvoicesPage({
 
       {tab === "invoices" ? (
         data.invoices.length === 0 ? (
-          cancelledView ? (
+          q ? (
+            <EmptyState icon={<ReceiptText />} title={t.invoices.noMatch.replace("{q}", q)} />
+          ) : cancelledView ? (
             <EmptyState icon={<ReceiptText />} title={t.invoices.noCancelled} />
           ) : (
             <EmptyState
@@ -384,6 +422,13 @@ export default async function InvoicesPage({
                 );
               })}
             </ul>
+            {data.more && (
+              <div className="border-t border-line p-3 text-center">
+                <Link href={listHref({ n: limit + PAGE })} scroll={false} className={buttonClass({ variant: "ghost", size: "sm" })} data-invoices-older>
+                  {t.invoices.showOlder}
+                </Link>
+              </div>
+            )}
           </Card>
         )
       ) : (

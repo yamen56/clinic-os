@@ -167,11 +167,19 @@ export function ServicesClient({
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium">{label(s)}</span>
           {!s.active && <Badge status="cancelled">{t.services.inactive}</Badge>}
-          {s.bookable_online && <Badge status="brand">{t.services.bookableOnline}</Badge>}
+          {/* The exception is the news: nearly every service is bookable online, so a badge on each said nothing. */}
+          {s.active && !s.bookable_online && <Badge status="neutral">{t.services.notOnline}</Badge>}
         </div>
         <div className="text-[13px] text-ink-500 tnum">
           {s.duration_min} {t.common.min} · {fmtMoney(Number(s.price), currency, locale)}
-          {s.doctor_ids.length > 0 && ` · ${s.doctor_ids.length} ${t.calendar.doctor}`}
+          {s.doctor_ids.length > 0 &&
+            ` · ${
+              s.doctor_ids.length === 1
+                ? t.services.doctorsOne
+                : s.doctor_ids.length === 2
+                  ? t.services.doctorsTwo
+                  : t.services.doctorsMany.replace("{n}", String(s.doctor_ids.length))
+            }`}
         </div>
       </div>
       {canEdit && (
@@ -214,8 +222,33 @@ export function ServicesClient({
     </li>
   );
 
-  return (
-    <>
+  /*
+    Sections organise the services, so once a clinic has some they head the
+    page. Until then they are an option most single-specialty clinics never
+    take, and a full empty state above the services pushed the list a clinic
+    came here to edit below the fold of a laptop. Without sections the card
+    is one line under the services: what they are, and the button.
+  */
+  const sectionsCard =
+    sections.length === 0 ? (
+      /* The hook is on a wrapper: Card does not pass data-* through. */
+      <div className="mt-5" data-sections-empty>
+        <Card>
+          <CardHeader
+            title={t.sections.title}
+            sub={t.sections.emptyBody}
+            action={
+              canEdit && (
+                <Button size="sm" variant="outline" onClick={() => setSectionDraft(emptySection)}>
+                  <LayoutGrid className="h-4 w-4" />
+                  {t.sections.addSection}
+                </Button>
+              )
+            }
+          />
+        </Card>
+      </div>
+    ) : (
       <Card className="mb-5">
         <CardHeader
           title={t.sections.title}
@@ -229,20 +262,6 @@ export function ServicesClient({
             )
           }
         />
-        {sections.length === 0 ? (
-          <div className="p-5">
-            <EmptyState
-              icon={<LayoutGrid />}
-              title={t.sections.empty}
-              body={t.sections.emptyBody}
-              action={
-                canEdit ? (
-                  <Button onClick={() => setSectionDraft(emptySection)}>{t.sections.addSection}</Button>
-                ) : undefined
-              }
-            />
-          </div>
-        ) : (
           <ul className="divide-y divide-line">
             {sections.map((sec, i) => (
               <li
@@ -305,9 +324,12 @@ export function ServicesClient({
               </li>
             ))}
           </ul>
-        )}
       </Card>
+    );
 
+  return (
+    <>
+      {sections.length > 0 && sectionsCard}
 
       <Card>
         <CardHeader
@@ -351,6 +373,8 @@ export function ServicesClient({
           </div>
         )}
       </Card>
+
+      {sections.length === 0 && sectionsCard}
 
       <Modal
         open={!!draft}

@@ -245,8 +245,14 @@ Overview · Notes · Prescriptions · Appointments · Files · Documents · Invo
 `?tab=<key>` opens the file on a tab (a notification's link); a tab the member cannot see
 falls back to Overview.
 
-- **Overview**: details, additional (custom) fields, summary notes, upcoming appointment,
-  balance due, recent activity.
+- **Overview**: medical history first, then details, additional (custom) fields, insurance,
+  summary notes; beside them automatic messages, balance due, upcoming appointment, recent
+  activity. On a phone the two columns become one in reading order — medical, summary, balance,
+  next visit, then the details form — so a doctor at the chair never scrolls past the edit
+  form to reach the allergies. **Recent activity** speaks words, not audit codes
+  ([src/lib/patient-activity.ts](src/lib/patient-activity.ts)): "Opened the file", "Charted a
+  treatment", "Lab work came back", a family fallback for codes without their own phrase, and a
+  run of the same thing by the same person folded into one line with ×n.
 - **Notes** (`patient_notes`): author recorded, optionally tied to an appointment,
   **autosaved as you type**. A note is a clinical record, which shapes all of it:
   - **There is no delete.** No action, no button. A note is corrected, never removed.
@@ -578,7 +584,10 @@ patient being pestered about every slot that opens in the same hour — `last_of
 - `service_doctors` maps which doctors perform which service. If a service has no mapping,
   every active doctor is a candidate.
 - `section_id` files a service under a `service_sections` row (migration `0047`). Null means
-  unfiled, and a clinic with no sections renders exactly as it did before they existed.
+  unfiled, and a clinic with no sections renders exactly as it did before they existed. On
+  Settings → Services the sections card heads the page once there are sections; without any it
+  is one short card under the services, so the list a clinic came to edit is not below the fold.
+  A row badges only the exception (*Not on the booking page*), not every bookable service.
   Every picker in the app goes through `loadServicesWithSections`
   ([src/lib/services.ts](src/lib/services.ts)) and the three shared components in
   [src/components/ui/service-picker.tsx](src/components/ui/service-picker.tsx) — the invoice
@@ -1252,6 +1261,10 @@ A model refusal or an API failure escalates to staff rather than going silent. W
 total, amount paid, notes, `public_token`, `pdf_path`.
 
 - **Status**: `draft` | `sent` | `partially_paid` | `paid` | `void`.
+- **The list** shows the newest 100 with *Show older invoices* (a hundred more each time, up to
+  1,000), and a search box: who it is for, matched like the patients screen (`patientSearchClause`
+  — Arabic spellings folded, any phone format, file number), or the invoice's own number and
+  title. The filter chips keep the search (`?status=unpaid&q=…`).
 - Optional **insurer split** — see the Insurance & claims section. `total` is always the full
   price; the patient's share is `total - insurer_amount`.
 - Line items (`invoice_items`) added from a service or as a custom item, with qty, unit
@@ -1713,20 +1726,30 @@ one company (`hasInsurers` on the finance viewer). Scoped like the invoice list.
 ## 17. Dashboard
 
 **Nav order** (sidebar, and the first four become the phone's bottom bar):
-Dashboard · Patients · Calendar · Invoices · Documents · Waitlist · Earnings ·
-Conversations · Campaigns · Automations · AI agent · Settings. The order is the clinic's working day, not
-the order the features were built — it decides what a receptionist reaches with one thumb.
+Dashboard · Patients · Calendar · Finance · Documents · [Devices · Lab work · Stock] ·
+Conversations · Campaigns · Automations · AI agent · Settings. Finance is one entry for Invoices,
+Payments, Earnings, Expenses and Claims (tabs inside it, pointing at the first this member may
+open); the waitlist is a tab of the Calendar. Devices, Lab work and Stock appear only once the
+clinic has a machine, a lab or the face chart's products. The order is the clinic's working day,
+not the order the features were built — it decides what a receptionist reaches with one thumb.
 Each item is filtered by the member's capabilities.
 
 
 The one screen everybody can open. Tiles respect the same capabilities as the nav:
 
-- Today's appointments (count + the day's list with time, patient, service, doctor, status)
+- **Set up your clinic** (owner / full access, until done): only the steps left get a row;
+  finished ones are a line of ticked chips under them, so a clinic one step from done is not
+  shown a screen of struck-through items.
+- Today's appointments (count + the day's list with time, patient, service, doctor, status).
+  A doctor on a phone gets their own list first and the numbers after it.
 - Unread conversations (requires `conversations`)
-- Revenue this week vs last week, with direction (requires `invoices`)
-- No-show rate this month
-- Pending items: unpaid invoices, unconfirmed appointments
-- Header badges: **WhatsApp connected/disconnected** and **AI on/off**
+- Revenue this week vs last week, with direction (requires `invoices`) — no comparison line
+  when both weeks are empty.
+- Owed to the clinic, no-show rate, new patients — four tiles, chosen by what this member may see.
+- Pending items: unpaid invoices, unconfirmed appointments, patients due back.
+- 14-day charts (collected, appointments), what earns, by doctor. A fortnight of zeros is one
+  line ("Nothing in the last 14 days"), not fourteen flat bars.
+- No WhatsApp or AI status badges: a disconnection reaches the owner as a notification.
 
 All counters are one SQL statement, not a query each. (Related perf note: `Promise.all` over
 a single `pg` client is a no-op — node-pg serializes per connection. Merge the SQL or open

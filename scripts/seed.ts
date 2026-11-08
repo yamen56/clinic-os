@@ -386,15 +386,29 @@ async function main() {
   // ---- Patient field definitions: the built-in set, then this clinic's own.
   // These same rows are the merge variables every document template can use.
   await c.query(`select seed_esign_defaults($1)`, [clinicId]);
+  /*
+    Only a field the product has no home for. Insurance and allergies used to
+    be extra fields here too, from before the Insurers list and the medical
+    history existed — so the demo file showed "Allergy: penicillin" in one
+    card and "nothing recorded: no allergies" in the next, which is the first
+    thing a dentist being shown the product would notice. They are seeded
+    where the product keeps them now (insurers below, medical_history on the
+    patient).
+  */
   await c.query(
     `insert into patient_field_definitions
        (clinic_id, scope, key, label, label_ar, field_type, options, storage_key, display_order) values
-      ($1, 'patient', 'patient.insurance', 'Insurance', 'شركة التأمين', 'select', $2, 'insurance', 210),
-      ($1, 'patient', 'patient.allergies', 'Allergies', 'الحساسية', 'longtext', '[]', 'allergies', 220),
       ($1, 'patient', 'patient.referred_by', 'Referred by', 'من حوّله', 'text', '[]', 'referred_by', 230)
      on conflict (clinic_id, key) do nothing`,
-    [clinicId, JSON.stringify(["بدون", "الأردنية للتأمين", "ميدغلف", "الشرق العربي"])]
+    [clinicId]
   );
+  const insurerIds = (
+    await c.query(
+      `insert into insurers (clinic_id, name) select $1, unnest($2::text[])
+       on conflict (clinic_id, name) do update set active = true returning id`,
+      [clinicId, ["الأردنية للتأمين", "ميدغلف", "الشرق العربي"]]
+    )
+  ).rows.map((r) => r.id as string);
 
   await c.query(`insert into booking_links (clinic_id, slug, name) values ($1, $2, 'الرابط العام')`, [
     clinicId, SLUG,
@@ -464,8 +478,8 @@ async function main() {
       i % 4 === 0 ? null : now.minus({ days: 10 + i * 11 }).toUTC().toISO();
     const r = await c.query(
       `insert into patients (clinic_id, full_name, phone_e164, birth_date, gender, tags, source, status,
-                             notes_summary, custom_fields, last_visit_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
+                             notes_summary, medical_history, insurer_id, last_visit_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
       [
         clinicId, name, phone,
         now.minus({ years: 20 + (i % 45), days: i * 9 }).toISODate(),
@@ -475,10 +489,11 @@ async function main() {
         i % 9 === 0 ? "lead" : "active",
         i % 5 === 0 ? "يفضّل المواعيد الصباحية." : "",
         JSON.stringify(
-          i % 3 === 0
-            ? { insurance: "الأردنية للتأمين", allergies: i % 6 === 0 ? "بنسلين" : "" }
-            : { insurance: "بدون" }
+          i % 6 === 0
+            ? { conditions: i % 12 === 0 ? ["hypertension"] : [], allergies: "بنسلين", medications: "", notes: "" }
+            : {}
         ),
+        i % 3 === 0 ? insurerIds[(i / 3) % insurerIds.length] : null,
         lastVisit,
       ]
     );

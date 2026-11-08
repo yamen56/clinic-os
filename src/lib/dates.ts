@@ -91,9 +91,17 @@ export function fmtDateTime(iso: string | Date, tz: string, locale: string): str
 }
 
 export function fmtRelative(iso: string | Date, locale: string): string {
-  return (
-    DateTime.fromJSDate(new Date(iso)).setLocale(numLocale(locale)).toRelative({ style: "short" }) ?? ""
-  );
+  const dt = DateTime.fromJSDate(new Date(iso));
+  /*
+    Under a minute either way is "now". Luxon counts seconds literally, so a
+    file opened this instant said "0 seconds ago", and a server clock a beat
+    ahead of the browser's said "in 2 sec" about something that already
+    happened. The platform's own word for it, in the reader's language.
+  */
+  if (Math.abs(dt.diffNow().as("seconds")) < 60) {
+    return new Intl.RelativeTimeFormat(numLocale(locale), { numeric: "auto" }).format(0, "second");
+  }
+  return dt.setLocale(numLocale(locale)).toRelative({ style: "short" }) ?? "";
 }
 
 export function fmtMoney(n: number | string, currency: string, locale: string): string {
