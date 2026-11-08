@@ -75,6 +75,11 @@ function centreOf(zone: string): { x: number; y: number; v: "front" } | null {
   return z ? { x: z.x, y: z.y, v: "front" } : null;
 }
 
+/** The colour a treatment's dots are drawn in. */
+function colorOf(m: { family: Family }): string {
+  return FAMILY_COLOR[m.family];
+}
+
 /** How long a toxin lasts, near enough to say when the patient is due again. */
 const TOXIN_DAYS = 120;
 /** A mis-tap can be taken back for this long, by the one who made it (the route agrees). */
@@ -128,13 +133,12 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const [pts, setPts] = useState<PendingPoint[]>([]);
   const sel = useMemo(() => inFaceOrder([...new Set(pts.map((p) => p.zone))].map((zone) => ({ zone }))).map((a) => a.zone), [pts]);
   // A past spot whose card is open, and whether past spots are drawn at all.
-  const [spot, setSpot] = useState<PastPoint | null>(null);
+  const [spot, setSpot] = useState<(PastPoint & { at: { x: number; y: number } }) | null>(null);
   // The picture in front of the doctor: the face from the front, or turned.
   const [view, setView] = useState<FaceView>("front");
   const [showPast, setShowPast] = useState(true);
   // The treatment list: what is usual for the parts chosen first, the rest a tap away, or found by name.
   const [findT, setFindT] = useState("");
-  const [allT, setAllT] = useState(false);
   const [tKey, setTKey] = useState<string | null>(null);
   const [units, setUnits] = useState<Record<string, number>>({});
   const [count, setCount] = useState(1);
@@ -187,7 +191,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
         ? live.flatMap((m) =>
             m.areas.flatMap((a, ai) => {
               const spots = a.points?.length ? a.points : [centreOf(a.zone)].filter((c) => c !== null);
-              return spots.map((p, pi) => ({ key: `${m.id}:${ai}:${pi}`, markId: m.id, zone: a.zone, x: p.x, y: p.y, v: p.v ?? "front", family: m.family }));
+              return spots.map((p, pi) => ({ key: `${m.id}:${ai}:${pi}`, markId: m.id, zone: a.zone, x: p.x, y: p.y, v: p.v ?? "front", color: colorOf(m) }));
             })
           )
         : [],
@@ -226,7 +230,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     setPts([]);
     setTKey(null);
     setFindT("");
-    setAllT(false);
   };
 
   // `given` is a treatment made a moment ago, before the catalog this render read has it.
@@ -272,7 +275,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     them counts: crow's feet and a tear trough together are a toxin and a filler,
     neither of which is usual on both, and asking for both hid the two most common.
   */
-  const usualOn = (x: FaceTreatment) => sel.filter((z) => x.fits.includes(z)).length;
   const fits = useMemo(() => {
     if (!sel.length) return [];
     return s.catalog.offered
@@ -280,14 +282,10 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       .sort((a, b) => b.n - a.n || a.i - b.i)
       .map((e) => e.x);
   }, [sel, s.catalog]);
-  const usualCount = fits.filter((x) => usualOn(x) > 0).length;
   // Typed as staff say it: "botox", "فيلر", a brand.
   const term = findT.trim().toLowerCase();
-  const shownFits = term
-    ? fits.filter((x) => [x.en, x.ar, ...(x.aliases ?? [])].some((w) => w.toLowerCase().includes(term)))
-    : allT || usualCount === 0
-      ? fits
-      : fits.slice(0, usualCount);
+  // Every treatment is always offered, the usual ones first: one kept behind a button was one a doctor could not find (11-08).
+  const shownFits = term ? fits.filter((x) => [x.en, x.ar, ...(x.aliases ?? [])].some((w) => w.toLowerCase().includes(term))) : fits;
   const here = useMemo(() => newestFirst.filter((m) => !m.voidedAt && m.areas.some((a) => sel.includes(a.zone))), [newestFirst, sel]);
 
   /* ---- the record panel's numbers ---- */
@@ -590,13 +588,13 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
    * What was done at a past spot: the card that opens on the face where the dot is,
    * toward the middle so it never runs off the picture.
    */
-  const spotCard = (p: PastPoint) => {
+  const spotCard = (p: PastPoint & { at: { x: number; y: number } }) => {
     const m = s.marks.find((x) => x.id === p.markId);
     if (!m) return null;
     const area = m.areas.find((a) => a.zone === p.zone);
     const used = usedOn(m.id);
-    const right = p.x > 0.5;
-    const below = p.y < 0.55;
+    const right = p.at.x > 0.5;
+    const below = p.at.y < 0.55;
     // Beside the dot, toward the middle, and never past either edge of the picture.
     const w = "min(17rem, 92%)";
     return (
@@ -604,8 +602,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
         className="absolute z-[4] rounded-card border border-line bg-surface p-3 text-start shadow-pop"
         style={{
           width: w,
-          left: `clamp(0px, ${right ? `calc(${p.x * 100}% - ${w} - 10px)` : `calc(${p.x * 100}% + 10px)`}, calc(100% - ${w}))`,
-          top: `${p.y * 100}%`,
+          left: `clamp(0px, ${right ? `calc(${p.at.x * 100}% - ${w} - 10px)` : `calc(${p.at.x * 100}% + 10px)`}, calc(100% - ${w}))`,
+          top: `${p.at.y * 100}%`,
           transform: `translateY(${below ? "10px" : "calc(-100% - 10px)"})`,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -715,8 +713,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
           <div className="mb-2 flex justify-center" role="tablist" aria-label={F.views}>
             <div className="flex w-full rounded-full bg-sunken p-0.5 sm:inline-flex sm:w-auto">
               {FACE_VIEWS.map((v) => {
-                const pending = pts.filter((p) => p.v === v).length;
-                const before = pastPoints.some((p) => p.v === v);
                 return (
                   <button
                     key={v}
@@ -732,11 +728,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                   >
                     <span className="sm:hidden">{VIEW_SHORT[v]}</span>
                     <span className="max-sm:hidden">{VIEW_NAME[v]}</span>
-                    {pending > 0 ? (
-                      <span className="absolute -top-1 end-0 min-w-[17px] rounded-full bg-brand-600 px-1 text-center text-[10px] leading-[17px] text-on-brand tnum">{pending}</span>
-                    ) : (
-                      before && <span className="absolute end-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-ink-400" aria-hidden />
-                    )}
                   </button>
                 );
               })}
@@ -750,7 +741,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             openKey={spot?.key ?? null}
             onPoint={addPoint}
             onRemovePoint={removePoint}
-            onPast={(p) => setSpot((cur) => (cur?.key === p.key ? null : p))}
+            onPast={(p, at) => setSpot((cur) => (cur?.key === p.key ? null : { ...p, at }))}
             labels={{ right: F.patientRight, left: F.patientLeft, removePoint: F.removePoint, pastPoint: F.pastPoint, addPointIn: F.addPointIn }}
           >
             {spot && spotCard(spot)}
@@ -843,11 +834,6 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                     </div>
                   ) : (
                     <p className="mt-1 text-[13px] text-ink-500">{F.noneFits}</p>
-                  )}
-                  {!term && !allT && usualCount > 0 && usualCount < fits.length && (
-                    <button type="button" onClick={() => setAllT(true)} className="mt-2 inline-flex min-h-10 items-center text-[13px] font-semibold text-brand-700 hover:underline" data-face-all-treatments>
-                      {F.allTreatments.replace("{n}", String(fits.length))}
-                    </button>
                   )}
                   {/* The clinic's own, made at the chair: the thirteen are a start, not the list. */}
                   <Button size="sm" variant="outline" className="mt-2 min-h-10" onClick={() => setAdding(true)} data-face-add-treatment>

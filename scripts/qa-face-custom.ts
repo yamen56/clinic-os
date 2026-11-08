@@ -218,13 +218,16 @@ async function main() {
     await page.locator("[data-face-view-tab='left']").click();
     check((await page.locator("[data-face-map]").getAttribute("data-face-view")) === "left" && (await page.locator("[data-face-img]").getAttribute("src"))?.includes("face-left"), "the left view shows the head from the left");
     check((await page.locator("[data-zone='cheek_r']").count()) === 0 && (await page.locator("[data-zone='cheek_l']").count()) === 1, "with only the parts it shows");
-    check((await page.locator(`[data-face-past='${pointed.id}']`).count()) === 0, "and none of the front's points");
+    // The front's dots, where those parts are on this side (2026-11-08: the views line up).
+    check((await page.locator(`[data-face-past='${pointed.id}']`).count()) === 3, "the dots put on the front are on the left view too", String(await page.locator(`[data-face-past='${pointed.id}']`).count()));
     const lb = (await map.boundingBox())!;
     await map.click({ position: { x: lb.width * 0.31, y: lb.height * 0.53 } });
     check((await page.locator("[data-face-point='cheek_l']").count()) === 1, "a tap on the left cheek is the left cheek");
-    check((await page.locator("[data-face-view-tab='left']").innerText()).includes("1"), "the view counts the points on it");
     await page.locator("[data-face-view-tab='front']").click();
-    check((await page.locator("[data-face-point]").count()) === 0 && (await page.locator("[data-face-panel='areas']").count()) === 1, "on the front it is not drawn, but it is still being recorded");
+    check((await page.locator("[data-face-point='cheek_l']").count()) === 1, "a dot put on the left view is on the front too");
+    await page.locator("[data-face-view-tab='right']").click();
+    check((await page.locator("[data-face-point='cheek_l']").count()) === 0, "but not on the right, which does not show the left cheek");
+    await page.locator("[data-face-view-tab='front']").click();
     await page.locator("[data-face-treatment='aes_filler']").click();
     await page.waitForSelector("[data-face-panel='record']");
     await page.locator("[data-face-save]").click();
@@ -236,15 +239,34 @@ async function main() {
     check((side.areas as { points?: { v?: string }[] }[])[0]?.points?.[0]?.v === "left", "with the view it was marked on", JSON.stringify(side.areas));
     await page.reload();
     await page.waitForSelector("[data-face-map]", { timeout: 120000 });
-    check((await page.locator(`[data-face-past='${side.id}']`).count()) === 0, "after, its dot is not on the front");
-    check((await page.locator("[data-face-view-tab='left'] span[aria-hidden]").count()) === 1, "the left view says it has points");
+    check((await page.locator(`[data-face-past='${side.id}']`).count()) === 1, "after, its dot is on the front as well");
     await page.locator("[data-face-view-tab='left']").click();
     check((await page.locator(`[data-face-past='${side.id}']`).count()) === 1, "it is on the left view");
     const wrongView = await page.request.post(`${BASE}/api/c/${slug}/patients/${patient.id}/face/marks`, {
       data: { id: crypto.randomUUID(), eventId: crypto.randomUUID(), treatmentKey: "aes_filler", areas: [{ zone: "cheek_l", points: [{ x: 0.31, y: 0.53, v: "front" }] }] },
     });
     check(wrongView.status() === 400, "a point is checked against the picture it says it was on", String(wrongView.status()));
+
+    console.log("Botox anywhere it goes (2026-11-08)");
+    // The back of the head, on the left view, where a migraine's toxin goes.
+    const lb2 = (await map.boundingBox())!;
+    await map.click({ position: { x: lb2.width * 0.82, y: lb2.height * 0.44 } });
+    check((await page.locator("[data-face-point='occipital']").count()) === 1, "a dot goes on the back of the head");
+    const firstOffered = await page.locator("[data-face-treatment]").first().getAttribute("data-face-treatment");
+    check(firstOffered === "aes_toxin", "and Botox is offered first for it", String(firstOffered));
     await page.locator("[data-face-view-tab='front']").click();
+    check((await page.locator("[data-face-point='occipital']").count()) === 0, "the front, which does not show it, does not draw it");
+    // A temple, from the front: Botox is offered there too, not hidden behind a button.
+    await page.locator("[data-zone='temple_r']").click();
+    check((await page.locator("[data-face-all-treatments]").count()) === 0 && (await page.locator("[data-face-treatment]").count()) >= 19, "every treatment is offered, none held back");
+    await page.locator("[data-face-treatment='aes_toxin']").click();
+    await page.waitForSelector("[data-face-panel='record']");
+    check((await page.locator("[data-face-units='occipital']").count()) === 1 && (await page.locator("[data-face-units='temple_r']").count()) === 1, "with units for the back of the head and the temple");
+    await page.locator("[data-face-save]").click();
+    check(
+      await until(async () => (await q(`select 1 from chart_marks where clinic_id = $1 and treatment_key = 'aes_toxin' and areas @> '[{"zone":"occipital","units":15}]'`, [clinic.id])).length === 1),
+      "and is saved there, at its usual 15 units"
+    );
 
     console.log("A treatment added from the price list");
     await page.goto(`${BASE}/c/${slug}/settings/face-prices`, { timeout: 180000 });

@@ -156,11 +156,9 @@ async function main() {
       "four dots: forehead, glabella and both crow's feet",
       await page.locator("[data-face-where]").innerText()
     );
-    const usual = await page.locator("[data-face-treatment]").evaluateAll((els) => els.map((e) => e.getAttribute("data-face-treatment")));
-    check(usual.includes("aes_toxin") && !usual.includes("aes_filler"), "what is usual there is offered first: the toxin, not a filler", usual.join(","));
-    await page.locator("[data-face-all-treatments]").click();
+    // Every treatment is offered, always: one hidden behind a button was one a doctor could not find (11-08).
     const offered = await page.locator("[data-face-treatment]").evaluateAll((els) => els.map((e) => e.getAttribute("data-face-treatment")));
-    check(offered.indexOf("aes_toxin") >= 0 && offered.indexOf("aes_toxin") < offered.indexOf("aes_filler"), "and All treatments shows the rest after it", offered.join(","));
+    check(offered.indexOf("aes_toxin") >= 0 && offered.indexOf("aes_toxin") < offered.indexOf("aes_filler"), "every treatment is offered, what is usual there first: the toxin before a filler", offered.join(","));
     await page.locator("[data-face-find]").fill("fille");
     check((await page.locator("[data-face-treatment]").count()) === 1 && (await page.locator("[data-face-treatment='aes_filler']").count()) === 1, "a treatment is found by typing part of its name");
     await page.locator("[data-face-find]").fill("");

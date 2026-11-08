@@ -15,14 +15,19 @@
   middle. Dots from past visits stay in the colour of the work done there, and
   tapping one shows what was done (the chart draws that card, as `children`).
 
+  Every dot is on every picture that shows its part, wherever it was marked
+  (Yamen, 2026-11-08: "when I put a treatment on the front I want to see it when I
+  press on the right"): `placeOn` keeps its place within its part.
+
   Paper that stays white in the dark theme: the picture has a white ground.
 */
 
 import type { ReactNode } from "react";
-import { FAMILY_COLOR, VIEW_CAPTION, VIEW_NAME, VIEW_SRC, zoneAt, zonesOn, type Family, type FaceView } from "@/lib/charts/face/catalog";
+import { VIEW_CAPTION, VIEW_NAME, VIEW_SRC, placeOn, zoneAt, zonesOn, type FaceView } from "@/lib/charts/face/catalog";
 
 export type PendingPoint = { x: number; y: number; zone: string; v: FaceView };
-export type PastPoint = { key: string; markId: string; zone: string; x: number; y: number; v: FaceView; family: Family };
+/** A recorded spot, where it was marked, and the colour of its treatment. */
+export type PastPoint = { key: string; markId: string; zone: string; x: number; y: number; v: FaceView; color: string };
 
 export function FaceMap({
   view,
@@ -48,7 +53,8 @@ export function FaceMap({
   openKey: string | null;
   onPoint: (p: PendingPoint) => void;
   onRemovePoint: (index: number) => void;
-  onPast: (p: PastPoint) => void;
+  /** `at` is where it is on the picture in front of the doctor. */
+  onPast: (p: PastPoint, at: { x: number; y: number }) => void;
   labels: { right: string; left: string; removePoint: string; pastPoint: string; addPointIn: string };
   children?: ReactNode;
 }) {
@@ -96,9 +102,9 @@ export function FaceMap({
         ))}
 
         {/* Before: what was done where, each spot in the colour of its kind of work. */}
-        {past
-          .filter((p) => p.v === view)
-          .map((p) => {
+        {past.map((p) => {
+            const at = placeOn(p, p.zone, view);
+            if (!at) return null;
             const open = openKey === p.key;
             return (
               <button
@@ -107,24 +113,25 @@ export function FaceMap({
                 tabIndex={pastActive ? 0 : -1}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onPast(p);
+                  onPast(p, at);
                 }}
                 aria-label={labels.pastPoint}
-                className={`absolute grid h-6 w-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full ${pastActive ? "" : "pointer-events-none opacity-55"}`}
-                style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, zIndex: open ? 3 : 1 }}
+                className={`absolute grid h-5 w-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full ${pastActive ? "" : "pointer-events-none opacity-55"}`}
+                style={{ left: `${at.x * 100}%`, top: `${at.y * 100}%`, zIndex: open ? 3 : 1 }}
                 data-face-past={p.markId}
               >
                 <span
                   className={`block rounded-full ring-2 ring-white transition-transform ${open ? "h-3.5 w-3.5 scale-125" : "h-2.5 w-2.5"}`}
-                  style={{ background: FAMILY_COLOR[p.family], boxShadow: open ? `0 0 0 4px ${FAMILY_COLOR[p.family]}55` : undefined }}
+                  style={{ background: p.color, boxShadow: open ? `0 0 0 4px ${p.color}55` : undefined }}
                 />
               </button>
             );
           })}
 
         {/* Now: the spots being recorded, tapped again to take one off. */}
-        {points.map((p, i) =>
-          p.v !== view ? null : (
+        {points.map((p, i) => {
+          const at = placeOn(p, p.zone, view);
+          return !at ? null : (
             <button
               key={`${p.x}:${p.y}:${i}`}
               type="button"
@@ -133,14 +140,17 @@ export function FaceMap({
                 onRemovePoint(i);
               }}
               aria-label={labels.removePoint}
-              className="absolute z-[2] grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full"
-              style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
+              // Answers a tap on the dot itself only: crow's feet are injected a few millimetres apart, and a
+              // wider target took the next dot's tap as removing this one.
+              className="absolute z-[2] grid h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full"
+              style={{ left: `${at.x * 100}%`, top: `${at.y * 100}%` }}
               data-face-point={p.zone}
+              data-face-point-view={p.v}
             >
               <span className="block h-3.5 w-3.5 rounded-full bg-brand-600 shadow-[0_0_0_2.5px_white,0_0_0_4px_rgba(11,18,32,0.35)]" />
             </button>
-          )
-        )}
+          );
+        })}
 
         {children}
       </div>

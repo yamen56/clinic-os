@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
-import { FACE_ZONES, FAMILIES, whereText, type Family, type FaceTreatment, type FaceVariant, type PricedBy } from "@/lib/charts/face/catalog";
+import { BACK_ZONES, FACE_ZONES, FAMILIES, whereText, type Family, type FaceTreatment, type FaceVariant, type PricedBy } from "@/lib/charts/face/catalog";
 
 export type TreatmentsAnswer = { ok?: boolean; key?: string; variantId?: string; custom: FaceTreatment[]; variants: FaceVariant[]; error?: string };
 
@@ -58,7 +58,7 @@ export function AddTreatment({
       family,
       pricedBy,
       units: units || pricedBy === "unit",
-      fits: anywhere || !zones.length ? FACE_ZONES.map((z) => z.key) : zones,
+      fits: anywhere || !zones.length ? [...FACE_ZONES, ...BACK_ZONES].map((z) => z.key) : zones,
     });
     setBusy(false);
     if (!r.key) return toast(r.error === "exists" ? N.exists : t.common.genericError, "error");

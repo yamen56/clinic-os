@@ -66,7 +66,18 @@ const GROUPS: Record<string, { en: string; ar: string }> = {
   jaw: { en: "Jawline", ar: "خط الفك" },
 };
 
-export const ZONE_BY_KEY = new Map(FACE_ZONES.map((z) => [z.key, z]));
+/**
+ * Parts only a turned head shows: the back of the head and of the neck, where a
+ * migraine's toxin goes (Yamen, 2026-11-08: "I wanted to put Botox in certain
+ * places but it did not show"). They have no place on the front picture.
+ */
+export const BACK_ZONES: Zone[] = [
+  { key: "occipital", en: "Back of head", ar: "مؤخرة الرأس", x: 0, y: 0, w: 0, h: 0 },
+  { key: "nape", en: "Back of neck", ar: "مؤخرة الرقبة", x: 0, y: 0, w: 0, h: 0 },
+];
+const ALL_ZONES = [...FACE_ZONES, ...BACK_ZONES];
+
+export const ZONE_BY_KEY = new Map(ALL_ZONES.map((z) => [z.key, z]));
 export const isZone = (k: string) => ZONE_BY_KEY.has(k);
 
 /** Quick picks: the areas doctors treat together. */
@@ -158,7 +169,7 @@ export const FACE_TREATMENTS: FaceTreatment[] = [
     family: "toxin",
     pricedBy: "area",
     units: true,
-    fits: ["forehead", "glabella", "crows_r", "crows_l", "nose", "lips", "chin", "jaw_r", "jaw_l", "neck"],
+    fits: ["forehead", "glabella", "crows_r", "crows_l", "temple_r", "temple_l", "scalp", "nose", "lips", "chin", "jaw_r", "jaw_l", "neck", "occipital", "nape"],
     aliases: ["botox", "dysport", "xeomin", "بوتكس"],
   },
   {
@@ -220,6 +231,11 @@ export const DEFAULT_UNITS: Record<string, number> = {
   jaw_r: 25,
   jaw_l: 25,
   neck: 30,
+  // A migraine's: the temples, the back of the head and of the neck.
+  temple_r: 20,
+  temple_l: 20,
+  occipital: 15,
+  nape: 10,
 };
 
 /**
@@ -285,6 +301,8 @@ const SIDE: Record<Exclude<FaceView, "front">, Place[]> = {
     { key: "chin", x: 0.13, y: 0.735, w: 0.1, h: 0.06 },
     { key: "jaw_l", x: 0.33, y: 0.705, w: 0.24, h: 0.07 },
     { key: "neck", x: 0.55, y: 0.83, w: 0.36, h: 0.16 },
+    { key: "occipital", x: 0.82, y: 0.44, w: 0.14, h: 0.2 },
+    { key: "nape", x: 0.74, y: 0.74, w: 0.12, h: 0.12 },
   ],
   front_left: [
     { key: "scalp", x: 0.48, y: 0.11, w: 0.46, h: 0.13 },
@@ -324,6 +342,8 @@ const SIDE: Record<Exclude<FaceView, "front">, Place[]> = {
     { key: "chin", x: 0.87, y: 0.735, w: 0.1, h: 0.06 },
     { key: "jaw_r", x: 0.67, y: 0.705, w: 0.24, h: 0.07 },
     { key: "neck", x: 0.45, y: 0.83, w: 0.36, h: 0.16 },
+    { key: "occipital", x: 0.18, y: 0.44, w: 0.14, h: 0.2 },
+    { key: "nape", x: 0.26, y: 0.74, w: 0.12, h: 0.12 },
   ],
   front_right: [
     { key: "scalp", x: 0.52, y: 0.11, w: 0.46, h: 0.13 },
@@ -354,6 +374,31 @@ const SIDE: Record<Exclude<FaceView, "front">, Place[]> = {
 export function zonesOn(view: FaceView): Zone[] {
   if (view === "front") return FACE_ZONES;
   return SIDE[view].map((p) => ({ ...ZONE_BY_KEY.get(p.key)!, x: p.x, y: p.y, w: p.w, h: p.h }));
+}
+
+/**
+ * Where a spot marked on one picture is on another (Yamen, 2026-11-08: "when I put
+ * a treatment on the front I want to see it when I press on the right"). It keeps
+ * its place within its part: as far across and down that part's oval as it was.
+ * Null when the other picture does not show that part (the left cheek from the
+ * right). Near enough to find the work, which is what the turned views are for.
+ */
+export function placeOn(p: { x: number; y: number; v?: FaceView }, zone: string, view: FaceView): { x: number; y: number } | null {
+  const from = p.v ?? "front";
+  if (from === view) return { x: p.x, y: p.y };
+  const a = zonesOn(from).find((z) => z.key === zone);
+  const b = zonesOn(view).find((z) => z.key === zone);
+  if (!b) return null;
+  if (!a) return { x: b.x, y: b.y };
+  let dx = (p.x - a.x) / (a.w / 2);
+  let dy = (p.y - a.y) / (a.h / 2);
+  // A spot just outside its part (it went to the nearest) stays just outside, not far off.
+  const r = Math.hypot(dx, dy);
+  if (r > 1.2) {
+    dx = (dx / r) * 1.2;
+    dy = (dy / r) * 1.2;
+  }
+  return { x: b.x + (dx * b.w) / 2, y: b.y + (dy * b.h) / 2 };
 }
 export const isView = (v: unknown): v is FaceView => typeof v === "string" && (FACE_VIEWS as string[]).includes(v);
 
@@ -395,12 +440,13 @@ export function zoneAt(x: number, y: number, view: FaceView = "front"): string |
       near = z.key;
     }
   }
-  return inside ?? (nearGap <= 0.06 ? near : null);
+  // Off a part by a little still counts as that part: anywhere on the face takes a dot.
+  return inside ?? (nearGap <= 0.09 ? near : null);
 }
 
 /** The areas in face order — the order the chart lists them in, whatever order they were tapped. */
 export function inFaceOrder<T extends { zone: string }>(areas: T[]): T[] {
-  const at = (k: string) => FACE_ZONES.findIndex((z) => z.key === k);
+  const at = (k: string) => ALL_ZONES.findIndex((z) => z.key === k);
   return [...areas].sort((a, b) => at(a.zone) - at(b.zone));
 }
 
