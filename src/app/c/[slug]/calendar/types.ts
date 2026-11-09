@@ -53,6 +53,10 @@ export type Appt = {
   next_visit_member_id?: string | null;
   desk_note?: string;
   handed_off_at?: string | null;
+  /** Finish said no further visit is needed (0103). */
+  next_visit_none?: boolean;
+  /** The patient's next visit after this one, if one is booked — what a finished card reports. */
+  next_booked_at?: string | null;
   /** The booked service's length — what a next visit takes unless the hand-off says otherwise. */
   service_duration_min?: number | null;
   /** How late the patient said they would be, or were (migration 0089). */

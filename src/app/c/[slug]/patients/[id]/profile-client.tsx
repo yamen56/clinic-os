@@ -795,7 +795,9 @@ export function PatientProfile(props: {
         </div>
       </div>
 
-      {visitNow && <VisitBanner key={visitNow.id} slug={slug} visit={visitNow} patientName={p.full_name} canFlow={caps.calendar} />}
+      {visitNow && (
+        <VisitBanner key={visitNow.id} slug={slug} tz={tz} patientId={p.id} visit={visitNow} patientName={p.full_name} canFlow={caps.calendar} />
+      )}
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
       <div className="mt-5">

@@ -196,12 +196,32 @@ export function FlowCard({
         )}
       </div>
 
-      {/* The doctor's hand-off, where the desk takes the patient out: when to book next, and their line for reception. */}
-      {stage === "finished" && appt.handed_off_at && (appt.next_visit_days || appt.desk_note) && (
-        <div className="mt-2 grid gap-0.5 rounded-lg bg-brand-50 px-2.5 py-1.5 text-[12.5px] text-ink-900" data-flow-handoff>
-          {appt.next_visit_days ? (
-            <span className="font-semibold">
-              {t.finishVisit.nextIn.replace("{when}", nextWhen(appt.next_visit_days, t.finishVisit.inDays))}
+      {/*
+        What became of the next visit, where the desk takes the patient out:
+        booked (and when), asked for and not booked yet, or not needed — and
+        the doctor's line for reception (2026-11-09: "it should record that").
+      */}
+      {stage === "finished" &&
+        (appt.next_booked_at || (appt.handed_off_at && (appt.next_visit_days || appt.desk_note || appt.next_visit_none))) && (
+        <div
+          className={`mt-2 grid gap-0.5 rounded-lg px-2.5 py-1.5 text-[12.5px] text-ink-900 ${appt.next_booked_at ? "bg-st-confirmed-soft" : "bg-brand-50"}`}
+          data-flow-handoff
+        >
+          {appt.next_booked_at ? (
+            <span className="inline-flex items-center gap-1 font-semibold text-st-confirmed" data-flow-next="booked">
+              <Check className="h-3.5 w-3.5 shrink-0" />
+              {t.finishVisit.bookedFor.replace(
+                "{when}",
+                DateTime.fromISO(appt.next_booked_at).setZone(tz).setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB").toFormat("ccc d LLL · H:mm")
+              )}
+            </span>
+          ) : appt.next_visit_days ? (
+            <span className="font-semibold" data-flow-next="not_booked">
+              {t.finishVisit.notBookedYet.replace("{when}", nextWhen(appt.next_visit_days, t.finishVisit.inDays))}
+            </span>
+          ) : appt.next_visit_none ? (
+            <span className="font-semibold" data-flow-next="none">
+              {t.finishVisit.nextNone}
             </span>
           ) : null}
           {appt.desk_note && (
@@ -346,7 +366,9 @@ export function FlowCard({
               type="button"
               onClick={onBookNext}
               className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold ${
-                appt.next_visit_days ? "bg-brand-600 text-on-brand hover:bg-brand-hover" : "border border-line-strong text-ink-700 hover:bg-sunken"
+                appt.next_visit_days && !appt.next_booked_at
+                  ? "bg-brand-600 text-on-brand hover:bg-brand-hover"
+                  : "border border-line-strong text-ink-700 hover:bg-sunken"
               }`}
               data-flow-book-next
             >

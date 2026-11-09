@@ -52,7 +52,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
         `select a.id, a.patient_id, a.doctor_member_id, a.service_id, a.starts_at, a.ends_at,
                 a.status, a.source, a.notes, a.intake_answers,
                 a.room_id, a.arrived_at, a.seated_at, a.finished_at, a.walk_in, a.flow_prev_status,
-                a.next_visit_days, a.next_visit_min, a.next_visit_member_id, a.desk_note, a.handed_off_at,
+                a.next_visit_days, a.next_visit_min, a.next_visit_member_id, a.desk_note, a.handed_off_at, a.next_visit_none,
+                -- The patient's next visit after this one, booked at Finish or since: what a finished card says was done.
+                (select min(a2.starts_at) from appointments a2
+                  where a2.patient_id = a.patient_id and a2.clinic_id = a.clinic_id and a2.id <> a.id
+                    and a2.starts_at > a.starts_at and a2.status in ('pending_approval', 'scheduled', 'confirmed')) as next_booked_at,
                 a.late_min, a.delay_notice_at,
                 s.duration_min as service_duration_min,
                 p.full_name as patient_name, p.phone_e164 as patient_phone, p.medical_history,

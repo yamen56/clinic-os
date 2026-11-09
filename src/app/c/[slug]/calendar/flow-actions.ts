@@ -12,6 +12,8 @@ import type { PoolClient } from "pg";
 import { notifyUser, staffMembersInRoles } from "@/lib/notify";
 import { NT, asLocale } from "@/lib/notification-text";
 import { resolveCapabilities, type MemberRole } from "@/lib/permissions";
+import { DateTime } from "luxon";
+import { createAppointmentAction } from "./actions";
 
 /**
  * The patient's way through the clinic today: arrived → in a room → finished,
@@ -37,6 +39,7 @@ export type FlowRow = {
   next_visit_member_id: string | null;
   desk_note: string;
   handed_off_at: string | null;
+  next_visit_none: boolean;
 };
 
 /**
@@ -49,6 +52,13 @@ export type Handoff = {
   nextMin: number | null;
   nextMemberId: string | null;
   note: string;
+  /** "Not needed" was chosen: no further visit (0103). */
+  none?: boolean;
+  /**
+   * A time picked on the sheet: the next visit is booked there and then, as
+   * the visit is finished (Yamen, 2026-11-09), rather than left to the desk.
+   */
+  book?: { startsAt: string; doctorMemberId: string | null } | null;
 };
 
 export type FlowResult = {
@@ -57,10 +67,26 @@ export type FlowResult = {
   /** Who is in the room already. */
   occupiedBy?: string;
   row?: FlowRow;
+  /** The next visit, booked from the sheet. */
+  booked?: { id: string; startsAt: string };
+  /** The visit is finished, but the time picked could not be booked (taken meanwhile, outside hours…). */
+  bookError?: string;
+};
+
+/** A next visit picked on the Finish sheet, to book once the visit is finished. */
+type BookFor = {
+  patientId: string;
+  serviceId: string | null;
+  doctorMemberId: string | null;
+  startsAt: string;
+  minutes: number;
+  /** The desk would have been told without the booking (a "when", or a note). */
+  tell: boolean;
+  note: boolean;
 };
 
 const RETURNING = `returning id, status, arrived_at, seated_at, finished_at, room_id, flow_prev_status,
-  next_visit_days, next_visit_min, next_visit_member_id, desk_note, handed_off_at`;
+  next_visit_days, next_visit_min, next_visit_member_id, desk_note, handed_off_at, next_visit_none`;
 
 export async function setFlowAction(
   slug: string,
@@ -71,7 +97,9 @@ export async function setFlowAction(
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
   if (!isUuid(id)) return { error: "not_found" };
-  return inClinic(access, async (c) => {
+  // The next visit to book once this one is finished, when the sheet picked a time for it.
+  let bookFor = null as BookFor | null;
+  const res = await inClinic(access, async (c): Promise<FlowResult> => {
     // Seating asks who is in the room right now; the lock keeps two people
     // from putting two patients in the same chair at the same moment.
     if (step === "seated") await lockClinicSchedule(c, access.clinicId);
@@ -170,12 +198,38 @@ export async function setFlowAction(
         row = (
           await c.query(
             `update appointments set next_visit_days = $2, next_visit_min = $3, next_visit_member_id = $4, desk_note = $5,
-                    handed_off_at = now(), handed_off_by = $6
+                    handed_off_at = now(), handed_off_by = $6, next_visit_none = $7
               where id = $1 ${RETURNING}`,
-            [id, days, mins, member, note, access.session.user.id]
+            [id, days, mins, member, note, access.session.user.id, !days && h.none === true]
           )
         ).rows[0];
-        if (days || note) await tellTheDesk(c, access.clinicId, access.clinicSlug, id, access.session.user.id);
+        /*
+          A time picked on the sheet is booked once this transaction is done,
+          through the same path as any booking — the schedule check, the room,
+          the "new appointment" alerts. The desk is told after that, so it hears
+          "booked for Tuesday", not "book in two weeks", or — if the time went
+          meanwhile — exactly what it would have heard without a booking.
+        */
+        const pick = h.book && typeof h.book.startsAt === "string" && !Number.isNaN(Date.parse(h.book.startsAt)) ? h.book : null;
+        if (pick) {
+          let doctor = member ?? cur.doctor_member_id;
+          if (pick.doctorMemberId && isUuid(pick.doctorMemberId)) {
+            const m = await c.query(`select id from clinic_members where id = $1 and clinic_id = $2 and active`, [pick.doctorMemberId, access.clinicId]);
+            if (m.rowCount) doctor = pick.doctorMemberId;
+          }
+          const length = Math.round((new Date(cur.ends_at).getTime() - new Date(cur.starts_at).getTime()) / 60000);
+          bookFor = {
+            patientId: cur.patient_id,
+            serviceId: cur.service_id,
+            doctorMemberId: doctor,
+            startsAt: new Date(pick.startsAt).toISOString(),
+            minutes: mins ?? (length >= 5 && length <= 480 ? length : 30),
+            tell: !!(days || note),
+            note: !!note,
+          };
+        } else if (days || note) {
+          await tellTheDesk(c, access.clinicId, access.clinicSlug, id, access.session.user.id);
+        }
       }
     } else if (step === "no_show") {
       // Somebody already in a room plainly came.
@@ -202,7 +256,7 @@ export async function setFlowAction(
           await c.query(
             `update appointments set status = flow_prev_status, flow_prev_status = null, finished_at = null,
                     next_visit_days = null, next_visit_min = null, next_visit_member_id = null, desk_note = '',
-                    handed_off_at = null, handed_off_by = null
+                    handed_off_at = null, handed_off_by = null, next_visit_none = false
               where id = $1 ${RETURNING}`,
             [id]
           )
@@ -237,6 +291,25 @@ export async function setFlowAction(
     }
     return { ok: true, row: serialize(row) };
   });
+
+  // Finished; now the next visit, if a time was picked for it.
+  const b = bookFor;
+  if (!res.ok || !b) return res;
+  const made = await createAppointmentAction(slug, {
+    patientId: b.patientId,
+    doctorMemberId: b.doctorMemberId,
+    serviceId: b.serviceId,
+    startsAt: b.startsAt,
+    endsAt: new Date(new Date(b.startsAt).getTime() + b.minutes * 60000).toISOString(),
+    notes: "",
+  });
+  if (made.id) {
+    if (b.note) await inClinic(access, (c) => tellTheDesk(c, access.clinicId, access.clinicSlug, id, access.session.user.id, b.startsAt));
+    return { ...res, booked: { id: made.id, startsAt: b.startsAt } };
+  }
+  // Not booked after all: the desk hears what it would have without the booking, and books it.
+  if (b.tell) await inClinic(access, (c) => tellTheDesk(c, access.clinicId, access.clinicSlug, id, access.session.user.id));
+  return { ...res, bookError: made.error ?? "failed" };
 }
 
 /**
@@ -246,11 +319,20 @@ export async function setFlowAction(
  * owners who may see the calendar — in their own language, onto the visit on
  * the board. Not to the doctor who finished it: they know.
  */
-async function tellTheDesk(c: PoolClient, clinicId: string, slug: string, appointmentId: string, actorUserId: string) {
+async function tellTheDesk(
+  c: PoolClient,
+  clinicId: string,
+  slug: string,
+  appointmentId: string,
+  actorUserId: string,
+  /** The next visit was booked at Finish: say when, not "book in two weeks". */
+  bookedAt?: string
+) {
   const a = (
     await c.query(
-      `select a.next_visit_days, a.desk_note, p.full_name as patient, coalesce(du.full_name, au.full_name) as doctor
+      `select a.next_visit_days, a.desk_note, p.full_name as patient, coalesce(du.full_name, au.full_name) as doctor, cl.timezone
          from appointments a
+         join clinics cl on cl.id = a.clinic_id
          join patients p on p.id = a.patient_id
          left join clinic_members dm on dm.id = a.doctor_member_id
          left join users du on du.id = dm.user_id
@@ -263,12 +345,23 @@ async function tellTheDesk(c: PoolClient, clinicId: string, slug: string, appoin
   for (const m of await staffMembersInRoles(c, clinicId, ["owner", "receptionist"])) {
     if (m.userId === actorUserId) continue;
     if (!resolveCapabilities(m.permissions, { isOwner: m.isOwner, role: m.role as MemberRole }).calendar) continue;
-    const L = NT[asLocale(m.locale)];
+    const locale = asLocale(m.locale);
+    const L = NT[locale];
+    const next = bookedAt
+      ? L.handoffBooked(
+          DateTime.fromISO(bookedAt)
+            .setZone(a.timezone)
+            .setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB")
+            .toFormat("ccc d LLL · H:mm")
+        )
+      : a.next_visit_days
+        ? L.handoffNext(a.next_visit_days)
+        : L.handoffDone;
     await notifyUser(c, m.userId, {
       clinicId,
       kind: "visit_handoff",
       title: L.handoffTitle(a.doctor ?? "", a.patient),
-      body: [a.next_visit_days ? L.handoffNext(a.next_visit_days) : L.handoffDone, a.desk_note].filter(Boolean).join("\n"),
+      body: [next, a.desk_note].filter(Boolean).join("\n"),
       url: `/c/${slug}/calendar?open=${appointmentId}`,
       dedupeKey: `visit_handoff:${appointmentId}`,
     });
@@ -393,5 +486,6 @@ function serialize(r: FlowRow): FlowRow {
     next_visit_member_id: r.next_visit_member_id ?? null,
     desk_note: r.desk_note ?? "",
     handed_off_at: iso(r.handed_off_at),
+    next_visit_none: r.next_visit_none === true,
   };
 }

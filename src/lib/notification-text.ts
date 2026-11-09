@@ -75,6 +75,7 @@ const ar = {
     return `احجز الموعد القادم بعد ${span}`;
   },
   handoffDone: "لا يحتاج موعداً آخر",
+  handoffBooked: (when: string) => `حُجز الموعد القادم: ${when}`,
   payoutTitle: (month: string, amount: string) => `دُفع لك عن ${month}: ${amount}`,
   payoutMethods: { cash: "نقداً", cliq: "كليك", transfer: "تحويل بنكي", cheque: "شيك" } as Record<string, string>,
   hoursTitle: (doctor: string) => `تغيّرت ساعات دوام ${doctor}`,
@@ -123,6 +124,7 @@ const en: typeof ar = {
   handoffTitle: (doctor, p) => `${doctor} finished with ${p}`,
   handoffNext: (days) => `Book the next visit in ${days % 7 === 0 && days < 56 ? `${days / 7} ${days === 7 ? "week" : "weeks"}` : days === 182 ? "6 months" : days % 30 === 0 ? `${days / 30} ${days === 30 ? "month" : "months"}` : `${days} days`}`,
   handoffDone: "No further visit needed",
+  handoffBooked: (when) => `Next visit booked: ${when}`,
   payoutTitle: (month, amount) => `Paid for ${month}: ${amount}`,
   payoutMethods: { cash: "Cash", cliq: "CliQ", transfer: "Bank transfer", cheque: "Cheque" },
   hoursTitle: (doctor) => `${doctor}'s working hours changed`,

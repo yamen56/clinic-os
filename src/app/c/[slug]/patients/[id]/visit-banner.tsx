@@ -22,10 +22,14 @@ import { useToast } from "@/components/ui/toast";
 import { minutesBetween } from "@/lib/patient-flow";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
+import { nextVisitHref } from "@/lib/next-visit";
+import { DateTime } from "luxon";
 import { setFlowAction, type Handoff } from "../../calendar/flow-actions";
 
 export type VisitNow = {
   id: string;
+  starts_at: string;
+  service_id: string | null;
   arrived_at: string | null;
   seated_at: string | null;
   doctor_member_id: string | null;
@@ -36,7 +40,21 @@ export type VisitNow = {
   room_name_ar: string | null;
 };
 
-export function VisitBanner({ slug, visit, patientName, canFlow }: { slug: string; visit: VisitNow; patientName: string; canFlow: boolean }) {
+export function VisitBanner({
+  slug,
+  tz,
+  patientId,
+  visit,
+  patientName,
+  canFlow,
+}: {
+  slug: string;
+  tz: string;
+  patientId: string;
+  visit: VisitNow;
+  patientName: string;
+  canFlow: boolean;
+}) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
@@ -72,14 +90,29 @@ export function VisitBanner({ slug, visit, patientName, canFlow }: { slug: strin
     }
   };
 
-  const finish = async (handoff: Handoff | null) => {
+  /** `another`: "Another time…" — finished, then the calendar's booking on the day asked for. */
+  const finish = async (handoff: Handoff | null, another?: boolean) => {
     setBusy(true);
     const r = await setFlowAction(slug, visit.id, "finished", handoff ? { handoff } : {});
     setBusy(false);
     if (r.error) return fail(r.error);
     setFinishing(false);
     setFinished(true);
-    toast(t.finishVisit.finished);
+    if (r.booked) {
+      toast(
+        t.finishVisit.finishedBooked.replace(
+          "{when}",
+          DateTime.fromISO(r.booked.startsAt).setZone(tz).setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB").toFormat("ccc d LLL · H:mm")
+        )
+      );
+    } else if (r.bookError) {
+      toast(t.finishVisit.bookFailed, "error");
+    } else {
+      toast(t.finishVisit.finished);
+    }
+    if (handoff && (another || r.bookError)) {
+      router.push(nextVisitHref(slug, { patient_id: patientId, starts_at: visit.starts_at, doctor_member_id: visit.doctor_member_id, service_id: visit.service_id }, handoff, tz));
+    }
   };
 
   return (
@@ -125,6 +158,10 @@ export function VisitBanner({ slug, visit, patientName, canFlow }: { slug: strin
       </div>
       {finishing && (
         <FinishVisitSheet
+          slug={slug}
+          tz={tz}
+          serviceId={visit.service_id}
+          onAnotherTime={(h) => void finish(h, true)}
           patientName={patientName}
           serviceName={service}
           defaultDoctorId={visit.doctor_member_id}

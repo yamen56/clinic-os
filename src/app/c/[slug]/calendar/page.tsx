@@ -27,6 +27,7 @@ export default async function CalendarPage({
     show?: string;
     doctor?: string;
     service?: string;
+    at?: string;
   }>;
 }) {
   const { slug } = await params;
@@ -133,6 +134,8 @@ export default async function CalendarPage({
       /* ?doctor=&service= with ?patient= — "Book next visit" from an invoice: who saw them, and for what. */
       initialDoctorId={isUuid(sp.doctor) ? sp.doctor : null}
       initialServiceId={isUuid(sp.service) ? sp.service : null}
+      /* ?at= with ?patient= — "Another time…" at Finish: the booking opens at the time the next visit was asked for. */
+      initialStart={sp.at && !Number.isNaN(Date.parse(sp.at)) ? sp.at : null}
       /* ?show=unconfirmed&date= — "N not confirmed": the list to call through, on its day. */
       unconfirmedOnly={sp.show === "unconfirmed"}
       initialDate={/^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date : null}

@@ -98,6 +98,13 @@ async function main() {
     ).rows[0].id as string;
   const visit = await inRoom(nada, 20);
   const visit2 = await inRoom(sami, 10);
+  // Booked at Finish, not needed, and another time (2026-11-09).
+  const lina = await mkPatient("Lina Saleh", "+962790661103");
+  const omar = await mkPatient("Omar Najjar", "+962790661104");
+  const huda = await mkPatient("Huda Karam", "+962790661105");
+  const visit3 = await inRoom(lina, 15);
+  const visit4 = await inRoom(omar, 12);
+  const visit5 = await inRoom(huda, 8);
 
   const browser = await chromium.launch();
   const errors: string[] = [];
@@ -166,7 +173,7 @@ async function main() {
     const card = desk.locator(`[data-flow-card="${visit}"]`);
     await card.waitFor({ timeout: 90_000 });
     const handoff = await card.locator("[data-flow-handoff]").innerText();
-    check("the finished card shows the hand-off", handoff.includes("Next visit in 2 weeks") && handoff.includes("X-ray"), handoff);
+    check("the finished card says the next visit is not booked yet, and the note", handoff.includes("Not booked yet — next visit in 2 weeks") && handoff.includes("X-ray"), handoff);
     await card.locator("[data-flow-book-next]").click();
     const booking = desk.locator("aside", { hasText: "New appointment" });
     await booking.waitFor({ timeout: 30_000 });
@@ -179,7 +186,7 @@ async function main() {
     await desk.goto(`${base}/calendar?open=${visit}`);
     await desk.waitForSelector("[data-panel-checkout]", { timeout: 60_000 });
     const panel = await desk.locator("[data-panel-checkout]").innerText();
-    check("the visit opened from the Schedule offers the same next steps", panel.includes("Next visit in 2 weeks") && panel.includes("Create invoice"), panel);
+    check("the visit opened from the Schedule offers the same next steps", panel.includes("next visit in 2 weeks") && panel.includes("Create invoice"), panel);
 
     /* ============================================================ due back */
     console.log("\n[due back until somebody books]");
@@ -215,6 +222,93 @@ async function main() {
     check("Skip finishes the visit with nothing handed on", skipped && r2.handed_off_at === null && r2.next_visit_days === null, JSON.stringify(r2));
     const told = (await db.query(`select count(*)::int as n from notifications where clinic_id = $1 and kind = 'visit_handoff'`, [clinic])).rows[0].n;
     check("and tells nobody", told === 1, String(told));
+
+    /* ============================================================ book it at Finish */
+    console.log("\n[the next visit booked as the visit is finished]");
+    await docDesk.goto(base);
+    await docDesk.waitForSelector(`[data-today-row="${visit3}"] [data-today-action="finished"]`, { timeout: 90_000 });
+    await docDesk.click(`[data-today-row="${visit3}"] [data-today-action="finished"]`);
+    await docDesk.waitForSelector("[data-finish-sheet]", { timeout: 15_000 });
+    check("before a when is chosen, nothing offers to book", (await docDesk.locator("[data-finish-book]").count()) === 0);
+    await docDesk.click('[data-next-days="14"]');
+    const slot = docDesk.locator("[data-book-slot]").first();
+    check("choosing 2 weeks offers free times to book", await slot.waitFor({ timeout: 30_000 }).then(() => true, () => false));
+    const slotAt = (await slot.getAttribute("data-book-slot")) ?? "";
+    const slotDay = DateTime.fromISO(slotAt).setZone(TZ).toISODate();
+    check("from the day asked for", !!slotDay && slotDay >= DateTime.now().setZone(TZ).plus({ days: 14 }).toISODate()!, `${slotDay}`);
+    check("beside Another time and Not now", (await docDesk.locator("[data-book-other]").count()) === 1 && (await docDesk.locator("[data-book-later]").count()) === 1);
+    await docDesk.fill("[data-desk-note]", "Bring the old x-ray");
+    await slot.click();
+    const confirm = await docDesk.locator("[data-finish-confirm]").innerText();
+    check("the button says it will finish and book", confirm.includes("Finish and book"), confirm);
+    await docDesk.click("[data-finish-confirm]");
+    const nextAppt = async () =>
+      (
+        await db.query(
+          `select id, starts_at, ends_at, doctor_member_id, service_id, status from appointments where patient_id = $1 and starts_at > now() order by starts_at limit 1`,
+          [lina]
+        )
+      ).rows[0];
+    check("the next visit is booked", await until(async () => !!(await nextAppt())));
+    const nx = await nextAppt();
+    check(
+      "at the time picked, with the doctor, for the service, 45 minutes",
+      !!nx &&
+        new Date(nx.starts_at).toISOString() === new Date(slotAt).toISOString() &&
+        nx.doctor_member_id === doc &&
+        nx.service_id === svc &&
+        (new Date(nx.ends_at).getTime() - new Date(nx.starts_at).getTime()) / 60000 === 45,
+      JSON.stringify(nx)
+    );
+    const v3 = (await db.query(`select status, next_visit_days from appointments where id = $1`, [visit3])).rows[0];
+    check("and the visit is finished, asking for 2 weeks", v3.status === "completed" && v3.next_visit_days === 14, JSON.stringify(v3));
+    const told3 = (await db.query(`select body from notifications where clinic_id = $1 and kind = 'visit_handoff' and url like $2`, [clinic, `%${visit3}`])).rows;
+    check(
+      "the desk is told it is booked, not asked to book it",
+      told3.length === 1 && told3[0].body.includes("Next visit booked") && told3[0].body.includes("Bring the old x-ray") && !told3[0].body.includes("Book the next visit"),
+      JSON.stringify(told3)
+    );
+    await desk.goto(`${base}/calendar?tab=today`);
+    const card3 = desk.locator(`[data-flow-card="${visit3}"]`);
+    await card3.waitFor({ timeout: 90_000 });
+    const booked3 = card3.locator('[data-flow-next="booked"]');
+    check("the Finished card records it booked", await until(async () => (await booked3.count()) === 1, 30_000));
+    check(
+      "and says when",
+      (await booked3.innerText().catch(() => "")).includes(DateTime.fromISO(slotAt).setZone(TZ).setLocale("en-GB").toFormat("d LLL")),
+      await booked3.innerText().catch(() => "")
+    );
+
+    console.log("\n[not needed, said and kept]");
+    const card4 = desk.locator(`[data-flow-card="${visit4}"]`);
+    await card4.locator('[data-flow-action="finished"]').click();
+    await desk.waitForSelector("[data-finish-sheet]", { timeout: 15_000 });
+    await desk.click('[data-next-days="none"]');
+    await desk.click("[data-finish-confirm]");
+    check(
+      "Not needed is kept on the visit",
+      await until(async () => (await db.query(`select next_visit_none from appointments where id = $1`, [visit4])).rows[0].next_visit_none === true)
+    );
+    check("and the Finished card says no further visit is needed", await until(async () => (await card4.locator('[data-flow-next="none"]').count()) === 1, 30_000));
+    check("with nobody booked for them", (await db.query(`select 1 from appointments where patient_id = $1 and starts_at > now()`, [omar])).rowCount === 0);
+
+    console.log("\n[another time: finished, and the booking opens on the day]");
+    const card5 = desk.locator(`[data-flow-card="${visit5}"]`);
+    await card5.locator('[data-flow-action="finished"]').click();
+    await desk.waitForSelector("[data-finish-sheet]", { timeout: 15_000 });
+    await desk.click('[data-next-days="30"]');
+    await desk.locator("[data-book-other]").waitFor({ timeout: 30_000 });
+    await desk.click("[data-book-other]");
+    const booking5 = desk.locator("aside", { hasText: "New appointment" });
+    check("Another time opens the booking", await booking5.waitFor({ timeout: 30_000 }).then(() => true, () => false));
+    const dates5 = await booking5.locator('input[type="date"]').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+    const in30 = DateTime.now().setZone(TZ).plus({ days: 30 }).toISODate()!;
+    check("on the day a month from now", dates5.includes(in30), `${dates5.join(",")} vs ${in30}`);
+    check("for the patient", (await booking5.innerText()).includes("Huda Karam"));
+    const v5 = (await db.query(`select status, next_visit_days from appointments where id = $1`, [visit5])).rows[0];
+    check("with the visit already finished", v5.status === "completed" && v5.next_visit_days === 30, JSON.stringify(v5));
+    await desk.keyboard.press("Escape");
+    check("until it is booked, the card says it is not", await until(async () => (await card5.locator('[data-flow-next="not_booked"]').count()) === 1, 30_000));
 
     check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
     await browser.close();

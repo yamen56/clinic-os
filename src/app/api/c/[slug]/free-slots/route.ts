@@ -26,11 +26,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 6, 1), 20);
   const tz = access.clinic.timezone;
   const fromParam = url.searchParams.get("from");
+  // ?in=14 — "in two weeks" from Finish, counted in the clinic's own days rather than the browser's.
+  const inDays = Number(url.searchParams.get("in"));
   const today = DateTime.now().setZone(tz).startOf("day");
   const from =
     fromParam && /^\d{4}-\d{2}-\d{2}$/.test(fromParam)
       ? DateTime.max(DateTime.fromISO(fromParam, { zone: tz }), today)
-      : today;
+      : Number.isInteger(inDays) && inDays > 0 && inDays <= 730
+        ? today.plus({ days: inDays })
+        : today;
 
   const slots = await inClinic(access, async (c) => {
     const clinic = (

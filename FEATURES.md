@@ -507,6 +507,22 @@ confirmation or consent form to somebody already in the waiting room.
   `appointment_status_changed` like the panel; **Undo raises nothing** (re-raising would
   re-send consent forms) and keeps `last_visit_at` — `flow_prev_status` is what it
   restores.
+- **Finish asks first** (0088, `components/appointments/finish-visit-sheet.tsx`, from the
+  board, the visit panel, the dashboard's Today list and the patient file): when the next
+  visit should be (1 week … 6 months, or Not needed — kept as `next_visit_none`, 0103), how
+  long, with whom, a note for reception; Skip finishes as Finish always did. **Booking it
+  there** (2026-11-09): once a when is picked the sheet offers the free times from that day
+  (`/api/c/{slug}/free-slots?in=N`, the first in each hour). Tapping one makes the button
+  **Finish and book …**, which finishes the visit and books the next one in the same request,
+  through `createAppointmentAction` (schedule check, room, alerts); a time taken meanwhile
+  leaves the visit finished and opens the booking on that day. **Another time…** finishes and
+  opens the booking on the day asked for (the board and the panel open their own; the
+  dashboard and the patient file go to `/calendar?patient=&doctor=&service=&date=&at=`).
+  **Not now** leaves it to the desk, which is told and sees the patient on Due back. When it
+  was booked the desk hears "Next visit booked: …", and only if there is a note.
+- **The Finished card records what happened** (and the visit panel says the same): booked,
+  with the day and time (the patient's next active appointment after this visit,
+  `next_booked_at`), not booked yet with the when asked for, or no further visit needed.
 - **Walk-in** (`walkInAction`): starts now, already arrived, `walk_in = true`, no slot
   check (they wait for whoever is free). It does **not** raise `appointment_created`, so
   no "your appointment is booked" WhatsApp, no booking alert, and their waitlist entry

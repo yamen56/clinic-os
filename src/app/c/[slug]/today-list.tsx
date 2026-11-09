@@ -30,6 +30,8 @@ import { flowStage, type FlowStage } from "@/lib/patient-flow";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { setFlowAction, type FlowStep, type Handoff } from "./calendar/flow-actions";
 import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
+import { nextVisitHref } from "@/lib/next-visit";
+import { DateTime } from "luxon";
 
 export type TodayRow = {
   id: string;
@@ -44,6 +46,8 @@ export type TodayRow = {
   service_color: string | null;
   doctor_member_id: string | null;
   doctor_name: string | null;
+  service_id: string | null;
+  service_duration_min: number | null;
 };
 
 /** The groups across the top, each a count and a filter. Late patients are still to come. */
@@ -91,7 +95,8 @@ export function TodayList({
   });
 
   const [finishing, setFinishing] = useState<TodayRow | null>(null);
-  const step = async (row: TodayRow, s: FlowStep, handoff?: Handoff | null) => {
+  /** `another`: the sheet's "Another time…" — finished, then the calendar's booking on the day asked for. */
+  const step = async (row: TodayRow, s: FlowStep, handoff?: Handoff | null, another?: boolean) => {
     const now = new Date().toISOString();
     const guess: Partial<TodayRow> =
       s === "arrived" ? { arrived_at: now } : s === "seated" ? { seated_at: now, arrived_at: row.arrived_at ?? now } : { status: "completed" };
@@ -109,7 +114,19 @@ export function TodayList({
         r.error === "room_occupied" ? t.flow.roomOccupied.replace("{name}", r.occupiedBy ?? "") : r.error === "not_today" ? t.flow.notToday : t.flow.stale,
         "error"
       );
+      return;
     }
+    if (r.booked) {
+      toast(
+        t.finishVisit.finishedBooked.replace(
+          "{when}",
+          DateTime.fromISO(r.booked.startsAt).setZone(tz).setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB").toFormat("ccc d LLL · H:mm")
+        )
+      );
+    } else if (r.bookError) {
+      toast(t.finishVisit.bookFailed, "error");
+    }
+    if (handoff && (another || r.bookError)) router.push(nextVisitHref(slug, row, handoff, tz));
   };
 
   const label: Record<FlowStep, string> = { arrived: t.flow.arrived, seated: t.flow.callIn, finished: t.flow.finish, no_show: "", undo: "" };
@@ -217,10 +234,14 @@ export function TodayList({
     </ul>
       {finishing && (
         <FinishVisitSheet
+          slug={slug}
+          tz={tz}
+          serviceId={finishing.service_id}
+          onAnotherTime={(h) => void step(finishing, "finished", h, true)}
           patientName={finishing.patient_name}
           serviceName={(locale === "ar" ? finishing.service_name_ar : null) || finishing.service_name}
-          defaultDoctorId={null}
-          defaultMinutes={null}
+          defaultDoctorId={finishing.doctor_member_id}
+          defaultMinutes={finishing.service_duration_min}
           busy={busy === finishing.id}
           onFinish={(h) => void step(finishing, "finished", h)}
           onClose={() => setFinishing(null)}

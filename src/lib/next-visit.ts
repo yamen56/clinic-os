@@ -29,6 +29,31 @@ export function nextVisitOf(
   return { doctorId, serviceId: a.service_id, start: start.toISO() ?? undefined };
 }
 
+/**
+ * The calendar's booking, opened for the next visit a finished one asked for —
+ * for the screens that have no booking panel of their own (the dashboard's
+ * Today list, the visit banner on a patient's file).
+ */
+export function nextVisitHref(
+  slug: string,
+  a: { patient_id: string; starts_at: string; doctor_member_id: string | null; service_id: string | null },
+  h: { nextDays: number | null; nextMemberId: string | null },
+  tz: string
+): string {
+  const n = nextVisitOf(
+    { ...a, finished_at: new Date().toISOString(), next_visit_days: h.nextDays, next_visit_member_id: h.nextMemberId },
+    tz
+  );
+  const q = new URLSearchParams({ tab: "schedule", patient: a.patient_id });
+  if (n.doctorId) q.set("doctor", n.doctorId);
+  if (n.serviceId) q.set("service", n.serviceId);
+  if (n.start) {
+    q.set("date", DateTime.fromISO(n.start).setZone(tz).toISODate()!);
+    q.set("at", n.start);
+  }
+  return `/c/${slug}/calendar?${q}`;
+}
+
 /** "2 weeks", "6 months" — the chip's own words for a chip's number, plain days otherwise. */
 export function nextWhen(days: number, words: Record<string, string>): string {
   return words[String(days)] ?? `${days}`;

@@ -58,10 +58,13 @@ export function AppointmentsClient({
   unconfirmedOnly = false,
   initialDoctorId = null,
   initialServiceId = null,
+  initialStart = null,
 }: {
   /** With initialPatient: the doctor and service a booking starts with. */
   initialDoctorId?: string | null;
   initialServiceId?: string | null;
+  /** With initialPatient: when it starts — the next visit asked for at Finish. */
+  initialStart?: string | null;
   /** ?date= — the day the Schedule opens on, from a link about that day. */
   initialDate?: string | null;
   /** ?show=unconfirmed — the Schedule opens on the visits nobody has confirmed. */
@@ -112,6 +115,7 @@ export function AppointmentsClient({
           items: initialPlan?.items,
           doctorId: initialPlan?.doctorId ?? initialDoctorId ?? undefined,
           serviceId: initialServiceId ?? undefined,
+          start: initialStart ?? undefined,
           notes: initialPlan?.notes,
         }
       : openNew
@@ -191,14 +195,15 @@ export function AppointmentsClient({
     answered by the screen, not by the server — and the server's answer then
     replaces the guess, or puts the card back with the reason.
   */
-  const step = async (a: Appt, s: FlowStep, roomId?: string | null, handoff?: Handoff | null) => {
+  /** True once the server has the step; false when it asked first or was refused. */
+  const step = async (a: Appt, s: FlowStep, roomId?: string | null, handoff?: Handoff | null): Promise<boolean> => {
     /*
       Finish asks first: the doctor hands the visit to the desk on the sheet,
       or skips it. The sheet calls back here with its answer.
     */
     if (s === "finished" && handoff === undefined) {
       setFinishing(a);
-      return;
+      return false;
     }
     const now = new Date(nowMs).toISOString();
     const room = roomId !== undefined ? (today?.rooms ?? []).find((r) => r.id === roomId) : null;
@@ -238,7 +243,7 @@ export function AppointmentsClient({
       );
       void refetchToday();
       setVersion((v) => v + 1);
-      return;
+      return false;
     }
     if (r.row) {
       const rm = (today?.rooms ?? []).find((x) => x.id === r.row!.room_id);
@@ -247,8 +252,35 @@ export function AppointmentsClient({
         ...(rm ? { room_name: rm.name, room_name_ar: rm.name_ar, room_color: rm.color } : {}),
       });
     }
+    /*
+      The next visit booked from the sheet: the finished card says when. If the
+      time went meanwhile, the visit is still finished and the booking opens on
+      the asked-for day to pick another.
+    */
+    if (r.booked) {
+      patchToday(a.id, { next_booked_at: r.booked.startsAt });
+      toast(t.finishVisit.finishedBooked.replace("{when}", whenOf(r.booked.startsAt)));
+    } else if (r.bookError && handoff) {
+      toast(t.finishVisit.bookFailed, "error");
+      bookAfter(a, handoff);
+    }
     if (tab !== "today") setVersion((v) => v + 1);
+    return true;
   };
+
+  /** "Tue 23 Nov · 10:00", in the clinic's day. */
+  const whenOf = (iso: string) =>
+    DateTime.fromISO(iso)
+      .setZone(tz)
+      .setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB")
+      .toFormat("ccc d LLL · H:mm");
+
+  /** The booking a finished visit asked for, opened on its day with its doctor — "Another time…", or a time that went. */
+  const bookAfter = (a: Appt, h: Handoff) =>
+    bookFrom(
+      { id: a.patient_id, name: a.patient_name },
+      nextVisitOf({ ...a, finished_at: new Date().toISOString(), next_visit_days: h.nextDays, next_visit_member_id: h.nextMemberId }, tz)
+    );
 
   /*
     Late: the minutes on the patient's card, and — if the desk ticked anyone —
@@ -524,6 +556,13 @@ export function AppointmentsClient({
 
       {finishing && (
         <FinishVisitSheet
+          slug={slug}
+          tz={tz}
+          serviceId={finishing.service_id}
+          onAnotherTime={(h) => {
+            const a = finishing;
+            void step(a, "finished", undefined, h).then((ok) => ok && bookAfter(a, h));
+          }}
           patientName={finishing.patient_name}
           serviceName={(locale === "ar" ? finishing.service_name_ar : null) || finishing.service_name}
           done={finishing.done}

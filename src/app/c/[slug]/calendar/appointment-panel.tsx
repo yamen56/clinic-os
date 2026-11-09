@@ -240,10 +240,16 @@ export function AppointmentPanel({
     });
 
   const [finishing, setFinishing] = useState(false);
-  const flow = (step: FlowStep, handoff?: Handoff | null) =>
+  /*
+    `bookNext`: finished from the sheet's "Another time…" — once the visit is
+    finished, the booking opens on the day the doctor asked for. A time picked
+    on the sheet that went meanwhile does the same.
+  */
+  const flow = (step: FlowStep, handoff?: Handoff | null, bookNext?: boolean) =>
     start(async () => {
       if (state?.mode !== "edit") return;
-      const r = await setFlowAction(slug, state.appt.id, step, handoff ? { handoff } : {});
+      const appt = state.appt;
+      const r = await setFlowAction(slug, appt.id, step, handoff ? { handoff } : {});
       setFinishing(false);
       if (r.error) {
         toast(
@@ -256,8 +262,27 @@ export function AppointmentPanel({
         );
         return;
       }
-      toast(t.calendar.updated);
+      if (r.booked) {
+        toast(
+          t.finishVisit.finishedBooked.replace(
+            "{when}",
+            DateTime.fromISO(r.booked.startsAt).setZone(tz).setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB").toFormat("ccc d LLL · H:mm")
+          )
+        );
+      } else if (r.bookError) {
+        toast(t.finishVisit.bookFailed, "error");
+      } else {
+        toast(t.calendar.updated);
+      }
       onChanged();
+      if (handoff && onBookNext && (bookNext || r.bookError)) {
+        onBookNext({
+          ...appt,
+          finished_at: new Date().toISOString(),
+          next_visit_days: handoff.nextDays,
+          next_visit_member_id: handoff.nextMemberId,
+        });
+      }
     });
 
   const suggest = async () => {
@@ -364,10 +389,23 @@ export function AppointmentPanel({
             */}
             {editAppt && editAppt.status === "completed" && (canInvoice || onBookNext) && (
               <div className="grid gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5" data-panel-checkout>
-                {editAppt.handed_off_at && (editAppt.next_visit_days || editAppt.desk_note) && (
-                  <div className="grid gap-0.5 text-[12.5px]">
-                    {editAppt.next_visit_days ? (
-                      <span className="font-semibold">{t.finishVisit.nextIn.replace("{when}", nextWhen(editAppt.next_visit_days, t.finishVisit.inDays))}</span>
+                {/* What became of the next visit: booked and when, still to book, or not needed — as the board's card says it. */}
+                {(editAppt.next_booked_at ||
+                  (editAppt.handed_off_at && (editAppt.next_visit_days || editAppt.desk_note || editAppt.next_visit_none))) && (
+                  <div className="grid gap-0.5 text-[12.5px]" data-panel-next>
+                    {editAppt.next_booked_at ? (
+                      <span className="font-semibold text-st-confirmed" data-panel-next-state="booked">
+                        {t.finishVisit.bookedFor.replace(
+                          "{when}",
+                          DateTime.fromISO(editAppt.next_booked_at).setZone(tz).setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB").toFormat("ccc d LLL · H:mm")
+                        )}
+                      </span>
+                    ) : editAppt.next_visit_days ? (
+                      <span className="font-semibold" data-panel-next-state="not_booked">
+                        {t.finishVisit.notBookedYet.replace("{when}", nextWhen(editAppt.next_visit_days, t.finishVisit.inDays))}
+                      </span>
+                    ) : editAppt.next_visit_none ? (
+                      <span className="font-semibold" data-panel-next-state="none">{t.finishVisit.nextNone}</span>
                     ) : null}
                     {editAppt.desk_note && (
                       <span dir="auto" className="whitespace-pre-line text-ink-700">
@@ -769,6 +807,10 @@ export function AppointmentPanel({
 
       {finishing && editAppt && (
         <FinishVisitSheet
+          slug={slug}
+          tz={tz}
+          serviceId={editAppt.service_id}
+          onAnotherTime={onBookNext ? (h) => flow("finished", h, true) : undefined}
           patientName={editAppt.patient_name}
           serviceName={(locale === "ar" ? editAppt.service_name_ar : null) || editAppt.service_name}
           done={done}

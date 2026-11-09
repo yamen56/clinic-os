@@ -589,6 +589,18 @@ export const en = {
     overdue: "{n} days late",
     noneDue: "Nobody is due back.",
     finished: "Visit finished",
+    /* Booking the next visit from Finish (2026-11-09). */
+    bookNow: "Book it now?",
+    findingTimes: "Finding free times…",
+    noTimes: "No free time around then.",
+    anotherTime: "Another time…",
+    notNow: "Not now",
+    notNowHint: "The desk is told, and the patient waits on Due back until somebody books it.",
+    finishAndBook: "Finish and book {when}",
+    finishedBooked: "Visit finished. Next visit booked for {when}",
+    bookFailed: "Visit finished, but that time could not be booked. Pick another.",
+    bookedFor: "Next visit booked · {when}",
+    notBookedYet: "Not booked yet — next visit in {when}",
   },
   /* The treatment coordinator's list (a test — lib/courses). */
   coordinator: {
