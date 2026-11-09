@@ -215,6 +215,7 @@ const URGENT = new Set([
   "whatsapp_errors",
   "whatsapp_undelivered",
   "whatsapp_blast_guard",
+  "whatsapp_restricted",
   "ai_escalation",
   "document_integrity",
 ]);

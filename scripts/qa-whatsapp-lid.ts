@@ -87,11 +87,19 @@ async function main() {
   check("no LID anywhere falls back to the phone address", a.jid === "962790111222@s.whatsapp.net", a.jid ?? "");
   check("and is still marked reachable", a.exists === true);
 
-  // WhatsApp saying no, versus WhatsApp saying nothing.
-  a = await resolveSendAddress({ onWhatsApp: async () => [{ jid: "x", exists: false }] }, PN);
-  check("a real 'no account' is reported as such", a.exists === false && a.jid === null);
+  /*
+    WhatsApp saying no, versus the question failing. Baileys 7 lists only
+    registered contacts, so "no account" arrives as [] (Socket/socket.js,
+    onWhatsApp); only a query that did not come back gives undefined. This
+    used to assert that [] was "silence", which is how messages to numbers
+    with no WhatsApp went out to nowhere while the suite stayed green.
+  */
   a = await resolveSendAddress({ onWhatsApp: async () => [] }, PN);
-  check("silence is not a verdict", a.exists === null, String(a.exists));
+  check("an empty answer is 'no account', as Baileys means it", a.exists === false && a.jid === null, String(a.exists));
+  a = await resolveSendAddress({ onWhatsApp: async () => [{ jid: "x", exists: false }] }, PN);
+  check("an explicit no is a no too", a.exists === false && a.jid === null);
+  a = await resolveSendAddress({ onWhatsApp: async () => undefined }, PN);
+  check("a lookup that failed is not a verdict", a.exists === null, String(a.exists));
 
   // A mapper that throws must not become a verdict either.
   a = await resolveSendAddress(

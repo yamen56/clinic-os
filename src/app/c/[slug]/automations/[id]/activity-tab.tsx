@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import type { FlowNode } from "@/lib/automation/graph";
 import type { RunRow } from "@/lib/automation/store";
+import { deliveryNote, deliveryText } from "@/lib/wa-delivery";
 import { cancelRunAction, cancelWaitingRunsAction, loadRunsAction } from "../actions";
 import { fill, handleLabel } from "../flow-meta";
 
@@ -19,6 +20,16 @@ const runBadge: Record<string, StatusKey> = {
   running: "scheduled",
   waiting: "pending",
   completed: "confirmed",
+  failed: "no_show",
+  cancelled: "cancelled",
+};
+
+const messageBadge: Record<string, StatusKey> = {
+  queued: "pending",
+  sending: "pending",
+  sent: "scheduled",
+  delivered: "confirmed",
+  read: "confirmed",
   failed: "no_show",
   cancelled: "cancelled",
 };
@@ -121,6 +132,12 @@ export function ActivityTab({
           <ul className="divide-y divide-line">
             {runs.map((r) => {
               const live = r.status === "waiting" || r.status === "running";
+              // A run can complete while its message never arrives; that is what the clinic needs to see.
+              const session = { connected: r.wa_connected !== false };
+              const sent = (r.messages ?? []).filter((m) => m.direction === "out").map((m) => ({ m, note: deliveryNote(m, session) }));
+              const problem = sent.find(
+                (x) => x.note && (x.note.kind === "failed" || x.note.kind === "cancelled" || x.note.kind === "undelivered")
+              );
               return (
                 <li key={r.id}>
                   <button
@@ -140,6 +157,17 @@ export function ActivityTab({
                         <span className="block truncate text-[12px] text-ink-500" suppressHydrationWarning>
                           {stepName(r.current_step_id, null)}
                           {r.wake_at ? ` · ${fill(f.nextStepAt, { when: fmtRelative(r.wake_at, locale) })}` : ""}
+                        </span>
+                      )}
+                      {problem && (
+                        <span
+                          className={`block truncate text-[12px] ${problem.note?.kind === "undelivered" ? "text-warning" : "text-danger"}`}
+                          data-run-message-problem
+                        >
+                          {t.delivery.message} ·{" "}
+                          {problem.note?.kind === "undelivered"
+                            ? t.wa.undeliveredCount
+                            : ((t.delivery.status as Record<string, string>)[problem.m.status] ?? problem.m.status)}
                         </span>
                       )}
                     </span>
@@ -172,6 +200,34 @@ export function ActivityTab({
                           );
                         })}
                       </ol>
+                      {sent.length > 0 && (
+                        <ol className="mt-3 grid gap-2 border-t border-line pt-3" data-run-messages>
+                          {sent.map(({ m, note }) => (
+                            <li key={m.id} className="flex items-start gap-2.5 text-[13px]">
+                              <Badge status={messageBadge[m.status] ?? "neutral"}>
+                                {(t.delivery.status as Record<string, string>)[m.status] ?? m.status}
+                              </Badge>
+                              <span className="min-w-0 flex-1">
+                                <span className="block font-medium">{t.delivery.message}</span>
+                                {note && (
+                                  <span className="block break-words text-[12px] text-ink-500" suppressHydrationWarning>
+                                    {deliveryText(note, t.delivery, (at) => fmtDateTime(at, tz, locale))}
+                                  </span>
+                                )}
+                                <Link
+                                  href={`/c/${slug}/conversations?open=${m.conversation_id}`}
+                                  className="text-[12px] font-medium text-brand-700 hover:underline"
+                                >
+                                  {t.wa.openChat}
+                                </Link>
+                              </span>
+                              <span className="shrink-0 text-[12px] text-ink-400" suppressHydrationWarning>
+                                {fmtDateTime(m.created_at, tz, locale)}
+                              </span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
                       <div className="mt-3 flex flex-wrap gap-2">
                         {r.patient_id && (
                           <Link href={`/c/${slug}/patients/${r.patient_id}`} className="text-[13px] font-medium text-brand-700 hover:underline">

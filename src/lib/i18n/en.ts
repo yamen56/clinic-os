@@ -2112,6 +2112,7 @@ export const en = {
       einvoice_failed: "Invoice not filed",
       whatsapp_undelivered: "Messages not arriving",
       whatsapp_blast_guard: "Sending paused",
+      whatsapp_restricted: "New chats restricted",
       test: "Test",
     },
     tabInbox: "Inbox",
@@ -3409,6 +3410,48 @@ export const en = {
     handled: "Handled",
     patientPanel: "Patient details",
   },
+  // Why an outbound WhatsApp message is not on the patient's phone (lib/wa-delivery).
+  delivery: {
+    failed: {
+      noAccount: "Not sent — this number isn't on WhatsApp. Check the number on the patient file.",
+      restricted:
+        "Not delivered — WhatsApp is stopping the clinic's number from starting new chats (code {code}). Chats where the patient wrote first still work.",
+      staleAddress:
+        "Not delivered — WhatsApp refused it because the patient's phone changed (a new phone or a reinstall). Send it again.",
+      rejected: "Not delivered — WhatsApp refused the message (code {code}).",
+      mediaMissing: "Not sent — the attached file could not be found.",
+      connectionLost: "Not sent — WhatsApp kept disconnecting while sending it.",
+      other: "Not sent — {detail}",
+    },
+    cancelled: {
+      appointmentPassed: "Not sent — the appointment had already started before WhatsApp could send it.",
+      expired: "Not sent — it waited more than three days, so it was no longer current.",
+      other: "Not sent — cancelled.",
+    },
+    waiting: {
+      disconnected: "Waiting — the clinic's WhatsApp is not connected. It sends as soon as it reconnects.",
+      dailyCap: "Waiting — today's message limit was reached. Sends {at}.",
+      warmupCap: "Waiting — a newly linked number sends fewer messages a day at first. Sends {at}.",
+      blastGuard: "Held — the same text went to many patients within minutes. Sends {at}.",
+      paused: "Held — sending paused after repeated failures. Resumes {at}.",
+      scheduled: "Scheduled — sends {at}.",
+      retrying: "Didn't go on the first try — trying again {at}.",
+    },
+    undelivered:
+      "Not delivered yet — WhatsApp has it, but the patient's phone hasn't received it. The phone may be off or offline and will get it when it's back; if this stays, the number may no longer use WhatsApp.",
+    sendAgain: "Send again",
+    sentAgain: "Sent again",
+    message: "WhatsApp message",
+    status: {
+      queued: "Waiting to send",
+      sending: "Sending",
+      sent: "Sent",
+      delivered: "Delivered",
+      read: "Read",
+      failed: "Not delivered",
+      cancelled: "Not sent",
+    },
+  },
   wa: {
     title: "WhatsApp connection",
     sub: "Link the clinic's WhatsApp number — messages, automations, and the AI assistant all run through it.",
@@ -3444,6 +3487,11 @@ export const en = {
     noAccount: "Number has no WhatsApp",
     unreachableNote:
       "{n} numbers in this clinic have no WhatsApp account. Messages to them are skipped rather than retried — check the number on the patient file.",
+    cancelledCount: "Not sent (too late)",
+    undeliveredCount: "Sent, not on the phone after 6 hours",
+    problemsTitle: "Messages that didn't reach the patient",
+    problemsSub: "Last 7 days, newest first. Open the chat to send one again.",
+    openChat: "Open chat",
   },
   book: {
     chooseService: "Choose a service",

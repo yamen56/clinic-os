@@ -1,6 +1,7 @@
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
+  proto,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
@@ -20,6 +21,13 @@ const logger = pino({ level: "silent" });
  */
 export class WASession {
   sock: WASocket | null = null;
+  /*
+    Open between the socket's "open" and its "close". `sock.user` alone stays
+    set on a socket that has already closed, so the outbox kept handing
+    messages to a dead connection during every reconnect — each one an error
+    that used up one of the message's attempts.
+  */
+  private open = false;
   private stopping = false;
   private retries = 0;
   private clearAuth: (() => Promise<void>) | null = null;
@@ -58,6 +66,7 @@ export class WASession {
 
   async start(): Promise<void> {
     this.stopping = false;
+    this.open = false;
     try {
       const { state, saveCreds, clear } = await useDbAuthState(this.clinicId);
       this.clearAuth = clear;
@@ -76,24 +85,12 @@ export class WASession {
           it again, and Baileys needs the content to re-encrypt. Its own cache of
           recent sends lives in memory and dies with every deploy, so a message
           sent just before one sat on the patient's screen as "Waiting for this
-          message" for good. Text we can rebuild from the thread; anything else
-          stays unanswered, as before.
+          message" for good. Text we rebuild from the thread. Pictures, videos
+          and documents — invoices, prescriptions, signed forms — are answered
+          from the exact message we sent, kept for this (migration 0104); before
+          that they were never answered at all.
         */
-        getMessage: async (key) => {
-          if (!key.id) return undefined;
-          const row = await withSystem(async (c) =>
-            (
-              await c.query(
-                `select body, msg_type from messages
-                  where clinic_id = $1 and wa_message_id = $2 and direction = 'out'
-                  limit 1`,
-                [this.clinicId, key.id]
-              )
-            ).rows[0] as { body: string; msg_type: string } | undefined
-          ).catch(() => undefined);
-          if (!row || row.msg_type !== "text" || !row.body) return undefined;
-          return { conversation: row.body };
-        },
+        getMessage: async (key) => (key.id ? retryContent(this.clinicId, key.id) : undefined),
       });
       this.sock = sock;
 
@@ -108,6 +105,7 @@ export class WASession {
               await this.setSession({ status: "qr", qr: u.qr, error: null });
             }
             if (u.connection === "open") {
+              this.open = true;
               this.retries = 0;
               const me = sock.user?.id ?? "";
               const phone = me.split(":")[0].split("@")[0];
@@ -146,6 +144,7 @@ export class WASession {
               }, 20_000);
             }
             if (u.connection === "close") {
+              this.open = false;
               const code =
                 (u.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)
                   ?.output?.statusCode ?? 0;
@@ -237,6 +236,7 @@ export class WASession {
 
   async stop(opts: { logout?: boolean } = {}): Promise<void> {
     this.stopping = true;
+    this.open = false;
     try {
       if (opts.logout && this.sock) {
         await this.sock.logout().catch(() => {});
@@ -253,8 +253,36 @@ export class WASession {
   }
 
   get connected(): boolean {
-    return !!this.sock?.user;
+    return this.open && !!this.sock?.user;
   }
+}
+
+/**
+ * What to re-encrypt when a patient's phone asks for a message again. The
+ * exact message we sent when it was kept (media, since 0104); otherwise text
+ * rebuilt from the thread; otherwise nothing, which leaves that copy unread.
+ */
+export async function retryContent(clinicId: string, waId: string): Promise<proto.IMessage | undefined> {
+  const row = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select body, msg_type, wa_payload from messages
+          where clinic_id = $1 and wa_message_id = $2 and direction = 'out'
+          limit 1`,
+        [clinicId, waId]
+      )
+    ).rows[0] as { body: string; msg_type: string; wa_payload: Buffer | null } | undefined
+  ).catch(() => undefined);
+  if (!row) return undefined;
+  if (row.wa_payload) {
+    try {
+      return proto.Message.decode(row.wa_payload);
+    } catch {
+      // Fall through to the text rebuild, which is all there was before.
+    }
+  }
+  if (row.msg_type !== "text" || !row.body) return undefined;
+  return { conversation: row.body };
 }
 
 async function notifyDisconnected(clinicId: string) {

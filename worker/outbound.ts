@@ -6,7 +6,8 @@ import { resolveSendAddress } from "./wa/resolve-address";
 import { readFileBuffer } from "../src/lib/storage";
 import { notifyUser } from "../src/lib/notify";
 import { effectiveDailyCap } from "../src/lib/whatsapp-ramp";
-import type { AnyMessageContent } from "@whiskeysockets/baileys";
+import { WA_REASON, isConnectionError } from "../src/lib/wa-delivery";
+import { proto, type AnyMessageContent } from "@whiskeysockets/baileys";
 
 /**
  * Outbound sender with number-protection rails:
@@ -216,13 +217,15 @@ export async function processOnce() {
             .plus({ days: 1 })
             .startOf("day")
             .plus({ minutes: hmToMinutes(String(ses.message_window_start)) });
-          await c.query(
-            `update messages set status = 'queued', scheduled_at = $2 where id = $1`,
-            [row.id, nextWindow.toUTC().toISO()]
-          );
           // Says which cap, because "deferred" on a brand-new number at twenty
-          // messages looks like a bug unless the ramp is named.
-          const why = cap < Number(ses.daily_outbound_cap) ? `warm-up cap ${cap}` : `daily cap ${cap}`;
+          // messages looks like a bug unless the ramp is named — in the log and
+          // under the message in the inbox.
+          const warm = cap < Number(ses.daily_outbound_cap);
+          await c.query(
+            `update messages set status = 'queued', scheduled_at = $2, error = $3 where id = $1`,
+            [row.id, nextWindow.toUTC().toISO(), warm ? WA_REASON.heldWarmupCap : WA_REASON.heldDailyCap]
+          );
+          const why = warm ? `warm-up cap ${cap}` : `daily cap ${cap}`;
           console.log(`[outbound ${clinicId}] ${why} reached — deferred message`);
           return null;
         }
@@ -259,8 +262,8 @@ export async function processOnce() {
               [clinicId]
             );
             await c.query(
-              `update messages set status = 'queued', scheduled_at = now() + interval '35 minutes' where id = $1`,
-              [row.id]
+              `update messages set status = 'queued', scheduled_at = now() + interval '35 minutes', error = $2 where id = $1`,
+              [row.id, WA_REASON.heldBlastGuard]
             );
             // Silently pausing a clinic's automations is how this stayed
             // invisible: nothing sends, nothing errors, nobody is told.
@@ -300,8 +303,15 @@ export async function processOnce() {
         asking on every send is exactly the repeated lookup that gets a number
         rate-limited.
       */
-      const stale =
-        !claimed.checkedAt || Date.now() - new Date(claimed.checkedAt).getTime() > 30 * 864e5;
+      /*
+        A "no" is asked again after a day rather than a month. A yes almost
+        never turns into a no, but a no turns into a yes whenever somebody
+        installs WhatsApp or the patient file's number is corrected — and a
+        month of every message to them failing on a stale answer is the silent
+        loss this check exists to prevent, just with a reason attached.
+      */
+      const age = claimed.checkedAt ? Date.now() - new Date(claimed.checkedAt).getTime() : Infinity;
+      const stale = age > (claimed.onWhatsApp === false ? 864e5 : 30 * 864e5);
       /*
         The stored address wins. It is the one WhatsApp used when the patient
         wrote to us, so it is known to reach them — where a rebuilt one is a
@@ -359,9 +369,10 @@ export async function processOnce() {
         const sent = await session.sock!.sendMessage(jid, content);
         await withSystem(async (c) => {
           await c.query(
-            `update messages set status = 'sent', sent_at = now(), wa_message_id = coalesce($2, wa_message_id), error = null
+            `update messages set status = 'sent', sent_at = now(), wa_message_id = coalesce($2, wa_message_id), error = null,
+                    wa_payload = $3
              where id = $1`,
-            [row.id, sent?.key?.id ?? null]
+            [row.id, sent?.key?.id ?? null, retryPayload(row.msg_type, sent?.message)]
           );
           await c.query(
             `update whatsapp_sessions set outbound_today = outbound_today + 1, consecutive_errors = 0, last_seen_at = now()
@@ -370,11 +381,30 @@ export async function processOnce() {
           );
         });
       } catch (e) {
-        const errMsg = (e as Error).message.slice(0, 300);
-        console.error(`[outbound ${clinicId}] send failed:`, errMsg);
+        const raw = (e as Error).message.slice(0, 300);
+        console.error(`[outbound ${clinicId}] send failed:`, raw);
+        /*
+          Three kinds of failure, treated differently.
+
+          The connection dropping mid-send says nothing about the message: the
+          same message goes once the socket is back. It used to spend the
+          message's three attempts at 90-second intervals, so a phone off wifi
+          for five minutes failed every message queued in that window for good.
+          It gets ten tries now, and does not count towards pausing the clinic —
+          the disconnect alert already covers a connection that is down.
+
+          A missing attachment will be missing on the next try too, so it fails
+          at once rather than after three.
+
+          Anything else is the message's own problem and keeps the old ladder.
+        */
+        const conn = isConnectionError(raw);
+        const permanent = raw === WA_REASON.mediaMissing;
+        const errMsg = conn ? WA_REASON.connectionLost : raw;
+        const maxAttempts = permanent ? 1 : conn ? 10 : 3;
         await withSystem(async (c) => {
           const attempts = (row.attempts ?? 0) + 1;
-          if (attempts < 3) {
+          if (attempts < maxAttempts) {
             /*
               The casts are load-bearing. Postgres cannot deduce one type for a
               parameter used both as an integer column and as the left side of
@@ -386,7 +416,7 @@ export async function processOnce() {
             */
             await c.query(
               `update messages set status = 'queued', attempts = $2::int, error = $3,
-                 scheduled_at = now() + ($2::int * interval '90 seconds')
+                 scheduled_at = now() + (least($2::int, 4) * interval '90 seconds')
                where id = $1`,
               [row.id, attempts, errMsg]
             );
@@ -397,6 +427,7 @@ export async function processOnce() {
               errMsg,
             ]);
           }
+          if (conn) return;
           const ses = (
             await c.query(
               `update whatsapp_sessions set consecutive_errors = consecutive_errors + 1
@@ -459,7 +490,7 @@ export async function messageContent(row: OutboxRow): Promise<AnyMessageContent>
     return { text: row.body ?? "" };
   }
   const buf = await readFileBuffer(row.media_path);
-  if (!buf) throw new Error("media file missing");
+  if (!buf) throw new Error(WA_REASON.mediaMissing);
 
   if (row.msg_type === "image") return { image: buf, caption };
   if (row.msg_type === "video") {
@@ -488,6 +519,21 @@ export async function messageContent(row: OutboxRow): Promise<AnyMessageContent>
     fileName: row.media_name ?? "document.pdf",
     caption,
   };
+}
+
+/**
+ * The sent message, encoded, for answering a retry request (see session.ts,
+ * getMessage). Text is rebuilt from `body` instead, so only media is kept: a
+ * picture or document cannot be rebuilt without the uploaded file's key and
+ * address, which only exist in what Baileys handed WhatsApp.
+ */
+export function retryPayload(msgType: string, message: proto.IMessage | null | undefined): Buffer | null {
+  if (!message || msgType === "text") return null;
+  try {
+    return Buffer.from(proto.Message.encode(message).finish());
+  } catch {
+    return null;
+  }
 }
 
 /**

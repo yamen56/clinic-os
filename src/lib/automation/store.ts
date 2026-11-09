@@ -177,6 +177,24 @@ export type RunRow = {
   wake_at: string | null;
   test: boolean;
   logs: { status: string; detail: Record<string, unknown>; at: string; step_id: string | null; step: string | null }[];
+  /**
+   * What became of the WhatsApp messages this run queued. The step log only
+   * says "queued" — the message can still fail, be cancelled, or never reach
+   * the phone hours later, and the run would read as completed either way.
+   */
+  messages: {
+    id: string;
+    direction: string;
+    status: string;
+    error: string | null;
+    created_at: string;
+    sent_at: string | null;
+    scheduled_at: string | null;
+    delivered_at: string | null;
+    conversation_id: string;
+  }[];
+  /** Whether the clinic's WhatsApp is connected now — the usual reason a queued message is still waiting. */
+  wa_connected: boolean | null;
 };
 
 export const RUNS_PAGE = 40;
@@ -194,7 +212,13 @@ export async function queryRuns(
             coalesce((select json_agg(json_build_object('status', l.status, 'detail', l.detail, 'at', l.created_at,
                                                         'step_id', l.step_id, 'step', s.step_type) order by l.created_at)
                         from automation_run_logs l left join automation_steps s on s.id = l.step_id
-                       where l.run_id = r.id), '[]') as logs
+                       where l.run_id = r.id), '[]') as logs,
+            coalesce((select json_agg(json_build_object('id', m.id, 'direction', m.direction, 'status', m.status,
+                                                        'error', m.error, 'created_at', m.created_at, 'sent_at', m.sent_at,
+                                                        'scheduled_at', m.scheduled_at, 'delivered_at', m.delivered_at,
+                                                        'conversation_id', m.conversation_id) order by m.created_at)
+                        from messages m where m.automation_run_id = r.id and m.clinic_id = r.clinic_id), '[]') as messages,
+            (select ws.status = 'connected' from whatsapp_sessions ws where ws.clinic_id = r.clinic_id) as wa_connected
        from automation_runs r
        left join patients p on p.id = r.patient_id
       where r.automation_id = $1 and r.clinic_id = $2

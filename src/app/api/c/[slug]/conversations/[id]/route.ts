@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { owedSql } from "@/lib/invoices";
+import { resendMessage } from "@/lib/wa-resend";
 
 /** Thread detail: messages + linked patient panel. */
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
@@ -30,13 +31,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
     const messages = (
       await c.query(
         `select m.id, m.direction, m.sender_kind, m.msg_type, m.body, m.media_path, m.media_mime,
-                m.media_name, m.status, m.error, m.created_at, m.sent_at, u.full_name as sender_name
+                m.media_name, m.status, m.error, m.created_at, m.sent_at, m.scheduled_at, m.delivered_at,
+                m.resent_at, u.full_name as sender_name
          from messages m left join users u on u.id = m.sender_user_id
          where m.conversation_id = $1 and m.clinic_id = $2
          order by m.created_at desc limit 150`,
         [id, g.access.clinicId]
       )
     ).rows.reverse();
+    // Whether a waiting message is waiting on the connection — the commonest
+    // reason, and one only the session knows (lib/wa-delivery).
+    const ws = (
+      await c.query(`select status, paused_until from whatsapp_sessions where clinic_id = $1`, [g.access.clinicId])
+    ).rows[0];
+    const session = { connected: ws?.status === "connected", pausedUntil: ws?.paused_until ?? null };
 
     let patient = null;
     if (conv.patient_id) {
@@ -52,7 +60,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
         )
       ).rows[0];
     }
-    return { conversation: conv, messages, patient };
+    return { conversation: conv, messages, patient, session };
   });
 
   if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -70,7 +78,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     op?: string;
     enabled?: boolean;
     status?: string;
+    messageId?: string;
   };
+
+  if (body.op === "resend") {
+    if (!isUuid(body.messageId ?? "")) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    const r = await inClinic(g.access, (c) =>
+      resendMessage(c, { clinicId: g.access.clinicId, conversationId: id, messageId: body.messageId!, userId: g.access.session.user.id })
+    );
+    return r.ok ? NextResponse.json(r) : NextResponse.json(r, { status: r.error === "not_found" ? 404 : 409 });
+  }
 
   const ok = await inClinic(g.access, async (c) => {
     if (body.op === "read") {

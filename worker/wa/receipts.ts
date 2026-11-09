@@ -1,5 +1,8 @@
 import type { BaileysEventMap } from "@whiskeysockets/baileys";
+import type { PoolClient } from "pg";
 import { withSystem } from "../db";
+import { notifyUser } from "../../src/lib/notify";
+import { WA_REASON } from "../../src/lib/wa-delivery";
 
 /**
  * Delivery receipts.
@@ -24,17 +27,32 @@ export async function handleReceipts(
   updates: BaileysEventMap["messages.update"]
 ) {
   const wanted: { waId: string; status: "sent" | "delivered" | "read" }[] = [];
+  const rejected: { waId: string; code: string }[] = [];
   const readHere: string[] = [];
   for (const u of updates) {
     const raw = u.update?.status;
+    const waId = u.key?.id;
+    /*
+      WhatsApp's server refused the message (Baileys turns the error ack into
+      status ERROR, 0, with the server's code first in messageStubParameters).
+      This used to fall through the table below, so a refused message kept its
+      single grey tick for ever — indistinguishable from one on its way. Compared
+      exactly, never through Number(): an update carrying `status: null` is not
+      an error.
+    */
+    if ((raw === 0 || raw === ("ERROR" as never)) && waId && u.key?.fromMe) {
+      const param = u.update?.messageStubParameters?.[0];
+      rejected.push({ waId, code: String(param ?? "unknown").slice(0, 20) });
+      continue;
+    }
     const code = typeof raw === "number" ? raw : Number(raw);
     const status = BY_CODE[code];
-    const waId = u.key?.id;
     if (status && waId && u.key?.fromMe) wanted.push({ waId, status });
     // The patient's message, read on the clinic's own phone.
     else if (status === "read" && waId && u.key && !u.key.fromMe) readHere.push(waId);
   }
   if (readHere.length) await readOnThePhone(clinicId, readHere);
+  if (rejected.length) await recordRejections(clinicId, rejected);
   if (!wanted.length) return;
 
   await withSystem(async (c) => {
@@ -44,22 +62,82 @@ export async function handleReceipts(
         before the delivery it implies. Rank the statuses and only ever move
         forward, so a late-arriving 'delivered' cannot un-read a message.
         `array_position` returns null for 'failed' and 'cancelled', which keeps
-        a receipt from resurrecting a message we already gave up on.
+        a plain server ack from resurrecting a message we already gave up on.
+
+        Delivered and read are the exception: they are the phone itself saying
+        the message is there. A message WhatsApp refused and then delivered
+        anyway (a retry to a newer device) did arrive, and the inbox should say
+        so rather than keep showing the refusal.
       */
       await c.query(
         `update messages
             set status = $3,
+                error = case when status = 'failed' then null else error end,
                 delivered_at = case when $3 in ('delivered', 'read')
                                     then coalesce(delivered_at, now()) else delivered_at end,
                 read_at = case when $3 = 'read' then coalesce(read_at, now()) else read_at end,
                 updated_at = now()
           where clinic_id = $1 and wa_message_id = $2 and direction = 'out'
-            and array_position(array['queued','sending','sent','delivered','read'], status)
-              < array_position(array['queued','sending','sent','delivered','read'], $3::text)`,
+            and (array_position(array['queued','sending','sent','delivered','read'], status)
+                   < array_position(array['queued','sending','sent','delivered','read'], $3::text)
+                 or (status = 'failed' and $3 in ('delivered', 'read')))`,
         [clinicId, waId, status]
       );
     }
   });
+}
+
+/**
+ * Messages WhatsApp refused, failed with its code so the inbox can say why.
+ *
+ * Only while still at 'sent': a message already delivered or read reached the
+ * phone whatever an ack said about one of its copies.
+ *
+ * 463 is about the clinic's number, not the patient: WhatsApp is not letting it
+ * start new chats (no privacy token), which is what a number looks like on its
+ * way to a ban. Chats where the patient wrote first still work. Retrying is
+ * exactly the wrong thing — Baileys says so too — so nothing here retries; the
+ * owner is told once a day instead.
+ */
+async function recordRejections(clinicId: string, rejected: { waId: string; code: string }[]) {
+  await withSystem(async (c) => {
+    let restricted = 0;
+    for (const { waId, code } of rejected) {
+      const r = await c.query(
+        `update messages set status = 'failed', error = $3, updated_at = now()
+          where clinic_id = $1 and wa_message_id = $2 and direction = 'out'
+            and status in ('sending', 'sent')
+          returning id`,
+        [clinicId, waId, WA_REASON.rejected(code)]
+      );
+      if (r.rowCount) {
+        console.error(`[wa ${clinicId}] WhatsApp refused message ${waId} (code ${code})`);
+        if (code === "463") restricted += r.rowCount;
+      }
+    }
+    if (restricted) await notifyRestricted(c, clinicId);
+  });
+}
+
+async function notifyRestricted(c: PoolClient, clinicId: string) {
+  const clinic = (await c.query(`select slug from clinics where id = $1`, [clinicId])).rows[0];
+  if (!clinic) return;
+  const staff = await c.query(
+    `select user_id from clinic_members where clinic_id = $1 and is_owner and active
+     union select id from users where is_super_admin`,
+    [clinicId]
+  );
+  const day = new Date().toISOString().slice(0, 10);
+  for (const s of staff.rows) {
+    await notifyUser(c, (s.user_id ?? s.id) as string, {
+      clinicId,
+      kind: "whatsapp_restricted",
+      title: "واتساب يمنع الرقم من بدء محادثات جديدة",
+      body: "رسائل إلى أرقام لم تراسل العيادة من قبل تُرفض الآن. المحادثات القائمة تعمل. خفّف الإرسال إلى أرقام جديدة ليوم على الأقل.",
+      url: `/c/${clinic.slug}/settings/whatsapp`,
+      dedupeKey: `wa_restricted:${clinicId}:${day}`,
+    });
+  }
 }
 
 /*

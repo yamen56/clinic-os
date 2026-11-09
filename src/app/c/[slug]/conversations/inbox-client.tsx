@@ -8,6 +8,7 @@ import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { useFillHeight } from "@/lib/use-fill-height";
 import { fmtRelative, fmtTime, fmtMoney, fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
+import { canResend, deliveryNote, deliveryText, type DeliveryNote, type SessionState } from "@/lib/wa-delivery";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
@@ -30,6 +31,8 @@ import {
   CheckCheck,
   Clock,
   AlertCircle,
+  Ban,
+  Loader2,
   Sparkles,
   UserRound,
   UserPlus,
@@ -74,8 +77,20 @@ type Msg = {
   status: string;
   error: string | null;
   created_at: string;
+  sent_at: string | null;
+  scheduled_at: string | null;
+  delivered_at: string | null;
+  resent_at: string | null;
   sender_name: string | null;
 };
+
+/** How loudly a delivery note speaks: refused or dropped is red, stuck is amber, merely later is grey. */
+const noteTone = (n: NonNullable<DeliveryNote>) =>
+  n.kind === "failed" || n.kind === "cancelled"
+    ? "text-danger"
+    : n.kind === "undelivered" || (n.kind === "waiting" && n.reason !== "scheduled" && n.reason !== "retrying")
+      ? "text-warning"
+      : "text-ink-500";
 
 type PatientPanel = {
   id: string;
@@ -127,9 +142,11 @@ export function InboxClient({
     conversation: ConvRow;
     messages: Msg[];
     patient: PatientPanel | null;
+    session?: SessionState;
   } | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [resending, setResending] = useState<string | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [quickReplies, setQuickReplies] = useState(initialQuickReplies);
   const [saveQrOpen, setSaveQrOpen] = useState(false);
@@ -221,6 +238,24 @@ export function InboxClient({
     }
   };
 
+  /** "Send again": a new copy goes as this staff member's; the old one keeps its reason. */
+  const resend = async (messageId: string) => {
+    if (!openId || resending) return;
+    setResending(messageId);
+    try {
+      const res = await fetch(`/api/c/${slug}/conversations/${openId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "resend", messageId }),
+      });
+      if (!res.ok) toast(t.common.genericError, "error");
+      await refreshThread(openId);
+      void refreshList();
+    } finally {
+      setResending(null);
+    }
+  };
+
   const command = async (op: string, extra: Record<string, unknown> = {}) => {
     if (!openId) return;
     await fetch(`/api/c/${slug}/conversations/${openId}`, {
@@ -280,6 +315,9 @@ export function InboxClient({
     if (m.direction === "in") return null;
     if (m.status === "failed")
       return <AlertCircle className="h-3.5 w-3.5 text-danger" aria-label={t.conversations.failed} />;
+    // Never sent. It used to fall through to the single tick below and read as "sent".
+    if (m.status === "cancelled")
+      return <Ban className="h-3.5 w-3.5 opacity-70" aria-label={t.delivery.status.cancelled} />;
     if (m.status === "queued" || m.status === "sending")
       return <Clock className="h-3.5 w-3.5 opacity-60" aria-label={t.conversations.pending} />;
     if (m.status === "read")
@@ -493,6 +531,7 @@ export function InboxClient({
               )}
               {thread.messages.map((m) => {
                 const out = m.direction === "out";
+                const note = out ? deliveryNote(m, thread.session ?? { connected: true }) : null;
                 const senderLabel =
                   out && m.sender_kind !== "patient"
                     ? m.sender_kind === "staff"
@@ -501,8 +540,9 @@ export function InboxClient({
                     : null;
                 return (
                   <div key={m.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
+                    <div className={`flex min-w-0 max-w-[78%] flex-col ${out ? "items-end" : "items-start"}`}>
                     <div
-                      className={`max-w-[78%] rounded-2xl px-3 py-2 shadow-sm ${
+                      className={`max-w-full rounded-2xl px-3 py-2 shadow-sm ${
                         out
                           ? m.sender_kind === "ai"
                             ? "rounded-be-md bg-brand-100 text-brand-900"
@@ -542,16 +582,40 @@ export function InboxClient({
                       {/* Each message in its own direction: an English one in the Arabic app ends with its "?", not starts. */}
                       {m.body && <div className="whitespace-pre-wrap break-words text-sm" dir="auto">{m.body}</div>}
                       <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${out && m.sender_kind !== "ai" ? "text-white/60" : "text-ink-400"}`}>
-                        {m.status === "failed" && (
-                          <span className="font-medium text-danger">
-                            {m.error === "no_whatsapp_account"
-                              ? t.conversations.noWhatsappAccount
-                              : t.conversations.failed}
-                          </span>
-                        )}
                         <span className="tnum" suppressHydrationWarning>{fmtTime(m.created_at, tz, locale)}</span>
                         {statusIcon(m)}
                       </div>
+                    </div>
+                    {/*
+                      Why it is not on the patient's phone, under the bubble
+                      rather than in it: every message that did not arrive says
+                      so in words, and the navy bubble is no place for red text.
+                    */}
+                    {note && (
+                      <div
+                        className={`mt-1 flex max-w-full flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[11px] leading-snug ${noteTone(note)}`}
+                        data-delivery-note={note.kind}
+                      >
+                        <span className="text-end" suppressHydrationWarning>
+                          {deliveryText(note, t.delivery, (at) => fmtDateTime(at, tz, locale))}
+                        </span>
+                        {canResend(note) &&
+                          (m.resent_at ? (
+                            <span className="text-ink-400">{t.delivery.sentAgain}</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void resend(m.id)}
+                              disabled={!!resending}
+                              className="inline-flex items-center gap-1 font-semibold text-brand-700 underline-offset-2 hover:underline disabled:opacity-60"
+                              data-resend={m.id}
+                            >
+                              {resending === m.id && <Loader2 className="h-3 w-3 animate-spin" />}
+                              {t.delivery.sendAgain}
+                            </button>
+                          ))}
+                      </div>
+                    )}
                     </div>
                   </div>
                 );

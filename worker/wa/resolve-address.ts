@@ -69,12 +69,26 @@ export async function resolveSendAddress(
 
   if (typeof s.onWhatsApp !== "function") return { jid: null, lid: null, exists: null };
 
-  const [hit] = (await s.onWhatsApp(phoneE164)) ?? [];
-  // An empty result is WhatsApp declining to answer — common on a flaky
-  // connection. Reading it as "no such account" would write off a working
-  // number for good, so it stays unknown and the send goes ahead.
-  if (!hit || typeof hit.exists !== "boolean") return { jid: null, lid: null, exists: null };
-  if (!hit.exists) return { jid: null, lid: null, exists: false };
+  /*
+    What the answer means is Baileys' to say, so it is read the way Baileys
+    builds it (Socket/socket.js, onWhatsApp): the query's list is filtered to
+    contacts WhatsApp marked `type="in"` — registered — so a number with no
+    account is simply left out and the call returns []. It returns undefined
+    only when the query itself did not come back as a result.
+
+    This used to read [] as "WhatsApp declined to answer" and send anyway, to a
+    phone address nobody is at. The socket accepts that without complaint, so
+    every message to a landline or a mistyped number showed one grey tick for
+    ever. By the time we are here the LID lookup above has also come back
+    empty, so two separate questions have both said there is no account.
+
+    A wrong "no" is not permanent: the outbox asks again after a day, and
+    "Send again" in the inbox asks again at once.
+  */
+  const found = await s.onWhatsApp(phoneE164);
+  if (!Array.isArray(found)) return { jid: null, lid: null, exists: null };
+  const [hit] = found;
+  if (!hit || hit.exists === false) return { jid: null, lid: null, exists: false };
 
   const rawLid = typeof hit.lid === "string" && hit.lid ? String(hit.lid) : null;
   if (rawLid) {
