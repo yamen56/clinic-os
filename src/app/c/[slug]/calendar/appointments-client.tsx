@@ -14,6 +14,7 @@ import { RunningLateSheet } from "@/components/appointments/running-late-sheet";
 import { markLateAction } from "./late-actions";
 import { nextVisitOf } from "@/lib/next-visit";
 import { DueBackList } from "./waitlist/due-back";
+import { TreatmentsList } from "./waitlist/treatments";
 import { FlowBoard } from "./flow/flow-board";
 import { WalkInModal } from "./flow/walk-in-modal";
 import { ScheduleView } from "./schedule/schedule-view";
@@ -52,6 +53,7 @@ export function AppointmentsClient({
   initialWaitlist,
   caps,
   showBoard,
+  coordinator = false,
   initialDate,
   unconfirmedOnly = false,
   initialDoctorId = null,
@@ -78,6 +80,8 @@ export function AppointmentsClient({
   caps: PageCaps;
   /** Off for a workspace whose "appointments" are sales meetings. */
   showBoard: boolean;
+  /** The treatment coordinator (a test): its Treatments list takes Due back's place. */
+  coordinator?: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -427,17 +431,21 @@ export function AppointmentsClient({
 
       {tab === "waitlist" && (
         <div className="pb-20 sm:pb-0">
-          <DueBackList
-            slug={slug}
-            tz={tz}
-            canMessage={caps.patients && caps.conversations}
-            onBook={(d) =>
-              bookFrom(
-                { id: d.patientId, name: d.patientName },
-                nextVisitOf({ starts_at: d.startsAt, finished_at: d.finishedAt, doctor_member_id: d.doctorId, service_id: d.serviceId, next_visit_days: d.nextVisitDays }, tz)
-              )
-            }
-          />
+          {coordinator ? (
+            <TreatmentsList slug={slug} tz={tz} canMessage={caps.patients && caps.conversations} onBook={bookFrom} />
+          ) : (
+            <DueBackList
+              slug={slug}
+              tz={tz}
+              canMessage={caps.patients && caps.conversations}
+              onBook={(d) =>
+                bookFrom(
+                  { id: d.patientId, name: d.patientName },
+                  nextVisitOf({ starts_at: d.startsAt, finished_at: d.finishedAt, doctor_member_id: d.doctorId, service_id: d.serviceId, next_visit_days: d.nextVisitDays }, tz)
+                )
+              }
+            />
+          )}
           <WaitlistTab
             slug={slug}
             tz={tz}

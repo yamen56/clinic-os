@@ -42,6 +42,8 @@ type Service = {
   section_id: string | null;
   doctor_ids: string[];
   fee_code: string | null;
+  course_sessions: number | null;
+  course_interval_days: number | null;
 };
 
 type Section = {
@@ -66,6 +68,10 @@ type Draft = {
   sectionId: string | null;
   doctorIds: string[];
   feeCode: string;
+  /** Given as a course of so many sessions (the treatment coordinator); null is a single visit. */
+  courseSessions: number | null;
+  courseEvery: number;
+  courseUnit: "days" | "weeks";
 };
 
 type SectionDraft = { id?: string; name: string; nameAr: string; color: string; active: boolean };
@@ -82,6 +88,9 @@ const empty: Draft = {
   sectionId: null,
   doctorIds: [],
   feeCode: "",
+  courseSessions: null,
+  courseEvery: 4,
+  courseUnit: "weeks",
 };
 
 const emptySection: SectionDraft = { name: "", nameAr: "", color: "#6989a6", active: true };
@@ -93,6 +102,7 @@ export function ServicesClient({
   doctors,
   sections,
   currency,
+  coordinator = false,
 }: {
   slug: string;
   canEdit: boolean;
@@ -100,6 +110,7 @@ export function ServicesClient({
   doctors: { id: string; name: string }[];
   sections: Section[];
   currency: string;
+  coordinator?: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -115,7 +126,11 @@ export function ServicesClient({
   const save = () =>
     start(async () => {
       if (!draft) return;
-      const r = await saveServiceAction(slug, draft);
+      const { courseEvery, courseUnit, ...rest } = draft;
+      const r = await saveServiceAction(slug, {
+        ...rest,
+        courseIntervalDays: draft.courseSessions ? Math.max(1, Math.round(courseEvery * (courseUnit === "weeks" ? 7 : 1))) : null,
+      });
       if (r.error) {
         toast(t.common.genericError, "error");
         return;
@@ -209,6 +224,10 @@ export function ServicesClient({
                 sectionId: s.section_id,
                 doctorIds: s.doctor_ids,
                 feeCode: s.fee_code ?? "",
+                courseSessions: s.course_sessions,
+                ...(s.course_interval_days && s.course_interval_days % 7 === 0
+                  ? { courseEvery: s.course_interval_days / 7, courseUnit: "weeks" as const }
+                  : { courseEvery: s.course_interval_days ?? 4, courseUnit: s.course_interval_days ? ("days" as const) : ("weeks" as const) }),
               })
             }
           >
@@ -432,6 +451,51 @@ export function ServicesClient({
                 />
               </Field>
             </div>
+            {coordinator && (
+              <div className="grid gap-2 rounded-ctl border border-line p-3" data-service-course>
+                <label className="flex items-center gap-2.5">
+                  <Toggle
+                    checked={draft.courseSessions !== null}
+                    onChange={(v) => setDraft({ ...draft, courseSessions: v ? 6 : null })}
+                  />
+                  <span className="text-[13px] font-medium">{t.services.course.toggle}</span>
+                </label>
+                {draft.courseSessions !== null && (
+                  <div className="grid grid-cols-[5rem_auto_5rem_minmax(0,1fr)] items-center gap-2 text-[13px] text-ink-700">
+                    <NumberInput
+                      dir="ltr"
+                      min={2}
+                      max={100}
+                      value={draft.courseSessions}
+                      fallback={2}
+                      onChange={(courseSessions) => setDraft({ ...draft, courseSessions: Math.round(courseSessions) })}
+                      aria-label={t.services.course.sessions}
+                      data-course-sessions
+                    />
+                    <span>{t.services.course.sessionsEvery}</span>
+                    <NumberInput
+                      dir="ltr"
+                      min={1}
+                      max={draft.courseUnit === "weeks" ? 52 : 365}
+                      value={draft.courseEvery}
+                      fallback={1}
+                      onChange={(courseEvery) => setDraft({ ...draft, courseEvery })}
+                      aria-label={t.services.course.every}
+                      data-course-every
+                    />
+                    <Select
+                      value={draft.courseUnit}
+                      onChange={(e) => setDraft({ ...draft, courseUnit: e.target.value === "days" ? "days" : "weeks" })}
+                      aria-label={t.services.course.every}
+                    >
+                      <option value="weeks">{t.services.course.weeks}</option>
+                      <option value="days">{t.services.course.days}</option>
+                    </Select>
+                  </div>
+                )}
+                <p className="text-[12px] leading-snug text-ink-500">{t.services.course.hint}</p>
+              </div>
+            )}
             <Field label={t.services.feeCode} hint={t.services.feeCodeHint}>
               <Input
                 dir="ltr"

@@ -22,7 +22,7 @@
  * worker job asked about them, and a dental clinic told its Botox was running
  * low the first time one did.
  */
-export const OPT_IN = new Set(["einvoicing", "dental", "aesthetic"]);
+export const OPT_IN = new Set(["einvoicing", "dental", "aesthetic", "coordinator"]);
 
 /** True while the clinic still has this module. Expects `clinics` aliased `cl`. */
 export function hasFeature(feature: string, alias = "cl"): string {

@@ -515,6 +515,8 @@ export function BuilderClient({
         slug={slug}
         node={selectedNode}
         provides={providesByNode(provides, state.nodes, state.edges).get(selectedNode.id) ?? provides}
+        trigger={state.trigger ?? ""}
+        coordinator={modules.coordinator === true}
         hasReplyStep={hasReplyStep}
         lookups={lookups}
         issues={issues.filter((i) => i.nodeId === selectedNode.id)}

@@ -74,6 +74,12 @@ export async function installRecipes(
   specialty: Specialty
 ): Promise<number> {
   const recipes = await pendingDefaultRecipes(c, clinicId, specialty);
+  await installTemplates(c, clinicId, recipes);
+  return recipes.length;
+}
+
+/** Copies recipe_templates rows into the clinic as switched-on flows, each with its own step ids. */
+export async function installTemplates(c: PoolClient, clinicId: string, recipes: Record<string, any>[]): Promise<void> {
   for (const r of recipes) {
     const graph = treeToGraph((Array.isArray(r.steps) ? r.steps : []) as RecipeStep[], () => randomUUID());
     const a = await c.query(
@@ -93,7 +99,6 @@ export async function installRecipes(
     );
     await writeFlowGraph(c, clinicId, a.rows[0].id, graph.nodes, graph.edges);
   }
-  return recipes.length;
 }
 
 /**

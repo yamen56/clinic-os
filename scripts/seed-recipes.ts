@@ -1,6 +1,7 @@
 import { Client } from "pg";
 import { SPECIALTY_RECIPES } from "./specialty-recipes";
-import { replyToBook, UNLESS_BOOKED, callTask } from "./recipe-kit";
+import { replyToBook, UNLESS_BOOKED, callTask, CONFIRM_WORDS, CHANGE_WORDS } from "./recipe-kit";
+import { COORDINATOR_RECIPE_LIST } from "./coordinator-recipes";
 
 /**
  * Agency-level defaults: automation recipes + AI knowledge structure.
@@ -29,13 +30,6 @@ export type Recipe = {
   specialty?: string;
 };
 
-/*
-  Words that mean "yes, I'll come" and "I need to change it", as patients in
-  Jordan actually type them. Matching ignores tashkeel, alef and taa-marbuta
-  spelling and reads ١ as 1, so one spelling of each is enough.
-*/
-const CONFIRM_WORDS = ["1", "نعم", "اكيد", "تمام", "موافق", "تأكيد", "ok", "yes", "confirm", "👍"];
-const CHANGE_WORDS = ["2", "تغيير", "تأجيل", "الغاء", "لا", "مش رح اقدر", "change", "cancel", "no"];
 
 export const RECIPES: Recipe[] = [
   {
@@ -672,7 +666,7 @@ export const KNOWLEDGE = [
  * per-field packs on top. One list, because a recipe is a recipe — the
  * `specialty` column is the only thing that decides who is offered it.
  */
-export const ALL_RECIPES: Recipe[] = [...RECIPES, ...SPECIALTY_RECIPES];
+export const ALL_RECIPES: Recipe[] = [...RECIPES, ...SPECIALTY_RECIPES, ...COORDINATOR_RECIPE_LIST];
 
 export async function seedAgencyDefaults(c: Client) {
   for (const r of ALL_RECIPES) {

@@ -25,6 +25,7 @@ import { FEATURES, toFeatureSetting, type Feature, type FeatureMap } from "@/lib
 import { RESTORE_WINDOW_DAYS } from "@/lib/clinic-lifecycle";
 import { SPECIALTIES, asSpecialty, clinicSpecialties, isSpecialty, type Specialty } from "@/lib/specialties";
 import { provisionClinic, installRecipes, isReservedSlug } from "@/lib/clinic-provision";
+import { setCoordinator } from "@/lib/coordinator";
 import { SPECIALTY_MODULES, modulesFor } from "@/lib/specialty-profile";
 import { z } from "zod";
 
@@ -198,6 +199,7 @@ export async function createClinicAction(
       });
       clinicId = p.clinicId;
       ownerId = p.ownerId;
+      if (d.features.coordinator) await setCoordinator(c, clinicId, true);
 
       await audit(c, {
         clinicId,
@@ -477,6 +479,7 @@ export async function updateClinicFeaturesAction(
   ) as Record<Feature, boolean>;
 
   await withSystem(async (c) => {
+    const before = (await c.query(`select features from clinics where id = $1 and deleted_at is null for update`, [clinicId])).rows[0];
     const r = await c.query(
       `update clinics set features = $2, updated_at = now()
         where id = $1 and deleted_at is null
@@ -484,6 +487,8 @@ export async function updateClinicFeaturesAction(
       [clinicId, JSON.stringify(clean)]
     );
     if (!r.rowCount) return;
+    // The treatment coordinator brings its flows with it, and takes them away again.
+    if ((before?.features?.coordinator === true) !== clean.coordinator) await setCoordinator(c, clinicId, clean.coordinator);
     await audit(c, {
       clinicId,
       userId: s.user.id,

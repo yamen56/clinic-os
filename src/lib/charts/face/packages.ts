@@ -13,7 +13,17 @@ import type { PoolClient } from "pg";
 export const PACKAGE_KEY = "aes_package";
 
 export type PlanItem = { treatmentKey: string; sessions: number };
-export type PackagePlan = { id: string; name: string; nameAr: string; price: number; validMonths: number | null; active: boolean; items: PlanItem[] };
+export type PackagePlan = {
+  id: string;
+  name: string;
+  nameAr: string;
+  price: number;
+  validMonths: number | null;
+  /** Days between sessions, for the treatment coordinator (0102); null reads as four weeks. */
+  intervalDays: number | null;
+  active: boolean;
+  items: PlanItem[];
+};
 
 export type PatientPackageItem = { id: string; treatmentKey: string; sessions: number; value: number; used: number };
 export type PatientPackage = {
@@ -31,7 +41,7 @@ export type PatientPackage = {
 
 export async function loadPlans(c: PoolClient, clinicId: string, activeOnly: boolean): Promise<PackagePlan[]> {
   const r = await c.query(
-    `select p.id, p.name, p.name_ar, p.price::float as price, p.valid_months, p.active,
+    `select p.id, p.name, p.name_ar, p.price::float as price, p.valid_months, p.interval_days, p.active,
             coalesce((select json_agg(json_build_object('treatmentKey', i.treatment_key, 'sessions', i.sessions) order by i.sort)
                         from package_plan_items i where i.plan_id = p.id), '[]'::json) as items
        from package_plans p
@@ -39,7 +49,16 @@ export async function loadPlans(c: PoolClient, clinicId: string, activeOnly: boo
       order by p.active desc, p.sort, p.name`,
     [clinicId, activeOnly]
   );
-  return r.rows.map((x) => ({ id: x.id, name: x.name, nameAr: x.name_ar, price: Number(x.price), validMonths: x.valid_months ?? null, active: !!x.active, items: x.items }));
+  return r.rows.map((x) => ({
+    id: x.id,
+    name: x.name,
+    nameAr: x.name_ar,
+    price: Number(x.price),
+    validMonths: x.valid_months ?? null,
+    intervalDays: x.interval_days ?? null,
+    active: !!x.active,
+    items: x.items,
+  }));
 }
 
 export async function loadPatientPackages(c: PoolClient, clinicId: string, patientId: string): Promise<PatientPackage[]> {

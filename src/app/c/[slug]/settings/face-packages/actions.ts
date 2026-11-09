@@ -14,6 +14,8 @@ const schema = z.object({
   nameAr: z.string().trim().max(80).default(""),
   price: z.number().min(0).max(1_000_000),
   validMonths: z.number().int().min(1).max(60).nullable().default(null),
+  /* Days between sessions (the treatment coordinator, a test). Written only while the clinic has it. */
+  intervalDays: z.number().int().min(1).max(365).nullable().default(null),
   active: z.boolean().default(true),
   items: z
     .array(z.object({ treatmentKey: z.string().max(64), sessions: z.number().int().min(1).max(100) }))
@@ -59,6 +61,9 @@ export async function savePlanAction(slug: string, data: unknown): Promise<{ pla
           [access.clinicId, d.name, d.nameAr, d.price, d.validMonths, d.active, access.session.user.id]
         )
       ).rows[0].id as string;
+    }
+    if (access.clinic.features.coordinator) {
+      await c.query(`update package_plans set interval_days = $3 where id = $1 and clinic_id = $2`, [id, access.clinicId, d.intervalDays]);
     }
     for (const [i, it] of d.items.entries()) {
       await c.query(`insert into package_plan_items (clinic_id, plan_id, treatment_key, sessions, sort) values ($1, $2, $3, $4, $5)`, [

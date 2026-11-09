@@ -2,7 +2,7 @@
 
 import { useI18n } from "@/lib/i18n/client";
 import { Toggle } from "@/components/ui/input";
-import { FEATURES, type Feature, type FeatureMap } from "@/lib/features";
+import { FEATURES, TEST_FEATURES, type Feature, type FeatureMap } from "@/lib/features";
 import {
   MessageCircle,
   CalendarDays,
@@ -15,6 +15,7 @@ import {
   Landmark,
   Smile,
   ScanFace,
+  Route,
 } from "lucide-react";
 
 const icons: Record<Feature, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
@@ -29,6 +30,7 @@ const icons: Record<Feature, React.ComponentType<{ className?: string; strokeWid
   einvoicing: Landmark,
   dental: Smile,
   aesthetic: ScanFace,
+  coordinator: Route,
 };
 
 /**
@@ -54,20 +56,22 @@ export function FeaturePicker({
   disabled?: boolean;
 }) {
   const { t } = useI18n();
-  const on = FEATURES.filter((f) => value[f]).length;
+  const counted = FEATURES.filter((f) => !TEST_FEATURES.has(f));
+  const on = counted.filter((f) => value[f]).length;
 
+  // "All" never switches a test on; "None" switches everything off, tests included.
   const setAll = (v: boolean) =>
-    onChange(Object.fromEntries(FEATURES.map((f) => [f, v])) as FeatureMap);
+    onChange(Object.fromEntries(FEATURES.map((f) => [f, v && TEST_FEATURES.has(f) ? value[f] : v])) as FeatureMap);
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="text-[13px] text-ink-500 tnum">
-          {on === FEATURES.length
+          {on === counted.length
             ? t.admin.featuresAll
             : t.admin.featuresOf
                 .replace("{n}", String(on))
-                .replace("{total}", String(FEATURES.length))}
+                .replace("{total}", String(counted.length))}
         </span>
         <div className="flex items-center gap-1">
           <button

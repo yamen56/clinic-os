@@ -44,6 +44,14 @@ export const FEATURES = [
     dental chart — the agency turns it on, one clinic at a time.
   */
   "aesthetic",
+  /*
+    The treatment coordinator (2026-11-09, a test): the system books a
+    patient's next session itself — packages, courses, the doctor's "come
+    back in…" — invites where the next visit is not clear, and follows up
+    enquiries. Opt-in and switched on for test clinics only while it is
+    measured (see lib/courses.ts).
+  */
+  "coordinator",
 ] as const;
 
 export type Feature = (typeof FEATURES)[number];
@@ -72,7 +80,16 @@ export const OPT_IN_FEATURES = new Set<Feature>([
   // the permission". Nothing turns it on but the switch — no specialty, no
   // migration (0084 switched it on for nobody).
   "aesthetic",
+  // A test: nobody gets it until the agency switches it on for that clinic.
+  "coordinator",
 ]);
+
+/**
+ * Modules still being tried on test clinics. The Admin picker's "All" leaves
+ * them as they are — a clinic set up with everything on must not become a
+ * test clinic by accident — and they are not counted in its "n of N".
+ */
+export const TEST_FEATURES = new Set<Feature>(["coordinator"]);
 
 /**
  * The charts a doctor records on. `patients.charts` is the right to record on
@@ -118,6 +135,8 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
   dental: [],
   // Its products and stock are its own; recording on it is `patients.charts`, shared.
   aesthetic: ["stock"],
+  // Not a screen of its own: it acts through automations and the Treatments list.
+  coordinator: [],
 };
 
 /** What the new-clinic form starts from: everything except the opt-ins. */

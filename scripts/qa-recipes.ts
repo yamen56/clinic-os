@@ -518,6 +518,219 @@ async function run(db: Client, recipes: { key: string }[]) {
   check("sent the moment it is scheduled", tPl.includes("تعليمات ما قبل العملية"));
   check("never tells the patient to stop a medicine on its own", tPl.includes("لا توقف أي دواء من نفسك"));
 
+  /* ================================================================ the treatment coordinator */
+  console.log("\ntreatment coordinator (a test, behind a switch)");
+  {
+    const { validateFlow } = await import("../src/lib/automation/graph");
+    const { COORDINATOR_RECIPE_LIST } = await import("./coordinator-recipes");
+    for (const r of COORDINATOR_RECIPE_LIST) {
+      const g = treeToGraph(r.steps, randomUUID);
+      const errs = validateFlow({ trigger: r.trigger_type, triggerConfig: r.trigger_config, nodes: g.nodes, edges: g.edges }).filter(
+        (i) => i.severity === "error"
+      );
+      check(`${r.key} can be switched on`, errs.length === 0, errs.map((e) => e.code).join(","));
+    }
+  }
+  const coord = await import("../worker/coordinator");
+  const { openTreatments } = await import("../src/lib/courses");
+  const stateOf = async (p: string) => (await withSystem((c) => openTreatments(c, clinic, { patientId: p })))[0];
+  const activate = (keys: string[]) => db.query(`update automations set active = (recipe_key = any($2::text[])) where clinic_id = $1`, [clinic, keys]);
+  const svcLaser = (
+    await one(
+      `insert into services (clinic_id, name, name_ar, duration_min, price, course_sessions, course_interval_days) values ($1, 'Laser', 'ليزر', 30, 40, 6, 28) returning id`,
+      [clinic]
+    )
+  ).id as string;
+  const svcConsult = (await one(`insert into services (clinic_id, name, name_ar, duration_min, price) values ($1, 'Consultation', 'كشفية', 20, 10) returning id`, [clinic]))
+    .id as string;
+  await activate(["coordinator_next_session", "coordinator_plan_invite", "cancelled_rebook"]);
+
+  // A course: one session of six, three weeks ago, at ten.
+  const pL = await patient("ليلى ليزر");
+  await appointment(pL, { at: today.minus({ days: 21 }).plus({ hours: 10 }), status: "completed", doctor: drB, service: svcLaser });
+  // Two sessions nobody pressed Finish on.
+  const pU = await patient("أنس بلا إنهاء");
+  await appointment(pU, { at: today.minus({ days: 53 }).plus({ hours: 16 }), status: "scheduled", doctor: drA, service: svcLaser });
+  await appointment(pU, { at: today.minus({ days: 25 }).plus({ hours: 16 }), status: "confirmed", doctor: drA, service: svcLaser });
+  // The doctor said "two weeks" on the finish sheet: that beats the course's four.
+  const pFs = await patient("فرح مراجعة");
+  await appointment(pFs, {
+    at: today.minus({ days: 10 }).plus({ hours: 12 }),
+    status: "completed",
+    doctor: drA,
+    service: svcLaser,
+    extra: { next_visit_days: 14, finished_at: today.minus({ days: 10 }).plus({ hours: 12, minutes: 30 }).toUTC().toISO() },
+  });
+  // A face package: six sessions, every two weeks, two used.
+  const pPk = await patient("ريما باقة");
+  const saleAppt = await appointment(pPk, { at: today.minus({ days: 30 }).plus({ hours: 11 }), status: "completed", doctor: drA, service: svcConsult });
+  const plan = (await one(`insert into package_plans (clinic_id, name, name_ar, price, interval_days) values ($1, 'Laser x6', 'ليزر ×6', 200, 14) returning id`, [clinic]))
+    .id as string;
+  const sale = (
+    await one(
+      `insert into chart_marks (clinic_id, patient_id, chart, site, treatment_key, label, label_ar, look, kind, status, appointment_id, done_at, created_at)
+       values ($1, $2, 'aesthetic', 'face', 'aes_package', 'Laser x6', 'ليزر ×6', 'x', 'procedure', 'done', $3, now() - interval '30 days', now() - interval '30 days') returning id`,
+      [clinic, pPk, saleAppt]
+    )
+  ).id as string;
+  const pkg = (
+    await one(
+      `insert into patient_packages (clinic_id, patient_id, plan_id, name, name_ar, price, sale_mark_id, created_at)
+       values ($1, $2, $3, 'Laser x6', 'ليزر ×6', 200, $4, now() - interval '30 days') returning id`,
+      [clinic, pPk, plan, sale]
+    )
+  ).id as string;
+  const item = (
+    await one(`insert into patient_package_items (clinic_id, patient_package_id, treatment_key, sessions, value) values ($1, $2, 'aes_laser_hair', 6, 200) returning id`, [
+      clinic,
+      pkg,
+    ])
+  ).id as string;
+  for (const d of [24, 10]) {
+    const a = await appointment(pPk, { at: today.minus({ days: d }).plus({ hours: 11 }), status: "completed", doctor: drA, service: svcLaser });
+    await db.query(
+      `insert into chart_marks (clinic_id, patient_id, chart, site, treatment_key, label, label_ar, look, kind, status, appointment_id, done_at, package_item_id)
+       values ($1, $2, 'aesthetic', 'face', 'aes_laser_hair', 'Laser hair removal', 'ليزر إزالة الشعر', 'x', 'procedure', 'done', $3, $4, $5)`,
+      [clinic, pPk, a, today.minus({ days: d }).plus({ hours: 11, minutes: 20 }).toUTC().toISO(), item]
+    );
+  }
+  // Reception pressed Stop following.
+  const pSt = await patient("سامر موقوف");
+  await appointment(pSt, { at: today.minus({ days: 21 }).plus({ hours: 9 }), status: "completed", doctor: drA, service: svcLaser });
+  await db.query(`insert into treatment_follow_stops (clinic_id, patient_id) values ($1, $2)`, [clinic, pSt]);
+  // A dental plan, charted two days ago and not started.
+  const pDp = await patient("هادي خطة");
+  await db.query(
+    `insert into chart_marks (clinic_id, patient_id, chart, site, treatment_key, label, label_ar, look, kind, status, created_at)
+     values ($1, $2, 'dental', '36', 'qa_rct', 'Root canal', 'علاج عصب', 'x', 'procedure', 'planned', now() - interval '2 days')`,
+    [clinic, pDp]
+  );
+
+  await coord.treatmentSessionsDue({ force: true });
+  await drain();
+  const everyone = [pL, pU, pFs, pPk, pSt, pDp];
+  let touched = 0;
+  for (const p of everyone) touched += (await texts(p)).length + (await booked(p)).length;
+  check("switched off, nothing happens to anyone", touched === 0, String(touched));
+
+  await db.query(`update clinics set features = features || '{"coordinator": true}' where id = $1`, [clinic]);
+  await coord.treatmentSessionsDue({ force: true });
+  await drain();
+
+  const bL = await booked(pL);
+  const startL = bL[0] ? DateTime.fromJSDate(new Date(bL[0].starts_at)).setZone(TZ) : null;
+  check("on: session 2 of 6 is booked by itself", bL.length === 1);
+  check(
+    "on the day it falls due, at the time they usually come, with their doctor",
+    startL?.toISODate() === today.plus({ days: 7 }).toISODate() && startL?.hour === 10 && bL[0]?.doctor_member_id === drB && bL[0]?.service_id === svcLaser,
+    startL?.toISO() ?? ""
+  );
+  check("booked, for the day-before reminder to confirm", bL[0]?.status === "scheduled");
+  check("the appointment says which session", String(bL[0]?.notes ?? "").includes("الجلسة 2 من 6"), bL[0]?.notes);
+  const tL = (await texts(pL)).at(-1) ?? "";
+  check("the patient is told, with how to change it", tL.includes("الجلسة 2 من 6") && tL.includes("ليزر") && tL.includes("أرسل 2"), tL.slice(0, 90));
+
+  const bU = await booked(pU);
+  check("visits nobody finished still count: session 3 of 6", bU.length === 1 && String(bU[0].notes).includes("الجلسة 3 من 6"), bU[0]?.notes);
+
+  const bFs = await booked(pFs);
+  const startFs = bFs[0] ? DateTime.fromJSDate(new Date(bFs[0].starts_at)).setZone(TZ) : null;
+  check("the doctor's 'two weeks' beats the course's four", startFs?.toISODate() === today.plus({ days: 4 }).toISODate() && startFs?.hour === 12, startFs?.toISO() ?? "none");
+  check("and still says which session of the course it is", String(bFs[0]?.notes ?? "").includes("الجلسة 2 من 6"), bFs[0]?.notes);
+
+  const bPk = await booked(pPk);
+  const startPk = bPk[0] ? DateTime.fromJSDate(new Date(bPk[0].starts_at)).setZone(TZ) : null;
+  check(
+    "a package's third session, two weeks after the second",
+    bPk.length === 1 && startPk?.toISODate() === today.plus({ days: 4 }).toISODate() && String(bPk[0].notes).includes("الجلسة 3 من 6"),
+    `${startPk?.toISO()} ${bPk[0]?.notes}`
+  );
+
+  check("stopped: left alone", (await booked(pSt)).length === 0 && (await texts(pSt)).length === 0);
+  check("and the list says so", (await stateOf(pSt))?.state === "stopped");
+
+  const tDp = (await texts(pDp)).at(-1) ?? "";
+  check("a dental plan is an invitation, never a booking", tDp.includes("علاج عصب") && tDp.includes("أرسل 1") && (await booked(pDp)).length === 0, tDp.slice(0, 80));
+  await reply(pDp, "1");
+  check("a yes is reception's task, naming the treatment", (await tasks(pDp)).some((t) => t.includes("علاج عصب")));
+  check("still nothing booked by itself", (await booked(pDp)).length === 0);
+
+  await coord.treatmentSessionsDue({ force: true });
+  await drain();
+  check("once per session", (await booked(pL)).length === 1 && (await texts(pL)).length === 1);
+
+  await reply(pL, "2");
+  check("2 cancels it", bL[0] && (await one(`select status from appointments where id = $1`, [bL[0].id])).status === "cancelled");
+  check("and reception gets the call to make", (await tasks(pL)).some((t) => t.includes("لاختيار وقت")));
+  check("quietly: the 'rebook in one reply' flow does not also write", !(await runOf("cancelled_rebook", pL)));
+  check("then it is reception's: stalled, never booked again by itself", (await stateOf(pL))?.state === "stalled");
+  await coord.treatmentSessionsDue({ force: true });
+  await drain();
+  check("and the next pass leaves it", (await booked(pL)).length === 1);
+
+  console.log("\nan enquiry that went quiet");
+  await activate(["coordinator_enquiry"]);
+  const conv = (await one(`insert into conversations (clinic_id, phone_e164, whatsapp_name) values ($1, '+962791234567', 'Ahmad') returning id`, [clinic])).id as string;
+  await db.query(
+    `insert into messages (clinic_id, conversation_id, direction, sender_kind, body, status, created_at)
+     values ($1, $2, 'in', 'patient', 'كم سعر الليزر؟', 'delivered', now() - interval '30 hours'),
+            ($1, $2, 'out', 'staff', 'أهلاً، الجلسة بـ40 دينار', 'sent', now() - interval '26 hours')`,
+    [clinic, conv]
+  );
+  await db.query(`update conversations set last_message_at = now() - interval '26 hours', last_message_direction = 'out' where id = $1`, [conv]);
+  const convTexts = async (id: string) =>
+    (await all(`select body from messages where conversation_id = $1 and sender_kind = 'automation' order by created_at`, [id])).map((r) => String(r.body));
+  await coord.enquiriesNotBooked({ force: true });
+  await drain();
+  check("a day after the clinic answered, the consultation is offered", (await convTexts(conv)).some((t) => t.includes("موعد كشفية")));
+  await db.query(`update conversations set last_message_at = now() - interval '26 hours' where id = $1`, [conv]);
+  await coord.enquiriesNotBooked({ force: true });
+  await drain();
+  check("once per conversation", (await convTexts(conv)).filter((t) => t.includes("موعد كشفية")).length === 1);
+  await resumeOnReply(clinic, { conversationId: conv, body: "1" });
+  await drain();
+  const pE = (await one(`select patient_id from conversations where id = $1`, [conv])).patient_id as string | null;
+  check("1 opens a file for them", !!pE);
+  const bE = pE ? await booked(pE) : [];
+  check("and books the consultation, confirmed", bE.length === 1 && bE[0].service_id === svcConsult && bE[0].status === "confirmed");
+  check("then tells them when", (await convTexts(conv)).some((t) => t.includes("حجزنالك موعد كشفية")));
+
+  console.log("\nthe switch");
+  {
+    const { setCoordinator } = await import("../src/lib/coordinator");
+    const sw = (await one(`insert into clinics (name, slug) values ('Switch', $1) returning id`, [`qa-sw-${randomUUID().slice(0, 8)}`])).id as string;
+    await withSystem((c) => installRecipes(c, sw, "general"));
+    const activeKeys = async () => (await all(`select recipe_key from automations where clinic_id = $1 and active`, [sw])).map((r) => String(r.recipe_key));
+    await withSystem((c) => setCoordinator(c, sw, true));
+    const on1 = await activeKeys();
+    check("on: its three flows are installed and on", ["coordinator_next_session", "coordinator_plan_invite", "coordinator_enquiry"].every((k) => on1.includes(k)), on1.join(","));
+    check("and the doctor's recall it replaces is paused", !on1.includes("next_visit_due_book"));
+    await withSystem((c) => setCoordinator(c, sw, false));
+    const off1 = await activeKeys();
+    check("off: its flows are off and the recall is back", !off1.some((k) => k.startsWith("coordinator_")) && off1.includes("next_visit_due_book"), off1.join(","));
+    await withSystem((c) => setCoordinator(c, sw, true));
+    check(
+      "on again: nothing installed twice",
+      (await one(`select count(*)::int as n from automations where clinic_id = $1 and recipe_key like 'coordinator\\_%'`, [sw])).n === 3
+    );
+  }
+
+  /* ================================================================ replies (every clinic) */
+  console.log("\na reply reaches the flow that asked last");
+  await activate(["reminder_24h", "prescription_check_in"]);
+  const pQ = await patient("قيس ردّين");
+  const aQ = await appointment(pQ, { at: DateTime.now().plus({ hours: 23, minutes: 57 }) });
+  await sched.appointmentReminders();
+  await drain();
+  await fire("prescription_sent", { patientId: pQ });
+  await skip("prescription_check_in", pQ);
+  check("two flows wait on one patient", (await all(`select 1 from automation_runs where patient_id = $1 and status = 'waiting'`, [pQ])).length === 2);
+  await reply(pQ, "1");
+  check("their 1 answers the last question asked", (await one(`select flagged from conversations where patient_id = $1`, [pQ])).flagged === true);
+  check("not the reminder before it too", (await one(`select status from appointments where id = $1`, [aQ])).status === "scheduled");
+  await reply(pQ, "1");
+  check("whose turn comes next", (await one(`select status from appointments where id = $1`, [aQ])).status === "confirmed");
+
   /* ================================================================ a new clinic's defaults */
   console.log("\nwhat a new clinic starts with");
   const fresh = async (specialty: string) => {

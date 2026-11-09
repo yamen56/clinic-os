@@ -18,7 +18,7 @@ import { isUuid } from "../uuid";
 export type Ctx = "patient" | "appointment" | "invoice" | "document" | "conversation" | "treatment";
 
 /** Modules a trigger or step belongs to, named as in lib/features. */
-type Module = "calendar" | "conversations" | "invoices" | "documents" | "patients" | "dental";
+type Module = "calendar" | "conversations" | "invoices" | "documents" | "patients" | "dental" | "coordinator";
 
 const uuid = z.string().refine(isUuid, "uuid");
 const uuids = z.array(uuid).max(100).default([]);
@@ -69,6 +69,19 @@ const TRIGGER_SCHEMAS = {
     named for the next visit.
   */
   next_visit_due: z.object({ days_before: z.number().int().min(0).max(30).default(2) }),
+  /*
+    The treatment coordinator (a test, the opt-in `coordinator` feature): a
+    patient's next session is due — the doctor's "come back in…", a package or
+    a course with sessions left, or a dental plan not finished (lib/courses.ts).
+    `book` for the ones whose next visit is clear, `invite` for dental plans.
+    Fires `days_ahead` before the due date.
+  */
+  treatment_session_due: z.object({
+    action: z.enum(["book", "invite"]).default("book"),
+    days_ahead: z.number().int().min(0).max(30).default(7),
+  }),
+  /* An enquiry the clinic answered on WhatsApp that turned into no booking, quiet for `hours`. */
+  enquiry_not_booked: z.object({ hours: z.number().int().min(6).max(168).default(24) }),
   inbound_message: z.object({
     mode: z.enum(["any", "keywords", "first_message"]).default("keywords"),
     keywords: z.array(z.string().min(1).max(60)).max(30).default([]),
@@ -126,6 +139,10 @@ export const TRIGGERS: TriggerDef[] = [
   { key: "birthday", category: "patients", provides: ["patient"], module: "patients", timed: true },
   { key: "after_last_visit", category: "patients", provides: ["patient"], module: "patients", timed: true },
   { key: "next_visit_due", category: "appointments", provides: appt, module: "calendar", timed: true },
+  // No appointment of its own guaranteed (a package not yet started): the booking step brings one.
+  { key: "treatment_session_due", category: "treatments", provides: ["patient", "treatment"], module: "coordinator", timed: true },
+  // A thread may have no patient file yet; booking from it makes one.
+  { key: "enquiry_not_booked", category: "messages", provides: ["patient", "conversation"], module: "coordinator", timed: true },
   { key: "prescription_sent", category: "patients", provides: ["patient"], module: "patients" },
   { key: "treatment_done", category: "treatments", provides: ["patient", "treatment"], module: "dental" },
   { key: "treatment_unbooked", category: "treatments", provides: ["patient", "treatment"], module: "dental", timed: true },
@@ -340,7 +357,11 @@ const STEP_SCHEMAS = {
     value: text(500),
   }),
   add_note: z.object({ body: text(4000) }),
-  update_appointment: z.object({ status: z.enum(["confirmed", "cancelled"]).default("confirmed") }),
+  update_appointment: z.object({
+    status: z.enum(["confirmed", "cancelled"]).default("confirmed"),
+    /* Without starting other automations — the flow that cancels is already handling the patient. */
+    quiet: z.boolean().default(false),
+  }),
   /*
     Books the patient's next visit on its own: the first free time, about
     `after_days` from now (or from the trigger's appointment), searched forward
@@ -351,23 +372,29 @@ const STEP_SCHEMAS = {
   */
   book_appointment: z.object({
     /* "last": the patient's most recent finished visit — what a recall with no appointment of its own books. */
-    service: z.enum(["trigger", "last", "pick"]).default("trigger"),
+    /* "treatment": the service the coordinator found for the treatment; "consultation": the clinic's first-visit service. */
+    service: z.enum(["trigger", "last", "treatment", "consultation", "pick"]).default("trigger"),
     service_id: z.string().default(""),
-    doctor: z.enum(["trigger", "last", "any", "pick"]).default("trigger"),
+    doctor: z.enum(["trigger", "last", "treatment", "any", "pick"]).default("trigger"),
     member_id: z.string().default(""),
     after_days: z.number().int().min(0).max(730).default(7),
-    from: z.enum(["now", "appointment"]).default("now"),
+    /* "due": the date the treatment's next session falls due. */
+    from: z.enum(["now", "appointment", "due"]).default("now"),
     search_days: z.number().int().min(1).max(60).default(14),
     part_of_day: z.enum(["any", "morning", "afternoon", "evening", "same_time"]).default("any"),
     status: z.enum(["scheduled", "confirmed"]).default("scheduled"),
     /* A patient who already has a visit ahead is not booked a second one. */
     skip_if_booked: z.boolean().default(true),
+    /* No free time at that part of the day: take any time that day rather than none. */
+    then_any: z.boolean().default(false),
+    /* Only the doctors and the notice the online booking link offers — for bookings nobody asked for. */
+    within_link_rules: z.boolean().default(false),
   }),
   /* Puts the patient on the waitlist, so the desk and the waitlist's offers find them when a time frees up. */
   add_to_waitlist: z.object({
-    service: z.enum(["trigger", "last", "pick", "none"]).default("trigger"),
+    service: z.enum(["trigger", "last", "treatment", "pick", "none"]).default("trigger"),
     service_id: z.string().default(""),
-    doctor: z.enum(["trigger", "last", "any", "pick"]).default("trigger"),
+    doctor: z.enum(["trigger", "last", "treatment", "any", "pick"]).default("trigger"),
     member_id: z.string().default(""),
     within_days: z.number().int().min(1).max(365).default(30),
     note: text(300),
@@ -605,5 +632,9 @@ export function defaultSettingsFor(trigger: string): FlowSettings {
     s.reentry = "always";
     s.exit_on = ["appointment_booked"];
   }
+  // A course is many sessions: each is its own reason. The run books the visit itself, so "booked" is no reason to stop it.
+  if (trigger === "treatment_session_due") s.reentry = "always";
+  // Once per thread is the scanner's rule; a later enquiry on another thread is its own.
+  if (trigger === "enquiry_not_booked") s.reentry = "always";
   return s;
 }

@@ -61,6 +61,8 @@ export const TRIGGER_ICONS: Record<string, Icon> = {
   document_expired: FileX,
   treatment_done: Stethoscope,
   treatment_unbooked: CalendarSearch,
+  treatment_session_due: CalendarPlus,
+  enquiry_not_booked: MessageCircle,
 };
 
 export const PRESET_ICONS: Record<string, Icon> = {
@@ -204,11 +206,12 @@ export function stepSummary(dict: Dict, type: string, raw: Record<string, unknow
       const b = t.flow.book;
       const bits: string[] = [];
       if (cfg.service === "pick") bits.push(name(look.services.find((s) => s.id === str("service_id"))) || "…");
+      if (cfg.service === "treatment" || cfg.service === "consultation") bits.push((b.serviceFrom as Record<string, string>)[str("service")]);
       if (cfg.doctor === "pick") bits.push(look.members.find((m) => m.id === str("member_id"))?.name ?? "…");
       else if (cfg.doctor === "any") bits.push(b.summaryAny);
       else if (cfg.doctor === "last" || cfg.service === "last") bits.push(b.summaryLast);
       if (type === "book_appointment") {
-        bits.push(fill(b.summaryDays, { n: Number(cfg.after_days) || 0 }));
+        bits.push(cfg.from === "due" ? b.from.due : fill(b.summaryDays, { n: Number(cfg.after_days) || 0 }));
         if (cfg.part_of_day !== "any") bits.push((b.parts as Record<string, string>)[str("part_of_day")] ?? "");
       } else {
         bits.push(`${b.withinDays} ${Number(cfg.within_days) || 0} ${t.flow.units.days}`);
@@ -266,6 +269,12 @@ export function triggerSummary(
     if (cats.length) bits.push(cats.join(locale === "ar" ? "، " : ", "));
     if (list("treatments").length) bits.push(t.flow.someTreatments.replace("{n}", String(list("treatments").length)));
   }
+  if (type === "treatment_session_due") {
+    bits.push(t.flow.sessionAction[cfg.action === "invite" ? "invite" : "book"]);
+    const n = Number(cfg.days_ahead ?? 7);
+    bits.push(n > 0 ? fill(t.flow.daysBeforeShort, { n }) : t.flow.onDueDay);
+  }
+  if (type === "enquiry_not_booked") bits.push(`${cfg.hours ?? 24} ${t.flow.units.hours}`);
   if (type === "conversation_unanswered") bits.push(`${cfg.minutes ?? 15} ${t.flow.minutesShort}`);
   if ((type === "tag_added" || type === "tag_removed") && cfg.tag) bits.push(`“${cfg.tag}”`);
   if (type === "inbound_message") {

@@ -5,6 +5,8 @@ import { licensed } from "./features";
 import { createAndSendFromTemplate } from "../src/lib/esign/flow";
 import { notifyUser, staffInRoles } from "../src/lib/notify";
 import { applyAppointmentStatus, lockClinicSchedule } from "../src/lib/appointments";
+import { findOrCreatePatient } from "../src/lib/patients";
+import { consultationService } from "../src/lib/courses";
 import { computeDayCounts, computeSlots, type SlotResult } from "../src/lib/slots";
 import { audit } from "../src/lib/audit";
 import { emitTrigger } from "../src/lib/triggers";
@@ -636,7 +638,14 @@ async function runStep(env: Env, step: Step): Promise<StepResult> {
         status,
         actorUserId: null,
         onlyFrom: status === "confirmed" ? ["pending_approval", "scheduled", "confirmed"] : ["pending_approval", "scheduled", "confirmed"],
-        chainDepth: run.chain_depth + 1,
+        /*
+          Quietly: no other flow hears of it. The coordinator's "reply 2 to
+          change" cancels the time it picked and hands the patient to
+          reception — it is not the patient cancelling, and the cancellation
+          flows' "shall we rebook?" on top of reception's call is one message
+          too many.
+        */
+        chainDepth: cfg.quiet ? MAX_CHAIN + 1 : run.chain_depth + 1,
       });
       if (!r.ok) return next("skipped", { reason: r.error, current: r.previousStatus });
       return next(r.changed ? "ok" : "skipped", r.changed ? { status } : { status, reason: "unchanged" });
@@ -833,8 +842,9 @@ async function followAppointment(env: Env, appointmentId: string): Promise<boole
 async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<StepResult> {
   const { c, run } = env;
   const take = (handle: string, status: LogStatus, detail?: Record<string, unknown>): StepResult => ({ kind: "next", handle, status, detail });
-  if (!run.patient_id) return take("no_slot", "skipped", { reason: "no_patient" });
+  if (!run.patient_id && !(await patientFromThread(env))) return take("no_slot", "skipped", { reason: "no_patient" });
   const prior = await runAppointment(env);
+  const trig = (run.context?.trigger ?? {}) as Record<string, unknown>;
 
   // A visit already ahead is the answer, not a reason to book a second one.
   if (cfg.skip_if_booked) {
@@ -856,7 +866,15 @@ async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<
 
   const last = cfg.service === "last" || cfg.doctor === "last" ? await lastVisit(env) : null;
   const serviceId =
-    cfg.service === "pick" ? String(cfg.service_id ?? "") : cfg.service === "last" ? (last?.service_id ?? "") : (prior?.service_id ?? "");
+    cfg.service === "pick"
+      ? String(cfg.service_id ?? "")
+      : cfg.service === "last"
+        ? (last?.service_id ?? "")
+        : cfg.service === "treatment"
+          ? String(trig.serviceId ?? prior?.service_id ?? "")
+          : cfg.service === "consultation"
+            ? ((await consultationService(c, run.clinic_id))?.id ?? "")
+            : (prior?.service_id ?? "");
   const svc = UUID.test(serviceId)
     ? (await c.query(`select id, duration_min from services where id = $1 and clinic_id = $2 and active`, [serviceId, run.clinic_id])).rows[0]
     : null;
@@ -875,7 +893,9 @@ async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<
         ? (prior?.doctor_member_id ?? null)
         : cfg.doctor === "last"
           ? (last?.doctor_member_id ?? null)
-          : null;
+          : cfg.doctor === "treatment"
+            ? ((trig.doctorId as string | null) ?? prior?.doctor_member_id ?? null)
+            : null;
   if (doctorId) {
     const active = UUID.test(doctorId)
       ? await c.query(`select 1 from clinic_members where id = $1 and clinic_id = $2 and active`, [doctorId, run.clinic_id])
@@ -892,10 +912,19 @@ async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<
   ).rows[0];
   const tz = String(clinic.timezone);
   const link = (
-    await c.query(`select slot_granularity_min from booking_links where clinic_id = $1 and active order by created_at limit 1`, [run.clinic_id])
+    await c.query(
+      `select slot_granularity_min, min_notice_min, doctor_member_ids from booking_links where clinic_id = $1 and active order by created_at limit 1`,
+      [run.clinic_id]
+    )
   ).rows[0];
   const today = DateTime.now().setZone(tz).startOf("day");
-  const from = cfg.from === "appointment" && prior ? DateTime.fromJSDate(new Date(prior.starts_at)).setZone(tz) : DateTime.now().setZone(tz);
+  const dueOn = typeof trig.dueOn === "string" ? DateTime.fromISO(trig.dueOn, { zone: tz }) : null;
+  const from =
+    cfg.from === "appointment" && prior
+      ? DateTime.fromJSDate(new Date(prior.starts_at)).setZone(tz)
+      : cfg.from === "due" && dueOn?.isValid
+        ? dueOn
+        : DateTime.now().setZone(tz);
   let first = from.plus({ days: Number(cfg.after_days) || 0 }).startOf("day");
   if (first < today) first = today;
   const span = Math.min(60, Math.max(1, Number(cfg.search_days) || 14));
@@ -909,10 +938,15 @@ async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<
     blockedDates: clinic.blocked_dates ?? [],
     serviceId: svc.id as string,
     doctorMemberId: doctorId,
-    // An hour's notice at least, so a booking for today is never a time already upon the desk.
-    minNoticeMin: 60,
+    /*
+      An hour's notice at least, so a booking for today is never a time
+      already upon the desk. Inside the online booking's rules when asked:
+      its notice, and — when no doctor is named — only the doctors it offers.
+      A system booking by itself books no further than a patient could.
+    */
+    minNoticeMin: cfg.within_link_rules ? Math.max(60, Number(link?.min_notice_min) || 0) : 60,
     granularityMin: Number(link?.slot_granularity_min) || 30,
-    linkDoctorIds: [] as string[],
+    linkDoctorIds: (cfg.within_link_rules ? (link?.doctor_member_ids ?? []) : []) as string[],
   };
   const counts = await computeDayCounts(c, { ...opts, fromISO: first.toISODate()!, days: span });
   const part = String(cfg.part_of_day ?? "any");
@@ -921,32 +955,38 @@ async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<
     return l.hour * 60 + l.minute;
   };
   const was = prior ? DateTime.fromJSDate(new Date(prior.starts_at)).setZone(tz) : null;
-  let slot: SlotResult | null = null;
-  for (const day of Object.keys(counts).sort()) {
-    if (!counts[day]) continue;
-    let fit = await computeSlots(c, { ...opts, dateISO: day });
-    if (DAY_PARTS[part]) {
-      const [lo, hi] = DAY_PARTS[part];
-      fit = fit.filter((s) => minuteOf(s) >= lo && minuteOf(s) < hi);
-    } else if (part === "same_time" && was) {
-      // The same time of day, or the nearest within an hour of it.
-      const want = was.hour * 60 + was.minute;
-      fit = fit.filter((s) => Math.abs(minuteOf(s) - want) <= 60).sort((a, b) => Math.abs(minuteOf(a) - want) - Math.abs(minuteOf(b) - want));
+  const days = Object.keys(counts).filter((d) => counts[d]).sort();
+  const free = new Map<string, SlotResult[]>();
+  const search = async (shaped: boolean): Promise<SlotResult | null> => {
+    for (const day of days) {
+      if (!free.has(day)) free.set(day, await computeSlots(c, { ...opts, dateISO: day }));
+      let fit = free.get(day)!;
+      if (shaped && DAY_PARTS[part]) {
+        const [lo, hi] = DAY_PARTS[part];
+        fit = fit.filter((s) => minuteOf(s) >= lo && minuteOf(s) < hi);
+      } else if (shaped && part === "same_time" && was) {
+        // The same time of day, or the nearest within an hour of it.
+        const want = was.hour * 60 + was.minute;
+        fit = fit.filter((s) => Math.abs(minuteOf(s) - want) <= 60).sort((a, b) => Math.abs(minuteOf(a) - want) - Math.abs(minuteOf(b) - want));
+      }
+      if (fit.length) return fit[0];
     }
-    if (fit.length) {
-      slot = fit[0];
-      break;
-    }
-  }
+    return null;
+  };
+  // Then any time of day: a session at four on another day beats no session at all.
+  const slot = (await search(true)) ?? (cfg.then_any && part !== "any" ? await search(false) : null);
   if (!slot) return take("no_slot", "ok", { reason: "no_free_time", from: first.toISODate(), days: span });
 
   const start = DateTime.fromISO(slot.startISO);
   const end = start.plus({ minutes });
   const flow = (await c.query(`select name from automations where id = $1`, [run.automation_id])).rows[0]?.name as string | undefined;
+  // What the session is, for whoever opens the appointment: "الجلسة 3 من 6 — ليزر".
+  const t = (trig.treatment ?? {}) as { name?: string; session_label?: string };
+  const what = [t.session_label, t.name].filter((x) => typeof x === "string" && x.trim()).join(" — ");
   const note =
-    clinic.default_locale === "en"
+    (clinic.default_locale === "en"
       ? `Booked automatically${flow ? ` by “${flow}”` : ""}`
-      : `حُجز تلقائياً${flow ? ` عبر «${flow}»` : ""}`;
+      : `حُجز تلقائياً${flow ? ` عبر «${flow}»` : ""}`) + (what ? ` · ${what}` : "");
   const id = (
     await c.query(
       `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, status, source, notes, room_id)
@@ -970,9 +1010,49 @@ async function bookAppointment(env: Env, cfg: Record<string, unknown>): Promise<
     source: "automation",
     chainDepth: run.chain_depth + 1,
   });
+  // An enquiry booked is a patient now, not a lead.
+  await c.query(`update patients set status = 'active' where id = $1 and status = 'lead'`, [run.patient_id]);
   await followAppointment(env, id);
   return take("booked", "ok", { appointmentId: id, startsAt: start.toUTC().toISO(), doctorMemberId: slot.doctorMemberId });
 }
+
+/**
+ * A run about a thread with no file yet — an enquiry — gets one before it
+ * books: through the identity rule, so a file staff added since is booked
+ * onto rather than duplicated, the way the AI receptionist does it. A thread
+ * WhatsApp addressed by LID has no number to write onto a file; the LID sweep
+ * gives it one once known.
+ */
+async function patientFromThread(env: Env): Promise<boolean> {
+  const { c, run } = env;
+  if (!run.conversation_id) return false;
+  const conv = (
+    await c.query(
+      `select cv.id, cv.patient_id, cv.phone_e164, cv.whatsapp_name, cv.identifier_kind, cl.default_locale
+         from conversations cv join clinics cl on cl.id = cv.clinic_id where cv.id = $1 and cv.clinic_id = $2`,
+      [run.conversation_id, run.clinic_id]
+    )
+  ).rows[0];
+  if (!conv) return false;
+  let patientId: string | null = conv.patient_id ?? null;
+  if (!patientId) {
+    const dialable = conv.identifier_kind !== "lid";
+    const p = await findOrCreatePatient(c, run.clinic_id, {
+      phone: dialable ? conv.phone_e164 : "",
+      fullName: !dialable && !conv.whatsapp_name ? (conv.default_locale === "en" ? "WhatsApp user" : "مستخدم واتساب") : undefined,
+      whatsappName: conv.whatsapp_name ?? undefined,
+      source: "whatsapp",
+      status: "active",
+    });
+    patientId = p.id;
+    await c.query(`update conversations set patient_id = $2 where id = $1 and patient_id is null`, [conv.id, patientId]);
+  }
+  await c.query(`update automation_runs set patient_id = $2 where id = $1`, [run.id, patientId]);
+  run.patient_id = patientId;
+  env.resetTmpl();
+  return true;
+}
+
 
 /**
  * Puts the patient on the waitlist, from today for `within_days`. One live
@@ -984,8 +1064,19 @@ async function addToWaitlist(env: Env, cfg: Record<string, unknown>): Promise<St
   if (!run.patient_id) return next("skipped", { reason: "no_patient" });
   const prior = await runAppointment(env);
   const last = cfg.service === "last" || cfg.doctor === "last" ? await lastVisit(env) : null;
+  const trig = (run.context?.trigger ?? {}) as Record<string, unknown>;
+  const fromTreatment = (key: "service_id" | "doctor_member_id") =>
+    String((key === "service_id" ? trig.serviceId : trig.doctorId) ?? prior?.[key] ?? "");
   const from = (mode: unknown, picked: unknown, key: "service_id" | "doctor_member_id"): string =>
-    mode === "pick" ? String(picked ?? "") : mode === "trigger" ? (prior?.[key] ?? "") : mode === "last" ? (last?.[key] ?? "") : "";
+    mode === "pick"
+      ? String(picked ?? "")
+      : mode === "trigger"
+        ? (prior?.[key] ?? "")
+        : mode === "last"
+          ? (last?.[key] ?? "")
+          : mode === "treatment"
+            ? fromTreatment(key)
+            : "";
   const rawService = from(cfg.service, cfg.service_id, "service_id");
   const rawDoctor = from(cfg.doctor, cfg.member_id, "doctor_member_id");
   const serviceId = UUID.test(rawService)
@@ -1381,12 +1472,31 @@ export async function resumeOnReply(
   const body = String(payload.body ?? "").trim();
   if (!payload.conversationId && !payload.patientId) return 0;
   return withSystem(async (c) => {
+    /*
+      One reply answers one question: the one asked last on this thread.
+
+      It used to wake every run waiting on the thread, so a "1" meant for the
+      day-before reminder also answered a prescription check-in, and a "2"
+      could cancel a booking while declining something else. And runs were
+      matched by the thread's one patient, so a child on a parent's phone —
+      a run of the child's, the same thread — never heard the reply at all.
+      Now: any run on this thread, this patient, or a patient with this
+      phone, and only the one that began waiting most recently.
+    */
+    const phone = payload.conversationId
+      ? ((await c.query(`select phone_e164 from conversations where id = $1`, [payload.conversationId])).rows[0]?.phone_e164 ?? null)
+      : null;
     const waiting = await c.query(
       `select r.id, r.current_step_id from automation_runs r
         where r.clinic_id = $1 and r.status = 'waiting' and r.waiting_for = 'reply'
-          and (r.conversation_id = $2 or (r.patient_id is not null and r.patient_id = $3))
-        for update skip locked`,
-      [clinicId, payload.conversationId ?? null, payload.patientId ?? null]
+          and (r.conversation_id = $2
+               or (r.patient_id is not null and r.patient_id = $3)
+               or ($4::text is not null and r.patient_id in (
+                     select p.id from patients p where p.clinic_id = $1 and p.phone_e164 = $4 and p.merged_into is null)))
+        order by (r.context->>'waiting_since')::timestamptz desc nulls last, r.updated_at desc
+        limit 1
+        for update`,
+      [clinicId, payload.conversationId ?? null, payload.patientId ?? null, phone]
     );
     let taken = 0;
     for (const w of waiting.rows) {

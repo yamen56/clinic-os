@@ -31,8 +31,8 @@ export const VARIABLE_GROUPS: VariableGroup[] = [
   { group: "invoice", needs: "invoice", vars: ["number", "total", "paid", "balance", "link"] },
   { group: "document", needs: "document", vars: ["title", "status", "expires"] },
   { group: "reply", needs: "conversation", vars: ["text"] },
-  // The dental chart's treatment the flow is about: its name in the clinic's language, and its tooth.
-  { group: "treatment", needs: "treatment", vars: ["name", "tooth"] },
+  // The treatment the flow is about: its name in the clinic's language, its tooth, and — for the coordinator — which session ("الجلسة 3 من 6").
+  { group: "treatment", needs: "treatment", vars: ["name", "tooth", "session_label"] },
 ];
 
 /**
@@ -114,6 +114,6 @@ export function sampleContext(locale: "ar" | "en"): TemplateContext {
     invoice: { number: "INV-1042", total: "45.00 JOD", paid: "20.00 JOD", balance: "25.00 JOD", link: "https://clinicti.app/inv/…" },
     document: { title: ar ? "نموذج موافقة" : "Consent form", status: "sent", expires: ar ? "25 تشرين الأول" : "25 October" },
     reply: { text: ar ? "نعم" : "Yes" },
-    treatment: { name: ar ? "علاج عصب" : "Root canal treatment", tooth: "36" },
+    treatment: { name: ar ? "علاج عصب" : "Root canal treatment", tooth: "36", session_label: ar ? "الجلسة 3 من 6" : "Session 3 of 6" },
   };
 }

@@ -21,7 +21,18 @@ import type { PackagePlan, PlanItem } from "@/lib/charts/face/packages";
 import { FamilyTag } from "@/components/charts/face/family-tag";
 import { savePlanAction } from "./actions";
 
-export function FacePackages({ slug, currency, plans: initial }: { slug: string; currency: string; plans: PackagePlan[] }) {
+export function FacePackages({
+  slug,
+  currency,
+  plans: initial,
+  coordinator = false,
+}: {
+  slug: string;
+  currency: string;
+  plans: PackagePlan[];
+  /** The treatment coordinator (a test): how far apart the sessions are is asked. */
+  coordinator?: boolean;
+}) {
   const { t, locale } = useI18n();
   const cat = useFaceCatalog();
   const P = t.services.facePackages;
@@ -90,12 +101,32 @@ export function FacePackages({ slug, currency, plans: initial }: { slug: string;
           ))}
         </div>
       )}
-      {editing && <PlanForm plan={editing === "new" ? null : editing} currency={currency} onClose={() => setEditing(null)} onSave={async (d) => (await save(d)) && setEditing(null)} />}
+      {editing && (
+        <PlanForm
+          plan={editing === "new" ? null : editing}
+          currency={currency}
+          coordinator={coordinator}
+          onClose={() => setEditing(null)}
+          onSave={async (d) => (await save(d)) && setEditing(null)}
+        />
+      )}
     </div>
   );
 }
 
-function PlanForm({ plan, currency, onClose, onSave }: { plan: PackagePlan | null; currency: string; onClose: () => void; onSave: (d: Record<string, unknown>) => Promise<unknown> }) {
+function PlanForm({
+  plan,
+  currency,
+  coordinator,
+  onClose,
+  onSave,
+}: {
+  plan: PackagePlan | null;
+  currency: string;
+  coordinator: boolean;
+  onClose: () => void;
+  onSave: (d: Record<string, unknown>) => Promise<unknown>;
+}) {
   const { t } = useI18n();
   const cat = useFaceCatalog();
   const P = t.services.facePackages;
@@ -103,6 +134,8 @@ function PlanForm({ plan, currency, onClose, onSave }: { plan: PackagePlan | nul
   const [nameAr, setNameAr] = useState(plan?.nameAr ?? "");
   const [price, setPrice] = useState(plan ? String(plan.price) : "");
   const [months, setMonths] = useState(plan?.validMonths ? String(plan.validMonths) : "");
+  // Weeks on screen, days in the table: what a clinic says is "every four weeks".
+  const [weeks, setWeeks] = useState(plan?.intervalDays ? String(Math.max(1, Math.round(plan.intervalDays / 7))) : "");
   const [items, setItems] = useState<PlanItem[]>(plan?.items.length ? plan.items : [{ treatmentKey: "aes_laser_hair", sessions: 6 }]);
   const [active, setActive] = useState(plan?.active ?? true);
   const [busy, setBusy] = useState(false);
@@ -129,6 +162,7 @@ function PlanForm({ plan, currency, onClose, onSave }: { plan: PackagePlan | nul
                 nameAr: nameAr.trim(),
                 price: Number(price),
                 validMonths: months.trim() ? Number(months) : null,
+                intervalDays: weeks.trim() && Number(weeks) > 0 ? Math.min(365, Number(weeks) * 7) : null,
                 active,
                 items,
               });
@@ -156,6 +190,18 @@ function PlanForm({ plan, currency, onClose, onSave }: { plan: PackagePlan | nul
         <Field label={P.months} hint={P.monthsHint}>
           <Input type="text" inputMode="numeric" value={months} onChange={(e) => setMonths(e.target.value.replace(/\D/g, "").slice(0, 2))} dir="ltr" />
         </Field>
+        {coordinator && (
+          <Field label={P.everyWeeks} hint={P.everyWeeksHint}>
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={weeks}
+              onChange={(e) => setWeeks(e.target.value.replace(/\D/g, "").slice(0, 2))}
+              dir="ltr"
+              data-plan-weeks
+            />
+          </Field>
+        )}
       </div>
       <div className="mt-4">
         <div className="text-[13px] font-semibold text-ink-900">{P.items}</div>

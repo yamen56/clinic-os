@@ -1151,7 +1151,7 @@ per-step 30-day counts, a list of problems that pans to the step. Tabs: Flow · 
 
 ### Templates
 
-`recipe_templates`, seeded from `scripts/seed-recipes.ts` (20 general) and
+`recipe_templates`, seeded from `scripts/seed-recipes.ts` (20 general, plus the coordinator's 3 in `scripts/coordinator-recipes.ts`) and
 `scripts/specialty-recipes.ts` (39 across 14 specialties), offered in the **New automation**
 gallery — the clinic's own field first. Each card says **what problem it solves and what the
 patient receives** (`description` / `description_ar`, migration 0101), not only its name. A
@@ -1188,6 +1188,54 @@ prescription.
 The two **patient-facing document reminders (24h / 72h) are built in, not recipes** — they
 run off the clinic's own "first reminder after" setting so they're hour-accurate and can't be
 switched off by accident, and duplicating them as automations would nudge every patient twice.
+
+**A reply reaches the flow that asked last** (2026-11-09). A waiting run is matched by its
+thread, its patient, or a file with the thread's number, and only the one that started waiting
+most recently (`context.waiting_since`) is resumed. One "1" used to answer every flow waiting
+on the thread at once — a reminder confirmed by a reply meant for another question.
+
+### Treatment coordinator — a test, behind a switch (`coordinator`, migration 0102)
+
+Plays the receptionist for patients part-way through a treatment. **Opt-in, off everywhere**:
+Admin → clinic → Features → "Treatment coordinator (test)". Until it leaves the test, no other
+clinic sees or gets any of it; the reply fix above is the only part that applies to everyone.
+
+*Who is due* (`src/lib/courses.ts`, read from what the clinic already records — nothing to set
+up): the finish sheet's "come back in N days" (wins over everything); a face package with
+sessions left and not expired (last session + the plan's spacing, four weeks by default; two
+days after the sale if none used); a service given as a course (`services.course_sessions` /
+`course_interval_days`: sessions attended of it, the next one the spacing after the last); a
+dental plan with work still planned (last step + 7 days, charted + 2 if not started). One next
+session per patient. Attended = completed, or past and not cancelled / no-show, so clinics that
+never press Finish are counted. Left alone: anything booked ahead, reception's **Stop
+following** (`treatment_follow_stops`; a treatment that starts afterwards is followed again),
+and **stalled** — the last automatic booking was missed or cancelled, or a month overdue. Late
+by more than 3 days is never booked automatically (switching it on does not message the past).
+
+*What it does* (`worker/coordinator.ts`, daily from 10:00; templates in
+`scripts/coordinator-recipes.ts`, installed and switched on with the feature; switching it on
+pauses every flow on `next_visit_due` / `treatment_unbooked`, marked `paused_by: coordinator`,
+and switching it off brings exactly those back):
+- **Book the next session** (`treatment_session_due`, action book, 7 days ahead): books it on
+  the due day at the time they usually come, with the doctor treating them (any time of day if
+  that hour is taken; inside the online booking's notice and doctors), *scheduled*, the note
+  naming the session ("الجلسة 3 من 6 — ليزر"). The patient is told: 1 confirms, 2 cancels it
+  **quietly** (`update_appointment.quiet` — no cancellation flow also writes) and gives
+  reception a call to make. Nothing free in two weeks: waitlist + task.
+- **Invite back to a dental plan** (action invite): never books — whether they took the plan
+  and how long the visit is are reception's questions. "1" is a task naming treatment and teeth.
+- **Asked, did not book** (`enquiry_not_booked`): a thread begun this week, answered by staff
+  or the AI, quiet 24 h, nothing booked, a new number or a lead — once per thread: "1" opens a
+  file (identity rule, LID-safe) and books the clinic's consultation (first service named
+  كشفية / استشارة / معاينة / consultation, else the first bookable one).
+
+*Reception* — Calendar → Waitlist: **Treatments** replaces Due back (it includes it): due,
+booked automatically, needs a call; Book (due day, usual hour, their doctor), Stop following
+(Undo). Its header counts the last 30 days — booked by it, confirmed, came, no-show,
+cancelled, enquiries booked — which is what decides whether it leaves the test.
+*Inputs*, shown only with the switch: Settings → Services "Given as a course of N sessions,
+every X weeks/days"; face package plans "a session every N weeks". The finish sheet is
+unchanged.
 
 ### System messages (`clinic_system_messages`)
 

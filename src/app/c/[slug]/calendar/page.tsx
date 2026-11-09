@@ -144,6 +144,7 @@ export default async function CalendarPage({
         settingsRooms: can(access, "settings.services"),
       }}
       showBoard={showBoard}
+      coordinator={access.clinic.features.coordinator === true}
       /*
         A phone opens the Schedule as a list. A time grid on 390px is one
         narrow column per doctor scrolled both ways; the list is the day in

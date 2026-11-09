@@ -18,7 +18,7 @@ import type { RecipeStep } from "./seed-recipes";
   and reception gets a task. A reply that is not a yes — a question, "next
   month" — is flagged for a person to answer. No reply leaves `onSilence`.
 */
-const BOOK_WORDS = ["1", "نعم", "اكيد", "احجز", "احجزلي", "تمام", "موافق", "ماشي", "ok", "yes", "book", "👍"];
+export const BOOK_WORDS = ["1", "نعم", "اكيد", "احجز", "احجزلي", "تمام", "موافق", "ماشي", "ok", "yes", "book", "👍"];
 
 export function replyToBook(opts: {
   /** "trigger": like the appointment the flow is about; "last": like the patient's last finished visit. */
@@ -102,6 +102,14 @@ export function replyToBook(opts: {
     },
   };
 }
+
+/*
+  Words that mean "yes, I'll come" and "I need to change it", as patients in
+  Jordan actually type them. Matching ignores tashkeel, alef and taa-marbuta
+  spelling and reads ١ as 1, so one spelling of each is enough.
+*/
+export const CONFIRM_WORDS = ["1", "نعم", "اكيد", "تمام", "موافق", "تأكيد", "ok", "yes", "confirm", "👍"];
+export const CHANGE_WORDS = ["2", "تغيير", "تأجيل", "الغاء", "لا", "مش رح اقدر", "change", "cancel", "no"];
 
 /** Stop here when the patient already has a visit ahead — the reminder has nothing to ask for. */
 export const UNLESS_BOOKED: RecipeStep = {

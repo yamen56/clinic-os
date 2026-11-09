@@ -171,6 +171,24 @@ export function TriggerInspector({
           <NumberInput dir="ltr" min={0} max={30} value={Number(config.days_before ?? 2)} fallback={0} onChange={(v) => set({ days_before: Math.round(v) })} />
         </Field>
       )}
+      {trigger === "treatment_session_due" && (
+        <>
+          <Segmented
+            value={(config.action === "invite" ? "invite" : "book") as "book" | "invite"}
+            onChange={(action) => set({ action })}
+            options={(["book", "invite"] as const).map((a) => ({ value: a, label: f.sessionAction[a] }))}
+          />
+          <p className="text-[12px] leading-snug text-ink-500">{f.sessionActionHint[config.action === "invite" ? "invite" : "book"]}</p>
+          <Field label={f.daysAheadOfSession}>
+            <NumberInput dir="ltr" min={0} max={30} value={Number(config.days_ahead ?? 7)} fallback={7} onChange={(v) => set({ days_ahead: Math.round(v) })} />
+          </Field>
+        </>
+      )}
+      {trigger === "enquiry_not_booked" && (
+        <Field label={f.enquiryQuietHours} hint={f.enquiryQuietHint}>
+          <NumberInput dir="ltr" min={6} max={168} value={Number(config.hours ?? 24)} fallback={24} onChange={(v) => set({ hours: Math.round(v) })} />
+        </Field>
+      )}
       {trigger === "invoice_unpaid" && (
         <Field label={f.daysAfterSent}>
           <NumberInput dir="ltr" min={1} max={365} value={Number(config.days ?? 3)} fallback={3} onChange={(v) => set({ days: Math.round(v) })} />
@@ -240,6 +258,8 @@ export function StepInspector({
   slug,
   node,
   provides,
+  trigger,
+  coordinator,
   hasReplyStep,
   lookups,
   issues,
@@ -252,6 +272,9 @@ export function StepInspector({
   slug: string;
   node: FlowNode;
   provides: Ctx[];
+  trigger: string;
+  /** The clinic has the treatment coordinator (a test): its booking choices are offered. */
+  coordinator: boolean;
   hasReplyStep: boolean;
   lookups: Lookups;
   issues: Issue[];
@@ -476,6 +499,9 @@ export function StepInspector({
             options={(["confirmed", "cancelled"] as const).map((s) => ({ value: s, label: f.apptAction[s] }))}
           />
           <p className="text-[12px] leading-snug text-ink-500">{f.apptActionHint}</p>
+          {(coordinator || Boolean(cfg.quiet)) && cfg.status === "cancelled" && (
+            <Check checked={Boolean(cfg.quiet)} onChange={(quiet) => set({ quiet })} label={f.book.quietCancel} />
+          )}
         </>
       )}
 
@@ -485,6 +511,8 @@ export function StepInspector({
           cfg={cfg}
           set={set}
           hasAppt={hasAppt}
+          course={trigger === "treatment_session_due"}
+          coordinator={coordinator}
           lookups={lookups}
         />
       )}
@@ -600,21 +628,39 @@ function BookingFields({
   cfg,
   set,
   hasAppt,
+  course,
+  coordinator,
   lookups,
 }: {
   booking: boolean;
   cfg: Record<string, unknown>;
   set: (patch: Record<string, unknown>) => void;
   hasAppt: boolean;
+  /** The run is about a treatment's next session: its service, doctor and due day can be booked. */
+  course: boolean;
+  coordinator: boolean;
   lookups: Lookups;
 }) {
   const { t, locale } = useI18n();
   const b = t.automations.flow.book;
   const str = (k: string) => String(cfg[k] ?? "");
   const doctors = lookups.members.filter((m) => m.role === "doctor");
-  const serviceModes = (booking ? (["trigger", "last", "pick"] as const) : (["trigger", "last", "pick", "none"] as const)).filter((m) => m !== "trigger" || hasAppt);
-  const doctorModes = (["trigger", "last", "any", "pick"] as const).filter((m) => m !== "trigger" || hasAppt);
-  const parts = (["any", "morning", "afternoon", "evening", "same_time"] as const).filter((p) => p !== "same_time" || hasAppt);
+  // A choice already saved is always shown, so a flow is never displayed as something it is not.
+  const offered = (m: string, key: string, when: boolean) => when || str(key) === m;
+  const serviceModes = (
+    booking
+      ? (["treatment", "trigger", "last", "consultation", "pick"] as const)
+      : (["treatment", "trigger", "last", "pick", "none"] as const)
+  ).filter(
+    (m) =>
+      (m !== "trigger" || hasAppt) &&
+      (m !== "treatment" || offered(m, "service", course)) &&
+      (m !== "consultation" || offered(m, "service", coordinator))
+  );
+  const doctorModes = (["treatment", "trigger", "last", "any", "pick"] as const).filter(
+    (m) => (m !== "trigger" || hasAppt) && (m !== "treatment" || offered(m, "doctor", course))
+  );
+  const parts = (["any", "morning", "afternoon", "evening", "same_time"] as const).filter((p) => p !== "same_time" || hasAppt || course);
 
   return (
     <>
@@ -660,8 +706,8 @@ function BookingFields({
               <NumberInput dir="ltr" min={0} max={730} value={Number(cfg.after_days) || 0} onChange={(after_days) => set({ after_days })} data-book-after />
               <span className="text-[13px] text-ink-500">{b.afterDays}</span>
               <Select value={str("from")} onChange={(e) => set({ from: e.target.value })}>
-                {(["now", "appointment"] as const)
-                  .filter((v) => v !== "appointment" || hasAppt)
+                {(["now", "appointment", "due"] as const)
+                  .filter((v) => (v !== "appointment" || hasAppt) && (v !== "due" || offered(v, "from", course)))
                   .map((v) => (
                     <option key={v} value={v}>
                       {b.from[v]}
@@ -678,7 +724,15 @@ function BookingFields({
           </Section>
           <Section title={b.partOfDay}>
             <Chips single options={parts.map((p) => ({ value: p, label: b.parts[p] }))} value={[str("part_of_day")]} onChange={(v) => set({ part_of_day: v[0] ?? "any" })} />
+            {(coordinator || Boolean(cfg.then_any)) && str("part_of_day") !== "any" && (
+              <div className="mt-2">
+                <Check checked={Boolean(cfg.then_any)} onChange={(then_any) => set({ then_any })} label={b.thenAny} />
+              </div>
+            )}
           </Section>
+          {(coordinator || Boolean(cfg.within_link_rules)) && (
+            <Check checked={Boolean(cfg.within_link_rules)} onChange={(within_link_rules) => set({ within_link_rules })} label={b.withinLinkRules} />
+          )}
           <Section title={b.status}>
             <Segmented
               value={str("status") as "scheduled" | "confirmed"}

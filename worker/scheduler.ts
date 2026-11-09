@@ -16,6 +16,7 @@ import { enqueueEinvoiceSubmit } from "../src/lib/einvoice/jobs";
 import { opsWatch } from "../src/lib/ops-alert";
 import { postRecurringExpenses } from "./expenses";
 import { unbookedTreatments } from "./treatments";
+import { enquiriesNotBooked, treatmentSessionsDue } from "./coordinator";
 import { stockAlerts } from "./stock-alerts";
 
 /**
@@ -655,6 +656,8 @@ export function startScheduler() {
       birthdays,
       unpaidInvoices,
       unbookedTreatments,
+      treatmentSessionsDue,
+      enquiriesNotBooked,
       stockAlerts,
       unansweredConversations,
       sweepStalledRuns,

@@ -166,8 +166,12 @@ function stepIssues(node: FlowNode, provides: Ctx[], hasReplyStep: boolean): Iss
       const fromAppt =
         cfg.service === "trigger" ||
         cfg.doctor === "trigger" ||
-        (node.type === "book_appointment" && (cfg.from === "appointment" || cfg.part_of_day === "same_time"));
+        (node.type === "book_appointment" &&
+          (cfg.from === "appointment" || (cfg.part_of_day === "same_time" && !provides.includes("treatment"))));
       if (fromAppt && !provides.includes("appointment")) err("needs_appointment");
+      // The coordinator's own choices read the treatment its trigger found.
+      const fromTreatment = cfg.service === "treatment" || cfg.doctor === "treatment" || (node.type === "book_appointment" && cfg.from === "due");
+      if (fromTreatment && !provides.includes("treatment")) err("needs_treatment");
       if (cfg.service === "pick" && !str("service_id")) err("no_service");
       if (cfg.doctor === "pick" && !str("member_id")) err("no_member");
       break;

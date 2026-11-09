@@ -25,6 +25,7 @@ export default async function ServicesSettingsPage({
         */
         `select s.id, s.name, s.name_ar, s.duration_min, s.price, s.color, s.buffer_after_min,
                 s.bookable_online, s.location_kind, s.active, s.section_id, s.fee_code,
+                s.course_sessions, s.course_interval_days,
                 coalesce(array_agg(sd.member_id) filter (where sd.member_id is not null), '{}') as doctor_ids
          from services s
          left join service_doctors sd on sd.service_id = s.id
@@ -69,6 +70,7 @@ export default async function ServicesSettingsPage({
       doctors={JSON.parse(JSON.stringify(data.doctors))}
       sections={JSON.parse(JSON.stringify(data.sections))}
       currency={access.clinic.currency}
+      coordinator={access.clinic.features.coordinator === true}
     />
     {/*
       A dental clinic's treatment prices are services too, and have a page of

@@ -51,7 +51,12 @@ export async function loadRunContext(
     booking_link: clinic.booking_slug ? `${appUrl()}/book/${clinic.booking_slug}` : "",
   };
   if (ids.reply) ctx.reply = { text: ids.reply };
-  if (ids.treatment) ctx.treatment = { name: String(ids.treatment.name ?? ""), tooth: String(ids.treatment.tooth ?? "") };
+  if (ids.treatment)
+    ctx.treatment = {
+      name: String(ids.treatment.name ?? ""),
+      tooth: String(ids.treatment.tooth ?? ""),
+      session_label: String(ids.treatment.session_label ?? ""),
+    };
 
   if (ids.patientId) {
     const p = (

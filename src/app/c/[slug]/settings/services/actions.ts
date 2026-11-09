@@ -34,6 +34,14 @@ const serviceSchema = z.object({
     it wants; blank is the default and changes nothing.
   */
   feeCode: z.string().trim().max(30).optional().default(""),
+  /*
+    Given as a course (the treatment coordinator, a test — migration 0102):
+    so many sessions, so far apart. Null on both is a single visit. Written
+    only while the clinic has the coordinator, so a clinic without it never
+    clears what it set.
+  */
+  courseSessions: z.coerce.number().int().min(2).max(100).nullable().default(null),
+  courseIntervalDays: z.coerce.number().int().min(1).max(365).nullable().default(null),
 });
 
 const sectionSchema = z.object({
@@ -111,6 +119,15 @@ export async function saveServiceAction(slug: string, data: unknown): Promise<{ 
          on conflict do nothing`,
         [serviceId, mid, access.clinicId]
       );
+    }
+    if (access.clinic.features.coordinator) {
+      const course = d.courseSessions && d.courseIntervalDays;
+      await c.query(`update services set course_sessions = $3, course_interval_days = $4 where id = $1 and clinic_id = $2`, [
+        serviceId,
+        access.clinicId,
+        course ? d.courseSessions : null,
+        course ? d.courseIntervalDays : null,
+      ]);
     }
     await audit(c, {
       clinicId: access.clinicId,

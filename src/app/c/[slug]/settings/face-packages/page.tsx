@@ -20,7 +20,7 @@ export default async function FacePackagesPage({ params }: { params: Promise<{ s
   }));
   return (
     <FaceCatalogProvider custom={custom} looks={looks}>
-      <FacePackages slug={slug} currency={access.clinic.currency} plans={plans} />
+      <FacePackages slug={slug} currency={access.clinic.currency} plans={plans} coordinator={access.clinic.features.coordinator === true} />
     </FaceCatalogProvider>
   );
 }
