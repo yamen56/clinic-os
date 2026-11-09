@@ -228,7 +228,7 @@ export function TriggerInspector({
         <Check checked={Boolean(config.fully_paid_only)} onChange={(v) => set({ fully_paid_only: v })} label={f.fullyPaidOnly} />
       )}
       {trigger === "conversation_unanswered" && (
-        <Field label={`${f.unansweredMinutes} (${f.minutesShort})`} hint={f.unansweredHint}>
+        <Field label={`${f.unansweredMinutes} (${f.minutesShort})`}>
           <NumberInput dir="ltr" min={5} max={1440} value={Number(config.minutes ?? 15)} fallback={15} onChange={(v) => set({ minutes: Math.round(v) })} />
         </Field>
       )}

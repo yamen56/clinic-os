@@ -792,7 +792,8 @@ text, photos, files and voice notes. Separate tables (`team_threads`, `team_thre
 2. **Daily cap** (`clinics.daily_outbound_cap`, default 300). Overflow is *deferred to
    tomorrow's window*, not dropped.
 3. **Sending window** (`message_window_start`/`_end`, default 09:00–21:00 clinic-local).
-   Automated messages outside it queue for the next window.
+   Campaigns only. Automations send at any hour since 2026-11-10, and the window's
+   setting was removed from the Automations page.
 4. **Blast guard**: if identical `automation` text has gone to more than 8 distinct
    conversations in 10 minutes, the clinic's sending is **paused 30 minutes** and the
    message re-queued. Campaigns are exempt on purpose — one message to many numbers is the
@@ -1069,7 +1070,7 @@ action's enum had never heard of, so those flows could not be saved).
 | `next_visit_due` | The finish sheet's "come back in N days" (0088) falls due — `days_before` it (default 2) — and nothing is booked since; the run is about that visit, so "same doctor" is the one named for the next visit | days before |
 | `prescription_sent` | A prescription is sent (once per prescription) | |
 | `inbound_message` | A patient writes | any message / keywords (whole words, Arabic-normalised, ١٢٣ = 123) / first message from a new number |
-| `conversation_unanswered` | A patient waited N minutes for a reply (only inside the sending window) | minutes |
+| `conversation_unanswered` | A patient waited N minutes for a reply (any hour) | minutes |
 | `invoice_sent` | Invoice sent (now carries the patient — it used to carry none, so nothing was ever sent) | |
 | `invoice_unpaid` | Unpaid X days after sending | |
 | `payment_received` | A payment is recorded at the desk (insurer payments are not) | fully paid only |
@@ -1154,7 +1155,7 @@ not switched on.
 - **Daily triggers** (recall, next visit, birthday, unpaid invoice, stalled treatment, unsigned document) run on every tick from their hour until 20:00 local, guarded by "a run already started today for this", and rest 30 minutes per flow once a pass starts nothing (`worker/daily.ts`). They used to fire only in the first three minutes of the hour, so a deploy or a slow tick then lost the day. Scheduler-started runs are advanced by a job keyed by the run (`advance:<runId>`): job keys are unique for ever, and a reminder keyed by appointment never advanced after a reschedule.
 - **Stale automation messages are cancelled, not sent** (`worker/outbound.ts`): one written before its appointment began, once that appointment has started, and anything queued 72 hours ago — a disconnected phone or the daily cap must not deliver "see you tomorrow" after the visit. Status `cancelled` with the reason in `error`.
 - **Empty values drop their whole line**: a line whose every `{{value}}` came back empty goes, lead-in and emoji included ("Rate us on Google: …" without a review link), shared with the system messages.
-- Automated sends land inside the clinic's **sending window**.
+- Automated sends go **at any hour** (2026-11-10). A flow that should land at a particular time of day uses a "wait until" step.
 - **Test run** uses the patient's own next appointment, open invoice, latest document and thread.
 
 ### The builder

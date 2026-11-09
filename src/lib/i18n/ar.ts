@@ -2289,8 +2289,6 @@ export const ar: Dict = {
     yes: "إذا نعم",
     no: "إذا لا",
     variables: "المتغيرات",
-    sendingWindow: "أوقات الإرسال",
-    sendingWindowSub: "الرسائل التلقائية تُرسل ضمن هذه الأوقات فقط، والباقي ينتظر الفترة التالية.",
 
     optOut: "مرضى أوقفوا الرسائل",
     optOutSub:
@@ -2672,7 +2670,6 @@ export const ar: Dict = {
       keywordsHint: "اضغط Enter بعد كل كلمة. كلمات كاملة فقط، وتُطابق أشكال الكتابة العربية والأرقام ١٢٣ أيضاً.",
       add: "إضافة",
       unansweredMinutes: "ينتظر الرد منذ",
-      unansweredHint: "فقط ضمن أوقات الإرسال.",
       fullyPaidOnly: "فقط عند دفع الفاتورة بالكامل",
       daysAfterSent: "أيام بعد الإرسال",
       daysAfterVisit: "أيام بعد آخر زيارة",

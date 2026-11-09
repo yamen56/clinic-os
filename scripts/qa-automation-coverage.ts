@@ -560,9 +560,11 @@ async function main() {
     const flows = await visible();
     check(
       "the flows tab still lists the automations",
-      flows.includes(ar.automations.flow.offSection) && flows.includes(ar.automations.sendingWindow),
+      flows.includes(ar.automations.flow.offSection) && flows.includes(ar.automations.flow.reviewLink),
       ""
     );
+    // Automations send at any hour (2026-11-10): the sending-hours card is gone.
+    check("and no longer offers sending hours", !flows.includes("أوقات الإرسال"), "");
     /*
       The specialty pack is offered rather than installed now: the gallery
       behind "New automation" leads with the clinic's own field. Read from the

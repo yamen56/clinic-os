@@ -2367,8 +2367,6 @@ export const en = {
     yes: "If yes",
     no: "If no",
     variables: "Variables",
-    sendingWindow: "Sending window",
-    sendingWindowSub: "Automated messages only go out between these hours; the rest queue for the next window.",
 
     /* The other limit on everything above: patients who asked to be left alone. */
     optOut: "Patients who opted out",
@@ -2770,7 +2768,6 @@ export const en = {
       keywordsHint: "Press Enter after each. Whole words only; Arabic spelling variants and ١٢٣ digits match too.",
       add: "Add",
       unansweredMinutes: "Waiting for a reply for",
-      unansweredHint: "Only while your sending window is open.",
       fullyPaidOnly: "Only once the invoice is fully paid",
       daysAfterSent: "Days after it was sent",
       daysAfterVisit: "Days after the last visit",

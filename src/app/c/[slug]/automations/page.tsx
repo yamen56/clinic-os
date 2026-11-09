@@ -55,7 +55,7 @@ export default async function AutomationsPage({
     ).rows.map((a) => ({ ...a, trigger_config: normalizeTriggerConfig(a.trigger_type, a.trigger_config) }));
     const clinic = (
       await c.query(
-        `select message_window_start, message_window_end, timezone, specialty, specialties, google_review_url
+        `select timezone, specialty, specialties, google_review_url
            from clinics where id = $1`,
         [access.clinicId]
       )
@@ -120,8 +120,6 @@ export default async function AutomationsPage({
       automations={JSON.parse(JSON.stringify(data.automations))}
       messages={data.messages}
       alerts={JSON.parse(JSON.stringify(data.alerts))}
-      windowStart={String(data.clinic.message_window_start).slice(0, 5)}
-      windowEnd={String(data.clinic.message_window_end).slice(0, 5)}
       reviewUrl={data.clinic.google_review_url ?? ""}
       mutedPatients={data.muted}
       templates={templates}

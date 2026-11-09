@@ -64,7 +64,10 @@ type RunRow = {
   started_at: string;
 };
 
-/** Next send time inside the clinic's allowed window (queues overnight traffic). */
+/**
+ * Next send time inside the clinic's allowed window (queues overnight traffic).
+ * Campaigns only since 2026-11-10 — automations send at any hour.
+ */
 export function withinWindow(
   from: DateTime,
   tz: string,
@@ -229,7 +232,7 @@ export async function startRun(
 type Env = {
   c: PoolClient;
   run: RunRow;
-  clinic: { timezone: string; message_window_start: string; message_window_end: string; features: unknown };
+  clinic: { timezone: string; features: unknown };
   steps: Step[];
   tmpl: () => Promise<TemplateContext>;
   /** Forget the variables read so far: the run is about a different appointment now. */
@@ -354,7 +357,7 @@ export async function advanceRun(runId: string): Promise<void> {
 
     const clinic = (
       await c.query(
-        `select timezone, message_window_start, message_window_end, features from clinics where id = $1`,
+        `select timezone, features from clinics where id = $1`,
         [run.clinic_id]
       )
     ).rows[0];
@@ -1217,12 +1220,14 @@ async function sendWhatsapp(env: Env, cfg: Record<string, unknown>): Promise<Ste
   );
   if (existing.rowCount) return next("skipped", { reason: "already_sent" });
 
-  const sendAt = withinWindow(
-    DateTime.now(),
-    clinic.timezone,
-    String(clinic.message_window_start).slice(0, 5),
-    String(clinic.message_window_end).slice(0, 5)
-  );
+  /*
+    Now, at any hour. Automations used to wait for the clinic's sending window
+    (09:00–21:00 by default), so a reply, a booking confirmation or a reminder
+    due at night sat until morning. Yamen, 2026-11-10: automations work 24/7.
+    A flow that should land at a particular time of day says so with its own
+    "wait until" step. Campaigns keep their hours (worker/campaigns.ts).
+  */
+  const sendAt = DateTime.now();
   await c.query(
     `insert into messages (clinic_id, conversation_id, direction, sender_kind, msg_type, body,
                            media_path, media_name, media_mime, status, scheduled_at, automation_run_id)

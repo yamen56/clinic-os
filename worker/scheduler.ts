@@ -311,16 +311,16 @@ export async function birthdays(opts: { force?: boolean } = {}) {
  *
  * Every minute, for each such flow: threads whose last message is the
  * patient's, older than the flow's N minutes but by no more than ten more — a
- * missed tick is made up, a thread from last week is not news. Only while the
- * clinic's sending window is open, because a 2am message waiting fifteen
- * minutes is not something to wake reception about; the morning digest has it.
+ * missed tick is made up, a thread from last week is not news. At any hour:
+ * automations work 24/7 (Yamen, 2026-11-10), and a patient writing at 2am is
+ * exactly the one nobody else is answering.
  * Once per message: a run already started since that message counts.
  */
 async function unansweredConversations() {
   await withSystem(async (c) => {
     const due = await c.query(
       `with flow as (
-         select a.id, a.clinic_id, cl.timezone, cl.message_window_start as ws, cl.message_window_end as we,
+         select a.id, a.clinic_id,
                 case when a.trigger_config->>'minutes' ~ '^[0-9]+$'
                      then (a.trigger_config->>'minutes')::int else 15 end as minutes
            from automations a
@@ -333,10 +333,6 @@ async function unansweredConversations() {
         where cv.status = 'open' and cv.last_message_direction = 'in'
           and cv.last_message_at <= now() - (f.minutes * interval '1 minute')
           and cv.last_message_at >  now() - (f.minutes * interval '1 minute') - interval '10 minutes'
-          and case when f.ws < f.we
-                   then (now() at time zone f.timezone)::time >= f.ws and (now() at time zone f.timezone)::time < f.we
-                   else (now() at time zone f.timezone)::time >= f.ws or (now() at time zone f.timezone)::time < f.we
-              end
           and not exists (
             select 1 from automation_runs r
              where r.automation_id = f.id and r.conversation_id = cv.id and r.started_at >= cv.last_message_at

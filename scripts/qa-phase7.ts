@@ -187,7 +187,7 @@ async function main() {
   }, 90000);
   console.log("✓ scheduler woke the run and finished the remaining steps");
 
-  // 6. Sending window defers out-of-hours messages
+  // 6. Automations send at any hour (2026-11-10): even a one-minute window holds nothing back.
   await db.query(
     `update clinics set message_window_start = '09:00', message_window_end = '09:01' where id = $1`,
     [clinic.id]
@@ -214,9 +214,9 @@ async function main() {
     );
     return r.rows[0] ?? null;
   });
-  if (new Date(windowed.scheduled_at).getTime() <= Date.now() + 60_000)
-    throw new Error("out-of-window message was not deferred");
-  console.log("✓ out-of-window message deferred to the next window");
+  if (new Date(windowed.scheduled_at).getTime() > Date.now() + 60_000)
+    throw new Error("an automation message was held for the sending window");
+  console.log("✓ an automation message outside the old sending window goes now");
 
   // 7. UI: builder renders, toggle works, history shows runs
   const browser = await chromium.launch();
