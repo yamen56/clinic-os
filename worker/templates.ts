@@ -49,7 +49,8 @@ export async function loadContext(
   if (ids.appointmentId) {
     const a = (
       await c.query(
-        `select a.starts_at, a.status, s.name as service_name, s.name_ar as service_name_ar,
+        `select a.starts_at, a.status,
+                appointment_service_names(a.id, false) as service_name, appointment_service_names(a.id, true) as service_name_ar,
                 u.full_name as doctor_name
          from appointments a
          left join services s on s.id = a.service_id

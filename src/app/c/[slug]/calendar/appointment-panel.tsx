@@ -23,8 +23,10 @@ import { AppointmentNotes } from "@/components/appointment-notes";
 import { PatientPicker } from "@/components/appointments/patient-picker";
 import type { Appt, Doctor, PlannedItem, Room, Section, Service } from "./types";
 import { VisitLineView, whereOf } from "@/components/charts/dental/visit-work";
-import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock } from "lucide-react";
+import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock, UserPen } from "lucide-react";
 import { flagAlerts } from "@/lib/medical-history";
+import { MAX_VISIT_SERVICES } from "@/lib/appointment-services";
+import { visitServiceLabel } from "@/lib/services";
 
 export type PanelState =
   | null
@@ -98,7 +100,9 @@ export function AppointmentPanel({
   // form state
   const [patient, setPatient] = useState<{ id: string; name: string } | null>(null);
   const [newPatient, setNewPatient] = useState<{ fullName: string; phone: string } | null>(null);
-  const [serviceId, setServiceId] = useState("");
+  /** Every service the visit is for, the first one first — it is the visit's own (migration 0106). */
+  const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const serviceId = serviceIds[0] ?? "";
   const [doctorId, setDoctorId] = useState("");
   const [roomId, setRoomId] = useState("");
   const [date, setDate] = useState("");
@@ -119,7 +123,7 @@ export function AppointmentPanel({
       const svc = services.find((x) => x.id === state.serviceId);
       setPatient(state.patient ?? null);
       setNewPatient(null);
-      setServiceId(svc?.id ?? "");
+      setServiceIds(svc ? [svc.id] : []);
       setDoctorId(state.doctorId ?? "");
       setRoomId(state.roomId ?? "");
       setDate(s.toISODate()!);
@@ -133,7 +137,7 @@ export function AppointmentPanel({
       const e = DateTime.fromISO(a.ends_at).setZone(tz);
       setPatient({ id: a.patient_id, name: a.patient_name });
       setNewPatient(null);
-      setServiceId(a.service_id ?? "");
+      setServiceIds([a.service_id, ...(a.extra_services ?? []).map((x) => x.id)].filter((x): x is string => !!x));
       setDoctorId(a.doctor_member_id ?? "");
       setRoomId(a.room_id ?? "");
       setDate(s.toISODate()!);
@@ -182,6 +186,32 @@ export function AppointmentPanel({
 
   const roomLabel = (r: Room) => (locale === "ar" && r.name_ar) || r.name;
 
+  /*
+    The services chosen, as the clinic names them. One the clinic has since
+    switched off is not in `services` any more, so its name comes from the
+    visit itself — a visit must keep saying what it was booked for.
+  */
+  const chosen = serviceIds.map((id) => {
+    const s = services.find((x) => x.id === id);
+    if (s) return { id, name: locale === "ar" ? s.name_ar || s.name : s.name, color: s.color, minutes: s.duration_min };
+    const a = state?.mode === "edit" ? state.appt : null;
+    const x = a?.extra_services?.find((e) => e.id === id);
+    const name = x
+      ? (locale === "ar" && x.name_ar) || x.name
+      : a && a.service_id === id
+        ? (locale === "ar" && a.service_name_ar) || a.service_name || ""
+        : "";
+    return { id, name, color: null as string | null, minutes: x?.duration_min ?? (a?.service_id === id ? (a.service_duration_min ?? 0) : 0) };
+  });
+  /** The visit is as long as its services together; the length stays the desk's to change after. */
+  const changeServices = (next: string[]) => {
+    setServiceIds(next);
+    setSuggested(null);
+    const total = next.reduce((n, id) => n + (services.find((x) => x.id === id)?.duration_min ?? 0), 0);
+    if (total > 0) setDuration(Math.min(total, 480));
+  };
+  const addable = services.filter((s) => !serviceIds.includes(s.id));
+
   const submit = () =>
     start(async () => {
       if (!startsAt) return;
@@ -192,6 +222,7 @@ export function AppointmentPanel({
           newPatient: newPatient ?? undefined,
           doctorMemberId: doctorId || null,
           serviceId: serviceId || null,
+          serviceIds,
           startsAt: startsAt.toUTC().toISO()!,
           endsAt: endsAt.toUTC().toISO()!,
           notes,
@@ -212,7 +243,7 @@ export function AppointmentPanel({
         */
         const r = await updateAppointmentAction(slug, state.appt.id, {
           doctorMemberId: doctorId || null,
-          serviceId: serviceId || null,
+          serviceIds,
           startsAt: startsAt.toUTC().toISO()!,
           endsAt: endsAt.toUTC().toISO()!,
           notes,
@@ -290,6 +321,8 @@ export function AppointmentPanel({
     setSuggesting(true);
     try {
       const q = new URLSearchParams({ service: serviceId, limit: "6", ...(doctorId ? { doctor: doctorId } : {}), ...(date ? { from: date } : {}) });
+      // Every further service too, so a free time is long enough for all of them.
+      for (const id of serviceIds.slice(1)) q.append("also", id);
       const res = await fetch(`/api/c/${slug}/free-slots?${q}`);
       setSuggested(res.ok ? (await res.json()).slots : []);
     } finally {
@@ -309,6 +342,32 @@ export function AppointmentPanel({
       )
     : null;
   const canFlow = isToday && !!stage && stage !== "hidden";
+
+  /* Who booked the visit, in a line: by whom or through what, then when. */
+  const bookedBy = !editAppt
+    ? ""
+    : editAppt.walk_in
+      ? editAppt.created_by_name
+        ? t.calendar.walkInBy.replace("{name}", editAppt.created_by_name)
+        : t.flow.walkInTag
+      : editAppt.source === "booking_link"
+        ? editAppt.booking_link_name
+          ? t.calendar.bookedOnlineVia.replace("{link}", editAppt.booking_link_name)
+          : t.flow.bookedOnline
+        : editAppt.source === "ai_agent"
+          ? t.calendar.bookedByAiFull
+          : editAppt.source === "automation"
+            ? t.flow.bookedByAutomation
+            : editAppt.created_by_name
+              ? t.calendar.bookedBy.replace("{name}", editAppt.created_by_name)
+              : "";
+  const bookedLine =
+    bookedBy && editAppt?.created_at
+      ? `${bookedBy} · ${DateTime.fromISO(editAppt.created_at)
+          .setZone(tz)
+          .setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB")
+          .toFormat("ccc d LLL · H:mm")}`
+      : bookedBy;
 
   return (
     <>
@@ -492,6 +551,18 @@ export function AppointmentPanel({
               ) : (
                 <PatientPicker slug={slug} onPick={setPatient} onCreateNew={setNewPatient} />
               )}
+              {/*
+                Who booked it, and when (Yamen, 2026-11-12: "mention who created
+                this appointment, or that it came from the scheduling link").
+                The staff member, the booking link by its name, the AI
+                receptionist or an automation — whichever it was.
+              */}
+              {bookedLine && (
+                <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-ink-500" data-booked-by={editAppt?.walk_in ? "walk_in" : editAppt?.source}>
+                  <UserPen className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                  <span className="min-w-0">{bookedLine}</span>
+                </p>
+              )}
             </Field>
 
             {/*
@@ -546,51 +617,92 @@ export function AppointmentPanel({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label={t.calendar.service}>
-                <Select
-                  value={serviceId}
-                  onChange={(e) => {
-                    setServiceId(e.target.value);
-                    setSuggested(null);
-                    const s = services.find((x) => x.id === e.target.value);
-                    if (s) setDuration(s.duration_min);
-                  }}
-                >
-                  <option value="">{t.calendar.noService}</option>
-                  {/* Grouped by section when the clinic has them, flat when it
-                      does not — a single <optgroup> around every option is a
-                      heading that separates nothing. */}
-                  {sections.length === 0
-                    ? services.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {locale === "ar" ? s.name_ar || s.name : s.name}
-                        </option>
-                      ))
-                    : [
-                        ...sections.map((sec) => ({
-                          key: sec.id,
-                          label: locale === "ar" ? sec.name_ar || sec.name : sec.name,
-                          items: services.filter((s) => s.section_id === sec.id),
-                        })),
-                        {
-                          key: "__unfiled",
-                          label: t.sections.unfiled,
-                          items: services.filter((s) => !s.section_id),
-                        },
-                      ]
-                        .filter((g) => g.items.length > 0)
-                        .map((g) => (
-                          <optgroup key={g.key} label={g.label}>
-                            {g.items.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {locale === "ar" ? s.name_ar || s.name : s.name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                </Select>
-              </Field>
+            {/*
+              What the visit is for — one service or several (Yamen, 2026-11-12:
+              "to make the doctor see that this patient will do more than one
+              service"). Each one chosen is a chip; the list below adds another.
+              It stays the panel's first <select> and the doctor its second,
+              which is how the QA scripts find them.
+            */}
+            <Field label={t.calendar.service}>
+              {chosen.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5" data-visit-services={chosen.length}>
+                  {chosen.map((s) => (
+                    <span
+                      key={s.id}
+                      data-visit-service={s.id}
+                      className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-line-strong bg-surface ps-2.5 pe-0.5 text-[13px] font-medium text-ink-900"
+                    >
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color ?? "var(--color-ink-300)" }} aria-hidden />
+                      <span className="truncate">{s.name}</span>
+                      {s.minutes > 0 && (
+                        <span className="shrink-0 text-[11.5px] font-normal text-ink-500 tnum">{t.finishVisit.minutes.replace("{n}", String(s.minutes))}</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => changeServices(serviceIds.filter((x) => x !== s.id))}
+                        aria-label={t.calendar.removeService.replace("{name}", s.name)}
+                        className="grid h-7 w-7 shrink-0 touch-manipulation place-items-center rounded-full text-ink-400 hover:bg-sunken hover:text-danger"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <Select
+                value=""
+                disabled={chosen.length >= MAX_VISIT_SERVICES}
+                onChange={(e) => {
+                  if (e.target.value) changeServices([...serviceIds, e.target.value]);
+                }}
+                data-add-service
+              >
+                <option value="">
+                  {chosen.length === 0 ? t.calendar.noService : chosen.length === 1 ? t.calendar.addAnotherService : t.calendar.addService}
+                </option>
+                {/* Grouped by section when the clinic has them, flat when it
+                    does not — a single <optgroup> around every option is a
+                    heading that separates nothing. */}
+                {sections.length === 0
+                  ? addable.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {locale === "ar" ? s.name_ar || s.name : s.name}
+                      </option>
+                    ))
+                  : [
+                      ...sections.map((sec) => ({
+                        key: sec.id,
+                        label: locale === "ar" ? sec.name_ar || sec.name : sec.name,
+                        items: addable.filter((s) => s.section_id === sec.id),
+                      })),
+                      {
+                        key: "__unfiled",
+                        label: t.sections.unfiled,
+                        items: addable.filter((s) => !s.section_id),
+                      },
+                    ]
+                      .filter((g) => g.items.length > 0)
+                      .map((g) => (
+                        <optgroup key={g.key} label={g.label}>
+                          {g.items.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {locale === "ar" ? s.name_ar || s.name : s.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+              </Select>
+              {chosen.length > 1 && (
+                <p className="mt-1.5 text-[12px] text-ink-500" data-visit-services-total>
+                  {t.calendar.servicesTotal
+                    .replace("{n}", String(chosen.length))
+                    .replace("{min}", String(chosen.reduce((n, s) => n + s.minutes, 0)))}
+                </p>
+              )}
+            </Field>
+
+            <div className={rooms.length > 0 ? "grid grid-cols-2 gap-4" : "grid gap-4"}>
               <Field label={t.calendar.doctor}>
                 <Select
                   value={doctorId}
@@ -607,26 +719,25 @@ export function AppointmentPanel({
                   ))}
                 </Select>
               </Field>
+              {/* Beside the doctor, and only once the clinic has rooms. */}
+              {rooms.length > 0 && (
+                <Field label={t.calendar.room}>
+                  <Select value={roomId} onChange={(e) => setRoomId(e.target.value)} data-room-select>
+                    <option value="">{t.calendar.autoRoom}</option>
+                    {rooms.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {roomLabel(r)}
+                        {busyRooms.has(r.id) ? ` — ${t.calendar.roomBusy}` : ""}
+                      </option>
+                    ))}
+                    {/* A room since taken out of use still names where this visit was. */}
+                    {editAppt?.room_id && !rooms.some((r) => r.id === editAppt.room_id) && (
+                      <option value={editAppt.room_id}>{(locale === "ar" && editAppt.room_name_ar) || editAppt.room_name}</option>
+                    )}
+                  </Select>
+                </Field>
+              )}
             </div>
-
-            {/* After the doctor, and only once the clinic has rooms. */}
-            {rooms.length > 0 && (
-              <Field label={t.calendar.room}>
-                <Select value={roomId} onChange={(e) => setRoomId(e.target.value)} data-room-select>
-                  <option value="">{t.calendar.autoRoom}</option>
-                  {rooms.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {roomLabel(r)}
-                      {busyRooms.has(r.id) ? ` — ${t.calendar.roomBusy}` : ""}
-                    </option>
-                  ))}
-                  {/* A room since taken out of use still names where this visit was. */}
-                  {editAppt?.room_id && !rooms.some((r) => r.id === editAppt.room_id) && (
-                    <option value={editAppt.room_id}>{(locale === "ar" && editAppt.room_name_ar) || editAppt.room_name}</option>
-                  )}
-                </Select>
-              </Field>
-            )}
 
             <div className="grid grid-cols-3 gap-3">
               <Field label={t.common.date}>
@@ -751,7 +862,7 @@ export function AppointmentPanel({
                 patientId={editAppt.patient_id}
                 patientName={editAppt.patient_name}
                 startsAt={editAppt.starts_at}
-                serviceName={(locale === "ar" ? editAppt.service_name_ar : null) ?? editAppt.service_name}
+                serviceName={visitServiceLabel(editAppt, locale) || null}
                 tz={tz}
               />
             )}
@@ -812,7 +923,7 @@ export function AppointmentPanel({
           serviceId={editAppt.service_id}
           onAnotherTime={onBookNext ? (h) => flow("finished", h, true) : undefined}
           patientName={editAppt.patient_name}
-          serviceName={(locale === "ar" ? editAppt.service_name_ar : null) || editAppt.service_name}
+          serviceName={visitServiceLabel(editAppt, locale) || null}
           done={done}
           doctors={doctors.map((d) => ({ id: d.id, name: d.name }))}
           defaultDoctorId={editAppt.doctor_member_id}

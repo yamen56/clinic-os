@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { DateTime } from "luxon";
 import { withSystem } from "@/lib/db";
-import { loadPublicLink, rateLimit, clientIp } from "@/lib/booking-public";
+import { loadPublicLink, rateLimit, clientIp, linkServiceIds } from "@/lib/booking-public";
 import { takePublicSlot, overloaded, rateLimited } from "@/lib/public-guard";
 import { computeSlots } from "@/lib/slots";
 
@@ -26,12 +26,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ bslug: string }
   const data = await loadPublicLink(bslug);
   if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const url = new URL(req.url);
-  const serviceId = url.searchParams.get("serviceId");
+  const named = url.searchParams.getAll("serviceId");
   const doctorId = url.searchParams.get("doctorId");
   const date = url.searchParams.get("date");
-  if (!serviceId || !date) return NextResponse.json({ error: "missing" }, { status: 400 });
-  if (!data.services.some((s) => s.id === serviceId))
-    return NextResponse.json({ error: "bad_service" }, { status: 400 });
+  if (!named.length || !date) return NextResponse.json({ error: "missing" }, { status: 400 });
+  // One service, or several on a link that allows it — see linkServiceIds.
+  const serviceIds = linkServiceIds(data, named);
+  if (!serviceIds) return NextResponse.json({ error: "bad_service" }, { status: 400 });
 
   const day = DateTime.fromISO(date, { zone: data.clinic.timezone });
   const today = DateTime.now().setZone(data.clinic.timezone).startOf("day");
@@ -50,7 +51,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ bslug: string }
         tz: data.clinic.timezone,
         clinicHours: data.clinic.working_hours,
         blockedDates: data.clinic.blocked_dates,
-        serviceId,
+        serviceId: serviceIds[0],
+        extraServiceIds: serviceIds.slice(1),
         doctorMemberId: doctorId || null,
         dateISO: date,
         minNoticeMin: data.link.min_notice_min,

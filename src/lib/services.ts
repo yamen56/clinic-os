@@ -95,6 +95,26 @@ export function serviceLabel(
 }
 
 /**
+ * What a visit is for, as one line: "Cleaning + Whitening".
+ *
+ * A visit has a first service on the appointment itself and, since migration
+ * 0106, any number after it. Every card and list that names the service goes
+ * through here, so a second service cannot show on the board and be missing
+ * from the schedule.
+ */
+export function visitServiceLabel(
+  a: {
+    service_name?: string | null;
+    service_name_ar?: string | null;
+    extra_services?: { name: string; name_ar: string | null }[] | null;
+  },
+  locale: string
+): string {
+  const first = (locale === "ar" ? a.service_name_ar : null) || a.service_name || "";
+  return [first, ...(a.extra_services ?? []).map((s) => serviceLabel(s, locale))].filter(Boolean).join(" + ");
+}
+
+/**
  * The least a picker needs to know.
  *
  * Declared separately from `ServiceRow` so a screen that already selects four

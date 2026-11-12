@@ -267,6 +267,8 @@ export default async function PublicBookingPage({
         link offering three and then have to guess which one the patient wanted.
       */
       skipServiceStep={data.link.skip_service_step && data.services.length === 1}
+      /* Several services in one visit: only where the link allows it and offers more than one (0106). */
+      allowMultiple={data.link.allow_multiple_services && data.services.length > 1}
       /*
         Both halves, resolved here. The link may ask for a code and the clinic's
         WhatsApp may be unable to send one — in which case `/start` books

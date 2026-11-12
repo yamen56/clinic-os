@@ -177,12 +177,15 @@ async function main() {
   );
   const correct = v.rows[0].code as string;
   const wrong = correct === "111111" ? "222222" : "111111";
+  /*
+    No press of "Confirm booking": the code sends itself at its sixth digit
+    (2026-11-12). A wrong one is cleared on the way back, which leaves the
+    button shut — so pressing it after typing would wait on a disabled button.
+  */
   await page.fill('input[inputmode="numeric"]', wrong);
-  await page.click("text=تأكيد الحجز");
   await page.waitForSelector("text=الرمز غير صحيح", { timeout: 10000 });
-  console.log("✓ wrong code rejected");
+  console.log("✓ wrong code rejected (it submitted itself at six digits)");
   await page.fill('input[inputmode="numeric"]', correct);
-  await page.click("text=تأكيد الحجز");
   await page.waitForSelector("text=تم تأكيد الحجز", { timeout: 15000 });
   console.log("✓ correct code books the appointment");
 

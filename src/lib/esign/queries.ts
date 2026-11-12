@@ -276,16 +276,23 @@ export async function loadAppointmentDocuments(
   }[]
 > {
   const r = await c.query(
-    `select t.id as template_id, t.name, t.name_ar, sd.auto_send,
+    /*
+      What every service of the visit asks for (0106) — its first and the
+      rest — each form once, sent automatically if any of them says so.
+    */
+    `select t.id as template_id, t.name, t.name_ar, bool_or(sd.auto_send) as auto_send,
             d.id as document_id, d.status
      from appointments a
-     join service_documents sd on sd.service_id = a.service_id and sd.clinic_id = a.clinic_id
+     join service_documents sd on sd.clinic_id = a.clinic_id
+      and (sd.service_id = a.service_id
+           or sd.service_id in (select e.service_id from appointment_extra_services e where e.appointment_id = a.id))
      join document_templates t on t.id = sd.template_id and t.is_active
      left join documents d
        on d.template_id = t.id and d.clinic_id = a.clinic_id
       and (d.appointment_id = a.id or (d.appointment_id is null and d.patient_id = a.patient_id))
       and d.status <> 'voided'
      where a.id = $1 and a.clinic_id = $2
+     group by t.id, t.name, t.name_ar, d.id, d.status
      order by t.name`,
     [appointmentId, clinicId]
   );

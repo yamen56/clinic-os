@@ -86,7 +86,7 @@ export async function loadPatientNotes(
             (select count(*)::int from patient_note_versions v where v.note_id = n.id) as version_count,
             n.appointment_id,
             a.starts_at as appointment_starts_at,
-            s.name as appointment_service, s.name_ar as appointment_service_ar
+            appointment_service_names(a.id, false) as appointment_service, appointment_service_names(a.id, true) as appointment_service_ar
      from patient_notes n
      left join users u on u.id = n.author_id
      left join users e on e.id = n.edited_by
@@ -113,7 +113,7 @@ export async function loadNoteAppointments(
 ): Promise<NoteAppointment[]> {
   const r = await c.query(
     `select a.id, a.starts_at, a.status,
-            s.name as service_name, s.name_ar as service_name_ar,
+            appointment_service_names(a.id, false) as service_name, appointment_service_names(a.id, true) as service_name_ar,
             u.full_name as doctor_name
      from appointments a
      left join services s on s.id = a.service_id
@@ -140,7 +140,7 @@ export async function loadAppointmentNotes(
             (select count(*)::int from patient_note_versions v where v.note_id = n.id) as version_count,
             n.appointment_id,
             a.starts_at as appointment_starts_at,
-            s.name as appointment_service, s.name_ar as appointment_service_ar
+            appointment_service_names(a.id, false) as appointment_service, appointment_service_names(a.id, true) as appointment_service_ar
      from patient_notes n
      left join users u on u.id = n.author_id
      left join users e on e.id = n.edited_by

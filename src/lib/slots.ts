@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 import type { PoolClient } from "pg";
 import { effectiveHours, rangesForDay, hmToMin, type WeeklyHours } from "./hours";
-import { freeRoom, loadActiveRooms, suitableRooms, type Room } from "./rooms";
+import { freeRoom, loadActiveRooms, suitableRoomsForAll, type Room } from "./rooms";
 
 /** `roomId` is the room the slot would take — null when rooms do not limit this booking. */
 export type SlotResult = { startISO: string; doctorMemberId: string | null; roomId: string | null };
@@ -25,6 +25,13 @@ export type AvailabilityOpts = {
   clinicHours: WeeklyHours;
   blockedDates: string[];
   serviceId: string;
+  /**
+   * The visit's further services (migration 0106). The slot is then as long as
+   * all of them together, takes the longest of their buffers, and is offered
+   * only with a doctor and a room that suit every one. Left out, nothing here
+   * differs from one service.
+   */
+  extraServiceIds?: string[];
   doctorMemberId: string | null; // null = any doctor
   minNoticeMin: number;
   granularityMin: number;
@@ -47,13 +54,16 @@ async function loadInputs(
 ): Promise<Inputs | null> {
   const { clinicId, serviceId } = opts;
 
-  const service = (
+  const serviceIds = [...new Set([serviceId, ...(opts.extraServiceIds ?? [])])];
+  const services = (
     await c.query(
-      `select duration_min, buffer_after_min, location_kind from services where id = $1 and clinic_id = $2 and active`,
-      [serviceId, clinicId]
+      `select id, duration_min, buffer_after_min, location_kind from services
+        where id = any($1::uuid[]) and clinic_id = $2 and active`,
+      [serviceIds, clinicId]
     )
-  ).rows[0];
-  if (!service) return null;
+  ).rows as { id: string; duration_min: number; buffer_after_min: number; location_kind: string | null }[];
+  // Every one of them, or nothing: a visit cannot be offered for half of what was asked.
+  if (services.length !== serviceIds.length) return null;
 
   // Candidate doctors: explicit > link restriction > doctors assigned to the service > any active doctor
   let doctors: { id: string; working_hours: WeeklyHours | null; default_room_id: string | null }[];
@@ -74,14 +84,21 @@ async function loadInputs(
       )
     ).rows;
   } else {
+    /*
+      A doctor who does every service asked for: for each one, either it names
+      its doctors and this is one of them, or it names nobody and anyone will
+      do. With one service this is the rule it always was.
+    */
     doctors = (
       await c.query(
         `select cm.id, cm.working_hours, cm.default_room_id from clinic_members cm
          where cm.clinic_id = $1 and cm.role = 'doctor' and cm.active
-           and (exists (select 1 from service_doctors sd where sd.service_id = $2 and sd.member_id = cm.id)
-                or not exists (select 1 from service_doctors sd2 where sd2.service_id = $2))
+           and not exists (
+             select 1 from unnest($2::uuid[]) as want(service_id)
+              where exists (select 1 from service_doctors sd2 where sd2.service_id = want.service_id)
+                and not exists (select 1 from service_doctors sd where sd.service_id = want.service_id and sd.member_id = cm.id))
          order by cm.created_at`,
-        [clinicId, serviceId]
+        [clinicId, serviceIds]
       )
     ).rows;
   }
@@ -97,13 +114,13 @@ async function loadInputs(
     )
   ).rows as Busy[];
 
-  // A slot needs a free room as well as a free doctor — when rooms limit this
-  // service at all (see suitableRooms).
-  const rooms = suitableRooms(await loadActiveRooms(c, clinicId), serviceId, service.location_kind ?? null);
+  // A slot needs a free room as well as a free doctor — when rooms limit these
+  // services at all (see suitableRooms).
+  const rooms = suitableRoomsForAll(await loadActiveRooms(c, clinicId), services);
 
   return {
-    durMin: service.duration_min as number,
-    bufMin: service.buffer_after_min as number,
+    durMin: services.reduce((n, s) => n + Number(s.duration_min), 0),
+    bufMin: Math.max(...services.map((s) => Number(s.buffer_after_min) || 0)),
     candidates: useUnassigned ? [{ id: null, working_hours: null }] : doctors,
     useUnassigned,
     busy,

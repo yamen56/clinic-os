@@ -53,6 +53,7 @@ export function NewInvoiceClient({
   initialPatient,
   appointmentId,
   appointmentServiceId,
+  appointmentServiceIds,
   appointmentDoctorId,
   einvoice,
   initialLines,
@@ -77,6 +78,8 @@ export function NewInvoiceClient({
   initialPatient: { id: string; name: string } | null;
   appointmentId: string | null;
   appointmentServiceId: string | null;
+  /** Every service of the visit, first one first — each starts a line. */
+  appointmentServiceIds?: string[];
   appointmentDoctorId: string | null;
   /**
    * Null for every clinic that does not file with JoFotara, which is most of
@@ -139,8 +142,11 @@ export function NewInvoiceClient({
         markId: l.markId,
       }));
     }
-    const svc = services.find((s) => s.id === appointmentServiceId);
-    return svc ? [newLine(svc.id, serviceLabel(svc, locale), Number(svc.price), startingDoctor)] : [];
+    // One line per service the visit was booked for (0106), in the order they were chosen.
+    return (appointmentServiceIds ?? (appointmentServiceId ? [appointmentServiceId] : []))
+      .map((id) => services.find((s) => s.id === id))
+      .filter((s): s is ServiceRow => !!s)
+      .map((svc) => newLine(svc.id, serviceLabel(svc, locale), Number(svc.price), startingDoctor));
   });
   const [notes, setNotes] = useState("");
   const [title, setTitle] = useState("");

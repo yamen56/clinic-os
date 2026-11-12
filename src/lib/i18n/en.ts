@@ -1230,6 +1230,16 @@ export const en = {
     created: "Appointment booked",
     updated: "Appointment updated",
     noService: "No service",
+    /* Several services on one visit (migration 0106). */
+    addService: "Add a service",
+    addAnotherService: "Add another service",
+    removeService: "Remove {name}",
+    servicesTotal: "{n} services · {min} min in total",
+    /* Who booked the visit, on its panel. */
+    bookedBy: "Booked by {name}",
+    bookedOnlineVia: "Booked online · {link}",
+    bookedByAiFull: "Booked by the AI receptionist",
+    walkInBy: "Walk-in · added by {name}",
     noDoctor: "No doctor",
     plannedTreatment: "Planned treatment",
     openTreatment: "Open the dental chart",
@@ -1322,6 +1332,8 @@ export const en = {
     bookedByAi: "Booked by AI",
     bookedByAutomation: "Booked automatically",
     walkInTag: "Walk-in",
+    /* The staff member who booked the visit, on its card. */
+    bookedByName: "Booked by {name}",
     awaitingApproval: "Awaiting approval",
     roomFree: "Free",
     roomNext: "Next {time}",
@@ -3549,6 +3561,18 @@ export const en = {
     /* Shown instead of the address and the phone number when the booking is
        held online — see services.location_kind. */
     joinMeeting: "Open the meeting link",
+    /* The page's own furniture (2026-11-12). */
+    stepOf: "Step {n} of {total}",
+    anyDoctorHint: "We'll book you with whoever is free at the time you pick.",
+    /* A link that lets the patient take several services in one visit (0106). */
+    chooseServices: "Choose your services",
+    chooseServicesHint: "You can pick more than one — they are booked as one visit.",
+    onePicked: "1 service · {min} min",
+    servicesPicked: "{n} services · {min} min",
+    /* A link with nothing to book, and a code tried too many times. */
+    noServices: "Online booking isn't available right now.",
+    noServicesHint: "Please call the clinic to book your appointment.",
+    tooManyCodes: "Too many wrong codes. Ask for a new one below.",
   },
   bookingSettings: {
     title: "Booking links",
@@ -3595,6 +3619,9 @@ export const en = {
       "Opens the page on the date instead of asking what to book. Only applies when this link offers exactly one service.",
     skipServiceStepInactive:
       "This link offers {n} services, so the step is still shown. Restrict it to one for this to take effect.",
+    allowMultiple: "Patients can pick more than one service",
+    allowMultipleHint:
+      "They tick every service they want and book them as one visit. The visit is as long as all of them together.",
     requireConsent: "Require agreement before booking",
     requireConsentHint: "A tick-box the patient must accept, in your words.",
     requireOtp: "Verify the number on WhatsApp",

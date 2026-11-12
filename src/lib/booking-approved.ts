@@ -21,7 +21,9 @@ export async function tellPatientBookingApproved(c: PoolClient, clinicId: string
     await c.query(
       `select a.starts_at, a.patient_id, p.full_name, p.phone_e164, cl.timezone, cl.default_locale,
               cl.name as clinic_name, cl.name_ar as clinic_name_ar, cl.address, cl.address_ar,
-              s.name as service_name, s.name_ar as service_name_ar, du.full_name as doctor_name,
+              -- Every service of the visit, joined (0106).
+              appointment_service_names(a.id, false) as service_name, appointment_service_names(a.id, true) as service_name_ar,
+              du.full_name as doctor_name,
               coalesce(ws.status = 'connected', false) as wa_connected
          from appointments a
          join patients p on p.id = a.patient_id

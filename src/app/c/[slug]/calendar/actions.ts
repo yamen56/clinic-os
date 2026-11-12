@@ -8,12 +8,20 @@ import { findOrCreatePatient } from "@/lib/patients";
 import { applyAppointmentStatus } from "@/lib/appointments";
 import { tellPatientBookingApproved } from "@/lib/booking-approved";
 import { scheduleCheck } from "@/lib/schedule-check";
+import { cleanServiceIds, setExtraServices } from "@/lib/appointment-services";
 
 export type ApptInput = {
   patientId?: string;
   newPatient?: { fullName: string; phone: string };
   doctorMemberId: string | null;
   serviceId: string | null;
+  /**
+   * Every service the visit is for, first one first (migration 0106). When
+   * given it is the whole answer — an empty list means no service at all — and
+   * `serviceId` is ignored. The callers that only know one service (Finish's
+   * next visit, a drag) leave it out and behave as they always did.
+   */
+  serviceIds?: string[];
   startsAt: string; // UTC ISO
   endsAt: string;
   notes: string;
@@ -51,9 +59,16 @@ export async function createAppointmentAction(slug: string, input: ApptInput): P
     }
     if (!patientId) return { error: "patient_required" };
 
+    /*
+      The first service is the visit's own — its colour, its room, its reports.
+      The rest are written after the appointment exists.
+    */
+    const services = input.serviceIds ? cleanServiceIds(input.serviceIds) : input.serviceId ? [input.serviceId] : [];
+    const serviceId = services[0] ?? null;
+
     const check = await scheduleCheck(c, access.clinicId, {
       doctorMemberId: input.doctorMemberId,
-      serviceId: input.serviceId,
+      serviceId,
       startsAt: input.startsAt,
       endsAt: input.endsAt,
       roomId: input.roomId ?? null,
@@ -67,7 +82,7 @@ export async function createAppointmentAction(slug: string, input: ApptInput): P
         access.clinicId,
         patientId,
         input.doctorMemberId,
-        input.serviceId,
+        serviceId,
         input.startsAt,
         input.endsAt,
         input.notes.slice(0, 2000),
@@ -76,6 +91,7 @@ export async function createAppointmentAction(slug: string, input: ApptInput): P
       ]
     );
     const id = r.rows[0].id as string;
+    if (services.length > 1) await setExtraServices(c, access.clinicId, id, serviceId, services.slice(1));
     /*
       What the visit is for, when it was booked from the plan. Only this
       patient's own entries, still standing — an id from anywhere else is
@@ -116,7 +132,7 @@ export async function createAppointmentAction(slug: string, input: ApptInput): P
 export async function updateAppointmentAction(
   slug: string,
   id: string,
-  input: Partial<Pick<ApptInput, "doctorMemberId" | "serviceId" | "startsAt" | "endsAt" | "notes" | "roomId">>
+  input: Partial<Pick<ApptInput, "doctorMemberId" | "serviceId" | "serviceIds" | "startsAt" | "endsAt" | "notes" | "roomId">>
 ): Promise<ApptResult> {
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
@@ -133,7 +149,19 @@ export async function updateAppointmentAction(
     const endsAt = input.endsAt ?? new Date(cur.ends_at).toISOString();
     const doctor =
       input.doctorMemberId !== undefined ? input.doctorMemberId : cur.doctor_member_id;
-    const serviceId = input.serviceId === undefined ? cur.service_id : input.serviceId ?? cur.service_id;
+    /*
+      The form sends the whole list, and then the list is the answer: its first
+      service is the visit's, and an empty list is a visit with no service —
+      which the single `serviceId` could never say, because a null there has
+      always meant "leave it". A drag or a resize sends neither and changes
+      nothing about what the visit is for.
+    */
+    const services = input.serviceIds ? cleanServiceIds(input.serviceIds) : null;
+    const serviceId = services
+      ? (services[0] ?? null)
+      : input.serviceId === undefined
+        ? cur.service_id
+        : input.serviceId ?? cur.service_id;
 
     const check = await scheduleCheck(c, access.clinicId, {
       doctorMemberId: doctor,
@@ -148,7 +176,7 @@ export async function updateAppointmentAction(
 
     await c.query(
       `update appointments set starts_at = $3, ends_at = $4, doctor_member_id = $5,
-         service_id = coalesce($6, service_id), notes = coalesce($7, notes), room_id = $8
+         service_id = $6, notes = coalesce($7, notes), room_id = $8
        where id = $1 and clinic_id = $2`,
       [
         id,
@@ -156,11 +184,12 @@ export async function updateAppointmentAction(
         startsAt,
         endsAt,
         doctor,
-        input.serviceId === undefined ? null : input.serviceId,
+        serviceId,
         input.notes === undefined ? null : input.notes.slice(0, 2000),
         check.roomId,
       ]
     );
+    if (services) await setExtraServices(c, access.clinicId, id, serviceId, services.slice(1));
     await audit(c, {
       clinicId: access.clinicId,
       userId: access.session.user.id,

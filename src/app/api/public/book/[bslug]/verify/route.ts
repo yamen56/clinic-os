@@ -18,11 +18,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   const data = await loadPublicLink(bslug);
   if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const read = await readJsonCapped<{ verificationId?: string; code?: string }>(req, 8 * 1024);
+  const read = await readJsonCapped<{
+    verificationId?: string;
+    code?: string;
+    /** Another time for the same booking, after the first one went — see below. */
+    startISO?: string;
+    doctorId?: string | null;
+  }>(req, 8 * 1024);
   if (!read.ok) return read.res;
   const body = read.body;
   if (!body.verificationId || !body.code) {
     return NextResponse.json({ error: "missing" }, { status: 400 });
+  }
+  /*
+    A replacement time names its doctor, and that doctor has to be one this
+    link offers — the same check `/start` makes, before anything is written.
+  */
+  const retime = typeof body.startISO === "string" && body.startISO ? body.startISO : null;
+  if (retime && body.doctorId && !data.doctors.some((d) => d.id === body.doctorId)) {
+    return NextResponse.json({ error: "bad_doctor" }, { status: 400 });
   }
 
   const check = await withSystem(async (c) => {
@@ -73,7 +87,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
     return NextResponse.json(check, { status });
   }
 
-  const result = await finalizeBooking(data, check.phone, check.payload, "verified");
-  if ("error" in result) return NextResponse.json(result, { status: 409 });
+  const payload: BookingPayload = retime
+    ? { ...check.payload, startISO: retime, doctorId: body.doctorId ?? null }
+    : check.payload;
+  const result = await finalizeBooking(data, check.phone, payload, "verified");
+  if ("error" in result) {
+    /*
+      The code was right and the time had gone — somebody else took it while
+      this patient was finding their WhatsApp. The code proved the number, not
+      the time, so it is put back in play: the page sends the patient to pick
+      another time and posts the same code again with `startISO`, rather than
+      making them wait for a second code that the per-number limit may refuse.
+      It still expires when it would have, and still works exactly once.
+    */
+    if (result.error === "slot_taken") {
+      await withSystem((c) =>
+        c.query(`update booking_verifications set verified_at = null where id = $1 and clinic_id = $2`, [
+          body.verificationId,
+          data.clinic.id,
+        ])
+      );
+    }
+    return NextResponse.json(result, { status: 409 });
+  }
   return NextResponse.json(result);
 }

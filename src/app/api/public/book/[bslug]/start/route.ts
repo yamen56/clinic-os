@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { randomInt } from "node:crypto";
 import { withSystem } from "@/lib/db";
-import { loadPublicLink, clientIp } from "@/lib/booking-public";
+import { loadPublicLink, clientIp, linkServiceIds } from "@/lib/booking-public";
 import { rateLimitShared } from "@/lib/rate-limit-shared";
 import { normalizePhone } from "@/lib/phone";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
-import { questionsForService, validateAnswers } from "@/lib/booking-intake";
+import { questionsForServices, validateAnswers } from "@/lib/booking-intake";
 import { finalizeBooking } from "../finalize";
 import { readJsonCapped } from "@/lib/public-guard";
 
@@ -28,6 +28,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   // way to make the process buffer as much as an attacker cared to send.
   const read = await readJsonCapped<{
     serviceId?: string;
+    /** Every service chosen, first one first — only on a link that allows more than one (0106). */
+    serviceIds?: string[];
     doctorId?: string | null;
     startISO?: string;
     fullName?: string;
@@ -38,13 +40,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   }>(req, 64 * 1024);
   if (!read.ok) return read.res;
   const body = read.body;
-  const { serviceId, doctorId, startISO, fullName } = body;
-  if (!serviceId || !startISO || !fullName?.trim() || !body.phone) {
+  const { doctorId, startISO, fullName } = body;
+  const named = Array.isArray(body.serviceIds) && body.serviceIds.length ? body.serviceIds : [body.serviceId];
+  if (!named[0] || !startISO || !fullName?.trim() || !body.phone) {
     return NextResponse.json({ error: "missing" }, { status: 400 });
   }
-  if (!data.services.some((s) => s.id === serviceId)) {
-    return NextResponse.json({ error: "bad_service" }, { status: 400 });
-  }
+  /*
+    Each service against the list the page was allowed to draw, and more than
+    one only where this link allows it — read from the link's own row, like
+    everything else a public form could lie about.
+  */
+  const serviceIds = linkServiceIds(data, named);
+  if (!serviceIds) return NextResponse.json({ error: "bad_service" }, { status: 400 });
+  const serviceId = serviceIds[0];
   /*
     And the doctor, against the same list the page was allowed to draw.
 
@@ -69,7 +77,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   if (data.link.require_consent && body.consent !== true) {
     return NextResponse.json({ error: "consent_required" }, { status: 422 });
   }
-  const applicable = questionsForService(data.questions, serviceId);
+  const applicable = questionsForServices(data.questions, serviceIds);
   const checked = validateAnswers(applicable, body.answers);
   if ("error" in checked) {
     return NextResponse.json(checked, { status: 422 });
@@ -89,6 +97,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ bslug: string 
   const locale = (body.locale === "en" ? "en" : "ar") as "ar" | "en";
   const payload = {
     serviceId,
+    extraServiceIds: serviceIds.slice(1),
     doctorId: doctorId ?? null,
     startISO,
     fullName: fullName.trim().slice(0, 80),

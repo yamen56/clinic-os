@@ -1325,8 +1325,16 @@ async function evaluateRule(env: Env, r: Rule, cache: Map<string, unknown>): Pro
   const appointment = () =>
     once("appointment", async () =>
       run.appointment_id
-        ? (await c.query(`select status, service_id, doctor_member_id from appointments where id = $1`, [run.appointment_id]))
-            .rows[0] ?? null
+        ? (
+            await c.query(
+              // Every service of the visit, so "service is X" holds when X is its second one (0106).
+              `select a.status, a.service_id, a.doctor_member_id,
+                      array_remove(array[a.service_id] || coalesce((select array_agg(e.service_id) from appointment_extra_services e
+                                                                 where e.appointment_id = a.id), '{}'), null)::text[] as service_ids
+                 from appointments a where a.id = $1`,
+              [run.appointment_id]
+            )
+          ).rows[0] ?? null
         : null
     );
   const values = r.values ?? [];
@@ -1398,7 +1406,7 @@ async function evaluateRule(env: Env, r: Rule, cache: Map<string, unknown>): Pro
     }
     case "appointment_service": {
       const a = await appointment();
-      return Boolean(a && a.service_id && values.includes(a.service_id));
+      return Boolean(a && ((a.service_ids ?? []) as string[]).some((id) => values.includes(id)));
     }
     case "appointment_doctor": {
       const a = await appointment();

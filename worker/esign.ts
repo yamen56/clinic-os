@@ -13,6 +13,7 @@ import {
   notifyStaffOfSignerAction,
 } from "../src/lib/esign/delivery";
 import { createAndSendFromTemplate } from "../src/lib/esign/flow";
+import { visitServiceIds } from "../src/lib/appointment-services";
 import { loadSigners, signersDueNow, type DocumentRow } from "../src/lib/esign/documents";
 import { logDocEvent } from "../src/lib/esign/events";
 import { emitDocumentTrigger } from "../src/lib/esign/jobs";
@@ -303,11 +304,15 @@ export async function autoSendServiceDocuments(
     ).rows[0];
     if (!appt || appt.status !== "confirmed" || !appt.service_id) return;
 
+    /*
+      What every service of the visit asks for (0106), each form once: two
+      services that both need the same consent send it one time.
+    */
     const required = await c.query(
-      `select sd.template_id from service_documents sd
+      `select distinct sd.template_id from service_documents sd
        join document_templates t on t.id = sd.template_id and t.is_active
-       where sd.service_id = $1 and sd.clinic_id = $2 and sd.auto_send`,
-      [appt.service_id, clinicId]
+       where sd.service_id = any($1::uuid[]) and sd.clinic_id = $2 and sd.auto_send`,
+      [await visitServiceIds(c, appointmentId), clinicId]
     );
     if (!required.rowCount) return;
 

@@ -121,8 +121,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
     */
     const appts = (
       await c.query(
+        // Every service of the visit, joined (0106): the doctor sees it is more than one.
         `select ap.id, ap.patient_id, ap.starts_at, ap.status, ap.arrived_at, ap.seated_at, p.full_name as patient_name,
-                s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
+                appointment_service_names(ap.id, false) as service_name, appointment_service_names(ap.id, true) as service_name_ar,
+                s.color as service_color,
                 ap.doctor_member_id, du.full_name as doctor_name, ap.service_id, s.duration_min as service_duration_min
          from appointments ap
          join patients p on p.id = ap.patient_id

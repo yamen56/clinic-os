@@ -59,6 +59,8 @@ type LinkRow = {
   skip_service_step: boolean;
   /** Ask for a WhatsApp code before booking. On unless the clinic turns it off. */
   require_otp: boolean;
+  /** A patient may book several services in one visit (0106). Off unless the clinic turns it on. */
+  allow_multiple_services: boolean;
 };
 
 type QuestionRow = {
@@ -180,6 +182,7 @@ export function BookingLinksClient({
         // `?? true` on the way out as well as in the schema: a row read before
         // this column existed must not be saved back as "verification off".
         requireOtp: editing.require_otp ?? true,
+        allowMultipleServices: editing.allow_multiple_services ?? false,
       });
       if (r.error) {
         toast(
@@ -646,6 +649,21 @@ export function BookingLinksClient({
                 <p className="text-[13px] text-warning">
                   {tb.skipServiceStepInactive.replace("{n}", String(effectiveServiceCount))}
                 </p>
+              )}
+              {/*
+                The other statement about that picker: whether the patient
+                takes one of these services or several in one visit (0106).
+                Offered only where there is more than one to take.
+              */}
+              {effectiveServiceCount > 1 && (
+                <div data-allow-multiple>
+                  <ToggleRow
+                    label={tb.allowMultiple}
+                    hint={tb.allowMultipleHint}
+                    checked={!!editing.allow_multiple_services}
+                    onChange={(v) => setEditing({ ...editing, allow_multiple_services: v })}
+                  />
+                </div>
               )}
             </div>
 

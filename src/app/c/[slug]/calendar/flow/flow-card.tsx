@@ -10,6 +10,7 @@ import { TakePayment } from "@/components/take-payment";
 import { minutesBetween, type FlowStage } from "@/lib/patient-flow";
 import { flagAlerts } from "@/lib/medical-history";
 import { nextWhen } from "@/lib/next-visit";
+import { visitServiceLabel } from "@/lib/services";
 import type { FlowStep } from "../flow-actions";
 import type { Appt, PageCaps, Room } from "../types";
 import { Menu, MenuItem } from "./menu";
@@ -86,7 +87,8 @@ export function FlowCard({
   useEffect(() => setPaidHere(0), [appt.balance_due]);
   const s = DateTime.fromISO(appt.starts_at).setZone(tz);
   const e = DateTime.fromISO(appt.ends_at).setZone(tz);
-  const service = (locale === "ar" ? appt.service_name_ar : null) || appt.service_name;
+  // Every service of the visit — the doctor sees at a glance that it is more than one (0106).
+  const service = visitServiceLabel(appt, locale);
   const room = (locale === "ar" && appt.room_name_ar) || appt.room_name;
   const roomName = (r: Room) => (locale === "ar" && r.name_ar) || r.name;
 
@@ -119,6 +121,9 @@ export function FlowCard({
   else if (appt.source === "booking_link") tags.push({ key: "online", text: t.flow.bookedOnline, status: "neutral" });
   else if (appt.source === "ai_agent") tags.push({ key: "ai", text: t.flow.bookedByAi, status: "neutral" });
   else if (appt.source === "automation") tags.push({ key: "auto", text: t.flow.bookedByAutomation, status: "neutral" });
+  // And who at the clinic booked it, when it was somebody (2026-11-12).
+  else if (appt.source === "staff" && appt.created_by_name)
+    tags.push({ key: "by", text: t.flow.bookedByName.replace("{name}", appt.created_by_name.split(/\s+/)[0]), status: "neutral" });
   if (appt.status === "pending_approval") tags.push({ key: "pending", text: t.flow.awaitingApproval, status: "pending" });
   // What the desk was told: how late this patient said they would be, and whether they were warned of a wait themselves.
   const notHereYet = stage === "expected" || stage === "late";
@@ -177,9 +182,9 @@ export function FlowCard({
 
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ink-500">
         {service && (
-          <span className="inline-flex min-w-0 items-center gap-1">
+          <span className="inline-flex min-w-0 items-center gap-1" data-flow-services={1 + (appt.extra_services?.length ?? 0)}>
             <Stethoscope className="h-3.5 w-3.5 shrink-0 text-ink-400" />
-            <span className="truncate">{service}</span>
+            <span className="line-clamp-2">{service}</span>
           </span>
         )}
         {appt.doctor_name && (

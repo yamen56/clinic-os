@@ -63,6 +63,27 @@ export function suitableRooms(rooms: Room[], serviceId: string | null, locationK
   return rooms.filter((r) => r.serviceIds.length === 0 || r.serviceIds.includes(serviceId));
 }
 
+/**
+ * The rooms that can host every one of a visit's services (migration 0106).
+ *
+ * Each in-person service narrows the list as `suitableRooms` would on its own;
+ * one that no room offers, or that is held online, narrows nothing — the same
+ * rule, applied per service. Empty means rooms do not limit this booking: that
+ * includes two services that only ever share no room, which a single room
+ * cannot answer and the desk places by hand.
+ *
+ * With one service this is exactly `suitableRooms`.
+ */
+export function suitableRoomsForAll(rooms: Room[], services: { id: string; location_kind: string | null }[]): Room[] {
+  let out: Room[] | null = null;
+  for (const s of services) {
+    const ok = suitableRooms(rooms, s.id, s.location_kind);
+    if (!ok.length) continue;
+    out = (out ?? rooms).filter((r) => ok.some((x) => x.id === r.id));
+  }
+  return out ?? [];
+}
+
 const ms = (d: Date | string) => (d instanceof Date ? d.getTime() : Date.parse(d));
 
 /**
@@ -116,18 +137,23 @@ export async function pickRoom(
     /** Already loaded by the caller, to save the read. */
     rooms?: Room[];
     locationKind?: string | null;
+    /** The rooms that suit the visit, already worked out — a visit with several services (suitableRoomsForAll). */
+    suitable?: Room[];
   }
 ): Promise<PickResult> {
   const rooms = o.rooms ?? (await loadActiveRooms(c, o.clinicId));
   if (!rooms.length) return { roomId: null, reason: "unconstrained" };
-  const locationKind =
-    o.locationKind !== undefined
-      ? o.locationKind
-      : o.serviceId
-        ? (((await c.query(`select location_kind from services where id = $1 and clinic_id = $2`, [o.serviceId, o.clinicId])).rows[0]
-            ?.location_kind as string | undefined) ?? null)
-        : null;
-  const suitable = suitableRooms(rooms, o.serviceId, locationKind);
+  let suitable = o.suitable;
+  if (!suitable) {
+    const locationKind =
+      o.locationKind !== undefined
+        ? o.locationKind
+        : o.serviceId
+          ? (((await c.query(`select location_kind from services where id = $1 and clinic_id = $2`, [o.serviceId, o.clinicId])).rows[0]
+              ?.location_kind as string | undefined) ?? null)
+          : null;
+    suitable = suitableRooms(rooms, o.serviceId, locationKind);
+  }
   if (!suitable.length) return { roomId: null, reason: "unconstrained" };
 
   const prefer: (string | null)[] = [o.preferRoomId ?? null];

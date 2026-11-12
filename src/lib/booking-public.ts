@@ -41,6 +41,14 @@ export type PublicLink = {
     require_otp: boolean;
     /** Restrict to one section, picking up its future services. */
     section_id: string | null;
+    /**
+     * Whether a patient may book more than one service in one visit (0106).
+     *
+     * Off unless the clinic turned it on for this link. The routes read it from
+     * here and never from the browser: a posted list of four services on a link
+     * that does not allow it is refused.
+     */
+    allow_multiple_services: boolean;
   };
   clinic: {
     id: string;
@@ -224,6 +232,8 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
           goes missing again.
         */
         require_otp: link.require_otp ?? true,
+        // The safe direction again: missing reads as "one service", as it always was.
+        allow_multiple_services: link.allow_multiple_services === true,
       },
       clinic,
       services,
@@ -233,6 +243,27 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       rawQuestions,
     } as PublicLink;
   });
+}
+
+/**
+ * The services a public request names, checked against what the link offers.
+ *
+ * `serviceId` may be repeated (`?serviceId=a&serviceId=b`) or posted as a list.
+ * Every one has to be a service this link shows, each counts once, and more
+ * than one is only accepted on a link that allows it — the page hides the
+ * choice when it does not, but the page is not what is being trusted here.
+ * Null when the request names none, a stranger's, or too many.
+ */
+export function linkServiceIds(data: PublicLink, raw: (string | null | undefined)[]): string[] | null {
+  const ids: string[] = [];
+  for (const x of raw) {
+    if (typeof x !== "string" || !x) continue;
+    if (!data.services.some((s) => s.id === x)) return null;
+    if (!ids.includes(x)) ids.push(x);
+  }
+  if (!ids.length || ids.length > 8) return null;
+  if (ids.length > 1 && !data.link.allow_multiple_services) return null;
+  return ids;
 }
 
 /**

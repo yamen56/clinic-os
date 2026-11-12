@@ -428,10 +428,23 @@ import would destroy work. Patients carry `import_batch_id` and `source = 'impor
 ### Appointment record
 
 `appointments`: patient, `doctor_member_id`, `service_id`, `starts_at`/`ends_at`
-(`ends_at > starts_at` enforced), notes, `created_by`.
+(`ends_at > starts_at` enforced), notes, `created_by`, `booking_link_id`.
 
 - **Status**: `pending_approval` | `scheduled` | `confirmed` | `completed` | `no_show` | `cancelled`
-- **Source**: `staff` | `booking_link` | `ai_agent`
+- **Source**: `staff` | `booking_link` | `ai_agent` | `automation`
+- **Several services on one visit** (migration `0106`, 2026-11-12). `service_id` stays the
+  visit's first service — its colour, its room, the reports and every automation read it
+  unchanged — and the rest are `appointment_extra_services` rows in the order chosen. The
+  booking panel shows each as a chip with an "Add a service" list; the length becomes the
+  total; "Suggest times" looks for a time long enough for all of them (`/free-slots?also=`).
+  Every card, list, notice and message names them joined — "Cleaning + Whitening" — through
+  `visitServiceLabel` (client) or `appointment_service_names(id, ar)` (SQL). The consent
+  forms of every service are offered (each once), "Appointment service is" matches any of
+  them, and an invoice raised from the visit starts with one line per service.
+- **Who booked it**: the panel says "Booked by {name} · {when}", "Booked online · {link
+  name}", "Booked by the AI receptionist", "Booked automatically" or "Walk-in · added by
+  {name}"; a staff booking's board card carries "Booked by {first name}". `booking_link_id`
+  is set from `0106` on; older online bookings say "Booked online".
 
 ### The Appointments page: three tabs
 
@@ -638,10 +651,11 @@ Configured per **booking link** (`booking_links`), and a clinic can have several
 | `show_prices` | `true` — off for clinics that quote per case |
 | `allow_any_doctor` | `true` — off forces the patient to choose a doctor |
 | `require_consent` + `consent_text` / `consent_text_ar` | `false` — a tick-box in the clinic's words. Since `0064` the consent is **kept**: `appointments.booking_consent` = `{ at, text }`, the moment it was given and the wording shown in the patient's language, copied — rewording the link later changes nothing already agreed. Null when the link asked nothing |
+| `allow_multiple_services` | `false` — on, the patient ticks several services and books them as one visit (`0106`). The service step then lists every service under its section heading (no section step), and the times are long enough for all of them: the total length, the longest buffer, a doctor who does every one, a room that suits every in-person one. `/days`, `/slots` and `/start` refuse a second service on a link without it |
 
 ### Wizard
 
-1. Choose a service
+1. Choose a service — or several, on a link with `allow_multiple_services`
 2. Choose a doctor (or "First available doctor", unless `allow_any_doctor` is off)
 3. Pick a time
 4. **Your details, on one step** — name, WhatsApp number, the clinic's own
@@ -658,8 +672,31 @@ Configured per **booking link** (`booking_links`), and a clinic can have several
 
 Availability is shown, not discovered: `GET /api/public/book/{slug}/days` returns a
 slot count per day for the whole window in one request, so closed and full days are
-greyed out, the wizard opens on the first day that has something, and an empty day
-offers "next available". Times are grouped morning / afternoon / evening.
+greyed out, the wizard opens on the first day that has something (scrolled into view),
+and an empty day offers "next available". Times are grouped morning / afternoon / evening.
+
+**Look (2026-11-12).** A band in the clinic's colour carries the logo, name, address and
+the language button; the steps sit on one white sheet over it, with "Step n of N", the
+step's title and a progress line; Back and the step's action are held at the bottom of
+the phone's screen. The details step and the confirmation show the visit as an
+appointment card (day on a tear-off stub; time, services, length, doctor). Ink is chosen
+by contrast (`brandTokens`): a pale brand gets dark writing on the band, and buttons and
+chosen items in the same hue made dark enough to read on white.
+
+**What the server holds the booking to.** `finalizeBooking` asks the slot engine, under
+the schedule lock, whether the requested time is one the page would offer — the clinic's
+and the doctor's hours, closed dates, the link's days-ahead window, the slot grid, the
+buffer, a doctor who does the service, a room. Until 0106 any future instant was booked
+if the doctor happened to be free (three in the morning, a closed day). The notice period
+is not re-applied, so finding the WhatsApp code does not cost the patient their time.
+
+**When the time goes while the patient is booking.** Taken before the code is sent: the
+page goes back to the times, read again. Taken after the right code was entered: the
+verification is put back in play and the patient picks another time, which the **same
+code** books (`/verify` with `startISO`) — no second WhatsApp message, and no running into
+the three-codes-per-number limit. Five wrong codes say "ask for a new one" and open
+Resend at once; the code submits itself at six digits. A link with nothing bookable says
+online booking is unavailable and offers the clinic's phone.
 
 ### Booking questions (`booking_questions`)
 

@@ -75,8 +75,9 @@ export async function loadRunContext(
       };
       const next = (
         await c.query(
-          `select a.starts_at, s.name as service_name, s.name_ar as service_name_ar
-             from appointments a left join services s on s.id = a.service_id
+          `select a.starts_at,
+                  appointment_service_names(a.id, false) as service_name, appointment_service_names(a.id, true) as service_name_ar
+             from appointments a
             where a.patient_id = $1 and a.clinic_id = $2 and a.starts_at > now()
               and a.status in ('pending_approval', 'scheduled', 'confirmed')
             order by a.starts_at limit 1`,
@@ -97,7 +98,8 @@ export async function loadRunContext(
   if (ids.appointmentId) {
     const a = (
       await c.query(
-        `select a.starts_at, a.ends_at, a.status, s.name as service_name, s.name_ar as service_name_ar,
+        `select a.starts_at, a.ends_at, a.status,
+                appointment_service_names(a.id, false) as service_name, appointment_service_names(a.id, true) as service_name_ar,
                 u.full_name as doctor_name
          from appointments a
          left join services s on s.id = a.service_id

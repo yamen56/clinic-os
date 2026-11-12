@@ -5,6 +5,7 @@ import { DateTime } from "luxon";
 import { useI18n } from "@/lib/i18n/client";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { flowStage, type FlowStage } from "@/lib/patient-flow";
+import { visitServiceLabel } from "@/lib/services";
 import type { Appt } from "../types";
 import { CalendarDays } from "lucide-react";
 
@@ -112,7 +113,7 @@ export function AgendaList({
                 nowMs
               );
               const room = (locale === "ar" && a.room_name_ar) || a.room_name;
-              const service = (locale === "ar" ? a.service_name_ar : null) || a.service_name;
+              const service = visitServiceLabel(a, locale);
               const canArrive = isToday && (stage === "expected" || stage === "late");
               const badgeKey = stageBadge[stage] ?? statusBadge[a.status] ?? "neutral";
               const badgeText = stageBadge[stage]

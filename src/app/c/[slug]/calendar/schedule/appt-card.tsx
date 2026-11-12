@@ -3,6 +3,7 @@
 import { DateTime } from "luxon";
 import { flowStage } from "@/lib/patient-flow";
 import { tint } from "./grid-layout";
+import { visitServiceLabel } from "@/lib/services";
 import type { Appt } from "../types";
 import { CheckCircle2, Hourglass, DoorOpen, Armchair, Clock, Check } from "lucide-react";
 
@@ -57,7 +58,7 @@ export function ApptCard({
     { status: appt.status, starts_at: appt.starts_at, arrived_at: appt.arrived_at ?? null, seated_at: appt.seated_at ?? null },
     nowMs
   );
-  const service = (locale === "ar" ? appt.service_name_ar : null) || appt.service_name || "";
+  const service = visitServiceLabel(appt, locale);
   const room = (locale === "ar" && appt.room_name_ar) || appt.room_name;
   const dim = appt.status === "completed" || appt.status === "no_show";
 
@@ -108,7 +109,7 @@ export function ApptCard({
         background: tint(color, stage === "in_room" ? 24 : 15),
         borderColor: tint(color, 45),
       }}
-      title={`${appt.patient_name} · ${statusLabel}`}
+      title={[appt.patient_name, service, statusLabel].filter(Boolean).join(" · ")}
     >
       <span className="absolute inset-y-0 start-0 w-[3px]" style={{ background: color }} aria-hidden />
       {/*

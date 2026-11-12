@@ -144,6 +144,15 @@ export function questionsForService<T extends { serviceIds: string[] }>(
   );
 }
 
+/**
+ * The questions for a visit with several services (migration 0106): each one
+ * that applies to any of them, once, in the clinic's order.
+ */
+export function questionsForServices<T extends { serviceIds: string[] }>(questions: T[], serviceIds: string[]): T[] {
+  if (!serviceIds.length) return questionsForService(questions, null);
+  return questions.filter((q) => !q.serviceIds.length || q.serviceIds.some((id) => serviceIds.includes(id)));
+}
+
 const MAX_LEN: Record<QuestionType, number> = {
   text: 200,
   longtext: 2000,

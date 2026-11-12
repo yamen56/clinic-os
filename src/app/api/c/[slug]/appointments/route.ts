@@ -5,6 +5,7 @@ import { invoiceScopeSql } from "@/lib/invoice-scope";
 import { leadIdOf } from "@/lib/charts/dental/full-arch";
 import { visitLines } from "@/lib/charts/dental/treatment";
 import { medicalFlags } from "@/lib/medical-history";
+import { extraServicesSql } from "@/lib/appointment-services";
 
 type WorkRow = { markId: string; site: string; label: string; labelAr: string | null; treatmentKey: string; groupId: string | null; step: string | null; at: string };
 type Member = { id: string; site: string; label: string; labelAr: string | null; treatmentKey: string; groupId: string };
@@ -59,6 +60,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
                     and a2.starts_at > a.starts_at and a2.status in ('pending_approval', 'scheduled', 'confirmed')) as next_booked_at,
                 a.late_min, a.delay_notice_at,
                 s.duration_min as service_duration_min,
+                -- The services after the first, and who booked the visit (migration 0106).
+                ${extraServicesSql("a")} as extra_services,
+                a.created_at, cb.full_name as created_by_name, bl.name as booking_link_name,
                 p.full_name as patient_name, p.phone_e164 as patient_phone, p.medical_history,
                 s.name as service_name, s.name_ar as service_name_ar, s.color as service_color,
                 s.section_id as service_section_id, s.location_kind as service_location,
@@ -78,6 +82,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
          left join clinic_members cm on cm.id = a.doctor_member_id
          left join users u on u.id = cm.user_id
          left join clinic_rooms rm on rm.id = a.room_id
+         left join users cb on cb.id = a.created_by
+         left join booking_links bl on bl.id = a.booking_link_id
          where a.clinic_id = $1 and a.starts_at < $3 and a.ends_at > $2
          order by a.starts_at`,
         [access.clinicId, from, to]

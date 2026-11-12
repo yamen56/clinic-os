@@ -11,6 +11,7 @@ import { ownInvoicesOnly } from "@/lib/invoice-scope";
 import { dictFor } from "@/lib/i18n/client-dict";
 import { getLocale } from "@/lib/i18n";
 import { billsFromCharts } from "@/lib/features";
+import { visitServiceIds } from "@/lib/appointment-services";
 
 export default async function NewInvoicePage({
   params,
@@ -63,7 +64,7 @@ export default async function NewInvoicePage({
       ).rows[0];
       if (p) patient = { id: p.id, name: p.full_name };
     }
-    let appointment: { id: string; serviceId: string | null; doctorMemberId: string | null } | null =
+    let appointment: { id: string; serviceId: string | null; serviceIds: string[]; doctorMemberId: string | null } | null =
       null;
     if (isUuid(sp.appointment)) {
       // The doctor comes along with the service: an invoice raised from a visit
@@ -76,7 +77,13 @@ export default async function NewInvoicePage({
         )
       ).rows[0];
       if (a)
-        appointment = { id: a.id, serviceId: a.service_id, doctorMemberId: a.doctor_member_id };
+        appointment = {
+          id: a.id,
+          serviceId: a.service_id,
+          // Every service it was booked for (0106), each a line on the invoice.
+          serviceIds: await visitServiceIds(c, a.id),
+          doctorMemberId: a.doctor_member_id,
+        };
     }
     /*
       `isReady`, not `enabled`. A clinic that ticked the switch but has not
@@ -160,6 +167,7 @@ export default async function NewInvoicePage({
       initialPatient={data.patient}
       appointmentId={data.appointment?.id ?? null}
       appointmentServiceId={data.appointment?.serviceId ?? null}
+      appointmentServiceIds={data.appointment?.serviceIds}
       appointmentDoctorId={data.appointment?.doctorMemberId ?? null}
       einvoice={data.einvoice}
       initialLines={data.initialLines}

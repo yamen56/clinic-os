@@ -118,7 +118,8 @@ export default async function PatientProfilePage({
                   (select count(*)::int from patient_note_versions v where v.note_id = n.id) as version_count,
                   n.appointment_id,
                   a.starts_at as appointment_starts_at,
-                  s.name as appointment_service, s.name_ar as appointment_service_ar
+                  case when a.id is null then null else appointment_service_names(a.id, false) end as appointment_service,
+                  case when a.id is null then null else appointment_service_names(a.id, true) end as appointment_service_ar
            from patient_notes n
            left join users u on u.id = n.author_id
            left join users e on e.id = n.edited_by
@@ -137,7 +138,8 @@ export default async function PatientProfilePage({
         ),
         () => caps.calendar
           ? c.query(
-              `select a.id, a.starts_at, a.ends_at, a.status, a.source, s.name as service_name, s.name_ar as service_name_ar,
+              `select a.id, a.starts_at, a.ends_at, a.status, a.source,
+                      appointment_service_names(a.id, false) as service_name, appointment_service_names(a.id, true) as service_name_ar,
                       u.full_name as doctor_name,
                       -- Where they are today, for the banner over the file while they are in the clinic.
                       a.arrived_at, a.seated_at, a.doctor_member_id, a.service_id, s.duration_min as service_duration_min,

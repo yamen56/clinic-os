@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { computeDayCounts, computeSlots, type SlotResult } from "@/lib/slots";
 import { isUuid } from "@/lib/uuid";
+import { cleanServiceIds } from "@/lib/appointment-services";
 
 /**
  * The next free times for a service (and optionally a doctor), for staff:
@@ -23,6 +24,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   const doctorId = url.searchParams.get("doctor");
   if (!isUuid(serviceId)) return NextResponse.json({ error: "service_required" }, { status: 400 });
   if (doctorId && !isUuid(doctorId)) return NextResponse.json({ error: "bad_doctor" }, { status: 400 });
+  // ?also= — the visit's further services, so a free time is long enough for all of them (migration 0106).
+  const also = cleanServiceIds(url.searchParams.getAll("also")).filter((x) => x !== serviceId);
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 6, 1), 20);
   const tz = access.clinic.timezone;
   const fromParam = url.searchParams.get("from");
@@ -46,6 +49,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       clinicHours: clinic.working_hours,
       blockedDates: clinic.blocked_dates,
       serviceId,
+      extraServiceIds: also,
       doctorMemberId: doctorId || null,
       minNoticeMin: 0,
       granularityMin: 15,

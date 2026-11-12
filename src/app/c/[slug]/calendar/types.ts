@@ -2,6 +2,7 @@ import type { WeeklyHours } from "@/lib/hours";
 import type { IntakeAnswer } from "@/lib/booking-intake";
 import type { VisitLine } from "@/lib/charts/dental/treatment";
 import type { MedicalFlags } from "@/lib/medical-history";
+import type { ExtraService } from "@/lib/appointment-services";
 
 /** One appointment, as GET /api/c/[slug]/appointments returns it. */
 export type Appt = {
@@ -59,6 +60,12 @@ export type Appt = {
   next_booked_at?: string | null;
   /** The booked service's length — what a next visit takes unless the hand-off says otherwise. */
   service_duration_min?: number | null;
+  /** The services after the first, in the order they were chosen (migration 0106). */
+  extra_services?: ExtraService[];
+  /** When the visit was booked, and by whom: the staff member, or the booking link it came through. */
+  created_at?: string;
+  created_by_name?: string | null;
+  booking_link_name?: string | null;
   /** How late the patient said they would be, or were (migration 0089). */
   late_min?: number | null;
   /** When this patient was told the doctor's day is running behind. */

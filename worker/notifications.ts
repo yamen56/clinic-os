@@ -333,7 +333,8 @@ export async function doctorReminders() {
       const lead = alert.minutes_before as number | null;
       const due = await c.query(
         `select a.id, a.starts_at, a.clinic_id, cm.user_id, cl.slug, cl.timezone,
-                p.full_name as patient_name, s.name as service_name, s.name_ar as service_name_ar
+                p.full_name as patient_name,
+                appointment_service_names(a.id, false) as service_name, appointment_service_names(a.id, true) as service_name_ar
          from appointments a
          join clinic_members cm on cm.id = a.doctor_member_id
          join clinics cl on cl.id = a.clinic_id
