@@ -651,6 +651,7 @@ Configured per **booking link** (`booking_links`), and a clinic can have several
 | `show_prices` | `true` — off for clinics that quote per case |
 | `allow_any_doctor` | `true` — off forces the patient to choose a doctor |
 | `require_consent` + `consent_text` / `consent_text_ar` | `false` — a tick-box in the clinic's words. Since `0064` the consent is **kept**: `appointments.booking_consent` = `{ at, text }`, the moment it was given and the wording shown in the patient's language, copied — rewording the link later changes nothing already agreed. Null when the link asked nothing |
+| `brand_header` | `true` — the page opens on a band in the clinic's colour with the booking on a white sheet over it. Off (`0107`): a plain white page under a quiet header, the clinic's colour only on buttons and on what is chosen; from a tablet up the sheet is a bordered card |
 | `allow_multiple_services` | `false` — on, the patient ticks several services and books them as one visit (`0106`). The service step then lists every service under its section heading (no section step), and the times are long enough for all of them: the total length, the longest buffer, a doctor who does every one, a room that suits every in-person one. `/days`, `/slots` and `/start` refuse a second service on a link without it |
 
 ### Wizard
@@ -681,7 +682,14 @@ step's title and a progress line; Back and the step's action are held at the bot
 the phone's screen. The details step and the confirmation show the visit as an
 appointment card (day on a tear-off stub; time, services, length, doctor). Ink is chosen
 by contrast (`brandTokens`): a pale brand gets dark writing on the band, and buttons and
-chosen items in the same hue made dark enough to read on white.
+chosen items in the same hue made dark enough to read on white. The band is optional per
+link (`brand_header`).
+
+**On phones** (`scripts/qa-booking-mobile.ts`): a whole booking by touch on iPhones in
+WebKit and Android in Chromium, 320px wide upwards, in both looks — nothing wider than the
+screen, the step's button on screen without scrolling, every button at least 40px, fields
+at 16px so iOS does not zoom on focus, the chosen day in view in the strip. Fields carry
+`scroll-mb-28`, so one the phone scrolls to with the keyboard up stops clear of the bar.
 
 **What the server holds the booking to.** `finalizeBooking` asks the slot engine, under
 the schedule lock, whether the requested time is one the page would offer — the clinic's

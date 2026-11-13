@@ -230,7 +230,8 @@ export function QuestionField({
   const optionLabel = (o: string, i: number) => (isAr ? q.optionsAr[i] ?? o : o);
   const ring = invalid ? "border-danger" : "border-line-strong";
   // 16px, or an iPhone zooms the page in on every field it focuses.
-  const box = `w-full rounded-xl border ${ring} bg-surface px-4 text-[16px] outline-none focus:border-[var(--bk-text)]`;
+  // `scroll-mb-28`: a field the phone scrolls to on focus stops clear of the bottom bar.
+  const box = `w-full scroll-mb-28 rounded-xl border ${ring} bg-surface px-4 text-[16px] outline-none focus:border-[var(--bk-text)]`;
 
   if (q.type === "checkbox") {
     return (

@@ -61,6 +61,8 @@ type LinkRow = {
   require_otp: boolean;
   /** A patient may book several services in one visit (0106). Off unless the clinic turns it on. */
   allow_multiple_services: boolean;
+  /** The page opens on a band in the clinic's colour (0107). On unless the clinic turns it off. */
+  brand_header: boolean;
 };
 
 type QuestionRow = {
@@ -183,6 +185,8 @@ export function BookingLinksClient({
         // this column existed must not be saved back as "verification off".
         requireOtp: editing.require_otp ?? true,
         allowMultipleServices: editing.allow_multiple_services ?? false,
+        // `!== false`: a link read before the column existed keeps its band.
+        brandHeader: editing.brand_header !== false,
       });
       if (r.error) {
         toast(
@@ -691,6 +695,14 @@ export function BookingLinksClient({
 
             <SectionRule label={tb.whatPatientsSee} />
             <div className="grid gap-3">
+              <div data-brand-header>
+                <ToggleRow
+                  label={tb.brandHeader}
+                  hint={tb.brandHeaderHint}
+                  checked={editing.brand_header !== false}
+                  onChange={(v) => setEditing({ ...editing, brand_header: v })}
+                />
+              </div>
               <ToggleRow
                 label={tb.showPrices}
                 hint={tb.showPricesHint}

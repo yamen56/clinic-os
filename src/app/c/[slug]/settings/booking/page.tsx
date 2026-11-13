@@ -18,7 +18,7 @@ export default async function BookingSettingsPage({
                 slot_granularity_min, approval_mode, active, headline, headline_ar, intro, intro_ar,
                 success_note, success_note_ar, show_prices, allow_any_doctor,
                 consent_text, consent_text_ar, require_consent, skip_service_step, require_otp,
-                allow_multiple_services
+                allow_multiple_services, brand_header
          from booking_links where clinic_id = $1 order by created_at`,
         [access.clinicId]
       )

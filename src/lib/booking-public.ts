@@ -49,6 +49,8 @@ export type PublicLink = {
      * that does not allow it is refused.
      */
     allow_multiple_services: boolean;
+    /** The page opens on a band in the clinic's colour; off, a plain white page (0107). */
+    brand_header: boolean;
   };
   clinic: {
     id: string;
@@ -234,6 +236,8 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
         require_otp: link.require_otp ?? true,
         // The safe direction again: missing reads as "one service", as it always was.
         allow_multiple_services: link.allow_multiple_services === true,
+        // Missing reads as the band, which is how every link looked before the switch.
+        brand_header: link.brand_header !== false,
       },
       clinic,
       services,

@@ -3619,6 +3619,9 @@ export const en = {
       "Opens the page on the date instead of asking what to book. Only applies when this link offers exactly one service.",
     skipServiceStepInactive:
       "This link offers {n} services, so the step is still shown. Restrict it to one for this to take effect.",
+    brandHeader: "Clinic colour across the top",
+    brandHeaderHint:
+      "A band in your clinic's colour with the logo and address, the booking on a white card over it. Off: a plain white page, your colour only on the buttons.",
     allowMultiple: "Patients can pick more than one service",
     allowMultipleHint:
       "They tick every service they want and book them as one visit. The visit is as long as all of them together.",

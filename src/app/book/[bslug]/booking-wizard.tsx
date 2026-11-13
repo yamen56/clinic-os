@@ -64,6 +64,7 @@ export function BookingWizard({
   lockedDoctor,
   skipServiceStep,
   allowMultiple,
+  brandHeader = true,
   verifyByOtp,
 }: {
   bslug: string;
@@ -115,6 +116,8 @@ export function BookingWizard({
    * than one. The routes check it again; this only decides what is drawn.
    */
   allowMultiple: boolean;
+  /** A band in the clinic's colour across the top (default), or a plain white page (0107). */
+  brandHeader?: boolean;
   /**
    * Whether a WhatsApp code stands between this form and the appointment.
    *
@@ -643,10 +646,21 @@ export function BookingWizard({
     `flex min-h-[4.25rem] w-full touch-manipulation items-center gap-3.5 rounded-2xl border px-4 py-3.5 text-start transition-colors ${s}`;
   const plainCard = card("border-line bg-surface hover:border-[var(--bk-line)] hover:bg-[var(--bk-soft)]");
 
+  /*
+    The band in the clinic's colour, or a plain white page (0107). Plain on a
+    phone is the sheet edge to edge under a quiet header; from a tablet up it
+    is the same sheet as a bordered card. `gutter` is the sheet's side padding
+    in each, which the date strip bleeds out to.
+  */
+  const banded = brandHeader;
+  const gutter = banded ? "px-5 sm:px-6" : "px-4 sm:px-6";
+  const bleed = banded ? "-mx-5 px-5 sm:-mx-6 sm:px-6" : "-mx-4 px-4 sm:-mx-6 sm:px-6";
+
   return (
     <main
       dir={dir}
-      className="theme-light min-h-dvh bg-sunken text-ink-900"
+      className={`theme-light min-h-dvh text-ink-900 ${banded ? "bg-sunken" : "bg-surface"}`}
+      data-booking-style={banded ? "band" : "plain"}
       style={
         {
           "--band": brand.band,
@@ -665,9 +679,13 @@ export function BookingWizard({
         white.
       */}
       <header
-        className="px-4 pb-12 pt-[max(1.5rem,env(safe-area-inset-top))]"
-        style={{ background: "var(--band)", color: "var(--band-ink)" }}
-        data-booking-band
+        className={
+          banded
+            ? "px-4 pb-12 pt-[max(1.5rem,env(safe-area-inset-top))]"
+            : "border-b border-line px-4 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] sm:border-b-0"
+        }
+        style={banded ? { background: "var(--band)", color: "var(--band-ink)" } : undefined}
+        data-booking-band={banded ? "" : undefined}
       >
         <div className="mx-auto flex max-w-lg items-center gap-3.5">
           {clinic.hasLogo ? (
@@ -675,12 +693,12 @@ export function BookingWizard({
             <img
               src={`/api/public/clinic-logo/${clinic.slug}`}
               alt=""
-              className="h-14 w-14 shrink-0 rounded-2xl bg-white object-contain p-1"
+              className={`h-14 w-14 shrink-0 rounded-2xl bg-white object-contain p-1 ${banded ? "" : "border border-line"}`}
             />
           ) : (
             <span
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white font-display text-[22px] font-bold"
-              style={{ color: "var(--bk)" }}
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl font-display text-[22px] font-bold"
+              style={{ color: "var(--bk)", background: banded ? "#ffffff" : "var(--bk-soft)" }}
             >
               {clinicName.slice(0, 1)}
             </span>
@@ -704,16 +722,22 @@ export function BookingWizard({
             onClick={() => setLocale(isAr ? "en" : "ar")}
             aria-label={isAr ? "English" : "العربية"}
             className="grid h-10 min-w-10 shrink-0 touch-manipulation place-items-center rounded-full border px-3 text-[13px] font-semibold"
-            style={{ borderColor: brand.bandInk === "#ffffff" ? "rgba(255,255,255,0.45)" : "rgba(11,18,32,0.25)" }}
+            style={{
+              borderColor: !banded
+                ? "var(--color-line-strong)"
+                : brand.bandInk === "#ffffff"
+                  ? "rgba(255,255,255,0.45)"
+                  : "rgba(11,18,32,0.25)",
+            }}
           >
             {isAr ? "EN" : "ع"}
           </button>
         </div>
       </header>
 
-      <div className="mx-auto -mt-7 max-w-lg px-3 sm:px-4">
-        <div className="rounded-[22px] bg-surface shadow-pop">
-          <div className="px-5 pb-6 pt-5 sm:px-6">
+      <div className={`mx-auto max-w-lg ${banded ? "-mt-7 px-3 sm:px-4" : "sm:mt-2 sm:px-4"}`}>
+        <div className={banded ? "rounded-[22px] bg-surface shadow-pop" : "bg-surface sm:rounded-[22px] sm:border sm:border-line"}>
+          <div className={`${gutter} pb-6 pt-5`}>
             {services.length === 0 ? (
               /* Nothing to book: say so, and how to book instead. */
               <section className="py-8 text-center" data-booking-empty>
@@ -924,7 +948,7 @@ export function BookingWizard({
                       {DateTime.fromISO(date, { zone: clinic.tz }).setLocale(fmtLocale).toFormat("LLLL yyyy")}
                     </p>
                     {/* The date strip. Each chip's day is the one `span.tnum` in it — how qa finds the chips. */}
-                    <div className="-mx-5 mb-5 flex snap-x gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:-mx-6 sm:px-6">
+                    <div className={`${bleed} mb-5 flex snap-x gap-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none]`}>
                       {days.map((d) => {
                         const iso = d.toISODate()!;
                         const active = iso === date;
@@ -1020,7 +1044,7 @@ export function BookingWizard({
                         placeholder={t.fullName}
                         aria-label={t.fullName}
                         autoComplete="name"
-                        className="h-12 rounded-xl border border-line-strong bg-surface px-4 text-[16px] outline-none focus:border-[var(--bk-text)]"
+                        className="h-12 scroll-mb-28 rounded-xl border border-line-strong bg-surface px-4 text-[16px] outline-none focus:border-[var(--bk-text)]"
                       />
                       <label className="block">
                         <span className="mb-1.5 block text-[13px] font-semibold">{t.phone}</span>
@@ -1031,7 +1055,7 @@ export function BookingWizard({
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
                           placeholder="079 000 0000"
-                          className="h-12 w-full rounded-xl border border-line-strong bg-surface px-4 text-[16px] tabular-nums outline-none focus:border-[var(--bk-text)]"
+                          className="h-12 w-full scroll-mb-28 rounded-xl border border-line-strong bg-surface px-4 text-[16px] tabular-nums outline-none focus:border-[var(--bk-text)]"
                         />
                         <span className="mt-1.5 flex items-start gap-1.5 text-[12.5px] leading-5 text-ink-500">
                           <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -1199,7 +1223,7 @@ export function BookingWizard({
           */}
           {bar && (
             <div
-              className="sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-b-[22px] border-t border-line bg-surface px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6"
+              className={`sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-line bg-surface ${gutter} pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] ${banded ? "rounded-b-[22px]" : "sm:rounded-b-[22px]"}`}
               data-booking-bar
             >
               {bar}
