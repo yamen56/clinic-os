@@ -321,7 +321,8 @@ export function InboxClient({
     if (m.status === "queued" || m.status === "sending")
       return <Clock className="h-3.5 w-3.5 opacity-60" aria-label={t.conversations.pending} />;
     if (m.status === "read")
-      return <CheckCheck className="h-3.5 w-3.5 text-sky-300" aria-label={t.conversations.read} />;
+      // Pale blue on the navy bubble; a deeper blue on the light bubble dark mode draws.
+      return <CheckCheck className="h-3.5 w-3.5 text-sky-300 dark:text-sky-600" aria-label={t.conversations.read} />;
     if (m.status === "delivered")
       return <CheckCheck className="h-3.5 w-3.5 opacity-60" aria-label={t.conversations.delivered} />;
     return <Check className="h-3.5 w-3.5 opacity-60" aria-label={t.conversations.sent} />;
@@ -549,9 +550,11 @@ export function InboxClient({
                             : "rounded-be-md bg-brand-600 text-on-brand"
                           : "rounded-bs-md border border-line bg-surface"
                       }`}
+                      data-bubble={out ? m.sender_kind : "in"}
                     >
+                      {/* The bubble's own ink, faded — not white, which vanished on dark mode's light bubble. */}
                       {senderLabel && (
-                        <div className={`mb-0.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide ${out && m.sender_kind !== "ai" ? "text-white/70" : "text-brand-700"}`}>
+                        <div className={`mb-0.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide ${out && m.sender_kind !== "ai" ? "text-on-brand/70" : "text-brand-700"}`}>
                           {m.sender_kind === "ai" && <Sparkles className="h-3 w-3" />}
                           {m.sender_kind === "automation" && <Zap className="h-3 w-3" />}
                           {senderLabel}
@@ -573,7 +576,7 @@ export function InboxClient({
                           href={`/api/c/${slug}/wa-media/${m.id}`}
                           target="_blank"
                           rel="noreferrer"
-                          className={`mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] underline ${out ? "bg-white/10" : "bg-sunken"}`}
+                          className={`mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] underline ${out ? (m.sender_kind === "ai" ? "bg-surface/60" : "bg-on-brand/10") : "bg-sunken"}`}
                         >
                           <Paperclip className="h-3.5 w-3.5" />
                           {m.media_name ?? m.msg_type}
@@ -581,7 +584,7 @@ export function InboxClient({
                       )}
                       {/* Each message in its own direction: an English one in the Arabic app ends with its "?", not starts. */}
                       {m.body && <div className="whitespace-pre-wrap break-words text-sm" dir="auto">{m.body}</div>}
-                      <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${out && m.sender_kind !== "ai" ? "text-white/60" : "text-ink-400"}`}>
+                      <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${out && m.sender_kind !== "ai" ? "text-on-brand/65" : "text-ink-500"}`} data-bubble-time>
                         <span className="tnum" suppressHydrationWarning>{fmtTime(m.created_at, tz, locale)}</span>
                         {statusIcon(m)}
                       </div>

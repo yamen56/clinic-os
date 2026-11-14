@@ -84,8 +84,8 @@ async function main() {
   await aside.locator("text=Create new patient").click();
   await aside.locator('input[placeholder="Full name"]').fill("ليلى حداد");
   await aside.locator('input[placeholder="xxxxxxxxxx"]').fill("0795556677");
-  await aside.locator("select").nth(0).selectOption({ index: 1 }); // Dental Cleaning
-  await aside.locator("select").nth(1).selectOption({ index: 1 }); // doctor
+  await aside.locator("select[data-add-service]").selectOption({ index: 1 }); // Dental Cleaning
+  await aside.locator("select[data-doctor-select]").selectOption({ index: 1 }); // doctor
   await aside.locator('input[type="date"]').fill(CLINIC_TODAY);
   await aside.locator('input[type="time"]').fill("10:00");
   await aside.locator("button:has-text('Save')").click();
@@ -100,7 +100,7 @@ async function main() {
   await aside2.locator("text=Create new patient").click();
   await aside2.locator('input[placeholder="Full name"]').fill("عمر يوسف");
   await aside2.locator('input[placeholder="xxxxxxxxxx"]').fill("0791119988");
-  await aside2.locator("select").nth(1).selectOption({ index: 1 });
+  await aside2.locator("select[data-doctor-select]").selectOption({ index: 1 });
   await aside2.locator('input[type="date"]').fill(CLINIC_TODAY);
   await aside2.locator('input[type="time"]').fill("10:15");
   await aside2.locator("button:has-text('Save')").click();

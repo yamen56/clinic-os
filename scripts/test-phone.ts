@@ -7,12 +7,14 @@ import {
   splitE164,
   joinE164,
   countryFromClinic,
+  formatPhone,
+  type CountryCode,
 } from "../src/lib/phone";
 
 let pass = 0;
 let fail = 0;
 
-function eq(input: string, expected: string | null, country: "JO" | "SA" | "AE" = "JO") {
+function eq(input: string, expected: string | null, country: CountryCode = "JO") {
   const got = normalizePhone(input, country);
   if (got === expected) {
     pass++;
@@ -190,6 +192,26 @@ clinic("Asia/Dubai", "AED", "AE");
 clinic("Asia/Amman", "USD", "JO");
 clinic(null, "EGP", "EG");
 clinic(null, null, "JO");
+
+/* -------------------------------------------- Palestine (2026-11-14) */
+// A clinic in Palestine: Jawwal 059 and Ooredoo 056, with and without the trunk zero.
+eq("0599123456", "+970599123456", "PS");
+eq("599123456", "+970599123456", "PS");
+eq("0569123456", "+970569123456", "PS");
+// Whatever the clinic, a number written with its code is Palestinian.
+eq("+970599123456", "+970599123456");
+eq("00970599123456", "+970599123456");
+eq("9700599123456", "+970599123456");
+// Without the code, 05… is still Saudi for a Jordanian clinic — unchanged.
+eq("0599123456", "+966599123456", "JO");
+// The picker: a country chosen beside the number decides it.
+join("PS", "0599 123 456", "+970599123456");
+join("PS", "599123456", "+970599123456");
+eq("01001234567", "+201001234567", "EG");
+if (formatPhone("+970599123456") === "+970 59 912 3456") pass++;
+else { fail++; console.error("FAIL formatPhone(+970599123456) =", formatPhone("+970599123456")); }
+if (splitE164("+970599123456").country === "PS") pass++;
+else { fail++; console.error("FAIL splitE164 did not read +970 as Palestine"); }
 
 console.log(`phone tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

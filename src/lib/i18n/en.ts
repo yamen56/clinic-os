@@ -11,6 +11,8 @@ export const en = {
     delete: "Delete",
     send: "Send",
     country: "Country",
+    chooseFile: "Choose a file",
+    noFileChosen: "No file chosen yet",
     edit: "Edit",
     add: "Add",
     create: "Create",

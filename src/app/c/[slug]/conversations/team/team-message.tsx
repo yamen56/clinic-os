@@ -227,7 +227,7 @@ export function Bubble({
               {seen === "sent" ? (
                 <Check className="h-3.5 w-3.5" />
               ) : (
-                <CheckCheck className={`h-3.5 w-3.5 ${seen === "all" ? "text-sky-300" : ""}`} />
+                <CheckCheck className={`h-3.5 w-3.5 ${seen === "all" ? "text-sky-300 dark:text-sky-600" : ""}`} />
               )}
             </span>
           )}

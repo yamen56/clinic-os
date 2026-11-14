@@ -223,7 +223,7 @@ async function main() {
       check("the length is both together", length === "50", length);
       check("and says so", (await desk.locator("aside").last().innerText()).includes("2 services · 50 min in total"));
       if (SHOTS) await desk.locator("aside").last().screenshot({ path: `${SHOTS}/desk-1-new.png` });
-      await aside.locator("select").nth(1).selectOption(doc);
+      await aside.locator("select[data-doctor-select]").selectOption(doc);
       await aside.locator('input[type="date"]').fill(day);
       await aside.locator('input[type="time"]').fill("15:00");
       await aside.locator("button:has-text('Save')").click();

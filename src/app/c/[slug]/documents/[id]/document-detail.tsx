@@ -12,6 +12,9 @@ import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { FileField } from "@/components/ui/file-field";
+import { countryFromClinic } from "@/lib/phone";
 import { useToast } from "@/components/ui/toast";
 import { DocumentBody } from "@/components/esign/document-body";
 import { SignaturePad, type SignaturePadHandle } from "@/components/esign/signature-pad";
@@ -1006,6 +1009,7 @@ export function DocumentDetailClient({
         mode={doc.signing_mode}
         roles={detail.roles}
         signers={editSigners}
+        tz={tz}
         onClose={() => setEditSigners(null)}
       />
 
@@ -1148,12 +1152,7 @@ function UploadSignedCopy({
         <p className="text-[13px] text-ink-500">{t.docs.uploadSignedBody}</p>
 
         <Field label={t.docs.uploadSignedFile} required>
-          <input
-            type="file"
-            accept=".pdf,application/pdf"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="w-full rounded-ctl border border-line bg-surface px-3 py-2 text-base file:me-3 file:rounded-ctl file:border-0 file:bg-sunken file:px-3 file:py-1.5 file:text-[13px] file:font-medium md:text-sm"
-          />
+          <FileField accept=".pdf,application/pdf" onFile={setFile} />
         </Field>
 
         <div>
@@ -1210,10 +1209,13 @@ function SignerEditor({
   mode,
   roles,
   signers,
+  tz,
   onClose,
 }: {
   slug: string;
   documentId: string;
+  /** The clinic's timezone — and so its country, for a signer's number typed without a code. */
+  tz: string;
   mode: "sequential" | "parallel";
   roles: { key: string; label: string; label_ar: string | null; is_staff: boolean }[];
   signers: Signer[] | null;
@@ -1275,13 +1277,11 @@ function SignerEditor({
               </Field>
               {!isStaffRole && (
                 <Field label={t.docs.signerPhone}>
-                  <Input
-                    dir="ltr"
+                  <PhoneInput
                     value={s.phone_e164 ?? ""}
+                    defaultCountry={countryFromClinic({ timezone: tz })}
                     placeholder="xxxxxxxxxx"
-                    onChange={(e) =>
-                      setRows(rows.map((x, idx) => (idx === i ? { ...x, phone_e164: e.target.value } : x)))
-                    }
+                    onChange={(v) => setRows((rs) => rs.map((x, idx) => (idx === i ? { ...x, phone_e164: v } : x)))}
                   />
                 </Field>
               )}

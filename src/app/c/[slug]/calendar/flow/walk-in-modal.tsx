@@ -10,6 +10,8 @@ import { useToast } from "@/components/ui/toast";
 import { ServiceSelect } from "@/components/ui/service-picker";
 import { PatientPicker } from "@/components/appointments/patient-picker";
 import { walkInAction } from "../flow-actions";
+import { PhoneInput } from "@/components/ui/phone-input";
+import type { CountryCode } from "@/lib/phone";
 import type { CalendarMeta } from "../types";
 import { X } from "lucide-react";
 
@@ -24,6 +26,7 @@ export function WalkInModal({
   onDone,
   meta,
   defaultDoctorId,
+  country = "JO",
 }: {
   slug: string;
   open: boolean;
@@ -31,6 +34,8 @@ export function WalkInModal({
   onDone: () => void;
   meta: CalendarMeta | null;
   defaultDoctorId: string;
+  /** The clinic's own country: where a number typed without a code is from. */
+  country?: CountryCode;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -88,11 +93,12 @@ export function WalkInModal({
                 onChange={(e) => setNewPatient({ ...newPatient, fullName: e.target.value })}
                 autoFocus
               />
-              <Input
-                dir="ltr"
-                placeholder="xxxxxxxxxx"
+              {/* The country first, the clinic's own by default (2026-11-14). */}
+              <PhoneInput
                 value={newPatient.phone}
-                onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+                defaultCountry={country}
+                placeholder="xxxxxxxxxx"
+                onChange={(v) => setNewPatient((np) => (np ? { ...np, phone: v } : np))}
               />
               <button onClick={() => setNewPatient(null)} className="justify-self-start text-[12px] text-ink-500 underline">
                 {t.common.cancel}

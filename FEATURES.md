@@ -1907,6 +1907,16 @@ clinic has a machine, a lab or the face chart's products. The order is the clini
 not the order the features were built — it decides what a receptionist reaches with one thumb.
 Each item is filtered by the member's capabilities.
 
+**A tap is answered at once** (2026-11-14). Pages are rendered on the server, and on a phone on
+mobile data the old screen used to stay up, with the tapped tab unlit, until the new one
+arrived. The shell now takes the destination from the click itself: the tab lights at once and
+a thin line runs across the top of the screen (`.nav-progress`, after 120ms so an instant page
+does not flicker) until the path changes, Back is pressed, or fifteen seconds pass. The
+workspace's fallback skeleton (`c/[slug]/loading.tsx`), which shows before a page's own one has
+been fetched, is a title over a list — the shape nearly every page shares — and no longer the
+dashboard's four tiles. On a phone each announcement is cut to two lines (tap for the rest) with
+a 40px close button.
+
 
 The one screen everybody can open. Tiles respect the same capabilities as the nav:
 
@@ -2255,8 +2265,21 @@ E.164 normalisation is **the single source of patient identity**.
 - **Ambiguous `05…` resolves to Saudi (+966) unless the clinic's country is UAE** — SA and
   AE share the local mobile shape; SA is the larger Gulf market and the clinic's country
   breaks the tie.
-- Display grouping `+962 79 074 4070`; helpers for WhatsApp JID conversion both ways.
-- `npm run test:phone` covers the matrix.
+- **Palestine (+970)**: a clinic in Palestine reads `059…` / `056…` (Jawwal, Ooredoo) as +970,
+  before the Saudi rule claims every `05…`. Any other country set as the default reads its own
+  trunk-zero local form (2026-11-14).
+- Display grouping `+962 79 074 4070` (also +970, +966, +971, +963); helpers for WhatsApp JID
+  conversion both ways.
+- **The phone field** (`components/ui/phone-input.tsx`) is used wherever a patient's number is
+  first typed — New patient, the booking panel's and the walk-in's new patient, a consent
+  form's signer, the public booking page — as well as on the patient file. The country is a
+  control of its own showing the flag and code; tapping it opens the phone's native picker,
+  listing each country **by name** in the reader's language ("🇵🇸 فلسطين +970"), because
+  Windows and many Android phones draw the flag as the letters "PS". It starts on the
+  clinic's country (`countryFromClinic`), a number pasted with its code ("+970 59…",
+  "00970…") moves it to that country, and a local number handed over from a patient search
+  is sent up with its country at once rather than left for the server to guess.
+- `npm run test:phone` covers the matrix; `scripts/qa-phone-ux.ts` covers the field in each form.
 
 ---
 

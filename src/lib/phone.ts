@@ -151,6 +151,28 @@ export function normalizePhone(raw: string, defaultCountry: CountryCode = "JO"):
   if (/^07[789]\d{7}$/.test(s)) return `+${jo.cc}${s.slice(1)}`; // 0790744070
   if (/^7[789]\d{7}$/.test(s)) return `+${jo.cc}${s}`; // 790744070
 
+  /*
+    Palestinian mobiles — Jawwal 059, Ooredoo 056 — for a clinic in Palestine.
+    Asked before the Saudi/Emirati rule below, which claims every 05… number:
+    a Palestinian clinic's 0599 123 456 is its own patient, not a Saudi one.
+  */
+  if (defaultCountry === "PS") {
+    const ps = COUNTRIES.PS;
+    if (/^05[69]\d{7}$/.test(s)) return `+${ps.cc}${s.slice(1)}`; // 0599123456
+    if (/^5[69]\d{7}$/.test(s)) return `+${ps.cc}${s}`; // 599123456
+  }
+
+  /*
+    Any other country picked as the default: its own trunk-zero form. This is
+    what makes a number typed beside a chosen country (the phone field's
+    picker) mean that country, for every country on the list.
+  */
+  if (defaultCountry !== "JO" && defaultCountry !== "SA" && defaultCountry !== "AE") {
+    const { cc, subLen } = COUNTRIES[defaultCountry];
+    const local = s.replace(/^0/, "");
+    if (local.length === subLen) return `+${cc}${local}`;
+  }
+
   if (/^05\d{8}$/.test(s)) {
     const c = defaultCountry === "AE" ? COUNTRIES.AE : COUNTRIES.SA;
     return `+${c.cc}${s.slice(1)}`;
@@ -169,7 +191,8 @@ export function normalizePhone(raw: string, defaultCountry: CountryCode = "JO"):
 /** Display format: +962 79 074 4070 style grouping. */
 export function formatPhone(e164: string | null | undefined): string {
   if (!e164) return "";
-  const m = e164.match(/^\+(962|966|971)(\d{2})(\d{3})(\d{4})$/);
+  // Jordan, Saudi, the Emirates, Palestine and Syria: nine digits after the code.
+  const m = e164.match(/^\+(962|966|971|970|963)(\d{2})(\d{3})(\d{4})$/);
   if (m) return `+${m[1]} ${m[2]} ${m[3]} ${m[4]}`;
   return e164;
 }

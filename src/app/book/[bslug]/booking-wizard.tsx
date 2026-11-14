@@ -6,6 +6,8 @@ import type { Dict } from "@/lib/i18n/en";
 import { PoweredBy, PrivacyLink } from "@/components/powered-by";
 import { questionsForServices, type PublicQuestion } from "@/lib/booking-intake";
 import { trackSchedule } from "@/components/meta-pixel";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { countryFromClinic, formatPhone } from "@/lib/phone";
 import {
   AddToCalendar,
   AppointmentCard,
@@ -207,6 +209,8 @@ export function BookingWizard({
   const consentText = isAr ? copy.consentTextAr || copy.consentText : copy.consentText;
   const fmtLocale = isAr ? "ar-JO-u-nu-latn" : "en-GB";
   const nameOf = (s: { name: string; nameAr: string | null }) => (isAr ? s.nameAr || s.name : s.name);
+  /** Where a number typed without its code is from: the clinic's own country. */
+  const homeCountry = countryFromClinic({ timezone: clinic.tz, currency: clinic.currency });
 
   const pickedIds = useMemo(() => picked.map((s) => s.id), [picked]);
   const pickedKey = pickedIds.join(",");
@@ -1046,22 +1050,29 @@ export function BookingWizard({
                         autoComplete="name"
                         className="h-12 scroll-mb-28 rounded-xl border border-line-strong bg-surface px-4 text-[16px] outline-none focus:border-[var(--bk-text)]"
                       />
-                      <label className="block">
+                      <div>
                         <span className="mb-1.5 block text-[13px] font-semibold">{t.phone}</span>
-                        <input
-                          dir="ltr"
-                          inputMode="tel"
-                          autoComplete="tel"
+                        {/*
+                          The country first, the clinic's own by default: a
+                          patient with a Palestinian or Saudi number picks it
+                          rather than having it refused (2026-11-14).
+                        */}
+                        <PhoneInput
                           value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          placeholder="079 000 0000"
-                          className="h-12 w-full scroll-mb-28 rounded-xl border border-line-strong bg-surface px-4 text-[16px] tabular-nums outline-none focus:border-[var(--bk-text)]"
+                          defaultCountry={homeCountry}
+                          onChange={setPhone}
+                          placeholder={homeCountry === "JO" ? "079 000 0000" : undefined}
+                          size="lg"
+                          locale={locale}
+                          countryLabel={isAr ? "الدولة" : "Country"}
+                          // `tel`, not `tel-national`: autofill hands over the whole number, and the field reads its code.
+                          inputAttrs={{ autoComplete: "tel", "aria-label": t.phone }}
                         />
                         <span className="mt-1.5 flex items-start gap-1.5 text-[12.5px] leading-5 text-ink-500">
                           <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                           {verifyByOtp ? t.phoneHint : t.phoneHintNoCode}
                         </span>
-                      </label>
+                      </div>
                     </div>
 
                     {activeQuestions.length > 0 && (
@@ -1110,7 +1121,7 @@ export function BookingWizard({
                     >
                       <MessageCircle className="h-7 w-7" />
                     </span>
-                    <p className="num mb-5 text-[14px] text-ink-500 tabular-nums">{phone}</p>
+                    <p className="num mb-5 text-[14px] text-ink-500 tabular-nums">{formatPhone(phone) || phone}</p>
                     <input
                       dir="ltr"
                       inputMode="numeric"

@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate } from "@/lib/dates";
-import { formatPhone } from "@/lib/phone";
+import { countryFromClinic, formatPhone } from "@/lib/phone";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { addedByLabel, type AddedBy } from "@/lib/added-by";
 import { PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,8 @@ export function PatientsList({
   const { t, locale } = useI18n();
   const router = useRouter();
   const { toast } = useToast();
+  /** The clinic's own country: where a number typed without a code is from. */
+  const country = countryFromClinic({ timezone: tz });
   const [f, setF] = useState(initialFilters);
   const [newOpen, setNewOpen] = useState(Boolean(openNew));
   /*
@@ -543,7 +546,14 @@ export function PatientsList({
               required={requiredKey("patient.phone")}
               error={err?.field === "phone" ? err.text : undefined}
             >
-              <Input dir="ltr" type="tel" value={nw.phone} onChange={(e) => setNw({ ...nw, phone: e.target.value })} placeholder="+962 7…" data-new-phone />
+              {/* The country first, the clinic's own by default — a Palestinian or Saudi number is one tap away. */}
+              <PhoneInput
+                value={nw.phone}
+                defaultCountry={country}
+                onChange={(v) => setNw({ ...nw, phone: v })}
+                placeholder="xxxxxxxxxx"
+                inputAttrs={{ "data-new-phone": "" }}
+              />
             </Field>
             <Field label={labelOf("patient.gender", t.patients.gender)} required={requiredKey("patient.gender")}>
               <Select value={nw.gender} onChange={(e) => setNw({ ...nw, gender: e.target.value as typeof nw.gender })} data-new-gender>

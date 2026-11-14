@@ -13,6 +13,8 @@ export const ar: Dict = {
     delete: "حذف",
     send: "إرسال",
     country: "الدولة",
+    chooseFile: "اختر ملفاً",
+    noFileChosen: "لم يُختر ملف بعد",
     edit: "تعديل",
     add: "إضافة",
     create: "إنشاء",

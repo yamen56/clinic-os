@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/misc";
  */
 export default function Loading() {
   return (
-    <div className="animate-fade-in grid h-[calc(100vh-11rem)] grid-cols-1 gap-4 md:grid-cols-[22rem_1fr]">
+    <div className="animate-fade-in grid h-[calc(100dvh_-_11.5rem_-_env(safe-area-inset-top))] grid-cols-1 gap-4 md:h-[calc(100dvh-5rem)] md:grid-cols-[22rem_1fr]">
       <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
         <div className="border-b border-line px-4 py-3">
           <Skeleton className="h-9 w-full rounded-ctl" />

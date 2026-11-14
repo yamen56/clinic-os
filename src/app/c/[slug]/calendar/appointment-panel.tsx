@@ -26,6 +26,8 @@ import { VisitLineView, whereOf } from "@/components/charts/dental/visit-work";
 import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock, UserPen } from "lucide-react";
 import { flagAlerts } from "@/lib/medical-history";
 import { MAX_VISIT_SERVICES } from "@/lib/appointment-services";
+import { countryFromClinic } from "@/lib/phone";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { visitServiceLabel } from "@/lib/services";
 
 export type PanelState =
@@ -538,11 +540,12 @@ export function AppointmentPanel({
                     onChange={(e) => setNewPatient({ ...newPatient, fullName: e.target.value })}
                     autoFocus
                   />
-                  <Input
-                    dir="ltr"
-                    placeholder="xxxxxxxxxx"
+                  {/* The country first, the clinic's own by default (2026-11-14). */}
+                  <PhoneInput
                     value={newPatient.phone}
-                    onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+                    defaultCountry={countryFromClinic({ timezone: tz })}
+                    placeholder="xxxxxxxxxx"
+                    onChange={(v) => setNewPatient((np) => (np ? { ...np, phone: v } : np))}
                   />
                   <button onClick={() => setNewPatient(null)} className="justify-self-start text-[12px] text-ink-500 underline">
                     {t.common.cancel}
@@ -621,8 +624,9 @@ export function AppointmentPanel({
               What the visit is for — one service or several (Yamen, 2026-11-12:
               "to make the doctor see that this patient will do more than one
               service"). Each one chosen is a chip; the list below adds another.
-              It stays the panel's first <select> and the doctor its second,
-              which is how the QA scripts find them.
+              QA finds it as `select[data-add-service]` and the doctor as
+              `select[data-doctor-select]` — not by position, which a new
+              patient's country picker (2026-11-14) moves.
             */}
             <Field label={t.calendar.service}>
               {chosen.length > 0 && (
@@ -705,6 +709,7 @@ export function AppointmentPanel({
             <div className={rooms.length > 0 ? "grid grid-cols-2 gap-4" : "grid gap-4"}>
               <Field label={t.calendar.doctor}>
                 <Select
+                  data-doctor-select
                   value={doctorId}
                   onChange={(e) => {
                     setDoctorId(e.target.value);

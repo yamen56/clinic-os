@@ -16,6 +16,7 @@ import {
 } from "./actions";
 import { IMPORT_ACCEPT, type ImportField } from "@/lib/import/parse";
 import { Upload, Undo2 } from "lucide-react";
+import { FileField } from "@/components/ui/file-field";
 
 const FIELDS: ImportField[] = [
   "ignore",
@@ -145,19 +146,14 @@ export function ImportClient({
           <CardHeader title={t.import.step1} sub={t.import.step1Sub} />
           <div className="grid gap-4 p-5">
             <div>
-              <input
-                type="file"
+              <FileField
                 accept={IMPORT_ACCEPT}
                 disabled={reading}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
+                onFile={(f) => {
                   if (f) void readFile(f);
                 }}
-                className="block w-full text-sm file:me-3 file:rounded-ctl file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-700"
+                hint={reading ? t.import.reading : t.import.fileHint}
               />
-              <p className="mt-1 text-xs text-ink-500">
-                {reading ? t.import.reading : t.import.fileHint}
-              </p>
               {readError && (
                 <p className="mt-1 text-xs text-danger">{readError}</p>
               )}

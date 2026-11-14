@@ -180,6 +180,8 @@ export function Shell({
     document.cookie = `${SIDEBAR_COOKIE}=${next}; path=/; max-age=${365 * 86400}; samesite=lax`;
   };
   const [hiddenAnnouncements, setHiddenAnnouncements] = useState<string[]>([]);
+  /** The announcement shown in full on a phone, where they are cut to two lines. */
+  const [openAnnouncement, setOpenAnnouncement] = useState<string | null>(null);
   const live = useLiveNotifications(clinic.slug, notifications);
   /*
     The team chat's count, kept live. Each person hears only of their own threads'
@@ -326,12 +328,67 @@ export function Shell({
     inside the section when they are on Expenses — matching on their own href
     would leave the entry unlit on two of its own tabs.
   */
-  const isActive = (item: { key: NavKey; href: string }) => {
-    if (item.key === "finance") {
-      return FINANCE_PREFIXES.some((p) => pathname.startsWith(`${base}${p}`));
+  /*
+    Where a tap is taking us, before the server has answered.
+
+    A page here is rendered on the server, and on a phone on mobile data that
+    is a second or two in which the screen used to show nothing at all: the old
+    page stayed, the tapped tab stayed unlit, and the tap read as missed — so
+    people tapped again (2026-11-14: "the loading screen in the phone view does
+    not appear properly"). Now the tab lights the moment it is pressed and a
+    thin line runs across the top until the page arrives.
+
+    Taken from the click itself, in the capture phase — before next/link
+    handles it and cancels the browser's own navigation — for any link to
+    another page of this app. Cleared when the path changes, by Back, or after
+    fifteen seconds whatever happens, so a navigation that never lands cannot
+    leave the line running.
+  */
+  const [goingTo, setGoingTo] = useState<string | null>(null);
+  const [showProgress, setShowProgress] = useState(false);
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || (a.target && a.target !== "_self") || a.hasAttribute("download")) return;
+      const url = new URL(a.href, window.location.href);
+      if (url.origin !== window.location.origin || url.pathname === window.location.pathname) return;
+      if (/^\/api\//.test(url.pathname)) return;
+      setGoingTo(url.pathname);
+    };
+    const onBack = () => setGoingTo(null);
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("popstate", onBack);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("popstate", onBack);
+    };
+  }, []);
+  useEffect(() => {
+    setGoingTo(null);
+  }, [pathname]);
+  useEffect(() => {
+    if (!goingTo) {
+      setShowProgress(false);
+      return;
     }
-    return item.href === base ? pathname === base : pathname.startsWith(item.href);
+    // Only for a wait worth showing: a page that is there at once gets no flicker.
+    const show = setTimeout(() => setShowProgress(true), 120);
+    const giveUp = setTimeout(() => setGoingTo(null), 15000);
+    return () => {
+      clearTimeout(show);
+      clearTimeout(giveUp);
+    };
+  }, [goingTo]);
+
+  const isActiveAt = (item: { key: NavKey; href: string }, path: string) => {
+    if (item.key === "finance") {
+      return FINANCE_PREFIXES.some((p) => path.startsWith(`${base}${p}`));
+    }
+    return item.href === base ? path === base : path.startsWith(item.href);
   };
+  /* The tab being gone to is the lit one, from the moment it is tapped. */
+  const isActive = (item: { key: NavKey; href: string }) => isActiveAt(item, goingTo ?? pathname);
 
   /*
     Back, on every page the nav does not lead to directly.
@@ -400,6 +457,15 @@ export function Shell({
   return (
     <div className="shell min-h-dvh bg-canvas" data-sidebar={sb}>
       <ThemeScope />
+      {/* The page on its way (see `goingTo`): a line across the very top, under the phone's status bar. */}
+      {showProgress && (
+        <div
+          className="nav-progress pointer-events-none fixed inset-x-0 z-[70] top-[env(safe-area-inset-top)]"
+          role="progressbar"
+          aria-label={t.common.loading}
+          data-nav-progress
+        />
+      )}
       {/*
         Desktop sidebar — night surface, the one dark region of the app chrome,
         in both themes: the Clinicti mark is white and needs it.
@@ -717,13 +783,24 @@ export function Shell({
           .map((a) => (
             <div
               key={a.id}
-              className="flex items-start gap-3 border-b border-brand-100 bg-brand-50 px-4 py-2.5 text-[13px] text-ink-900 md:px-8"
+              className="flex items-center gap-3 border-b border-brand-100 bg-brand-50 px-4 py-2 text-[13px] text-ink-900 md:items-start md:px-8 md:py-2.5"
+              data-announcement
             >
-              <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" strokeWidth={1.75} />
-              <div className="min-w-0 flex-1">
+              <Megaphone className="h-4 w-4 shrink-0 text-brand-500 md:mt-0.5" strokeWidth={1.75} />
+              {/*
+                Two lines at most on a phone, and the whole text on a tap: two
+                announcements at full length took a fifth of the screen before
+                the page began.
+              */}
+              <button
+                type="button"
+                aria-expanded={openAnnouncement === a.id}
+                onClick={() => setOpenAnnouncement((x) => (x === a.id ? null : a.id))}
+                className={`min-w-0 flex-1 text-start ${openAnnouncement === a.id ? "" : "max-md:line-clamp-2"}`}
+              >
                 <span className="font-semibold">{a.title}</span>
                 {a.body && <span className="ms-2 text-ink-700">{a.body}</span>}
-              </div>
+              </button>
               <button
                 onClick={() => {
                   setHiddenAnnouncements((xs) => [...xs, a.id]);
@@ -734,7 +811,7 @@ export function Shell({
                   }).catch(() => {});
                 }}
                 aria-label={t.common.close}
-                className="-m-1 shrink-0 rounded-full p-1 text-ink-500 transition-colors hover:bg-brand-100 hover:text-ink-900"
+                className="-my-2 -me-2 grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full text-ink-500 transition-colors hover:bg-brand-100 hover:text-ink-900 md:-m-1 md:h-auto md:w-auto md:p-1"
               >
                 <X className="h-4 w-4" />
               </button>

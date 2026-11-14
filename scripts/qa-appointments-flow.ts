@@ -218,8 +218,8 @@ async function main() {
       await aside.locator("text=Create new patient").click();
       await aside.locator('input[placeholder="Full name"]').fill(name);
       await aside.locator('input[placeholder="xxxxxxxxxx"]').fill(phone().slice(4));
-      await aside.locator("select").nth(0).selectOption(service);
-      await aside.locator("select").nth(1).selectOption(doctor);
+      await aside.locator("select[data-add-service]").selectOption(service);
+      await aside.locator("select[data-doctor-select]").selectOption(doctor);
       if (room) await aside.locator("select[data-room-select]").selectOption(room);
       await aside.locator('input[type="date"]').fill(tomorrow.toISODate()!);
       await aside.locator('input[type="time"]').fill(time);

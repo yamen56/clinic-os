@@ -17,6 +17,7 @@ import { DueBackList } from "./waitlist/due-back";
 import { TreatmentsList } from "./waitlist/treatments";
 import { FlowBoard } from "./flow/flow-board";
 import { WalkInModal } from "./flow/walk-in-modal";
+import { countryFromClinic } from "@/lib/phone";
 import { ScheduleView } from "./schedule/schedule-view";
 import { WaitlistTab } from "./waitlist/waitlist-tab";
 import type { Appt, CalendarData, CalendarMeta, PageCaps, PlannedItem, ScheduleState, ScheduleView as View, Tab } from "./types";
@@ -530,6 +531,7 @@ export function AppointmentsClient({
         }}
         meta={meta}
         defaultDoctorId={isDoctor ? selfMemberId ?? "" : boardDoctor}
+        country={countryFromClinic({ timezone: tz })}
       />
 
       {late && (
