@@ -11,6 +11,8 @@ import { insurerShareOf, patientShareLines } from "../src/lib/einvoice/share";
 import {
   buildInvoiceXml,
   encodeInvoice,
+  preflight,
+  totalsOf,
   DOC_INVOICE,
   DOC_CREDIT_NOTE,
   type EinvoiceLine,
@@ -31,7 +33,12 @@ type Ctx = {
   lines: EinvoiceLine[];
   settings: Awaited<ReturnType<typeof loadEinvoiceSettings>>;
   slug: string;
-  correctsNumber: string | null;
+  /**
+   * Credit notes: the document being reversed, as ISTD holds it — the number
+   * and UUID it was filed under, what it was payable at, and whether it was
+   * filed as cash or receivable (the reversal must say the same).
+   */
+  corrects: { number: string; uuid: string; payable: number; cash: boolean } | null;
   /** The insurer's share left off this document; see src/lib/einvoice/share.ts. */
   excluded: number;
 };
@@ -48,9 +55,11 @@ async function load(invoiceId: string): Promise<Ctx | null> {
   return withSystem(async (c) => {
     const inv = (
       await c.query(
-        `select i.*, cl.slug, cl.timezone,
-                p.full_name as patient_name, p.phone_e164 as patient_phone,
-                orig.number as corrects_number, orig.einvoice_excluded as corrects_excluded
+        `select i.*, cl.slug, cl.timezone, i.issue_date::text as issue_day,
+                p.full_name as patient_name, p.national_id as patient_national_id,
+                orig.number as corrects_number, orig.einvoice_excluded as corrects_excluded,
+                orig.einvoice_uuid as corrects_uuid, orig.total as corrects_total,
+                orig.einvoice_payment_method as corrects_method
            from invoices i
            join clinics cl on cl.id = i.clinic_id
            join patients p on p.id = i.patient_id
@@ -125,7 +134,14 @@ async function load(invoiceId: string): Promise<Ctx | null> {
       lines,
       settings,
       slug: String(inv.slug),
-      correctsNumber: (inv.corrects_number as string) ?? null,
+      corrects: inv.credit_note_of
+        ? {
+            number: String(inv.corrects_number ?? ""),
+            uuid: String(inv.corrects_uuid ?? ""),
+            payable: round2(Number(inv.corrects_total ?? 0) - Number(inv.corrects_excluded ?? 0)),
+            cash: inv.corrects_method !== "022",
+          }
+        : null,
       excluded,
     };
   });
@@ -139,11 +155,12 @@ export async function submitEinvoice(invoiceId: string, attempt: JobAttempt): Pr
 
   const isCreditNote = Boolean(inv.credit_note_of);
   const lines = patientShareLines(ctx.lines, excluded);
-  if (!lines.length) {
+  if (!lines.length || totalsOf(lines).gross <= 0) {
     /*
-      The insurer covers all of it: there is no sale to the patient to report.
-      Normally caught before queueing (enqueueEinvoiceSubmit); this is the
-      belt for an amount that reached the full total some other way.
+      Nothing to report: the insurer covers all of it, or the invoice comes to
+      nothing. ISTD refuses a zero document, and a free visit is not a sale.
+      Normally caught before queueing (enqueueEinvoiceSubmit); this is the belt
+      for an amount that reached the full total some other way.
     */
     await withSystem(async (c) => {
       await c.query(
@@ -158,33 +175,40 @@ export async function submitEinvoice(invoiceId: string, attempt: JobAttempt): Pr
   // What the patient owes, which is what this document is for.
   const share = round2(Number(inv.total) - excluded);
   const paid = Number(inv.amount_paid) >= share && share > 0;
-  const issueDate = inv.issue_date
-    ? DateTime.fromJSDate(new Date(inv.issue_date as string)).toFormat("yyyy-MM-dd")
-    : DateTime.now().setZone(String(inv.timezone)).toFormat("yyyy-MM-dd");
+  // As text: a `date` read through node-pg is a Date in the server's zone.
+  const issueDate = (inv.issue_day as string | null) ?? DateTime.now().setZone(String(inv.timezone)).toFormat("yyyy-MM-dd");
+  /*
+    Cash or receivable. A credit note is reported exactly as the invoice it
+    reverses was — ISTD refuses a reversal whose type differs from its original.
+  */
+  const cash = isCreditNote ? (ctx.corrects?.cash ?? true) : paid;
 
-  const xml = buildInvoiceXml({
+  const doc = {
     settings,
     uuid: String(inv.einvoice_uuid),
     number: String(inv.number),
     icv: Number(inv.seq),
     issueDate,
-    currency: String(inv.currency),
     documentType: isCreditNote ? DOC_CREDIT_NOTE : DOC_INVOICE,
-    /*
-      Cash or receivable. A credit note reverses a sale rather than making one,
-      and is reported the way the invoice it corrects was — which for a clinic
-      is almost always cash, money already taken at the desk.
-    */
-    paid: isCreditNote ? true : paid,
+    paid: cash,
     buyerName: String(inv.patient_name ?? ""),
-    buyerPhone: (inv.patient_phone as string) ?? null,
+    buyerNationalId: (inv.patient_national_id as string) ?? null,
     buyerTaxNumber: null,
     lines,
-    correctsNumber: ctx.correctsNumber,
+    corrects: ctx.corrects,
     correctionReason: (inv.void_reason as string) || null,
-  });
+  } as const;
 
-  const result = await submitInvoice({ settings, payload: encodeInvoice(xml) });
+  /*
+    Checked here before anything is sent, so a document ISTD would refuse is
+    refused by us in a sentence the clinic can act on — a rate ISTD does not
+    accept, a missing income source sequence — and the failure path below tells
+    somebody, exactly as an ISTD rejection would.
+  */
+  const problem = preflight(doc);
+  const result = problem
+    ? ({ ok: false, status: null, error: problem, raw: null, retryable: false } as const)
+    : await submitInvoice({ settings, payload: encodeInvoice(buildInvoiceXml(doc)) });
 
   if (result.ok) {
     await withSystem(async (c) => {
@@ -205,9 +229,10 @@ export async function submitEinvoice(invoiceId: string, attempt: JobAttempt): Pr
           result.qr,
           result.number,
           isCreditNote ? DOC_CREDIT_NOTE : DOC_INVOICE,
-          // The sub-type digits carry cash/receivable; this column records the
-          // plain fact so a person reading the invoice does not have to decode it.
-          isCreditNote || paid ? "012" : "022",
+          // Cash or receivable, as filed — the plain fact, so a person reading the
+          // invoice does not have to decode the sub-type, and a later credit note
+          // can be filed the same way.
+          cash ? "012" : "022",
           excluded,
         ]
       );

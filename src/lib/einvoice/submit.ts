@@ -54,10 +54,37 @@ function pick(body: unknown, keys: string[]): string | null {
 
 export function readStamp(body: unknown): { uuid: string | null; qr: string | null; number: string | null } {
   return {
-    uuid: pick(body, ["EINV_INV_UUID", "invoice_uuid", "uuid", "UUID"]),
-    qr: pick(body, ["EINV_QR", "qr_code", "qrCode", "qr", "QR"]),
-    number: pick(body, ["EINV_NUM", "invoice_number", "invoiceNumber", "number"]),
+    uuid: pick(body, ["EINV_INV_UUID", "invoiceUUID", "invoice_uuid", "uuid", "UUID"]),
+    qr: pick(body, ["EINV_QR", "qrCode", "qr_code", "qr", "QR"]),
+    number: pick(body, ["EINV_NUM", "invoiceNumber", "invoice_number", "number"]),
   };
+}
+
+/**
+ * What ISTD said about the document, separate from the HTTP status.
+ *
+ * A 200 is not an acceptance. The verdict is in the body — `EINV_STATUS`
+ * (SUBMITTED, ALREADY_SUBMITTED, or NOT_SUBMITTED) and `EINV_RESULTS` with its
+ * status and the ERRORS that explain a refusal. Treating every 200 as filed
+ * would mark a rejected invoice "submitted", with no QR and no word to anyone.
+ */
+export function readVerdict(body: unknown): { verdict: "accepted" | "rejected" | "unknown"; errors: string[] } {
+  const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const results = (o.EINV_RESULTS ?? o.validationResults ?? {}) as Record<string, unknown>;
+  const status = String(o.EINV_STATUS ?? o.invoiceStatus ?? "").toUpperCase();
+  const checks = String(results.status ?? results.STATUS ?? "").toUpperCase();
+  const list = (results.ERRORS ?? results.errorMessages ?? []) as unknown[];
+  const errors = (Array.isArray(list) ? list : [])
+    .map((e) => {
+      const r = (e ?? {}) as Record<string, unknown>;
+      return String(r.EINV_MESSAGE ?? r.message ?? r.EINV_CODE ?? r.code ?? "").trim();
+    })
+    .filter(Boolean);
+  if (["NOT_SUBMITTED", "REJECT", "REJECTED", "ERROR"].includes(status) || checks === "ERROR" || errors.length) {
+    return { verdict: "rejected", errors };
+  }
+  if (["SUBMITTED", "ALREADY_SUBMITTED"].includes(status) || checks === "PASS") return { verdict: "accepted", errors };
+  return { verdict: "unknown", errors };
 }
 
 /**
@@ -123,10 +150,12 @@ export async function submitInvoice(args: {
   }
 
   if (!res.ok) {
+    // ISTD's own sentence when it gave one, so the clinic reads what to fix.
+    const said = readVerdict(body).errors.join(" · ");
     return {
       ok: false,
       status: res.status,
-      error: text.slice(0, 200) || `HTTP ${res.status}`,
+      error: (said || text.slice(0, 200) || `HTTP ${res.status}`).slice(0, 500),
       raw: body,
       /*
         4xx is the invoice, not the weather. A rejected document is rejected
@@ -140,5 +169,31 @@ export async function submitInvoice(args: {
   }
 
   const stamp = readStamp(body);
+  const { verdict, errors } = readVerdict(body);
+  if (verdict === "rejected") {
+    return {
+      ok: false,
+      status: res.status,
+      error: (errors.join(" · ") || text || "Rejected by JoFotara").slice(0, 500),
+      raw: body,
+      // The document, not the weather — the same one would be refused again.
+      retryable: false,
+    };
+  }
+  /*
+    Accepted means ISTD said so and stamped it. A 200 that says neither — no
+    verdict and no QR — is not counted as filed: it is retried, and the retry
+    carries the same UUID, so a document ISTD did take answers ALREADY_SUBMITTED
+    rather than becoming a second sale.
+  */
+  if (verdict === "unknown" && !stamp.qr) {
+    return {
+      ok: false,
+      status: res.status,
+      error: `JoFotara answered without a verdict or a QR: ${text.slice(0, 160)}`,
+      raw: body,
+      retryable: true,
+    };
+  }
   return { ok: true, ...stamp, raw: body };
 }

@@ -100,9 +100,9 @@ export async function loadEinvoiceSettingsView(
 export function isReady(s: EinvoiceSettings): boolean {
   if (!s.enabled) return false;
   if (!s.clientId || !s.secretKey || !s.taxNumber || !s.registeredName) return false;
-  // The income-source sequence identifies which registered activity the sale
-  // belongs to, and only a sales-tax taxpayer has one.
-  if (s.taxpayerType === "general" && !s.incomeSourceSequence) return false;
+  // The income source sequence identifies which registered activity the sale
+  // belongs to. ISTD requires it on every invoice, income and sales taxpayers alike.
+  if (!s.incomeSourceSequence) return false;
   return true;
 }
 
@@ -113,6 +113,6 @@ export function missingFields(s: EinvoiceSettings): string[] {
   if (!s.taxNumber) out.push("taxNumber");
   if (!s.clientId) out.push("clientId");
   if (!s.secretKey) out.push("secretKey");
-  if (s.taxpayerType === "general" && !s.incomeSourceSequence) out.push("incomeSourceSequence");
+  if (!s.incomeSourceSequence) out.push("incomeSourceSequence");
   return out;
 }

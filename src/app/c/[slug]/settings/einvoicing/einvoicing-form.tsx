@@ -157,18 +157,17 @@ export function EinvoicingForm({
             </Field>
           </div>
 
-          {/* Only a sales-tax taxpayer has one; an income taxpayer's portal does
-              not even show the field. */}
-          {taxpayerType === "general" && (
-            <Field label={E.incomeSourceSequence} hint={E.incomeSourceSequenceHint}>
-              <Input
-                dir="ltr"
-                defaultValue={settings.incomeSourceSequence}
-                disabled={ro}
-                onChange={(e) => patch({ income_source_sequence: e.target.value })}
-              />
-            </Field>
-          )}
+          {/* On every invoice, for every taxpayer: ISTD's guide requires the
+              income source sequence whether the clinic pays income or sales tax. */}
+          <Field label={E.incomeSourceSequence} hint={E.incomeSourceSequenceHint}>
+            <Input
+              dir="ltr"
+              inputMode="numeric"
+              defaultValue={settings.incomeSourceSequence}
+              disabled={ro}
+              onChange={(e) => patch({ income_source_sequence: e.target.value })}
+            />
+          </Field>
         </div>
       </Card>
 

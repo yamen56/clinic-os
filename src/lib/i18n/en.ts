@@ -3189,7 +3189,7 @@ export const en = {
       taxNumber: "tax number",
       clientId: "Client ID",
       secretKey: "Secret Key",
-      incomeSourceSequence: "activity number",
+      incomeSourceSequence: "income source sequence",
     },
     taxpayerType: "Which taxpayer you are",
     taxpayerTypeHint: "As registered with ISTD. It decides the shape of every invoice filed.",
@@ -3200,8 +3200,9 @@ export const en = {
     registeredName: "Registered name",
     registeredNameHint: "Exactly as it appears at ISTD. A name that merely resembles it is rejected.",
     taxNumber: "Tax number",
-    incomeSourceSequence: "Activity number",
-    incomeSourceSequenceHint: "The income source sequence shown against your activity on the portal.",
+    incomeSourceSequence: "Income source sequence",
+    incomeSourceSequenceHint:
+      "The number shown against your activity on the JoFotara portal. Every invoice carries it, whichever tax you pay.",
     credentials: "Device credentials",
     credentialsHint:
       "From the JoFotara portal: create a device under your account, and it issues these two.",

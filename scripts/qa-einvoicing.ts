@@ -24,9 +24,10 @@ import { chromium } from "playwright";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
 import { computeInvoice, taxBreakdown, round2 } from "../src/lib/invoices";
-import { buildInvoiceXml, encodeInvoice, totalsOf, SUBTYPE, DOC_INVOICE, DOC_CREDIT_NOTE } from "../src/lib/einvoice/ubl";
+import { buildInvoiceXml, encodeInvoice, totalsOf, preflight, SUBTYPE, DOC_INVOICE, DOC_CREDIT_NOTE } from "../src/lib/einvoice/ubl";
+import { readVerdict } from "../src/lib/einvoice/submit";
 import { EMPTY_SETTINGS, isReady, missingFields } from "../src/lib/einvoice/settings";
-import { startMockJofotara, validateUbl } from "./mock-jofotara";
+import { startMockJofotara, validateUbl, checkUbl } from "./mock-jofotara";
 import { ar } from "../src/lib/i18n/ar";
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
@@ -152,11 +153,10 @@ async function main() {
     number: "RIMA-2026-0001",
     icv: 1,
     issueDate: "2026-08-24",
-    currency: "JOD",
     documentType: DOC_INVOICE as typeof DOC_INVOICE,
     paid: true,
     buyerName: "سارة عبدالله",
-    buyerPhone: "+962790000001",
+    buyerNationalId: "9881234567",
     lines: mixed.lines.map((l, i) => ({
       description: ["Consultation", "Whitening"][i],
       qty: 1,
@@ -174,7 +174,35 @@ async function main() {
   check("the seller's tax number is on it", xml.includes("<cbc:CompanyID>12345678</cbc:CompanyID>"));
   check("so is the registered name", xml.includes("Rima Dental"));
   check("Arabic survives the round trip", xml.includes("سارة عبدالله"));
-  check("both categories are declared", xml.includes(">E<") && xml.includes(">S<"));
+  /*
+    ISTD's own spelling, which is the opposite of UN/ECE for two codes: Z is
+    exempt and O is zero-rated, and E does not exist. An exempt consultation
+    goes out as Z.
+  */
+  check("an exempt line goes out as ISTD's Z, a taxed one as S", xml.includes(">Z<") && xml.includes(">S<") && !xml.includes(">E<"));
+  check(
+    "every amount is in ISTD's currencyID JO, not JOD",
+    !/currencyID="(?!JO")/.test(xml) && xml.includes('currencyID="JO"')
+  );
+  check("the document and tax currencies are JOD", xml.includes("<cbc:DocumentCurrencyCode>JOD<") && xml.includes("<cbc:TaxCurrencyCode>JOD<"));
+  check(
+    "the tax category sits in the line's TaxSubtotal, not under Item",
+    [...xml.matchAll(/<cac:Item>([\s\S]*?)<\/cac:Item>/g)].every((m) => !m[1].includes("TaxCategory")) &&
+      xml.includes("<cac:TaxSubtotal>")
+  );
+  check("the buyer is identified by national number", xml.includes('<cbc:ID schemeID="NIN">9881234567</cbc:ID>'));
+  check(
+    "a walk-in without one goes as an empty NIN, still valid",
+    validateUbl(buildInvoiceXml({ ...xmlArgs, buyerNationalId: null })) === null &&
+      buildInvoiceXml({ ...xmlArgs, buyerNationalId: null }).includes('<cbc:ID schemeID="NIN"></cbc:ID>')
+  );
+  check(
+    "TaxExclusiveAmount is quantity × price before any discount",
+    validateUbl(buildInvoiceXml({ ...xmlArgs, lines: [{ ...xmlArgs.lines[1], discount: 10, tax: 14.4 }] })) === null &&
+      buildInvoiceXml({ ...xmlArgs, lines: [{ ...xmlArgs.lines[1], discount: 10, tax: 14.4 }] }).includes(
+        '<cbc:TaxExclusiveAmount currencyID="JO">100.000</cbc:TaxExclusiveAmount>'
+      )
+  );
   check(
     "a general taxpayer's invoice is cash-coded 012",
     xml.includes(`name="${SUBTYPE.general.cash}"`),
@@ -190,19 +218,55 @@ async function main() {
       `name="${SUBTYPE.income.cash}"`
     )
   );
+  const incomeXml = buildInvoiceXml({
+    ...xmlArgs,
+    settings: { ...settings, taxpayerType: "income" },
+    lines: xmlArgs.lines.map((l) => ({ ...l, taxCategory: "O" as const, taxRate: 0, tax: 0 })),
+  });
+  check("an income taxpayer's invoice is valid too", validateUbl(incomeXml) === null, validateUbl(incomeXml) ?? "");
+  check("it carries no tax block anywhere, line or document", !incomeXml.includes("TaxTotal"));
+  check("but it does carry the income source sequence — every taxpayer does", incomeXml.includes("<cac:SellerSupplierParty>") && incomeXml.includes(">9911<"));
   check(
-    "an income taxpayer sends no activity number",
-    !buildInvoiceXml({
-      ...xmlArgs,
-      settings: { ...settings, taxpayerType: "income" },
-    }).includes("SellerSupplierParty")
+    "the receiving end refuses the old shape: amounts in JOD",
+    (checkUbl(xml.replace(/currencyID="JO"/g, 'currencyID="JOD"')).problems[0] ?? [""])[0] === "AMT-002"
+  );
+  check(
+    "and an income invoice with tax on it",
+    checkUbl(buildInvoiceXml({ ...xmlArgs, settings: { ...settings, taxpayerType: "general" } }).replace(/name="012"/, 'name="011"')).problems.some(([id]) => id === "INC-001")
   );
   const t2 = totalsOf(xmlArgs.lines);
   check(
     "the totals block agrees with the invoice",
-    t2.net === 130 && t2.tax === 16 && t2.gross === 146,
-    `${t2.net}/${t2.tax}/${t2.gross}`
+    t2.extended === 130 && t2.net === 130 && t2.tax === 16 && t2.gross === 146,
+    `${t2.extended}/${t2.net}/${t2.tax}/${t2.gross}`
   );
+  check(
+    "an income invoice's totals carry no tax",
+    totalsOf(xmlArgs.lines, false).tax === 0 && totalsOf(xmlArgs.lines, false).gross === 130
+  );
+
+  console.log("\n[refused before it leaves]");
+  check("a complete document passes the preflight", preflight(xmlArgs) === null, preflight(xmlArgs) ?? "");
+  check(
+    "a rate ISTD does not take is caught here, in words",
+    /ISTD accepts sales tax/.test(preflight({ ...xmlArgs, lines: [{ ...xmlArgs.lines[1], taxRate: 15, tax: 15 }] }) ?? ""),
+    preflight({ ...xmlArgs, lines: [{ ...xmlArgs.lines[1], taxRate: 15, tax: 15 }] }) ?? "passed"
+  );
+  check(
+    "so is a missing income source sequence",
+    /income source sequence/.test(preflight({ ...xmlArgs, settings: { ...settings, incomeSourceSequence: "" } }) ?? "")
+  );
+  check(
+    "and a credit note that does not say what it reverses",
+    /reverses/.test(preflight({ ...xmlArgs, documentType: DOC_CREDIT_NOTE as never, corrects: null, correctionReason: "x" }) ?? "")
+  );
+
+  console.log("\n[what ISTD's answer means]");
+  check("SUBMITTED is accepted", readVerdict({ EINV_STATUS: "SUBMITTED", EINV_RESULTS: { status: "PASS" } }).verdict === "accepted");
+  check("ALREADY_SUBMITTED is accepted — a retry of a filed one", readVerdict({ EINV_STATUS: "ALREADY_SUBMITTED" }).verdict === "accepted");
+  const no = readVerdict({ EINV_STATUS: "NOT_SUBMITTED", EINV_RESULTS: { status: "ERROR", ERRORS: [{ EINV_MESSAGE: "wrong ICV" }] } });
+  check("NOT_SUBMITTED is a rejection, with ISTD's own words", no.verdict === "rejected" && no.errors[0] === "wrong ICV");
+  check("a body that says nothing is not counted as filed", readVerdict({}).verdict === "unknown");
   check(
     "a name with an ampersand cannot end the document early",
     buildInvoiceXml({ ...xmlArgs, buyerName: 'A & B "C" <D>' }).includes("A &amp; B &quot;C&quot; &lt;D&gt;")
@@ -216,12 +280,10 @@ async function main() {
     missingFields({ ...EMPTY_SETTINGS, enabled: true }).includes("taxNumber")
   );
   check(
-    "an income taxpayer needs no activity number",
-    !missingFields({ ...settings, taxpayerType: "income", incomeSourceSequence: "" }).includes(
-      "incomeSourceSequence"
-    )
+    "an income taxpayer needs the income source sequence too",
+    missingFields({ ...settings, taxpayerType: "income", incomeSourceSequence: "" }).includes("incomeSourceSequence")
   );
-  check("a general one does", missingFields({ ...settings, incomeSourceSequence: "" }).includes("incomeSourceSequence"));
+  check("as does a general one", missingFields({ ...settings, incomeSourceSequence: "" }).includes("incomeSourceSequence"));
   check("a complete registration is ready", isReady(settings));
 
   /* ================================================================== fixtures */
@@ -306,7 +368,28 @@ async function main() {
     fixture clinics to prove the one that never opted in is untouched.
   */
   const dbAsClient = db as never;
-  const queued = await enqueueEinvoiceSubmit(dbAsClient, bystander.id, plainInv, "paid");
+  /*
+    Queue a filing, then push its job a day ahead, in one transaction — so a
+    worker running on this machine never sees it as due. That worker never saw
+    JOFOTARA_BASE_URL: claiming one of these would send a fixture invoice to the
+    real ISTD endpoint. The suite files every document itself, by calling
+    submitEinvoice, and needs the job row only as proof it was queued once.
+  */
+  const held = async <T>(fn: () => Promise<T>, invoiceId: string): Promise<T> => {
+    await db.query("begin");
+    try {
+      const out = await fn();
+      await db.query(`update jobs set run_at = now() + interval '1 day' where dedupe_key = $1`, [
+        `einvoice:submit:${invoiceId}`,
+      ]);
+      await db.query("commit");
+      return out;
+    } catch (e) {
+      await db.query("rollback");
+      throw e;
+    }
+  };
+  const queued = await held(() => enqueueEinvoiceSubmit(dbAsClient, bystander.id, plainInv, "paid"), plainInv);
   check("nothing is queued for it", queued === false);
   const plainState = await db.query(`select einvoice_status from invoices where id = $1`, [plainInv]);
   check(
@@ -324,8 +407,8 @@ async function main() {
   console.log("\n[filing, and filing only once]");
 
   const invA = await makeInvoice(filer.id, filer.patient, { unitPrice: 100, taxRate: 16 });
-  const first = await enqueueEinvoiceSubmit(dbAsClient, filer.id, invA, "paid");
-  const second = await enqueueEinvoiceSubmit(dbAsClient, filer.id, invA, "delivered");
+  const first = await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invA, "paid"), invA);
+  const second = await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invA, "delivered"), invA);
   check("the first trigger queues it", first === true);
   check("a second trigger does not queue it again", second === false);
   const jobCount = await db.query(
@@ -353,7 +436,7 @@ async function main() {
 
   const invPaid = await makeInvoice(filer.id, filer.patient, { unitPrice: 50, taxRate: 16 });
   await db.query(`update invoices set amount_paid = total, status = 'paid' where id = $1`, [invPaid]);
-  await enqueueEinvoiceSubmit(dbAsClient, filer.id, invPaid, "paid");
+  await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invPaid, "paid"), invPaid);
   await submitEinvoice(invPaid, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
   const donePaid = (
     await db.query(`select einvoice_payment_method from invoices where id = $1`, [invPaid])
@@ -374,7 +457,7 @@ async function main() {
   console.log("\n[when the tax authority is having a bad day]");
 
   const invDown = await makeInvoice(filer.id, filer.patient, { unitPrice: 25, taxRate: 16 });
-  await enqueueEinvoiceSubmit(dbAsClient, filer.id, invDown, "paid");
+  await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invDown, "paid"), invDown);
   await fetch(`${MOCK}/__fault`, {
     method: "POST",
     body: JSON.stringify({ status: 503, body: "upstream down", times: 99 }),
@@ -406,7 +489,7 @@ async function main() {
 
   console.log("\n[when the invoice itself is wrong]");
   const invBad = await makeInvoice(filer.id, filer.patient, { unitPrice: 30, taxRate: 16 });
-  await enqueueEinvoiceSubmit(dbAsClient, filer.id, invBad, "paid");
+  await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invBad, "paid"), invBad);
   await fetch(`${MOCK}/__fault`, {
     method: "POST",
     body: JSON.stringify({ status: 400, body: '{"EINV_RESULTS":{"ERRORS":[{"EINV_MESSAGE":"bad tax number"}]}}', times: 99 }),
@@ -430,11 +513,38 @@ async function main() {
   await fetch(`${MOCK}/__reset`, { method: "POST" });
 
   const { requeueEinvoiceSubmit } = await import("../src/lib/einvoice/jobs");
-  const requeued = await requeueEinvoiceSubmit(dbAsClient, filer.id, invBad);
+  const requeued = await held(() => requeueEinvoiceSubmit(dbAsClient, filer.id, invBad), invBad);
   check("a failed invoice can be filed again by hand", requeued === true);
   await submitEinvoice(invBad, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
   const fixed = (await db.query(`select einvoice_status from invoices where id = $1`, [invBad])).rows[0];
   check("and succeeds once the fault is gone", fixed.einvoice_status === "submitted", fixed.einvoice_status);
+
+  /*
+    A 200 is not an acceptance. ISTD can answer 200 and say NOT_SUBMITTED in the
+    body; reading the status code alone once marked such an invoice filed, with
+    no QR and nobody told.
+  */
+  const invSoft = await makeInvoice(filer.id, filer.patient, { unitPrice: 33, taxRate: 16 });
+  await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invSoft, "paid"), invSoft);
+  await fetch(`${MOCK}/__fault`, {
+    method: "POST",
+    body: JSON.stringify({
+      status: 200,
+      body: JSON.stringify({
+        EINV_RESULTS: { status: "ERROR", ERRORS: [{ EINV_CODE: "E-77", EINV_MESSAGE: "invoice counter out of sequence" }] },
+        EINV_STATUS: "NOT_SUBMITTED",
+      }),
+      times: 1,
+    }),
+  });
+  await submitEinvoice(invSoft, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
+  const soft = (await db.query(`select einvoice_status, einvoice_error, einvoice_qr from invoices where id = $1`, [invSoft])).rows[0];
+  check(
+    "a 200 that says NOT_SUBMITTED is a rejection, not a filing",
+    soft.einvoice_status === "failed" && !soft.einvoice_qr && /out of sequence/.test(soft.einvoice_error ?? ""),
+    `${soft.einvoice_status}: ${soft.einvoice_error}`
+  );
+  await fetch(`${MOCK}/__reset`, { method: "POST" });
 
   /* ================================================================== */
   console.log("\n[an insured patient's share]");
@@ -498,7 +608,7 @@ async function main() {
                          amount_paid = 36, status = 'partially_paid' where id = $1`,
     [invIns, insurer]
   );
-  await enqueueEinvoiceSubmit(dbAsClient, filer.id, invIns, "paid");
+  await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invIns, "paid"), invIns);
   await submitEinvoice(invIns, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
   const insDone = (
     await db.query(
@@ -510,7 +620,7 @@ async function main() {
   check("an insured invoice is filed", insDone.einvoice_status === "submitted", insDone.einvoice_status);
   check(
     "for the patient's share only",
-    filedXml.includes(`<cbc:TaxInclusiveAmount currencyID="JOD">36.000</cbc:TaxInclusiveAmount>`),
+    filedXml.includes(`<cbc:TaxInclusiveAmount currencyID="JO">36.000</cbc:TaxInclusiveAmount>`),
     filedXml.match(/TaxInclusiveAmount[^>]*>([^<]+)/)?.[1] ?? "nothing filed"
   );
   check("and records what it left off", Number(insDone.einvoice_excluded) === 80, String(insDone.einvoice_excluded));
@@ -522,7 +632,7 @@ async function main() {
 
   const invCovered = await makeInvoice(filer.id, filer.patient, { unitPrice: 50 });
   await db.query(`update invoices set insurer_id = $2, insurer_amount = total where id = $1`, [invCovered, insurer]);
-  const coveredQueued = await enqueueEinvoiceSubmit(dbAsClient, filer.id, invCovered, "paid");
+  const coveredQueued = await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invCovered, "paid"), invCovered);
   check("an invoice the insurer covers in full is not queued", coveredQueued === false);
 
   const mirror = async (originalId: string) => {
@@ -544,7 +654,7 @@ async function main() {
          from invoice_items where invoice_id = $1`,
       [originalId, n]
     );
-    await enqueueEinvoiceSubmit(dbAsClient, filer.id, n, "credit_note");
+    await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, n, "credit_note"), n);
     await submitEinvoice(n, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
     return {
       row: (await db.query(`select einvoice_status, einvoice_type from invoices where id = $1`, [n])).rows[0],
@@ -555,7 +665,7 @@ async function main() {
   check(
     "its credit note reverses the patient's document, not the full total",
     insNote.row.einvoice_type === "381" &&
-      insNote.xml.includes(`<cbc:TaxInclusiveAmount currencyID="JOD">36.000</cbc:TaxInclusiveAmount>`),
+      insNote.xml.includes(`<cbc:TaxInclusiveAmount currencyID="JO">36.000</cbc:TaxInclusiveAmount>`),
     insNote.xml.match(/TaxInclusiveAmount[^>]*>([^<]+)/)?.[1] ?? insNote.row.einvoice_status
   );
   /*
@@ -563,15 +673,18 @@ async function main() {
     its insurer amount says. Its credit note must reverse that, not today's rule.
   */
   const invLegacy = await makeInvoice(filer.id, filer.patient, { unitPrice: 60 });
+  // Filed for real at its full total, then given the shape such a row has: an
+  // insurer amount recorded afterwards, and no record of anything left off.
+  await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invLegacy, "paid"), invLegacy);
+  await submitEinvoice(invLegacy, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
   await db.query(
-    `update invoices set insurer_id = $2, insurer_amount = 40, einvoice_status = 'submitted',
-                         einvoice_uuid = gen_random_uuid()::text, einvoice_excluded = null where id = $1`,
+    `update invoices set insurer_id = $2, insurer_amount = 40, einvoice_excluded = null where id = $1`,
     [invLegacy, insurer]
   );
   const legacyNote = await mirror(invLegacy);
   check(
     "a credit note for an invoice filed before the split reverses its full total",
-    legacyNote.xml.includes(`<cbc:TaxInclusiveAmount currencyID="JOD">60.000</cbc:TaxInclusiveAmount>`),
+    legacyNote.xml.includes(`<cbc:TaxInclusiveAmount currencyID="JO">60.000</cbc:TaxInclusiveAmount>`),
     legacyNote.xml.match(/TaxInclusiveAmount[^>]*>([^<]+)/)?.[1] ?? legacyNote.row.einvoice_status
   );
 
@@ -599,7 +712,7 @@ async function main() {
 
   await db.query(`update clinic_einvoice_settings set secret_key = $2 where clinic_id = $1`, [filer.id, sealedSk]);
   const invSealed = await makeInvoice(filer.id, filer.patient, { unitPrice: 20 });
-  await enqueueEinvoiceSubmit(dbAsClient, filer.id, invSealed, "paid");
+  await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invSealed, "paid"), invSealed);
   await submitEinvoice(invSealed, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
   const sealedDone = (await db.query(`select einvoice_status from invoices where id = $1`, [invSealed])).rows[0];
   check("a sealed secret still files", sealedDone.einvoice_status === "submitted", sealedDone.einvoice_status);
@@ -610,7 +723,7 @@ async function main() {
 
   delete process.env.APP_ENCRYPTION_KEY;
   const invNoKey = await makeInvoice(filer.id, filer.patient, { unitPrice: 21 });
-  await enqueueEinvoiceSubmit(dbAsClient, filer.id, invNoKey, "paid");
+  await held(() => enqueueEinvoiceSubmit(dbAsClient, filer.id, invNoKey, "paid"), invNoKey);
   let noKeyThrew = false;
   try {
     await submitEinvoice(invNoKey, { attempts: 1, maxAttempts: 5, isLastAttempt: false });
@@ -634,17 +747,38 @@ async function main() {
   const originalNumber = (await db.query(`select number from invoices where id = $1`, [invA])).rows[0].number;
   // The credit note is raised by the action, which needs a session; the shape it
   // produces is what matters, so it is built here the same way and checked.
-  const creditXml = buildInvoiceXml({
+  const originalUuid = (await db.query(`select einvoice_uuid from invoices where id = $1`, [invA])).rows[0].einvoice_uuid as string;
+  const creditArgs = {
     ...xmlArgs,
+    uuid: randomUUID(),
     documentType: DOC_CREDIT_NOTE as typeof DOC_CREDIT_NOTE,
     number: "QAE-2026-9999",
-    correctsNumber: originalNumber,
+    corrects: { number: originalNumber, uuid: originalUuid, payable: 146 },
     correctionReason: "Wrong amount",
-  });
+  };
+  const creditXml = buildInvoiceXml(creditArgs);
   check("a credit note carries 381", creditXml.includes(">381</cbc:InvoiceTypeCode>"));
-  check("it names the invoice it corrects", creditXml.includes(originalNumber), originalNumber);
-  check("it states a reason", creditXml.includes("Wrong amount"));
+  check("it names the invoice it corrects", creditXml.includes(`<cbc:ID>${originalNumber}</cbc:ID>`), originalNumber);
+  check("by the UUID ISTD holds it under", creditXml.includes(`<cbc:UUID>${originalUuid}</cbc:UUID>`));
+  check("and the amount it was payable at", creditXml.includes("<cbc:DocumentDescription>146.000</cbc:DocumentDescription>"));
+  check(
+    "the reason goes where ISTD reads it, in PaymentMeans",
+    creditXml.includes('<cbc:PaymentMeansCode listID="UN/ECE 4461">10</cbc:PaymentMeansCode>') &&
+      creditXml.includes("<cbc:InstructionNote>Wrong amount</cbc:InstructionNote>")
+  );
+  check(
+    "a sales return carries the extra fields the guide asks for",
+    creditXml.includes("<cbc:TaxableAmount") && creditXml.includes('<cbc:BaseQuantity unitCode="C62">1</cbc:BaseQuantity>') &&
+      creditXml.includes('<cbc:PrepaidAmount currencyID="JO">0</cbc:PrepaidAmount>')
+  );
   check("and is still a valid document", validateUbl(creditXml) === null, validateUbl(creditXml) ?? "");
+  const incomeReturn = buildInvoiceXml({
+    ...creditArgs,
+    settings: { ...settings, taxpayerType: "income" },
+    lines: xmlArgs.lines.map((l) => ({ ...l, taxCategory: "O" as const, taxRate: 0, tax: 0 })),
+    corrects: { ...creditArgs.corrects, payable: 130 },
+  });
+  check("an income return is valid, without the sales-only fields", validateUbl(incomeReturn) === null && !incomeReturn.includes("PrepaidAmount"), validateUbl(incomeReturn) ?? "");
 
   /* ================================================================== */
   console.log("\n[the screens]");
@@ -711,6 +845,13 @@ async function main() {
     */
     await page.goto(`${BASE}/c/${filer.slug}/invoices/${invPaid}`);
     await page.waitForLoadState("networkidle");
+    /*
+      Filing switched off for the click. Voiding a filed invoice raises a credit
+      note and queues it — from the web app, where this suite cannot hold the job
+      — and a worker running here would send it to the real ISTD. Off, the note
+      is raised and nothing is queued; the suite files it itself below.
+    */
+    await db.query(`update clinic_einvoice_settings set enabled = false where clinic_id = $1`, [filer.id]);
     await page.getByRole("button", { name: ar.invoices.voidInvoice }).first().click();
     const voidDialog = page.getByRole("dialog");
     await voidDialog.waitFor({ timeout: 15_000 });
@@ -719,6 +860,7 @@ async function main() {
     await reasonBox.fill("مبلغ خاطئ");
     await voidDialog.getByRole("button", { name: ar.invoices.voidInvoice }).click();
     await page.waitForTimeout(2000);
+    await db.query(`update clinic_einvoice_settings set enabled = true where clinic_id = $1`, [filer.id]);
 
     const note = (
       await db.query(

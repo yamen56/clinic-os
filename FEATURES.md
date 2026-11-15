@@ -1597,20 +1597,51 @@ live/test device switch. A separate table rather than columns on `clinics` becau
 server components select `cl.*` and pass the row to a client component. The settings screen
 receives `hasSecret`, never the key; saving a blank key means *unchanged*.
 
-**Taxpayer types.** `income` charges no sales tax and has no activity number — most small
-Jordanian clinics, the services registration threshold being JOD 30,000. `general` is
-per-line 16%/15%. Special sales tax is deliberately not offered: it covers goods no clinic
+**Taxpayer types.** `income` charges no sales tax — most small Jordanian clinics, the
+services registration threshold being JOD 30,000. `general` is per-line sales tax. **Both
+carry the income source sequence** (تسلسل مصدر الدخل) on every invoice; a registration without
+it is not ready, for either type. Special sales tax is deliberately not offered: it covers goods no clinic
 sells, and a menu entry nobody should pick is one somebody eventually picks.
 
 **The document** ([src/lib/einvoice/ubl.ts](src/lib/einvoice/ubl.ts)) is UBL 2.1 XML, base64
 in a JSON body, `POST /core/invoices/` with `Client-Id` and `Secret-Key` headers. `388`
-invoice / `381` credit note; sub-type digits encode taxpayer type and cash (`012`/`011`) vs
-receivable (`022`/`021`). **Buyer details are not required for a cash invoice**, so reception
-never has to ask a patient for a tax number. Generated here because no Node library exists.
+invoice / `381` credit note; sub-type digits encode cash (`011`/`012`) vs receivable
+(`021`/`022`) and income vs sales taxpayer. Its shape follows ISTD's technical guide for the
+e-invoicing API (v1.4) as two independent readings agree — the jofotara-kit validator's rule set
+and the jafar-albadarneh PHP SDK, whose author has filed income invoices live. Reconciled on
+2026-11-15, when it was found wrong in eight places; the rules that matter:
 
-> ⚠️ The element set follows the profile published integrators describe. The authoritative
-> spec ships with the device credentials inside the taxpayer's own JoFotara portal account.
-> Reconcile against it, and against a test device, before a clinic files anything real.
+- every amount carries `currencyID="JO"` (the document and tax currencies are `JOD`);
+- an **income** invoice has **no tax block at all**, line or document; a **sales** invoice has
+  one on every line, with the category inside `TaxTotal › TaxSubtotal › TaxCategory`, never
+  under `Item`;
+- ISTD's categories are `S`, `Z` (**exempt**) and `O` (**zero-rated**) — the opposite of UN/ECE
+  for two of them, and no `E`. `istdCategory` maps ours: exempt → Z, zero-rated → O, out of
+  scope → Z. Sales-tax rates are limited to 1, 2, 3, 4, 5, 7, 8, 10 and 16%;
+- `TaxExclusiveAmount` is Σ quantity × price **before** discount; the allowance is the sum of
+  the line discounts; `TaxInclusiveAmount` = that − discount + tax = `PayableAmount`;
+- the buyer is `PartyIdentification` scheme `NIN` — the patient's national number when the file
+  has one, empty for a walk-in cash sale. The name goes always; it is required on a receivable
+  invoice or one over 10,000 JOD;
+- a credit note's `BillingReference` is the original's **number, UUID and payable amount**, its
+  reason is `PaymentMeans/InstructionNote` (code 10), and its sub-type is the original's — a
+  cash invoice is reversed as cash. A sales return also carries `TaxableAmount`,
+  `BaseQuantity C62 = 1`, document `TaxSubtotal`s and `PrepaidAmount 0`.
+
+**Preflight** (`preflight` in ubl.ts) refuses, before anything is sent and in a sentence the
+clinic can act on: a missing or non-numeric income source sequence or tax number, a rate ISTD
+does not take, a credit note without its original. It fails the invoice the way an ISTD
+rejection would. A document that comes to nothing (a free visit, or one the insurer covers in
+full) is skipped — ISTD refuses zero.
+
+**The verdict is in the body, not the status code.** A 200 can carry `EINV_STATUS:
+NOT_SUBMITTED` with `EINV_RESULTS.ERRORS`; that is a rejection, with ISTD's messages kept.
+`SUBMITTED` / `ALREADY_SUBMITTED` (a retry of a filed document — same UUID) is accepted. A 200
+with no verdict and no QR is not counted as filed; it is retried.
+
+> ⚠️ Still a reading of the guide, not ISTD's own acceptance, and ISTD has no sandbox. The
+> first real filing from a clinic's own device is the test that settles it — file one small
+> real invoice, check it appears on the JoFotara portal, then reverse it with a credit note.
 
 **When it files.** Three triggers, one function, one dedupe key — whichever fires first wins:
 
@@ -1664,6 +1695,13 @@ every queue, acceptance and rejection per invoice — mirroring `document_events
 **Testing**: [scripts/mock-jofotara.ts](scripts/mock-jofotara.ts) stands in via
 `JOFOTARA_BASE_URL` and validates the document rather than rubber-stamping it — the real
 endpoint is never in a test's reach, because filing an invoice is recorded and irreversible.
+It parses the XML and enforces the guide's rules under jofotara-kit's rule ids (structure and
+order, header, parties, `JO` amounts, line and document arithmetic, income vs sales tax blocks,
+categories and rates, returns), remembers what it accepted so a credit note must reverse an
+accepted invoice by its number, UUID and type, and answers in ISTD's shape. `qa-einvoicing`
+queues every filing with its job pushed a day ahead (`held`), and switches filing off for the
+browser void, so a worker running on the same machine — which never saw `JOFOTARA_BASE_URL` —
+cannot claim one and send a fixture to the real ISTD.
 
 ---
 
