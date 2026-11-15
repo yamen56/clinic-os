@@ -30,6 +30,7 @@ import {
   ShieldCheck,
   Siren,
   Smile,
+  Stethoscope,
   type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
@@ -38,11 +39,13 @@ import { fmtDate, fmtTime } from "@/lib/dates";
 import type { FeedItem, FeedSource } from "@/lib/note-feed";
 import { useOptionalDentalStore } from "@/components/charts/dental/store";
 import { useOptionalFaceStore } from "@/components/charts/face/store";
+import { useOptionalTreatmentStore } from "@/components/treatment/store";
+import { hasText } from "@/lib/treatment/visits";
 import { whereText } from "@/lib/charts/face/catalog";
 import { isToothSite, type Mark } from "@/lib/charts/dental/state";
 import { EMERGENCY_STEP, stepOf } from "@/lib/charts/dental/protocols";
 
-export type OtherSource = FeedSource | "chart" | "step" | "emergency" | "face";
+export type OtherSource = FeedSource | "chart" | "step" | "emergency" | "face" | "treatment";
 
 /** A note from elsewhere in the file, ready to show. */
 export type Other = {
@@ -68,6 +71,7 @@ export const SOURCE_ICON: Record<OtherSource, LucideIcon> = {
   step: ListChecks,
   emergency: Siren,
   face: ScanFace,
+  treatment: Stethoscope,
 };
 
 type Answer = { label?: string; labelAr?: string; value?: unknown };
@@ -90,6 +94,7 @@ export function useOtherNotes({
   const router = useRouter();
   const store = useOptionalDentalStore();
   const faceStore = useOptionalFaceStore();
+  const treatment = useOptionalTreatmentStore();
   const has = (k: string) => tabKeys.includes(k);
   const out: Other[] = [];
 
@@ -235,6 +240,42 @@ export function useOtherNotes({
         body: m.note,
         lines: [],
         open: has("face") ? () => onTab("face") : undefined,
+      });
+    }
+  }
+  // The treatment record's: what each visit was, and the note on a treatment done at it.
+  if (treatment) {
+    const T = t.treatment;
+    const visitOf = (id: string | null) => (id ? treatment.visits.find((v) => v.id === id) : undefined);
+    const open = (appointmentId: string | null) => () => {
+      onTab("overview");
+      if (treatment.canWrite) treatment.openSheet(appointmentId);
+    };
+    for (const r of treatment.records) {
+      if (!hasText(r)) continue;
+      const v = visitOf(r.appointmentId);
+      out.push({
+        key: `record:${r.id}`,
+        source: "treatment",
+        at: v?.starts_at ?? r.createdAt,
+        by: r.recordedBy?.name ?? null,
+        title: (v ? (locale === "ar" && v.service_name_ar) || v.service_name : null) ?? "",
+        body: "",
+        lines: (["complaint", "exam", "diagnosis", "plan"] as const).filter((f) => r[f].trim()).map((f) => `${T.fields[f]}: ${r[f].trim()}`),
+        open: open(r.appointmentId),
+      });
+    }
+    for (const m of treatment.marks) {
+      if (m.voidedAt || !m.note.trim()) continue;
+      out.push({
+        key: `treatment:${m.id}`,
+        source: "treatment",
+        at: m.doneAt ?? m.createdAt,
+        by: m.performedBy?.name ?? m.recordedBy.name,
+        title: (locale === "ar" && m.labelAr) || m.label,
+        body: m.note,
+        lines: [],
+        open: open(visitOf(m.appointmentId)?.id ?? null),
       });
     }
   }

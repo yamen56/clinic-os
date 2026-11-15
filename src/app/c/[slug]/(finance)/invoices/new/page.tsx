@@ -10,7 +10,6 @@ import { billableMarks, chartLines, type ChartLine } from "@/lib/charts/dental/b
 import { ownInvoicesOnly } from "@/lib/invoice-scope";
 import { dictFor } from "@/lib/i18n/client-dict";
 import { getLocale } from "@/lib/i18n";
-import { billsFromCharts } from "@/lib/features";
 import { visitServiceIds } from "@/lib/appointment-services";
 
 export default async function NewInvoicePage({
@@ -103,7 +102,7 @@ export default async function NewInvoicePage({
     */
     let initialLines: ChartLine[] = [];
     const markIds = (sp.marks ?? "").split(",").filter((x) => isUuid(x)).slice(0, 40);
-    if (patient && markIds.length && billsFromCharts(access.clinic.features)) {
+    if (patient && markIds.length) {
       initialLines = await chartLines(c, access.clinicId, patient.id, markIds, locale, dictFor(locale).invoices.chartLine);
     }
     /*
@@ -114,7 +113,7 @@ export default async function NewInvoicePage({
       filling. Only work still waiting to be billed; a treatment billed whole
       at its first visit is not billed again at the second.
     */
-    if (patient && appointment && !markIds.length && billsFromCharts(access.clinic.features)) {
+    if (patient && appointment && !markIds.length) {
       const own = ownInvoicesOnly(access);
       if (!own || access.memberId) {
         const waiting = await billableMarks(c, access.clinicId, patient.id, own ? access.memberId! : null);
@@ -171,7 +170,7 @@ export default async function NewInvoicePage({
       appointmentDoctorId={data.appointment?.doctorMemberId ?? null}
       einvoice={data.einvoice}
       initialLines={data.initialLines}
-      chartBilling={billsFromCharts(access.clinic.features)}
+      chartBilling
       existingInvoice={data.existing}
       fromBoard={sp.from === "board"}
     />

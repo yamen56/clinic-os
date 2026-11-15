@@ -541,6 +541,8 @@ export async function mergePatientsAction(
       ["chart_marks", "patient_id"],
       // Its cases, the steps of its treatments, and the plan items booked into visits.
       ["treatment_cases", "patient_id"],
+      // What each visit was (0108); what was done at it is chart_marks, above.
+      ["visit_records", "patient_id"],
       ["chart_mark_steps", "patient_id"],
       ["appointment_items", "patient_id"],
       ["lab_cases", "patient_id"],

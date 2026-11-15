@@ -14,6 +14,7 @@ import { DateTime } from "luxon";
 import { loadDentalChart } from "@/lib/charts/dental/db";
 import { loadFaceChart } from "@/lib/charts/face/db";
 import { loadNoteFeed } from "@/lib/note-feed";
+import { loadTreatment } from "@/lib/treatment/db";
 import type { PoolClient } from "pg";
 import { hintWords, nameWords } from "@/lib/imaging/ingest";
 import { clinicSpecialties } from "@/lib/specialties";
@@ -141,6 +142,12 @@ export default async function PatientProfilePage({
               `select a.id, a.starts_at, a.ends_at, a.status, a.source,
                       appointment_service_names(a.id, false) as service_name, appointment_service_names(a.id, true) as service_name_ar,
                       u.full_name as doctor_name,
+                      -- Every service it was booked for (0106), the first one first: what the visit's record offers to confirm.
+                      array(select x.service_id::text
+                              from (select a.service_id, 0 as ord where a.service_id is not null
+                                    union all
+                                    select e.service_id, 1 + e.sort from appointment_extra_services e where e.appointment_id = a.id) x
+                             order by x.ord) as service_ids,
                       -- Where they are today, for the banner over the file while they are in the clinic.
                       a.arrived_at, a.seated_at, a.doctor_member_id, a.service_id, s.duration_min as service_duration_min,
                       rm.name as room_name, rm.name_ar as room_name_ar
@@ -244,14 +251,12 @@ export default async function PatientProfilePage({
            from note_categories where clinic_id = $1 order by sort, name`,
           [access.clinicId]
         ),
-        // The doctors a chart entry can be performed by.
-        () => dental || face
-          ? c.query(
-              `select m.id, u.full_name as name from clinic_members m join users u on u.id = m.user_id
-                where m.clinic_id = $1 and m.active and m.role = 'doctor' order by u.full_name`,
-              [access.clinicId]
-            )
-          : none,
+        // The doctors a chart entry or a recorded treatment can be performed by.
+        () => c.query(
+          `select m.id, u.full_name as name from clinic_members m join users u on u.id = m.user_id
+            where m.clinic_id = $1 and m.active and m.role = 'doctor' order by u.full_name`,
+          [access.clinicId]
+        ),
       ]);
 
     /*
@@ -288,6 +293,8 @@ export default async function PatientProfilePage({
       // The saved chart: its entries and their history, the clinic's own treatments and favourites.
       dentalChart: dental ? await loadDentalChart(c, access.clinicId, id, { visits: caps.calendar, billing: caps.invoices }) : null,
       faceChart: face ? await loadFaceChart(c, access.clinicId, id, { billing: caps.invoices, stockCosts: can(access, "stock") }) : null,
+      // The treatment record, for every clinic: what each visit was, and what was done at it that no chart draws.
+      treatment: await loadTreatment(c, access.clinicId, id, { billing: caps.invoices, userId: access.session.user.id }),
       filesHub: await loadFilesHub(c, access.clinicId, id, p.full_name as string, (p.birth_date as Date | null) ?? null),
       // Notes written elsewhere in the file — visits, invoices, prescriptions… — for the Notes tab, each where its reader may look.
       noteFeed: await loadNoteFeed(
@@ -332,6 +339,17 @@ export default async function PatientProfilePage({
       caps={caps}
       country={countryFromClinic(access.clinic)}
       filesHub={d.filesHub ? JSON.parse(JSON.stringify({ ...d.filesHub, canMessage: can(access, "conversations") && !!d.patient.phone_e164, canManageDevices: can(access, "settings.clinic"), clinicName: access.clinic.name })) : null}
+      treatment={JSON.parse(
+        JSON.stringify({
+          me: { id: access.session.user.id, name: access.session.user.fullName },
+          myMemberId: access.memberId,
+          doctors: d.dentalDoctors,
+          canWrite: can(access, "patients.charts"),
+          canBill: caps.invoices,
+          currency: access.clinic.currency,
+          treatment: d.treatment,
+        })
+      )}
       dental={
         d.dentalChart
           ? JSON.parse(

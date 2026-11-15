@@ -16,13 +16,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, Clock, DoorOpen } from "lucide-react";
+import { CheckCheck, ClipboardPen, Clock, DoorOpen } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { minutesBetween } from "@/lib/patient-flow";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
 import { nextVisitHref } from "@/lib/next-visit";
+import { useOptionalTreatmentStore } from "@/components/treatment/store";
 import { DateTime } from "luxon";
 import { setFlowAction, type Handoff } from "../../calendar/flow-actions";
 
@@ -58,6 +59,8 @@ export function VisitBanner({
   const { t, locale } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
+  // The visit's record is written from here while the patient is in the clinic: the banner is the visit.
+  const treatment = useOptionalTreatmentStore();
   const [seatedAt, setSeatedAt] = useState(visit.seated_at);
   const [finished, setFinished] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -123,7 +126,8 @@ export function VisitBanner({
         }`}
         data-visit-banner={inRoom ? "in_room" : "waiting"}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold text-ink-900">
+        {/* With two buttons beside it a phone has no room left for the words: there they take the line above. */}
+        <div className={`flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold text-ink-900 ${treatment?.canWrite ? "max-sm:basis-full" : ""}`}>
           {inRoom ? <DoorOpen className="h-4 w-4 shrink-0" /> : <Clock className="h-4 w-4 shrink-0" />}
           <span className="min-w-0 truncate">
             {inRoom ? (room ? t.visitBanner.inRoomNamed.replace("{room}", room) : t.visitBanner.inRoom) : t.visitBanner.waiting}
@@ -131,6 +135,17 @@ export function VisitBanner({
             {service ? <span className="font-normal text-ink-500"> · {service}</span> : null}
           </span>
         </div>
+        {treatment?.canWrite && (
+          <button
+            type="button"
+            onClick={() => treatment.openSheet(visit.id)}
+            className="inline-flex h-10 touch-manipulation items-center gap-1.5 rounded-full border border-line-strong bg-surface px-4 text-[13px] font-semibold text-ink-900 hover:bg-sunken max-sm:flex-1 max-sm:justify-center"
+            data-visit-record-open
+          >
+            <ClipboardPen className="h-4 w-4" />
+            {t.treatment.record}
+          </button>
+        )}
         {canFlow &&
           (inRoom ? (
             <button

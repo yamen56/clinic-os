@@ -14,7 +14,6 @@ import { can } from "@/lib/auth";
 import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { deskLines, readyToBillDesk } from "@/lib/charts/dental/billing-server";
 import { ReadyToBillDesk, type DeskGroup } from "./ready-to-bill-desk";
-import { billsFromCharts } from "@/lib/features";
 import { DELETABLE_INVOICE_SQL, owedSql } from "@/lib/invoices";
 import { patientSearchClause } from "@/lib/patients";
 import { DeleteCancelled } from "./delete-cancelled";
@@ -180,12 +179,13 @@ export default async function InvoicesPage({
       ).rows;
     }
     /*
-      The desk's Ready to bill: clinics that chart — teeth or faces — on the
-      invoices list. A doctor who sees only their own invoices sees only their
+      The desk's Ready to bill, on the invoices list: what was recorded and is
+      not on an invoice yet — teeth, faces, and since 0108 the treatments every
+      clinic records. A doctor who sees only their own invoices sees only their
       own work here.
     */
     let ready: DeskGroup[] = [];
-    if (tab === "invoices" && billsFromCharts(access.clinic.features)) {
+    if (tab === "invoices") {
       const own = ownInvoicesOnly(access);
       if (!own || access.memberId) {
         const rows = await readyToBillDesk(c, access.clinicId, own ? access.memberId! : null);

@@ -375,6 +375,18 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
   await q(`insert into chart_treatment_favorites (clinic_id, treatment_key) values ($1, 'rct') returning id`, [clinic]);
   await q(`insert into imaging_requests (clinic_id, patient_id, teeth) values ($1, $2, '{36}') returning id`, [clinic, patient]);
 
+  // The treatment record (migration 0108): a visit's record, a version of it,
+  // and a treatment that no chart draws.
+  const vrec = (
+    await q(`insert into visit_records (clinic_id, patient_id, diagnosis, recorded_by) values ($1, $2, 'Tonsillitis', $3) returning id`, [clinic, patient, user])
+  ).id;
+  await q(`insert into visit_record_versions (clinic_id, record_id, diagnosis, author_id) values ($1, $2, 'Tonsillitis', $3) returning id`, [clinic, vrec, user]);
+  await q(
+    `insert into chart_marks (clinic_id, patient_id, chart, site, treatment_key, label, label_ar, look, kind, status, recorded_by)
+     values ($1, $2, 'general', 'body', 'general_other', 'Dressing', 'غيار', 'general', 'procedure', 'done', $3) returning id`,
+    [clinic, patient, user]
+  );
+
   // Treatment (migration 0073): a case, a root canal under it with a step
   // done, and the root canal booked into a visit.
   const tcase = (

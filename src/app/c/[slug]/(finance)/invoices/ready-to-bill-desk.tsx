@@ -184,7 +184,9 @@ export function ReadyToBillDesk({
           <ul className="mt-2 overflow-hidden rounded-ctl border border-line" data-desk-lines={g.patientId}>
             {g.lines.map((l) => {
               const on = !unticked.has(l.markId);
-              const priceHref = l.chart === "aesthetic" ? (priceLinks.face ? `/c/${slug}/settings/face-prices` : null) : priceLinks.dental ? `/c/${slug}/settings/prices` : null;
+              // A treatment typed by hand is on no list to be priced on: reception prices it on the invoice.
+              const priceHref =
+                l.chart === "general" ? null : l.chart === "aesthetic" ? (priceLinks.face ? `/c/${slug}/settings/face-prices` : null) : priceLinks.dental ? `/c/${slug}/settings/prices` : null;
               return (
                 <li
                   key={l.markId}
@@ -205,7 +207,7 @@ export function ReadyToBillDesk({
                     {/* Which chart it came from, and who did it — under the words, so a phone gives the words the line. */}
                     <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-500">
                       <span className="inline-flex h-[18px] items-center rounded-md border border-line-strong bg-sunken px-1.5 text-[11px] font-semibold text-ink-700">
-                        {l.chart === "aesthetic" ? I.chartFace : I.chartDental}
+                        {l.chart === "general" ? I.chartGeneral : l.chart === "aesthetic" ? I.chartFace : I.chartDental}
                       </span>
                       {l.doctorName}
                     </span>

@@ -45,6 +45,12 @@ import { DentalProvider, useOptionalDentalStore } from "@/components/charts/dent
 import { ReadyToBill } from "@/components/charts/dental/ready-to-bill";
 import { FaceProvider, type FaceTabData } from "@/components/charts/face/store";
 import { FaceReadyToBill } from "@/components/charts/face/ready-to-bill";
+import { TreatmentProvider, useOptionalTreatmentStore, type TreatmentTabData } from "@/components/treatment/store";
+import { TreatmentCard } from "@/components/treatment/treatment-card";
+import { TreatmentReadyToBill } from "@/components/treatment/ready-to-bill";
+import { VisitRecordSheetHost } from "@/components/treatment/visit-record-sheet";
+import { VisitRecordView, useChartWork } from "@/components/treatment/visit-record-view";
+import { hasText, standing } from "@/lib/treatment/visits";
 import { TakePayment } from "@/components/take-payment";
 import { DentalMedicalCard } from "@/components/charts/dental/medical-card";
 import { DateTime } from "luxon";
@@ -87,6 +93,7 @@ import {
   ShieldAlert,
   ExternalLink,
   Smile,
+  ClipboardPen,
 } from "lucide-react";
 
 /*
@@ -164,6 +171,36 @@ function MaybeDental({
     <DentalProvider slug={slug} patientId={patientId} data={dental} files={files} renderedAt={renderedAt}>
       {children}
     </DentalProvider>
+  );
+}
+
+/* The treatment record's store, for every clinic — above the tabs, for the same reasons. */
+function MaybeTreatment({
+  slug,
+  patientId,
+  tz,
+  treatment,
+  visits,
+  feed,
+  renderedAt,
+  onTab,
+  children,
+}: {
+  slug: string;
+  patientId: string;
+  tz: string;
+  treatment: TreatmentTabData | null | undefined;
+  visits: React.ComponentProps<typeof TreatmentProvider>["visits"];
+  feed: FeedItem[];
+  renderedAt: number;
+  onTab: (key: string) => void;
+  children: React.ReactNode;
+}) {
+  if (!treatment) return <>{children}</>;
+  return (
+    <TreatmentProvider slug={slug} patientId={patientId} tz={tz} data={treatment} visits={visits} feed={feed} renderedAt={renderedAt} onTab={onTab}>
+      {children}
+    </TreatmentProvider>
   );
 }
 
@@ -328,7 +365,7 @@ export function PatientProfile(props: {
   noteFeed?: FeedItem[];
   noteCategories: NoteCategoryRow[];
   files: PatientFileRow[];
-  appointments: ({ id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null } & Partial<VisitNow>)[];
+  appointments: ({ id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null; service_ids?: string[] } & Partial<VisitNow>)[];
   invoices: ({
     id: string;
     number: string;
@@ -392,6 +429,8 @@ export function PatientProfile(props: {
   dental?: DentalTabData | null;
   /** The face chart, for an aesthetic clinic (the `aesthetic` module). Null hides the tab. */
   face?: FaceTabData | null;
+  /** The treatment record, for every clinic (0108): what each visit was, and what was done at it. */
+  treatment?: TreatmentTabData | null;
   /** The Files hub: the clinic's machines, requests waiting, results that look like this patient's. */
   filesHub?: FilesHub | null;
   /** When the server rendered this page — the chart store re-reads a page restored from history. */
@@ -594,6 +633,7 @@ export function PatientProfile(props: {
   return (
     <MaybeDental slug={slug} patientId={p.id} dental={props.dental} files={props.files} renderedAt={props.renderedAt}>
     <MaybeFace slug={slug} patientId={p.id} face={props.face} renderedAt={props.renderedAt}>
+    <MaybeTreatment slug={slug} patientId={p.id} tz={tz} treatment={props.treatment} visits={props.appointments} feed={props.noteFeed ?? []} renderedAt={props.renderedAt} onTab={setTab}>
       {/* Header */}
       <div className="relative mb-5 flex flex-wrap items-start gap-4">
         <Avatar name={p.full_name} size={52} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
@@ -818,6 +858,8 @@ export function PatientProfile(props: {
               <div className="max-lg:order-1">
                 <PatientMedical tz={tz} history={medical} onSave={saveMedical} />
               </div>
+              {/* What has been done, visit by visit, and the way in to record today's: second, under what to be careful of. */}
+              <TreatmentCard className="max-lg:order-1" currentVisitId={visitNow?.id ?? null} />
               <Card className="p-5 max-lg:order-5">
                 <h3 className="mb-4 text-[15px] font-semibold">{t.patients.overview.details}</h3>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1181,6 +1223,7 @@ export function PatientProfile(props: {
                     tz={tz}
                     locale={locale}
                     onOpenChart={() => setTab("dental")}
+                    onTab={setTab}
                   />
                 ))}
               </ul>
@@ -1211,6 +1254,7 @@ export function PatientProfile(props: {
         )}
         {tab === "invoices" && <ReadyToBill tz={tz} />}
         {tab === "invoices" && <FaceReadyToBill />}
+        {tab === "invoices" && <TreatmentReadyToBill />}
         {tab === "invoices" && (
           <Card>
             {props.invoices.length === 0 ? (
@@ -1434,6 +1478,9 @@ export function PatientProfile(props: {
           toast(next === "archived" ? t.patients.archived : t.common.saved);
         }}
       />
+      {/* The one sheet a visit's record is written in, wherever in the file it was asked for. */}
+      <VisitRecordSheetHost />
+    </MaybeTreatment>
     </MaybeFace>
     </MaybeDental>
   );
@@ -1585,6 +1632,7 @@ function AppointmentRow({
   tz,
   locale,
   onOpenChart,
+  onTab,
 }: {
   slug: string;
   patientName: string;
@@ -1602,12 +1650,20 @@ function AppointmentRow({
   locale: string;
   /** Show the dental chart — a visit's chart work opens there. */
   onOpenChart: () => void;
+  /** Show another tab of the file. */
+  onTab: (key: string) => void;
 }) {
   const { t } = useI18n();
   const router = useRouter();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const work = useVisitWorkCount(appointment.id);
+  // The visit's record: what it was, and the treatments no chart draws that were done at it.
+  const treatment = useOptionalTreatmentStore();
+  const faceWork = useChartWork().get(appointment.id)?.face ?? [];
+  const record = treatment?.records.find((r) => r.appointmentId === appointment.id) ?? null;
+  const doneHere = treatment ? standing(treatment.marks).filter((m) => m.appointmentId === appointment.id) : [];
+  const recorded = hasText(record) || doneHere.length > 0;
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -1657,6 +1713,12 @@ function AppointmentRow({
             <span className="tnum">{work}</span>
           </span>
         )}
+        {recorded && (
+          <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-medium text-ink-500" data-visit-recorded={doneHere.length}>
+            <ClipboardPen className="h-3 w-3" />
+            {doneHere.length > 0 && <span className="tnum">{doneHere.length}</span>}
+          </span>
+        )}
         {notes.length > 0 && (
           <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-medium text-ink-500">
             <StickyNote className="h-3 w-3" />
@@ -1676,6 +1738,21 @@ function AppointmentRow({
             {patientName} · {fmtDateTime(appointment.starts_at, tz, locale)}
             {service ? ` · ${service}` : ""}
           </p>
+
+          {/* The visit's record, as the Overview's Treatment card shows it; tooth work keeps its own box below. */}
+          {treatment && (recorded || faceWork.length > 0 || treatment.canWrite) && (
+            <div className="mb-3 grid gap-2 rounded-lg border border-line bg-surface p-3" data-appointment-record={appointment.id}>
+              <VisitRecordView appointmentId={appointment.id} record={record} marks={doneHere} chart={{ dental: 0, face: faceWork }} onTab={onTab} />
+              {treatment.canWrite && !["cancelled", "no_show"].includes(appointment.status) && new Date(appointment.starts_at).getTime() < Date.now() + 86_400_000 && (
+                <div>
+                  <Button size="sm" variant="outline" onClick={() => treatment.openSheet(appointment.id)} data-appointment-record-edit={appointment.id}>
+                    <ClipboardPen className="h-4 w-4" />
+                    {recorded ? t.treatment.edit : t.treatment.record}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* The visit's dental work — planned for it, done at it. */}
           <div className="mb-3 empty:hidden">

@@ -92,14 +92,14 @@ export const OPT_IN_FEATURES = new Set<Feature>([
 export const TEST_FEATURES = new Set<Feature>(["coordinator"]);
 
 /**
- * The charts a doctor records on. `patients.charts` is the right to record on
- * whichever of them the clinic has, so it is masked only when it has none —
- * an aesthetic clinic without the dental chart still records on the face.
+ * The charts a doctor records on. `patients.charts` is the right to record
+ * what was done to a patient: on whichever chart the clinic has, and on the
+ * treatment record every clinic has (0108). So no module masks it any more —
+ * a clinic with no chart still records its visits — and every clinic bills
+ * from what was recorded: the desk's Ready to bill and the invoice builder's
+ * "From the chart" are no longer a chart clinic's alone.
  */
 export const CHART_FEATURES: Feature[] = ["dental", "aesthetic"];
-
-/** Whether a clinic bills from a chart: the desk's Ready to bill, and "From the chart" in the invoice builder. */
-export const billsFromCharts = (features: Record<Feature, boolean>) => CHART_FEATURES.some((f) => features[f]);
 
 /**
  * The capabilities each module owns.
@@ -181,8 +181,6 @@ export function maskByFeatures(caps: CapabilityMap, features: FeatureMap): Capab
   for (const f of FEATURES) {
     if (!features[f]) for (const cap of FEATURE_CAPS[f]) denied.add(cap);
   }
-  // No chart at all, nothing to record on.
-  if (!CHART_FEATURES.some((f) => features[f])) denied.add("patients.charts");
   if (denied.size === 0) return caps;
   const out = { ...caps };
   for (const cap of CAPABILITIES) if (denied.has(cap)) out[cap] = false;

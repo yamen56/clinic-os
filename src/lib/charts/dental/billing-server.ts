@@ -129,7 +129,7 @@ export type ChartLine = {
  */
 export type DeskLine = ChartLine & {
   patientId: string;
-  chart: "dental" | "aesthetic";
+  chart: "dental" | "aesthetic" | "general";
   at: string;
   doctorName: string | null;
   /** False: no price on the list when it was charted — it bills at 0 until one is set. */
@@ -216,6 +216,23 @@ async function linesFor(
           m.service_name ? { name: m.service_name, nameAr: m.service_name_ar ?? null } : null,
           locale
         ),
+        qty: 1,
+        unitPrice: m.fee == null ? 0 : Number(m.fee),
+        doctorMemberId: m.performed_by ?? null,
+        ...about,
+      });
+      continue;
+    }
+    /*
+      A treatment no chart draws (0108) is one line of the price list: the
+      service's name as the list has it now, else the name recorded.
+    */
+    if (m.chart === "general") {
+      if ((billed.get(m.id) ?? 0) > 0) continue;
+      lines.push({
+        markId: m.id,
+        serviceId: m.service_id ?? null,
+        description: m.service_name ? (locale === "ar" && m.service_name_ar) || m.service_name : (locale === "ar" && m.label_ar) || m.label,
         qty: 1,
         unitPrice: m.fee == null ? 0 : Number(m.fee),
         doctorMemberId: m.performed_by ?? null,

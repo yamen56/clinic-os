@@ -31,6 +31,10 @@ export type ActivityKey =
   | "dental"
   | "faceMark"
   | "faceUndo"
+  | "treatmentMark"
+  | "treatmentUndo"
+  | "treatmentRecord"
+  | "treatment"
   | "face"
   | "packageSell"
   | "noCharge"
@@ -58,6 +62,9 @@ const EXACT: Record<string, ActivityKey> = {
   "dental.step.undo": "dentalUndo",
   "face.mark.create": "faceMark",
   "face.mark.undo": "faceUndo",
+  "treatment.mark.create": "treatmentMark",
+  "treatment.mark.undo": "treatmentUndo",
+  "treatment.record": "treatmentRecord",
   "face.package.sell": "packageSell",
   "chart.mark.no_charge": "noCharge",
   "lab_case.send": "labSend",
@@ -70,6 +77,7 @@ export function activityKey(action: string): ActivityKey {
   if (exact) return exact;
   if (action.startsWith("dental.")) return "dental";
   if (action.startsWith("face.")) return "face";
+  if (action.startsWith("treatment.")) return "treatment";
   if (action.startsWith("lab_case.")) return "lab";
   return "other";
 }
