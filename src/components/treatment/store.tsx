@@ -94,6 +94,14 @@ export type TreatmentStore = Omit<TreatmentTabData, "treatment"> & {
   files: VisitFile[];
   /** A file this screen just added: shown at once, before the page hears of it. */
   addFile(f: VisitFile): void;
+  /**
+   * A visit for now, for a patient with no appointment today (a walk-in,
+   * already with the doctor), and the sheet opened on it. `recordId`: today's
+   * record written without a visit, which moves onto it. Throws on failure.
+   */
+  startVisit(recordId?: string | null): Promise<string>;
+  /** Open an appointment's full details in the Appointments tab. Absent for a member without the calendar. */
+  showAppointment?: (appointmentId: string) => void;
   /** Write a prescription for a visit, starting from its diagnosis. Absent for a member who may not prescribe. */
   prescribe?: (appointmentId: string | null, diagnosis: string) => void;
   /** The visit the sheet is open on: an appointment, or `null` inside for a day with none. Undefined: closed. */
@@ -142,6 +150,8 @@ export function TreatmentProvider({
   sheet,
   onSheet,
   onPrescribe,
+  onVisitStarted,
+  onShowAppointment,
   renderedAt,
   onTab,
   children,
@@ -158,6 +168,9 @@ export function TreatmentProvider({
   sheet: { appointmentId: string | null } | undefined;
   onSheet: (v: { appointmentId: string | null } | undefined) => void;
   onPrescribe?: (appointmentId: string | null, diagnosis: string) => void;
+  /** A visit was started here: the page reads the visits again, so the banner and the calendar know of it. */
+  onVisitStarted?: () => void;
+  onShowAppointment?: (appointmentId: string) => void;
   renderedAt: number;
   onTab: (key: string) => void;
   children: React.ReactNode;
@@ -167,6 +180,14 @@ export function TreatmentProvider({
   const [billing, setBilling] = useState<Billed[]>(data.treatment.billing);
   const [services, setServices] = useState<ServiceOption[]>(data.treatment.services);
   const [added, setAdded] = useState<VisitFile[]>([]);
+  // Visits started here, until the page's own list has them.
+  const [started, setStarted] = useState<TreatmentVisit[]>([]);
+  const allVisits = useMemo(() => {
+    const known = new Set(visits.map((v) => v.id));
+    return [...started.filter((v) => !known.has(v.id)), ...visits];
+  }, [visits, started]);
+  const visitStarted = useRef(onVisitStarted);
+  visitStarted.current = onVisitStarted;
   const [returnTo, setReturnTo] = useState<{ appointmentId: string | null } | null>(null);
   const setSheet = useRef(onSheet);
   setSheet.current = onSheet;
@@ -243,12 +264,35 @@ export function TreatmentProvider({
   const goTab = useCallback((key: string) => tab.current(key), []);
   const mine = useCallback((id: string) => void sync.current.mine.set(id, Date.now()), []);
 
+  const startVisit = useCallback(
+    async (recordId?: string | null) => {
+      const r = await call<{ visit: TreatmentVisit }>(`/api/c/${slug}/patients/${patientId}/treatment/visit`, "POST", { recordId: recordId ?? null });
+      const v = r.visit;
+      setStarted((prev) => [v, ...prev]);
+      if (recordId) {
+        // As the server did: today's record, and what was done today with no visit, are under the new one now.
+        const today = new Date(v.starts_at).toDateString();
+        setRecords((prev) => prev.map((x) => (x.id === recordId && !x.appointmentId ? { ...x, appointmentId: v.id } : x)));
+        setMarks((prev) =>
+          prev.map((m) =>
+            !m.appointmentId && m.status === "done" && !m.voidedAt && m.doneAt && new Date(m.doneAt).toDateString() === today ? { ...m, appointmentId: v.id } : m
+          )
+        );
+      }
+      setReturnTo(null);
+      setSheet.current({ appointmentId: v.id });
+      visitStarted.current?.();
+      return v.id;
+    },
+    [slug, patientId]
+  );
+
   const value = useMemo<TreatmentStore>(
     () => ({
       slug,
       patientId,
       tz,
-      visits,
+      visits: allVisits,
       feed,
       me: data.me,
       myMemberId: data.myMemberId,
@@ -265,6 +309,8 @@ export function TreatmentProvider({
       prescriptions,
       files: allFiles,
       addFile,
+      startVisit,
+      showAppointment: onShowAppointment,
       prescribe: onPrescribe,
       sheet,
       openSheet,
@@ -276,7 +322,7 @@ export function TreatmentProvider({
       mine,
       reload,
     }),
-    [slug, patientId, tz, visits, feed, data, records, marks, billing, services, prescriptions, allFiles, addFile, onPrescribe, sheet, openSheet, closeSheet, returnTo, goTab, write, mine, reload]
+    [slug, patientId, tz, allVisits, feed, data, records, marks, billing, services, prescriptions, allFiles, addFile, startVisit, onShowAppointment, onPrescribe, sheet, openSheet, closeSheet, returnTo, goTab, write, mine, reload]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

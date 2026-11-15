@@ -19,7 +19,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Copy, Download, FileText, FolderUp, Smile, Trash2, Upload, X } from "lucide-react";
+import { Camera, Copy, Download, FileText, FolderUp, Trash2, Upload, X } from "lucide-react";
+import { Tooth } from "@/components/ui/tooth-icon";
 import { folderItems, resultsIn } from "@/lib/imaging/folder-files";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate } from "@/lib/dates";
@@ -500,7 +501,7 @@ export function FilesTab({
                     )}
                     {fileTeeth.length > 0 && (
                       <span dir="ltr" className="absolute bottom-2 start-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-brand-700 tnum" data-file-teeth>
-                        <Smile className="h-3 w-3" />
+                        <Tooth className="h-3 w-3" />
                         {fileTeeth.join(" · ")}
                       </span>
                     )}

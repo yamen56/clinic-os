@@ -5,7 +5,8 @@
   so the same treatment wears the same picture everywhere.
 */
 
-import { Activity, Anchor, Baby, CircleDot, Crown, ScanSearch, Scissors, Smile, Sparkles, Sun, Waves, Wrench, type LucideIcon } from "lucide-react";
+import { Activity, Anchor, Baby, CircleDot, Crown, ScanSearch, Scissors, Sparkles, Sun, Waves, Wrench, type LucideIcon } from "lucide-react";
+import { Tooth } from "@/components/ui/tooth-icon";
 import type { Category } from "@/lib/charts/dental/catalog";
 
 const BY_CATEGORY: Record<Category, LucideIcon> = {
@@ -16,10 +17,10 @@ const BY_CATEGORY: Record<Category, LucideIcon> = {
   endodontic: Activity,
   periodontic: Waves,
   fixed: Crown,
-  removable: Smile,
+  removable: Tooth,
   implant: Anchor,
   surgery: Scissors,
-  ortho: Smile,
+  ortho: Tooth,
   pediatric: Baby,
   cosmetic: Sun,
 };

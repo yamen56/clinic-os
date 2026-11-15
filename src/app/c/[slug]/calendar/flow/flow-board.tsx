@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { DateTime } from "luxon";
 import { useI18n } from "@/lib/i18n/client";
-import { EmptyState, Spinner } from "@/components/ui/misc";
+import { EmptyState } from "@/components/ui/misc";
+import { BoardOutline } from "./board-outline";
 import { flowStage, minutesBetween, LATE_GRACE_MIN, type FlowStage } from "@/lib/patient-flow";
 import type { FlowStep } from "../flow-actions";
 import type { Appt, CalendarData, PageCaps } from "../types";
@@ -183,7 +184,8 @@ export function FlowBoard({
     return drag.over === c ? "ring-2 ring-brand-600 bg-brand-50" : "outline-dashed outline-2 -outline-offset-2 outline-brand-600/50";
   };
 
-  if (!data) return <Spinner label={t.common.loading} />;
+  // The board's outline while the day comes, as the calendar's loading screen drew it: one shape, not a bar.
+  if (!data) return <BoardOutline />;
 
   const activeCol: Column = phoneCol ?? (cols.waiting.length ? "waiting" : cols.in_room.length && !cols.coming.length ? "in_room" : "coming");
   const doctors = data.doctors;

@@ -1,48 +1,31 @@
 import { Skeleton } from "@/components/ui/misc";
+import { BoardOutline } from "./flow/board-outline";
 
 /**
- * A week, because the calendar opens on one.
+ * Patients today, because that is what the calendar opens on.
  *
- * Same reason as the other two: the only skeleton in the workspace was the
- * dashboard's, and a grid of stat tiles resolving into a grid of days is a
- * visible relayout rather than a head start.
+ * It used to draw a week: seven days side by side on a computer and, on a
+ * phone, seven of them stacked — a page several screens tall, under a header
+ * wider than the screen — which then became the Today board (Yamen,
+ * 2026-11-15: "the loading is not in the right proportions"). The calendar
+ * has opened on Today since the board came (calendar/page.tsx), so this is
+ * its tabs over the board's own outline, which the board shows too while it
+ * fetches the day: one shape from the tap to the patients.
  *
- * Seven columns on a wide screen and one on a phone, matching how the calendar
- * itself collapses — a skeleton that keeps a layout the real screen drops is
- * the same mistake in the other direction.
+ * A link about the calendar (a visit to open, a patient to book) opens the
+ * Schedule instead; its moment of this outline is far shorter than the week
+ * was tall on a phone, which is the trade this makes.
  */
 export default function Loading() {
   return (
     <div className="animate-fade-in">
-      <div className="mb-6 flex items-end justify-between gap-3">
-        <div>
-          <Skeleton className="h-7 w-40" />
-          <Skeleton className="mt-2 h-4 w-48" />
-        </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-10 w-24 rounded-ctl" />
-          <Skeleton className="h-10 w-32 rounded-ctl" />
-        </div>
+      {/* The tabs: Today, Schedule, Waitlist. */}
+      <div className="mb-4 grid grid-cols-3 gap-2 border-b border-line pb-3 sm:flex sm:gap-6">
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="mx-auto h-5 w-20 sm:mx-0" />
+        ))}
       </div>
-
-      <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-        <div className="grid grid-cols-1 divide-y divide-line sm:grid-cols-7 sm:divide-x sm:divide-y-0">
-          {Array.from({ length: 7 }).map((_, day) => (
-            <div key={day} className="min-h-40 p-2.5">
-              <Skeleton className="h-3 w-14" />
-              <div className="mt-3 space-y-2">
-                {/*
-                  A different number of appointments per day. An even grid reads
-                  as a table that has not loaded; an uneven one reads as a week.
-                */}
-                {Array.from({ length: [2, 3, 1, 3, 2, 1, 0][day] }).map((_, i) => (
-                  <Skeleton key={i} className="h-9 w-full rounded-md" />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <BoardOutline />
     </div>
   );
 }

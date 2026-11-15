@@ -49,14 +49,12 @@ import { TreatmentProvider, useOptionalTreatmentStore, type TreatmentTabData } f
 import { TreatmentCard } from "@/components/treatment/treatment-card";
 import { TreatmentReadyToBill } from "@/components/treatment/ready-to-bill";
 import { VisitRecordSheetHost } from "@/components/treatment/visit-record-sheet";
-import { VisitRecordView, useChartWork } from "@/components/treatment/visit-record-view";
-import { hasText, standing } from "@/lib/treatment/visits";
 import { TakePayment } from "@/components/take-payment";
 import { DentalMedicalCard } from "@/components/charts/dental/medical-card";
 import { DateTime } from "luxon";
 import { VisitBanner, type VisitNow } from "./visit-banner";
+import { AppointmentRow, type RowAppointment } from "./appointment-row";
 import { MedicalCard } from "@/components/medical-card";
-import { VisitWork, useVisitWorkCount } from "@/components/charts/dental/visit-work";
 import { medicalAlerts, readHistory, type MedicalHistory } from "@/lib/medical-history";
 import { FilesTab, type FilesHub } from "./files-tab";
 import { OnFile, OtherNoteCard, SOURCE_ICON, useOtherNotes, type OtherSource } from "./notes-feed";
@@ -81,7 +79,6 @@ import {
   Archive,
   MoreVertical,
   StickyNote,
-  ChevronRight,
   History,
   Filter,
   Pencil,
@@ -92,8 +89,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   ExternalLink,
-  Smile,
-  ClipboardPen,
   ArrowLeft,
 } from "lucide-react";
 
@@ -359,14 +354,6 @@ const storageKeyOf = (d: FieldDef) => d.storage_key ?? d.key.replace(/^patient\.
 const HEADER_ACTION =
   "w-full max-sm:h-full max-sm:min-h-9 max-sm:gap-1.5 max-sm:px-2 max-sm:py-1.5 max-sm:whitespace-normal max-sm:text-center max-sm:leading-tight sm:w-auto";
 
-const apptStatus: Record<string, StatusKey> = {
-  pending_approval: "pending",
-  scheduled: "scheduled",
-  confirmed: "confirmed",
-  completed: "completed",
-  no_show: "no_show",
-  cancelled: "cancelled",
-};
 
 export function PatientProfile(props: {
   slug: string;
@@ -379,7 +366,7 @@ export function PatientProfile(props: {
   noteFeed?: FeedItem[];
   noteCategories: NoteCategoryRow[];
   files: PatientFileRow[];
-  appointments: ({ id: string; starts_at: string; status: string; service_name: string | null; service_name_ar: string | null; doctor_name: string | null; service_ids?: string[] } & Partial<VisitNow>)[];
+  appointments: (RowAppointment & { service_ids?: string[] } & Partial<VisitNow>)[];
   invoices: ({
     id: string;
     number: string;
@@ -390,6 +377,8 @@ export function PatientProfile(props: {
     total: string;
     amount_paid: string;
     created_at: string;
+    /** The visit it was raised for, when it was. */
+    appointment_id?: string | null;
   } & PatientClaim)[];
   conversation: { id: string; msgs: { id: string; direction: string; sender_kind: string; body: string; msg_type: string; created_at: string }[] | null } | null;
   defs: FieldDef[];
@@ -479,6 +468,12 @@ export function PatientProfile(props: {
   const openComposer = (draft: RxDraft | null = null) => setComposer({ draft });
   // The visit's record sheet: which visit it is open on. Held here so the prescription can open over it and return.
   const [recordSheet, setRecordSheet] = useState<{ appointmentId: string | null } | undefined>(undefined);
+  // The visit the Treatment card asked to see in full, in the Appointments tab.
+  const [focusAppt, setFocusAppt] = useState<string | null>(null);
+  const showAppointment = (id: string) => {
+    setFocusAppt(id);
+    setTab("appointments");
+  };
   const prescribeFromRecord = (appointmentId: string | null, diagnosis: string) => {
     setRecordSheet(undefined);
     setComposer({ draft: diagnosis.trim() ? { diagnosis: diagnosis.trim() } : null, from: { appointmentId } });
@@ -677,6 +672,8 @@ export function PatientProfile(props: {
       sheet={recordSheet}
       onSheet={setRecordSheet}
       onPrescribe={caps.prescriptions ? prescribeFromRecord : undefined}
+      onVisitStarted={() => router.refresh()}
+      onShowAppointment={caps.calendar ? showAppointment : undefined}
       renderedAt={props.renderedAt}
       onTab={setTab}
     >
@@ -1263,12 +1260,23 @@ export function PatientProfile(props: {
                   <AppointmentRow
                     key={a.id}
                     slug={slug}
+                    patientId={p.id}
                     patientName={p.full_name}
                     appointment={a}
                     notes={props.notes.filter((n) => n.appointment_id === a.id)}
                     categories={props.noteCategories}
+                    invoices={props.invoices.filter((i) => i.appointment_id === a.id && i.status !== "void")}
+                    // The patient's next booked visit after this one: the earliest still to come that starts later.
+                    nextBookedAt={
+                      props.appointments
+                        .filter((b) => b.id !== a.id && Date.parse(b.starts_at) > Date.parse(a.starts_at) && ["pending_approval", "scheduled", "confirmed"].includes(b.status))
+                        .map((b) => b.starts_at)
+                        .sort()[0] ?? null
+                    }
+                    currency={currency}
                     tz={tz}
-                    locale={locale}
+                    canInvoice={caps.invoices}
+                    focused={focusAppt === a.id}
                     onOpenChart={() => setTab("dental")}
                     onTab={setTab}
                   />
@@ -1658,211 +1666,6 @@ function TagsRow({
  * Shown only when the patient has visits at all: on a file with none this is a
  * control whose every option is the empty one.
  */
-/**
- * One past or upcoming visit on the patient file, with what was written about it.
- *
- * The notes are already in hand — the page loads every note for this patient
- * with its `appointment_id` — so grouping them here costs nothing and opens
- * instantly. Fetching per row would put a spinner between a doctor and the last
- * thing they wrote about this exact visit, which is the thing they opened the
- * appointment to read.
- *
- * Collapsed by default: a file with thirty visits would otherwise be a wall of
- * text, and the count on the row is enough to say whether opening it is worth
- * it. A visit with nothing written stays quiet rather than showing "0".
- */
-function AppointmentRow({
-  slug,
-  patientName,
-  appointment,
-  notes,
-  categories,
-  tz,
-  locale,
-  onOpenChart,
-  onTab,
-}: {
-  slug: string;
-  patientName: string;
-  appointment: {
-    id: string;
-    starts_at: string;
-    status: string;
-    service_name: string | null;
-    service_name_ar: string | null;
-    doctor_name: string | null;
-  };
-  notes: NoteRow[];
-  categories: NoteCategoryRow[];
-  tz: string;
-  locale: string;
-  /** Show the dental chart — a visit's chart work opens there. */
-  onOpenChart: () => void;
-  /** Show another tab of the file. */
-  onTab: (key: string) => void;
-}) {
-  const { t } = useI18n();
-  const router = useRouter();
-  const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const work = useVisitWorkCount(appointment.id);
-  // The visit's record: what it was, and the treatments no chart draws that were done at it.
-  const treatment = useOptionalTreatmentStore();
-  const faceWork = useChartWork().get(appointment.id)?.face ?? [];
-  const record = treatment?.records.find((r) => r.appointmentId === appointment.id) ?? null;
-  const doneHere = treatment ? standing(treatment.marks).filter((m) => m.appointmentId === appointment.id) : [];
-  const recorded = hasText(record) || doneHere.length > 0;
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const service = (locale === "ar" ? appointment.service_name_ar : null) || appointment.service_name;
-  const byId = new Map(categories.map((c) => [c.id, c]));
-
-  const add = async () => {
-    const text = draft.trim();
-    if (!text) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/c/${slug}/appointments/${appointment.id}/notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: text }),
-      });
-      if (!res.ok) return toast(t.common.genericError, "error");
-      setDraft("");
-      router.refresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <li data-appointment-row={appointment.id}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-4 px-5 py-3 text-start transition-colors hover:bg-ink-900/[0.02]"
-      >
-        <ChevronRight
-          className={`h-4 w-4 shrink-0 text-ink-300 transition-transform rtl:rotate-180 ${
-            open ? "rotate-90 rtl:rotate-90" : ""
-          }`}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium">{service || "—"}</div>
-          <div className="text-[13px] text-ink-500">
-            {fmtDateTime(appointment.starts_at, tz, locale)}
-            {appointment.doctor_name ? ` · ${appointment.doctor_name}` : ""}
-          </div>
-        </div>
-        {work > 0 && (
-          <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-medium text-ink-500" data-visit-work-count={work}>
-            <Smile className="h-3 w-3" />
-            <span className="tnum">{work}</span>
-          </span>
-        )}
-        {recorded && (
-          <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-medium text-ink-500" data-visit-recorded={doneHere.length}>
-            <ClipboardPen className="h-3 w-3" />
-            {doneHere.length > 0 && <span className="tnum">{doneHere.length}</span>}
-          </span>
-        )}
-        {notes.length > 0 && (
-          <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-medium text-ink-500">
-            <StickyNote className="h-3 w-3" />
-            <span className="tnum">{notes.length}</span>
-          </span>
-        )}
-        <Badge status={apptStatus[appointment.status] ?? "neutral"}>
-          {(t.calendar.statuses as Record<string, string>)[appointment.status] ?? appointment.status}
-        </Badge>
-      </button>
-
-      {open && (
-        <div className="border-t border-line bg-sunken/30 px-5 py-3">
-          {/* Whose visit and which one, restated where a note is about to be
-              written — the row above is a summary, this is the record. */}
-          <p className="mb-2 text-[12px] text-ink-500">
-            {patientName} · {fmtDateTime(appointment.starts_at, tz, locale)}
-            {service ? ` · ${service}` : ""}
-          </p>
-
-          {/* The visit's record, as the Overview's Treatment card shows it; tooth work keeps its own box below. */}
-          {treatment && (recorded || faceWork.length > 0 || treatment.canWrite) && (
-            <div className="mb-3 grid gap-2 rounded-lg border border-line bg-surface p-3" data-appointment-record={appointment.id}>
-              <VisitRecordView appointmentId={appointment.id} record={record} marks={doneHere} chart={{ dental: 0, face: faceWork }} onTab={onTab} />
-              {treatment.canWrite && !["cancelled", "no_show"].includes(appointment.status) && new Date(appointment.starts_at).getTime() < Date.now() + 86_400_000 && (
-                <div>
-                  <Button size="sm" variant="outline" onClick={() => treatment.openSheet(appointment.id)} data-appointment-record-edit={appointment.id}>
-                    <ClipboardPen className="h-4 w-4" />
-                    {recorded ? t.treatment.edit : t.treatment.record}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* The visit's dental work — planned for it, done at it. */}
-          <div className="mb-3 empty:hidden">
-            <VisitWork appointmentId={appointment.id} onOpenChart={onOpenChart} />
-          </div>
-
-          {notes.length === 0 ? (
-            <p className="mb-2 text-[12px] text-ink-400">{t.patients.notes.noVisitNotes}</p>
-          ) : (
-            <ul className="mb-2 grid gap-2">
-              {notes.map((n) => {
-                const cat = n.category_id ? byId.get(n.category_id) : null;
-                return (
-                  <li key={n.id} className="rounded-lg border border-line bg-surface p-2.5">
-                    <div className="mb-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-400">
-                      {cat && (
-                        <span
-                          className="inline-flex h-4 items-center rounded-full px-1.5 font-semibold"
-                          style={{ color: cat.color, background: "var(--color-sunken)" }}
-                        >
-                          {locale === "ar" ? cat.name_ar || cat.name : cat.name}
-                        </span>
-                      )}
-                      {n.author ? `${n.author} · ` : ""}
-                      {fmtDateTime(n.created_at, tz, locale)}
-                      {n.edited_at ? ` · ${t.patients.notes.edited}` : ""}
-                    </div>
-                    {n.audio_path && (
-                      <VoiceNote
-                        src={`/api/c/${slug}/notes/${n.id}/audio`}
-                        seconds={n.audio_seconds}
-                        label={t.patients.notes.playVoice}
-                      />
-                    )}
-                    {n.body && (
-                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900">
-                        {n.body}
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={t.patients.notes.addVisitNote}
-            className="min-h-16 bg-surface"
-          />
-          <div className="mt-1.5 flex justify-end">
-            <Button size="sm" onClick={add} loading={busy} disabled={!draft.trim() || busy}>
-              {t.patients.notes.add}
-            </Button>
-          </div>
-        </div>
-      )}
-    </li>
-  );
-}
-
 function VisitPicker({
   visits,
   value,

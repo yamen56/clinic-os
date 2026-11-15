@@ -29,10 +29,10 @@ import {
   ScanFace,
   ShieldCheck,
   Siren,
-  Smile,
   Stethoscope,
   type LucideIcon,
 } from "lucide-react";
+import { Tooth } from "@/components/ui/tooth-icon";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { fmtDate, fmtTime } from "@/lib/dates";
@@ -67,7 +67,7 @@ export const SOURCE_ICON: Record<OtherSource, LucideIcon> = {
   prescription: Pill,
   waitlist: Hourglass,
   xray: FileText,
-  chart: Smile,
+  chart: Tooth,
   step: ListChecks,
   emergency: Siren,
   face: ScanFace,

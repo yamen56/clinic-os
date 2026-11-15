@@ -34,7 +34,8 @@
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FileText, Mic, Paperclip, Pill, Plus, ScanFace, Search, Smile, Square, X } from "lucide-react";
+import { ArrowLeft, FileText, Mic, Paperclip, Pill, Plus, ScanFace, Square, X } from "lucide-react";
+import { Tooth } from "@/components/ui/tooth-icon";
 import { useI18n } from "@/lib/i18n/client";
 import { useAutosave } from "@/lib/use-autosave";
 import { useToast } from "@/components/ui/toast";
@@ -104,7 +105,7 @@ function Picker({
           dir="auto"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={T.search}
+          placeholder={T.searchOrType}
           maxLength={120}
           className="h-11 min-w-0 flex-1 rounded-se-lg bg-surface px-2 text-base focus:outline-none md:text-sm"
           data-record-search
@@ -369,6 +370,19 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
     if (any) router.refresh();
   };
 
+  // A record with no visit, written today: a visit for now can still be started, and it moves there.
+  const isToday = !appointmentId && (existing ? dayOf(existing.createdAt, tz) === today : true);
+  const [starting, setStarting] = useState(false);
+  const startHere = async () => {
+    setStarting(true);
+    try {
+      await store.startVisit(store.records.some((r) => r.id === recordId) ? recordId : null);
+    } catch {
+      setStarting(false);
+      toast(T.saveFailed, "error");
+    }
+  };
+
   const when = visit ? `${fmtDate(visit.starts_at, tz, locale)} · ${fmtTime(visit.starts_at, tz, locale)}` : `${fmtDate(new Date().toISOString(), tz, locale)} · ${T.noVisit}`;
   const service = visit ? (locale === "ar" && visit.service_name_ar) || visit.service_name : null;
   const openChart = (key: string) => {
@@ -475,6 +489,24 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
         )}
 
         <div className="grid gap-5 overflow-y-auto overscroll-contain px-5 py-4">
+          {!appointmentId && isToday && (
+            <div className="grid gap-2 rounded-lg border border-st-pending/30 bg-st-pending-soft px-3 py-2.5" data-record-no-visit>
+              <p className="text-[13px] text-ink-900">{T.noVisitHint}</p>
+              <div>
+                <button
+                  type="button"
+                  disabled={starting}
+                  onClick={() => void startHere()}
+                  className="inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[14px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
+                  data-record-start-visit
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  {T.startVisit}
+                </button>
+              </div>
+            </div>
+          )}
+
           {lastPlan && (
             <div className="rounded-lg border border-line bg-canvas px-3 py-2 text-[13px]" data-record-last-plan>
               <div className="mb-0.5 text-[12px] font-semibold text-ink-500">{T.lastPlan.replace("{date}", fmtDate(lastPlan.at, tz, locale))}</div>
@@ -540,7 +572,29 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
               </ul>
             )}
 
-            {/* What an earlier visit planned comes first: this is the visit it was planned for, as likely as not. */}
+            {/*
+              A new treatment — neither booked nor planned — is the first thing
+              offered, and plainly (Yamen, 2026-11-15: "make a new one other
+              than the old and the planned one"): from the price list, or by
+              its name when it is not on it.
+            */}
+            {picking !== "done" ? (
+              <button
+                type="button"
+                onClick={() => setPicking("done")}
+                className="mb-3 inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[14px] font-semibold text-on-brand hover:bg-brand-hover"
+                data-record-pick
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                {T.newTreatment}
+              </button>
+            ) : (
+              <div className="mb-3">
+                <Picker services={store.services} currency={store.currency} onPick={(s, typed) => void add(s, typed, "done")} onBack={() => setPicking(null)} />
+              </div>
+            )}
+
+            {/* Or one already in view: what an earlier visit planned, and what this one was booked for. */}
             {waiting.length > 0 && (
               <div className="mb-2" data-record-planned-offer={waiting.length}>
                 <div className="mb-1.5 text-[12px] text-ink-500">{T.plannedEarlier}</div>
@@ -569,22 +623,13 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
               </div>
             )}
 
-            {picking !== "done" ? (
-              <button type="button" onClick={() => setPicking("done")} className={chip} data-record-pick>
-                <Search className="h-4 w-4 shrink-0" />
-                {T.add}
-              </button>
-            ) : (
-              <Picker services={store.services} currency={store.currency} onPick={(s, typed) => void add(s, typed, "done")} onBack={() => setPicking(null)} />
-            )}
-
             {(dental || face) && (
               <div className="mt-3 grid gap-2 rounded-lg bg-canvas p-3" data-record-charts>
                 <p className="text-[12.5px] text-ink-500">{T.chartHint}</p>
                 <div className="flex flex-wrap gap-2">
                   {dental && (
                     <button type="button" onClick={() => openChart("dental")} className={chip} data-open-chart="dental">
-                      <Smile className="h-4 w-4 shrink-0" />
+                      <Tooth className="h-4 w-4 shrink-0" />
                       {T.openTooth}
                       {chart?.dental ? <span className="font-normal text-ink-500 tnum">· {T.count.replace("{n}", String(chart.dental))}</span> : null}
                     </button>

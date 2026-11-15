@@ -13,10 +13,10 @@ import {
   Workflow,
   Sparkles,
   Landmark,
-  Smile,
   ScanFace,
   Route,
 } from "lucide-react";
+import { Tooth } from "@/components/ui/tooth-icon";
 
 const icons: Record<Feature, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
   conversations: MessageCircle,
@@ -28,7 +28,7 @@ const icons: Record<Feature, React.ComponentType<{ className?: string; strokeWid
   automations: Workflow,
   ai: Sparkles,
   einvoicing: Landmark,
-  dental: Smile,
+  dental: Tooth,
   aesthetic: ScanFace,
   coordinator: Route,
 };

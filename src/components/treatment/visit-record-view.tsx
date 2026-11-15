@@ -14,7 +14,8 @@
   Appointments tab, so a visit reads the same wherever it is opened.
 */
 
-import { FileText, Pill, ScanFace, Smile } from "lucide-react";
+import { FileText, Pill, ScanFace } from "lucide-react";
+import { Tooth } from "@/components/ui/tooth-icon";
 import { useI18n } from "@/lib/i18n/client";
 import { VisitWork } from "@/components/charts/dental/visit-work";
 import { useOptionalDentalStore } from "@/components/charts/dental/store";
@@ -128,7 +129,7 @@ export function VisitRecordView({
       {appointmentId && !!chart?.dental && (
         <div data-record-dental={chart.dental}>
           <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-            <Smile className="h-3.5 w-3.5" />
+            <Tooth className="h-3.5 w-3.5" />
             {T.toothChart}
           </div>
           <VisitWork appointmentId={appointmentId} onOpenChart={() => onTab("dental")} />

@@ -22,6 +22,12 @@
  * the next visit, with that visit's plan; the chart's tab offers the way
  * back to the record; and Talk fills the sections from speech, moving
  * between them by name.
+ *
+ * Third round (2026-11-15): Record visit for a patient with no appointment
+ * today starts one (a walk-in, with the doctor) so the prescription and files
+ * can be added; an appointment in the Appointments tab opens on all its
+ * details, the invoice among them; a visit on the Treatment card leads to
+ * them; and "New treatment" is the first thing offered.
  */
 import { Client } from "pg";
 import { chromium, devices, type Page } from "playwright";
@@ -138,6 +144,8 @@ async function main() {
     )
   ).rows[0].id as string;
   const followUp = await inRoom(clinic, sami, doc, consult);
+  // Seen today with no appointment at all.
+  const lina = (await db.query(`insert into patients (clinic_id, full_name, phone_e164, source) values ($1, 'Lina Saleh', '+962790771104', 'staff') returning id`, [clinic])).rows[0].id as string;
 
   /* ── A clinic with the tooth chart ──────────────────────────────────── */
   const dslug = `qarecd${tag}`;
@@ -273,6 +281,7 @@ async function main() {
     await ph.click("[data-record-plan-pick]");
     await ph.click("[data-picker-back]");
     check("the price list has a Back of its own", (await ph.locator("[data-record-picker]").count()) === 0 && (await ph.locator("[data-record-plan-pick]").count()) === 1);
+    check("“New treatment” is the first thing offered for what was done", (await ph.locator("[data-record-pick]").innerText()).includes("New treatment"));
     await ph.click("[data-record-plan-pick]");
     await ph.click(`[data-add-service="${earWash}"]`);
     check("a treatment is planned for a later visit", await until(async () => (await ph.locator("[data-planned-line]").count()) === 1));
@@ -302,6 +311,15 @@ async function main() {
     const cardNow = await ph.locator("[data-treatment-card]").innerText();
     check("the card shows the visit's prescription and photo", cardNow.includes("Amoxicillin") && cardNow.includes("throat.png"), cardNow);
     check("and what is planned for later, apart from what was done", (await ph.locator("[data-treatment-planned]").innerText()).includes("Ear wash"), cardNow);
+    await ph.click(`[data-entry-appointment="${visit}"]`);
+    const detailsFromCard = ph.locator(`[data-appointment-details="${visit}"]`);
+    check("a visit on the card leads to its appointment, opened, in the Appointments tab", await until(async () => (await detailsFromCard.count()) === 1));
+    const fromCard = await detailsFromCard.innerText();
+    check("which shows the day: arrived, with the doctor", fromCard.includes("Arrived") && fromCard.includes("with the doctor"), fromCard);
+    check("and the visit's record, prescription and photo", fromCard.includes("Acute bacterial tonsillitis") && fromCard.includes("Amoxicillin") && fromCard.includes("throat.png"), fromCard);
+    check("with a tooth, not a face, nowhere here (no chart in this clinic)", (await ph.locator("[data-visit-work-count]").count()) === 0);
+    await ph.goto(`${base}/patients/${patient}`);
+    await ph.waitForSelector("[data-treatment-card]", { timeout: 60_000 });
 
     console.log("\n[the same visit, elsewhere in the file]");
     await ph.goto(`${base}/patients/${patient}?tab=notes`);
@@ -346,6 +364,17 @@ async function main() {
     await desk.goto(`${base}/invoices`);
     await desk.waitForSelector("main", { timeout: 60_000 });
     check("billed, they leave Ready to bill", await until(async () => (await desk.locator("[data-ready-desk]").count()) === 0, 20_000));
+    const invNo = (await db.query(`select number from invoices where patient_id = $1 and appointment_id = $2`, [patient, visit])).rows[0]?.number as string | undefined;
+    await desk.goto(`${base}/patients/${patient}?tab=appointments`);
+    const deskRow = desk.locator(`[data-appointment-row="${visit}"]`);
+    await deskRow.waitFor({ timeout: 60_000 });
+    check("the visit's row says it is invoiced", !!invNo && (await deskRow.locator("[data-visit-invoiced]").innerText()).includes(invNo), invNo);
+    await deskRow.locator("button").first().click();
+    const details = await deskRow.locator("[data-appointment-details]").innerText();
+    check("opened, it shows the appointment's details: when, doctor, the day at the clinic", details.includes("When") && details.includes("Dr Rana") && details.includes("Arrived"), details);
+    check("what was said when booking", details.includes("Sore throat for three days"), details);
+    check("and its invoice, with its total and status", !!invNo && details.includes(invNo) && /Draft|Sent|Paid/.test(details), details);
+    check("and a way to it in the calendar", (await deskRow.locator("[data-detail-calendar]").getAttribute("href"))?.endsWith(`?open=${visit}`));
 
     // A second treatment after the invoice: the patient's Invoices tab offers it.
     await db.query(
@@ -426,6 +455,29 @@ async function main() {
     check("Finish shows what was done and the plan, to choose the next visit by", handed.includes("Ear wash") && handed.includes("no further visit needed"), handed);
     await fu.keyboard.press("Escape");
     await talkCtx.close();
+
+    /* ============================================================ no appointment */
+    console.log("\n[a patient seen with no appointment]");
+    const walkCtx = await browser.newContext({ ...devices["iPhone 13"] });
+    const wk = await walkCtx.newPage();
+    watch(wk);
+    await signIn(wk, `doc-${slug}@test.local`);
+    await wk.goto(`${base}/patients/${lina}`);
+    await wk.waitForSelector("[data-treatment-record]", { timeout: 90_000 });
+    check("no visit, no banner", (await wk.locator("[data-visit-banner]").count()) === 0);
+    await wk.click("[data-treatment-record]");
+    const walkIn = await until(async () => (await db.query(`select 1 from appointments where patient_id = $1`, [lina])).rowCount === 1, 30_000);
+    const appt = (await db.query(`select id, walk_in, arrived_at, seated_at, doctor_member_id, status, created_by from appointments where patient_id = $1`, [lina])).rows[0];
+    check("Record visit starts a visit for now: a walk-in, with the doctor, already in the room", walkIn && appt.walk_in && appt.arrived_at && appt.seated_at && appt.doctor_member_id === doc && appt.status === "confirmed" && appt.created_by === docUser, JSON.stringify(appt));
+    check("and the sheet opens on it", await until(async () => (await wk.locator(`[data-record-sheet="${appt?.id}"]`).count()) === 1));
+    check("with the prescription and the files to add", (await wk.locator("[data-record-prescribe]").count()) === 1 && (await wk.locator("[data-record-add-file]").count()) === 1);
+    await wk.setInputFiles("[data-record-file-input]", { name: "rash.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64") });
+    check("a photo goes under the new visit", await until(async () => (await db.query(`select 1 from patient_files where patient_id = $1 and appointment_id = $2`, [lina, appt?.id])).rowCount === 1, 30_000));
+    const told = (await db.query(`select count(*)::int as n from notifications where clinic_id = $1 and kind like '%appointment%'`, [clinic])).rows[0].n;
+    check("nobody is told an appointment was booked", told === 0, String(told));
+    await wk.click("[data-record-close]");
+    check("the file now shows the visit in progress", await until(async () => (await wk.locator('[data-visit-banner="in_room"]').count()) === 1, 30_000));
+    await walkCtx.close();
 
     /* ============================================================ may not record */
     console.log("\n[a member who may not record]");

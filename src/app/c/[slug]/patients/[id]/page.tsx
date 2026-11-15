@@ -150,19 +150,25 @@ export default async function PatientProfilePage({
                              order by x.ord) as service_ids,
                       -- Where they are today, for the banner over the file while they are in the clinic.
                       a.arrived_at, a.seated_at, a.doctor_member_id, a.service_id, s.duration_min as service_duration_min,
-                      rm.name as room_name, rm.name_ar as room_name_ar
+                      rm.name as room_name, rm.name_ar as room_name_ar,
+                      -- Everything else the visit holds, for its row in the Appointments tab (2026-11-15: "all of the details").
+                      a.ends_at, a.finished_at, a.walk_in, a.notes, a.intake_answers, a.created_at,
+                      a.next_visit_days, a.next_visit_none, a.desk_note, a.handed_off_at, a.late_min,
+                      cb.full_name as created_by_name, bl.name as booking_link_name
                from appointments a
                left join services s on s.id = a.service_id
                left join clinic_members m on m.id = a.doctor_member_id
                left join users u on u.id = m.user_id
                left join clinic_rooms rm on rm.id = a.room_id
+               left join users cb on cb.id = a.created_by
+               left join booking_links bl on bl.id = a.booking_link_id
                where a.patient_id = $1 and a.clinic_id = $2 order by a.starts_at desc limit 50`,
               [id, access.clinicId]
             )
           : none,
         () => caps.invoices
           ? c.query(
-              `select i.id, i.number, i.title, i.status, i.total, i.amount_paid, i.created_at,
+              `select i.id, i.number, i.title, i.status, i.total, i.amount_paid, i.created_at, i.appointment_id,
                       i.insurer_amount, i.claim_status, i.issue_date::text as issue_day, ins.name as insurer_name,
                       -- What the invoice is for when nobody gave it a title: its first line, and how many follow.
                       it.first_item, coalesce(it.item_count, 0) as item_count

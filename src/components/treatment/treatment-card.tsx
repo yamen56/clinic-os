@@ -16,10 +16,11 @@
 */
 
 import { useState } from "react";
-import { ChevronDown, ClipboardPen, Pencil, Stethoscope } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronRight, ClipboardPen, Pencil, Stethoscope } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { fmtDate } from "@/lib/dates";
 import { buildEntries, hasText, planned, todaysVisitId, type Entry } from "@/lib/treatment/visits";
 import { useOptionalTreatmentStore } from "./store";
@@ -34,6 +35,8 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
   const chart = useChartWork();
   const [all, setAll] = useState(false);
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
+  const [starting, setStarting] = useState(false);
+  const { toast } = useToast();
   if (!store) return null;
   const { tz } = store;
 
@@ -47,6 +50,24 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
   // What a doctor is here to write: the visit in progress, else today's, else today with no visit.
   const target = currentVisitId ?? todaysVisitId(store.visits, tz);
   const shown = all ? entries : entries.slice(0, SHOWN);
+  /*
+    Record visit, for a patient with no appointment today, starts one — a
+    walk-in, with this doctor, now — so the record, the prescription and the
+    files have a visit to go under, and the visit is in the calendar.
+  */
+  const record = async () => {
+    if (target) return store.openSheet(target);
+    setStarting(true);
+    try {
+      const today = new Date().toDateString();
+      const loose = store.records.find((r) => !r.appointmentId && new Date(r.createdAt).toDateString() === today);
+      await store.startVisit(loose?.id ?? null);
+    } catch {
+      toast(T.saveFailed, "error");
+    } finally {
+      setStarting(false);
+    }
+  };
 
   return (
     <div className={className} data-treatment-card={entries.length}>
@@ -57,7 +78,7 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
             {T.title}
           </h3>
           {store.canWrite && (
-            <Button size="sm" onClick={() => store.openSheet(target)} data-treatment-record>
+            <Button size="sm" onClick={() => void record()} loading={starting} data-treatment-record>
               <ClipboardPen className="h-4 w-4" />
               {T.record}
             </Button>
@@ -100,6 +121,8 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
                 canWrite={store.canWrite}
                 onEdit={() => store.openSheet(e.appointmentId)}
                 onTab={store.goTab}
+                onAppointment={e.appointmentId && store.showAppointment ? () => store.showAppointment!(e.appointmentId!) : undefined}
+                appointmentLabel={T.appointmentDetails}
                 noVisit={T.noVisit}
                 editLabel={T.edit}
                 countLabel={T.count}
@@ -134,6 +157,8 @@ function EntryRow({
   canWrite,
   onEdit,
   onTab,
+  onAppointment,
+  appointmentLabel,
   noVisit,
   editLabel,
   countLabel,
@@ -147,6 +172,8 @@ function EntryRow({
   canWrite: boolean;
   onEdit: () => void;
   onTab: (key: string) => void;
+  onAppointment?: () => void;
+  appointmentLabel: string;
   noVisit: string;
   editLabel: string;
   countLabel: string;
@@ -198,6 +225,18 @@ function EntryRow({
       {open && (
         <div className="border-t border-line px-4 py-3">
           <VisitRecordView appointmentId={entry.appointmentId} record={entry.record} marks={entry.marks} chart={chart} onTab={onTab} />
+          {onAppointment && (
+            <button
+              type="button"
+              onClick={onAppointment}
+              className="mt-3 inline-flex min-h-10 touch-manipulation items-center gap-1.5 rounded-full border border-line-strong px-3.5 text-[13px] font-semibold text-ink-700 hover:bg-sunken"
+              data-entry-appointment={entry.appointmentId}
+            >
+              <CalendarDays className="h-4 w-4" />
+              {appointmentLabel}
+              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+            </button>
+          )}
         </div>
       )}
     </li>
