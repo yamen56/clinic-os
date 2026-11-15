@@ -24,6 +24,7 @@ import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
 import { nextVisitHref } from "@/lib/next-visit";
 import { useOptionalTreatmentStore } from "@/components/treatment/store";
+import { planned as plannedOf, standing } from "@/lib/treatment/visits";
 import { DateTime } from "luxon";
 import { setFlowAction, type Handoff } from "../../calendar/flow-actions";
 
@@ -74,6 +75,17 @@ export function VisitBanner({
   useRealtimeRefresh(slug, ["appointments"], () => router.refresh(), (e) => e.id === visit.id);
 
   if (finished) return null;
+  // What the visit's record holds, for the hand-off: what was done, the plan, and what is planned for later.
+  const record = treatment?.records.find((r) => r.appointmentId === visit.id);
+  const recorded = treatment
+    ? {
+        done: standing(treatment.marks)
+          .filter((m) => m.appointmentId === visit.id)
+          .map((m) => (locale === "ar" && m.labelAr) || m.label),
+        plan: record?.plan.trim() ?? "",
+        planned: plannedOf(treatment.marks).map((m) => (locale === "ar" && m.labelAr) || m.label),
+      }
+    : undefined;
   const inRoom = !!seatedAt;
   const since = minutesBetween((inRoom ? seatedAt : visit.arrived_at) ?? new Date().toISOString(), now);
   const room = (locale === "ar" ? visit.room_name_ar : null) || visit.room_name;
@@ -181,6 +193,7 @@ export function VisitBanner({
           serviceName={service}
           defaultDoctorId={visit.doctor_member_id}
           defaultMinutes={visit.service_duration_min}
+          recorded={recorded}
           busy={busy}
           onFinish={(h) => void finish(h)}
           onClose={() => setFinishing(false)}

@@ -4,6 +4,7 @@ import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { GENERAL_MARK_SELECT, toGeneralMark } from "@/lib/treatment/db";
+import { visitFor } from "@/lib/treatment/server";
 
 /*
   Changing a recorded treatment. Each change is its own line in the
@@ -15,6 +16,8 @@ const bodySchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("void"), eventId: z.string().uuid(), reason: z.string().trim().max(300).optional() }),
   z.object({ op: z.literal("note"), eventId: z.string().uuid(), note: z.string().max(2000) }),
   z.object({ op: z.literal("performer"), eventId: z.string().uuid(), performerId: z.string().uuid() }),
+  /** A planned treatment, done: at the visit named, or today's. */
+  z.object({ op: z.literal("done"), eventId: z.string().uuid(), appointmentId: z.string().uuid().nullish(), performerId: z.string().uuid().nullish() }),
 ]);
 
 type Params = { params: Promise<{ slug: string; id: string; markId: string }> };
@@ -32,7 +35,7 @@ export async function PATCH(req: Request, ctx: Params) {
 
   const result = await inClinic(access, async (c) => {
     const cur = (
-      await c.query(`select id, label, voided_at from chart_marks where id = $1 and patient_id = $2 and clinic_id = $3 and chart = 'general' for update`, [
+      await c.query(`select id, label, status, voided_at from chart_marks where id = $1 and patient_id = $2 and clinic_id = $3 and chart = 'general' for update`, [
         markId,
         id,
         access.clinicId,
@@ -54,6 +57,21 @@ export async function PATCH(req: Request, ctx: Params) {
         const ok = await c.query(`select 1 from clinic_members where id = $1 and clinic_id = $2`, [b.performerId, access.clinicId]);
         if (!ok.rowCount) return { error: "invalid_performer" as const };
         await c.query(`update chart_marks set performed_by = $2 where id = $1`, [markId, b.performerId]);
+        break;
+      }
+      case "done": {
+        // Two screens tapping the same planned treatment: the second is told, and records nothing twice.
+        if (cur.status !== "planned") return { error: "not_planned" as const };
+        if (b.performerId) {
+          const ok = await c.query(`select 1 from clinic_members where id = $1 and clinic_id = $2`, [b.performerId, access.clinicId]);
+          if (!ok.rowCount) return { error: "invalid_performer" as const };
+        }
+        const at = await visitFor(c, access.clinicId, id, b.appointmentId, b.performerId ?? null);
+        if ("error" in at) return { error: at.error };
+        await c.query(
+          `update chart_marks set status = 'done', done_at = coalesce($2::timestamptz, now()), appointment_id = $3, performed_by = coalesce($4, performed_by) where id = $1`,
+          [markId, at.doneAt, at.visit, b.performerId ?? null]
+        );
         break;
       }
     }

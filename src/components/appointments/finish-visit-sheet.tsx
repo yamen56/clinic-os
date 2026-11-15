@@ -60,6 +60,7 @@ export function FinishVisitSheet({
   patientName,
   serviceName,
   done = [],
+  recorded,
   doctors = [],
   defaultDoctorId,
   defaultMinutes,
@@ -76,6 +77,8 @@ export function FinishVisitSheet({
   serviceName: string | null;
   /** What the chart recorded at this visit. */
   done?: VisitLine[];
+  /** What the visit's record holds (0108): the treatments done, the plan, and what is planned for later. */
+  recorded?: { done: string[]; plan: string; planned: string[] };
   /** Who the next visit can be with; with one or none the choice is not shown. */
   doctors?: { id: string; name: string }[];
   defaultDoctorId: string | null;
@@ -161,6 +164,35 @@ export function FinishVisitSheet({
                   <VisitLineView key={l.markId} line={l} />
                 ))}
               </div>
+            </section>
+          )}
+
+          {recorded && (recorded.done.length > 0 || recorded.plan || recorded.planned.length > 0) && (
+            <section className="grid gap-2 rounded-lg bg-canvas p-3 text-[13.5px]" data-finish-recorded>
+              {recorded.done.length > 0 && (
+                <div>
+                  <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{F.doneToday}</div>
+                  <p className="text-ink-900" dir="auto">
+                    {recorded.done.join(" · ")}
+                  </p>
+                </div>
+              )}
+              {recorded.plan && (
+                <div>
+                  <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t.treatment.fields.plan}</div>
+                  <p className="whitespace-pre-wrap text-ink-900" dir="auto">
+                    {recorded.plan}
+                  </p>
+                </div>
+              )}
+              {recorded.planned.length > 0 && (
+                <div>
+                  <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t.treatment.planned}</div>
+                  <p className="text-ink-900" dir="auto">
+                    {recorded.planned.join(" · ")}
+                  </p>
+                </div>
+              )}
             </section>
           )}
 

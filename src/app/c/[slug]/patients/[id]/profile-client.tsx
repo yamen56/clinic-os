@@ -94,6 +94,7 @@ import {
   ExternalLink,
   Smile,
   ClipboardPen,
+  ArrowLeft,
 } from "lucide-react";
 
 /*
@@ -176,31 +177,42 @@ function MaybeDental({
 
 /* The treatment record's store, for every clinic — above the tabs, for the same reasons. */
 function MaybeTreatment({
-  slug,
-  patientId,
-  tz,
   treatment,
-  visits,
-  feed,
-  renderedAt,
-  onTab,
   children,
-}: {
-  slug: string;
-  patientId: string;
-  tz: string;
-  treatment: TreatmentTabData | null | undefined;
-  visits: React.ComponentProps<typeof TreatmentProvider>["visits"];
-  feed: FeedItem[];
-  renderedAt: number;
-  onTab: (key: string) => void;
-  children: React.ReactNode;
-}) {
+  ...rest
+}: Omit<React.ComponentProps<typeof TreatmentProvider>, "data"> & { treatment: TreatmentTabData | null | undefined }) {
   if (!treatment) return <>{children}</>;
   return (
-    <TreatmentProvider slug={slug} patientId={patientId} tz={tz} data={treatment} visits={visits} feed={feed} renderedAt={renderedAt} onTab={onTab}>
+    <TreatmentProvider data={treatment} {...rest}>
       {children}
     </TreatmentProvider>
+  );
+}
+
+/*
+  The way back to a visit's record from the chart it sent the reader to: the
+  record's sheet has a button to the tooth chart, and the chart had no button
+  back — the doctor recorded the filling and then had to find the visit again.
+*/
+function BackToRecord({ tab }: { tab: string }) {
+  const { t } = useI18n();
+  const store = useOptionalTreatmentStore();
+  if (!store?.returnTo || tab === "overview") return null;
+  const { appointmentId } = store.returnTo;
+  return (
+    <div className="mt-3" data-back-to-record>
+      <button
+        type="button"
+        onClick={() => {
+          store.goTab("overview");
+          store.openSheet(appointmentId);
+        }}
+        className="inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full border border-line-strong bg-surface px-4 text-[14px] font-semibold text-ink-900 hover:bg-sunken"
+      >
+        <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+        {t.treatment.backToRecord}
+      </button>
+    </div>
   );
 }
 
@@ -308,6 +320,8 @@ export type PatientFileRow = {
   view?: string | null;
   /** The picture this is an edited copy of. */
   edited_from?: string | null;
+  /** The visit it was added at, from the visit's record (0109). */
+  appointment_id?: string | null;
   /** The machine that sent it, when one did. */
   device_name?: string | null;
   /** A DICOM study kept with its originals; what the row shows is the preview. */
@@ -456,12 +470,30 @@ export function PatientProfile(props: {
       prev.some((r) => r.id === row.id) ? prev.map((r) => (r.id === row.id ? row : r)) : [row, ...prev]
     );
   const rxData = useComposerData(slug, props.patient.id, caps.prescriptions);
-  const [composer, setComposer] = useState<{ draft: RxDraft | null } | null>(null);
+  /*
+    `from`: the visit's record the prescription was started from. It is then
+    filed under that visit, and closing or sending it comes back to the record
+    rather than leaving the doctor on the Prescriptions tab mid-visit.
+  */
+  const [composer, setComposer] = useState<{ draft: RxDraft | null; from?: { appointmentId: string | null } } | null>(null);
   const openComposer = (draft: RxDraft | null = null) => setComposer({ draft });
+  // The visit's record sheet: which visit it is open on. Held here so the prescription can open over it and return.
+  const [recordSheet, setRecordSheet] = useState<{ appointmentId: string | null } | undefined>(undefined);
+  const prescribeFromRecord = (appointmentId: string | null, diagnosis: string) => {
+    setRecordSheet(undefined);
+    setComposer({ draft: diagnosis.trim() ? { diagnosis: diagnosis.trim() } : null, from: { appointmentId } });
+  };
+  const closeComposer = () => {
+    const from = composer?.from;
+    setComposer(null);
+    if (from) setRecordSheet(from);
+  };
   const onRxSaved = (row: PrescriptionRow, warning: string | undefined, sent: boolean) => {
     upsertRx(row);
+    const from = composer?.from;
     setComposer(null);
-    setTab("prescriptions");
+    if (from) setRecordSheet(from);
+    else setTab("prescriptions");
     const T = t.prescriptions;
     if (warning === "no_phone") toast(T.savedNoPhone, "error");
     else if (warning === "wa_disconnected") toast(T.savedNotSent, "error");
@@ -633,7 +665,21 @@ export function PatientProfile(props: {
   return (
     <MaybeDental slug={slug} patientId={p.id} dental={props.dental} files={props.files} renderedAt={props.renderedAt}>
     <MaybeFace slug={slug} patientId={p.id} face={props.face} renderedAt={props.renderedAt}>
-    <MaybeTreatment slug={slug} patientId={p.id} tz={tz} treatment={props.treatment} visits={props.appointments} feed={props.noteFeed ?? []} renderedAt={props.renderedAt} onTab={setTab}>
+    <MaybeTreatment
+      slug={slug}
+      patientId={p.id}
+      tz={tz}
+      treatment={props.treatment}
+      visits={props.appointments}
+      feed={props.noteFeed ?? []}
+      prescriptions={rxRows}
+      files={props.files}
+      sheet={recordSheet}
+      onSheet={setRecordSheet}
+      onPrescribe={caps.prescriptions ? prescribeFromRecord : undefined}
+      renderedAt={props.renderedAt}
+      onTab={setTab}
+    >
       {/* Header */}
       <div className="relative mb-5 flex flex-wrap items-start gap-4">
         <Avatar name={p.full_name} size={52} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
@@ -839,6 +885,7 @@ export function PatientProfile(props: {
         <VisitBanner key={visitNow.id} slug={slug} tz={tz} patientId={p.id} visit={visitNow} patientName={p.full_name} canFlow={caps.calendar} />
       )}
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
+      <BackToRecord tab={tab} />
 
       <div className="mt-5">
         {/*
@@ -854,12 +901,12 @@ export function PatientProfile(props: {
         {tab === "overview" && (
           <div className="grid gap-4 lg:grid-cols-3" data-overview>
             <div className="grid gap-4 max-lg:contents lg:col-span-2">
-              {/* The medical history, for every clinic; its alerts head the file. First, because it is what changes how the patient is treated. */}
+              {/* What has been done, visit by visit, and the way in to record today's: first (Yamen, 2026-11-15). */}
+              <TreatmentCard className="max-lg:order-1" currentVisitId={visitNow?.id ?? null} />
+              {/* The medical history, for every clinic; its alerts head the file, above the tabs, whatever is first here. */}
               <div className="max-lg:order-1">
                 <PatientMedical tz={tz} history={medical} onSave={saveMedical} />
               </div>
-              {/* What has been done, visit by visit, and the way in to record today's: second, under what to be careful of. */}
-              <TreatmentCard className="max-lg:order-1" currentVisitId={visitNow?.id ?? null} />
               <Card className="p-5 max-lg:order-5">
                 <h3 className="mb-4 text-[15px] font-semibold">{t.patients.overview.details}</h3>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1447,10 +1494,11 @@ export function PatientProfile(props: {
               data={rxData.data}
               setData={rxData.setData}
               reload={rxData.load}
-              onClose={() => setComposer(null)}
+              onClose={closeComposer}
               onSaved={onRxSaved}
               allergies={allergies}
-              appointmentId={visitNow?.id ?? null}
+              // Written from a visit's record: that visit's. Otherwise the one in progress, if there is one.
+              appointmentId={composer.from ? composer.from.appointmentId : (visitNow?.id ?? null)}
             />
           )}
         </WithAllergies>

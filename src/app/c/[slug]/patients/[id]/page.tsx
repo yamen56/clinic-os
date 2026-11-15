@@ -130,7 +130,7 @@ export default async function PatientProfilePage({
           [id, access.clinicId]
         ),
         () => c.query(
-          `select f.id, f.file_name, f.mime_type, f.size_bytes, f.kind, f.created_at, f.teeth, f.view, f.edited_from, d.name as device_name,
+          `select f.id, f.file_name, f.mime_type, f.size_bytes, f.kind, f.created_at, f.teeth, f.view, f.edited_from, f.appointment_id, d.name as device_name,
                   case when f.dicom is null then null else jsonb_build_object(
                     'modality', f.dicom->>'modality', 'instances', jsonb_array_length(f.dicom->'instances')) end as dicom
              from patient_files f left join clinic_devices d on d.id = f.device_id

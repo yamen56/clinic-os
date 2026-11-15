@@ -39,6 +39,28 @@ export function hasText(r: VisitRecord | null | undefined): boolean {
 
 export const dayOf = (iso: string, tz: string) => DateTime.fromISO(iso).setZone(tz).toISODate()!;
 
+/** The treatments planned for a later visit and not done yet, oldest first. */
+export const planned = (marks: GeneralMark[]) => marks.filter((m) => !m.voidedAt && m.status === "planned").sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+
+/**
+ * The plan the visit before this one left: the latest record before `at`
+ * that wrote one. A follow-up is read against it — "review in a week" is why
+ * the patient is here.
+ */
+export function lastPlanBefore(
+  records: VisitRecord[],
+  visits: EntryVisit[],
+  exceptId: string,
+  at: string
+): { plan: string; at: string } | null {
+  const byVisit = new Map(visits.map((v) => [v.id, v]));
+  const whenOf = (r: VisitRecord) => (r.appointmentId ? byVisit.get(r.appointmentId)?.starts_at : undefined) ?? r.createdAt;
+  const before = records
+    .filter((r) => r.id !== exceptId && r.plan.trim() && Date.parse(whenOf(r)) < Date.parse(at))
+    .sort((a, b) => Date.parse(whenOf(b)) - Date.parse(whenOf(a)))[0];
+  return before ? { plan: before.plan.trim(), at: whenOf(before) } : null;
+}
+
 /** The treatments done and still standing. */
 export const standing = (marks: GeneralMark[]) => marks.filter((m) => !m.voidedAt && m.status === "done");
 

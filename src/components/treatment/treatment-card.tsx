@@ -4,9 +4,9 @@
   The Overview's Treatment card: what has been done for this patient, visit
   by visit, newest first — and the way in to record today's.
 
-  It is second on a phone, under the medical history, because that is the
-  order a doctor reads a file in: what to be careful of, then what has been
-  done. The latest visit is open; the ones before it are a line each — the
+  It is first on the Overview, above the medical history (Yamen, 2026-11-15:
+  "make it above the medical history") — the medical alerts already head the
+  file, over every tab. The latest visit is open; the ones before it are a line each — the
   day, the doctor, the diagnosis, what was done — and open on a tap. Three
   are shown, and Show all brings the rest in place: the full record is this
   card, not another screen.
@@ -21,7 +21,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { fmtDate } from "@/lib/dates";
-import { buildEntries, hasText, todaysVisitId, type Entry } from "@/lib/treatment/visits";
+import { buildEntries, hasText, planned, todaysVisitId, type Entry } from "@/lib/treatment/visits";
 import { useOptionalTreatmentStore } from "./store";
 import { useChartWork, VisitRecordView, type ChartWork } from "./visit-record-view";
 
@@ -37,7 +37,13 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
   if (!store) return null;
   const { tz } = store;
 
-  const entries = buildEntries(store.records, store.marks, store.visits, tz, chart.keys());
+  // A visit is listed for anything it left behind: its record, its treatments, its chart work, a prescription, a file.
+  const withSomething = new Set<string>(chart.keys());
+  for (const r of store.prescriptions) if (r.appointment_id) withSomething.add(r.appointment_id);
+  for (const f of store.files) if (f.appointment_id) withSomething.add(f.appointment_id);
+  const entries = buildEntries(store.records, store.marks, store.visits, tz, withSomething);
+  // What earlier visits planned and no visit has done yet: the first thing to know before today's.
+  const waiting = planned(store.marks);
   // What a doctor is here to write: the visit in progress, else today's, else today with no visit.
   const target = currentVisitId ?? todaysVisitId(store.visits, tz);
   const shown = all ? entries : entries.slice(0, SHOWN);
@@ -58,7 +64,23 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
           )}
         </div>
 
-        {entries.length === 0 ? (
+        {waiting.length > 0 && (
+          <div className="mb-3 rounded-lg border border-line bg-canvas px-3 py-2.5" data-treatment-planned={waiting.length}>
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{T.planned}</div>
+            <ul className="grid gap-1">
+              {waiting.map((m) => (
+                <li key={m.id} className="text-[13.5px] text-ink-900">
+                  <span className="font-medium" dir="auto">
+                    {(locale === "ar" && m.labelAr) || m.label}
+                  </span>
+                  <span className="text-ink-500"> · {fmtDate(m.createdAt, tz, locale)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {entries.length === 0 && waiting.length > 0 ? null : entries.length === 0 ? (
           <div className="py-2" data-treatment-empty>
             <p className="text-[14px] font-medium text-ink-700">{T.empty}</p>
             <p className="mt-0.5 text-[13px] text-ink-500">{T.emptyHint}</p>

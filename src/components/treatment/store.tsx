@@ -54,6 +54,12 @@ export type TreatmentVisit = {
   service_ids?: string[];
 };
 
+/** A file of the patient's, as much of it as a visit's record shows. */
+export type VisitFile = { id: string; file_name: string; mime_type: string; kind: string; created_at: string; appointment_id?: string | null };
+
+/** A prescription, as much of it as a visit's record shows. */
+export type VisitRx = { id: string; number: number; created_at: string; items: { name?: string }[]; appointment_id: string | null };
+
 /** What the patient page hands the record: what is saved, and who is writing. */
 export type TreatmentTabData = {
   me: Person;
@@ -83,10 +89,20 @@ export type TreatmentStore = Omit<TreatmentTabData, "treatment"> & {
   setMarks: Setter<GeneralMark[]>;
   billing: Billed[];
   services: ServiceOption[];
+  /** The patient's prescriptions and files; a visit's record shows the ones written or added at it. */
+  prescriptions: VisitRx[];
+  files: VisitFile[];
+  /** A file this screen just added: shown at once, before the page hears of it. */
+  addFile(f: VisitFile): void;
+  /** Write a prescription for a visit, starting from its diagnosis. Absent for a member who may not prescribe. */
+  prescribe?: (appointmentId: string | null, diagnosis: string) => void;
   /** The visit the sheet is open on: an appointment, or `null` inside for a day with none. Undefined: closed. */
   sheet: { appointmentId: string | null } | undefined;
   openSheet(appointmentId: string | null): void;
   closeSheet(): void;
+  /** The record the reader left for a chart, so the chart's tab can offer the way back to it. */
+  returnTo: { appointmentId: string | null } | null;
+  setReturnTo(v: { appointmentId: string | null } | null): void;
   /** Show another tab of the file — a chart's work opens on its chart. */
   goTab(key: string): void;
   /** Send a write through the store: a re-read waits for it, and its echo is not taken for a colleague's change. */
@@ -121,6 +137,11 @@ export function TreatmentProvider({
   data,
   visits,
   feed,
+  prescriptions,
+  files,
+  sheet,
+  onSheet,
+  onPrescribe,
   renderedAt,
   onTab,
   children,
@@ -131,6 +152,12 @@ export function TreatmentProvider({
   data: TreatmentTabData;
   visits: TreatmentVisit[];
   feed: FeedItem[];
+  prescriptions: VisitRx[];
+  files: VisitFile[];
+  /** Which visit the sheet is open on — held by the file, which opens the prescription over it and comes back. */
+  sheet: { appointmentId: string | null } | undefined;
+  onSheet: (v: { appointmentId: string | null } | undefined) => void;
+  onPrescribe?: (appointmentId: string | null, diagnosis: string) => void;
   renderedAt: number;
   onTab: (key: string) => void;
   children: React.ReactNode;
@@ -139,7 +166,15 @@ export function TreatmentProvider({
   const [marks, setMarks] = useState<GeneralMark[]>(data.treatment.marks);
   const [billing, setBilling] = useState<Billed[]>(data.treatment.billing);
   const [services, setServices] = useState<ServiceOption[]>(data.treatment.services);
-  const [sheet, setSheet] = useState<{ appointmentId: string | null } | undefined>(undefined);
+  const [added, setAdded] = useState<VisitFile[]>([]);
+  const [returnTo, setReturnTo] = useState<{ appointmentId: string | null } | null>(null);
+  const setSheet = useRef(onSheet);
+  setSheet.current = onSheet;
+  const allFiles = useMemo(() => {
+    const known = new Set(files.map((f) => f.id));
+    return [...added.filter((f) => !known.has(f.id)), ...files];
+  }, [files, added]);
+  const addFile = useCallback((f: VisitFile) => setAdded((prev) => [f, ...prev]), []);
   const sync = useRef({ inflight: 0, writes: 0, owed: false, mine: new Map<string, number>() });
   const [staleOnMount] = useState(() => Date.now() - renderedAt > STALE_AFTER_MS);
   const tab = useRef(onTab);
@@ -200,8 +235,11 @@ export function TreatmentProvider({
     syncOnOpen: staleOnMount,
   });
 
-  const openSheet = useCallback((appointmentId: string | null) => setSheet({ appointmentId }), []);
-  const closeSheet = useCallback(() => setSheet(undefined), []);
+  const openSheet = useCallback((appointmentId: string | null) => {
+    setReturnTo(null);
+    setSheet.current({ appointmentId });
+  }, []);
+  const closeSheet = useCallback(() => setSheet.current(undefined), []);
   const goTab = useCallback((key: string) => tab.current(key), []);
   const mine = useCallback((id: string) => void sync.current.mine.set(id, Date.now()), []);
 
@@ -224,15 +262,21 @@ export function TreatmentProvider({
       setMarks,
       billing,
       services,
+      prescriptions,
+      files: allFiles,
+      addFile,
+      prescribe: onPrescribe,
       sheet,
       openSheet,
       closeSheet,
+      returnTo,
+      setReturnTo,
       goTab,
       write,
       mine,
       reload,
     }),
-    [slug, patientId, tz, visits, feed, data, records, marks, billing, services, sheet, openSheet, closeSheet, goTab, write, mine, reload]
+    [slug, patientId, tz, visits, feed, data, records, marks, billing, services, prescriptions, allFiles, addFile, onPrescribe, sheet, openSheet, closeSheet, returnTo, goTab, write, mine, reload]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

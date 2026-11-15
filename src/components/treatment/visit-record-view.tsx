@@ -14,7 +14,7 @@
   Appointments tab, so a visit reads the same wherever it is opened.
 */
 
-import { ScanFace, Smile } from "lucide-react";
+import { FileText, Pill, ScanFace, Smile } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { VisitWork } from "@/components/charts/dental/visit-work";
 import { useOptionalDentalStore } from "@/components/charts/dental/store";
@@ -23,6 +23,7 @@ import { whereText } from "@/lib/charts/face/catalog";
 import type { FaceMark } from "@/lib/charts/face/db";
 import type { GeneralMark, VisitRecord } from "@/lib/treatment/db";
 import { hasText } from "@/lib/treatment/visits";
+import { useOptionalTreatmentStore } from "./store";
 
 /** A visit's share of the charts: how much tooth work, and which face work. */
 export type ChartWork = { dental: number; face: FaceMark[] };
@@ -80,8 +81,12 @@ export function VisitRecordView({
 }) {
   const { t, locale } = useI18n();
   const T = t.treatment;
+  const store = useOptionalTreatmentStore();
   const written = hasText(record);
-  if (!written && !marks.length && !chart?.dental && !chart?.face.length) return null;
+  // What the visit handed the patient and kept of them: filed under it (prescriptions since 0088, files since 0109).
+  const rx = store && appointmentId ? store.prescriptions.filter((r) => r.appointment_id === appointmentId) : [];
+  const files = store && appointmentId ? store.files.filter((f) => f.appointment_id === appointmentId) : [];
+  if (!written && !marks.length && !chart?.dental && !chart?.face.length && !rx.length && !files.length) return null;
 
   return (
     <div className="grid gap-3" data-visit-record={appointmentId ?? "day"}>
@@ -127,6 +132,41 @@ export function VisitRecordView({
             {T.toothChart}
           </div>
           <VisitWork appointmentId={appointmentId} onOpenChart={() => onTab("dental")} />
+        </div>
+      )}
+
+      {(rx.length > 0 || files.length > 0) && store && (
+        <div data-record-attached-view={rx.length + files.length}>
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{T.rxAndFiles}</div>
+          <ul className="grid gap-1">
+            {rx.map((r) => (
+              <li key={r.id}>
+                <button type="button" onClick={() => onTab("prescriptions")} className="flex w-full items-start gap-2 text-start text-[13.5px] text-ink-900 hover:text-brand-700" data-view-rx={r.id}>
+                  <Pill className="mt-0.5 h-4 w-4 shrink-0 text-ink-500" />
+                  <span className="min-w-0">
+                    <span className="font-medium">{T.rxNumber.replace("{n}", String(r.number))}</span>
+                    <span className="text-ink-500" dir="auto">
+                      {r.items.some((i) => i.name) ? ` · ${r.items.map((i) => i.name).filter(Boolean).join(" · ")}` : ""}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+            {files.map((f) => (
+              <li key={f.id}>
+                <a href={`/api/c/${store.slug}/files/${f.id}`} target="_blank" rel="noopener" className="flex items-center gap-2 text-[13.5px] text-ink-900 hover:text-brand-700" data-view-file={f.id}>
+                  {f.mime_type.startsWith("image/") ? (
+                    <img src={`/api/c/${store.slug}/files/${f.id}?thumb=1`} alt="" loading="lazy" className="h-8 w-8 shrink-0 rounded-md object-cover" />
+                  ) : (
+                    <FileText className="h-4 w-4 shrink-0 text-ink-500" />
+                  )}
+                  <span className="min-w-0 truncate font-medium" dir="auto">
+                    {f.file_name}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

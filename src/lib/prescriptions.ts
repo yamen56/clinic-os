@@ -216,13 +216,15 @@ export type PrescriptionRow = {
   by_other: boolean;
   /** The WhatsApp message's own status, when it was sent: queued → read. */
   message_status: string | null;
+  /** The visit it was written at (0088), so the visit's record can show it. */
+  appointment_id: string | null;
 };
 
 const ROW_SELECT = `
   select rx.id, rx.number, rx.created_at, rx.locale, rx.diagnosis, rx.items,
          rx.doctor_member_id, rx.doctor_name, rx.author_id, au.full_name as author_name,
          rx.signed, rx.pdf_path is not null as has_pdf, rx.sent_at, rx.message_id,
-         m.status as message_status,
+         m.status as message_status, rx.appointment_id,
          coalesce(dm.user_id <> rx.author_id, false) as by_other
     from prescriptions rx
     left join users au on au.id = rx.author_id

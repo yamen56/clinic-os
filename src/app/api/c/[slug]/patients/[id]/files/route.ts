@@ -34,6 +34,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     .filter((x) => /^[1-8][1-8]$/.test(x));
   const editedFromRaw = String(form.get("editedFrom") ?? "");
   const editedFrom = isUuid(editedFromRaw) ? editedFromRaw : null;
+  // The visit it was added at, when it was added from the visit's record (0109).
+  const visitRaw = String(form.get("appointmentId") ?? "");
+  const visit = isUuid(visitRaw) ? visitRaw : null;
   if (!(file instanceof File)) return NextResponse.json({ error: "no_file" }, { status: 400 });
   // A photo of the insurance card is filed as insurance, so it takes the switch.
   if (kind === "insurance_card" && !can(access, "insurance")) {
@@ -65,14 +68,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       return NextResponse.json({ error: r.error }, { status: r.error === "series_elsewhere" ? 409 : 404 });
     }
     if (r.placed === "inbox") return NextResponse.json({ error: "series_in_inbox" }, { status: 409 });
-    const f = await inClinic(access, async (c) =>
-      (
+    const f = await inClinic(access, async (c) => {
+      // Filed under the visit too — only one of this patient's own, and only when it is not under one already.
+      if (visit) {
         await c.query(
-          `select id, file_name, mime_type, size_bytes, kind, created_at, teeth, view, edited_from from patient_files where id = $1 and clinic_id = $2`,
+          `update patient_files f set appointment_id = a.id from appointments a
+            where f.id = $1 and f.clinic_id = $2 and f.appointment_id is null
+              and a.id = $3 and a.clinic_id = $2 and a.patient_id = f.patient_id`,
+          [r.fileId, access.clinicId, visit]
+        );
+      }
+      return (
+        await c.query(
+          `select id, file_name, mime_type, size_bytes, kind, created_at, teeth, view, edited_from, appointment_id from patient_files where id = $1 and clinic_id = $2`,
           [r.fileId, access.clinicId]
         )
-      ).rows[0]
-    );
+      ).rows[0];
+    });
     return NextResponse.json({ ok: true, file: f, added: r.added });
   }
 
@@ -84,11 +96,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     if (!p.rowCount) return null;
     const { storagePath, sizeBytes } = await saveFile(access.clinicId, `patients/${id}`, file.name, buf);
     const r = await c.query(
-      `insert into patient_files (clinic_id, patient_id, uploaded_by, file_name, mime_type, size_bytes, storage_path, kind, view, teeth, edited_from)
+      `insert into patient_files (clinic_id, patient_id, uploaded_by, file_name, mime_type, size_bytes, storage_path, kind, view, teeth, edited_from, appointment_id)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                -- An edited copy points at its original — only one of this patient's own.
-               (select id from patient_files where id = $11::uuid and clinic_id = $1 and patient_id = $2))
-       returning id, file_name, mime_type, size_bytes, kind, created_at, view, teeth, edited_from`,
+               (select id from patient_files where id = $11::uuid and clinic_id = $1 and patient_id = $2),
+               -- And a file added at a visit, at one of this patient's own.
+               (select id from appointments where id = $12::uuid and clinic_id = $1 and patient_id = $2))
+       returning id, file_name, mime_type, size_bytes, kind, created_at, view, teeth, edited_from, appointment_id`,
       [
         access.clinicId,
         id,
@@ -101,6 +115,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         view,
         [...new Set(teeth)].sort(),
         editedFrom,
+        visit,
       ]
     );
     await audit(c, {
