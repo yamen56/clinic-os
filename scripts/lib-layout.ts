@@ -42,6 +42,8 @@ export function workspacePages(ids: PageIds): [string, string][] {
     // 300px card reached phones. qa-mobile adds lines and measures them too.
     ["finance · new invoice", `${s}/invoices/new`],
     ["finance · payments", `${s}/invoices?tab=payments`],
+    ["finance · analytics", `${s}/analytics`],
+    ["finance · analytics, a year", `${s}/analytics?p=12m`],
     ["finance · earnings", `${s}/earnings`],
     ["finance · expenses", `${s}/expenses`],
     ["documents", `${s}/documents`],

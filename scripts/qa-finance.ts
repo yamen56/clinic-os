@@ -208,7 +208,7 @@ async function main() {
   check(
     "an admin gets every tab",
     financeTabs({ caps: allCaps, hasEarnings: true, fullControl: true }).join() ===
-      "invoices,payments,earnings,expenses"
+      "invoices,analytics,earnings,expenses"
   );
   check(
     "a doctor with a share and nothing else gets only Earnings",
@@ -229,7 +229,12 @@ async function main() {
   check(
     "the clinic's own figures are not a capability anybody can be granted",
     financeTabs({ caps: allCaps, hasEarnings: false, fullControl: false }).join() ===
-      "invoices,payments,expenses"
+      "invoices,analytics,expenses"
+  );
+  check(
+    "and Analytics is not offered to a doctor whose invoices are their own",
+    financeTabs({ caps: allCaps, hasEarnings: false, fullControl: false, ownInvoicesOnly: true }).join() ===
+      "invoices,expenses"
   );
 
   // ---- the browser -------------------------------------------------------
@@ -254,6 +259,22 @@ async function main() {
     await page.goto(`${BASE}${p}`);
     await page.waitForLoadState("networkidle");
   };
+  /*
+    The section's strip, and only it. The invoices screen has a second
+    tablist — the Invoices / Payments switch — so "every tab on the page" is
+    no longer the strip.
+  */
+  const stripTabs = () => page.locator('[role="tablist"]').first().locator('[role="tab"]').allTextContents();
+  /*
+    Where a guarded URL ends up. A guard's redirect arrives after the shell has
+    flushed, as a client-side navigation, so the address at networkidle can
+    still be the one that was asked for.
+  */
+  const refused = async (p: string) => {
+    await page.goto(`${BASE}${p}`);
+    await page.waitForURL((u) => u.pathname !== p, { timeout: 20000 }).catch(() => {});
+    return new URL(page.url()).pathname !== p;
+  };
 
   // ---- one nav entry, three tabs ----------------------------------------
   await signIn(emailOf("admin"));
@@ -267,10 +288,15 @@ async function main() {
   );
 
   await go(`/c/${slug}/invoices`);
-  const tabs = await page.locator('[role="tablist"] [role="tab"]').allTextContents();
+  const tabs = await stripTabs();
   check(
     "the strip carries all four tabs for an admin",
-    ["Invoices", "Payments", "Earnings", "Expenses"].every((x) => tabs.some((t) => t.includes(x))),
+    ["Invoices & payments", "Analytics", "Earnings", "Expenses"].every((x) => tabs.some((t) => t.includes(x))),
+    tabs.join(", ")
+  );
+  check(
+    "and payments are no longer a tab of their own",
+    !tabs.some((t) => t.trim() === "Payments"),
     tabs.join(", ")
   );
 
@@ -283,10 +309,63 @@ async function main() {
     ["last month's earnings", `/c/${slug}/earnings?m=-1`],
     ["expenses", `/c/${slug}/expenses`],
     ["one invoice", `/c/${slug}/invoices/${mine.id}`],
+    ["analytics", `/c/${slug}/analytics`],
+    ["a year of analytics", `/c/${slug}/analytics?p=12m`],
+    ["last month's analytics", `/c/${slug}/analytics?p=last`],
   ] as [string, string][]) {
     const r = await page.goto(`${BASE}${path}`);
     check(`${name} is still at its own URL`, r?.status() === 200, `${r?.status()}`);
   }
+
+  // ---- one tab for invoices and payments ---------------------------------
+  await go(`/c/${slug}/invoices`);
+  const adminInvoices = await mainText();
+  check("the invoice list carries the day's takings", adminInvoices.includes("Collected today"), adminInvoices.slice(0, 160));
+  check(
+    "and none of the other totals, which moved to Analytics",
+    !adminInvoices.includes("This week") && !adminInvoices.includes("This month") && !adminInvoices.includes("Outstanding"),
+    adminInvoices.slice(0, 200)
+  );
+  await page.locator("[data-list-switch] [role=tab]", { hasText: "Payments" }).click();
+  await page.waitForURL((u) => u.searchParams.get("tab") === "payments", { timeout: 20000 });
+  await page.waitForLoadState("networkidle");
+  const adminPayments = await mainText();
+  check(
+    "the payments list is the same tab's other list",
+    adminPayments.includes(mine.number) && adminPayments.includes(theirs.number) && adminPayments.includes("Cash"),
+    adminPayments.slice(0, 200)
+  );
+  check(
+    "and the strip still shows the one tab lit",
+    (await page.locator('[role="tablist"]').first().locator('[role="tab"][aria-selected="true"]').innerText()).includes("Invoices & payments")
+  );
+
+  // ---- the analytics tab --------------------------------------------------
+  const figure = async (hook: string) =>
+    (await page.locator(`[data-figure="${hook}"]`).first().innerText()).replace(/\s+/g, " ");
+  // The fixture's payments are dated the 10th of this month at noon. Before
+  // then "this month so far" has not reached them, and the year is asked instead.
+  const landed = DateTime.now().setZone("Asia/Amman") > DateTime.now().setZone("Asia/Amman").startOf("month").plus({ days: 9, hours: 12 });
+  await go(`/c/${slug}/analytics`);
+  const adminAnalytics = await mainText();
+  check("what was invoiced this month is there", (await figure("invoiced")).includes("817.00"), await figure("invoiced"));
+  if (landed) check("and what was collected", (await figure("collected")).includes("817.00"), await figure("collected"));
+  check(
+    "with each doctor's invoiced work",
+    adminAnalytics.includes("QA Dr Other") && adminAnalytics.includes("QA Dr Analytics"),
+    adminAnalytics.slice(0, 200)
+  );
+  check("how patients paid", !landed || adminAnalytics.includes("Cash"));
+  check("and what the clinic kept, for whoever holds the clinic", (await page.locator('[data-figure="kept"]').count()) === 1);
+  check("nothing is owed, and it says so", (await figure("owed")).includes("0.00"), await figure("owed"));
+  await page.locator("[data-period] [role=tab]", { hasText: "12 months" }).click();
+  await page.waitForURL((u) => u.searchParams.get("p") === "12m", { timeout: 20000 });
+  await page.waitForLoadState("networkidle");
+  check(
+    "a longer period is a tap away, by month",
+    (await mainText()).includes("Month by month") && (!landed || (await figure("collected")).includes("817.00")),
+    await figure("collected")
+  );
 
   // ---- what the clinic kept ---------------------------------------------
   await go(`/c/${slug}/earnings`);
@@ -358,6 +437,24 @@ async function main() {
     !docInvoices.includes("This week") && !docInvoices.includes("Outstanding"),
     docInvoices.slice(0, 200)
   );
+  check(
+    "the day's takings too — they are the clinic's, not this doctor's",
+    !docInvoices.includes("Collected today"),
+    docInvoices.slice(0, 200)
+  );
+  const docTabs = await stripTabs();
+  check(
+    "and there is no Analytics tab, though the capability was ticked by hand",
+    !docTabs.some((x) => x.includes("Analytics")),
+    docTabs.join(", ")
+  );
+  check("the analytics URL is refused, not just hidden", await refused(`/c/${slug}/analytics`), page.url());
+  const docAnalyticsDoc = await page.content();
+  check(
+    "and none of it reached the page on the way out",
+    !docAnalyticsDoc.includes("QA Dr Other") && !docAnalyticsDoc.includes("817.00"),
+    `${docAnalyticsDoc.length} bytes`
+  );
 
   await go(`/c/${slug}/invoices?tab=payments`);
   const docPayments = await mainText();
@@ -398,9 +495,25 @@ async function main() {
   );
 
   // ---- reception is not filtered ----------------------------------------
+  // A payment taken just now, by card: what the desk's day should show. After
+  // the checks above on purpose — they look for the month's exact take.
+  await db.query(
+    `insert into payments (clinic_id, invoice_id, patient_id, amount, method) values ($1, $2, $3, 23.45, 'card')`,
+    [clinic.id, mine.id, patient.id]
+  );
   await signIn(emailOf("reception"));
   await go(`/c/${slug}/invoices`);
   const recInvoices = await mainText();
+  check(
+    "reception sees what was collected today, and how",
+    recInvoices.includes("Collected today") && recInvoices.includes("23.45") && recInvoices.includes("Card"),
+    recInvoices.slice(0, 200)
+  );
+  check(
+    "and no figure beyond its own day",
+    !recInvoices.includes("This week") && !recInvoices.includes("This month") && !recInvoices.includes("Outstanding"),
+    recInvoices.slice(0, 200)
+  );
   check(
     "reception still sees every invoice — settling at the desk is the job",
     recInvoices.includes(mine.number) && recInvoices.includes(theirs.number),
@@ -409,11 +522,27 @@ async function main() {
   const recNav = await navLabels();
   check("reception has the money section", recNav.includes("Finance"), recNav);
   await go(`/c/${slug}/invoices`);
-  const recTabs = await page.locator('[role="tablist"] [role="tab"]').allTextContents();
+  const recTabs = await stripTabs();
   check(
     "but no Earnings tab — there is no earnings screen for reception",
     !recTabs.some((t) => t.includes("Earnings")),
     recTabs.join(", ")
+  );
+  check(
+    "and no Analytics tab: the desk does not start with the clinic's figures",
+    !recTabs.some((t) => t.includes("Analytics")),
+    recTabs.join(", ")
+  );
+  check("nor does its URL open for them", await refused(`/c/${slug}/analytics`), page.url());
+  const recExport = await page.request.get(`${BASE}/api/c/${slug}/payments/export`);
+  check("nor the payments export", recExport.status() === 403, `${recExport.status()}`);
+
+  await signIn(emailOf("manager"));
+  await go(`/c/${slug}/analytics`);
+  check(
+    "somebody on full access opens Analytics",
+    new URL(page.url()).pathname === `/c/${slug}/analytics` && (await mainText()).includes("Money in"),
+    page.url()
   );
 
   // ---- the admin can be a doctor ----------------------------------------

@@ -2,6 +2,7 @@ import { cache } from "react";
 import { requireClinic, hasFullControl } from "./auth";
 import { inClinic } from "./clinic-api";
 import { memberHasEarnings } from "./earnings";
+import { ownInvoicesOnly } from "./invoice-scope";
 import type { FinanceViewer } from "./finance";
 
 /**
@@ -38,5 +39,11 @@ export const financeViewer = cache(async (slug: string): Promise<FinanceViewer> 
         )
       )
     : false;
-  return { caps: access.caps, hasEarnings, fullControl: hasFullControl(access), hasInsurers };
+  return {
+    caps: access.caps,
+    hasEarnings,
+    fullControl: hasFullControl(access),
+    hasInsurers,
+    ownInvoicesOnly: ownInvoicesOnly(access),
+  };
 });

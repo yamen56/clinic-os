@@ -420,6 +420,7 @@ export function Shell({
     earnings: t.nav.earnings,
     expenses: t.nav.expenses,
     claims: t.claims.tab,
+    analytics: t.finance.tab,
   };
   const segmentsOf = (href: string) => href.split(/[?#]/)[0].slice(base.length).split("/").filter(Boolean);
   const here = segmentsOf(pathname);

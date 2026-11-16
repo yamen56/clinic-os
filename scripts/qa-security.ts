@@ -146,6 +146,7 @@ async function main() {
     console.log("[doctor] is refused what it does not");
     ok((await api(page, `/api/c/${SLUG}/conversations`)) === 403, "conversations API 403");
     ok((await api(page, `/api/c/${SLUG}/payments/export`)) === 403, "payments export 403");
+    ok((await land(page, `/c/${SLUG}/analytics`)) !== `/c/${SLUG}/analytics`, "analytics page redirects away");
     ok((await api(page, `/api/c/${SLUG}/whatsapp/status`)) === 403, "whatsapp status 403");
     ok((await land(page, `/c/${SLUG}/settings`)) !== `/c/${SLUG}/settings`, "settings page redirects away");
     await page.close();
@@ -158,6 +159,7 @@ async function main() {
     console.log("\n[receptionist] is not caught by the new gates");
     ok((await api(page, `/api/c/${SLUG}/conversations`)) === 200, "conversations API 200");
     ok((await api(page, `/api/c/${SLUG}/payments/export`)) === 200, "payments export 200");
+    ok((await land(page, `/c/${SLUG}/analytics`)) === `/c/${SLUG}/analytics`, "analytics page opens");
     ok((await api(page, `/api/c/${SLUG}/whatsapp/status`)) === 200, "whatsapp status 200");
     ok((await land(page, `/c/${SLUG}/settings`)) === `/c/${SLUG}/settings`, "settings page opens");
     ok((await land(page, `/c/${SLUG}/patients`)) === `/c/${SLUG}/patients`, "patients page opens");

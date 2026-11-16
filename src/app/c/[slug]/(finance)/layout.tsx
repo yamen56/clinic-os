@@ -37,9 +37,10 @@ export default async function FinanceLayout({
   return (
     <>
       {/*
-        The strip reads `?tab=` to tell Invoices from Payments, which a layout is
-        never handed — so it is a client component, and `useSearchParams` wants a
-        boundary above it.
+        A client component: it lights the pressed tab before the server has the
+        next screen ready. The boundary dates from when the strip read `?tab=`
+        to tell Invoices from Payments; they are one tab now, and it stays as
+        the cheap guard it is.
       */}
       <Suspense fallback={null}>
         <FinanceNav slug={slug} tabs={tabs} />

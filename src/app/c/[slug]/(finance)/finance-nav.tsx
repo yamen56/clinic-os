@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LinkTabs } from "@/components/ui/misc";
 import { useI18n } from "@/lib/i18n/client";
@@ -9,15 +9,14 @@ import { financeHref, type FinanceTab } from "@/lib/finance";
 /**
  * The strip across the top of the money section.
  *
- * Payments is a tab here and not a route: it is the invoices screen's other
- * list, reached by `?tab=payments`, which is why this reads the query string as
- * well as the path. That also means it cannot be a server component — a layout
- * is never handed `searchParams`.
+ * Invoices and payments are one tab (Yamen, 2026-11-15): the desk raises an
+ * invoice and takes its payment in the same breath, and two tabs made that two
+ * places. The switch between the two lists is on the screen itself
+ * (`list-switch.tsx`), so the strip only reads the path.
  */
 export function FinanceNav({ slug, tabs }: { slug: string; tabs: FinanceTab[] }) {
   const { t } = useI18n();
   const pathname = usePathname();
-  const params = useSearchParams();
 
   /*
     Highlight on press rather than on arrival. Every tab here is a server
@@ -27,24 +26,23 @@ export function FinanceNav({ slug, tabs }: { slug: string; tabs: FinanceTab[] })
     `settings-nav.tsx`.
   */
   const [pressed, setPressed] = useState<FinanceTab | null>(null);
-  const here = `${pathname}${params.get("tab") === "payments" ? "?tab=payments" : ""}`;
-  useEffect(() => setPressed(null), [here]);
+  useEffect(() => setPressed(null), [pathname]);
 
   const current: FinanceTab =
     pressed ??
-    (pathname.includes("/claims")
-      ? "claims"
-      : pathname.includes("/earnings")
-      ? "earnings"
-      : pathname.includes("/expenses")
-        ? "expenses"
-        : params.get("tab") === "payments"
-          ? "payments"
-          : "invoices");
+    (pathname.includes("/analytics")
+      ? "analytics"
+      : pathname.includes("/claims")
+        ? "claims"
+        : pathname.includes("/earnings")
+          ? "earnings"
+          : pathname.includes("/expenses")
+            ? "expenses"
+            : "invoices");
 
   const label: Record<FinanceTab, string> = {
-    invoices: t.nav.invoices,
-    payments: t.invoices.payments,
+    invoices: t.invoices.tabTitle,
+    analytics: t.finance.tab,
     claims: t.claims.tab,
     earnings: t.nav.earnings,
     expenses: t.nav.expenses,

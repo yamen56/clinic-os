@@ -250,10 +250,15 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
 
       The desk takes the money, so it starts able to raise invoices, settle them
       and see what a patient owes — all of which it needs. What it no longer
-      starts with is the clinic's own takings: the day's total, the week against
-      last week, the sum outstanding. That is the owner's number, and "an owner
-      who does not want that unticks one box" turned out to be the wrong default,
-      because nobody unticks a box they never knew was ticked.
+      starts with is the clinic's own takings: the week against last week, the
+      month, the sum outstanding, the Analytics tab. That is the owner's number,
+      and "an owner who does not want that unticks one box" turned out to be the
+      wrong default, because nobody unticks a box they never knew was ticked.
+
+      The one figure the desk does see is what was collected today, on the
+      invoices screen (Yamen, 2026-11-15): it took that money itself, and has
+      to check its day against the drawer. That needs `invoices` and nothing
+      more.
 
       Still grantable. An owner who wants their practice manager to see the
       takings ticks it, once, for that person.

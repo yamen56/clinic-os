@@ -1557,13 +1557,37 @@ month — not paid yet, paid on which day, or what is still to come — and is n
 takes the notification back. Owner and full access only, like the table itself.
 
 **Who sees the clinic's takings.** `invoices.analytics` gates every clinic-wide money
-figure: the dashboard's revenue tile, its 14-day chart and its "what earns" breakdowns, and
-the Today / This week / This month / Outstanding tiles on the invoices list. It is **off by
-default for every job**, including reception, and it **never inherits** from `invoices` — so
-a member granted Invoices can raise, settle and chase them, and see what one patient owes,
-without seeing what the practice takes. An owner grants it deliberately, per person. `full`
-access still includes it. The queries do not run at all for a member without it, so the
-figures never reach their browser.
+figure: the dashboard's revenue tile, its 14-day chart and its "what earns" breakdowns, the
+payments export, and the **Analytics tab** of Finance. It is **off by default for every
+job**, including reception, and it **never inherits** from `invoices` — so a member granted
+Invoices can raise, settle and chase them, and see what one patient owes, without seeing
+what the practice takes. An owner grants it deliberately, per person. `full` access still
+includes it. The queries do not run at all for a member without it, so the figures never
+reach their browser.
+
+The one figure that needs only `invoices` is **Collected today** (decision 144): a card on
+the invoices screen with the day's total, how many payments, and the split by method (cash,
+CliQ, card, transfer), so the desk can check its day against the drawer. It replaced the
+Today / This week / This month / Outstanding tiles, which moved to Analytics. A doctor whose
+invoices are filtered to their own work does not get it.
+
+**Invoices and payments are one tab** (2026-11-15). The strip reads Invoices & payments ·
+Analytics · Claims · Earnings · Expenses; the payments list is still `/invoices?tab=payments`
+and is reached by a segmented switch on the screen
+([list-switch.tsx](src/app/c/[slug]/(finance)/invoices/list-switch.tsx)).
+
+**Analytics** ([src/lib/finance-analytics.ts](src/lib/finance-analytics.ts),
+`/analytics?p=`) — the clinic's money over a period: this month, last month, 3, 6 or 12
+months, this year. A period still running ends today and is compared with the same days one
+step back (the 1st–15th against the 1st–15th). It shows what was collected and invoiced with
+the change against the period before; money in as a chart (by day, week or month); how
+patients paid; what earned the most (by what was invoiced); the work invoiced under each
+doctor; what is owed as of today by how long it has waited (30 / 60 / 90 days and over) and
+who owes the most; and Export CSV for the period's payments. Two parts answer to other
+grants: what was spent, by category, and what is still to pay suppliers need `expenses`;
+the doctors' shares in "what the clinic kept" need full control — without it the chain reads
+"left after expenses". A card with nothing in it is left out. Refused, not just hidden, for a
+member without the capability and for a doctor whose invoices are their own.
 
 **A doctor's invoices are their own.** A doctor who is granted Invoices, and who is not the
 admin or on full access, sees only invoices carrying their name on a line
@@ -2370,12 +2394,12 @@ Every table with `updated_at` gets a `touch_updated_at` trigger automatically.
 `/settings` (+ `/booking`, `/documents`, `/documents/{id}`, `/einvoicing`, `/fields`,
 `/hours`, `/insurers`, `/invoicing`, `/services`, `/staff`, `/tags`, `/whatsapp`)
 
-**Finance** — one nav entry, four tabs, and the URLs are unchanged from when they were three
-separate sections. The folders live under the route group `(finance)`, which is
+**Finance** — one nav entry, up to five tabs, and the URLs are unchanged from when they were
+three separate sections. The folders live under the route group `(finance)`, which is
 parentheses-named and so contributes nothing to the path (decision 85):
 
-`/invoices` · `/invoices?tab=payments` · `/invoices/new` · `/invoices/{id}` · `/earnings` ·
-`/expenses`
+`/invoices` · `/invoices?tab=payments` · `/invoices/new` · `/invoices/{id}` · `/analytics` ·
+`/claims` · `/earnings` · `/expenses`
 
 ### Agency admin — `/admin`
 

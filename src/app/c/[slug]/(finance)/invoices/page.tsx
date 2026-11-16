@@ -3,13 +3,13 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import type { Dict } from "@/lib/i18n/client-dict";
-import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtMoney, fmtDate } from "@/lib/dates";
+import { dayRangeUtc, fmtMoney, fmtDate, fmtLongToday } from "@/lib/dates";
 import { PageHeader, Card } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button-class";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { redirect } from "next/navigation";
-import { Plus, ReceiptText, Download } from "lucide-react";
+import { Plus, ReceiptText } from "lucide-react";
 import { can } from "@/lib/auth";
 import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { deskLines, readyToBillDesk } from "@/lib/charts/dental/billing-server";
@@ -18,6 +18,7 @@ import { DELETABLE_INVOICE_SQL, owedSql } from "@/lib/invoices";
 import { patientSearchClause } from "@/lib/patients";
 import { DeleteCancelled } from "./delete-cancelled";
 import { InvoiceSearch } from "./invoice-search";
+import { ListSwitch } from "./list-switch";
 
 /* The list grows a page at a time from the newest; past this it is a search, not a scroll. */
 const PAGE = 100;
@@ -51,68 +52,57 @@ export default async function InvoicesPage({
 
   const tz = access.clinic.timezone;
   /*
-    The totals across the top are the clinic's takings, which is a different
-    question from whether somebody may raise and settle an invoice. A receptionist
-    can be given the till without being shown the month's revenue.
+    What was collected today, for whoever works this list (Yamen, 2026-11-15):
+    the desk takes the money and has to be able to check its own day against
+    the drawer at closing. It is the one figure left here — the week, the month
+    and what is outstanding moved to the Analytics tab, behind
+    `invoices.analytics`, and no longer ride on this screen.
 
-    The query behind them does not run for a member who may not see the answer —
-    the same rule the dashboard already follows, and the reason a hidden section
-    there cannot leak through a page that everybody can open.
+    Not for a member whose list is filtered to their own work. A figure summed
+    over the clinic above rows filtered to one doctor is two different answers
+    stacked, and theirs is on the Earnings tab.
   */
-  /*
-    And a member whose list is filtered to their own work gets no clinic totals
-    on top of it, whatever else they hold. A screen that filters the rows and
-    then sums every row in the clinic above them is not a narrower view of the
-    clinic, it is two different answers stacked — and the larger one is the
-    number being withheld.
-  */
-  const showTotals = can(access, "invoices.analytics") && !ownInvoicesOnly(access);
+  const showToday = !ownInvoicesOnly(access);
 
   const data = await inClinic(access, async (c) => {
     const today = dayRangeUtc(tz);
-    const week = weekRangeUtc(tz);
-    const month = monthRangeUtc(tz);
 
     /*
-      `partial_count` is not one of the totals — it is the number beside the
-      "Partly paid" filter chip, and a member who can work the list needs it
-      whether or not they may see money. So it is asked for either way, and the
-      four sums are only added to the statement when they will be shown.
+      The numbers beside the filter chips — part-paid, cancelled, and how many
+      of the cancelled may be deleted (the ones never filed with JoFotara,
+      DELETABLE_INVOICE_SQL). They count what this member can actually open.
     */
-    /*
-      The chip counts what this member can actually open. Dead in the totals
-      branch — a filtered member never reaches it, see `showTotals` — and
-      written generally anyway, because the next person to move one of these
-      branches should not have to notice that.
-    */
-    const chipScope = invoiceScopeSql(access, "i", showTotals ? 8 : 2);
-    /*
-      The chips' counts: part-paid, cancelled, and how many of the cancelled
-      may be deleted — the ones never filed with JoFotara (DELETABLE_INVOICE_SQL).
-    */
-    const chipCounts = `
-      (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'partially_paid'${chipScope.sql})::int as partial_count,
-      (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'void'${chipScope.sql})::int as cancelled_count,
-      (select count(*) from invoices i where i.clinic_id = $1 and ${DELETABLE_INVOICE_SQL}${chipScope.sql})::int as deletable_count`;
+    const chipScope = invoiceScopeSql(access, "i", 2);
     const [stats] = (
       await c.query(
-        showTotals
-          ? /* Takings leave out a cancelled invoice's payments: that money is not the clinic's (Yamen, 2026-10-14). */
-            `select
-               (select coalesce(sum(p.amount), 0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
-                 where p.clinic_id = $1 and p.paid_at >= $2 and p.paid_at < $3) as today,
-               (select coalesce(sum(p.amount), 0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
-                 where p.clinic_id = $1 and p.paid_at >= $4 and p.paid_at < $5) as week,
-               (select coalesce(sum(p.amount), 0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
-                 where p.clinic_id = $1 and p.paid_at >= $6 and p.paid_at < $7) as month,
-               (select coalesce(sum(i.total - i.amount_paid), 0) from invoices i where i.clinic_id = $1 and ${owedSql("i")}) as outstanding,
-               ${chipCounts}`
-          : `select ${chipCounts}`,
-        showTotals
-          ? [access.clinicId, today.start, today.end, week.start, week.end, month.start, month.end, ...chipScope.params]
-          : [access.clinicId, ...chipScope.params]
+        `select
+           (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'partially_paid'${chipScope.sql})::int as partial_count,
+           (select count(*) from invoices i where i.clinic_id = $1 and i.status = 'void'${chipScope.sql})::int as cancelled_count,
+           (select count(*) from invoices i where i.clinic_id = $1 and ${DELETABLE_INVOICE_SQL}${chipScope.sql})::int as deletable_count`,
+        [access.clinicId, ...chipScope.params]
       )
     ).rows;
+
+    /*
+      Today's takings, by how they were paid — cash is what the drawer should
+      hold, and the rest is what the machine and the bank should show. A
+      cancelled invoice's payments are left out: that money is not the
+      clinic's (Yamen, 2026-10-14). Not asked at all for somebody who is not
+      shown it.
+    */
+    const todayByMethod: { method: string; amount: number; n: number }[] = showToday
+      ? (
+          await c.query(
+            `select p.method, sum(p.amount)::float8 as amount, count(*)::int as n
+               from payments p
+               join invoices v on v.id = p.invoice_id and v.status <> 'void'
+              where p.clinic_id = $1 and p.paid_at >= $2 and p.paid_at < $3
+              group by p.method
+              order by 2 desc`,
+            [access.clinicId, today.start, today.end]
+          )
+        ).rows
+      : [];
 
     let invoices: Record<string, unknown>[] = [];
     let payments: Record<string, unknown>[] = [];
@@ -195,10 +185,13 @@ export default async function InvoicesPage({
       }
     }
     const more = invoices.length > limit;
-    return { stats, invoices: more ? invoices.slice(0, limit) : invoices, more, payments, ready };
+    return { stats, todayByMethod, invoices: more ? invoices.slice(0, limit) : invoices, more, payments, ready };
   });
 
   const base = `/c/${slug}/invoices`;
+  const money = (n: number) => fmtMoney(n, access.clinic.currency, locale);
+  const todayTotal = data.todayByMethod.reduce((sum, m) => sum + m.amount, 0);
+  const todayCount = data.todayByMethod.reduce((sum, m) => sum + m.n, 0);
   /* A link inside this list keeps whatever else is chosen: the filter, the search, how far back it reaches. */
   const listHref = (o: { status?: string; n?: number }) => {
     const u = new URLSearchParams();
@@ -213,45 +206,56 @@ export default async function InvoicesPage({
   return (
     <>
       <PageHeader
-        title={t.invoices.title}
-        /* Separate children rather than one row, so `PageHeader` can break
-           between them on a narrow phone — together they are 301px and the
-           column is 288px. */
+        title={tab === "payments" ? t.invoices.payments : t.invoices.title}
         action={
-          <>
-            {/* Behind the same capability as the totals it sits above. The
-                route refuses it either way now; this stops offering a button
-                that answers 403. */}
-            {showTotals && (
-              <a href={`/api/c/${slug}/payments/export`} download className={buttonClass({ variant: "outline" })}>
-                <Download className="h-4 w-4" />
-                {t.invoices.exportCsv}
-              </a>
-            )}
-            <Link href={`${base}/new`} className={buttonClass()}>
-              <Plus className="h-4 w-4" />
-              {t.invoices.newInvoice}
-            </Link>
-          </>
+          <Link href={`${base}/new`} className={buttonClass()}>
+            <Plus className="h-4 w-4" />
+            {t.invoices.newInvoice}
+          </Link>
         }
       />
 
-      {showTotals && (
-        <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          {(
-            [
-              [t.invoices.todayTotal, data.stats.today],
-              [t.invoices.weekTotal, data.stats.week],
-              [t.invoices.monthTotal, data.stats.month],
-              [t.invoices.outstanding, data.stats.outstanding],
-            ] as [string, string][]
-          ).map(([label, val], i) => (
-            <Card key={i} className="p-4">
-              <div className="text-[13px] text-ink-500">{label}</div>
-              <div className="mt-1 text-xl font-semibold tnum">{fmtMoney(Number(val), access.clinic.currency, locale)}</div>
-            </Card>
-          ))}
-        </div>
+      {/*
+        The day's takings: one figure, and how it was paid. On both lists, so
+        the desk closing its day reads the total and the payments under it
+        together.
+      */}
+      {showToday && (
+        <Card className="mb-4 px-5 py-4">
+          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4" data-today-takings={todayTotal.toFixed(2)}>
+            <div className="min-w-0">
+              <div className="text-[13px] text-ink-500">
+                {t.invoices.collectedToday}
+                <span className="text-ink-400"> · {fmtLongToday(tz, locale)}</span>
+              </div>
+              <div className="mt-1.5 font-display text-[28px] font-bold leading-none text-ink-900">{money(todayTotal)}</div>
+              <div className="mt-2 text-[12px] text-ink-400">
+                {todayCount === 0 ? (
+                  t.invoices.nothingToday
+                ) : tab === "payments" ? (
+                  t.invoices.todayPayments.replace("{n}", String(todayCount))
+                ) : (
+                  <Link href={`${base}?tab=payments`} className="font-medium text-brand-700 hover:underline">
+                    {t.invoices.todayPayments.replace("{n}", String(todayCount))}
+                  </Link>
+                )}
+              </div>
+            </div>
+            {data.todayByMethod.length > 0 && (
+              /* On a phone the methods share the row evenly, two across, instead of wrapping ragged. */
+              <dl className="flex flex-wrap gap-2 max-sm:grid max-sm:w-full max-sm:grid-cols-2">
+                {data.todayByMethod.map((m) => (
+                  <div key={m.method} className="min-w-24 rounded-ctl bg-sunken px-3.5 py-2">
+                    <dt className="text-[12px] text-ink-500">
+                      {(t.invoices.methods as Record<string, string>)[m.method] ?? m.method}
+                    </dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-ink-900 tnum">{money(m.amount)}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        </Card>
       )}
 
       {data.ready.length > 0 && (
@@ -268,17 +272,20 @@ export default async function InvoicesPage({
       )}
 
       {/*
-        Invoices and Payments used to be a strip of their own here. They are
-        tabs of the Finance section now, drawn once above this page — two
-        identical strips stacked, with the word "Invoices" in both, was three
-        rows of chrome before the first invoice. What is left is the filter,
-        which belongs to this list and not to the section.
+        One tab, two lists (Yamen, 2026-11-15): invoices and the payments taken
+        on them. The switch is a segmented control beside the search, not a
+        second strip of tabs under the section's own.
       */}
-      {tab === "invoices" && (
-        <div className="mb-4 flex flex-wrap items-center gap-x-1 gap-y-2">
-          <div className="w-full sm:order-last sm:ms-auto sm:w-auto">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <ListSwitch slug={slug} />
+        {tab === "invoices" && (
+          <div className="w-full sm:w-auto">
             <InvoiceSearch initial={q} />
           </div>
+        )}
+      </div>
+      {tab === "invoices" && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-1 gap-y-2">
           {(
             [
               ["", t.invoices.allFilter, 0],
@@ -431,6 +438,8 @@ export default async function InvoicesPage({
             )}
           </Card>
         )
+      ) : data.payments.length === 0 ? (
+        <EmptyState icon={<ReceiptText />} title={t.invoices.noPayments} body={t.invoices.noPaymentsBody} />
       ) : (
         <Card>
           <ul className="divide-y divide-line">

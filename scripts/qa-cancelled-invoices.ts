@@ -117,7 +117,7 @@ async function main() {
 
     // ---- before ------------------------------------------------------------
     await go(page, `${C}/invoices`);
-    const todayBefore = await tile(page, "Today");
+    const todayBefore = await tile(page, "Collected today");
     await go(page, `${C}`);
     const dashText = async () => (await page.locator("main").innerText());
     const dashBefore = await dashText();
@@ -136,7 +136,7 @@ async function main() {
 
     // ---- the money --------------------------------------------------------
     await go(page, `${C}/invoices`);
-    const todayAfter = await tile(page, "Today");
+    const todayAfter = await tile(page, "Collected today");
     check("Today drops by exactly the cancelled payment", Math.abs(todayBefore - todayAfter - 57.25) < 0.001, `${todayBefore} → ${todayAfter}`);
     const expectToday = Number(
       (
