@@ -9,12 +9,12 @@ import { dictForClinic, getLocale } from "@/lib/i18n";
 import { fmtMoney } from "@/lib/dates";
 import { ownInvoicesOnly } from "@/lib/invoice-scope";
 import { round2 } from "@/lib/invoices";
-import { asPeriodKey } from "@/lib/finance-periods";
-import { financeAnalytics, periodOf, type Period, type SeriesPoint } from "@/lib/finance-analytics";
+import { asPeriodParam } from "@/lib/finance-periods";
+import { financeAnalytics, firstMoneyDate, periodOf, type Period, type SeriesPoint } from "@/lib/finance-analytics";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button-class";
 import { RowBar } from "@/components/ui/chart";
-import { PeriodPicker } from "./period-picker";
+import { PeriodPicker, type MenuYear } from "./period-picker";
 import { TrendChart, type TrendPoint } from "./trend-chart";
 
 /**
@@ -25,7 +25,8 @@ import { TrendChart, type TrendPoint } from "./trend-chart";
  * period and how that compares with the period before, what was invoiced,
  * what went out, what was kept, who pays how, what earns, and who still owes.
  * The week, month and outstanding tiles that used to sit above the invoice
- * list moved here (Yamen, 2026-11-15).
+ * list moved here (Yamen, 2026-11-15). Any stretch of time can be read: this
+ * month, this year, all time, or any one month or year (lib/finance-periods).
  *
  * Behind `invoices.analytics`, which no job starts with: an owner ticks it for
  * the person who should see the takings. Never for a member whose invoices are
@@ -58,17 +59,24 @@ export default async function FinanceAnalyticsPage({
   const currency = access.clinic.currency;
   const money = (n: number) => fmtMoney(n, currency, locale);
 
-  const period = periodOf(tz, asPeriodKey(sp.p));
   const showSpend = can(access, "expenses");
   const showShares = hasFullControl(access);
 
-  const a = await inClinic(access, (c) =>
-    financeAnalytics(
+  /*
+    When the clinic's money starts decides two things: where all time begins,
+    and how far back the month menu reaches. Asked first, on the same
+    connection, because the period depends on it.
+  */
+  const { a, period, since } = await inClinic(access, async (c) => {
+    const since = await firstMoneyDate(c, access.clinicId);
+    const period = periodOf(tz, asPeriodParam(sp.p), since);
+    const a = await financeAnalytics(
       c,
       { clinicId: access.clinicId, tz, period, dental: !!access.clinic.features.dental },
       { spend: showSpend, shares: showShares }
-    )
-  );
+    );
+    return { a, period, since };
+  });
 
   const day = (d: DateTime, withYear: boolean) => d.setLocale(intl).toFormat(withYear ? "d LLL yyyy" : "d LLL");
   // Half-open ranges end the day after the last one they cover.
@@ -77,7 +85,8 @@ export default async function FinanceAnalyticsPage({
     return `${day(from, from.year !== last.year)} – ${day(last, true)}`;
   };
 
-  const trend = (rows: SeriesPoint[]) => points(rows, period, intl, F.weekOf);
+  const trend = (rows: SeriesPoint[]) => points(rows, period, intl);
+  const menu = monthMenu(tz, since, intl, F.allOf);
 
   /*
     What was kept. Sales tax comes off because it was never the clinic's, the
@@ -145,13 +154,17 @@ export default async function FinanceAnalyticsPage({
   const categoriesMax = Math.max(0, ...(a.spend?.categories ?? []).map((c) => c.total));
   const exportHref = `/api/c/${slug}/payments/export?from=${encodeURIComponent(period.from.toUTC().toISO()!)}&to=${encodeURIComponent(period.to.toUTC().toISO()!)}`;
   const thirdRow = (a.spend ? 1 : 0) + (a.services.length > 0 ? 1 : 0) + (a.doctors.length > 0 ? 1 : 0);
-  const trendSub = period.bucket === "day" ? F.byDay : period.bucket === "week" ? F.byWeek : F.byMonth;
+  const trendSub = period.bucket === "day" ? F.byDay : period.bucket === "month" ? F.byMonth : F.byYear;
 
   return (
     <div data-finance-analytics>
       <PageHeader
         title={F.title}
-        sub={`${span(period.from, period.to)} · ${F.comparedWith.replace("{range}", span(period.prevFrom, period.prevTo))}`}
+        sub={
+          period.compare
+            ? `${span(period.from, period.to)} · ${F.comparedWith.replace("{range}", span(period.prevFrom, period.prevTo))}`
+            : F.allSince.replace("{date}", day(period.from, true))
+        }
         action={
           <a href={exportHref} download className={buttonClass({ variant: "outline" })}>
             <Download className="h-4 w-4" />
@@ -160,7 +173,7 @@ export default async function FinanceAnalyticsPage({
         }
       />
 
-      <PeriodPicker slug={slug} current={period.key} />
+      <PeriodPicker slug={slug} current={period.key} menu={menu} />
 
       {/*
         Five figures when the spending is in sight, four when it is not. Five
@@ -383,16 +396,40 @@ function delta(now: number, before: number): number | null {
 }
 
 /** The chart's points: a short label for under the axis, the full name for the readout. */
-function points(rows: SeriesPoint[], period: Period, intl: string, weekOf: string): TrendPoint[] {
+function points(rows: SeriesPoint[], period: Period, intl: string): TrendPoint[] {
   const years = new Set(rows.map((r) => r.bucket.slice(0, 4))).size > 1;
   return rows.map((r) => {
     const d = DateTime.fromISO(r.bucket).setLocale(intl);
-    return period.bucket === "month"
-      ? { label: d.toFormat(years ? "LLL yy" : "LLL"), name: d.toFormat("LLLL yyyy"), value: r.amount }
-      : period.bucket === "week"
-        ? { label: d.toFormat("d LLL"), name: weekOf.replace("{date}", d.toFormat("d LLLL")), value: r.amount }
+    return period.bucket === "year"
+      ? { label: d.toFormat("yyyy"), name: d.toFormat("yyyy"), value: r.amount }
+      : period.bucket === "month"
+        ? { label: d.toFormat(years ? "LLL yy" : "LLL"), name: d.toFormat("LLLL yyyy"), value: r.amount }
         : { label: d.toFormat("d LLL"), name: d.toFormat("cccc d LLLL"), value: r.amount };
   });
+}
+
+/**
+ * The menu of single months and years, from the clinic's first record to last
+ * month, newest first and grouped by year. This month and this year are the
+ * switch beside it, so they are not repeated here; a past year opens with its
+ * whole. Ten years at most — a menu, not an archive.
+ */
+function monthMenu(tz: string, since: Date | null, intl: string, allOf: string): MenuYear[] {
+  if (!since) return [];
+  const now = DateTime.now().setZone(tz).startOf("month");
+  const first = DateTime.fromJSDate(since).setZone(tz).startOf("month");
+  const out: MenuYear[] = [];
+  for (let y = now.year; y >= Math.max(first.year, now.year - 9); y--) {
+    const months: MenuYear["months"] = [];
+    for (let m = 12; m >= 1; m--) {
+      const d = DateTime.fromObject({ year: y, month: m, day: 1 }, { zone: tz });
+      if (d >= now || d < first) continue;
+      months.push({ value: d.toFormat("yyyy-MM"), label: d.setLocale(intl).toFormat("LLLL yyyy") });
+    }
+    const whole = y < now.year ? { value: String(y), label: allOf.replace("{year}", String(y)) } : null;
+    if (months.length || whole) out.push({ year: y, whole, months });
+  }
+  return out;
 }
 
 type TileProps = {

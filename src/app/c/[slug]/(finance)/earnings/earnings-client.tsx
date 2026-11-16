@@ -359,14 +359,16 @@ export function EarningsClient({
         )}
 
         {showTeam && net && (
-          <Card className="p-5">
+          /* The header carries its own padding and rule, like every other card here; the body is padded under it. */
+          <Card>
             <CardHeader title={t.earnings.whatTheClinicKept} />
             {/*
               A chain rather than three headline figures, because every line is
               a number the owner recognises and the last one is only believable
               if the subtractions above it are visible.
             */}
-            <ul className="mt-4 grid gap-2">
+            <div className="px-5 pb-5 pt-4">
+            <ul className="grid gap-2">
               <Line label={t.earnings.collected} value={money(net.collected)} />
               {/*
                 Sales tax, shown only when there is any. Most clinics here are
@@ -404,6 +406,7 @@ export function EarningsClient({
             <p className="mt-3 border-t border-line pt-3 text-[12px] leading-relaxed text-ink-500">
               {showSpend ? t.earnings.keptNote : t.earnings.afterCommissionNote}
             </p>
+            </div>
           </Card>
         )}
 

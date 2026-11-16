@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { DateTime } from "luxon";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDateOnly, fmtMoney, monthLabel } from "@/lib/dates";
@@ -38,6 +39,7 @@ import {
   ChevronRight,
   RotateCw,
   Package,
+  Tags,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -87,6 +89,10 @@ type Draft = {
 /** Paying a supplier: how much of what they are owed, on which day, how. */
 type PayDraft = { group: SupplierOwed; amount: string; paidOn: string; method: Method };
 
+/** The three lists of the screen: what was spent, what is owed, what repeats. */
+export type ExpensesView = "spent" | "pay" | "monthly";
+type View = ExpensesView;
+
 type CatDraft = { id?: string; name: string; nameAr: string; color: string; active: boolean };
 
 type SchedDraft = {
@@ -115,6 +121,7 @@ export function ExpensesClient({
   stockHref,
   suppliers,
   labsOwed,
+  initialView,
 }: {
   slug: string;
   currency: string;
@@ -135,6 +142,8 @@ export function ExpensesClient({
   suppliers: SupplierOwed[];
   /** What the outside labs are owed, paid from the Lab work page; null when nothing is. */
   labsOwed: { owed: number; labs: number; href: string | null } | null;
+  /** From `?view=`, so a link or a refresh opens the same list. */
+  initialView: View;
 }) {
   const { t, locale } = useI18n();
   const E = t.expenses;
@@ -158,6 +167,24 @@ export function ExpensesClient({
   const [pendingReceipt, setPendingReceipt] = useState<File | null>(null);
   const [paying, setPaying] = useState<PayDraft | null>(null);
   const [deleteBillId, setDeleteBillId] = useState<string | null>(null);
+  const [catsOpen, setCatsOpen] = useState(false);
+
+  /*
+    Which list is open. Local, so the switch answers the tap; mirrored into the
+    URL without a navigation, so a refresh — and router.refresh() after a save —
+    keeps it. An old link to "#to-pay" (Stock used one) opens To pay.
+  */
+  const [view, setView] = useState<View>(initialView);
+  useEffect(() => {
+    if (window.location.hash === "#to-pay") setView("pay");
+  }, []);
+  const show = (v: View) => {
+    setView(v);
+    const u = new URL(window.location.href);
+    if (v === "spent") u.searchParams.delete("view");
+    else u.searchParams.set("view", v);
+    window.history.replaceState(window.history.state, "", u.pathname + u.search);
+  };
 
   const money =(n: number | string) => fmtMoney(n, currency, locale);
   const label = (x: { name: string | null; name_ar?: string | null; nameAr?: string | null }) => {
@@ -313,54 +340,64 @@ export function ExpensesClient({
   };
 
   const maxCategory = Math.max(1, ...byCategory.map((b) => b.total));
+  const overdue = suppliers.reduce((n, s) => n + s.bills.filter((b) => !!b.dueOn && b.dueOn < todayLocal).length, 0);
+  const openBills = suppliers.reduce((n, s) => n + s.bills.length, 0) + (labsOwed ? 1 : 0);
+  const intl = locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB";
+
+  /* The month's expenses by day, newest first — the order the server lists them in. */
+  const days = useMemo(() => {
+    const out: { day: string; total: number; rows: ExpenseRow[] }[] = [];
+    for (const r of rows) {
+      const last = out[out.length - 1];
+      if (last && last.day === r.spentOn) {
+        last.rows.push(r);
+        last.total += r.amount;
+      } else out.push({ day: r.spentOn, total: r.amount, rows: [r] });
+    }
+    return out;
+  }, [rows]);
+
+  const views: [View, string, number][] = [
+    ["spent", E.views.spent, rows.length],
+    ["pay", E.views.pay, openBills],
+    ["monthly", E.views.monthly, schedules.length],
+  ];
+
+  const editExpense = (e: ExpenseRow) =>
+    setDraft({
+      id: e.id,
+      categoryId: e.categoryId,
+      amount: String(e.amount),
+      vendor: e.vendor,
+      note: e.note,
+      spentOn: e.spentOn,
+      method: e.method as Method,
+      hasReceipt: e.hasReceipt,
+      unpaid: false,
+      dueOn: "",
+    });
+
+  const stepMonth = (to: number) => {
+    show("spent");
+    router.push(`/c/${slug}/expenses?m=${to}`);
+  };
 
   return (
     <>
       <PageHeader
         title={t.nav.expenses}
-        sub={t.expenses.sub}
-        /*
-          Three separate children, not one row.
-
-          `PageHeader` wraps its action area precisely so a header with several
-          controls can break onto a second line on a phone. Handing it a single
-          flex `div` defeated that: the whole group became one unbreakable item
-          516px wide inside a 358px column, so the page itself scrolled sideways
-          at 390px and "Add expense" was off the screen entirely. The stepper
-          stays one unit — a month name with its arrows on different lines is
-          worse than a wrap — and the two buttons are free to drop below it.
-        */
+        sub={E.sub}
         action={
           <>
-            <div className="flex items-center gap-1">
-              <button
-                aria-label={t.earnings.previousMonth}
-                onClick={() => router.push(`/c/${slug}/expenses?m=${offset - 1}`)}
-                className="rounded-lg border border-line p-1.5 text-ink-500 hover:border-brand-400"
-              >
-                <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
-              </button>
-              <span className="min-w-28 text-center text-[13px] font-medium tabular-nums sm:min-w-36">
-                {monthLabel(timezone, offset, locale)}
-              </span>
-              <button
-                aria-label={t.earnings.nextMonth}
-                disabled={offset >= 0}
-                onClick={() => router.push(`/c/${slug}/expenses?m=${offset + 1}`)}
-                className="rounded-lg border border-line p-1.5 text-ink-500 hover:border-brand-400 disabled:opacity-40"
-              >
-                <ChevronRight className="h-4 w-4 rtl:rotate-180" />
-              </button>
-            </div>
             <a
               href={`/api/c/${slug}/expenses/export?from=${monthFrom}&to=${monthTo}`}
               download
-              className={buttonClass({ variant: "outline", size: "sm" })}
+              className={buttonClass({ variant: "outline" })}
             >
               <Download className="h-4 w-4" />
               {t.invoices.exportCsv}
             </a>
-            <Button size="sm" onClick={() => setDraft(emptyDraft())}>
+            <Button onClick={() => setDraft(emptyDraft())}>
               <Plus className="h-4 w-4" />
               {t.expenses.add}
             </Button>
@@ -368,23 +405,229 @@ export function ExpensesClient({
         }
       />
 
-      <div className="grid gap-4">
+      {/*
+        Two answers first, before any list (Yamen, 2026-11-15: the screen was
+        "not easy to understand the first time"). What the clinic spent — with
+        the month it is about, because only this side changes by month — and
+        what it still owes, which is owed until it is paid whatever month is on
+        screen. Everything below is the detail behind one of them.
+      */}
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
         <Card className="p-5">
-          <div className="text-[11px] uppercase tracking-wide text-ink-400">
-            {t.expenses.thisMonth}
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[13px] text-ink-500">{E.views.spent}</span>
+            <div className="flex items-center gap-1">
+              <button
+                aria-label={t.earnings.previousMonth}
+                onClick={() => stepMonth(offset - 1)}
+                className="grid h-7 w-7 place-items-center rounded-full text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
+              >
+                <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+              </button>
+              <span className="min-w-28 text-center text-[13px] font-semibold text-ink-900 tabular-nums">
+                {monthLabel(timezone, offset, locale)}
+              </span>
+              <button
+                aria-label={t.earnings.nextMonth}
+                disabled={offset >= 0}
+                onClick={() => stepMonth(offset + 1)}
+                className="grid h-7 w-7 place-items-center rounded-full text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900 disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+              </button>
+            </div>
           </div>
-          <div className="mt-1 text-2xl font-bold tabular-nums text-ink-900">{money(total)}</div>
+          <div className="mt-2 font-display text-[26px] font-bold leading-tight text-ink-900" data-month-spent={total}>
+            {money(total)}
+          </div>
+          <div className="mt-1 text-[12px] text-ink-400">{E.expensesCount.replace("{n}", String(rows.length))}</div>
         </Card>
 
-        {/*
-          What is owed (ذمم): never scoped to the month on screen, because a debt
-          is owed until it is paid. A wrapper, not the Card, carries the anchor —
-          Card does not pass ids or data attributes through.
-        */}
-        <div id="to-pay" className="scroll-mt-24" data-to-pay={owedTotal}>
+        {/* The whole card opens what is owed. A raw button, not Card: the hook has to reach the element. */}
+        <button
+          type="button"
+          onClick={() => show("pay")}
+          data-to-pay={owedTotal}
+          className="min-w-0 rounded-card border border-line bg-surface p-5 text-start shadow-card transition-shadow duration-220 ease-out hover:shadow-pop"
+        >
+          <div className="flex h-7 items-center justify-between gap-3">
+            <span className="text-[13px] text-ink-500">{E.stillToPay}</span>
+            <ChevronRight className="h-4 w-4 text-ink-400 rtl:rotate-180" aria-hidden />
+          </div>
+          <div className="mt-2 font-display text-[26px] font-bold leading-tight text-ink-900">{money(owedTotal)}</div>
+          <div className="mt-1 flex flex-wrap gap-x-2 text-[12px] text-ink-400">
+            {owedTotal <= 0 ? (
+              E.nothingOwedShort
+            ) : (
+              <>
+                <span>{E.suppliersCount.replace("{n}", String(suppliers.length + (labsOwed ? 1 : 0)))}</span>
+                {overdue > 0 && (
+                  <span className="font-semibold text-danger">{E.overdueCount.replace("{n}", String(overdue))}</span>
+                )}
+              </>
+            )}
+          </div>
+        </button>
+      </div>
+
+      {/*
+        One list at a time. A switch, held here and mirrored into the URL
+        (`?view=pay`) so a refresh or a link opens the same one — the page does
+        not reload to change it.
+      */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label={t.nav.expenses} className="inline-flex max-w-full overflow-x-auto rounded-full bg-ink-900/5 p-0.5">
+          {views.map(([key, label, count]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={view === key}
+              onClick={() => show(key)}
+              data-expenses-view={key}
+              className={`flex touch-manipulation items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+                view === key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+              }`}
+            >
+              {label}
+              {count > 0 && <span className="text-[12px] font-medium text-ink-400 tnum">{count}</span>}
+            </button>
+          ))}
+        </div>
+        {/* The word on a wider screen; on a phone the icon alone, so it stays on the switch's line. */}
+        <Button size="sm" variant="ghost" onClick={() => setCatsOpen(true)} data-categories-open>
+          <Tags className="h-4 w-4" />
+          <span className="max-sm:sr-only">{E.categories}</span>
+        </Button>
+      </div>
+
+      {/* ------------------------------------------------------------ spent */}
+      {view === "spent" &&
+        (rows.length === 0 ? (
+          <EmptyState
+            icon={<Banknote className="h-6 w-6" />}
+            title={E.emptyTitle}
+            body={E.emptyBody}
+            action={<Button onClick={() => setDraft(emptyDraft())}>{E.add}</Button>}
+          />
+        ) : (
+          <div className="grid items-start gap-4 lg:grid-cols-3">
+            <Card className="overflow-hidden lg:col-span-2">
+              {days.map((d) => (
+                <section key={d.day}>
+                  {/* The day, and what went out on it. */}
+                  <div className="flex items-baseline justify-between gap-3 border-b border-line bg-sunken/70 px-5 py-2 text-[12px]">
+                    <span className="font-semibold text-ink-700">
+                      {DateTime.fromISO(d.day).setLocale(intl).toFormat("cccc d LLLL")}
+                    </span>
+                    <span className="text-ink-500 tnum">{money(d.total)}</span>
+                  </div>
+                  <ul className="divide-y divide-line border-b border-line">
+                    {d.rows.map((e) => {
+                      const cat = label({ name: e.categoryName, name_ar: e.categoryNameAr });
+                      return (
+                        <li key={e.id} className="flex items-center gap-3 py-3 ps-5 pe-3">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: e.categoryColor ?? "var(--color-ink-300)" }}
+                            aria-hidden
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="truncate text-[14px] font-medium text-ink-900" dir="auto">
+                                {e.vendor || cat}
+                              </span>
+                              {e.recurring && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500">
+                                  <RotateCw className="h-3 w-3" />
+                                  {E.recurring}
+                                </span>
+                              )}
+                              {e.fromStock &&
+                                (stockHref ? (
+                                  <Link
+                                    href={stockHref}
+                                    className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-brand-700 hover:underline"
+                                    data-expense-stock
+                                  >
+                                    <Package className="h-3 w-3" />
+                                    {E.fromDelivery.replace("{product}", e.fromStock)}
+                                  </Link>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500" data-expense-stock>
+                                    <Package className="h-3 w-3" />
+                                    {E.fromDelivery.replace("{product}", e.fromStock)}
+                                  </span>
+                                ))}
+                              {/* A delivery's payment already says which delivery; anything else paid toward a bill says so. */}
+                              {e.towardBill && !e.fromStock && (
+                                <span className="inline-flex items-center whitespace-nowrap rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500" data-expense-bill>
+                                  {E.towardBill}
+                                </span>
+                              )}
+                              {e.hasReceipt && <Paperclip className="h-3.5 w-3.5 text-ink-400" aria-label={E.receipt} />}
+                            </div>
+                            <div className="truncate text-[12px] text-ink-500" dir="auto">
+                              {[e.vendor ? cat : null, (E.methods as Record<string, string>)[e.method] ?? e.method, e.note || null]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-[14px] font-semibold text-ink-900 tnum">{money(e.amount)}</span>
+                          <div className="flex shrink-0 items-center">
+                            <Button variant="ghost" size="icon" aria-label={t.common.edit} onClick={() => editExpense(e)}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" aria-label={t.common.delete} onClick={() => setDeleteId(e.id)}>
+                              <Trash2 className="h-4 w-4 text-danger" />
+                            </Button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ))}
+            </Card>
+
+            {byCategory.length > 0 && (
+              <Card>
+                <CardHeader title={E.byCategory} />
+                <ul className="divide-y divide-line">
+                  {byCategory.map((b) => (
+                    <li key={b.categoryId ?? "__unfiled"} className="px-5 py-3">
+                      <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[13px]">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: b.color ?? "var(--color-ink-300)" }}
+                            aria-hidden
+                          />
+                          <span className="truncate text-ink-900">{label(b)}</span>
+                        </span>
+                        <span className="shrink-0 tnum">
+                          <span className="font-semibold text-ink-900">{money(b.total)}</span>
+                          <span className="ms-2 inline-block w-9 text-end text-[12px] text-ink-400">
+                            {total > 0 ? Math.round((b.total / total) * 100) : 0}%
+                          </span>
+                        </span>
+                      </div>
+                      {/* Positive by construction — `amount > 0` — which is the only reason a bar is safe here at all. */}
+                      <RowBar value={b.total} max={maxCategory} />
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </div>
+        ))}
+
+      {/* ----------------------------------------------------------- to pay */}
+      {view === "pay" && (
+        <div id="to-pay" className="scroll-mt-24">
           <Card>
             <CardHeader
-              title={E.toPay}
+              title={E.views.pay}
               sub={E.toPaySub}
               action={
                 <Button size="sm" variant="outline" onClick={() => setDraft({ ...emptyDraft(), unpaid: true })} data-bill-add>
@@ -394,244 +637,97 @@ export function ExpensesClient({
               }
             />
             {owedTotal <= 0 ? (
-              <p className="px-5 pb-5 text-[13px] text-ink-400">{E.nothingOwed}</p>
+              <p className="px-5 py-8 text-center text-[13px] text-ink-400">{E.nothingOwed}</p>
             ) : (
-              <>
-                <div className="px-5 pb-3">
-                  <div className="text-[11px] uppercase tracking-wide text-ink-400">{E.owedTotal}</div>
-                  <div className="mt-1 text-2xl font-bold tabular-nums text-ink-900">{money(owedTotal)}</div>
-                </div>
-                <ul className="divide-y divide-line border-t border-line">
-                  {suppliers.map((s) => (
-                    <li key={s.key} className="px-5 py-3" data-supplier={s.name}>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[14px] font-semibold" dir="auto">
-                            {s.name || "—"}
-                          </div>
-                          <div className="text-[12px] text-ink-500">
-                            {E.since.replace("{date}", fmtDateOnly(s.bills[0].incurredOn, locale))}
-                          </div>
-                        </div>
-                        <span className="whitespace-nowrap text-[15px] font-bold tabular-nums" data-supplier-owed={s.owed}>
-                          {money(s.owed)}
-                        </span>
-                        <Button
-                          size="sm"
-                          onClick={() => setPaying({ group: s, amount: s.owed.toFixed(2), paidOn: todayLocal, method: "cash" })}
-                          data-supplier-pay
-                        >
-                          {E.pay}
-                        </Button>
-                      </div>
-                      <ul className="mt-2 grid gap-1.5">
-                        {s.bills.map((b) => {
-                          const late = !!b.dueOn && b.dueOn < todayLocal;
-                          return (
-                            <li key={b.id} className="flex items-center gap-2 rounded-ctl bg-sunken ps-3 pe-1 py-1.5 text-[12.5px]" data-bill={b.id}>
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-ink-900" dir="auto">
-                                  {b.product || b.note || E.billFallback}
-                                </div>
-                                <div className="text-ink-500">
-                                  {fmtDateOnly(b.incurredOn, locale)}
-                                  {b.dueOn && (
-                                    <span className={late ? "font-semibold text-danger" : ""} data-bill-due={late ? "late" : "due"}>
-                                      {" · "}
-                                      {(late ? E.overdue : E.dueBy).replace("{date}", fmtDateOnly(b.dueOn, locale))}
-                                    </span>
-                                  )}
-                                  {b.paid > 0 && (
-                                    <>
-                                      {" · "}
-                                      {E.paidOf.replace("{paid}", money(b.paid)).replace("{amount}", money(b.amount))}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              <span className="whitespace-nowrap font-semibold tabular-nums" data-bill-owed={b.owed}>
-                                {money(b.owed)}
-                              </span>
-                              <Button variant="ghost" size="icon" aria-label={t.common.edit} onClick={() => setDraft(billDraft(b))} data-bill-edit>
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" aria-label={t.common.delete} onClick={() => setDeleteBillId(b.id)} data-bill-delete>
-                                <Trash2 className="h-4 w-4 text-danger" />
-                              </Button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </li>
-                  ))}
-                  {labsOwed && (
-                    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3" data-labs-owed={labsOwed.owed}>
+              <ul className="divide-y divide-line">
+                {suppliers.map((s) => (
+                  <li key={s.key} className="px-5 py-4" data-supplier={s.name}>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                       <div className="min-w-0 flex-1">
-                        <div className="text-[14px] font-semibold">{E.labWork}</div>
-                        <div className="text-[12px] text-ink-500">{E.labsSub}</div>
+                        <div className="truncate text-[14px] font-semibold" dir="auto">
+                          {s.name || "—"}
+                        </div>
+                        <div className="text-[12px] text-ink-500">
+                          {E.since.replace("{date}", fmtDateOnly(s.bills[0].incurredOn, locale))}
+                        </div>
                       </div>
-                      <span className="whitespace-nowrap text-[15px] font-bold tabular-nums">{money(labsOwed.owed)}</span>
-                      {labsOwed.href && (
-                        <Link href={labsOwed.href} className={buttonClass({ variant: "outline", size: "sm" })}>
-                          {E.openLabs}
-                        </Link>
-                      )}
-                    </li>
-                  )}
-                </ul>
-              </>
+                      <span className="whitespace-nowrap text-[15px] font-bold tabular-nums" data-supplier-owed={s.owed}>
+                        {money(s.owed)}
+                      </span>
+                      <Button
+                        size="sm"
+                        onClick={() => setPaying({ group: s, amount: s.owed.toFixed(2), paidOn: todayLocal, method: "cash" })}
+                        data-supplier-pay
+                      >
+                        {E.pay}
+                      </Button>
+                    </div>
+                    <ul className="mt-2.5 grid gap-1.5">
+                      {s.bills.map((b) => {
+                        const late = !!b.dueOn && b.dueOn < todayLocal;
+                        return (
+                          <li key={b.id} className="flex items-center gap-2 rounded-ctl bg-sunken py-1.5 ps-3 pe-1 text-[12.5px]" data-bill={b.id}>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-ink-900" dir="auto">
+                                {b.product || b.note || E.billFallback}
+                              </div>
+                              <div className="text-ink-500">
+                                {fmtDateOnly(b.incurredOn, locale)}
+                                {b.dueOn && (
+                                  <span className={late ? "font-semibold text-danger" : ""} data-bill-due={late ? "late" : "due"}>
+                                    {" · "}
+                                    {(late ? E.overdue : E.dueBy).replace("{date}", fmtDateOnly(b.dueOn, locale))}
+                                  </span>
+                                )}
+                                {b.paid > 0 && (
+                                  <>
+                                    {" · "}
+                                    {E.paidOf.replace("{paid}", money(b.paid)).replace("{amount}", money(b.amount))}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <span className="whitespace-nowrap font-semibold tabular-nums" data-bill-owed={b.owed}>
+                              {money(b.owed)}
+                            </span>
+                            <Button variant="ghost" size="icon" aria-label={t.common.edit} onClick={() => setDraft(billDraft(b))} data-bill-edit>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" aria-label={t.common.delete} onClick={() => setDeleteBillId(b.id)} data-bill-delete>
+                              <Trash2 className="h-4 w-4 text-danger" />
+                            </Button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                ))}
+                {labsOwed && (
+                  <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4" data-labs-owed={labsOwed.owed}>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[14px] font-semibold">{E.labWork}</div>
+                      <div className="text-[12px] text-ink-500">{E.labsSub}</div>
+                    </div>
+                    <span className="whitespace-nowrap text-[15px] font-bold tabular-nums">{money(labsOwed.owed)}</span>
+                    {labsOwed.href && (
+                      <Link href={labsOwed.href} className={buttonClass({ variant: "outline", size: "sm" })}>
+                        {E.openLabs}
+                      </Link>
+                    )}
+                  </li>
+                )}
+              </ul>
             )}
           </Card>
         </div>
+      )}
 
-        {byCategory.length > 0 && (
-          <Card>
-            <CardHeader title={t.expenses.byCategory} />
-            <ul className="grid gap-2.5 p-5">
-              {byCategory.map((b) => (
-                <li key={b.categoryId ?? "__unfiled"} className="grid gap-1">
-                  <div className="flex items-center justify-between gap-3 text-[13px]">
-                    <span className="flex items-center gap-1.5">
-                      {b.color && (
-                        <span
-                          className="h-2 w-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: b.color }}
-                        />
-                      )}
-                      {label(b)}
-                    </span>
-                    <span className="tabular-nums font-medium">{money(b.total)}</span>
-                  </div>
-                  {/* Positive by construction — `amount > 0` — which is the only
-                      reason a bar is safe here at all. */}
-                  <RowBar value={b.total} max={maxCategory} />
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
-        <Card>
-          <CardHeader title={t.expenses.list} />
-          {rows.length === 0 ? (
-            <div className="p-5">
-              <EmptyState
-                icon={<Banknote className="h-6 w-6" />}
-                title={t.expenses.emptyTitle}
-                body={t.expenses.emptyBody}
-                action={<Button onClick={() => setDraft(emptyDraft())}>{t.expenses.add}</Button>}
-              />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="border-b border-line text-[11px] uppercase tracking-wide text-ink-400">
-                    <th className="px-5 py-2 text-start font-semibold">{t.common.date}</th>
-                    <th className="px-5 py-2 text-start font-semibold">{t.expenses.vendor}</th>
-                    <th className="px-5 py-2 text-start font-semibold">{t.expenses.category}</th>
-                    <th className="px-5 py-2 text-end font-semibold">{t.expenses.amount}</th>
-                    <th className="px-5 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((e) => (
-                    <tr key={e.id} className="border-b border-line last:border-0">
-                      {/* fmtDateOnly, not fmtDate: `spent_on` is a calendar day
-                          and a zone conversion would move it. */}
-                      <td className="whitespace-nowrap px-5 py-2.5 text-ink-500">
-                        {fmtDateOnly(e.spentOn, locale)}
-                      </td>
-                      <td className="px-5 py-2.5">
-                        <span className="font-medium">{e.vendor || "—"}</span>
-                        {e.recurring && (
-                          <span className="ms-2 inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500">
-                            <RotateCw className="h-3 w-3" />
-                            {t.expenses.recurring}
-                          </span>
-                        )}
-                        {e.fromStock &&
-                          (stockHref ? (
-                            <Link href={stockHref} className="ms-2 inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-brand-700 hover:underline" data-expense-stock>
-                              <Package className="h-3 w-3" />
-                              {t.expenses.fromDelivery.replace("{product}", e.fromStock)}
-                            </Link>
-                          ) : (
-                            <span className="ms-2 inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500" data-expense-stock>
-                              <Package className="h-3 w-3" />
-                              {t.expenses.fromDelivery.replace("{product}", e.fromStock)}
-                            </span>
-                          ))}
-                        {/* A delivery's payment already says which delivery; anything else paid toward a bill says so. */}
-                        {e.towardBill && !e.fromStock && (
-                          <span className="ms-2 inline-flex items-center whitespace-nowrap rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500" data-expense-bill>
-                            {E.towardBill}
-                          </span>
-                        )}
-                        {e.note && <div className="text-[12px] text-ink-400">{e.note}</div>}
-                      </td>
-                      <td className="px-5 py-2.5">
-                        <span className="flex items-center gap-1.5 text-ink-500">
-                          {e.categoryColor && (
-                            <span
-                              className="h-2 w-2 shrink-0 rounded-full"
-                              style={{ backgroundColor: e.categoryColor }}
-                            />
-                          )}
-                          {label({ name: e.categoryName, name_ar: e.categoryNameAr })}
-                        </span>
-                      </td>
-                      <td className="px-5 py-2.5 text-end font-medium tabular-nums">
-                        {money(e.amount)}
-                      </td>
-                      <td className="px-5 py-2.5">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t.common.edit}
-                            onClick={() =>
-                              setDraft({
-                                id: e.id,
-                                categoryId: e.categoryId,
-                                amount: String(e.amount),
-                                vendor: e.vendor,
-                                note: e.note,
-                                spentOn: e.spentOn,
-                                method: e.method as Method,
-                                hasReceipt: e.hasReceipt,
-                                unpaid: false,
-                                dueOn: "",
-                              })
-                            }
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t.common.delete}
-                            onClick={() => setDeleteId(e.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-danger" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        {/* Repeating bills live beside the ledger rather than in settings: the
-            moment somebody wants "and this happens every month" is while they
-            are typing this month's. */}
+      {/* ------------------------------------------------------ every month */}
+      {view === "monthly" && (
         <Card>
           <CardHeader
-            title={t.expenses.repeating}
-            sub={t.expenses.repeatingSub}
+            title={E.views.monthly}
+            sub={E.repeatingSub}
             action={
               <Button
                 size="sm"
@@ -649,117 +745,100 @@ export function ExpensesClient({
                 }
               >
                 <Plus className="h-4 w-4" />
-                {t.expenses.addRepeating}
+                {E.addRepeating}
               </Button>
             }
           />
           {schedules.length === 0 ? (
-            <p className="px-5 py-6 text-center text-[13px] text-ink-400">
-              {t.expenses.noRepeating}
-            </p>
+            <p className="px-5 py-8 text-center text-[13px] text-ink-400">{E.noRepeating}</p>
           ) : (
             <ul className="divide-y divide-line">
               {schedules.map((s) => (
-                <li key={s.id} className="flex items-center gap-3 px-5 py-3">
+                <li key={s.id} className={`flex items-center gap-3 py-3 ps-5 pe-3 ${s.active ? "" : "opacity-60"}`}>
+                  {/* The day of the month it lands on, as a date would be printed on a calendar. */}
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-ctl bg-sunken text-[15px] font-bold text-ink-900 tnum" aria-hidden>
+                    {s.day_of_month}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-[13px] font-medium">{s.vendor || "—"}</span>
-                      {!s.active && <Badge status="cancelled">{t.expenses.paused}</Badge>}
+                      <span className="truncate text-[14px] font-medium text-ink-900" dir="auto">
+                        {s.vendor || label({ name: s.category_name, name_ar: s.category_name_ar })}
+                      </span>
+                      {!s.active && <Badge status="cancelled">{E.paused}</Badge>}
                     </div>
-                    <div className="text-[12px] text-ink-500">
-                      {money(s.amount)} ·{" "}
-                      {t.expenses.everyMonthOn.replace("{d}", String(s.day_of_month))} ·{" "}
-                      {label({ name: s.category_name, name_ar: s.category_name_ar })}
+                    <div className="truncate text-[12px] text-ink-500">
+                      {E.everyMonthOn.replace("{d}", String(s.day_of_month))} · {label({ name: s.category_name, name_ar: s.category_name_ar })}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={t.common.edit}
-                    onClick={() =>
-                      setSchedDraft({
-                        id: s.id,
-                        categoryId: s.category_id,
-                        amount: String(s.amount),
-                        vendor: s.vendor,
-                        note: s.note,
-                        method: s.method,
-                        dayOfMonth: String(s.day_of_month),
-                        active: s.active,
-                      })
-                    }
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={t.common.delete}
-                    onClick={() => setDeleteSchedId(s.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-danger" />
-                  </Button>
+                  <span className="shrink-0 text-[14px] font-semibold text-ink-900 tnum">{money(s.amount)}</span>
+                  <div className="flex shrink-0 items-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t.common.edit}
+                      onClick={() =>
+                        setSchedDraft({
+                          id: s.id,
+                          categoryId: s.category_id,
+                          amount: String(s.amount),
+                          vendor: s.vendor,
+                          note: s.note,
+                          method: s.method,
+                          dayOfMonth: String(s.day_of_month),
+                          active: s.active,
+                        })
+                      }
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label={t.common.delete} onClick={() => setDeleteSchedId(s.id)}>
+                      <Trash2 className="h-4 w-4 text-danger" />
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </Card>
+      )}
 
-        <Card>
-          <CardHeader
-            title={t.expenses.categories}
-            sub={t.expenses.categoriesSub}
-            action={
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  setCatDraft({ name: "", nameAr: "", color: "#6989a6", active: true })
-                }
-              >
-                <Plus className="h-4 w-4" />
-                {t.expenses.addCategory}
-              </Button>
-            }
-          />
-          <ul className="divide-y divide-line">
+      {/* ------------------------------------------------------- categories */}
+      {/*
+        The clinic's own filing, kept out of the way: it is set up once and
+        touched rarely, and as a card at the bottom of the screen it was the
+        longest thing on it. Editing one opens over this window.
+      */}
+      <Modal open={catsOpen} onClose={() => setCatsOpen(false)} title={E.categories}>
+        <div className="grid gap-4" data-categories>
+          <p className="text-[13px] leading-relaxed text-ink-500">{E.categoriesSub}</p>
+          <ul className="divide-y divide-line rounded-ctl border border-line">
             {categories.map((c) => (
-              <li key={c.id} className={`flex items-center gap-3 px-5 py-2.5 ${c.active ? "" : "opacity-50"}`}>
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: c.color }}
-                />
+              <li key={c.id} className={`flex items-center gap-3 py-1.5 ps-3.5 pe-1.5 ${c.active ? "" : "opacity-50"}`}>
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: c.color }} aria-hidden />
                 <span className="flex-1 text-[13px]">{label(c)}</span>
-                {!c.active && <Badge status="cancelled">{t.expenses.hidden}</Badge>}
+                {!c.active && <Badge status="cancelled">{E.hidden}</Badge>}
                 <Button
                   variant="ghost"
                   size="icon"
                   aria-label={t.common.edit}
-                  onClick={() =>
-                    setCatDraft({
-                      id: c.id,
-                      name: c.name,
-                      nameAr: c.name_ar ?? "",
-                      color: c.color,
-                      active: c.active,
-                    })
-                  }
+                  onClick={() => setCatDraft({ id: c.id, name: c.name, nameAr: c.name_ar ?? "", color: c.color, active: c.active })}
                 >
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t.common.delete}
-                  onClick={() => setDeleteCatId(c.id)}
-                >
+                <Button variant="ghost" size="icon" aria-label={t.common.delete} onClick={() => setDeleteCatId(c.id)}>
                   <Trash2 className="h-4 w-4 text-danger" />
                 </Button>
               </li>
             ))}
           </ul>
-        </Card>
-      </div>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setCatDraft({ name: "", nameAr: "", color: "#6989a6", active: true })}>
+              <Plus className="h-4 w-4" />
+              {E.addCategory}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* ---------------------------------------------------------- expense */}
       <Modal

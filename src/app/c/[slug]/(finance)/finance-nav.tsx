@@ -6,39 +6,54 @@ import { LinkTabs } from "@/components/ui/misc";
 import { useI18n } from "@/lib/i18n/client";
 import { financeHref, type FinanceTab } from "@/lib/finance";
 
+/** Which tab a path belongs to. */
+function tabOf(pathname: string): FinanceTab {
+  return pathname.includes("/analytics")
+    ? "analytics"
+    : pathname.includes("/claims")
+      ? "claims"
+      : pathname.includes("/earnings")
+        ? "earnings"
+        : pathname.includes("/expenses")
+          ? "expenses"
+          : "invoices";
+}
+
 /**
- * The strip across the top of the money section.
+ * The strip across the top of the money section, and the page under it.
  *
- * Invoices and payments are one tab (Yamen, 2026-11-15): the desk raises an
- * invoice and takes its payment in the same breath, and two tabs made that two
- * places. The switch between the two lists is on the screen itself
- * (`list-switch.tsx`), so the strip only reads the path.
+ * A switch between tabs is one step, not two (Yamen, 2026-11-15: "switching
+ * between earnings and invoices is not smooth"). There used to be a skeleton
+ * between them, drawn once for the whole section — four tiles over a list —
+ * which matched no tab after the invoice totals went, so every switch showed
+ * one layout and then jumped to another; and when the next tab was quick, the
+ * skeleton was skipped, so the same click looked different from one time to
+ * the next. Now the tab lights on the press, the page that is there stays and
+ * fades back, a slim line runs under the strip, and the next tab replaces it
+ * whole. Arriving in Finance from elsewhere still shows the workspace's own
+ * skeleton (`c/[slug]/loading.tsx`).
+ *
+ * Invoices and payments are one tab (2026-11-15); the switch between the two
+ * lists is on that screen (`list-switch.tsx`), so the strip reads the path only.
  */
-export function FinanceNav({ slug, tabs }: { slug: string; tabs: FinanceTab[] }) {
+export function FinanceFrame({
+  slug,
+  tabs,
+  children,
+}: {
+  slug: string;
+  tabs: FinanceTab[];
+  children: React.ReactNode;
+}) {
   const { t } = useI18n();
   const pathname = usePathname();
+  const here = tabOf(pathname);
 
-  /*
-    Highlight on press rather than on arrival. Every tab here is a server
-    component with its own queries, so `usePathname` does not change until that
-    work is done — which on a cold month of invoices is long enough to read as
-    a tab that ignored the click. The same trick, and the same reason, as
-    `settings-nav.tsx`.
-  */
   const [pressed, setPressed] = useState<FinanceTab | null>(null);
   useEffect(() => setPressed(null), [pathname]);
-
-  const current: FinanceTab =
-    pressed ??
-    (pathname.includes("/analytics")
-      ? "analytics"
-      : pathname.includes("/claims")
-        ? "claims"
-        : pathname.includes("/earnings")
-          ? "earnings"
-          : pathname.includes("/expenses")
-            ? "expenses"
-            : "invoices");
+  // Pressing the tab already open goes nowhere, so it must not wait for anything.
+  const going = pressed !== null && pressed !== here ? pressed : null;
+  const current = going ?? here;
 
   const label: Record<FinanceTab, string> = {
     invoices: t.invoices.tabTitle,
@@ -49,14 +64,28 @@ export function FinanceNav({ slug, tabs }: { slug: string; tabs: FinanceTab[] })
   };
 
   return (
-    <LinkTabs
-      onSelect={(k) => setPressed(k as FinanceTab)}
-      tabs={tabs.map((tab) => ({
-        key: tab,
-        href: financeHref(slug, tab),
-        label: label[tab],
-        active: current === tab,
-      }))}
-    />
+    <>
+      <LinkTabs
+        onSelect={(k) => setPressed(k as FinanceTab)}
+        tabs={tabs.map((tab) => ({
+          key: tab,
+          href: financeHref(slug, tab),
+          label: label[tab],
+          active: current === tab,
+        }))}
+      />
+      {/*
+        The shell already runs its line across the top for any page on its way,
+        so this only fades the page that is leaving — after 150ms, so a tab
+        that is there at once never flickers.
+      */}
+      <div
+        className={`transition-opacity duration-200 ease-out ${going ? "pointer-events-none opacity-55 delay-150" : "opacity-100 delay-0"}`}
+        aria-busy={going ? true : undefined}
+        data-finance-body={going ? "pending" : "ready"}
+      >
+        {children}
+      </div>
+    </>
   );
 }

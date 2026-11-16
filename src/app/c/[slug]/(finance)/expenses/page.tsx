@@ -10,7 +10,7 @@ import {
   type ExpenseRow,
 } from "@/lib/expenses";
 import { bySupplier, labsOwed, openBills } from "@/lib/bills";
-import { ExpensesClient } from "./expenses-client";
+import { ExpensesClient, type ExpensesView } from "./expenses-client";
 
 /**
  * What the clinic spent, month by month.
@@ -24,7 +24,7 @@ export default async function ExpensesPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ m?: string }>;
+  searchParams: Promise<{ m?: string; view?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -95,6 +95,7 @@ export default async function ExpensesPage({
       schedules={JSON.parse(JSON.stringify(data.schedules))}
       stockHref={access.clinic.features.aesthetic && can(access, "stock") ? `/c/${slug}/stock` : null}
       suppliers={data.suppliers}
+      initialView={(["pay", "monthly"] as const).find((v) => v === sp.view) ?? ("spent" as ExpensesView)}
       labsOwed={
         data.labs.owed > 0
           ? {

@@ -1565,22 +1565,33 @@ what the practice takes. An owner grants it deliberately, per person. `full` acc
 includes it. The queries do not run at all for a member without it, so the figures never
 reach their browser.
 
-The one figure that needs only `invoices` is **Collected today** (decision 144): a card on
-the invoices screen with the day's total, how many payments, and the split by method (cash,
-CliQ, card, transfer), so the desk can check its day against the drawer. It replaced the
+The one figure that needs only `invoices` is **Collected today** (decision 144): one line
+under the Invoices title — the day's total in a pill, the split by method (cash, CliQ, card,
+transfer) beside it — so the desk can check its day against the drawer. A card until
+2026-11-16, when it was judged to take too much of the screen. It replaced the
 Today / This week / This month / Outstanding tiles, which moved to Analytics. A doctor whose
 invoices are filtered to their own work does not get it.
 
 **Invoices and payments are one tab** (2026-11-15). The strip reads Invoices & payments ·
-Analytics · Claims · Earnings · Expenses; the payments list is still `/invoices?tab=payments`
-and is reached by a segmented switch on the screen
+Claims · Earnings · Expenses · Analytics — the reading tab last; the payments list is still
+`/invoices?tab=payments` and is reached by a segmented switch on the screen
 ([list-switch.tsx](src/app/c/[slug]/(finance)/invoices/list-switch.tsx)).
 
+**Switching tabs is one step** (decision 145). There is no Finance-wide skeleton any more:
+the pressed tab lights at once, the page that is there fades back after 150ms, the shell's
+line runs across the top, and the next tab replaces it whole
+([finance-nav.tsx](src/app/c/[slug]/(finance)/finance-nav.tsx), `FinanceFrame`).
+
 **Analytics** ([src/lib/finance-analytics.ts](src/lib/finance-analytics.ts),
-`/analytics?p=`) — the clinic's money over a period: this month, last month, 3, 6 or 12
-months, this year. A period still running ends today and is compared with the same days one
-step back (the 1st–15th against the 1st–15th). It shows what was collected and invoiced with
-the change against the period before; money in as a chart (by day, week or month); how
+`/analytics?p=month|year|all|2026-10|2025`) — the clinic's money over a period. Three named
+periods — this month, this year, all time — and a menu of any single month or year, grouped
+by year, reaching back to the clinic's first payment, invoice or expense
+([src/lib/finance-periods.ts](src/lib/finance-periods.ts)). A period still running ends today
+and is compared with the same days one step back (the 1st–15th against the 1st–15th); a past
+month or year is compared whole with the one before; all time runs from the month of the
+first record and is compared with nothing. It shows what was collected and invoiced with the
+change against the period before; money in as a chart (by day, month, or — past three years
+of all time — by year); how
 patients paid; what earned the most (by what was invoiced); the work invoiced under each
 doctor; what is owed as of today by how long it has waited (30 / 60 / 90 days and over) and
 who owes the most; and Export CSV for the period's payments. Two parts answer to other
@@ -1588,6 +1599,16 @@ grants: what was spent, by category, and what is still to pay suppliers need `ex
 the doctors' shares in "what the clinic kept" need full control — without it the chain reads
 "left after expenses". A card with nothing in it is left out. Refused, not just hidden, for a
 member without the capability and for a doctor whose invoices are their own.
+
+**The Expenses screen** (redesigned 2026-11-16, decision 146) answers two questions before any
+list: **Spent** in the month on screen (the month arrows live in that card, because only
+spending changes by month) and **Still to pay** — everything owed to suppliers and outside
+labs, with how many are overdue; the card opens that list. Under them one list at a time, by a
+switch mirrored into the URL: **Spent** (the month's expenses grouped by day, each with its
+category, how it was paid and any note, beside "Where it went"), **To pay** (`?view=pay`,
+supplier by supplier with their bills and Pay) and **Every month** (`?view=monthly`, the
+repeating bills). Categories are set up from a small button, in a window of their own. Stock's
+"still to pay" link opens `?view=pay`; an old `#to-pay` link still does.
 
 **A doctor's invoices are their own.** A doctor who is granted Invoices, and who is not the
 admin or on full access, sees only invoices carrying their name on a line

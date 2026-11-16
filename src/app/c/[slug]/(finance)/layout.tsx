@@ -1,25 +1,27 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { financeViewer } from "@/lib/finance-access";
 import { financeTabs } from "@/lib/finance";
-import { FinanceNav } from "./finance-nav";
+import { FinanceFrame } from "./finance-nav";
 
 /**
  * The clinic's money, in one section.
  *
- * A route group, so the folder says these three belong together while every URL
+ * A route group, so the folder says these pages belong together while every URL
  * stays exactly where it was. That is the whole reason for the parentheses:
  * moving them under `/finance/` would have meant rewriting nineteen
  * `revalidatePath` calls and fourteen test suites, and — the part no edit can
  * fix — breaking the `url` already stored on every notification the worker has
  * ever sent about an invoice.
  *
- * The door opens for any of the three and **each page still gates itself**.
+ * The door opens for any of the tabs and **each page still gates itself**.
  * That is not belt and braces: Next renders a layout and its page concurrently,
  * so a `redirect()` here does not stop the page below from having already run
  * its queries. This is the sidebar's own argument — `guardAdminAnyCap` exists
  * for the same shape on the agency side.
+ *
+ * There is deliberately no `loading.tsx` at this level any more: switching tabs
+ * keeps the page there, faded, until the next one is whole (see FinanceFrame).
  */
 export default async function FinanceLayout({
   children,
@@ -35,17 +37,13 @@ export default async function FinanceLayout({
   if (tabs.length === 0) redirect(`/c/${slug}`);
 
   return (
-    <>
-      {/*
-        A client component: it lights the pressed tab before the server has the
-        next screen ready. The boundary dates from when the strip read `?tab=`
-        to tell Invoices from Payments; they are one tab now, and it stays as
-        the cheap guard it is.
-      */}
-      <Suspense fallback={null}>
-        <FinanceNav slug={slug} tabs={tabs} />
-      </Suspense>
+    /*
+      A client component: it lights the pressed tab before the server has the
+      next screen ready. It reads the path only — not `?tab=`, as the strip did
+      when Payments was a tab of its own — so it needs no Suspense boundary.
+    */
+    <FinanceFrame slug={slug} tabs={tabs}>
       {children}
-    </>
+    </FinanceFrame>
   );
 }

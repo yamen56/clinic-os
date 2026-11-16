@@ -69,13 +69,6 @@ export function financeHref(slug: string, tab: FinanceTab): string {
 export function financeTabs(v: FinanceViewer): FinanceTab[] {
   const out: FinanceTab[] = [];
   if (v.caps.invoices) out.push("invoices");
-  /*
-    The clinic's figures in depth. Second rather than last, so it is on screen
-    on a phone, where the strip scrolls. The same two conditions the page
-    checks for itself: the capability, and a list that is not filtered to one
-    doctor's own work.
-  */
-  if (v.caps["invoices.analytics"] && !v.ownInvoicesOnly) out.push("analytics");
   // Claims answer to Insurance, not Invoices: an insurance clerk works them
   // without raising invoices, and a desk that takes cash need never see them.
   if (v.caps.insurance && v.hasInsurers) out.push("claims");
@@ -83,6 +76,13 @@ export function financeTabs(v: FinanceViewer): FinanceTab[] {
     out.push("earnings");
   }
   if (v.caps.expenses) out.push("expenses");
+  /*
+    The clinic's figures in depth, last (Yamen, 2026-11-15): the working tabs
+    come first and the reading one after them. The same two conditions the page
+    checks for itself — the capability, and a list that is not filtered to one
+    doctor's own work.
+  */
+  if (v.caps["invoices.analytics"] && !v.ownInvoicesOnly) out.push("analytics");
   return out;
 }
 

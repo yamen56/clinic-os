@@ -208,7 +208,7 @@ async function main() {
   check(
     "an admin gets every tab",
     financeTabs({ caps: allCaps, hasEarnings: true, fullControl: true }).join() ===
-      "invoices,analytics,earnings,expenses"
+      "invoices,earnings,expenses,analytics"
   );
   check(
     "a doctor with a share and nothing else gets only Earnings",
@@ -229,7 +229,7 @@ async function main() {
   check(
     "the clinic's own figures are not a capability anybody can be granted",
     financeTabs({ caps: allCaps, hasEarnings: false, fullControl: false }).join() ===
-      "invoices,analytics,expenses"
+      "invoices,expenses,analytics"
   );
   check(
     "and Analytics is not offered to a doctor whose invoices are their own",
@@ -310,8 +310,10 @@ async function main() {
     ["expenses", `/c/${slug}/expenses`],
     ["one invoice", `/c/${slug}/invoices/${mine.id}`],
     ["analytics", `/c/${slug}/analytics`],
-    ["a year of analytics", `/c/${slug}/analytics?p=12m`],
-    ["last month's analytics", `/c/${slug}/analytics?p=last`],
+    ["this year's analytics", `/c/${slug}/analytics?p=year`],
+    ["all-time analytics", `/c/${slug}/analytics?p=all`],
+    ["one month's analytics", `/c/${slug}/analytics?p=${DateTime.now().minus({ months: 3 }).toFormat("yyyy-MM")}`],
+    ["a nonsense period, read as this month", `/c/${slug}/analytics?p=13m`],
   ] as [string, string][]) {
     const r = await page.goto(`${BASE}${path}`);
     check(`${name} is still at its own URL`, r?.status() === 200, `${r?.status()}`);
@@ -358,13 +360,57 @@ async function main() {
   check("how patients paid", !landed || adminAnalytics.includes("Cash"));
   check("and what the clinic kept, for whoever holds the clinic", (await page.locator('[data-figure="kept"]').count()) === 1);
   check("nothing is owed, and it says so", (await figure("owed")).includes("0.00"), await figure("owed"));
-  await page.locator("[data-period] [role=tab]", { hasText: "12 months" }).click();
-  await page.waitForURL((u) => u.searchParams.get("p") === "12m", { timeout: 20000 });
+  /*
+    The periods: three named ones and a menu (Yamen, 2026-11-15 — "this month,
+    this year, all time, a specific month; don't put too many options").
+  */
+  check(
+    "there are exactly three named periods",
+    (await page.locator("[data-period] [role=tab]").allInnerTexts()).join("|") === "This month|This year|All time",
+    (await page.locator("[data-period] [role=tab]").allInnerTexts()).join("|")
+  );
+  check(
+    "and with nothing recorded before this month, no menu of earlier ones",
+    (await page.locator("[data-period-pick]").count()) === 0
+  );
+  await page.locator("[data-period] [role=tab]", { hasText: "This year" }).click();
+  await page.waitForURL((u) => u.searchParams.get("p") === "year", { timeout: 20000 });
   await page.waitForLoadState("networkidle");
   check(
-    "a longer period is a tap away, by month",
+    "this year is a tap away, by month",
     (await mainText()).includes("Month by month") && (!landed || (await figure("collected")).includes("817.00")),
     await figure("collected")
+  );
+
+  // Something from fourteen months back: all time reaches it, and the menu offers its month.
+  const old = DateTime.now().setZone("Asia/Amman").minus({ months: 14 }).startOf("month").plus({ days: 4 });
+  await db.query(`insert into expenses (clinic_id, amount, vendor, spent_on) values ($1, 12.34, 'QA old supplier', $2)`, [
+    clinic.id,
+    old.toISODate(),
+  ]);
+  await page.locator("[data-period] [role=tab]", { hasText: "All time" }).click();
+  await page.waitForURL((u) => u.searchParams.get("p") === "all", { timeout: 20000 });
+  await page.waitForLoadState("networkidle");
+  const allTime = await mainText();
+  check(
+    "all time runs from the first record and is compared with nothing",
+    allTime.includes(`Everything since 1 ${old.setLocale("en-GB").toFormat("LLL yyyy")}`) && !allTime.includes("compared with"),
+    allTime.slice(0, 220)
+  );
+  check("and counts the old expense", (await figure("spent")).includes("12.34"), await figure("spent"));
+  await page.locator("[data-period-pick]").selectOption(old.toFormat("yyyy-MM"));
+  await page.waitForURL((u) => u.searchParams.get("p") === old.toFormat("yyyy-MM"), { timeout: 20000 });
+  await page.waitForLoadState("networkidle");
+  const oneMonth = await mainText();
+  check(
+    "a single month from the menu is that month alone, against the one before",
+    (await figure("spent")).includes("12.34") && (await figure("collected")).includes("0.00") && oneMonth.includes("compared with"),
+    oneMonth.slice(0, 220)
+  );
+  check(
+    "and the menu says which month it is showing",
+    (await page.locator("[data-period]").innerText()).includes(old.toFormat("LLLL yyyy")),
+    await page.locator("[data-period]").innerText()
   );
 
   // ---- what the clinic kept ---------------------------------------------

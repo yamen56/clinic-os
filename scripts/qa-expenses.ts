@@ -484,7 +484,8 @@ async function main() {
     Driven through the form rather than the table, because the suppression lived
     in the server action rather than in the poster.
   */
-  await page.goto(`${BASE}/c/${slug}/expenses`);
+  // Repeating bills are the screen's "Every month" list since 2026-11-15.
+  await page.goto(`${BASE}/c/${slug}/expenses?view=monthly`);
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "Add a repeating bill", exact: true }).first().click();
   const schedModal = page.getByRole("dialog");

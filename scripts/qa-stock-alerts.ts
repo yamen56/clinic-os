@@ -177,7 +177,8 @@ async function main() {
     await pill.waitFor({ timeout: 60000 });
     check((await pill.innerText()).includes("Delivery of Lidocaine cream"), "the expense says which delivery it paid for");
     check((await pill.getAttribute("href"))?.endsWith(`/c/${slug}/stock`), "and points back to Stock");
-    await pill.locator("xpath=ancestor::tr[1]").getByRole("button", { name: /delete/i }).click();
+    // The expense's own row: a list item since the 2026-11-16 redesign, a table row before it.
+    await pill.locator("xpath=ancestor::li[1]").getByRole("button", { name: /delete/i }).click();
     check(await until(async () => (await page.locator("body").innerText()).includes("The delivery stays on hand in Stock")), "deleting it says the delivery stays");
     await page.keyboard.press("Escape");
 

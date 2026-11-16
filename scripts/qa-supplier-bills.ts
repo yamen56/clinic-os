@@ -148,7 +148,8 @@ async function main() {
 
     /* ── To pay on Expenses ─────────────────────────────────────────── */
     console.log("To pay on Expenses");
-    await page.goto(`${BASE}/c/${slug}/expenses`, { timeout: 180000 });
+    // To pay is one of the screen's three lists since 2026-11-15; ?view=pay opens it.
+    await page.goto(`${BASE}/c/${slug}/expenses?view=pay`, { timeout: 180000 });
     await page.waitForSelector("[data-to-pay]", { timeout: 120000 });
     await hydrated(page, "[data-bill-add]");
     check((await owedOn(page)) === 2120, "everything owed: 2,000 to Allergan and 120 to the lab", String(await owedOn(page)));
@@ -196,7 +197,9 @@ async function main() {
     );
     check(paid?.day === today, "on the day it was paid, not the day the goods came", String(paid?.day));
     check(await until(async () => (await allerganRow.locator("[data-supplier-owed]").getAttribute("data-supplier-owed")) === "1500"), "Allergan is owed 1,500 now");
+    await page.locator('[data-expenses-view="spent"]').click();
     check((await page.locator("[data-expense-stock]").first().innerText()).includes("Botox"), "and the payment in Expenses says which delivery it paid for");
+    await page.locator('[data-expenses-view="pay"]').click();
 
     // Undo takes back exactly that payment.
     await page.locator("[data-toast-action]").last().click();
@@ -284,7 +287,7 @@ async function main() {
     /* ── On a phone ─────────────────────────────────────────────────── */
     console.log("On a phone");
     const phone = await signIn(browser, email, 390);
-    await phone.goto(`${BASE}/c/${slug}/expenses`, { timeout: 180000 });
+    await phone.goto(`${BASE}/c/${slug}/expenses?view=pay`, { timeout: 180000 });
     await phone.waitForSelector("[data-supplier-pay]", { timeout: 120000 });
     const box = await phone.locator("[data-supplier-pay]").first().boundingBox();
     check(!!box && box.x >= 0 && box.x + box.width <= 390, "Pay is on the screen", JSON.stringify(box));

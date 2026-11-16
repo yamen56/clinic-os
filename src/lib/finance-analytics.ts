@@ -4,7 +4,7 @@ import { clinicNetRevenue } from "./earnings";
 import { clinicExpenses, expensesByCategory, type ExpenseCategoryTotal } from "./expenses";
 import { labsOwed, openBills } from "./bills";
 import { owedSql, round2 } from "./invoices";
-import type { Bucket, PeriodKey } from "./finance-periods";
+import { parsePeriodParam, type Bucket } from "./finance-periods";
 
 /**
  * The clinic's money over a period, for the Analytics tab of Finance.
@@ -28,13 +28,20 @@ import type { Bucket, PeriodKey } from "./finance-periods";
  */
 
 export type Period = {
-  key: PeriodKey;
+  /** The URL's own words for it: `month`, `year`, `all`, `2026-10` or `2025`. */
+  key: string;
+  kind: "month" | "year" | "all";
   /** Half-open, in the clinic's own time: [from, to). */
   from: DateTime;
   to: DateTime;
-  /** The same stretch one step earlier, to measure against. */
+  /**
+   * The same stretch one step earlier, to measure against. Empty — equal to
+   * `from` — for all time, which has no "before", so every comparison in it
+   * comes out as nothing to compare.
+   */
   prevFrom: DateTime;
   prevTo: DateTime;
+  compare: boolean;
   bucket: Bucket;
 };
 
@@ -44,25 +51,53 @@ export type Period = {
  * A period still running ends at the end of today, and is compared with the
  * same number of days one step back — the 1st to the 15th against the 1st to
  * the 15th — because half a month beside a whole one always looks like a
- * collapse. Shifting both ends by whole months does that for every preset.
+ * collapse. A month or year already over is compared whole with the one before
+ * it. All time runs from the month of the clinic's first record (`since`) and
+ * is compared with nothing, by month — or by year, past three years of them.
  */
-export function periodOf(tz: string, key: PeriodKey): Period {
+export function periodOf(tz: string, key: string, since: Date | null): Period {
   const now = DateTime.now().setZone(tz);
-  const month = now.startOf("month");
   const tomorrow = now.startOf("day").plus({ days: 1 });
-  const [from, to, shift, bucket]: [DateTime, DateTime, number, Bucket] =
-    key === "last"
-      ? [month.minus({ months: 1 }), month, 1, "day"]
-      : key === "3m"
-        ? [month.minus({ months: 2 }), tomorrow, 3, "week"]
-        : key === "6m"
-          ? [month.minus({ months: 5 }), tomorrow, 6, "month"]
-          : key === "12m"
-            ? [month.minus({ months: 11 }), tomorrow, 12, "month"]
-            : key === "year"
-              ? [now.startOf("year"), tomorrow, 12, "month"]
-              : [month, tomorrow, 1, "day"];
-  return { key, from, to, prevFrom: from.minus({ months: shift }), prevTo: to.minus({ months: shift }), bucket };
+  const upTo = (end: DateTime) => (end > tomorrow ? tomorrow : end);
+  const one = (kind: "month" | "year", from: DateTime, bucket: Bucket): Period => {
+    const step = kind === "month" ? { months: 1 } : { years: 1 };
+    const to = upTo(from.plus(step));
+    return { key, kind, from, to, prevFrom: from.minus(step), prevTo: to.minus(step), compare: true, bucket };
+  };
+
+  if (key === "all") {
+    const first = since ? DateTime.fromJSDate(since).setZone(tz).startOf("month") : now.startOf("month");
+    const from = first < tomorrow ? first : now.startOf("month");
+    const months = Math.ceil(tomorrow.diff(from, "months").months);
+    const bucket: Bucket = months > 36 ? "year" : "month";
+    return { key, kind: "all", from: bucket === "year" ? from.startOf("year") : from, to: tomorrow, prevFrom: from, prevTo: from, compare: false, bucket };
+  }
+  if (key === "year") return one("year", now.startOf("year"), "month");
+  const picked = parsePeriodParam(key);
+  if (picked) {
+    const start = DateTime.fromObject({ year: picked.year, month: picked.month ?? 1, day: 1 }, { zone: tz });
+    // A month or year that has not begun is this one, not an empty page.
+    if (start.isValid && start < tomorrow) {
+      return picked.month ? one("month", start, "day") : one("year", start, "month");
+    }
+  }
+  return { ...one("month", now.startOf("month"), "day"), key: "month" };
+}
+
+/**
+ * When the clinic's money starts: its first payment, invoice or expense.
+ * All time runs from here, and the month menu reaches back to it.
+ */
+export async function firstMoneyDate(c: PoolClient, clinicId: string): Promise<Date | null> {
+  const r = await c.query(
+    `select least(
+       (select min(paid_at) from payments where clinic_id = $1),
+       (select min(created_at) from invoices where clinic_id = $1),
+       (select min(spent_on)::timestamptz from expenses where clinic_id = $1)
+     ) as first`,
+    [clinicId]
+  );
+  return (r.rows[0]?.first as Date | null) ?? null;
 }
 
 /** Every bucket of the period, in order — so a quiet day is a zero and not a gap. */
@@ -71,7 +106,7 @@ export function bucketsOf(p: Period): string[] {
   let d = p.from.startOf(p.bucket);
   while (d < p.to) {
     out.push(d.toISODate()!);
-    d = d.plus(p.bucket === "day" ? { days: 1 } : p.bucket === "week" ? { weeks: 1 } : { months: 1 });
+    d = d.plus(p.bucket === "day" ? { days: 1 } : p.bucket === "month" ? { months: 1 } : { years: 1 });
   }
   return out;
 }

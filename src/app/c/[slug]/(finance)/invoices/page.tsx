@@ -3,7 +3,7 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import type { Dict } from "@/lib/i18n/client-dict";
-import { dayRangeUtc, fmtMoney, fmtDate, fmtLongToday } from "@/lib/dates";
+import { dayRangeUtc, fmtMoney, fmtDate } from "@/lib/dates";
 import { PageHeader, Card } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button-class";
 import { Badge, type StatusKey } from "@/components/ui/badge";
@@ -191,7 +191,6 @@ export default async function InvoicesPage({
   const base = `/c/${slug}/invoices`;
   const money = (n: number) => fmtMoney(n, access.clinic.currency, locale);
   const todayTotal = data.todayByMethod.reduce((sum, m) => sum + m.amount, 0);
-  const todayCount = data.todayByMethod.reduce((sum, m) => sum + m.n, 0);
   /* A link inside this list keeps whatever else is chosen: the filter, the search, how far back it reaches. */
   const listHref = (o: { status?: string; n?: number }) => {
     const u = new URLSearchParams();
@@ -207,6 +206,29 @@ export default async function InvoicesPage({
     <>
       <PageHeader
         title={tab === "payments" ? t.invoices.payments : t.invoices.title}
+        /*
+          The day's takings, as one line under the title rather than a card of
+          its own (Yamen, 2026-11-15: the card "takes a big section of the
+          screen"). The total in a pill, how it was paid beside it — cash is
+          what the drawer should hold. On both lists, so the desk closing its
+          day reads the total and the payments under it together.
+        */
+        sub={
+          showToday ? (
+            <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5" data-today-takings={todayTotal.toFixed(2)}>
+              <span className="inline-flex items-baseline gap-2 rounded-full bg-ink-900/5 px-3 py-1">
+                <span className="text-[12px] text-ink-500">{t.invoices.collectedToday}</span>
+                <span className="text-[13px] font-semibold text-ink-900 tnum">{money(todayTotal)}</span>
+              </span>
+              {data.todayByMethod.map((m) => (
+                <span key={m.method} className="text-[12px] text-ink-400">
+                  {(t.invoices.methods as Record<string, string>)[m.method] ?? m.method}{" "}
+                  <span className="font-medium text-ink-700 tnum">{money(m.amount)}</span>
+                </span>
+              ))}
+            </span>
+          ) : undefined
+        }
         action={
           <Link href={`${base}/new`} className={buttonClass()}>
             <Plus className="h-4 w-4" />
@@ -214,49 +236,6 @@ export default async function InvoicesPage({
           </Link>
         }
       />
-
-      {/*
-        The day's takings: one figure, and how it was paid. On both lists, so
-        the desk closing its day reads the total and the payments under it
-        together.
-      */}
-      {showToday && (
-        <Card className="mb-4 px-5 py-4">
-          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4" data-today-takings={todayTotal.toFixed(2)}>
-            <div className="min-w-0">
-              <div className="text-[13px] text-ink-500">
-                {t.invoices.collectedToday}
-                <span className="text-ink-400"> · {fmtLongToday(tz, locale)}</span>
-              </div>
-              <div className="mt-1.5 font-display text-[28px] font-bold leading-none text-ink-900">{money(todayTotal)}</div>
-              <div className="mt-2 text-[12px] text-ink-400">
-                {todayCount === 0 ? (
-                  t.invoices.nothingToday
-                ) : tab === "payments" ? (
-                  t.invoices.todayPayments.replace("{n}", String(todayCount))
-                ) : (
-                  <Link href={`${base}?tab=payments`} className="font-medium text-brand-700 hover:underline">
-                    {t.invoices.todayPayments.replace("{n}", String(todayCount))}
-                  </Link>
-                )}
-              </div>
-            </div>
-            {data.todayByMethod.length > 0 && (
-              /* On a phone the methods share the row evenly, two across, instead of wrapping ragged. */
-              <dl className="flex flex-wrap gap-2 max-sm:grid max-sm:w-full max-sm:grid-cols-2">
-                {data.todayByMethod.map((m) => (
-                  <div key={m.method} className="min-w-24 rounded-ctl bg-sunken px-3.5 py-2">
-                    <dt className="text-[12px] text-ink-500">
-                      {(t.invoices.methods as Record<string, string>)[m.method] ?? m.method}
-                    </dt>
-                    <dd className="mt-0.5 text-sm font-semibold text-ink-900 tnum">{money(m.amount)}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-          </div>
-        </Card>
-      )}
 
       {data.ready.length > 0 && (
         <ReadyToBillDesk
