@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { CreditCard, ReceiptText } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 
 type List = "invoices" | "payments";
@@ -27,14 +28,14 @@ export function ListSwitch({ slug }: { slug: string }) {
   const current = pressed ?? shown;
 
   const base = `/c/${slug}/invoices`;
-  const options: [List, string, string][] = [
-    ["invoices", t.invoices.title, base],
-    ["payments", t.invoices.payments, `${base}?tab=payments`],
+  const options: [List, string, string, typeof ReceiptText][] = [
+    ["invoices", t.invoices.title, base, ReceiptText],
+    ["payments", t.invoices.payments, `${base}?tab=payments`, CreditCard],
   ];
 
   return (
     <div role="tablist" aria-label={t.invoices.tabTitle} className="inline-flex shrink-0 rounded-full bg-ink-900/5 p-0.5" data-list-switch>
-      {options.map(([key, label, href]) => (
+      {options.map(([key, label, href, Icon]) => (
         <Link
           key={key}
           href={href}
@@ -42,10 +43,11 @@ export function ListSwitch({ slug }: { slug: string }) {
           aria-selected={current === key}
           onClick={() => setPressed(key)}
           scroll={false}
-          className={`touch-manipulation rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+          className={`flex touch-manipulation items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
             current === key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
           }`}
         >
+          <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
           {label}
         </Link>
       ))}

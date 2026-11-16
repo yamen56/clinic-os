@@ -1610,6 +1610,21 @@ supplier by supplier with their bills and Pay) and **Every month** (`?view=month
 repeating bills). Categories are set up from a small button, in a window of their own. Stock's
 "still to pay" link opens `?view=pay`; an old `#to-pay` link still does.
 
+**One form adds any expense** (2026-11-16, decision 147). Add expense opens on a three-way
+choice — **Paid** · **Not paid yet** · **Every month** — and the fields follow it: a paid one
+asks the date, how it was paid and a receipt; one not paid yet asks the bill's date, when to
+pay by and who it is owed to; every month asks the day of the month instead of a date, and no
+receipt. Saving a new one shows the list it went to (Spent, To pay or Every month); a repeating
+one records this month's expense at once. Its own form is gone: "Add a repeating bill" on the
+Every month list opens the same form with Every month chosen, and editing a rule opens it
+there too, with Running / Paused.
+
+**Icons.** Each Finance tab carries one — Invoices & payments a receipt, Claims a shield,
+Earnings coins in a hand, Expenses a banknote, Analytics a column chart — and the switches
+inside use the same pictures (a card for Payments; banknote, calendar-clock and repeat for
+Spent, To pay and Every month). On a phone the switches drop theirs to fit, and the strip
+scrolls the open tab into view.
+
 **A doctor's invoices are their own.** A doctor who is granted Invoices, and who is not the
 admin or on full access, sees only invoices carrying their name on a line
 (`invoice_line_doctors`) — in the list, the payments tab, the detail page, the PDF route,

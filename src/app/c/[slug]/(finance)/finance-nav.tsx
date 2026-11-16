@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Banknote, ChartColumn, HandCoins, ReceiptText, ShieldCheck, type LucideIcon } from "lucide-react";
 import { LinkTabs } from "@/components/ui/misc";
 import { useI18n } from "@/lib/i18n/client";
 import { financeHref, type FinanceTab } from "@/lib/finance";
@@ -51,6 +52,19 @@ export function FinanceFrame({
 
   const [pressed, setPressed] = useState<FinanceTab | null>(null);
   useEffect(() => setPressed(null), [pathname]);
+
+  /*
+    On a phone the strip scrolls sideways, and with an icon on every tab the
+    one that is open can sit past the edge — Expenses showed as "E…". So the
+    open tab is brought into view whenever the tab changes. `nearest` both
+    ways: it moves the strip, never the page.
+  */
+  const strip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    strip.current
+      ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [here]);
   // Pressing the tab already open goes nowhere, so it must not wait for anything.
   const going = pressed !== null && pressed !== here ? pressed : null;
   const current = going ?? here;
@@ -62,18 +76,40 @@ export function FinanceFrame({
     earnings: t.nav.earnings,
     expenses: t.nav.expenses,
   };
+  /*
+    An icon each, so a tab is recognised before it is read (Yamen,
+    2026-11-16). The same pictures the screens use inside: Banknote is an
+    expense paid, ReceiptText an invoice.
+  */
+  const icon: Record<FinanceTab, LucideIcon> = {
+    invoices: ReceiptText,
+    claims: ShieldCheck,
+    earnings: HandCoins,
+    expenses: Banknote,
+    analytics: ChartColumn,
+  };
 
   return (
     <>
+      <div ref={strip}>
       <LinkTabs
         onSelect={(k) => setPressed(k as FinanceTab)}
-        tabs={tabs.map((tab) => ({
-          key: tab,
-          href: financeHref(slug, tab),
-          label: label[tab],
-          active: current === tab,
-        }))}
+        tabs={tabs.map((tab) => {
+          const Icon = icon[tab];
+          return {
+            key: tab,
+            href: financeHref(slug, tab),
+            label: (
+              <span className="flex items-center gap-2">
+                <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                {label[tab]}
+              </span>
+            ),
+            active: current === tab,
+          };
+        })}
       />
+      </div>
       {/*
         The shell already runs its line across the top for any page on its way,
         so this only fades the page that is leaving — after 150ms, so a tab

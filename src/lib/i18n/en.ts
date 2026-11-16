@@ -321,6 +321,14 @@ export const en = {
     },
   },
   expenses: {
+    /* One form for every expense (2026-11-16): which of the three it is. */
+    kinds: {
+      paid: "Paid",
+      owed: "Not paid yet",
+      monthly: "Every month",
+    },
+    repeatHint: "Recorded for this month now, then by itself on that day every month. It is listed under Every month.",
+    editRepeating: "Edit monthly expense",
     sub: "What the clinic spends, and what it still owes.",
     /* The screen's three lists (2026-11-15). */
     views: {
@@ -376,8 +384,6 @@ export const en = {
     dayOfMonthHint: "1–31. A month that is shorter uses its last day.",
     running: "Running",
     paused: "Paused",
-    repeatingNote:
-      "Counted in the month it falls in, whatever day it lands on — so a bill due on the 25th is part of this month's expenses from the start of the month. The first one is recorded for this month, so check you have not already entered it by hand.",
     confirmDeleteBody: "This expense will be removed and the month's total will change.",
     confirmDeleteStock: "This was paid for a delivery of {product}. The delivery stays on hand in Stock; only the money is removed.",
     confirmDeleteCategoryBody:
@@ -410,8 +416,6 @@ export const en = {
     labsSub: "Paid from the Lab work page",
     openLabs: "Open",
     payment: "Payment",
-    paidNow: "Paid now",
-    notPaidYet: "Not paid yet — owe it",
     billDate: "Date of the bill",
     dueOn: "Pay by",
     supplier: "Owed to",

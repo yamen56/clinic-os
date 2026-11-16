@@ -40,6 +40,8 @@ import {
   RotateCw,
   Package,
   Tags,
+  CalendarClock,
+  Repeat,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -84,7 +86,22 @@ type Draft = {
   billId?: string;
   /** A stock company's bill: who it is owed to is the company, not something typed. */
   fixedVendor?: boolean;
+  /**
+   * Every month (expense_schedules): saved as a rule, which writes this
+   * month's expense at once and the rest on their day. Added from the same
+   * form as any expense since 2026-11-16 — it used to be a form of its own.
+   */
+  repeat: boolean;
+  /** For a repeating one: the day of the month it lands on, "1"–"31". */
+  dayOfMonth: string;
+  /** For a repeating one being edited: running or paused. */
+  active: boolean;
+  /** Editing a repeating rule rather than an expense. */
+  scheduleId?: string;
 };
+
+/** Which of the three an expense being added is. */
+type Kind = "paid" | "owed" | "monthly";
 
 /** Paying a supplier: how much of what they are owed, on which day, how. */
 type PayDraft = { group: SupplierOwed; amount: string; paidOn: string; method: Method };
@@ -95,16 +112,6 @@ type View = ExpensesView;
 
 type CatDraft = { id?: string; name: string; nameAr: string; color: string; active: boolean };
 
-type SchedDraft = {
-  id?: string;
-  categoryId: string | null;
-  amount: string;
-  vendor: string;
-  note: string;
-  method: Method;
-  dayOfMonth: string;
-  active: boolean;
-};
 
 export function ExpensesClient({
   slug,
@@ -155,7 +162,6 @@ export function ExpensesClient({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [catDraft, setCatDraft] = useState<CatDraft | null>(null);
   const [deleteCatId, setDeleteCatId] = useState<string | null>(null);
-  const [schedDraft, setSchedDraft] = useState<SchedDraft | null>(null);
   const [deleteSchedId, setDeleteSchedId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   /*
@@ -228,6 +234,7 @@ export function ExpensesClient({
     return true;
   };
 
+  const todayDay = String(Number(todayLocal.slice(8, 10)) || 1);
   const emptyDraft = (): Draft => ({
     categoryId: categories.find((c) => c.active)?.id ?? null,
     amount: "",
@@ -238,6 +245,9 @@ export function ExpensesClient({
     hasReceipt: false,
     unpaid: false,
     dueOn: "",
+    repeat: false,
+    dayOfMonth: todayDay,
+    active: true,
   });
 
   const billDraft = (b: Bill): Draft => ({
@@ -251,6 +261,26 @@ export function ExpensesClient({
     spentOn: b.incurredOn,
     dueOn: b.dueOn ?? "",
     method: "cash",
+    hasReceipt: false,
+    repeat: false,
+    dayOfMonth: todayDay,
+    active: true,
+  });
+
+  /** A repeating rule, opened in the same form it was added from. */
+  const scheduleDraft = (r: Schedule): Draft => ({
+    scheduleId: r.id,
+    repeat: true,
+    unpaid: false,
+    categoryId: r.category_id,
+    amount: String(r.amount),
+    vendor: r.vendor,
+    note: r.note,
+    method: r.method,
+    dayOfMonth: String(r.day_of_month),
+    active: r.active,
+    spentOn: defaultDate,
+    dueOn: "",
     hasReceipt: false,
   });
 
@@ -357,11 +387,16 @@ export function ExpensesClient({
     return out;
   }, [rows]);
 
-  const views: [View, string, number][] = [
-    ["spent", E.views.spent, rows.length],
-    ["pay", E.views.pay, openBills],
-    ["monthly", E.views.monthly, schedules.length],
+  /* Each list with the picture its kind wears in the add form: paid, owed, every month. */
+  const views: [View, string, number, typeof Banknote][] = [
+    ["spent", E.views.spent, rows.length, Banknote],
+    ["pay", E.views.pay, openBills, CalendarClock],
+    ["monthly", E.views.monthly, schedules.length, Repeat],
   ];
+
+  const kindOf = (d: Draft): Kind => (d.repeat ? "monthly" : d.unpaid ? "owed" : "paid");
+  /** Where a new one is listed, so the screen can show it there once it is saved. */
+  const listOf: Record<Kind, View> = { paid: "spent", owed: "pay", monthly: "monthly" };
 
   const editExpense = (e: ExpenseRow) =>
     setDraft({
@@ -375,6 +410,9 @@ export function ExpensesClient({
       hasReceipt: e.hasReceipt,
       unpaid: false,
       dueOn: "",
+      repeat: false,
+      dayOfMonth: todayDay,
+      active: true,
     });
 
   const stepMonth = (to: number) => {
@@ -477,7 +515,7 @@ export function ExpensesClient({
       */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" aria-label={t.nav.expenses} className="inline-flex max-w-full overflow-x-auto rounded-full bg-ink-900/5 p-0.5">
-          {views.map(([key, label, count]) => (
+          {views.map(([key, label, count, Icon]) => (
             <button
               key={key}
               type="button"
@@ -489,6 +527,8 @@ export function ExpensesClient({
                 view === key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
               }`}
             >
+              {/* From a tablet up: on a phone the icons push Categories onto a line of its own. */}
+              <Icon className="h-3.5 w-3.5 shrink-0 max-sm:hidden" aria-hidden />
               {label}
               {count > 0 && <span className="text-[12px] font-medium text-ink-400 tnum">{count}</span>}
             </button>
@@ -732,17 +772,7 @@ export function ExpensesClient({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
-                  setSchedDraft({
-                    categoryId: categories.find((c) => c.active)?.id ?? null,
-                    amount: "",
-                    vendor: "",
-                    note: "",
-                    method: "transfer",
-                    dayOfMonth: "1",
-                    active: true,
-                  })
-                }
+                onClick={() => setDraft({ ...emptyDraft(), repeat: true })}
               >
                 <Plus className="h-4 w-4" />
                 {E.addRepeating}
@@ -776,18 +806,7 @@ export function ExpensesClient({
                       variant="ghost"
                       size="icon"
                       aria-label={t.common.edit}
-                      onClick={() =>
-                        setSchedDraft({
-                          id: s.id,
-                          categoryId: s.category_id,
-                          amount: String(s.amount),
-                          vendor: s.vendor,
-                          note: s.note,
-                          method: s.method,
-                          dayOfMonth: String(s.day_of_month),
-                          active: s.active,
-                        })
-                      }
+                      onClick={() => setDraft(scheduleDraft(s))}
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -847,23 +866,45 @@ export function ExpensesClient({
           setDraft(null);
           setPendingReceipt(null);
         }}
-        title={draft?.billId ? E.editBill : draft?.id ? t.common.edit : draft?.unpaid ? E.addBill : t.expenses.add}
+        title={draft?.billId ? E.editBill : draft?.scheduleId ? E.editRepeating : draft?.id ? t.common.edit : t.expenses.add}
       >
         {draft && (
-          <div className="grid gap-4" data-expense-form={draft.unpaid ? "bill" : "expense"}>
-            {/* Only while adding: an expense stays an expense and a bill a bill once saved. */}
-            {!draft.id && !draft.billId && (
-              <Field label={E.payment}>
-                <Select
-                  value={draft.unpaid ? "owed" : "paid"}
-                  onChange={(e) => setDraft({ ...draft, unpaid: e.target.value === "owed" })}
-                  data-expense-payment
-                >
-                  <option value="paid">{E.paidNow}</option>
-                  <option value="owed">{E.notPaidYet}</option>
-                </Select>
-              </Field>
+          <div className="grid gap-4" data-expense-form={draft.repeat ? "monthly" : draft.unpaid ? "bill" : "expense"}>
+            {/*
+              One place to add any expense (Yamen, 2026-11-16): paid now, not
+              paid yet, or every month. The repeating kind was a form of its
+              own, with its own questions; here it is one tap, and it asks the
+              day of the month instead of the date. Only while adding: an
+              expense stays an expense, a bill a bill, a rule a rule.
+            */}
+            {!draft.id && !draft.billId && !draft.scheduleId && (
+              <div role="radiogroup" aria-label={E.payment} className="grid grid-cols-3 gap-0.5 rounded-ctl bg-ink-900/5 p-0.5" data-expense-kind={kindOf(draft)}>
+                {(
+                  [
+                    ["paid", E.kinds.paid, Banknote],
+                    ["owed", E.kinds.owed, CalendarClock],
+                    ["monthly", E.kinds.monthly, Repeat],
+                  ] as const
+                ).map(([k, text, Icon]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={kindOf(draft) === k}
+                    onClick={() => setDraft({ ...draft, unpaid: k === "owed", repeat: k === "monthly" })}
+                    data-kind={k}
+                    className={`flex touch-manipulation items-center justify-center gap-1.5 rounded-md px-2 py-2 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+                      kindOf(draft) === k ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+                    }`}
+                  >
+                    {/* Words only on a phone: three labels and three icons do not fit a third of 358px. */}
+                    <Icon className="h-4 w-4 shrink-0 max-sm:hidden" aria-hidden />
+                    <span className="truncate">{text}</span>
+                  </button>
+                ))}
+              </div>
             )}
+            {draft.repeat && !draft.scheduleId && <p className="-mt-1 text-[12px] leading-relaxed text-ink-500">{E.repeatHint}</p>}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t.expenses.amount} required>
                 <Input
@@ -877,13 +918,25 @@ export function ExpensesClient({
                   data-expense-amount
                 />
               </Field>
-              <Field label={draft.unpaid ? E.billDate : t.common.date} required>
-                <Input
-                  type="date"
-                  value={draft.spentOn}
-                  onChange={(e) => setDraft({ ...draft, spentOn: e.target.value })}
-                />
-              </Field>
+              {draft.repeat ? (
+                <Field label={E.dayOfMonth} required hint={Number(draft.dayOfMonth) > 28 ? E.dayOfMonthHint : undefined}>
+                  <Select value={draft.dayOfMonth} onChange={(e) => setDraft({ ...draft, dayOfMonth: e.target.value })} data-expense-day>
+                    {Array.from({ length: 31 }, (_, i) => String(i + 1)).map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              ) : (
+                <Field label={draft.unpaid ? E.billDate : t.common.date} required>
+                  <Input
+                    type="date"
+                    value={draft.spentOn}
+                    onChange={(e) => setDraft({ ...draft, spentOn: e.target.value })}
+                  />
+                </Field>
+              )}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t.expenses.category}>
@@ -948,7 +1001,7 @@ export function ExpensesClient({
               Not on a bill: the receipt belongs to the payment, which is an
               expense of its own.
             */}
-            {!draft.unpaid && (
+            {!draft.unpaid && !draft.repeat && (
             <Field label={t.expenses.receipt} hint={t.expenses.receiptHint}>
                 <div className="flex flex-wrap items-center gap-2">
                   {draft.hasReceipt && (
@@ -1006,6 +1059,13 @@ export function ExpensesClient({
                 onChange={(e) => setDraft({ ...draft, note: e.target.value })}
               />
             </Field>
+            {/* Pausing is a change to a rule that exists, so it is only asked of one. */}
+            {draft.scheduleId && (
+              <label className="flex items-center gap-2.5">
+                <Toggle checked={draft.active} onChange={(v) => setDraft({ ...draft, active: v })} />
+                <span className="text-[13px] font-medium">{draft.active ? E.running : E.paused}</span>
+              </label>
+            )}
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
@@ -1018,10 +1078,30 @@ export function ExpensesClient({
               </Button>
               <Button
                 loading={pending}
-                disabled={!draft.amount || !draft.spentOn || (draft.unpaid && !draft.vendor.trim())}
+                disabled={!draft.amount || (draft.repeat ? !draft.dayOfMonth : !draft.spentOn) || (draft.unpaid && !draft.vendor.trim())}
                 data-expense-save
                 onClick={() =>
-                  draft.unpaid
+                  draft.repeat
+                    ? run(
+                        () =>
+                          saveExpenseScheduleAction(slug, {
+                            id: draft.scheduleId,
+                            categoryId: draft.categoryId,
+                            amount: draft.amount,
+                            vendor: draft.vendor,
+                            note: draft.note,
+                            method: draft.method,
+                            dayOfMonth: draft.dayOfMonth,
+                            active: draft.active,
+                          }),
+                        // A new one is shown where it went: the Every month list.
+                        () => {
+                          setDraft(null);
+                          if (!draft.scheduleId) show(listOf.monthly);
+                        },
+                        () => setDraft(draft)
+                      )
+                    : draft.unpaid
                     ? run(
                         () =>
                           saveBillAction(slug, {
@@ -1033,7 +1113,10 @@ export function ExpensesClient({
                             incurredOn: draft.spentOn,
                             dueOn: draft.dueOn || null,
                           }),
-                        () => setDraft(null),
+                        () => {
+                          setDraft(null);
+                          if (!draft.billId) show(listOf.owed);
+                        },
                         () => setDraft(draft)
                       )
                     : start(async () => {
@@ -1066,6 +1149,7 @@ export function ExpensesClient({
                     toast(t.common.saved);
                     setPendingReceipt(null);
                     setDraft(null);
+                    if (!draft.id) show(listOf.paid);
                   })
                 }
               >
@@ -1130,110 +1214,6 @@ export function ExpensesClient({
                     () => saveExpenseCategoryAction(slug, catDraft),
                     () => setCatDraft(null),
                     () => setCatDraft(catDraft)
-                  )
-                }
-              >
-                {t.common.save}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* -------------------------------------------------------- schedule */}
-      <Modal
-        open={!!schedDraft}
-        onClose={() => setSchedDraft(null)}
-        title={schedDraft?.id ? t.common.edit : t.expenses.addRepeating}
-      >
-        {schedDraft && (
-          <div className="grid gap-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t.expenses.amount} required>
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step={0.5}
-                  dir="ltr"
-                  value={schedDraft.amount}
-                  onChange={(e) => setSchedDraft({ ...schedDraft, amount: e.target.value })}
-                />
-              </Field>
-              <Field label={t.expenses.dayOfMonth} hint={t.expenses.dayOfMonthHint}>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={31}
-                  dir="ltr"
-                  value={schedDraft.dayOfMonth}
-                  onChange={(e) => setSchedDraft({ ...schedDraft, dayOfMonth: e.target.value })}
-                />
-              </Field>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t.expenses.category}>
-                <Select
-                  value={schedDraft.categoryId ?? ""}
-                  onChange={(e) =>
-                    setSchedDraft({ ...schedDraft, categoryId: e.target.value || null })
-                  }
-                >
-                  <option value="">{t.expenses.unfiled}</option>
-                  {categories
-                    .filter((c) => c.active || c.id === schedDraft.categoryId)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {label(c)}
-                      </option>
-                    ))}
-                </Select>
-              </Field>
-              <Field label={t.expenses.method}>
-                <Select
-                  value={schedDraft.method}
-                  onChange={(e) =>
-                    setSchedDraft({ ...schedDraft, method: e.target.value as Method })
-                  }
-                >
-                  {METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {t.expenses.methods[m]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </div>
-            <Field label={t.expenses.vendor} hint={t.common.optional}>
-              <Input
-                value={schedDraft.vendor}
-                maxLength={120}
-                onChange={(e) => setSchedDraft({ ...schedDraft, vendor: e.target.value })}
-              />
-            </Field>
-            <label className="flex items-center gap-2.5">
-              <Toggle
-                checked={schedDraft.active}
-                onChange={(v) => setSchedDraft({ ...schedDraft, active: v })}
-              />
-              <span className="text-[13px] font-medium">
-                {schedDraft.active ? t.expenses.running : t.expenses.paused}
-              </span>
-            </label>
-            <p className="text-[12px] leading-relaxed text-ink-500">{t.expenses.repeatingNote}</p>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setSchedDraft(null)}>
-                {t.common.cancel}
-              </Button>
-              <Button
-                loading={pending}
-                disabled={!schedDraft.amount || !schedDraft.dayOfMonth}
-                onClick={() =>
-                  run(
-                    () => saveExpenseScheduleAction(slug, schedDraft),
-                    () => setSchedDraft(null),
-                    () => setSchedDraft(schedDraft)
                   )
                 }
               >

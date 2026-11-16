@@ -484,14 +484,30 @@ async function main() {
     Driven through the form rather than the table, because the suppression lived
     in the server action rather than in the poster.
   */
-  // Repeating bills are the screen's "Every month" list since 2026-11-15.
-  await page.goto(`${BASE}/c/${slug}/expenses?view=monthly`);
+  /*
+    Added the way the clinic adds it since 2026-11-16: from Add expense, with
+    "Every month" chosen — not a form of its own any more (Yamen: the separate
+    one "asks you many questions").
+  */
+  await page.goto(`${BASE}/c/${slug}/expenses`);
   await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Add a repeating bill", exact: true }).first().click();
+  await page.getByRole("button", { name: "Add expense", exact: true }).first().click();
   const schedModal = page.getByRole("dialog");
   await schedModal.waitFor({ state: "visible", timeout: 10000 });
+  check(
+    "Add expense offers the three kinds in one place",
+    (await schedModal.locator("[data-kind]").allInnerTexts()).map((x) => x.trim()).join("|") === "Paid|Not paid yet|Every month",
+    (await schedModal.locator("[data-kind]").allInnerTexts()).join("|")
+  );
+  await schedModal.locator('[data-kind="monthly"]').click();
+  check(
+    "every month asks the day of the month instead of a date, and no receipt",
+    (await schedModal.locator('input[type="date"]').count()) === 0 &&
+      (await schedModal.locator("[data-expense-day]").count()) === 1 &&
+      (await schedModal.locator('input[type="file"]').count()) === 0
+  );
   await schedModal.getByLabel(/Amount/).first().fill("200");
-  await schedModal.getByLabel(/Day of the month/).first().fill(String(Math.max(1, local.day - 1)));
+  await schedModal.locator("[data-expense-day]").selectOption(String(Math.max(1, local.day - 1)));
   await schedModal.getByLabel(/Paid to/).first().fill("Landlord after the fact");
   /*
     Timed, because the complaint was that saving felt slow rather than that it
@@ -515,6 +531,12 @@ async function main() {
     )
   ).rows[0];
   check("the rule itself is saved", !!madeToday, String(madeToday?.id));
+  check(
+    "and the screen shows it where it went: the Every month list",
+    (await page.locator('[data-expenses-view="monthly"]').getAttribute("aria-selected")) === "true" &&
+      (await page.locator("main").innerText()).includes("Landlord after the fact"),
+    String(await page.locator('[data-expenses-view="monthly"]').getAttribute("aria-selected"))
+  );
 
   /*
     Written by the save, not by the worker — no `postRecurringExpenses()` here
