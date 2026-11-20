@@ -2,6 +2,7 @@ import type { BaileysEventMap } from "@whiskeysockets/baileys";
 import type { PoolClient } from "pg";
 import { withSystem } from "../db";
 import { notifyUser } from "../../src/lib/notify";
+import { clearPatientMessageAlerts } from "../../src/lib/patient-message-alerts";
 import { WA_REASON } from "../../src/lib/wa-delivery";
 
 /**
@@ -153,7 +154,7 @@ async function notifyRestricted(c: PoolClient, clinicId: string) {
 */
 async function readOnThePhone(clinicId: string, waIds: string[]) {
   await withSystem(async (c) => {
-    await c.query(
+    const cleared = await c.query(
       `with seen as (
          select conversation_id, max(created_at) as upto
            from messages
@@ -165,9 +166,12 @@ async function readOnThePhone(clinicId: string, waIds: string[]) {
                 select count(*)::int from messages m
                  where m.conversation_id = cv.id and m.direction = 'in' and m.created_at > seen.upto))
          from seen
-        where cv.id = seen.conversation_id and cv.clinic_id = $1 and cv.unread_count > 0`,
+        where cv.id = seen.conversation_id and cv.clinic_id = $1 and cv.unread_count > 0
+        returning cv.id, cv.unread_count`,
       [clinicId, waIds]
     );
+    // Nothing left unread there: the line on the staff's phones goes too (2026-11-20).
+    for (const r of cleared.rows) if (Number(r.unread_count) === 0) await clearPatientMessageAlerts(c, clinicId, r.id as string);
     // Read there, so the app has nothing left to tell WhatsApp about them (wa:read).
     await c.query(
       `update messages m set read_at = now()
@@ -190,16 +194,21 @@ export async function handleChatsRead(clinicId: string, chats: { id?: string | n
     .map((x) => x.id!.split("@")[0].split(":")[0]);
   if (!users.length) return;
   await withSystem(async (c) => {
-    await c.query(
-      `with done as (
-         update conversations set unread_count = 0
-          where clinic_id = $1 and unread_count > 0
-            and (split_part(split_part(wa_jid, '@', 1), ':', 1) = any($2::text[])
-                 or split_part(split_part(wa_lid, '@', 1), ':', 1) = any($2::text[]))
-          returning id)
-       update messages set read_at = now()
-        where conversation_id in (select id from done) and direction = 'in' and read_at is null`,
+    const done = await c.query(
+      `update conversations set unread_count = 0
+        where clinic_id = $1 and unread_count > 0
+          and (split_part(split_part(wa_jid, '@', 1), ':', 1) = any($2::text[])
+               or split_part(split_part(wa_lid, '@', 1), ':', 1) = any($2::text[]))
+        returning id`,
       [clinicId, users]
     );
+    const ids = done.rows.map((r) => r.id as string);
+    if (!ids.length) return;
+    await c.query(
+      `update messages set read_at = now()
+        where conversation_id = any($1::uuid[]) and direction = 'in' and read_at is null`,
+      [ids]
+    );
+    for (const id of ids) await clearPatientMessageAlerts(c, clinicId, id);
   });
 }

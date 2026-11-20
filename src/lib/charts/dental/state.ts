@@ -66,7 +66,7 @@ export type Mark = {
 export type MarkEvent = {
   id: string;
   markId: string;
-  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened" | "fee" | "redone" | "step_edit" | "cost" | "lab";
+  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened" | "fee" | "redone" | "step_edit" | "cost" | "lab" | "date";
   at: string;
   by: Person;
   reason?: string;

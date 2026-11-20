@@ -95,8 +95,9 @@ self.addEventListener("push", (event) => {
       data: { url: payload.url || "/", id: payload.id || null, team: payload.team || null },
     };
     if (image) options.image = image;
-    // A colleague's message buzzes like one, and can be answered from where it is.
-    if (payload.team) options.vibrate = [90, 50, 90];
+    // A colleague's or a patient's message buzzes like one, and can be answered from where it is.
+    const answerable = Array.isArray(payload.actions) && payload.actions.some((a) => a && a.action === "reply");
+    if (payload.team || answerable) options.vibrate = [90, 50, 90];
     if (Array.isArray(payload.actions) && payload.actions.length) options.actions = payload.actions.slice(0, 2);
     try {
       await self.registration.showNotification(title, options);
@@ -147,7 +148,7 @@ self.addEventListener("notificationclick", (event) => {
 
   // "Reply" opens the thread with the box ready to type in.
   const target = new URL(data.url || "/", self.location.origin);
-  if (event.action === "reply" && data.team) target.searchParams.set("reply", "1");
+  if (event.action === "reply") target.searchParams.set("reply", "1");
   const url = target.href;
 
   // Opening it on the phone is reading it: the bell in the app should agree.

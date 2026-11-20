@@ -4,6 +4,7 @@ import { inClinic } from "@/lib/clinic-api";
 import { withSystem } from "@/lib/db";
 import { StaffClient } from "./staff-client";
 import { can } from "@/lib/auth";
+import { memberHistorySql } from "@/lib/member-history";
 
 export default async function StaffSettingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -27,7 +28,9 @@ export default async function StaffSettingsPage({ params }: { params: Promise<{ 
               },
               cm.reminder_minutes, cm.meeting_url, cm.license_no, cm.syndicate_no,
               cm.permissions, cm.working_hours, u.full_name, u.email,
-              (u.avatar_path is not null) as has_photo
+              (u.avatar_path is not null) as has_photo,
+              -- Whether they did anything here: somebody added by mistake has not, and can be deleted (2026-11-20).
+              ${memberHistorySql("cm")} as has_history
        from clinic_members cm join users u on u.id = cm.user_id
        where cm.clinic_id = $1 order by cm.created_at`,
       [access.clinicId]

@@ -51,6 +51,8 @@ export type PanelActions = {
   onNote: (id: string, note: string) => void;
   onDetail: (id: string, key: string, value: string) => void;
   onEntryPerformer: (id: string, personId: string) => void;
+  /** A done entry moved to the day it was really done (2026-11-20). */
+  onEntryDate: (id: string, day: string) => void;
   /** Open these images in the viewer, at this one. */
   onOpenImages: (list: ChartImage[], index: number) => void;
   onPinImage: (imageId: string, fdi: string) => void;
@@ -528,6 +530,7 @@ export function ToothPanel({
         onNote={a.onNote}
         onDetail={a.onDetail}
         onPerformer={a.onEntryPerformer}
+        onDate={a.onEntryDate}
         progress={progressFor(m)}
         onOpen={progressFor(m) ? () => a.onOpenItem(m.id) : undefined}
         extra={m.kind === "finding" ? resolution(m) : undefined}

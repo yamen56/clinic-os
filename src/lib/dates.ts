@@ -6,6 +6,36 @@ export function clinicNow(tz: string): DateTime {
   return DateTime.now().setZone(tz);
 }
 
+/** Today in the clinic, as 'yyyy-MM-dd' — the default and the latest a "when was it" field allows. */
+export function todayIn(tz: string): string {
+  return clinicNow(tz).toISODate()!;
+}
+
+/**
+ * The instant to store for something that happened on a clinic day chosen by
+ * hand — a payment taken, an invoice raised, a treatment done — because it is
+ * often written down afterwards (Yamen, 2026-11-20: "many times I record a
+ * payment or something else and it was not today").
+ *
+ * Today (or nothing chosen) is `null`: the caller stores now, exactly as
+ * before. An earlier day is midday of that day in the clinic's timezone, so it
+ * lands on that date whichever timezone reads it back. A day in the future,
+ * more than ten years back, or not a date is refused.
+ */
+export function pastDayInstant(
+  day: string | null | undefined,
+  tz: string
+): { ok: true; at: string | null } | { ok: false } {
+  if (!day) return { ok: true, at: null };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false };
+  const d = DateTime.fromISO(day, { zone: tz });
+  if (!d.isValid) return { ok: false };
+  const today = clinicNow(tz).startOf("day");
+  if (d.startOf("day") > today || d < today.minus({ years: 10 })) return { ok: false };
+  if (d.hasSame(today, "day")) return { ok: true, at: null };
+  return { ok: true, at: d.set({ hour: 12, minute: 0, second: 0, millisecond: 0 }).toUTC().toISO()! };
+}
+
 /** UTC ISO range [start, end) of a clinic-local day. `day` is 'yyyy-MM-dd' in clinic time. */
 export function dayRangeUtc(tz: string, day?: string): { start: string; end: string; day: string } {
   const d = day

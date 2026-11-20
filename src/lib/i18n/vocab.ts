@@ -364,7 +364,7 @@ const AGENCY_AR: Patch = {
     newAppointment: "اجتماع",
     newPatient: "عيادة",
     revenueWeek: "المحصّل هذا الأسبوع",
-    outstanding: "مستحق على العيادات",
+    outstanding: "متبقي على العيادات",
     newPatientsMonth: "عيادات جديدة هذا الشهر",
     appointmentsTrend: "الاجتماعات، آخر ١٤ يوماً",
     byDoctor: "حسب الموظف، هذا الشهر",

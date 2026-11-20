@@ -74,6 +74,8 @@ export type RowAppointment = {
   next_visit_none?: boolean | null;
   desk_note?: string | null;
   handed_off_at?: string | null;
+  /** Cancelled, and nothing in the file hangs on it: may be deleted (2026-11-20). */
+  deletable?: boolean;
 };
 
 /** An invoice raised for this visit. */

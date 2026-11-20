@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import { hasFullControl, type ClinicAccess } from "./auth";
+import { can, hasFullControl, type ClinicAccess } from "./auth";
 
 /**
  * Which invoices a member may see: all of the clinic's, or only their own work.
@@ -66,6 +66,11 @@ export async function mayTouchInvoice(
   access: ClinicAccess,
   invoiceId: string
 ): Promise<boolean> {
+  if (todayOnly(access)) {
+    const day = invoiceDaySql(access, "i", 3, { owedToo: true });
+    const r = await c.query(`select 1 from invoices i where i.id = $1 and i.clinic_id = $2${day.sql}`, [invoiceId, access.clinicId, ...day.params]);
+    if (!r.rowCount) return false;
+  }
   if (!ownInvoicesOnly(access)) return true;
   if (!access.memberId) return false;
   const r = await c.query(
@@ -76,4 +81,53 @@ export async function mayTouchInvoice(
     [invoiceId, access.clinicId, access.memberId]
   );
   return !!r.rowCount;
+}
+
+/**
+ * Whether this member sees only today's invoices and payments — they have
+ * Invoices but not `invoices.history` (Yamen, 2026-11-20: staff "only being
+ * able to see today's and create new ones").
+ */
+export function todayOnly(access: ClinicAccess): boolean {
+  return can(access, "invoices") && !can(access, "invoices.history");
+}
+
+/**
+ * The day filter for a today-only member, ready to append to a query over
+ * `invoices`; empty for everybody else.
+ *
+ * Today's is what was raised today or is dated today — the date an invoice
+ * carries can be set back (2026-11-20), and one entered today for last week
+ * is still today's work at the desk. `owedToo` adds any invoice that still has
+ * something to pay: the desk settles a patient's balance from the file, and a
+ * link there must not lead to a page that refuses it. The list itself is
+ * today's only, which is the point of the switch.
+ *
+ * `alias` is interpolated, so it is only ever a literal written here in code.
+ */
+export function invoiceDaySql(
+  access: ClinicAccess,
+  alias: string,
+  nextParam: number,
+  opts: { owedToo?: boolean } = {}
+): { sql: string; params: string[] } {
+  if (!todayOnly(access)) return { sql: "", params: [] };
+  const tz = `$${nextParam}`;
+  const today = `(now() at time zone ${tz})::date`;
+  const owed = opts.owedToo ? ` or ${alias}.status in ('draft', 'sent', 'partially_paid')` : "";
+  return {
+    sql: ` and ((${alias}.created_at at time zone ${tz})::date = ${today} or ${alias}.issue_date = ${today}${owed})`,
+    params: [access.clinic.timezone],
+  };
+}
+
+/** The same for a query over `payments`: taken today, or entered today for another day. */
+export function paymentDaySql(access: ClinicAccess, alias: string, nextParam: number): { sql: string; params: string[] } {
+  if (!todayOnly(access)) return { sql: "", params: [] };
+  const tz = `$${nextParam}`;
+  const today = `(now() at time zone ${tz})::date`;
+  return {
+    sql: ` and ((${alias}.paid_at at time zone ${tz})::date = ${today} or (${alias}.created_at at time zone ${tz})::date = ${today})`,
+    params: [access.clinic.timezone],
+  };
 }

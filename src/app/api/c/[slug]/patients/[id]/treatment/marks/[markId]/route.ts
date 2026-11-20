@@ -5,6 +5,7 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { GENERAL_MARK_SELECT, toGeneralMark } from "@/lib/treatment/db";
 import { visitFor } from "@/lib/treatment/server";
+import { redateMarks } from "@/lib/charts/redate";
 
 /*
   Changing a recorded treatment. Each change is its own line in the
@@ -18,6 +19,8 @@ const bodySchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("performer"), eventId: z.string().uuid(), performerId: z.string().uuid() }),
   /** A planned treatment, done: at the visit named, or today's. */
   z.object({ op: z.literal("done"), eventId: z.string().uuid(), appointmentId: z.string().uuid().nullish(), performerId: z.string().uuid().nullish() }),
+  /** Done on another day than it was recorded (2026-11-20): see redateMarks. */
+  z.object({ op: z.literal("date"), eventId: z.string().uuid(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
 ]);
 
 type Params = { params: Promise<{ slug: string; id: string; markId: string }> };
@@ -72,6 +75,13 @@ export async function PATCH(req: Request, ctx: Params) {
           `update chart_marks set status = 'done', done_at = coalesce($2::timestamptz, now()), appointment_id = $3, performed_by = coalesce($4, performed_by) where id = $1`,
           [markId, at.doneAt, at.visit, b.performerId ?? null]
         );
+        break;
+      }
+      case "date": {
+        if (cur.status !== "done") return { error: "not_done" as const };
+        const r = await redateMarks(c, access.clinicId, id, [markId], b.day, access.clinic.timezone);
+        if (!r.ok) return { error: r.error };
+        reason = b.day;
         break;
       }
     }

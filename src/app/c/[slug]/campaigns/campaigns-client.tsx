@@ -11,8 +11,9 @@ import { buttonClass } from "@/components/ui/button-class";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { Badge, type StatusKey } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
-import { Modal } from "@/components/ui/modal";
-import { createCampaignAction, previewAudienceAction } from "./actions";
+import { ConfirmDialog, Modal } from "@/components/ui/modal";
+import { useToast } from "@/components/ui/toast";
+import { createCampaignAction, deleteCampaignAction, previewAudienceAction } from "./actions";
 import {
   MIN_INTERVAL_SECONDS,
   MAX_MEDIA_BYTES,
@@ -23,7 +24,7 @@ import {
   type VideoMeta,
 } from "./constants";
 import { readVideoMeta } from "./video-meta";
-import { Megaphone, Plus, ChevronRight, ImagePlus, X } from "lucide-react";
+import { Megaphone, Plus, ChevronRight, ImagePlus, X, Trash2 } from "lucide-react";
 
 export type CampaignRow = {
   id: string;
@@ -198,6 +199,14 @@ export function CampaignsClient({
     });
 
   const everyLabel = (v: string) => t.campaigns.every.replace("{v}", v);
+  /*
+    A stopped campaign, cleared from the list where it sits (Yamen, 2026-11-20:
+    cancelled things could only be looked at). Its messages already sent stay
+    in the conversations; the action keeps the shared file while they need it.
+  */
+  const { toast: notify } = useToast();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   return (
     <>
@@ -229,10 +238,10 @@ export function CampaignsClient({
               const done = c.sent + c.failed;
               const pct = c.total_count ? Math.round((done / c.total_count) * 100) : 0;
               return (
-                <li key={c.id}>
+                <li key={c.id} className="flex items-center">
                   <Link
                     href={`/c/${slug}/campaigns/${c.id}`}
-                    className="flex items-center gap-4 px-5 py-3.5 hover:bg-sunken"
+                    className="flex min-w-0 flex-1 items-center gap-4 px-5 py-3.5 hover:bg-sunken"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -259,12 +268,42 @@ export function CampaignsClient({
                     </div>
                     <ChevronRight className="h-4 w-4 shrink-0 text-ink-400 rtl:rotate-180" />
                   </Link>
+                  {c.status === "cancelled" && (
+                    <button
+                      type="button"
+                      onClick={() => setDeletingId(c.id)}
+                      aria-label={t.common.delete}
+                      className="me-2 grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full text-ink-400 hover:bg-danger-soft hover:text-danger"
+                      data-campaign-delete={c.id}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </li>
               );
             })}
           </ul>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={!!deletingId}
+        onClose={() => setDeletingId(null)}
+        title={t.campaigns.deleteTitle}
+        body={t.campaigns.deleteBody}
+        confirmLabel={t.common.delete}
+        cancelLabel={t.common.cancel}
+        loading={deleteBusy}
+        onConfirm={async () => {
+          if (!deletingId) return;
+          setDeleteBusy(true);
+          const r = await deleteCampaignAction(slug, deletingId);
+          setDeleteBusy(false);
+          setDeletingId(null);
+          if (r.error) notify(t.common.genericError, "error");
+          else notify(t.staff.deleted);
+        }}
+      />
 
       <Modal
         open={open}

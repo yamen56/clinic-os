@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
-import { invoiceScopeSql } from "@/lib/invoice-scope";
+import { invoiceDaySql, invoiceScopeSql } from "@/lib/invoice-scope";
 import { renderUrlToPdf } from "@/lib/pdf";
 import { saveFile, readFileBuffer } from "@/lib/storage";
 import { enqueueEinvoiceSubmit } from "@/lib/einvoice/jobs";
@@ -18,10 +18,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; 
     // Same filter as the screen. A PDF route that answers for any id in the
     // clinic would make the list's filter decorative.
     const scope = invoiceScopeSql(g.access, "i", 3);
+    // A today-only member: today's, or one with something still to pay — as the screen.
+    const day = invoiceDaySql(g.access, "i", 3 + scope.params.length, { owedToo: true });
     const r = await c.query(
       `select i.id, i.number, i.public_token, i.pdf_path, i.updated_at, i.einvoice_status, i.einvoice_qr
-         from invoices i where i.id = $1 and i.clinic_id = $2${scope.sql}`,
-      [id, g.access.clinicId, ...scope.params]
+         from invoices i where i.id = $1 and i.clinic_id = $2${scope.sql}${day.sql}`,
+      [id, g.access.clinicId, ...scope.params, ...day.params]
     );
     const row = r.rows[0];
     if (!row) return null;

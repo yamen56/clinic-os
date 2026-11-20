@@ -17,6 +17,37 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 type State = "unsupported" | "blocked" | "off" | "on" | "working";
 
 /**
+ * Ask for notifications and register this device for push. Shared by the
+ * switch on the notifications screen and the sheet an installed app opens
+ * with (permissions-prompt.tsx), so both register the same way.
+ *
+ * Must be called from a tap: a phone refuses the question otherwise.
+ */
+export async function subscribeThisDevice(): Promise<"on" | "blocked" | "off" | "error"> {
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return permission === "denied" ? "blocked" : "off";
+    const reg = await navigator.serviceWorker.ready;
+    const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!key) return "error";
+    const sub =
+      (await reg.pushManager.getSubscription()) ??
+      (await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
+      }));
+    const res = await fetch("/api/me/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sub.toJSON()),
+    });
+    return res.ok ? "on" : "error";
+  } catch {
+    return "error";
+  }
+}
+
+/**
  * Registers the service worker and manages this device's push subscription.
  * `compact` renders the small toggle used in the notification center header.
  */
@@ -57,35 +88,14 @@ export function PushManager({ compact }: { compact?: boolean }) {
 
   const enable = async () => {
     setState("working");
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setState(permission === "denied" ? "blocked" : "off");
-        return;
-      }
-      const reg = await navigator.serviceWorker.ready;
-      const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!key) {
-        toast(t.common.genericError, "error");
-        setState("off");
-        return;
-      }
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
-      });
-      const res = await fetch("/api/me/push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sub.toJSON()),
-      });
-      if (!res.ok) throw new Error("register failed");
+    const r = await subscribeThisDevice();
+    if (r === "on") {
       setState("on");
       toast(t.notifications.pushEnabled);
-    } catch {
-      toast(t.common.genericError, "error");
-      setState("off");
+      return;
     }
+    if (r === "error") toast(t.common.genericError, "error");
+    setState(r === "blocked" ? "blocked" : "off");
   };
 
   const disable = async () => {

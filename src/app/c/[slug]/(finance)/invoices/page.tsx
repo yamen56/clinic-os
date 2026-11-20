@@ -3,7 +3,7 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
 import type { Dict } from "@/lib/i18n/client-dict";
-import { dayRangeUtc, fmtMoney, fmtDate } from "@/lib/dates";
+import { dayRangeUtc, fmtMoney, fmtDate, fmtDateOnly } from "@/lib/dates";
 import { PageHeader, Card } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button-class";
 import { Badge, type StatusKey } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { redirect } from "next/navigation";
 import { Plus, ReceiptText } from "lucide-react";
 import { can } from "@/lib/auth";
-import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
+import { invoiceDaySql, invoiceScopeSql, ownInvoicesOnly, paymentDaySql, todayOnly } from "@/lib/invoice-scope";
 import { deskLines, readyToBillDesk } from "@/lib/charts/dental/billing-server";
 import { ReadyToBillDesk, type DeskGroup } from "./ready-to-bill-desk";
 import { DELETABLE_INVOICE_SQL, owedSql } from "@/lib/invoices";
@@ -63,6 +63,8 @@ export default async function InvoicesPage({
     stacked, and theirs is on the Earnings tab.
   */
   const showToday = !ownInvoicesOnly(access);
+  /* No `invoices.history`: today's invoices and payments only (2026-11-20). */
+  const onlyToday = todayOnly(access);
 
   const data = await inClinic(access, async (c) => {
     const today = dayRangeUtc(tz);
@@ -72,7 +74,10 @@ export default async function InvoicesPage({
       of the cancelled may be deleted (the ones never filed with JoFotara,
       DELETABLE_INVOICE_SQL). They count what this member can actually open.
     */
-    const chipScope = invoiceScopeSql(access, "i", 2);
+    const own = invoiceScopeSql(access, "i", 2);
+    // A today-only member (no `invoices.history`) counts and lists today's alone.
+    const day = invoiceDaySql(access, "i", 2 + own.params.length);
+    const chipScope = { sql: own.sql + day.sql, params: [...own.params, ...day.params] };
     const [stats] = (
       await c.query(
         `select
@@ -123,7 +128,7 @@ export default async function InvoicesPage({
       */
       else if (sp.status === "cancelled") conds.push(`i.status = 'void'`);
       else conds.push(`i.status <> 'void'`);
-      const scope = invoiceScopeSql(access, "i", 2);
+      const scope = chipScope;
       const args: unknown[] = [access.clinicId, ...scope.params];
       /*
         Who it is for, the way the patients screen finds people — Arabic
@@ -140,11 +145,15 @@ export default async function InvoicesPage({
       // One row past the page says whether there is an older page to offer.
       invoices = (
         await c.query(
+          /*
+            Listed by the date the invoice carries, which can be set back to
+            the day the work was done (2026-11-20); entered order breaks ties.
+          */
           `select i.id, i.number, i.title, i.status, i.total, i.amount_paid, i.created_at, i.sent_at,
-                  p.full_name as patient_name
+                  i.issue_date::text as issue_day, p.full_name as patient_name
            from invoices i join patients p on p.id = i.patient_id
            where ${conds.join(" and ")}${scope.sql}
-           order by i.created_at desc limit ${limit + 1}`,
+           order by i.issue_date desc nulls last, i.created_at desc limit ${limit + 1}`,
           args
         )
       ).rows;
@@ -152,7 +161,7 @@ export default async function InvoicesPage({
       // Payments hang off invoices, so the same filter reaches them through the
       // join rather than needing one of its own. A cancelled invoice's payments
       // are not listed: they no longer count as money taken.
-      const scope = invoiceScopeSql(access, "i", 2);
+      const payDay = paymentDaySql(access, "pay", 2 + own.params.length);
       payments = (
         await c.query(
           `select pay.id, pay.amount, pay.method, pay.reference, pay.paid_at,
@@ -162,9 +171,9 @@ export default async function InvoicesPage({
            join invoices i on i.id = pay.invoice_id
            join patients p on p.id = pay.patient_id
            left join users u on u.id = pay.recorded_by
-           where pay.clinic_id = $1 and i.status <> 'void'${scope.sql}
+           where pay.clinic_id = $1 and i.status <> 'void'${own.sql}${payDay.sql}
            order by pay.paid_at desc limit 100`,
-          [access.clinicId, ...scope.params]
+          [access.clinicId, ...own.params, ...payDay.params]
         )
       ).rows;
     }
@@ -296,6 +305,12 @@ export default async function InvoicesPage({
           )}
         </div>
       )}
+      {/* Whoever sees only today's (no `invoices.history`) is told so, and where the rest of a patient's bills are. */}
+      {onlyToday && (
+        <p className="-mt-2 mb-4 text-[12px] text-ink-500" data-today-only>
+          {t.invoices.todayOnlyNote}
+        </p>
+      )}
       {/* Why some cancelled invoices cannot be deleted, said where they are listed. */}
       {cancelledView && Number(data.stats.cancelled_count) > Number(data.stats.deletable_count) && (
         <p className="-mt-2 mb-4 text-[12px] text-ink-500" data-filed-stay>
@@ -369,7 +384,7 @@ export default async function InvoicesPage({
                         ) : null}
                       </span>
                       <span className="hidden text-[13px] text-ink-400 sm:block">
-                        {fmtDate(String(inv.created_at), tz, locale)}
+                        {inv.issue_day ? fmtDateOnly(String(inv.issue_day), locale) : fmtDate(String(inv.created_at), tz, locale)}
                       </span>
                       {/*
                         A partly paid row shows the money, not just the word.
@@ -408,7 +423,7 @@ export default async function InvoicesPage({
                 );
               })}
             </ul>
-            {data.more && (
+            {data.more && !onlyToday && (
               <div className="border-t border-line p-3 text-center">
                 <Link href={listHref({ n: limit + PAGE })} scroll={false} className={buttonClass({ variant: "ghost", size: "sm" })} data-invoices-older>
                   {t.invoices.showOlder}

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
-import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/dates";
+import { fmtDate, fmtDateOnly, fmtDateTime, fmtMoney, todayIn } from "@/lib/dates";
 import { asTaxCategory, taxBreakdown } from "@/lib/invoices";
 import { coverState, insurerShareFor, ruleOf } from "@/lib/insurance";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
@@ -128,7 +128,7 @@ export function InvoiceDetailClient({
     tax_rate: string;
     tax_amount: string;
   }[];
-  payments: { id: string; amount: string; method: string; reference: string; paid_at: string; recorded_by: string | null }[];
+  payments: { id: string; amount: string; method: string; reference: string; paid_at: string; created_at?: string; recorded_by: string | null }[];
   /** Active companies, with the clinic's terms for each. Empty for a clinic that only takes cash. */
   insurers: { id: string; name: string; coverage_percent: string | null; coverage_cap: string | null }[];
   /** Whether this clinic files with JoFotara and has the credentials to do it. */
@@ -148,6 +148,8 @@ export function InvoiceDetailClient({
   const [amount, setAmount] = useState(due > 0 ? String(due) : "");
   const [method, setMethod] = useState("cash");
   const [reference, setReference] = useState("");
+  // The day it was paid: today unless it is being written down afterwards (2026-11-20).
+  const [paidOn, setPaidOn] = useState(() => todayIn(inv.timezone));
   const [insurerId, setInsurerId] = useState(inv.insurer_id ?? "");
   const [covered, setCovered] = useState(
     Number(inv.insurer_amount) > 0 ? String(Number(inv.insurer_amount)) : ""
@@ -254,9 +256,10 @@ export function InvoiceDetailClient({
         amount: Number(amount),
         method,
         reference,
+        paidOn,
       });
       if (r.error) {
-        toast(r.error === "overpay" ? t.invoices.overpay : t.common.genericError, "error");
+        toast(r.error === "overpay" ? t.invoices.overpay : r.error === "bad_date" ? t.invoices.badDate : t.common.genericError, "error");
         return;
       }
       toast(t.invoices.paymentSaved);
@@ -286,7 +289,7 @@ export function InvoiceDetailClient({
             )}
           </span>
         }
-        sub={`${inv.patient_name} · ${fmtDate(inv.created_at, inv.timezone, locale)}`}
+        sub={`${inv.patient_name} · ${inv.issue_day ? fmtDateOnly(inv.issue_day, locale) : fmtDate(inv.created_at, inv.timezone, locale)}`}
         action={
           <div className="flex flex-wrap gap-2">
             <Link href={`/c/${slug}/patients/${inv.patient_id}`} className={buttonClass({ variant: "ghost", size: "sm" })}>
@@ -799,7 +802,10 @@ export function InvoiceDetailClient({
                     </Badge>
                   </div>
                   <div className="mt-0.5 text-[12px] text-ink-400">
-                    {fmtDateTime(p.paid_at, inv.timezone, locale)}
+                    {/* Written down on another day: the day it was paid, not a made-up time of it. */}
+                    {p.created_at && fmtDate(p.created_at, inv.timezone, locale) !== fmtDate(p.paid_at, inv.timezone, locale)
+                      ? fmtDate(p.paid_at, inv.timezone, locale)
+                      : fmtDateTime(p.paid_at, inv.timezone, locale)}
                     {p.recorded_by ? ` · ${p.recorded_by}` : ""}
                     {p.reference ? ` · ${p.reference}` : ""}
                   </div>
@@ -824,12 +830,17 @@ export function InvoiceDetailClient({
               </Select>
             </Field>
           </div>
-          <Field label={t.invoices.reference} hint={t.common.optional}>
-            <Input value={reference} onChange={(e) => setReference(e.target.value)} />
-          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={t.invoices.paidOnLabel}>
+              <Input type="date" dir="ltr" value={paidOn} max={todayIn(inv.timezone)} onChange={(e) => setPaidOn(e.target.value)} data-pay-date />
+            </Field>
+            <Field label={t.invoices.reference} hint={t.common.optional}>
+              <Input value={reference} onChange={(e) => setReference(e.target.value)} />
+            </Field>
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setPayOpen(false)}>{t.common.cancel}</Button>
-            <Button onClick={pay} loading={pending} disabled={!(Number(amount) > 0)}>
+            <Button onClick={pay} loading={pending} disabled={!(Number(amount) > 0) || !paidOn}>
               {t.common.save}
             </Button>
           </div>

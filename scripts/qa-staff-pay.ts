@@ -326,10 +326,10 @@ async function main() {
     await dialog.getByRole("button", { name: "Deactivate" }).click();
     await until(async () => (await dialog.count()) === 0, 30000);
     check((await memberByEmail(`pay-sal-${tag}@test.local`))?.bill_active === false, "deactivated, her salary bill stops");
-    await page.locator("li", { hasText: "Rima Salary" }).getByRole("button", { name: "Edit" }).click();
-    await dialog.waitFor();
-    await dialog.getByRole("button", { name: "Reactivate" }).click();
-    await until(async () => (await dialog.count()) === 0, 30000);
+    // Removed people fold under "No longer here" (2026-11-20); she is added back from there.
+    await page.locator("[data-staff-removed-toggle]").click();
+    await page.locator("[data-staff-removed] li", { hasText: "Rima Salary" }).getByRole("button", { name: "Reactivate" }).click();
+    await until(async () => (await memberByEmail(`pay-sal-${tag}@test.local`))?.bill_active === true, 30000);
     check((await memberByEmail(`pay-sal-${tag}@test.local`))?.bill_active === true, "reactivated, it resumes");
 
     /* ── A staff manager sees nobody's pay ────────────────────────────── */

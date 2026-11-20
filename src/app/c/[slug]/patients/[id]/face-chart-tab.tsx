@@ -25,7 +25,8 @@
 import { useMemo, useState } from "react";
 import { CornerDownRight } from "lucide-react";
 import Link from "next/link";
-import { PackagePlus, Plus, Repeat2, Undo2, X } from "lucide-react";
+import { CalendarDays, PackagePlus, Plus, Repeat2, Undo2, X } from "lucide-react";
+import { DoneDateField } from "@/components/charts/done-date";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
@@ -153,6 +154,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const [voidReason, setVoidReason] = useState("");
   const [pricing, setPricing] = useState<{ id: string; value: string } | null>(null);
   const [noting, setNoting] = useState<{ id: string; value: string } | null>(null);
+  /* The entry whose date is open to change (2026-11-20). */
+  const [dating, setDating] = useState<string | null>(null);
   const [selling, setSelling] = useState(false);
   const [now] = useState(() => Date.now());
 
@@ -437,6 +440,12 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     setNoting(null);
   };
 
+  /* Done on another day than it was recorded: moved to that day, and its visit if there was one. */
+  const redate = (m: FaceMark, day: string) => {
+    patch(m, { op: "date", day }, { doneAt: `${day}T12:00:00` }, { done: t.common.dateMoved.replace("{date}", fmtDateOnly(day, locale)), reload: true });
+    setDating(null);
+  };
+
   /* ---- reading ---- */
 
   const amountOf = (m: FaceMark) => {
@@ -541,6 +550,16 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               </Button>
             </div>
           )}
+          {dating === m.id && !compact && (
+            <div className="mt-2 flex max-w-xs items-end gap-2" data-face-date-editor={m.id}>
+              <div className="min-w-0 flex-1">
+                <DoneDateField doneAt={m.doneAt ?? m.createdAt} tz={tz} onChange={(day) => redate(m, day)} />
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setDating(null)}>
+                {F.cancel}
+              </Button>
+            </div>
+          )}
         </div>
           {!compact && <span className="shrink-0 text-[13px] font-semibold tnum">{session ? F.covered : m.fee != null ? money(m.fee) : "—"}</span>}
         </div>
@@ -573,6 +592,12 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               {!compact && (s.canWrite || s.canBill) && !billed && !session && pricing?.id !== m.id && (
                 <button type="button" onClick={() => setPricing({ id: m.id, value: m.fee != null ? String(m.fee) : "" })} className={`${action} text-ink-500`} data-face-price={m.id}>
                   {F.editPrice}
+                </button>
+              )}
+              {!compact && s.canWrite && dating !== m.id && (
+                <button type="button" onClick={() => setDating(m.id)} className={`${action} text-ink-500`} data-face-date={m.id}>
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  {t.common.changeDate}
                 </button>
               )}
               {!compact && s.canWrite && !mine && (

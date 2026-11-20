@@ -9,7 +9,7 @@ export default async function ConversationsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ open?: string }>;
+  searchParams: Promise<{ open?: string; reply?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -32,6 +32,7 @@ export default async function ConversationsPage({
       tz={access.clinic.timezone}
       selfId={access.session.user.id}
       initialOpenId={sp.open ?? null}
+      initialReply={sp.reply === "1"}
       initialQuickReplies={JSON.parse(JSON.stringify(data.quickReplies))}
       hasTeam={!!access.memberId}
     />

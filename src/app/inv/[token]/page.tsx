@@ -69,7 +69,7 @@ export default async function PublicInvoicePage({
     ? {
         invoice: "فاتورة", billTo: "فاتورة إلى", date: "التاريخ", item: "البند", qty: "الكمية",
         price: "السعر", amount: "المجموع", subtotal: "المجموع الفرعي", discount: "الخصم",
-        total: "الإجمالي", paid: "المدفوع", due: "المستحق", tax: "الضريبة",
+        total: "الإجمالي", paid: "المدفوع", due: "المتبقي", tax: "الضريبة",
         taxNo: "الرقم الضريبي", creditNote: "إشعار دائن عن الفاتورة", scan: "امسح الرمز للتحقق من الفاتورة",
         subject: "الموضوع",
         payTitle: "تفاصيل الدفع", statusPaid: "مدفوعة", statusVoid: "ملغاة",

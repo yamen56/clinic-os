@@ -934,6 +934,11 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       const who = roster.find((d) => d.id === pid);
       if (m && who) change(m, { ...m, performedBy: who }, { op: "performer", performerId: pid }, "performer");
     },
+    // Moved to the day it was really done; the server says which visit that puts it under.
+    onEntryDate: (id, day) => {
+      const m = find(id);
+      if (m) change(m, { ...m, doneAt: `${day}T12:00:00` }, { op: "date", day }, "date", day);
+    },
     onOpenImages: (list, index) => setViewer({ list, index }),
     onPinImage: (imageId, fdi) => togglePin(imageId, fdi),
     onUploadForTooth: (kind, file, fdi) => upload(kind, file, fdi),
@@ -1493,6 +1498,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                   onNote={actions.onNote}
                   onDetail={actions.onDetail}
                   onPerformer={actions.onEntryPerformer}
+                      onDate={actions.onEntryDate}
                   extra={groupExtra(m)}
                   progress={progressInfo(m)}
                   onOpen={
@@ -1583,6 +1589,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                       onNote={actions.onNote}
                       onDetail={actions.onDetail}
                       onPerformer={actions.onEntryPerformer}
+                      onDate={actions.onEntryDate}
                       extra={groupExtra(m)}
                       progress={progressInfo(m)}
                       onOpen={opener(m)}

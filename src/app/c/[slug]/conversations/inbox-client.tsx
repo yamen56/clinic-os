@@ -110,6 +110,7 @@ export function InboxClient({
   tz,
   selfId,
   initialOpenId,
+  initialReply = false,
   initialQuickReplies,
   hasTeam,
 }: {
@@ -117,6 +118,8 @@ export function InboxClient({
   tz: string;
   selfId: string;
   initialOpenId: string | null;
+  /** Opened from Reply on a patient's message notification: the box is ready to type in. */
+  initialReply?: boolean;
   initialQuickReplies: QuickReply[];
   /** A member of the staff, so the team chat is a tab away. */
   hasTeam: boolean;
@@ -138,6 +141,18 @@ export function InboxClient({
   const listSeq = useRef(0);
   const [list, setList] = useState<ConvRow[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
+  /*
+    A notification opened while the inbox is already on screen arrives as a new
+    `?open=` on the same page, which does not remount it (2026-11-20).
+  */
+  useEffect(() => {
+    if (initialOpenId) setOpenId(initialOpenId);
+  }, [initialOpenId]);
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const wantsReply = useRef(initialReply);
+  useEffect(() => {
+    if (initialReply) wantsReply.current = true;
+  }, [initialReply, initialOpenId]);
   const [thread, setThread] = useState<{
     conversation: ConvRow;
     messages: Msg[];
@@ -155,6 +170,12 @@ export function InboxClient({
   /* The patient panel below a wide screen: a drawer from the thread's header, closed on each new thread. */
   const [panelOpen, setPanelOpen] = useState(false);
   useEffect(() => setPanelOpen(false), [openId]);
+  // Reply on the notification: once its thread is on screen, the cursor is in the box.
+  useEffect(() => {
+    if (!wantsReply.current || !thread || !openId) return;
+    wantsReply.current = false;
+    composer.current?.focus();
+  }, [thread, openId]);
   const [qrTitle, setQrTitle] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -631,6 +652,7 @@ export function InboxClient({
               <div className="flex items-end gap-2">
                 <div className="relative flex-1">
                   <textarea
+                    ref={composer}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => {

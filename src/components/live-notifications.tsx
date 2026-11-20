@@ -44,7 +44,15 @@ export type LiveNotif = {
 
 const isTeam = (kind: string) => kind === "team_message" || kind === "team_reaction";
 /** The team thread a notification is about, from its link. */
-const threadOf = (n: LiveNotif) => (n.url && isTeam(n.kind) ? new URL(n.url, "https://x").searchParams.get("t") : null);
+const threadOf = (n: LiveNotif) =>
+  !n.url
+    ? null
+    : isTeam(n.kind)
+      ? new URL(n.url, "https://x").searchParams.get("t")
+      : // A patient's WhatsApp conversation is a thread too: its newer line replaces the older pop-up (2026-11-20).
+        n.kind === "whatsapp_message"
+        ? `wa:${new URL(n.url, "https://x").searchParams.get("open") ?? ""}`
+        : null;
 
 export type InAppPrefs = { popups: boolean; sound: boolean };
 
@@ -148,9 +156,11 @@ export function useLiveNotifications(
   const onList = pathname === `/c/${slug}/notifications`;
   // The team chat shows its own messages as they arrive; a pop-up on top would say it twice.
   const onTeam = pathname === `/c/${slug}/conversations/team`;
+  // The patient inbox likewise: the list shows a new message the moment it lands.
+  const onInbox = pathname === `/c/${slug}/conversations`;
 
-  const live = useRef({ prefs, onList, onTeam });
-  live.current = { prefs, onList, onTeam };
+  const live = useRef({ prefs, onList, onTeam, onInbox });
+  live.current = { prefs, onList, onTeam, onInbox };
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/me/notifications?since=${encodeURIComponent(since.current)}`, {
@@ -164,7 +174,11 @@ export function useLiveNotifications(
     const all = data.notifications.filter((n) => !shown.current.has(n.id));
     for (const n of all) shown.current.add(n.id);
     // Not about the team thread already open in front of you: that thread says it itself.
-    const fresh = all.filter((n) => !(live.current.onTeam && threadOf(n) && threadOf(n) === teamView.openThreadId));
+    const fresh = all.filter(
+      (n) =>
+        !(live.current.onTeam && threadOf(n) && threadOf(n) === teamView.openThreadId) &&
+        !(live.current.onInbox && n.kind === "whatsapp_message")
+    );
     if (!fresh.length) return;
     const { prefs: p, onList: here } = live.current;
     if (!p.popups || here || document.visibilityState !== "visible") return;
@@ -242,6 +256,8 @@ function iconFor(kind: string) {
       return Package;
     case "team":
       return MessagesSquare;
+    case "patient_messages":
+      return MessageCircle;
     case "daily_summary":
     case "tomorrow_schedule":
     case "unconfirmed_tomorrow":
@@ -252,7 +268,9 @@ function iconFor(kind: string) {
   return BellRing;
 }
 
-const urgentLook = (kind: string) => kind.startsWith("whatsapp_") || kind === "ai_escalation" || kind === "document_integrity";
+// A patient writing in is news, not an alarm: only the number's own trouble wears the urgent look.
+const urgentLook = (kind: string) =>
+  (kind.startsWith("whatsapp_") && kind !== "whatsapp_message") || kind === "ai_escalation" || kind === "document_integrity";
 
 /**
  * The pop-ups themselves. Top corner on a desk, top of the screen on a phone —

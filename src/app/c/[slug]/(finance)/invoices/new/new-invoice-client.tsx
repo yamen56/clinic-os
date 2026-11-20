@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
-import { fmtMoney } from "@/lib/dates";
+import { fmtMoney, todayIn } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { PageHeader, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,7 +60,13 @@ export function NewInvoiceClient({
   chartBilling = false,
   existingInvoice = null,
   fromBoard = false,
+  tz,
+  defaultDay = null,
 }: {
+  /** The clinic's timezone, for what "today" is on the date field. */
+  tz: string;
+  /** The day of the visit it is raised from; today when none, or later than today. */
+  defaultDay?: string | null;
   /** Raised from the Today board: the invoice it makes offers Back to today. */
   fromBoard?: boolean;
   slug: string;
@@ -150,6 +156,12 @@ export function NewInvoiceClient({
   });
   const [notes, setNotes] = useState("");
   const [title, setTitle] = useState("");
+  /*
+    The invoice's date (Yamen, 2026-11-20): today, or the day of the visit it
+    is raised from — and any earlier day when it is being written up afterwards.
+  */
+  const today = todayIn(tz);
+  const [issueDate, setIssueDate] = useState(defaultDay && defaultDay < today ? defaultDay : today);
   const [fileEinvoice, setFileEinvoice] = useState(einvoice?.fileByDefault ?? true);
   const [added, setAdded] = useState<Added | null>(null);
   const [pending, start] = useTransition();
@@ -247,13 +259,20 @@ export function NewInvoiceClient({
         items: items.map(({ uid: _uid, ...line }) => line),
         notes,
         title,
+        issueDate,
         // Only sent by a clinic that files. Everyone else leaves it absent and
         // the server falls back to the clinic's own default.
         ...(einvoice ? { fileEinvoice } : {}),
       });
       if (r.error || !r.id) {
         toast(
-          r.error === "already_billed" ? t.invoices.alreadyBilled : r.error === "invalid_mark" ? t.invoices.chartChanged : t.common.genericError,
+          r.error === "already_billed"
+            ? t.invoices.alreadyBilled
+            : r.error === "invalid_mark"
+              ? t.invoices.chartChanged
+              : r.error === "bad_date"
+                ? t.invoices.badDate
+                : t.common.genericError,
           "error"
         );
         return;
@@ -285,14 +304,19 @@ export function NewInvoiceClient({
               and marked optional so nobody stops to think of a name for the
               ordinary consultation that does not need one.
             */}
-            <Field label={t.invoices.invoiceTitle} hint={t.common.optional}>
-              <Input
-                value={title}
-                maxLength={120}
-                placeholder={t.invoices.invoiceTitlePlaceholder}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_11rem]">
+              <Field label={t.invoices.invoiceTitle} hint={t.common.optional}>
+                <Input
+                  value={title}
+                  maxLength={120}
+                  placeholder={t.invoices.invoiceTitlePlaceholder}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </Field>
+              <Field label={t.invoices.invoiceDate}>
+                <Input type="date" dir="ltr" value={issueDate} max={today} onChange={(e) => setIssueDate(e.target.value)} data-invoice-date />
+              </Field>
+            </div>
             <Field label={t.invoices.patient} required>
               {patient ? (
                 <div className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2">

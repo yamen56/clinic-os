@@ -54,6 +54,7 @@ import { DentalMedicalCard } from "@/components/charts/dental/medical-card";
 import { DateTime } from "luxon";
 import { VisitBanner, type VisitNow } from "./visit-banner";
 import { AppointmentRow, type RowAppointment } from "./appointment-row";
+import { CancelledVisits } from "./cancelled-visits";
 import { MedicalCard } from "@/components/medical-card";
 import { medicalAlerts, readHistory, type MedicalHistory } from "@/lib/medical-history";
 import { FilesTab, type FilesHub } from "./files-tab";
@@ -1138,7 +1139,7 @@ export function PatientProfile(props: {
                   {/* Paid off over the visits: what the patient hands over goes on the oldest invoices first. */}
                   {/* Always mounted: it hides itself at nothing owed, and stays to offer the receipt of what it settled. */}
                   <div className="mt-3 empty:hidden">
-                    <TakePayment slug={slug} patientId={p.id} balance={props.balanceDue} currency={currency} />
+                    <TakePayment slug={slug} patientId={p.id} balance={props.balanceDue} currency={currency} tz={tz} />
                   </div>
                 </Card>
               )}
@@ -1256,7 +1257,8 @@ export function PatientProfile(props: {
               </div>
             ) : (
               <ul className="divide-y divide-line">
-                {props.appointments.map((a) => (
+                {(() => {
+                  const row = (a: RowAppointment) => (
                   <AppointmentRow
                     key={a.id}
                     slug={slug}
@@ -1280,7 +1282,21 @@ export function PatientProfile(props: {
                     onOpenChart={() => setTab("dental")}
                     onTab={setTab}
                   />
-                ))}
+                  );
+                  // Cancelled visits fold under the rest, where the ones nothing hangs on can be cleared (2026-11-20).
+                  return (
+                    <>
+                      {props.appointments.filter((a) => a.status !== "cancelled").map(row)}
+                      <CancelledVisits
+                        slug={slug}
+                        patientId={p.id}
+                        rows={props.appointments.filter((a) => a.status === "cancelled")}
+                        canDelete={caps.calendar}
+                        renderRow={row}
+                      />
+                    </>
+                  );
+                })()}
               </ul>
             )}
           </Card>

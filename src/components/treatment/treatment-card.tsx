@@ -16,7 +16,11 @@
 */
 
 import { useState } from "react";
+import { DateTime } from "luxon";
 import { CalendarDays, ChevronDown, ChevronRight, ClipboardPen, Pencil, Stethoscope } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
+import { Field, Input } from "@/components/ui/input";
+import { todayIn } from "@/lib/dates";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,9 +40,39 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
   const [all, setAll] = useState(false);
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const [starting, setStarting] = useState(false);
+  /* "Another day": the day picked for a visit written up afterwards (2026-11-20). */
+  const [otherDay, setOtherDay] = useState<string | null>(null);
   const { toast } = useToast();
   if (!store) return null;
   const { tz } = store;
+
+  /*
+    A visit on an earlier day: its own sheet when the patient had a visit that
+    day, else one made for that day, already over — so what is recorded in it
+    is dated that day (visitFor), and nothing is sent to the patient.
+  */
+  const recordOn = async (day: string) => {
+    if (day >= todayIn(tz)) {
+      setOtherDay(null);
+      return record();
+    }
+    const had = store.visits.find(
+      (v) => !["cancelled", "no_show"].includes(v.status) && DateTime.fromISO(v.starts_at).setZone(tz).toISODate() === day
+    );
+    if (had) {
+      setOtherDay(null);
+      return store.openSheet(had.id);
+    }
+    setStarting(true);
+    try {
+      await store.startVisit(null, day);
+      setOtherDay(null);
+    } catch {
+      toast(T.saveFailed, "error");
+    } finally {
+      setStarting(false);
+    }
+  };
 
   // A visit is listed for anything it left behind: its record, its treatments, its chart work, a prescription, a file.
   const withSomething = new Set<string>(chart.keys());
@@ -78,10 +112,16 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
             {T.title}
           </h3>
           {store.canWrite && (
-            <Button size="sm" onClick={() => void record()} loading={starting} data-treatment-record>
-              <ClipboardPen className="h-4 w-4" />
-              {T.record}
-            </Button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button size="sm" variant="ghost" onClick={() => setOtherDay(DateTime.now().setZone(tz).minus({ days: 1 }).toISODate()!)} data-treatment-other-day>
+                <CalendarDays className="h-4 w-4" />
+                {T.anotherDay}
+              </Button>
+              <Button size="sm" onClick={() => void record()} loading={starting && otherDay === null} data-treatment-record>
+                <ClipboardPen className="h-4 w-4" />
+                {T.record}
+              </Button>
+            </div>
           )}
         </div>
 
@@ -143,6 +183,32 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
           </button>
         )}
       </Card>
+
+      <Modal open={otherDay !== null} onClose={() => setOtherDay(null)} title={T.anotherDayTitle}>
+        {otherDay !== null && (
+          <form
+            className="grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (otherDay) void recordOn(otherDay);
+            }}
+            data-treatment-other-day-form
+          >
+            <p className="text-[13px] leading-relaxed text-ink-500">{T.anotherDayHint}</p>
+            <Field label={t.common.date}>
+              <Input type="date" dir="ltr" value={otherDay} max={todayIn(tz)} onChange={(e) => setOtherDay(e.target.value)} data-treatment-other-day-input />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setOtherDay(null)}>
+                {t.common.cancel}
+              </Button>
+              <Button type="submit" loading={starting} disabled={!otherDay} data-treatment-other-day-open>
+                {T.openVisit}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }

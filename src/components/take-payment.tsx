@@ -16,7 +16,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Check, ReceiptText, Wallet } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
-import { fmtMoney } from "@/lib/dates";
+import { fmtMoney, todayIn } from "@/lib/dates";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ export function TakePayment({
   patientId,
   balance,
   currency,
+  tz,
   size = "sm",
   showBalance = false,
   onPaid,
@@ -37,6 +38,8 @@ export function TakePayment({
   /** What the patient owes, as the page read it. */
   balance: number;
   currency: string;
+  /** The clinic's timezone: what "today" is for the date it was paid. */
+  tz: string;
   size?: "sm" | "md";
   /** "Owes 210 JOD" beside the button, where the balance is not already on screen. */
   showBalance?: boolean;
@@ -50,6 +53,8 @@ export function TakePayment({
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("cash");
   const [reference, setReference] = useState("");
+  // Today, unless the payment is being written down afterwards (2026-11-20).
+  const [paidOn, setPaidOn] = useState(() => todayIn(tz));
   const [pending, start] = useTransition();
   /* The invoices this payment settled, while their receipts are on offer. */
   const [receipts, setReceipts] = useState<{ id: string; number: string; sent: boolean }[] | null>(null);
@@ -64,9 +69,18 @@ export function TakePayment({
 
   const save = () =>
     start(async () => {
-      const r = await recordPatientPaymentAction(slug, { patientId, amount: value, method, reference });
+      const r = await recordPatientPaymentAction(slug, { patientId, amount: value, method, reference, paidOn });
       if (r.error || !r.paid) {
-        toast(r.error === "overpay" ? t.invoices.overpay : r.error === "nothing_due" ? t.invoices.nothingDue : t.common.genericError, "error");
+        toast(
+          r.error === "overpay"
+            ? t.invoices.overpay
+            : r.error === "nothing_due"
+              ? t.invoices.nothingDue
+              : r.error === "bad_date"
+                ? t.invoices.badDate
+                : t.common.genericError,
+          "error"
+        );
         return;
       }
       setOwed((o) => Math.max(0, Math.round((o - value) * 100) / 100));
@@ -104,6 +118,7 @@ export function TakePayment({
           onClick={() => {
             setAmount(String(owed));
             setReference("");
+            setPaidOn(todayIn(tz));
             setReceipts(null);
             setOpen(true);
           }}
@@ -171,14 +186,19 @@ export function TakePayment({
               </Select>
             </Field>
           </div>
-          <Field label={t.invoices.reference} hint={t.common.optional}>
-            <Input value={reference} onChange={(e) => setReference(e.target.value)} />
-          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={t.invoices.paidOnLabel}>
+              <Input type="date" dir="ltr" value={paidOn} max={todayIn(tz)} onChange={(e) => setPaidOn(e.target.value)} data-take-payment-date />
+            </Field>
+            <Field label={t.invoices.reference} hint={t.common.optional}>
+              <Input value={reference} onChange={(e) => setReference(e.target.value)} />
+            </Field>
+          </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t.common.cancel}
             </Button>
-            <Button type="submit" loading={pending} disabled={!valid} data-take-payment-save>
+            <Button type="submit" loading={pending} disabled={!valid || !paidOn} data-take-payment-save>
               {t.common.save}
             </Button>
           </div>

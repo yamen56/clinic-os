@@ -194,6 +194,14 @@ export async function deliverPending() {
  * a part (an iPhone shows neither picture nor buttons) simply leave it out.
  */
 async function teamExtras(c: PoolClient, n: Pending): Promise<Partial<PushPayload>> {
+  /*
+    A patient's WhatsApp message (2026-11-20): Reply opens the conversation with
+    the box ready to type in. Nothing else — marking it read from the lock
+    screen would tell the patient it was read without anybody having answered.
+  */
+  if (n.kind === "whatsapp_message") {
+    return { actions: [{ action: "reply", title: asLocale(n.locale) === "en" ? "Reply" : "رد" }] };
+  }
   if ((n.kind !== "team_message" && n.kind !== "team_reaction") || !n.slug || !n.url) return {};
   const threadId = new URL(n.url, "https://x").searchParams.get("t");
   if (!threadId) return {};
@@ -235,7 +243,12 @@ async function pushOne(c: PoolClient, n: Pending) {
           first on the phone and reception only ever saw the latest one.
         */
         // A team thread replaces its own line on the lock screen, as it does on the bell.
-        tag: REPLACEABLE.has(n.kind) ? n.kind : n.kind === "team_message" && n.dedupe_key ? n.dedupe_key : n.id,
+        // So does a patient's WhatsApp conversation: one line each, the latest message on it.
+        tag: REPLACEABLE.has(n.kind)
+          ? n.kind
+          : (n.kind === "team_message" || n.kind === "whatsapp_message") && n.dedupe_key
+            ? n.dedupe_key
+            : n.id,
         lang: ARABIC.test(`${n.title} ${n.body}`) ? "ar" : "en",
         id: n.id,
         badge: await unreadCount(c, n.user_id),

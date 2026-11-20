@@ -12,6 +12,7 @@ import { findPatientByPhone } from "../../src/lib/patients";
 import { bareJidUser, isLidJid, jidToE164 } from "../../src/lib/phone";
 import { adoptNumber, pnForLid } from "./lid-mapping";
 import { saveFile } from "../../src/lib/storage";
+import { alertPatientMessage, clearPatientMessageAlerts } from "./message-alert";
 
 const logger = pino({ level: "silent" });
 
@@ -252,6 +253,7 @@ async function handleOne(clinicId: string, sock: WASocket, msg: WAMessage) {
     mediaMime: ex.mediaMime ?? null,
     mediaName: ex.mediaName ?? null,
     pushName: fromMe ? null : (msg.pushName ?? null),
+    sentAt: Number(msg.messageTimestamp ?? 0) * 1000 || null,
   });
 }
 
@@ -277,6 +279,8 @@ export async function recordMessage(
     mediaMime: string | null;
     mediaName: string | null;
     pushName: string | null;
+    /** When WhatsApp says it was sent (ms), for not alerting about history replayed on reconnect. */
+    sentAt?: number | null;
   }
 ) {
   let dialable = m.dialable ?? true;
@@ -425,6 +429,22 @@ export async function recordMessage(
           }),
         ]
       );
+      /*
+        On the phones of whoever answers the inbox, now (2026-11-20). Telling,
+        not recording: if it fails, the message has still landed.
+      */
+      await c.query("savepoint patient_alert");
+      try {
+        // Replayed after the worker was away for hours: in the inbox, not on anybody's lock screen.
+        if (!m.sentAt || Date.now() - m.sentAt < 3 * 3600_000) await alertPatientMessage(c, clinicId, convId, { msgType: m.msgType, body: m.body, mediaName: m.mediaName });
+        await c.query("release savepoint patient_alert");
+      } catch (e) {
+        await c.query("rollback to savepoint patient_alert");
+        console.error(`[wa ${clinicId}] message alert`, (e as Error).message);
+      }
+    } else {
+      // Answered from the clinic's phone: whoever was told about it need not be any more.
+      await clearPatientMessageAlerts(c, clinicId, convId);
     }
   });
 }

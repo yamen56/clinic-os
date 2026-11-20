@@ -63,7 +63,7 @@ export default async function NewInvoicePage({
       ).rows[0];
       if (p) patient = { id: p.id, name: p.full_name };
     }
-    let appointment: { id: string; serviceId: string | null; serviceIds: string[]; doctorMemberId: string | null } | null =
+    let appointment: { id: string; serviceId: string | null; serviceIds: string[]; doctorMemberId: string | null; day: string } | null =
       null;
     if (isUuid(sp.appointment)) {
       // The doctor comes along with the service: an invoice raised from a visit
@@ -71,7 +71,8 @@ export default async function NewInvoicePage({
       // is how attribution ends up empty on most invoices.
       const a = (
         await c.query(
-          `select id, service_id, doctor_member_id from appointments where id = $1 and clinic_id = $2`,
+          `select a.id, a.service_id, a.doctor_member_id, (a.starts_at at time zone cl.timezone)::date::text as day
+             from appointments a join clinics cl on cl.id = a.clinic_id where a.id = $1 and a.clinic_id = $2`,
           [sp.appointment, access.clinicId]
         )
       ).rows[0];
@@ -82,6 +83,8 @@ export default async function NewInvoicePage({
           // Every service it was booked for (0106), each a line on the invoice.
           serviceIds: await visitServiceIds(c, a.id),
           doctorMemberId: a.doctor_member_id,
+          // The visit's own day: an invoice for last week's visit is dated last week.
+          day: a.day,
         };
     }
     /*
@@ -173,6 +176,8 @@ export default async function NewInvoicePage({
       chartBilling
       existingInvoice={data.existing}
       fromBoard={sp.from === "board"}
+      tz={access.clinic.timezone}
+      defaultDay={data.appointment?.day ?? null}
     />
   );
 }

@@ -3,7 +3,7 @@
  * Treatment tab is gone, and its work is done on the Dental chart tab.
  *
  * - who added a patient, by name and job, instead of "الموظفون";
- * - "المستحق" on a part-paid invoice, instead of "متبقٍ";
+ * - "المتبقي" on a part-paid invoice (Yamen, 2026-11-20: never "مستحق");
  * - All-on-4 recorded as a whole arch: implants and bridge teeth drawn on the
  *   teeth, listed once, done or voided as one;
  * - the chart is the file's, not the tab's: an entry survives the tab being
@@ -224,14 +224,14 @@ async function main() {
     check(/Dr\. Lina Mansour · Doctor/.test(listText), "a doctor is named with their title and job");
     check(/WhatsApp/.test(listText) && !/\bStaff\b/.test(listText), "a WhatsApp patient still says WhatsApp, and nothing says 'Staff'");
 
-    /* ── المستحق ──────────────────────────────────────────────────────── */
-    console.log("المستحق");
+    /* ── المتبقي ──────────────────────────────────────────────────────── */
+    console.log("المتبقي");
     const deskAr = await signIn(browser, `treat-deskar-${tag}@test.local`, "ar");
     deskAr.on("pageerror", (e) => errors.push(`deskAr: ${e.message}`));
     await deskAr.goto(`${BASE}/c/${slug}/invoices`, { timeout: 120000 });
     await deskAr.waitForSelector("text=INV-0001", { timeout: 60000 });
     const invText = await deskAr.locator("main").innerText();
-    check(invText.includes("المستحق") && !invText.includes("متبقٍ"), "a part-paid invoice says what is still owed as «المستحق»", invText.slice(0, 200));
+    check(invText.includes("المتبقي") && !invText.includes("مستحق"), "a part-paid invoice says what is still owed as «المتبقي», never «مستحق»", invText.slice(0, 200));
     await deskAr.goto(fileUrl(patient.id, "overview"), { timeout: 120000 });
     await deskAr.waitForSelector("[data-added-by]", { timeout: 60000 });
     const arHeader = await deskAr.locator("[data-added-by]").first().innerText();

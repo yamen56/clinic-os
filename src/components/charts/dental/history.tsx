@@ -11,9 +11,10 @@
 */
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, Banknote, Repeat, FlaskConical, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, Banknote, Repeat, FlaskConical, CalendarDays, type LucideIcon } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
-import { fmtDate, fmtDateTime } from "@/lib/dates";
+import { fmtDate, fmtDateOnly, fmtDateTime } from "@/lib/dates";
+import { DoneDateField } from "@/components/charts/done-date";
 import { findTreatment, type Treatment } from "@/lib/charts/dental/catalog";
 import { isToothSite, paintAt, type Mark, type MarkEvent, type Paint, type Person } from "@/lib/charts/dental/state";
 import { tooth as toothOf } from "@/lib/charts/dental/teeth";
@@ -58,6 +59,7 @@ export function EntryRow({
   onNote,
   onDetail,
   onPerformer,
+  onDate,
   extra,
   progress,
   onOpen,
@@ -78,6 +80,8 @@ export function EntryRow({
   onNote: (id: string, note: string) => void;
   onDetail: (id: string, key: string, value: string) => void;
   onPerformer: (id: string, personId: string) => void;
+  /** Done on another day: the day it moves to. Not given where the entry cannot be changed. */
+  onDate?: (id: string, day: string) => void;
 }) {
   const { t, locale } = useI18n();
   const T = t.dental;
@@ -205,6 +209,8 @@ export function EntryRow({
               ))}
             </select>
           </label>
+          {/* Done on another day than it was recorded: the day it was really done (2026-11-20). */}
+          {m.status === "done" && onDate && editable && <DoneDateField doneAt={m.doneAt} tz={tz} onChange={(day) => onDate(m.id, day)} />}
           <label className="block">
             <span className="mb-1 block text-[12px] font-semibold text-ink-500">{T.note}</span>
             <textarea
@@ -254,6 +260,7 @@ const EVENT_ICON: Record<MarkEvent["action"], LucideIcon> = {
   step_edit: Pencil,
   cost: Banknote,
   lab: FlaskConical,
+  date: CalendarDays,
 };
 
 /** The ink of one line in the history: what the entry was at that moment. */
@@ -304,6 +311,8 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
                     ? `${T.events.step_edit}: ${stepOf(m.treatmentKey, e.reason ?? "")?.en ?? e.reason ?? ""}`
                     : e.action === "lab"
                       ? `${T.events.lab}: ${e.reason ?? ""}`
+                      : e.action === "date"
+                        ? t.common.dateMoved.replace("{date}", e.reason ? fmtDateOnly(e.reason, locale) : "")
                       : T.events[e.action]}
               </span>
               {e.action === "step" && e.reason === EMERGENCY_STEP && <Siren className="ms-1 inline h-3 w-3 text-danger" />}
@@ -317,7 +326,7 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
                 .filter(Boolean)
                 .join(" · ")}
               {/* A step's line names its step above; "steps", "finish" and "undo" are how, not why. */}
-              {e.reason && e.action !== "step" && e.action !== "step_edit" && e.action !== "redone" && !(e.action === "done" && e.reason === "steps") && !(e.action === "step_void" && e.reason === "undo")
+              {e.reason && e.action !== "step" && e.action !== "step_edit" && e.action !== "redone" && e.action !== "date" && !(e.action === "done" && e.reason === "steps") && !(e.action === "step_void" && e.reason === "undo")
                 ? ` — ${e.action === "done" && e.reason === "finish" ? T.treatment.finishNow : e.reason}`
                 : ""}
             </div>

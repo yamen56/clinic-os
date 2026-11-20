@@ -3,6 +3,8 @@ import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { owedSql } from "@/lib/invoices";
 import { resendMessage } from "@/lib/wa-resend";
+import { withSystem } from "@/lib/db";
+import { clearPatientMessageAlerts } from "@/lib/patient-message-alerts";
 
 /** Thread detail: messages + linked patient panel. */
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
@@ -89,12 +91,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     return r.ok ? NextResponse.json(r) : NextResponse.json(r, { status: r.error === "not_found" ? 404 : 409 });
   }
 
+  let read = false;
   const ok = await inClinic(g.access, async (c) => {
     if (body.op === "read") {
-      await c.query(
+      const r = await c.query(
         `update conversations set unread_count = 0 where id = $1 and clinic_id = $2`,
         [id, g.access.clinicId]
       );
+      read = !!r.rowCount;
       // Read here is read on WhatsApp too: the worker sends the receipt (worker/wa/read.ts).
       await c.query(
         `insert into jobs (clinic_id, kind, payload)
@@ -142,6 +146,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     }
     return false;
   });
+  /*
+    Read here: the line it put on everybody's phone comes off (2026-11-20). As
+    the system, because a colleague's notifications are not ours to touch, and
+    only once the update above has shown the thread is this clinic's.
+  */
+  if (read) await withSystem((sc) => clearPatientMessageAlerts(sc, g.access.clinicId, id)).catch(() => {});
   return ok
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: "bad_op" }, { status: 400 });

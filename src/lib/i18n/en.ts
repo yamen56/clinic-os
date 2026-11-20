@@ -1,6 +1,9 @@
 export const en = {
   common: {
     appName: "Clinicti",
+    dateDone: "Date done",
+    changeDate: "Change date",
+    dateMoved: "Moved to {date}",
     save: "Save",
     saving: "Saving…",
     saved: "Saved",
@@ -215,6 +218,22 @@ export const en = {
     macShare: "Click the Share button in Safari’s toolbar",
     macAdd: "Choose “Add to Dock”, then Add",
   },
+  /* What the installed app asks for when it first opens (2026-11-20). */
+  permissions: {
+    title: "Allow Clinicti on this device",
+    sub: "So a patient’s message reaches you the moment it arrives, and the camera and microphone work when you need them. You can change these later in this device’s settings.",
+    notifications: "Notifications",
+    notificationsHint: "Patients’ WhatsApp messages, new bookings and reminders, as they happen.",
+    camera: "Camera",
+    cameraHint: "Photos and x-rays straight into a patient’s file.",
+    microphone: "Microphone",
+    microphoneHint: "Voice notes, and dictating a visit.",
+    allow: "Allow",
+    allowed: "Allowed",
+    blocked: "Blocked — turn it on in this device’s settings for Clinicti.",
+    later: "Not now",
+    done: "Done",
+  },
   import: {
     title: "Import patients",
     sub: "Bring an existing patient list in from a spreadsheet or another system.",
@@ -422,6 +441,14 @@ export const en = {
     towardBill: "Paid toward a bill",
     confirmDeleteBill: "The bill comes off To pay. Anything already paid toward it stays in Expenses.",
     confirmDeletePayment: "This paid toward a bill. Deleting it makes that bill owed again.",
+    /* Paid part of it now, the rest owed (Yamen, 2026-11-20). */
+    partPaid: "Paid only part of it",
+    partPaidHint: "What is left is listed under To pay, owed to this supplier.",
+    totalAmount: "Full amount",
+    paidNow: "Paid now",
+    leftAfter: "Still to pay: {left}",
+    partPaidToast: "Saved — {left} still to pay",
+    paidNowTooMuch: "What was paid now must be less than the full amount.",
   },
   /* Lab work across the clinic: out, back, and what is owed to each outside lab. */
   labs: {
@@ -643,6 +670,11 @@ export const en = {
   treatment: {
     title: "Treatment",
     record: "Record visit",
+    /* A visit written up afterwards (2026-11-20). */
+    anotherDay: "Another day",
+    anotherDayTitle: "Record a visit on another day",
+    anotherDayHint: "For a visit written up afterwards. It opens that day’s visit, or adds one that is already over. Nothing is sent to the patient.",
+    openVisit: "Open the visit",
     recordTitle: "Visit record",
     edit: "Edit",
     empty: "Nothing recorded yet",
@@ -1003,6 +1035,12 @@ export const en = {
     statusLead: "Lead",
     statusActive: "Active",
     statusArchived: "Archived",
+    /* Cancelled visits, folded under the rest (2026-11-20). */
+    cancelledVisitsN: "Cancelled ({n})",
+    deleteCancelledVisits: "Delete cancelled ({n})",
+    deleteCancelledVisitsTitle: "Delete {n} cancelled visits for good?",
+    deleteCancelledVisitsBody: "Only cancelled visits with nothing recorded under them. Any with an invoice, a note, a treatment or a file stay.",
+    deletedVisitsN: "{n} deleted",
     lastVisit: "Last visit",
     noPatients: "No patients yet",
     noPatientsBody: "Add your first patient, or they'll appear here automatically when they message you on WhatsApp.",
@@ -1862,6 +1900,14 @@ export const en = {
       "You can't change your own access — that's what stops somebody removing the one permission they'd need to put it back.",
     deactivate: "Deactivate",
     reactivate: "Reactivate",
+    /* Who is no longer here, out of the way (2026-11-20). */
+    removedN: "No longer here ({n})",
+    deleteTitle: "Delete {name}?",
+    deleteBody: "For someone added by mistake: they are taken off this clinic for good. Their account itself is not deleted.",
+    deleted: "Deleted",
+    kept: "Kept — has records",
+    keptHint: "They saw patients, were paid or were booked here, so they stay as the person who did that work.",
+    hasHistory: "They have records in this clinic, so they can’t be deleted. They stay here, out of the list.",
     emailTaken: "This email already has an account — they were added to your clinic.",
     addedEmailed: "They already have an account — we emailed them that they were added.",
     added: "Staff member added",
@@ -1988,6 +2034,7 @@ export const en = {
     "documents.manage": "Create, send and edit documents",
     "documents.void": "Void a signed document",
     invoices: "Invoices",
+    "invoices.history": "See every invoice and payment, not only today’s",
     "invoices.analytics": "See the financial analytics",
     "invoices.void": "Void an invoice",
     insurance: "Insurance",
@@ -2029,6 +2076,8 @@ export const en = {
     "documents.void": "Cancel a document that has already been signed.",
     invoices: "Raise invoices, take payments and send receipts.",
     "invoices.void": "Cancel an invoice. One already filed raises a credit note with JoFotara.",
+    "invoices.history":
+      "Off: the invoices and payments lists show today’s only. They can still raise new invoices, take payments, and settle what a patient still owes from the patient’s file.",
     "invoices.analytics":
       "The Analytics tab and the dashboard's revenue: what the clinic took over any period, what earned it, and what is owed. Without it, the desk still sees what was collected today.",
     insurance: "Insurance on patient files and invoices, and the claims list.",
@@ -2281,6 +2330,7 @@ export const en = {
       day_end: { label: "End-of-day summary", hint: "Completed, no-shows, and what was collected." },
       weekly_summary: { label: "Weekly summary", hint: "The last seven days, once a week." },
       unread_digest: { label: "Unread messages", hint: "When conversations are waiting for a reply." },
+      patient_messages: { label: "Patients’ WhatsApp messages", hint: "Each new message the moment it arrives, so you can answer it." },
       ai_escalation: { label: "The AI assistant needs you", hint: "A patient it handed back to the team." },
       documents: {
         label: "Documents and signatures",
@@ -3421,6 +3471,11 @@ export const en = {
     deleteAllConfirm: "Delete {n} cancelled invoices for good?",
     deleteAllBody: "They and their payments are removed from the clinic's records. This cannot be undone.",
     filedStays: "Invoices filed with JoFotara stay on record with their credit note: the tax authority holds them.",
+    todayOnlyNote: "Showing today’s only. What a patient still owes from before is on their file.",
+    /* When it happened, for what is written down afterwards (2026-11-20). */
+    paidOnLabel: "Date paid",
+    invoiceDate: "Invoice date",
+    badDate: "That date can’t be used — choose today or an earlier day.",
     deleted: "Invoice deleted",
     deletedN: "{n} invoices deleted",
     noCancelled: "No cancelled invoices",
@@ -4586,6 +4641,7 @@ export const en = {
       step_edit: "Corrected",
       cost: "Materials cost changed",
       lab: "Lab work",
+      date: "Date changed",
     },
     details: { material: "Material", canals: "Canals", grade: "Grade", type: "Type", implants: "Implants", depth: "Pocket depth" },
     categories: {

@@ -19,6 +19,7 @@ import {
   type Capability,
 } from "@/lib/permissions";
 import { applyPay, payFitsRole, paySchema, syncSalaryBill, type Pay } from "./pay";
+import { memberHistorySql } from "@/lib/member-history";
 
 const addStaffSchema = z.object({
   fullName: z.string().min(2).max(80),
@@ -561,6 +562,59 @@ export async function updateMemberAction(
     if (patch.active === true && !target.active) {
       await emailMemberAccess(c, access.clinicId, slug, target.user_id, access.session.user.id);
     }
+    revalidatePath(`/c/${slug}/settings/staff`);
+    return {};
+  });
+}
+
+/**
+ * Delete somebody added by mistake (Yamen, 2026-11-20: the staff list kept
+ * "people that I entered by fault", greyed out, with no way to get rid of
+ * them).
+ *
+ * Only somebody who left nothing in the clinic's records — see
+ * memberHistorySql. Anybody who saw a patient, earned a share or was paid is
+ * named on those rows; they stay removed instead, out of the way under
+ * Removed. Never the owner, never yourself. Their account is not touched: it
+ * may work at another clinic, and an invitation never accepted simply stops
+ * leading anywhere.
+ */
+export async function deleteMemberAction(slug: string, memberId: string): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "settings.staff")) return { error: "forbidden" };
+  if (!z.string().uuid().safeParse(memberId).success) return { error: "not_found" };
+  if (memberId === access.memberId) return { error: "forbidden_self" };
+
+  return inClinic(access, async (c) => {
+    const target = (
+      await c.query(
+        `select cm.is_owner, cm.user_id, cm.salary_schedule_id, u.full_name, u.email, ${memberHistorySql("cm")} as has_history
+           from clinic_members cm join users u on u.id = cm.user_id
+          where cm.id = $1 and cm.clinic_id = $2
+          for update of cm`,
+        [memberId, access.clinicId]
+      )
+    ).rows[0] as
+      | { is_owner: boolean; user_id: string; salary_schedule_id: string | null; full_name: string; email: string; has_history: boolean }
+      | undefined;
+    if (!target) return { error: "not_found" };
+    if (target.is_owner) return { error: "forbidden" };
+    if (target.has_history) return { error: "has_history" };
+
+    // A salary set for them stops; what it already recorded stays in Expenses.
+    if (target.salary_schedule_id) {
+      await c.query(`update expense_schedules set active = false where id = $1 and clinic_id = $2`, [target.salary_schedule_id, access.clinicId]);
+    }
+    await c.query(`delete from clinic_members where id = $1 and clinic_id = $2`, [memberId, access.clinicId]);
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "staff.delete",
+      entity: "clinic_member",
+      entityId: memberId,
+      detail: { name: target.full_name, email: target.email },
+    });
     revalidatePath(`/c/${slug}/settings/staff`);
     return {};
   });

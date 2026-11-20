@@ -370,6 +370,15 @@ const billSchema = z.object({
   /** The day the goods came or the bill arrived. */
   incurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+  /*
+    Paid part of it there and then, the rest owed (Yamen, 2026-11-20: "maybe I
+    paid but not the full price, I still owe them"). Only on a new bill. The
+    part paid is an expense toward the bill on the bill's own day — exactly
+    what paying it from To pay would have written — so the rest is owed and
+    nothing else needs to know how it started.
+  */
+  paidNow: z.coerce.number().positive().max(1_000_000).optional(),
+  method: z.enum(METHODS).default("cash"),
 });
 
 /**
@@ -380,16 +389,19 @@ const billSchema = z.object({
  * that would leave the supplier owing the clinic, which is a refund to record,
  * not a bill to shrink.
  */
-export async function saveBillAction(slug: string, data: unknown): Promise<{ error?: string; id?: string }> {
+export async function saveBillAction(slug: string, data: unknown): Promise<{ error?: string; id?: string; expenseId?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "expenses")) return { error: "forbidden" };
   const parsed = billSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
+  // Part of it is less than all of it: all of it paid is an expense, not a bill.
+  if (d.paidNow !== undefined && (d.id || round2(d.paidNow) > round2(d.amount) - 0.01)) return { error: "paid_now" };
 
-  return inClinic(access, async (c): Promise<{ error?: string; id?: string }> => {
+  return inClinic(access, async (c): Promise<{ error?: string; id?: string; expenseId?: string }> => {
     if (!(await categoryBelongs(c, access.clinicId, d.categoryId))) return { error: "invalid" };
     let id = d.id;
+    let expenseId: string | undefined;
     if (id) {
       const paid = Number(
         (await c.query(`select coalesce(sum(amount), 0) as n from expenses where bill_id = $1 and clinic_id = $2`, [id, access.clinicId]))
@@ -416,6 +428,25 @@ export async function saveBillAction(slug: string, data: unknown): Promise<{ err
           [access.clinicId, d.categoryId, d.amount, d.vendor, d.note.trim(), d.incurredOn, d.dueOn, access.session.user.id]
         )
       ).rows[0].id as string;
+      if (d.paidNow) {
+        expenseId = (
+          await c.query(
+            `insert into expenses (clinic_id, category_id, amount, vendor, note, spent_on, method, created_by, bill_id)
+             values ($1, $2, $3, $4, $5, $6::date, $7, $8, $9) returning id`,
+            [
+              access.clinicId,
+              d.categoryId,
+              round2(d.paidNow),
+              d.vendor.trim().replace(/\s+/g, " ").slice(0, 120),
+              d.note.trim().slice(0, 500),
+              d.incurredOn,
+              d.method,
+              access.session.user.id,
+              id,
+            ]
+          )
+        ).rows[0].id as string;
+      }
     }
     await audit(c, {
       clinicId: access.clinicId,
@@ -424,11 +455,11 @@ export async function saveBillAction(slug: string, data: unknown): Promise<{ err
       action: d.id ? "bill.update" : "bill.create",
       entity: "supplier_bill",
       entityId: id!,
-      detail: { amount: d.amount, vendor: d.vendor, incurredOn: d.incurredOn, dueOn: d.dueOn },
+      detail: { amount: d.amount, vendor: d.vendor, incurredOn: d.incurredOn, dueOn: d.dueOn, paidNow: d.paidNow ?? null, expense: expenseId ?? null },
     });
     revalidatePath(`/c/${slug}/expenses`);
     revalidatePath(`/c/${slug}/stock`);
-    return { id };
+    return { id, expenseId };
   });
 }
 

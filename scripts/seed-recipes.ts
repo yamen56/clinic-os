@@ -519,7 +519,7 @@ export const RECIPES: Recipe[] = [
     name_ar: "حجز إلكتروني بانتظار الموافقة",
     description:
       "An online booking waiting for approval is easy to miss among the day's alerts. It becomes a task on reception's to-do list, due within the hour.",
-    description_ar: "الحجز الإلكتروني الذي ينتظر الموافقة يضيع بسهولة بين تنبيهات اليوم. يصبح مهمة على قائمة الاستقبال، مستحقة خلال ساعة.",
+    description_ar: "الحجز الإلكتروني الذي ينتظر الموافقة يضيع بسهولة بين تنبيهات اليوم. يصبح مهمة على قائمة الاستقبال، مطلوبة خلال ساعة.",
     trigger_type: "booking_submitted",
     trigger_config: { needs_approval: true },
     sort: 15,
@@ -544,7 +544,7 @@ export const RECIPES: Recipe[] = [
     description:
       "Balances are forgotten more often than refused. Three days after an invoice is sent and still unpaid: a polite reminder with the amount and the payment link. Nothing is sent once it is paid.",
     description_ar:
-      "المبالغ المستحقة تُنسى أكثر مما تُرفض. بعد 3 أيام من إرسال فاتورة لم تُدفع: تذكير لطيف بالمبلغ ورابط الفاتورة. ولا يُرسل شيء إذا دُفعت.",
+      "المبالغ المتبقية تُنسى أكثر مما تُرفض. بعد 3 أيام من إرسال فاتورة لم تُدفع: تذكير لطيف بالمبلغ ورابط الفاتورة. ولا يُرسل شيء إذا دُفعت.",
     trigger_type: "invoice_unpaid",
     trigger_config: { days: 3 },
     sort: 16,

@@ -2,6 +2,7 @@ import { guardClinic } from "@/lib/guard";
 import { hasFullControl } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { ServiceWorkerRegistrar } from "@/components/pwa";
+import { PermissionsPrompt } from "@/components/permissions-prompt";
 import { AutosaveGuard } from "@/components/autosave-guard";
 import { Shell } from "./shell";
 import { getLocale } from "@/lib/i18n";
@@ -203,6 +204,8 @@ export default async function ClinicLayout({
         registration competes with the page they actually came for.
       */}
       <ServiceWorkerRegistrar />
+      {/* The installed app asks, once, for what it needs: notifications, camera, microphone (2026-11-20). */}
+      {!access.isImpersonating && <PermissionsPrompt />}
       <AutosaveGuard />
       {children}
     </Shell>

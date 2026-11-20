@@ -81,6 +81,13 @@ type Draft = {
   hasReceipt: boolean;
   /** Not paid yet: saved as a bill to pay (0099), not as an expense. `spentOn` is then the bill's date. */
   unpaid: boolean;
+  /**
+   * Paid, but only part of it (2026-11-20): saved as a bill for the full
+   * amount with `paidNow` paid toward it on the day, so the rest is owed.
+   * Only while adding a paid one.
+   */
+  partPaid: boolean;
+  paidNow: string;
   dueOn: string;
   /** Editing a bill rather than an expense. */
   billId?: string;
@@ -244,6 +251,8 @@ export function ExpensesClient({
     method: "cash",
     hasReceipt: false,
     unpaid: false,
+    partPaid: false,
+    paidNow: "",
     dueOn: "",
     repeat: false,
     dayOfMonth: todayDay,
@@ -253,6 +262,8 @@ export function ExpensesClient({
   const billDraft = (b: Bill): Draft => ({
     billId: b.id,
     unpaid: true,
+    partPaid: false,
+    paidNow: "",
     fixedVendor: !!b.companyId,
     categoryId: b.categoryId,
     amount: String(b.amount),
@@ -272,6 +283,8 @@ export function ExpensesClient({
     scheduleId: r.id,
     repeat: true,
     unpaid: false,
+    partPaid: false,
+    paidNow: "",
     categoryId: r.category_id,
     amount: String(r.amount),
     vendor: r.vendor,
@@ -395,6 +408,15 @@ export function ExpensesClient({
   ];
 
   const kindOf = (d: Draft): Kind => (d.repeat ? "monthly" : d.unpaid ? "owed" : "paid");
+  /** A new paid one, of which only part was paid. */
+  const partOn = (d: Draft) => !d.id && !d.billId && !d.scheduleId && !d.unpaid && !d.repeat && d.partPaid;
+  /** What would still be owed, once both amounts are typed; null until then. */
+  const partLeft = (d: Draft): number | null => {
+    const total = Number(d.amount);
+    const now = Number(d.paidNow);
+    if (!d.amount || !d.paidNow || !(total > 0) || !(now > 0)) return null;
+    return Math.round((total - now) * 100) / 100;
+  };
   /** Where a new one is listed, so the screen can show it there once it is saved. */
   const listOf: Record<Kind, View> = { paid: "spent", owed: "pay", monthly: "monthly" };
 
@@ -409,6 +431,8 @@ export function ExpensesClient({
       method: e.method as Method,
       hasReceipt: e.hasReceipt,
       unpaid: false,
+      partPaid: false,
+      paidNow: "",
       dueOn: "",
       repeat: false,
       dayOfMonth: todayDay,
@@ -906,7 +930,7 @@ export function ExpensesClient({
             )}
             {draft.repeat && !draft.scheduleId && <p className="-mt-1 text-[12px] leading-relaxed text-ink-500">{E.repeatHint}</p>}
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t.expenses.amount} required>
+              <Field label={partOn(draft) ? E.totalAmount : t.expenses.amount} required>
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -938,6 +962,46 @@ export function ExpensesClient({
                 </Field>
               )}
             </div>
+            {/*
+              Paid, but not all of it (Yamen, 2026-11-20). One switch under the
+              amount, only while adding a paid one: on, the amount is the full
+              price and a second box takes what was handed over today. The rest
+              is owed to the supplier and listed under To pay.
+            */}
+            {!draft.id && !draft.unpaid && !draft.repeat && (
+              <div className="grid gap-3 rounded-ctl border border-line px-3 py-2.5" data-part-paid={draft.partPaid}>
+                <label className="flex min-h-10 cursor-pointer items-center gap-2.5">
+                  <Toggle checked={draft.partPaid} onChange={(v) => setDraft({ ...draft, partPaid: v })} />
+                  <span className="text-[13px] font-medium">{E.partPaid}</span>
+                </label>
+                {draft.partPaid && (
+                  <>
+                    <Field
+                      label={E.paidNow}
+                      required
+                      hint={
+                        partLeft(draft) !== null
+                          ? partLeft(draft)! > 0
+                            ? E.leftAfter.replace("{left}", money(partLeft(draft)!))
+                            : E.paidNowTooMuch
+                          : E.partPaidHint
+                      }
+                    >
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step={0.5}
+                        dir="ltr"
+                        value={draft.paidNow}
+                        onChange={(e) => setDraft({ ...draft, paidNow: e.target.value })}
+                        data-expense-paid-now
+                      />
+                    </Field>
+                  </>
+                )}
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t.expenses.category}>
                 <Select
@@ -981,9 +1045,9 @@ export function ExpensesClient({
             </div>
             {/* Who is owed is what a bill is about, so it is asked for; on an expense it is optional. */}
             <Field
-              label={draft.unpaid ? E.supplier : t.expenses.vendor}
-              required={draft.unpaid}
-              hint={draft.unpaid ? undefined : t.common.optional}
+              label={draft.unpaid || partOn(draft) ? E.supplier : t.expenses.vendor}
+              required={draft.unpaid || partOn(draft)}
+              hint={draft.unpaid || partOn(draft) ? undefined : t.common.optional}
             >
               <Input
                 value={draft.vendor}
@@ -1078,10 +1142,42 @@ export function ExpensesClient({
               </Button>
               <Button
                 loading={pending}
-                disabled={!draft.amount || (draft.repeat ? !draft.dayOfMonth : !draft.spentOn) || (draft.unpaid && !draft.vendor.trim())}
+                disabled={
+                  !draft.amount ||
+                  (draft.repeat ? !draft.dayOfMonth : !draft.spentOn) ||
+                  ((draft.unpaid || partOn(draft)) && !draft.vendor.trim()) ||
+                  (partOn(draft) && !((partLeft(draft) ?? 0) > 0))
+                }
                 data-expense-save
                 onClick={() =>
-                  draft.repeat
+                  partOn(draft)
+                    ? start(async () => {
+                        const r = await saveBillAction(slug, {
+                          categoryId: draft.categoryId,
+                          amount: draft.amount,
+                          vendor: draft.vendor,
+                          note: draft.note,
+                          incurredOn: draft.spentOn,
+                          dueOn: null,
+                          paidNow: draft.paidNow,
+                          method: draft.method,
+                        });
+                        if (r.error) {
+                          toast(r.error === "paid_now" ? E.paidNowTooMuch : t.common.genericError, "error");
+                          return;
+                        }
+                        // The receipt is the payment's, so it goes on the expense the part paid wrote.
+                        if (pendingReceipt && r.expenseId) {
+                          await uploadReceipt(r.expenseId, pendingReceipt);
+                          router.refresh();
+                        }
+                        toast(E.partPaidToast.replace("{left}", money(partLeft(draft) ?? 0)));
+                        setPendingReceipt(null);
+                        setDraft(null);
+                        // Shown where the news is: what is still owed.
+                        show(listOf.owed);
+                      })
+                    : draft.repeat
                     ? run(
                         () =>
                           saveExpenseScheduleAction(slug, {

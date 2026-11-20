@@ -6,7 +6,8 @@ import { inOrder } from "@/lib/db";
 import { loadDocumentList } from "@/lib/esign/queries";
 import { PatientProfile } from "./profile-client";
 import { can } from "@/lib/auth";
-import { invoiceScopeSql } from "@/lib/invoice-scope";
+import { invoiceDaySql, invoiceScopeSql } from "@/lib/invoice-scope";
+import { appointmentAttachedSql } from "@/lib/appointment-history";
 import { countryFromClinic } from "@/lib/phone";
 import { PATIENT_PRESCRIPTIONS_JSON } from "@/lib/prescriptions";
 import { auditView } from "@/lib/audit";
@@ -44,6 +45,12 @@ export default async function PatientProfilePage({
     the two queries to unscope.
   */
   const invScope = invoiceScopeSql(access, "i", 3);
+  /*
+    Without `invoices.history` (2026-11-20) the file lists today's invoices and
+    any still to be paid — what the desk has to collect — and not the paid
+    history, the same set `/invoices/[id]` will open for them.
+  */
+  const invDay = invoiceDaySql(access, "i", 3 + invScope.params.length, { owedToo: true });
 
   /*
     The sections of the app this member is allowed into, decided once here and
@@ -154,7 +161,9 @@ export default async function PatientProfilePage({
                       -- Everything else the visit holds, for its row in the Appointments tab (2026-11-15: "all of the details").
                       a.ends_at, a.finished_at, a.walk_in, a.notes, a.intake_answers, a.created_at,
                       a.next_visit_days, a.next_visit_none, a.desk_note, a.handed_off_at, a.late_min,
-                      cb.full_name as created_by_name, bl.name as booking_link_name
+                      cb.full_name as created_by_name, bl.name as booking_link_name,
+                      -- A cancelled visit nothing was written under may be deleted from the file (2026-11-20).
+                      (a.status = 'cancelled' and not ${appointmentAttachedSql("a")}) as deletable
                from appointments a
                left join services s on s.id = a.service_id
                left join clinic_members m on m.id = a.doctor_member_id
@@ -177,9 +186,9 @@ export default async function PatientProfilePage({
                  select (array_agg(ii.description order by ii.sort, ii.id))[1] as first_item, count(*)::int as item_count
                  from invoice_items ii where ii.invoice_id = i.id
                ) it on true
-               where i.patient_id = $1 and i.clinic_id = $2${invScope.sql}
-               order by i.created_at desc limit 50`,
-              [id, access.clinicId, ...invScope.params]
+               where i.patient_id = $1 and i.clinic_id = $2${invScope.sql}${invDay.sql}
+               order by i.issue_date desc nulls last, i.created_at desc limit 50`,
+              [id, access.clinicId, ...invScope.params, ...invDay.params]
             )
           : none,
         () => caps.conversations

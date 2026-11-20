@@ -50,6 +50,7 @@ export const PREF_KEYS = [
   "doctor_hours",
   "stock",
   "team",
+  "patient_messages",
 ] as const;
 export type PrefKey = (typeof PREF_KEYS)[number];
 
@@ -112,6 +113,12 @@ export const PREF_DEFS: PrefDef[] = [
 
   // Patients reaching the clinic
   { key: "ai_escalation", group: "patients", lockOff: true, shownTo: frontDesk },
+  /*
+    A patient writing on WhatsApp, the moment it arrives (Yamen, 2026-11-20: "when
+    someone sends a message on WhatsApp I can receive it so I can reply
+    immediately"). To whoever may open the inbox.
+  */
+  { key: "patient_messages", group: "patients", shownTo: (a) => a.caps.conversations === true },
   { key: "documents", group: "patients", shownTo: (a) => a.caps.documents === true },
   {
     key: "prescriptions",
@@ -173,6 +180,9 @@ export function prefKeyFor(kind: string): PrefKey | null {
     case "team_message":
     case "team_reaction":
       return "team";
+    // Before the 'whatsapp_' prefix below: a patient's message is not the number's health.
+    case "whatsapp_message":
+      return "patient_messages";
     case "document_integrity":
     case "test":
       return null;
@@ -231,8 +241,9 @@ export function deliveryFor(kind: string): KindDelivery {
     kind === "ai_booking" ||
     kind === "waitlist_booked" ||
     kind.startsWith("appointment_") ||
-    // A colleague who needs something now.
+    // A colleague who needs something now — or a patient writing in.
     kind === "team_message" ||
+    kind === "whatsapp_message" ||
     kind === "test"
   ) {
     return { urgent: false, prompt: true, dropWhenQuiet: false, ttl: 3 * 3600 };

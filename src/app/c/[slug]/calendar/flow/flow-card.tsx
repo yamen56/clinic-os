@@ -363,6 +363,7 @@ export function FlowCard({
                 patientId={appt.patient_id}
                 balance={appt.balance_due ?? 0}
                 currency={currency}
+                tz={tz}
                 onPaid={(n) => setPaidHere((x) => Math.round((x + n) * 100) / 100)}
               />
             )}

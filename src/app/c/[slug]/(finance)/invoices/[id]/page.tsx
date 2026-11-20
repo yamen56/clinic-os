@@ -4,7 +4,7 @@ import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
 import { InvoiceDetailClient } from "./invoice-detail-client";
 import { can } from "@/lib/auth";
-import { invoiceScopeSql } from "@/lib/invoice-scope";
+import { invoiceDaySql, invoiceScopeSql } from "@/lib/invoice-scope";
 import { isReady, loadEinvoiceSettings } from "@/lib/einvoice/settings";
 import { DELETABLE_INVOICE_SQL } from "@/lib/invoices";
 
@@ -31,7 +31,14 @@ export default async function InvoiceDetailPage({
       have put a permanent unauthenticated link to somebody else's invoice in
       the page payload.
     */
-    const scope = invoiceScopeSql(access, "i", 3);
+    const own = invoiceScopeSql(access, "i", 3);
+    /*
+      Without `invoices.history`: today's, or one that still has something to
+      pay — the desk settles a balance from the patient's file and its link
+      must open. Applied to the lookup for the reason given above.
+    */
+    const day = invoiceDaySql(access, "i", 3 + own.params.length, { owedToo: true });
+    const scope = { sql: own.sql + day.sql, params: [...own.params, ...day.params] };
     const inv = (
       await c.query(
         `select i.*, p.full_name as patient_name, p.phone_e164 as patient_phone,
@@ -64,7 +71,7 @@ export default async function InvoiceDetailPage({
     ).rows;
     const payments = (
       await c.query(
-        `select pay.id, pay.amount, pay.method, pay.reference, pay.paid_at, u.full_name as recorded_by
+        `select pay.id, pay.amount, pay.method, pay.reference, pay.paid_at, pay.created_at, u.full_name as recorded_by
          from payments pay left join users u on u.id = pay.recorded_by
          where pay.invoice_id = $1 order by pay.paid_at desc`,
         [id]

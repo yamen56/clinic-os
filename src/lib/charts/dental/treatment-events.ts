@@ -42,13 +42,19 @@ export async function finishedTreatment(
   if (typeof markId !== "string") return null;
   const m = (
     await c.query(
-      `select m.patient_id, m.treatment_key, m.label, m.label_ar, m.status, m.voided_at, cl.default_locale, cl.timezone
+      `select m.patient_id, m.treatment_key, m.label, m.label_ar, m.status, m.voided_at, cl.default_locale, cl.timezone,
+              m.done_at > now() - interval '1 day' as recent
          from chart_marks m join clinics cl on cl.id = m.clinic_id
         where m.id = $1 and m.clinic_id = $2`,
       [markId, clinicId]
     )
   ).rows[0];
   if (!m || m.voided_at || m.status !== "done") return null;
+  /*
+    Written up afterwards — recorded for an earlier day, or its date set back
+    (2026-11-20). Aftercare for last week's extraction, sent today, is wrong.
+  */
+  if (!m.recent) return null;
   const teeth = await c.query(
     `select distinct site from chart_marks
       where clinic_id = $1 and patient_id = $2 and treatment_key = $3 and status = 'done' and voided_at is null

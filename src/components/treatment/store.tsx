@@ -97,9 +97,11 @@ export type TreatmentStore = Omit<TreatmentTabData, "treatment"> & {
   /**
    * A visit for now, for a patient with no appointment today (a walk-in,
    * already with the doctor), and the sheet opened on it. `recordId`: today's
-   * record written without a visit, which moves onto it. Throws on failure.
+   * record written without a visit, which moves onto it. `day`: an earlier
+   * day instead — that day's visit, found or made, already over (2026-11-20).
+   * Throws on failure.
    */
-  startVisit(recordId?: string | null): Promise<string>;
+  startVisit(recordId?: string | null, day?: string | null): Promise<string>;
   /** Open an appointment's full details in the Appointments tab. Absent for a member without the calendar. */
   showAppointment?: (appointmentId: string) => void;
   /** Write a prescription for a visit, starting from its diagnosis. Absent for a member who may not prescribe. */
@@ -265,11 +267,14 @@ export function TreatmentProvider({
   const mine = useCallback((id: string) => void sync.current.mine.set(id, Date.now()), []);
 
   const startVisit = useCallback(
-    async (recordId?: string | null) => {
-      const r = await call<{ visit: TreatmentVisit }>(`/api/c/${slug}/patients/${patientId}/treatment/visit`, "POST", { recordId: recordId ?? null });
+    async (recordId?: string | null, day?: string | null) => {
+      const r = await call<{ visit: TreatmentVisit }>(`/api/c/${slug}/patients/${patientId}/treatment/visit`, "POST", {
+        recordId: day ? null : (recordId ?? null),
+        day: day ?? null,
+      });
       const v = r.visit;
-      setStarted((prev) => [v, ...prev]);
-      if (recordId) {
+      setStarted((prev) => [v, ...prev.filter((x) => x.id !== v.id)]);
+      if (recordId && !day) {
         // As the server did: today's record, and what was done today with no visit, are under the new one now.
         const today = new Date(v.starts_at).toDateString();
         setRecords((prev) => prev.map((x) => (x.id === recordId && !x.appointmentId ? { ...x, appointmentId: v.id } : x)));

@@ -79,6 +79,20 @@ export const CAPABILITIES = [
   */
   "invoices.void",
   /*
+    The whole list of invoices and payments, not only today's.
+
+    Yamen, 2026-11-20: staff who take the money should be able to "only see
+    today's and create new ones". Off, the Invoices and Payments lists show what
+    was raised or taken today and nothing older, and an invoice from another
+    day opens only while it still has something to pay — the desk still has to
+    settle a patient's balance, which is the job. Raising, taking a payment and
+    the patient file's balance are `invoices`, untouched.
+
+    Inherited from `invoices` (see INHERITED below), so nobody loses the list on
+    deploy: an owner unticks it for the person who should see only today.
+  */
+  "invoices.history",
+  /*
     Insurance, as one switch.
 
     It used to be spread across three others — claims rode on `invoices`, the
@@ -193,6 +207,7 @@ const REQUIRES: Partial<Record<Capability, Capability[]>> = {
   "documents.void": ["documents"],
   "invoices.analytics": ["invoices"],
   "invoices.void": ["invoices"],
+  "invoices.history": ["invoices"],
   "insurance.claims": ["insurance"],
   "insurance.companies": ["insurance", "settings"],
   "settings.clinic": ["settings"],
@@ -239,6 +254,8 @@ export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
     // The desk takes the deliveries in.
     "stock",
     "invoices",
+    // Every invoice, not only today's: off for whoever should see only their day.
+    "invoices.history",
     // Correcting the desk's own mistake. Everything below this line up to
     // `settings` is what the desk could already do before it had a name.
     "invoices.void",
@@ -433,6 +450,7 @@ export function resolveCapabilities(
   const INHERITED: [Capability, boolean][] = [
     ["patients.merge", caps.patients],
     ["invoices.void", caps.invoices],
+    ["invoices.history", caps.invoices],
     ["insurance", caps.invoices || caps.settings],
     ["insurance.claims", caps.invoices],
     ["insurance.companies", caps.settings],
@@ -578,7 +596,7 @@ export const CAPABILITY_GROUPS: {
   },
   { section: "documents", actions: ["documents.manage", "documents.void"], area: "daily" },
   { section: "stock", actions: [], area: "daily" },
-  { section: "invoices", actions: ["invoices.void", "invoices.analytics"], area: "money" },
+  { section: "invoices", actions: ["invoices.history", "invoices.void", "invoices.analytics"], area: "money" },
   { section: "insurance", actions: ["insurance.claims", "insurance.companies"], area: "money" },
   { section: "earnings", actions: [], area: "money" },
   { section: "expenses", actions: [], area: "money" },

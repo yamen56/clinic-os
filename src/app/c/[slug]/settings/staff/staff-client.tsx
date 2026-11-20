@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, NumberInput, Select, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/misc";
-import { Modal } from "@/components/ui/modal";
+import { ConfirmDialog, Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { WeeklyHoursEditor } from "@/components/weekly-hours-editor";
 import { PhotoPicker } from "@/components/photo-picker";
-import { addStaffAction, updateMemberAction } from "./actions";
+import { addStaffAction, deleteMemberAction, updateMemberAction } from "./actions";
 import { PayEditor, emptyPay, payDraftOf, payKindsFor, payLine, payOf, type PayDraft } from "./pay-editor";
 import {
   CAPABILITIES,
@@ -45,6 +45,8 @@ import {
   Sparkles,
   Settings,
   RotateCcw,
+  ChevronDown,
+  Trash2,
 } from "lucide-react";
 
 type Member = {
@@ -67,6 +69,8 @@ type Member = {
   has_photo: boolean;
   /** They also work at another clinic here, so their name is theirs to change. */
   shared_account: boolean;
+  /** They did something here — a visit, a share, a payout — so they can be removed but not deleted. */
+  has_history: boolean;
   /**
    * What this doctor earns of what they bill. Null means no arrangement, which
    * is not the same as zero.
@@ -125,6 +129,16 @@ export function StaffClient({
   const [addOpen, setAddOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [editing, setEditing] = useState<Member | null>(null);
+  /*
+    Who is no longer here sits folded under the list (Yamen, 2026-11-20: greyed
+    rows of "people that I entered by fault" filled it). Somebody who did
+    nothing here can be deleted outright from there.
+  */
+  const [showRemoved, setShowRemoved] = useState(false);
+  const [deleting, setDeleting] = useState<Member | null>(null);
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const current = members.filter((m) => m.active);
+  const removed = members.filter((m) => !m.active);
   const [form, setForm] = useState<{
     fullName: string;
     email: string;
@@ -210,7 +224,7 @@ export function StaffClient({
           }
         />
         <ul className="divide-y divide-line">
-          {members.map((m) => (
+          {current.map((m) => (
             <li key={m.id} className={`flex items-center gap-3 px-5 py-3 ${m.active ? "" : "opacity-50"}`}>
               <Avatar
                 name={m.full_name}
@@ -259,7 +273,87 @@ export function StaffClient({
             </li>
           ))}
         </ul>
+        {removed.length > 0 && (
+          <div className="border-t border-line">
+            <button
+              type="button"
+              onClick={() => setShowRemoved((v) => !v)}
+              aria-expanded={showRemoved}
+              className="flex min-h-11 w-full touch-manipulation items-center justify-between gap-2 px-5 py-2.5 text-[13px] font-semibold text-ink-500 transition-colors hover:bg-sunken"
+              data-staff-removed-toggle={removed.length}
+            >
+              <span>{t.staff.removedN.replace("{n}", String(removed.length))}</span>
+              <ChevronDown className={`h-4 w-4 transition-transform duration-140 ${showRemoved ? "rotate-180" : ""}`} />
+            </button>
+            {showRemoved && (
+              <ul className="divide-y divide-line border-t border-line bg-canvas" data-staff-removed>
+                {removed.map((m) => (
+                  <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5" data-staff-removed-row={m.id}>
+                    <span className="opacity-60">
+                      <Avatar name={m.full_name} size={28} color={m.color} src={m.has_photo ? `/api/c/${slug}/staff/${m.id}/photo` : null} />
+                    </span>
+                    {/* A name room to read before the buttons: on a phone they wrap under it rather than crushing it. */}
+                    <div className="min-w-0 flex-1 basis-40">
+                      <div className="truncate text-[13px] font-medium text-ink-700">{m.full_name}</div>
+                      <div className="truncate text-[12px] text-ink-400" dir="ltr">
+                        {m.email}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        loading={rowBusy === m.id}
+                        onClick={async () => {
+                          setRowBusy(m.id);
+                          const r = await updateMemberAction(slug, m.id, { active: true });
+                          setRowBusy(null);
+                          if (r.error) toast(t.common.genericError, "error");
+                          else toast(t.common.saved);
+                        }}
+                        data-staff-reactivate={m.id}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        {t.staff.reactivate}
+                      </Button>
+                      {m.has_history ? (
+                        <span className="px-2 text-[12px] text-ink-400" title={t.staff.keptHint} data-staff-kept={m.id}>
+                          {t.staff.kept}
+                        </span>
+                      ) : (
+                        <Button size="sm" variant="ghost" className="!text-danger" onClick={() => setDeleting(m)} data-staff-delete={m.id}>
+                          <Trash2 className="h-4 w-4" />
+                          {t.common.delete}
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </Card>
+
+      <ConfirmDialog
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        title={deleting ? t.staff.deleteTitle.replace("{name}", deleting.full_name) : ""}
+        body={t.staff.deleteBody}
+        confirmLabel={t.common.delete}
+        cancelLabel={t.common.cancel}
+        loading={!!deleting && rowBusy === deleting.id}
+        onConfirm={async () => {
+          if (!deleting) return;
+          const who = deleting;
+          setRowBusy(who.id);
+          const r = await deleteMemberAction(slug, who.id);
+          setRowBusy(null);
+          setDeleting(null);
+          if (r.error) toast(r.error === "has_history" ? t.staff.hasHistory : t.common.genericError, "error");
+          else toast(t.staff.deleted);
+        }}
+      />
 
       {/* Add staff */}
       <Modal open={addOpen} onClose={closeAdd} title={t.staff.addStaff} wide>

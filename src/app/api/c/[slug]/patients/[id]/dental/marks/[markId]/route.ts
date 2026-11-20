@@ -7,6 +7,7 @@ import { MARK_SELECT, resolveTreatment, toEvent, toMark } from "@/lib/charts/den
 import { protocolFor } from "@/lib/charts/dental/protocols";
 import { applyToMembers, followersOf, todaysVisit } from "@/lib/charts/dental/server";
 import { setDetail } from "@/lib/charts/dental/billing-server";
+import { redateMarks } from "@/lib/charts/redate";
 
 /*
   Changing an entry on the chart. Every change a reader would care about —
@@ -25,6 +26,8 @@ const bodySchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("performer"), eventId: z.string().uuid(), performerId: z.string().uuid() }),
   z.object({ op: z.literal("detail"), key: z.string().max(24), value: z.string().max(24) }),
   z.object({ op: z.literal("surfaces"), surfaces: z.array(z.enum(["M", "D", "O", "B", "L"])).min(1).max(5) }),
+  /** Done on another day than it was recorded (2026-11-20): see redateMarks. */
+  z.object({ op: z.literal("date"), eventId: z.string().uuid(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
 ]);
 
 type Params = { params: Promise<{ slug: string; id: string; markId: string }> };
@@ -48,6 +51,7 @@ export async function PATCH(req: Request, ctx: Params) {
     if (cur.voided_at) return { error: "voided" as const };
 
     let event: { id: string; action: string; reason?: string } | null = null;
+    let redated: string[] = [];
     switch (b.op) {
       case "done": {
         if (cur.status !== "planned") return { error: "not_planned" as const };
@@ -91,6 +95,16 @@ export async function PATCH(req: Request, ctx: Params) {
         await c.query(`update chart_marks set surfaces = $2 where id = $1`, [markId, b.surfaces]);
         break;
       }
+      case "date": {
+        if (cur.status !== "done") return { error: "not_done" as const };
+        // A bridge or full arch was done on one day: its done teeth move with their lead.
+        const members = (await followersOf(c, access.clinicId, cur)).filter((x) => x.status === "done").map((x) => x.id);
+        const r = await redateMarks(c, access.clinicId, id, [markId, ...members], b.day, access.clinic.timezone);
+        if (!r.ok) return { error: r.error };
+        redated = r.changed.filter((x) => x !== markId);
+        event = { id: b.eventId, action: "date", reason: b.day };
+        break;
+      }
     }
     if (event) {
       await c.query(`insert into chart_mark_events (id, clinic_id, mark_id, action, by_user, reason) values ($1, $2, $3, $4, $5, $6)`, [
@@ -109,7 +123,7 @@ export async function PATCH(req: Request, ctx: Params) {
       teeth done, and either voided is all of them voided — each with its own
       line in its tooth's history.
     */
-    let kids: string[] = [];
+    let kids: string[] = redated;
     if (b.op === "done" || b.op === "void") {
       const members = await followersOf(c, access.clinicId, cur);
       kids = await applyToMembers(c, access.clinicId, members.map((x) => x.id), b.op, me, b.op === "void" ? b.reason || null : null);

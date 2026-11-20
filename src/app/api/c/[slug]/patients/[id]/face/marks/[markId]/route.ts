@@ -11,6 +11,7 @@ import { feeOf, pickFacePrice } from "@/lib/charts/face/catalog";
 import { resolveTreatment } from "@/lib/charts/face/treatments";
 import { dropStock, returnStock } from "@/lib/charts/face/stock";
 import { PACKAGE_KEY } from "@/lib/charts/face/packages";
+import { redateMarks } from "@/lib/charts/redate";
 
 /*
   Changing a treatment on the face chart. Each change is its own line in the
@@ -31,6 +32,8 @@ const bodySchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("note"), eventId: z.string().uuid(), note: z.string().max(2000) }),
   z.object({ op: z.literal("performer"), eventId: z.string().uuid(), performerId: z.string().uuid() }),
   z.object({ op: z.literal("fee"), eventId: z.string().uuid(), fee: z.number().min(0).max(1_000_000).nullable() }),
+  /** Done on another day than it was recorded (2026-11-20): see redateMarks. */
+  z.object({ op: z.literal("date"), eventId: z.string().uuid(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
 ]);
 
 type Params = { params: Promise<{ slug: string; id: string; markId: string }> };
@@ -119,6 +122,13 @@ export async function PATCH(req: Request, ctx: Params) {
           await c.query(`update chart_marks set fee = $2, fee_manual = true where id = $1`, [markId, b.fee]);
           reason = String(b.fee);
         }
+        break;
+      }
+      case "date": {
+        if (cur.status !== "done") return { error: "not_done" as const };
+        const r = await redateMarks(c, access.clinicId, id, [markId], b.day, access.clinic.timezone);
+        if (!r.ok) return { error: r.error };
+        reason = b.day;
         break;
       }
     }

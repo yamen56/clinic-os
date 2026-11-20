@@ -9,6 +9,9 @@ import { applyAppointmentStatus } from "@/lib/appointments";
 import { tellPatientBookingApproved } from "@/lib/booking-approved";
 import { scheduleCheck } from "@/lib/schedule-check";
 import { cleanServiceIds, setExtraServices } from "@/lib/appointment-services";
+import { revalidatePath } from "next/cache";
+import { isUuid } from "@/lib/uuid";
+import { appointmentAttachedSql } from "@/lib/appointment-history";
 
 export type ApptInput = {
   patientId?: string;
@@ -274,5 +277,47 @@ export async function setAppointmentStatusAction(
       detail: { status },
     });
     return { ok: true };
+  });
+}
+
+/**
+ * Clear cancelled visits out of a patient's file (Yamen, 2026-11-20: cancelled
+ * items "only show, without the ability of deleting what is cancelled").
+ *
+ * Only cancelled ones, only this clinic's and this patient's, and only those
+ * nothing in the file hangs on (appointmentAttachedSql) — the rest are left
+ * and counted, so the screen can say why. Their reminders' runs go with them.
+ */
+export async function deleteCancelledAppointmentsAction(
+  slug: string,
+  patientId: string,
+  ids: string[]
+): Promise<{ error?: string; deleted?: number; kept?: number }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "calendar")) return { error: "forbidden" };
+  if (!isUuid(patientId) || !Array.isArray(ids) || !ids.length || ids.length > 200 || !ids.every(isUuid)) return { error: "invalid" };
+
+  return inClinic(access, async (c) => {
+    const gone = await c.query(
+      `delete from appointments a
+        where a.id = any($1::uuid[]) and a.clinic_id = $2 and a.patient_id = $3 and a.status = 'cancelled'
+          and not ${appointmentAttachedSql("a")}
+        returning a.id, a.starts_at`,
+      [ids, access.clinicId, patientId]
+    );
+    const deleted = gone.rowCount ?? 0;
+    if (deleted) {
+      await audit(c, {
+        clinicId: access.clinicId,
+        userId: access.session.user.id,
+        impersonatedBy: access.session.impersonatedBy,
+        action: "appointment.delete_cancelled",
+        entity: "patient",
+        entityId: patientId,
+        detail: { appointments: gone.rows.map((r) => ({ id: r.id, startsAt: r.starts_at })) },
+      });
+    }
+    revalidatePath(`/c/${slug}/patients/${patientId}`);
+    return { deleted, kept: ids.length - deleted };
   });
 }

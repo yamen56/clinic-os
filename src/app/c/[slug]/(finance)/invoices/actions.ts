@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireClinic, can, type ClinicAccess } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
-import { invoiceScopeSql, mayTouchInvoice, ownInvoicesOnly } from "@/lib/invoice-scope";
+import { invoiceDaySql, invoiceScopeSql, mayTouchInvoice, ownInvoicesOnly } from "@/lib/invoice-scope";
 import {
   nextInvoiceNumber,
   nextReceiptNumber,
@@ -16,6 +16,7 @@ import {
   type InvoiceItemInput,
 } from "@/lib/invoices";
 import { isUuid } from "@/lib/uuid";
+import { pastDayInstant } from "@/lib/dates";
 import type { PoolClient } from "pg";
 import { queueWhatsAppMessage } from "@/lib/outbound";
 import { systemMessage } from "@/lib/system-messages";
@@ -68,6 +69,12 @@ const createSchema = z.object({
     read below.
   */
   fileEinvoice: z.boolean().optional(),
+  /*
+    The invoice's date, when it is not today (Yamen, 2026-11-20): the work is
+    often written up afterwards. It is the date the invoice carries — on the
+    list, the PDF, and to JoFotara. When it was entered stays `created_at`.
+  */
+  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
 });
 
 export async function createInvoiceAction(
@@ -79,6 +86,10 @@ export async function createInvoiceAction(
   const parsed = createSchema.safeParse(data);
   if (!parsed.success) return { error: "invalid" };
   const d = parsed.data;
+  // Today or earlier, in the clinic's own calendar; today is stored as today, exactly as before.
+  const dated = pastDayInstant(d.issueDate, access.clinic.timezone);
+  if (!dated.ok) return { error: "bad_date" };
+  const issueDay = dated.at ? d.issueDate! : null;
 
   return inClinic(access, async (c) => {
     /*
@@ -158,14 +169,14 @@ export async function createInvoiceAction(
                              title, file_einvoice,
                              issue_date, insurer_id, claim_status, insurer_amount)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-               ((now() at time zone (select timezone from clinics where id = $1)))::date,
+               coalesce($18::date, ((now() at time zone (select timezone from clinics where id = $1)))::date),
                $16, case when $16::uuid is null then 'none' else 'to_submit' end, $17)
        returning id`,
       [
         access.clinicId, d.patientId, d.appointmentId ?? null, seq, number, currency,
         totals.subtotal, totals.discount, totals.taxRate, totals.taxAmount, totals.total,
         d.notes, access.session.user.id, d.title.trim(), fileEinvoice,
-        patient.insurer_id ?? null, insurerAmount,
+        patient.insurer_id ?? null, insurerAmount, issueDay,
       ]
     );
     const invoiceId = inv.rows[0].id as string;
@@ -412,19 +423,22 @@ async function applyPayment(
     action: "payment.record",
     entity: "invoice",
     entityId: inv.id,
-    detail: { amount: p.amount, method: p.method },
+    detail: { amount: p.amount, method: p.method, ...(p.paidAt ? { paidAt: p.paidAt } : {}) },
   });
 }
 
 export async function recordPaymentAction(
   slug: string,
-  data: { invoiceId: string; amount: number; method: string; reference: string; paidAt?: string }
+  /** `paidOn`: the clinic day it was paid, when it was not today (2026-11-20). */
+  data: { invoiceId: string; amount: number; method: string; reference: string; paidOn?: string | null }
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
   if (!can(access, "invoices")) return { error: "forbidden" };
   if (!PAYMENT_METHODS.includes(data.method)) return { error: "invalid" };
   const amount = round2(Number(data.amount));
   if (!(amount > 0)) return { error: "invalid" };
+  const when = pastDayInstant(data.paidOn, access.clinic.timezone);
+  if (!when.ok) return { error: "bad_date" };
 
   return inClinic(access, async (c) => {
     if (!(await mayTouchInvoice(c, access, data.invoiceId))) return { error: "not_found" };
@@ -438,7 +452,7 @@ export async function recordPaymentAction(
     if (!inv || inv.status === "void") return { error: "not_found" };
     if (amount > Number(inv.total) - Number(inv.amount_paid) + 0.001) return { error: "overpay" };
 
-    await applyPayment(c, access, inv, { amount, method: data.method, reference: data.reference, paidAt: data.paidAt ?? null });
+    await applyPayment(c, access, inv, { amount, method: data.method, reference: data.reference, paidAt: when.at });
     revalidatePath(`/c/${slug}/invoices`);
     return {};
   });
@@ -461,7 +475,7 @@ export async function recordPaymentAction(
  */
 export async function recordPatientPaymentAction(
   slug: string,
-  data: { patientId: string; amount: number; method: string; reference: string }
+  data: { patientId: string; amount: number; method: string; reference: string; paidOn?: string | null }
 ): Promise<{ error?: string; paid?: { invoiceId: string; number: string; amount: number; settled: boolean }[] }> {
   const access = await requireClinic(slug);
   if (!can(access, "invoices")) return { error: "forbidden" };
@@ -469,6 +483,8 @@ export async function recordPatientPaymentAction(
   if (!PAYMENT_METHODS.includes(data.method)) return { error: "invalid" };
   const amount = round2(Number(data.amount));
   if (!(amount > 0)) return { error: "invalid" };
+  const when = pastDayInstant(data.paidOn, access.clinic.timezone);
+  if (!when.ok) return { error: "bad_date" };
 
   return inClinic(access, async (c) => {
     const scope = invoiceScopeSql(access, "i", 3);
@@ -494,7 +510,7 @@ export async function recordPatientPaymentAction(
       const remaining = round2(Number(inv.total) - Number(inv.amount_paid));
       const slice = Math.min(left, remaining);
       if (slice <= 0) continue;
-      await applyPayment(c, access, inv, { amount: slice, method: data.method, reference: data.reference, paidAt: null });
+      await applyPayment(c, access, inv, { amount: slice, method: data.method, reference: data.reference, paidAt: when.at });
       // Settled by this payment: the desk is offered its receipt then and there.
       paid.push({ invoiceId: inv.id, number: inv.number, amount: slice, settled: slice >= remaining - 0.001 });
       left = round2(left - slice);
@@ -1076,11 +1092,13 @@ export async function deleteCancelledInvoicesAction(slug: string): Promise<{ err
 
   return inClinic(access, async (c) => {
     const scope = invoiceScopeSql(access, "i", 2);
+    // Only the ones under the chip: today's alone for a today-only member.
+    const day = invoiceDaySql(access, "i", 2 + scope.params.length);
     const gone = await c.query(
       `delete from invoices i
-        where i.clinic_id = $1 and ${DELETABLE_INVOICE_SQL}${scope.sql}
+        where i.clinic_id = $1 and ${DELETABLE_INVOICE_SQL}${scope.sql}${day.sql}
         returning i.id, i.number, i.total`,
-      [access.clinicId, ...scope.params]
+      [access.clinicId, ...scope.params, ...day.params]
     );
     if (gone.rowCount) {
       await audit(c, {

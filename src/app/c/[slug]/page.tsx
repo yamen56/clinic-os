@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { can, hasFullControl } from "@/lib/auth";
-import { invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
+import { invoiceDaySql, invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-scope";
 import { landingPathIn } from "@/lib/permissions";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
@@ -97,7 +97,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
     when the takings are selected, three when they are not. Dead in the first
     (a filtered member never has `showRevenue`) and correct in both.
   */
-  const unpaidScope = invoiceScopeSql(a, "i", showRevenue ? 8 : 4);
+  const ownScope = invoiceScopeSql(a, "i", showRevenue ? 8 : 4);
+  // Counted over the same invoices its link lists: today's alone for a today-only member (2026-11-20).
+  const unpaidDay = invoiceDaySql(a, "i", (showRevenue ? 8 : 4) + ownScope.params.length);
+  const unpaidScope = { sql: ownScope.sql + unpaidDay.sql, params: [...ownScope.params, ...unpaidDay.params] };
   /** Clinicti's own workspace — see clinics.vocabulary and i18n/vocab.ts. */
   const isAgency = a.clinic.vocabulary === "agency";
   const showInbox = can(a, "conversations");
