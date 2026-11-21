@@ -13,6 +13,8 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Sparkline } from "@/components/ui/chart";
 import { buttonClass } from "@/components/ui/button-class";
 import { TodayList } from "./today-list";
+import { DayStrip, LiveClock, type DayDot } from "./day-clock";
+import { hmToMin, parseWeeklyHours, rangesForDay } from "@/lib/hours";
 import { TodoList } from "./todo-card";
 import { StockLines } from "./stock-card";
 import { loadStockAttention } from "@/lib/charts/face/stock";
@@ -21,6 +23,8 @@ import { dueBackCount } from "@/lib/due-back";
 import { setupChecklist, type SetupItem } from "@/lib/setup-checklist";
 import type { Dict } from "@/lib/i18n/en";
 import {
+  Activity,
+  Armchair,
   ArrowRight,
   Banknote,
   CalendarCheck,
@@ -34,9 +38,11 @@ import {
   ListChecks,
   MessageCircle,
   ReceiptText,
+  Stethoscope,
   Sunrise,
   Target,
   UserPlus,
+  UserRound,
   Users,
 } from "lucide-react";
 
@@ -80,6 +86,21 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
   const showPatients = can(a, "patients");
   /** Clinicti's own workspace — see clinics.vocabulary and i18n/vocab.ts. */
   const isAgency = a.clinic.vocabulary === "agency";
+  /*
+    Whose eyes the page is for (Yamen, 2026-11-21: "some of it should differ in
+    regard to their role in the clinic"). The day's list is the same for
+    everybody (11-08); the figures, the line under the greeting, tomorrow and
+    what "Needs you" holds follow the job:
+      clinic — the owner, anyone with full control, and other jobs: the whole
+               clinic — today, takings, inbox, patients, setup;
+      doctor — their own day: their patients, who is waiting for them, who is
+               next, their month;
+      desk   — the front desk: today, the waiting room, the inbox, takings.
+    Every figure still needs the capability that opens its page.
+  */
+  const myId = a.memberId ?? null;
+  const lens: "clinic" | "doctor" | "desk" =
+    isAgency || hasFullControl(a) ? "clinic" : a.role === "doctor" && myId ? "doctor" : a.role === "receptionist" ? "desk" : "clinic";
 
   const data = await inClinic(a, async (c) => {
     const today = dayRangeUtc(tz);
@@ -122,7 +143,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       params.push(v);
       return `$${params.length}`;
     };
-    const parts: string[] = [];
+    // The clinic's opening hours ride along, for the day strip in the welcome.
+    const parts: string[] = [`(select working_hours from clinics where id=$1) as working_hours`];
     if (showInbox) parts.push(`(select coalesce(sum(unread_count),0) from conversations where clinic_id=$1)::int as unread`);
     if (showCalendar) {
       parts.push(
@@ -150,13 +172,20 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         `(select count(*) from patients where clinic_id=$1 and merged_into is null and created_at >= ${$(month.start)} and created_at < ${$(month.end)})::int as new_patients`
       );
     }
+    if (lens === "doctor") {
+      parts.push(
+        `(select count(*) from appointments where clinic_id=$1 and doctor_member_id=${$(myId)} and status='completed'
+           and starts_at >= ${$(month.start)} and starts_at < ${$(month.end)})::int as my_month`
+      );
+    }
     if (isAgency) {
       parts.push(
         `(select count(*) from appointments where clinic_id=$1 and source='booking_link' and starts_at >= ${$(month.start)} and starts_at < ${$(month.end)})::int as self_booked`
       );
       if (showPatients) parts.push(`(select count(*) from patients where clinic_id=$1 and merged_into is null and status='lead')::int as leads`);
     }
-    const stats: Record<string, number> = parts.length ? (await c.query(`select ${parts.join(",\n")}`, params)).rows[0] : {};
+    const { working_hours: hoursRaw, ...counts } = (await c.query(`select ${parts.join(",\n")}`, params)).rows[0] as Record<string, unknown>;
+    const stats = counts as Record<string, number>;
 
     /*
       The last seven days, for the little lines in the corner of the cards:
@@ -170,7 +199,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
          )
          select d.day,
                 (select count(*) from appointments ap
-                  where ap.clinic_id = $1 and ap.status <> 'cancelled'
+                  where ap.clinic_id = $1 and ap.status <> 'cancelled'${lens === "doctor" ? " and ap.doctor_member_id = $3" : ""}
                     and (ap.starts_at at time zone $2)::date = d.day)::int as visits${
                   showRevenue
                     ? `,
@@ -179,7 +208,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
                     : ""
                 }
            from days d order by d.day`,
-        [a.clinicId, tz]
+        lens === "doctor" ? [a.clinicId, tz, myId] : [a.clinicId, tz]
       )
     ).rows as { visits: number; taken?: number }[];
 
@@ -192,9 +221,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
                join patients p on p.id = ap.patient_id
                left join clinic_members dm on dm.id = ap.doctor_member_id
                left join users du on du.id = dm.user_id
-              where ap.clinic_id = $1 and ap.starts_at >= $2 and ap.starts_at < $3 and ap.status not in ('cancelled')
+              where ap.clinic_id = $1 and ap.starts_at >= $2 and ap.starts_at < $3 and ap.status not in ('cancelled')${
+                lens === "doctor" ? " and ap.doctor_member_id = $4" : ""
+              }
               order by ap.starts_at limit 4`,
-            [a.clinicId, tomorrow.start, tomorrow.end]
+            lens === "doctor" ? [a.clinicId, tomorrow.start, tomorrow.end, myId] : [a.clinicId, tomorrow.start, tomorrow.end]
           )
         ).rows
       : [];
@@ -227,7 +258,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           ).rows
         : [];
     const stock = a.clinic.features.aesthetic && can(a, "stock") ? await loadStockAttention(c, a.clinicId) : [];
-    return { appts, stats, week, tomorrowRows, next, dueBack, setup, todo, stock };
+    return { appts, stats, hoursRaw, week, tomorrowRows, next, dueBack, setup, todo, stock };
   });
 
   const base = `/c/${slug}`;
@@ -237,110 +268,219 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
 
   /* Where the day stands: finished (and missed), in the waiting room, with a doctor. */
   const stages = data.appts.map((r) => flowStage(r, nowMs));
-  const finished = stages.filter((s) => s === "finished" || s === "no_show").length;
+  const isDone = (s: string) => s === "finished" || s === "no_show";
+  const finished = stages.filter(isDone).length;
   const waiting = stages.filter((s) => s === "waiting").length;
+  const withDoctor = stages.filter((s) => s === "in_room").length;
   const total = data.appts.length;
+  // As the clock and today's list write it: "9:30 ص", "2:30 pm".
+  const time = (iso: string) => DateTime.fromJSDate(new Date(iso)).setZone(tz).setLocale(intl).toFormat("h:mm a");
+
+  /*
+    A doctor's own share of the day. Next is the first of theirs still to be
+    seen, in booking order — somebody already in the waiting room included.
+  */
+  const mine = data.appts.flatMap((r, i) => (r.doctor_member_id === myId ? [{ r, stage: stages[i] }] : []));
+  const myFinished = mine.filter((m) => isDone(m.stage)).length;
+  const myWaiting = mine.filter((m) => m.stage === "waiting").length;
+  const myNext = mine.find((m) => m.stage === "waiting" || m.stage === "expected" || m.stage === "late")?.r ?? null;
 
   /* The welcome. */
   const hour = now.hour;
   const greeting = hour < 12 ? D.goodMorning : hour < 17 ? D.goodAfternoon : D.goodEvening;
   const name = shortName(a.session.user.fullName);
+  const line =
+    lens === "doctor"
+      ? mine.length
+        ? `${D.doctorLine.replace("{n}", String(mine.length))}${myNext ? ` · ${D.nextAt.replace("{time}", time(myNext.starts_at))}` : ""}`
+        : D.doctorLineNone
+      : lens === "desk"
+        ? D.deskLine.replace("{n}", String(total)).replace("{w}", String(waiting))
+        : D.welcomeLine;
 
   /*
-    Four figure cards at most, chosen by what this member may see — so a
-    receptionist without the money gets the week's bookings where the takings
-    would be, and the row is never a gap.
+    Four figure cards at most, chosen by the job and then by what this member
+    may see — so a receptionist without the money gets the patient count where
+    the takings would be, and the row is never a gap.
   */
-  const cards: FigureCard[] = [
-    {
-      key: "today",
-      href: showCalendar ? `${base}/calendar` : undefined,
-      icon: CalendarDays,
-      label: D.todayAppointments,
-      value: String(total),
-      sub: total > 0 ? `${D.finishedN.replace("{n}", String(finished))} · ${D.waitingN.replace("{n}", String(waiting))}` : D.noneYetToday,
-      progress: total > 0 ? finished / total : undefined,
-    },
-    showRevenue
-      ? {
-          key: "collected-today",
-          href: `${base}/invoices`,
-          icon: Banknote,
-          label: t.invoices.collectedToday,
-          value: money(data.stats.collected_today ?? 0),
-          sub: D.last7,
-          spark: data.week.map((w) => Number(w.taken ?? 0)),
-        }
-      : {
-          key: "week",
-          href: showCalendar ? `${base}/calendar` : undefined,
-          icon: CalendarCheck,
-          label: D.thisWeek,
-          value: String(data.week.reduce((s, w) => s + Number(w.visits), 0)),
-          sub: D.last7,
-          spark: data.week.map((w) => Number(w.visits)),
-        },
-    ...(isAgency
+  const calendarHref = showCalendar ? `${base}/calendar` : undefined;
+  const todayCard: FigureCard = {
+    key: "today",
+    href: calendarHref,
+    icon: CalendarDays,
+    label: D.todayAppointments,
+    value: String(total),
+    sub: total > 0 ? `${D.finishedN.replace("{n}", String(finished))} · ${D.waitingN.replace("{n}", String(waiting))}` : D.noneYetToday,
+    progress: total > 0 ? finished / total : undefined,
+    ringLabel: `${finished}/${total}`,
+  };
+  const takingsCard: FigureCard | null = showRevenue
+    ? {
+        key: "collected-today",
+        href: `${base}/invoices`,
+        icon: Banknote,
+        label: t.invoices.collectedToday,
+        value: money(data.stats.collected_today ?? 0),
+        sub: D.last7,
+        spark: data.week.map((w) => Number(w.taken ?? 0)),
+      }
+    : null;
+  const weekCard: FigureCard = {
+    key: "week",
+    href: calendarHref,
+    icon: CalendarCheck,
+    label: D.thisWeek,
+    value: String(data.week.reduce((s, w) => s + Number(w.visits), 0)),
+    sub: D.last7,
+    spark: data.week.map((w) => Number(w.visits)),
+  };
+  const unreadCard: FigureCard | null = showInbox
+    ? {
+        key: "unread",
+        href: `${base}/conversations`,
+        icon: MessageCircle,
+        label: D.unreadConversations,
+        value: String(data.stats.unread ?? 0),
+        sub: (data.stats.unread ?? 0) > 0 ? D.waitingReply : D.allAnswered,
+      }
+    : null;
+  const patientsCard: FigureCard | null = showPatients
+    ? {
+        key: "patients",
+        href: `${base}/patients`,
+        icon: Users,
+        label: D.patients,
+        value: Number(data.stats.patients ?? 0).toLocaleString(intl),
+        sub: D.newThisMonth.replace("{n}", String(data.stats.new_patients ?? 0)),
+      }
+    : null;
+  const waitingRoomCard: FigureCard = {
+    key: "waiting-room",
+    href: calendarHref,
+    icon: Armchair,
+    label: D.waitingRoom,
+    value: String(waiting),
+    sub: withDoctor > 0 ? D.withDoctorN.replace("{n}", String(withDoctor)) : waiting > 0 ? D.inWaitingRoom : D.noOneWaiting,
+  };
+
+  const byJob: (FigureCard | null)[] =
+    lens === "doctor"
       ? [
-          { key: "demos", href: `${base}/calendar`, icon: CalendarCheck, label: D.demosMonth, value: String(data.stats.self_booked ?? 0), sub: "" },
-          ...(showPatients
-            ? [{ key: "leads", href: `${base}/patients?status=lead`, icon: Target, label: t.patients.statusLead, value: String(data.stats.leads ?? 0), sub: "" }]
-            : []),
+          {
+            key: "my-today",
+            href: calendarHref,
+            icon: Stethoscope,
+            label: D.myPatientsToday,
+            value: String(mine.length),
+            sub:
+              mine.length > 0
+                ? `${D.finishedN.replace("{n}", String(myFinished))} · ${D.waitingN.replace("{n}", String(myWaiting))}`
+                : D.noneYetToday,
+            progress: mine.length > 0 ? myFinished / mine.length : undefined,
+            ringLabel: `${myFinished}/${mine.length}`,
+          },
+          {
+            key: "waiting-for-me",
+            href: calendarHref,
+            icon: Armchair,
+            label: D.waitingForYou,
+            value: String(myWaiting),
+            sub: myWaiting > 0 ? D.inWaitingRoom : D.noOneWaiting,
+          },
+          {
+            key: "next-patient",
+            href: myNext && showPatients ? `${base}/patients/${myNext.patient_id}` : undefined,
+            icon: UserRound,
+            label: D.nextPatient,
+            value: myNext ? time(myNext.starts_at) : "—",
+            sub: myNext ? myNext.patient_name : D.noOneNext,
+          },
+          {
+            key: "my-month",
+            icon: Activity,
+            label: D.myVisitsMonth,
+            value: String(data.stats.my_month ?? 0),
+            sub: D.last7,
+            spark: data.week.map((w) => Number(w.visits)),
+          },
         ]
-      : [
-          ...(showInbox
-            ? [
-                {
-                  key: "unread",
-                  href: `${base}/conversations`,
-                  icon: MessageCircle,
-                  label: D.unreadConversations,
-                  value: String(data.stats.unread ?? 0),
-                  sub: (data.stats.unread ?? 0) > 0 ? D.waitingReply : D.allAnswered,
-                },
-              ]
-            : []),
-          ...(showPatients
-            ? [
-                {
-                  key: "patients",
-                  href: `${base}/patients`,
-                  icon: Users,
-                  label: D.patients,
-                  value: Number(data.stats.patients ?? 0).toLocaleString(intl),
-                  sub: D.newThisMonth.replace("{n}", String(data.stats.new_patients ?? 0)),
-                },
-              ]
-            : []),
-        ]),
-  ].slice(0, 4);
+      : lens === "desk"
+        ? [todayCard, waitingRoomCard, unreadCard, takingsCard ?? patientsCard ?? weekCard]
+        : isAgency
+          ? [
+              todayCard,
+              takingsCard ?? weekCard,
+              { key: "demos", href: `${base}/calendar`, icon: CalendarCheck, label: D.demosMonth, value: String(data.stats.self_booked ?? 0), sub: "" },
+              showPatients
+                ? { key: "leads", href: `${base}/patients?status=lead`, icon: Target, label: t.patients.statusLead, value: String(data.stats.leads ?? 0), sub: "" }
+                : null,
+            ]
+          : [todayCard, takingsCard ?? weekCard, unreadCard, patientsCard];
+  const cards = byJob.filter((c): c is FigureCard => !!c).slice(0, 4);
 
   /*
     What is waiting on a person. A row this member may see stays at zero — "nothing waiting" is an
     answer; the parts that come and go (To do, stock, setup) disappear when empty. Unread messages
-    are a card above, so they are not repeated here.
+    are a card above, so they are not repeated here. A doctor's list is their own To do and stock:
+    confirming bookings and chasing invoices are the desk's work, not theirs.
   */
-  const rows: NeedsRow[] = [
-    ...(showCalendar
-      ? [{ key: "unconfirmed", href: `${base}/calendar?show=unconfirmed`, icon: CalendarClock, label: D.unconfirmed, count: data.stats.unconfirmed ?? 0 }]
-      : []),
-    ...(showMoney
-      ? [{ key: "unpaid", href: `${base}/invoices?status=unpaid`, icon: ReceiptText, label: D.unpaidInvoices, count: data.stats.unpaid ?? 0 }]
-      : []),
-    ...(showCalendar
-      ? [{ key: "due-back", href: `${base}/calendar?tab=waitlist`, icon: CalendarPlus, label: t.finishVisit.dueBack, count: data.dueBack }]
-      : []),
-  ];
+  const rows: NeedsRow[] =
+    lens === "doctor"
+      ? []
+      : [
+          ...(showCalendar
+            ? [{ key: "unconfirmed", href: `${base}/calendar?show=unconfirmed`, icon: CalendarClock, label: D.unconfirmed, count: data.stats.unconfirmed ?? 0 }]
+            : []),
+          ...(showMoney
+            ? [{ key: "unpaid", href: `${base}/invoices?status=unpaid`, icon: ReceiptText, label: D.unpaidInvoices, count: data.stats.unpaid ?? 0 }]
+            : []),
+          ...(showCalendar
+            ? [{ key: "due-back", href: `${base}/calendar?tab=waitlist`, icon: CalendarPlus, label: t.finishVisit.dueBack, count: data.dueBack }]
+            : []),
+        ];
   const setupLeft = data.setup && data.setup.some((i) => !i.done) ? data.setup : null;
   const tomorrowTotal = Number(data.tomorrowRows[0]?.total ?? 0);
-  const time = (iso: string) => DateTime.fromJSDate(new Date(iso)).setZone(tz).toFormat("HH:mm");
+  /*
+    The day strip: from the earlier of opening and the first booking to the
+    later of closing and the last, in whole hours, widened to take in now — so
+    at 9 pm the strip shows the clinic closed at 5 rather than pinning "now"
+    to its edge. A closed day with nothing booked shows 8 to 8.
+  */
+  const open = rangesForDay(parseWeeklyHours(data.hoursRaw), now).map(([o, c]) => [hmToMin(o), hmToMin(c)] as [number, number]);
+  const localMin = (iso: string) => {
+    const d = DateTime.fromJSDate(new Date(iso)).setZone(tz);
+    return d.hour * 60 + d.minute;
+  };
+  // A doctor's strip is their own day; everybody else's is the clinic's.
+  const dots: DayDot[] = data.appts.flatMap((r, i) =>
+    lens === "doctor" && r.doctor_member_id !== myId
+      ? []
+      : [
+          {
+            id: r.id,
+            min: localMin(r.starts_at),
+            kind: isDone(stages[i]) ? "done" : stages[i] === "waiting" || stages[i] === "in_room" ? "here" : "next",
+            label: `${time(r.starts_at)} · ${r.patient_name}`,
+          },
+        ]
+  );
+  const nowMin = now.hour * 60 + now.minute;
+  const quiet = open.length === 0 && dots.length === 0;
+  const spanFrom = Math.floor(Math.min(nowMin, quiet ? 8 * 60 : 24 * 60, ...open.map((o) => o[0]), ...dots.map((d) => d.min)) / 60) * 60;
+  const spanTo = Math.min(
+    24 * 60,
+    Math.ceil(Math.max(nowMin + 1, quiet ? 20 * 60 : 0, ...open.map((o) => o[1]), ...dots.map((d) => d.min + 30)) / 60) * 60
+  );
 
   return (
     <>
       <Welcome
         greeting={name ? `${greeting}${locale === "ar" ? "، " : ", "}${name}` : greeting}
         date={now.toFormat("cccc d LLLL")}
-        line={D.welcomeLine}
+        line={line}
+        clock={<LiveClock intl={intl} tz={tz} serverNow={nowMs} />}
+        clockSmall={<LiveClock intl={intl} tz={tz} serverNow={nowMs} compact />}
+        strip={<DayStrip tz={tz} intl={intl} serverNow={nowMs} from={spanFrom} to={spanTo} open={open} dots={dots} />}
         actions={
           <>
             {showCalendar && (
@@ -462,7 +602,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
                   <ul className="divide-y divide-line">
                     {data.tomorrowRows.map((r) => (
                       <li key={r.id} className="flex items-center gap-3 px-5 py-2.5 text-[0.8125rem]">
-                        <span className="w-11 shrink-0 font-semibold text-ink-900 tnum">{time(r.starts_at)}</span>
+                        <span className="min-w-[4.5rem] shrink-0 whitespace-nowrap font-semibold text-ink-900 tnum">{time(r.starts_at)}</span>
                         <span className="min-w-0 flex-1 truncate text-ink-700">{r.patient_name}</span>
                         {r.doctor_name && <span className="hidden max-w-[40%] truncate text-[0.75rem] text-ink-400 sm:inline">{r.doctor_name}</span>}
                       </li>
@@ -501,24 +641,50 @@ function shortName(full: string): string {
  * the same art that meets everybody at sign-in, so the first screen after it
  * feels like the same place. White on near-black in both themes.
  */
-function Welcome({ greeting, date, line, actions }: { greeting: string; date: string; line: string; actions: React.ReactNode }) {
+function Welcome({
+  greeting,
+  date,
+  line,
+  actions,
+  clock,
+  clockSmall,
+  strip,
+}: {
+  greeting: string;
+  date: string;
+  line: string;
+  actions: React.ReactNode;
+  /** The clinic's time, large, at the far side of the greeting. */
+  clock: React.ReactNode;
+  /** The same time as a few words after the date, for a phone. */
+  clockSmall: React.ReactNode;
+  /** The day as a line: opening hours, bookings, now. */
+  strip: React.ReactNode;
+}) {
   return (
     <section
-      className="welcome-art relative isolate overflow-hidden rounded-card px-4 py-4 text-white ring-1 ring-white/5 sm:px-5 sm:py-6 md:px-8 md:py-8"
+      className="welcome-art relative isolate overflow-hidden rounded-card px-4 py-4 text-white ring-1 ring-white/5 sm:px-5 sm:py-6 md:px-8 md:pb-6 md:pt-7"
       data-welcome
     >
-      <div className="flex flex-wrap items-end justify-between gap-5">
+      <div className="flex items-start justify-between gap-5">
         <div className="min-w-0">
-          <p className="text-[0.75rem] font-medium text-white/60 sm:text-[0.8125rem]">{date}</p>
+          <p className="text-[0.75rem] font-medium text-white/60 sm:text-[0.8125rem]">
+            {date}
+            <span className="sm:hidden"> · {clockSmall}</span>
+          </p>
           <h1 className="mt-0.5 font-display text-[1.375rem] font-bold leading-tight sm:mt-1 sm:text-[1.625rem] md:text-[2rem]">{greeting}</h1>
           <p className="mt-1.5 text-sm text-white/70 max-sm:hidden">{line}</p>
         </div>
-        {/*
-          Not on a phone: there the welcome is one slim line, so a doctor's list
-          is on the first screen (qa-connections), and the tab bar already
-          reaches Appointments and Patients.
-        */}
-        <div className="flex flex-wrap gap-2 max-sm:hidden">{actions}</div>
+        <div className="shrink-0 max-sm:hidden">{clock}</div>
+      </div>
+      {/*
+        Not on a phone: there the welcome is one slim line, so a doctor's list
+        is on the first screen (qa-connections), and the tab bar already
+        reaches Appointments and Patients.
+      */}
+      <div className="mt-6 flex items-end gap-6 max-sm:hidden">
+        <div className="min-w-0 flex-1">{strip}</div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">{actions}</div>
       </div>
     </section>
   );
@@ -533,46 +699,54 @@ type FigureCard = {
   sub: string;
   /** How far through the day: finished of booked. */
   progress?: number;
+  /** What the ring says in its middle, e.g. "3/8". */
+  ringLabel?: string;
   /** The last seven days, oldest first. */
   spark?: number[];
 };
 
 /**
- * One figure: its name and mark, the number large, a quiet line under it, and
- * — where it helps — how far through the day or the week's shape.
+ * One figure: its mark and name, the number large, a quiet line under it, and
+ * — where it helps — a picture beside the number: a ring for how far through
+ * the day the clinic is, a line for the week's shape. Beside, not below, so
+ * every card is the same height and none has an empty floor.
  *
- * The number is sized to its card, not only to the screen: the currency is the
- * one part of a money figure that must never be the part an ellipsis eats.
+ * The number is sized to its own column, not only to the screen: the currency
+ * is the one part of a money figure that must never be the part an ellipsis eats.
  */
 function Figure({ card }: { card: FigureCard }) {
   const Icon = card.icon;
   const body = (
-    <div className="@container flex h-full flex-col rounded-card border border-line bg-surface p-4 shadow-card transition-[border-color,box-shadow] duration-140 ease-out group-hover:border-line-strong group-hover:shadow-pop" data-figure={card.key}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-[0.8125rem] font-medium text-ink-500">{card.label}</span>
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700 ring-1 ring-brand-100">
-          <Icon className="h-4 w-4" strokeWidth={1.9} />
+    <div
+      className="flex h-full flex-col rounded-card border border-line bg-surface p-4 shadow-card transition-[border-color,box-shadow,transform] duration-140 ease-out group-hover:-translate-y-px group-hover:border-line-strong group-hover:shadow-pop"
+      data-figure={card.key}
+    >
+      <div className="flex items-center gap-2">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700 ring-1 ring-brand-100">
+          <Icon className="h-3.5 w-3.5" strokeWidth={2} />
         </span>
+        <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-ink-500">{card.label}</span>
+        {card.href && (
+          <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 opacity-0 transition-opacity duration-140 group-hover:opacity-100 rtl:rotate-180" aria-hidden />
+        )}
       </div>
-      <div
-        className="mt-2 font-display font-bold leading-none text-ink-900 tnum"
-        style={{ fontSize: `min(1.75rem, ${(100 / (Math.max(4, card.value.length) * 0.62)).toFixed(1)}cqi)` }}
-      >
-        {card.value}
-      </div>
-      {card.sub && <div className="mt-2 truncate text-[0.75rem] text-ink-500">{card.sub}</div>}
-      {card.progress !== undefined && (
-        <div className="mt-auto pt-3" aria-hidden>
-          <div className="h-1.5 overflow-hidden rounded-full bg-chart-soft">
-            <div className="h-full rounded-full bg-chart" style={{ width: `${Math.round(card.progress * 100)}%` }} data-chart-mark />
+      <div className="mt-auto flex items-end gap-3 pt-3">
+        <div className="@container min-w-0 flex-1">
+          <div
+            className="font-display font-bold leading-none text-ink-900 tnum"
+            style={{ fontSize: `min(1.875rem, ${(100 / (Math.max(4, card.value.length) * 0.62)).toFixed(1)}cqi)` }}
+          >
+            {card.value}
           </div>
+          {card.sub && <div className="mt-2 truncate text-[0.75rem] text-ink-500">{card.sub}</div>}
         </div>
-      )}
-      {card.spark && (
-        <div className="mt-auto pt-2">
-          <Sparkline values={card.spark} className="h-8" />
-        </div>
-      )}
+        {card.progress !== undefined && <Ring value={card.progress} label={card.ringLabel} />}
+        {card.spark && (
+          <div className="w-[38%] max-w-28 shrink-0 pb-1">
+            <Sparkline values={card.spark} className="h-10" />
+          </div>
+        )}
+      </div>
     </div>
   );
   return card.href ? (
@@ -581,6 +755,37 @@ function Figure({ card }: { card: FigureCard }) {
     </Link>
   ) : (
     <div>{body}</div>
+  );
+}
+
+/**
+ * Finished of booked, as a ring: one ratio, one colour, the count in the
+ * middle. Starts at the top and fills with the reading direction.
+ */
+function Ring({ value, label }: { value: number; label?: string }) {
+  const r = 15;
+  const c = 2 * Math.PI * r;
+  const v = Math.min(1, Math.max(0, value));
+  return (
+    <div className="relative grid h-12 w-12 shrink-0 place-items-center" aria-hidden>
+      <svg viewBox="0 0 36 36" className="absolute inset-0 h-full w-full -rotate-90 rtl:-scale-y-100">
+        <circle cx="18" cy="18" r={r} fill="none" strokeWidth="3.5" className="stroke-chart-soft" />
+        {v > 0 && (
+          <circle
+            cx="18"
+            cy="18"
+            r={r}
+            fill="none"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeDasharray={`${(c * v).toFixed(2)} ${c.toFixed(2)}`}
+            className="stroke-chart"
+            data-chart-mark
+          />
+        )}
+      </svg>
+      {label && <span className="relative text-[length:max(10px,0.6875rem)] font-semibold text-ink-700 tnum">{label}</span>}
+    </div>
   );
 }
 

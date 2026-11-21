@@ -331,13 +331,36 @@ async function main() {
       (await p2.locator('[data-figure="unread"]').count()) === 1 && (await p2.locator('[data-needs-row="unconfirmed"]').count()) === 1,
       ""
     );
+    // A receptionist leads with the front desk: the waiting room, and the patient count where takings would be.
+    const deskFigures = (await p2.locator("[data-figures] [data-figure]").evaluateAll((els) => els.map((e) => e.getAttribute("data-figure")))).join(",");
+    check("the front desk's figures: today, the waiting room, messages, patients", deskFigures === "today,waiting-room,unread,patients", deskFigures);
     check(
-      "the week's bookings stand where the takings would be",
-      (await p2.locator('[data-figure="week"]').count()) === 1,
-      (await p2.locator("[data-figures] [data-figure]").evaluateAll((els) => els.map((e) => e.getAttribute("data-figure")))).join(",")
+      "and her line says the day and the waiting room",
+      (await p2.locator("[data-welcome]").innerText()).includes(ar.dashboard.deskLine.replace("{n}", String(live)).replace("{w}", "0")),
+      (await p2.locator("[data-welcome]").innerText()).replace(/\s+/g, " ")
     );
     check("no invoice shortcut for her", !deskBody.includes(ar.dashboard.newInvoice), "");
     await ctx2.close();
+
+    /* ====================================================== a doctor */
+    console.log("\n[a doctor]");
+    const ctx3 = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const p3 = await ctx3.newPage();
+    await signIn(p3, `doc-${slug}@test.local`);
+    await land(p3, `${BASE}/c/${slug}`);
+    const docFigures = (await p3.locator("[data-figures] [data-figure]").evaluateAll((els) => els.map((e) => e.getAttribute("data-figure")))).join(",");
+    check("a doctor's figures are their own day", docFigures === "my-today,waiting-for-me,next-patient,my-month", docFigures);
+    check("their patients today: the two not cancelled", (await p3.locator('[data-figure="my-today"]').innerText()).includes("2"), await p3.locator('[data-figure="my-today"]').innerText());
+    check("their month: four completed visits", /\b4\b/.test(await p3.locator('[data-figure="my-month"]').innerText()), await p3.locator('[data-figure="my-month"]').innerText());
+    check(
+      "the line under the greeting counts their patients",
+      (await p3.locator("[data-welcome]").innerText()).includes(ar.dashboard.doctorLine.replace("{n}", "2")),
+      (await p3.locator("[data-welcome]").innerText()).replace(/\s+/g, " ")
+    );
+    check("confirming and chasing invoices are not theirs", (await p3.locator("[data-needs-row]").count()) === 0, "");
+    check("no takings on a doctor's page", (await p3.locator('[data-figure="collected-today"]').count()) === 0, "");
+    check("their strip shows their two bookings", (await p3.locator("[data-day-dot]").count()) === 2, String(await p3.locator("[data-day-dot]").count()));
+    await ctx3.close();
 
     /* ====================================================== the phone */
     console.log("\n[on a phone]");
