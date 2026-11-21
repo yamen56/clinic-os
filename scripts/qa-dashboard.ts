@@ -1,5 +1,9 @@
 /**
- * The dashboard: what it shows, who it shows it to, and the keys.
+ * The front page: today's list, what is waiting on somebody, who sees what, and the keys.
+ *
+ * Since 2026-11-21 it is two things — today's appointments and "Needs you" —
+ * with the day's takings as one pill under the date; the charts and tiles
+ * moved to Finance → Analytics (qa-finance, qa-brand-chart).
  *
  * Two things are being protected. The first is that the front page is the one
  * screen every member can open, so it is the one screen where a section hidden
@@ -211,26 +215,13 @@ async function main() {
     console.log("\n[what the owner sees]");
     await signIn(page, `owner-${slug}@test.local`);
     await land(page, `${BASE}/c/${slug}`);
-    let body = await text(page);
+    const body = await text(page);
 
-    check("today counts the day's appointments", body.includes("مواعيد اليوم"), "");
     /*
-      Counted from the database rather than hard-coded.
-
-      The number used to be a literal 2 — the three this fixture books today,
-      less the cancelled one. That held only in the middle of a month. The
-      "earlier this month" appointments below are built as `monthStart + d days`
-      for d=0..4 and clamped back into the past if they land in the future, so
-      during the first days of a month several of them come to rest on *today*
-      and join the count: 7 on the 1st, 4 on the 4th, 2 for the rest of the
-      month. The suite went red for the first week of every month and the answer
-      was always "not a regression, ignore it" — which is exactly the habit a
-      test suite must not teach.
-
-      Asking the database keeps the assertion pointed at what it was always
-      about: the tile counts today's appointments and leaves the cancelled one
-      out. Both halves are checked, so a tile that simply counted everything
-      would still fail.
+      Counted from the database rather than hard-coded: the "earlier this month"
+      fixtures are clamped back into the past, so on the first days of a month
+      some of them come to rest on today. Both halves are checked, so a list
+      that simply showed everything would still fail.
     */
     const todays = await db.query(
       `select count(*) filter (where status <> 'cancelled')::int as live,
@@ -240,55 +231,28 @@ async function main() {
       [clinicId, TZ]
     );
     const { live, all_of_them: booked } = todays.rows[0] as { live: number; all_of_them: number };
-    check(
-      "and excludes the cancelled one",
-      live < booked && new RegExp(`مواعيد اليوم\\s*${live}\\b`).test(body),
-      `tile should say ${live} of ${booked} booked — ${body.slice(0, 80)}`
-    );
-    check("the week's takings are shown", body.includes(ar.dashboard.revenueWeek), "");
-    check(
-      "collected this week is the 120 that was paid",
-      body.includes("120.00"),
-      body.match(/[\d,]+\.\d\d/g)?.slice(0, 4).join(" ") ?? ""
-    );
-    /*
-      Scoped to the tile, not the page. 300 legitimately appears further down as
-      what the service billed, so a page-wide "does not contain 300" would fail
-      for the right reason and teach the wrong lesson.
-    */
-    const owedTile = await page
-      .locator(`text=${ar.dashboard.outstanding}`)
-      .locator("xpath=ancestor::*[contains(@class,'rounded-card')][1]")
-      .innerText();
-    check(
-      "owed is total minus paid, not the invoice total",
-      owedTile.includes("180.00") && !owedTile.includes("300.00"),
-      owedTile.replace(/\s+/g, " ")
-    );
+    check("the day's list is there", body.includes(ar.dashboard.todayAppointments), "");
+    const listed = await page.locator("[data-today-row]").count();
+    check("it lists today's appointments and leaves the cancelled one out", live < booked && listed === live, `${listed} rows, ${live} of ${booked} booked`);
 
-    console.log("\n[the analytics]");
-    check("the takings chart is there", body.includes(ar.dashboard.revenueTrend), "");
-    check("so is the appointments chart", body.includes(ar.dashboard.appointmentsTrend), "");
-    check("what earns, this month", body.includes(ar.dashboard.topServices), "");
-    check("named by service", body.includes("تبييض"), "");
-    check(
-      "billed at the line total",
-      body.includes("300.00"),
-      body.match(/[\d,]+\.\d\d/g)?.join(" ") ?? ""
-    );
-    check("a void invoice is left out of it", !body.includes("999"), "");
-    check("the doctor breakdown is there", body.includes(ar.dashboard.byDoctor), "");
-    check("with the doctor named", body.includes("د. قياس"), "");
-    check(
-      "four completed and one missed",
-      /4 مكتمل/.test(body) && /1 لم يحضر/.test(body),
-      body.match(/\d+ مكتمل[^,]{0,20}/)?.[0] ?? ""
-    );
-    check(
-      "and the clinic's own no-show share, 1 of 5",
-      body.includes(ar.dashboard.noShowShare.replace("{n}", "20")),
-      "expected 20%"
-    );
+    const collected = (await page.locator('[data-figure="collected-today"]').innerText().catch(() => "")).replace(/\s+/g, " ");
+    check("collected today is the 120 that was paid", collected.includes(ar.invoices.collectedToday) && collected.includes("120.00"), collected);
+    check("a void invoice adds nothing anywhere", !body.includes("999"), "");
+
+    console.log("\n[needs you]");
+    const count = (p: Page, key: string) => p.locator(`[data-needs-row="${key}"]`).getAttribute("data-count", { timeout: 5_000 }).catch(() => null);
+    check("one unpaid invoice", (await count(page, "unpaid")) === "1", String(await count(page, "unpaid")));
+    const unconfirmed = (
+      await db.query(
+        `select count(*)::int as n from appointments where clinic_id = $1 and status in ('scheduled','pending_approval') and starts_at > now()`,
+        [clinicId]
+      )
+    ).rows[0].n as number;
+    check("bookings to confirm, as the calendar counts them", (await count(page, "unconfirmed")) === String(unconfirmed), `${await count(page, "unconfirmed")} vs ${unconfirmed}`);
+    check("no unread messages is still a row, saying 0", (await count(page, "unread")) === "0", String(await count(page, "unread")));
+    check("each row opens its list", (await page.locator('[data-needs-row="unpaid"]').getAttribute("href")) === `/c/${slug}/invoices?status=unpaid`);
+    check("the charts moved to Analytics", (await page.locator("[data-chart-mark]").count()) === 0, "");
+    check("and so did the tiles", !body.includes("180.00") && !body.includes("300.00"), "");
 
     /* =============================================================== keys */
     console.log("\n[the shortcuts]");
@@ -344,21 +308,17 @@ async function main() {
     await land(p2, `${BASE}/c/${slug}`);
     const deskBody = await text(p2);
 
-    check("no takings", !deskBody.includes(ar.dashboard.revenueWeek), "");
-    check("no balance owed", !deskBody.includes(ar.dashboard.outstanding), "");
-    check("no takings chart", !deskBody.includes(ar.dashboard.revenueTrend), "");
-    check("and none of what earns", !deskBody.includes(ar.dashboard.topServices), "");
+    check("no takings", (await p2.locator('[data-figure="collected-today"]').count()) === 0, "");
+    check("no unpaid invoice count", (await p2.locator('[data-needs-row="unpaid"]').count()) === 0, "");
     check(
       "not one of the amounts leaks",
       !deskBody.includes("180.00") && !deskBody.includes("300.00") && !deskBody.includes("120.00"),
       ""
     );
     check("but she still gets today's list", deskBody.includes(ar.dashboard.todayAppointments), "");
-    check("the appointments chart", deskBody.includes(ar.dashboard.appointmentsTrend), "");
-    check("and the doctor breakdown", deskBody.includes(ar.dashboard.byDoctor), "");
     check(
-      "her row of tiles is still full",
-      deskBody.includes(ar.dashboard.noShowRate) || deskBody.includes(ar.dashboard.newPatientsMonth),
+      "and what is waiting on her",
+      (await p2.locator('[data-needs-row="unread"]').count()) === 1 && (await p2.locator('[data-needs-row="unconfirmed"]').count()) === 1,
       ""
     );
     check("no invoice shortcut for her", !deskBody.includes(ar.dashboard.newInvoice), "");
@@ -378,7 +338,14 @@ async function main() {
         const els = [...document.querySelectorAll<HTMLElement>(".tnum")];
         return els.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent ?? "");
       });
-      check(`no tile number is cut off at ${width}px`, cut.length === 0, cut.join(" | "));
+      check(`no figure is cut off at ${width}px`, cut.length === 0, cut.join(" | "));
+      // A doctor between rooms opens this for who is next: the day first, what is waiting under it.
+      const order = await page.evaluate(() => {
+        const list = document.querySelector("[data-today-list]")?.getBoundingClientRect().top ?? -1;
+        const needs = document.querySelector("[data-needs-you]")?.getBoundingClientRect().top ?? -1;
+        return { list, needs };
+      });
+      check(`today's list comes before Needs you at ${width}px`, order.list >= 0 && order.needs > order.list, JSON.stringify(order));
     }
 
     check("no page errors anywhere", errors.length === 0, errors.slice(0, 2).join(" | "));

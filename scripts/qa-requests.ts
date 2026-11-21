@@ -131,8 +131,9 @@ async function main() {
     check("and the page shows it without the extra render", dimmed === 1, `${dimmed} dimmed rows`);
 
     /* --------------------------------------------------- dashboard, desktop */
-    await page.goto(`${BASE}/c/${slug}`, { waitUntil: "networkidle", timeout: 120_000 });
-    const owed = page.getByText(/17,472\.00/).first();
+    // The front page's tiles moved to Finance → Analytics (2026-11-21); the owed figure is its last tile.
+    await page.goto(`${BASE}/c/${slug}/analytics`, { waitUntil: "networkidle", timeout: 120_000 });
+    const owed = page.locator('[data-figure="owed"]').getByText(/17,472\.00/).first();
     await owed.waitFor({ timeout: 60_000 });
     const fit = await owed.evaluate((el) => ({
       text: el.textContent ?? "",
@@ -140,6 +141,7 @@ async function main() {
     }));
     check("a five-figure balance keeps its currency", /JOD/.test(fit.text), fit.text);
     check("and fits its tile without an ellipsis", fit.overflow <= 1, `${fit.overflow}px over`);
+    await page.goto(`${BASE}/c/${slug}`, { waitUntil: "networkidle", timeout: 120_000 });
 
     const nested = await page.evaluate(
       () => document.querySelectorAll("a button, button a, a a, button button").length

@@ -750,58 +750,28 @@ export const en = {
     todayAppointments: "Today's appointments",
     /* A doctor's own patient in the clinic's list for today. */
     you: "You",
+    /* Everything waiting on a person, in one list (2026-11-21). */
+    needsYou: "Needs you",
     todo: "To do",
     stock: "Stock",
-    stockOpen: "Open Stock",
     stockExpires: "Expires {date}",
     todoDone: "Done",
-    unreadConversations: "Unread conversations",
-    revenueWeek: "Revenue this week",
-    vsLastWeek: "vs last week",
-    noShowRate: "No-show rate this month",
+    unreadConversations: "Unread messages",
     whatsapp: "WhatsApp",
-    aiAgent: "AI Agent",
-    connected: "Connected",
-    disconnected: "Disconnected",
-    on: "On",
-    off: "Off",
-    pending: "Pending items",
-    unpaidInvoices: "unpaid invoices",
-    unconfirmed: "unconfirmed appointments",
+    unpaidInvoices: "Unpaid invoices",
+    unconfirmed: "To confirm",
     noAppointmentsToday: "No appointments today",
     viewCalendar: "Open appointments",
-    emptyDay: "A quiet day — no appointments scheduled yet.",
 
     /* --- quick actions --- */
     newAppointment: "Appointment",
     newPatient: "Patient",
     newInvoice: "Invoice",
     openInbox: "Inbox",
-    shortcutHint: "Press {key}",
 
-    /* --- tiles --- */
-    outstanding: "Owed to the clinic",
-    outstandingSub: "{n} unpaid",
-    newPatientsMonth: "New patients this month",
     /* Only the front page of a workspace that sells the product shows this, but
        the number exists for every clinic — see `source = 'booking_link'`. */
     demosMonth: "Booked online this month",
-    vsLastMonth: "vs last month",
-
-    /* --- charts --- */
-    revenueTrend: "Collected, last 14 days",
-    appointmentsTrend: "Appointments, last 14 days",
-    topServices: "What earns, this month",
-    topServicesSub: "Billed, excluding cancelled invoices",
-    topSections: "What earns, by section",
-    byDoctor: "By doctor, this month",
-    byDoctorSub: "Completed appointments, and how many were missed",
-    noShowShare: "{n}% of finished appointments were missed this month",
-    unassigned: "Unassigned",
-    noneYet: "Nothing yet this month",
-    quietFortnight: "Nothing in the last 14 days",
-    completedShort: "done",
-    noShowShort: "missed",
   },
   admin: {
     title: "Platform Admin",

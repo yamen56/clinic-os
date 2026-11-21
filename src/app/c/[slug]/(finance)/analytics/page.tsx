@@ -13,9 +13,8 @@ import { asPeriodParam } from "@/lib/finance-periods";
 import { financeAnalytics, firstMoneyDate, periodOf, type Period, type SeriesPoint } from "@/lib/finance-analytics";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button-class";
-import { RowBar } from "@/components/ui/chart";
+import { AreaTrend, ColumnChart, RankedRow as Row, type ChartPoint } from "@/components/ui/chart";
 import { PeriodPicker, type MenuYear } from "./period-picker";
-import { TrendChart, type TrendPoint } from "./trend-chart";
 
 /**
  * The clinic's money, in depth.
@@ -210,7 +209,7 @@ export default async function FinanceAnalyticsPage({
           <CardHeader title={F.trendTitle} sub={trendSub} />
           <div className="px-5 py-4">
             {a.collected > 0 ? (
-              <TrendChart data={trend(a.series)} locale={intl} currency={currency} />
+              <AreaTrend data={trend(a.series)} label={`${F.trendTitle}, ${trendSub}`} locale={intl} currency={currency} />
             ) : (
               <Quiet>{F.nothingCollected}</Quiet>
             )}
@@ -242,7 +241,7 @@ export default async function FinanceAnalyticsPage({
           <Card className="lg:col-span-2">
             <CardHeader title={F.spentTitle} sub={trendSub} />
             <div className="px-5 py-4">
-              <TrendChart data={trend(a.spend.series)} locale={intl} currency={currency} />
+              <ColumnChart data={trend(a.spend.series)} label={`${F.spentTitle}, ${trendSub}`} locale={intl} currency={currency} />
             </div>
           </Card>
 
@@ -396,7 +395,7 @@ function delta(now: number, before: number): number | null {
 }
 
 /** The chart's points: a short label for under the axis, the full name for the readout. */
-function points(rows: SeriesPoint[], period: Period, intl: string): TrendPoint[] {
+function points(rows: SeriesPoint[], period: Period, intl: string): ChartPoint[] {
   const years = new Set(rows.map((r) => r.bucket.slice(0, 4))).size > 1;
   return rows.map((r) => {
     const d = DateTime.fromISO(r.bucket).setLocale(intl);
@@ -461,11 +460,9 @@ function Tile({
   return (
     <Card className={`p-4 ${className}`}>
       <div data-figure={hook}>
-        <div className="text-[0.8125rem] text-ink-500">{label}</div>
-        <div className={`mt-1.5 font-display text-[1.375rem] font-bold leading-tight ${negative ? "text-danger" : "text-ink-900"}`}>
-          {value}
-        </div>
-        <div className="mt-2 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-ink-400">
+        {/* The name and how it moved on one line; the figure under it, the largest thing on the card. */}
+        <div className="flex min-h-6 items-center justify-between gap-2">
+          <span className="truncate text-[0.8125rem] font-medium text-ink-500">{label}</span>
           {d !== null && d !== undefined && (
             /*
               Direction is the arrow and the word, never the colour alone: the
@@ -474,7 +471,7 @@ function Tile({
             */
             <span
               title={(d === 0 ? words.same : d > 0 ? words.more : words.less).replace("{pct}", String(Math.abs(d)))}
-              className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-semibold tnum ${
+              className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.75rem] font-semibold tnum ${
                 good === null
                   ? "bg-ink-900/5 text-ink-500"
                   : good
@@ -486,43 +483,14 @@ function Tile({
               {Math.abs(d) > 999 ? "999+" : Math.abs(d)}%
             </span>
           )}
-          {sub && <span>{sub}</span>}
         </div>
+        {/* Smaller on a phone, where two tiles share a row: a five-figure amount keeps its currency on its line. */}
+        <div className={`mt-2 font-display text-[1.125rem] font-semibold leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none ${negative ? "text-danger" : "text-ink-900"}`}>
+          {value}
+        </div>
+        <div className="mt-2 min-h-4 truncate text-[0.75rem] text-ink-400">{sub}</div>
       </div>
     </Card>
-  );
-}
-
-/** One row of a breakdown: a name, its amount, and a bar on the scale the whole card shares. */
-function Row({
-  name,
-  note,
-  amount,
-  share,
-  value,
-  max,
-}: {
-  name: string;
-  note?: string;
-  amount: string;
-  share?: number | null;
-  value: number;
-  max: number;
-}) {
-  return (
-    <li className="px-5 py-3">
-      <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[0.8125rem]">
-        <span className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate text-ink-900">{name}</span>
-          {note && <span className="shrink-0 text-[0.75rem] text-ink-400 tnum">{note}</span>}
-        </span>
-        <span className="shrink-0 tnum">
-          <span className="font-semibold text-ink-900">{amount}</span>
-          {share !== null && share !== undefined && <span className="ms-2 inline-block w-9 text-end text-[0.75rem] text-ink-400">{share}%</span>}
-        </span>
-      </div>
-      <RowBar value={value} max={max} />
-    </li>
   );
 }
 

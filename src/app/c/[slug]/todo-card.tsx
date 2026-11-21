@@ -4,6 +4,9 @@
   The desk's To do: what the clinic's automations asked a person to do — call
   back a patient who replied "2" to a reminder, chase one who never confirmed,
   approve a booking. Ticked off here; a new one appears on its own.
+
+  A section of "Needs you" on the front page (2026-11-21), not a card of its
+  own: one list of what is waiting on somebody, rather than a stack of boxes.
 */
 
 import { useState } from "react";
@@ -12,14 +15,13 @@ import { useRouter } from "next/navigation";
 import { Check, ListTodo } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
-import { Card, CardHeader } from "@/components/ui/card";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { fmtRelative } from "@/lib/dates";
 import { completeTaskAction } from "./tasks-actions";
 
 export type TodoRow = { id: string; title: string; body: string; patient_id: string | null; patient_name: string | null; created_at: string };
 
-export function TodoCard({ slug, rows, canOpenPatient }: { slug: string; rows: TodoRow[]; canOpenPatient: boolean }) {
+export function TodoList({ slug, rows, canOpenPatient }: { slug: string; rows: TodoRow[]; canOpenPatient: boolean }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
@@ -43,40 +45,46 @@ export function TodoCard({ slug, rows, canOpenPatient }: { slug: string; rows: T
   };
 
   return (
-    <div data-todo-card>
-      <Card>
-        <CardHeader title={`${t.dashboard.todo} · ${shown.length}`} />
-        <ul className="divide-y divide-line">
-          {shown.map((r) => (
-            <li key={r.id} className="flex items-start gap-3 px-5 py-3" data-todo={r.id}>
-              <ListTodo className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-              <div className="min-w-0 flex-1">
-                <div dir="auto" className="text-sm font-medium">
-                  {r.title}
-                </div>
-                <div className="flex flex-wrap gap-x-2 text-[0.78125rem] text-ink-500">
-                  {r.body && <span dir="auto">{r.body}</span>}
-                  {r.patient_id && r.patient_name && canOpenPatient && (
-                    <Link href={`/c/${slug}/patients/${r.patient_id}`} className="font-semibold text-brand-700 hover:underline">
-                      {r.patient_name}
-                    </Link>
-                  )}
-                  <span suppressHydrationWarning>{fmtRelative(r.created_at, locale)}</span>
-                </div>
+    <div data-todo-card className="border-t border-line">
+      <div className="flex items-center gap-3 px-5 pb-1 pt-3 text-[0.75rem] font-semibold text-ink-500">
+        <ListTodo className="h-4 w-4 shrink-0 text-ink-400" />
+        <span className="flex-1">{t.dashboard.todo}</span>
+        <span className="rounded-full bg-st-pending-soft px-2 py-0.5 font-semibold text-st-pending tnum">{shown.length}</span>
+      </div>
+      <ul>
+        {shown.map((r) => (
+          <li key={r.id} className="flex items-center gap-3 px-5 py-2" data-todo={r.id}>
+            <div className="min-w-0 flex-1">
+              <div dir="auto" className="truncate text-[0.8125rem] font-medium text-ink-900">
+                {r.title}
               </div>
-              <button
-                type="button"
-                onClick={() => void done(r.id)}
-                className="inline-flex h-9 shrink-0 touch-manipulation items-center gap-1 rounded-full border border-line-strong px-3 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
-                data-todo-done
-              >
-                <Check className="h-3.5 w-3.5" />
-                {t.dashboard.todoDone}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </Card>
+              <div className="flex flex-wrap gap-x-2 text-[0.75rem] text-ink-500">
+                {r.patient_id && r.patient_name && canOpenPatient ? (
+                  <Link href={`/c/${slug}/patients/${r.patient_id}`} className="font-semibold text-brand-700 hover:underline">
+                    {r.patient_name}
+                  </Link>
+                ) : (
+                  r.body && (
+                    <span dir="auto" className="truncate">
+                      {r.body}
+                    </span>
+                  )
+                )}
+                <span suppressHydrationWarning>{fmtRelative(r.created_at, locale)}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void done(r.id)}
+              className="inline-flex h-9 shrink-0 touch-manipulation items-center gap-1 rounded-full border border-line-strong px-3 text-[0.75rem] font-semibold text-ink-700 hover:bg-sunken max-md:h-10"
+              data-todo-done
+            >
+              <Check className="h-3.5 w-3.5" />
+              {t.dashboard.todoDone}
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

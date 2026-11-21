@@ -6,56 +6,49 @@ import { invoiceDaySql, invoiceScopeSql, ownInvoicesOnly } from "@/lib/invoice-s
 import { landingPathIn } from "@/lib/permissions";
 import { inClinic } from "@/lib/clinic-api";
 import { dictForClinic, getLocale } from "@/lib/i18n";
-import { dayRangeUtc, weekRangeUtc, monthRangeUtc, fmtMoney, fmtLongToday } from "@/lib/dates";
+import { dayRangeUtc, monthRangeUtc, fmtMoney, fmtLongToday } from "@/lib/dates";
 import { Card, CardHeader, PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/misc";
-import { BarChart, RowBar, type Point } from "@/components/ui/chart";
 import { QuickActions, type QuickAction } from "./quick-actions";
 import { TodayList } from "./today-list";
-import { TodoCard } from "./todo-card";
-import { StockCard } from "./stock-card";
+import { TodoList } from "./todo-card";
+import { StockLines } from "./stock-card";
 import { loadStockAttention } from "@/lib/charts/face/stock";
 import { owedSql } from "@/lib/invoices";
 import { dueBackCount } from "@/lib/due-back";
 import { setupChecklist, type SetupItem } from "@/lib/setup-checklist";
+import type { Dict } from "@/lib/i18n/en";
 import {
-  CalendarDays,
-  CalendarCheck,
-  CalendarClock,
-  TrendingUp,
-  TrendingDown,
   ArrowRight,
-  MessageCircle,
-  Banknote,
-  ReceiptText,
-  Target,
-  UserX,
-  UserPlus,
-  ChevronRight,
+  CalendarClock,
+  CalendarDays,
   CalendarPlus,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Circle,
+  ListChecks,
+  MessageCircle,
+  ReceiptText,
 } from "lucide-react";
 
-/** A stat tile. Built as data so the visible four follow the viewer's access. */
-type Tile = { key: string; label: string; value: string; foot?: React.ReactNode; href?: string };
-
-/*
-  Each tile's mark, by key. A row of four labelled numbers is read by position
-  until somebody learns it; the icon lets the eye find "money" or "messages"
-  without reading a label first.
-*/
-const tileIcons: Record<string, React.ComponentType<{ className?: string; strokeWidth?: number }>> = {
-  today: CalendarDays,
-  unread: MessageCircle,
-  revenue: Banknote,
-  owed: ReceiptText,
-  demos: CalendarCheck,
-  prospects: Target,
-  noshow: UserX,
-  newpatients: UserPlus,
-};
-
+/**
+ * The front page: today, and what is waiting on somebody.
+ *
+ * Yamen, 2026-11-21: the old dashboard "doesn't serve a real job, and has too
+ * much talk". It was four tiles, the day's list, a follow-up card, two
+ * fortnight charts, two "what earns" lists and a per-doctor breakdown — the
+ * last five a second copy of Finance → Analytics, read once a week, on the
+ * screen opened fifty times a day. So it does two jobs now and nothing else:
+ *
+ *  - who is in the clinic today, and the one step each of them needs next
+ *    (TodayList, the same for every role since 2026-11-08); and
+ *  - "Needs you": one list of everything waiting on a person — bookings to
+ *    confirm, invoices unpaid, messages unread, patients due back, the
+ *    automations' To do, stock to order, and what is left to set up.
+ *
+ * The money a member may see is one pill under the date, not a card.
+ */
 export default async function DashboardPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const a = await guardClinic(slug);
@@ -69,58 +62,32 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
   if (!can(a, "dashboard")) redirect(landingPathIn(slug, a.caps));
   const t = await dictForClinic(a.clinic.vocabulary);
   const locale = await getLocale();
-
   const tz = a.clinic.timezone;
+
   /*
-    The dashboard is the one screen everybody can open, which makes it the one
-    screen where a hidden section can leak anyway. A member whose owner removed
-    Invoices should not read the week's revenue off the front page, so the tiles
-    and the charts follow the same capabilities as the nav — and the queries
-    behind them do not run at all for somebody who cannot see the answer.
+    The one screen everybody can open is the one where a hidden section can
+    leak anyway, so every figure follows the capability that opens its page —
+    and the query behind it does not run for somebody who cannot see the answer
+    (DECISIONS #74, #83).
   */
   const showMoney = can(a, "invoices");
-  /*
-    Narrower than showMoney, and the reason the comment above still holds after
-    the split. "May raise an invoice" and "may see what the clinic took this
-    week" became two separate answers; the shortcut follows the first, every
-    figure and chart below follows the second. Without this the front page would
-    quietly hand back exactly the totals the invoice list was told to hide.
-  */
+  // The day's takings are "what the clinic took", not "may raise an invoice".
   const showRevenue = can(a, "invoices.analytics") && !ownInvoicesOnly(a);
-  /*
-    The unpaid count is not one of the takings — it is how many pieces of paper
-    are outstanding, and somebody who works the list needs it whether or not
-    they may see money. So it survives without `invoices.analytics` and is
-    filtered instead, to the same set of invoices its link opens.
-
-    The index follows the two shapes of the statement below: seven parameters
-    when the takings are selected, three when they are not. Dead in the first
-    (a filtered member never has `showRevenue`) and correct in both.
-  */
-  const ownScope = invoiceScopeSql(a, "i", showRevenue ? 8 : 4);
-  // Counted over the same invoices its link lists: today's alone for a today-only member (2026-11-20).
-  const unpaidDay = invoiceDaySql(a, "i", (showRevenue ? 8 : 4) + ownScope.params.length);
-  const unpaidScope = { sql: ownScope.sql + unpaidDay.sql, params: [...ownScope.params, ...unpaidDay.params] };
-  /** Clinicti's own workspace — see clinics.vocabulary and i18n/vocab.ts. */
-  const isAgency = a.clinic.vocabulary === "agency";
   const showInbox = can(a, "conversations");
   const showCalendar = can(a, "calendar");
   const showPatients = can(a, "patients");
-  const intl = locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB";
+  /** Clinicti's own workspace — see clinics.vocabulary and i18n/vocab.ts. */
+  const isAgency = a.clinic.vocabulary === "agency";
 
   const data = await inClinic(a, async (c) => {
     const today = dayRangeUtc(tz);
-    const thisWeek = weekRangeUtc(tz);
-    const lastWeek = weekRangeUtc(tz, -1);
     const month = monthRangeUtc(tz);
 
     /*
       The clinic's day, the same for everybody (Yamen, 2026-11-08): the desk,
       the doctors and the owner all see who is in the waiting room, who is with
-      a doctor and who is still to come. A doctor's own patients are marked
-      as theirs rather than being the only ones shown — a doctor between rooms
-      also needs to know the waiting room is full. The list filters itself
-      (TodayList) for whoever wants one part of it.
+      a doctor and who is still to come. A doctor's own patients are marked as
+      theirs rather than being the only ones shown.
     */
     const appts = (
       await c.query(
@@ -142,190 +109,54 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
       )
     ).rows;
 
-    // The counters are all scalar lookups — one statement rather than a query each.
-    const [stats] = (
-      await c.query(
-        `select
-          (select coalesce(sum(unread_count),0) from conversations where clinic_id=$1)::int as unread,
-          ${
-            /*
-              Not computed at all for somebody who may not see it. The tiles were
-              already hidden, but the figures still travelled to their browser in
-              the page payload — and "the number is in the page, just not drawn"
-              is not what you tell an owner who asked that their staff not know
-              what the practice takes.
-
-              The month range is $2/$3 because it is always used; the two week
-              ranges are $4–$7 and are bound only when they are referenced.
-              Postgres rejects a statement that is handed a parameter it never
-              mentions ("bind message supplies 7 parameters, but prepared
-              statement requires 3"), so leaving them bound to keep the numbering
-              tidy took the whole dashboard down for everybody without revenue.
-            */
-            /* A cancelled invoice's payments are not revenue (Yamen, 2026-10-14). */
-            showRevenue
-              ? `(select coalesce(sum(p.amount),0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
-             where p.clinic_id=$1 and p.paid_at >= $4 and p.paid_at < $5) as rev_this,
-          (select coalesce(sum(p.amount),0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
-             where p.clinic_id=$1 and p.paid_at >= $6 and p.paid_at < $7) as rev_last,`
-              : `0::numeric as rev_this, 0::numeric as rev_last,`
-          }
-          (select count(*) from appointments where clinic_id=$1 and starts_at >= $2 and starts_at < $3 and status='no_show')::int as noshow,
-          (select count(*) from appointments where clinic_id=$1 and starts_at >= $2 and starts_at < $3 and status in ('completed','no_show'))::int as finished,
-          (select count(*) from invoices i where i.clinic_id=$1 and ${owedSql("i")}${unpaidScope.sql})::int as unpaid,
-          -- The money owed, not just how many pieces of paper it is spread across.
-          -- Same rule as the takings above: a sum of what the clinic is owed is
-          -- a clinic-wide figure, so it is not computed for somebody without it.
-          ${
-            showRevenue
-              ? `(select coalesce(sum(i.total - i.amount_paid),0) from invoices i where i.clinic_id=$1 and ${owedSql("i")}) as owed,`
-              : `0::numeric as owed,`
-          }
-          (select count(*) from patients where clinic_id=$1 and merged_into is null and created_at >= $2 and created_at < $3)::int as new_patients,
-          /*
-            Bookings that came through the public link this month. Every clinic
-            has this number; only the workspace selling software puts it on the
-            front page, where "how many demos did we book" is the question the
-            morning actually starts with.
-          */
-          (select count(*) from appointments where clinic_id=$1 and source='booking_link' and starts_at >= $2 and starts_at < $3)::int as self_booked,
-          (select count(*) from patients where clinic_id=$1 and merged_into is null and status='lead')::int as leads,
-          (select count(*) from appointments where clinic_id=$1 and status in ('scheduled','pending_approval') and starts_at > now())::int as unconfirmed`,
-        // Only what the statement actually mentions: an unreferenced parameter
-        // is a bind error, not a harmless extra.
-        showRevenue
-          ? [a.clinicId, month.start, month.end, thisWeek.start, thisWeek.end, lastWeek.start, lastWeek.end, ...unpaidScope.params]
-          : [a.clinicId, month.start, month.end, ...unpaidScope.params]
-      )
-    ).rows;
-
     /*
-      Fourteen days of takings and bookings, bucketed by the clinic's own day.
+      The counters, as one statement built from the parts this member may see.
 
-      `generate_series` supplies the days so a quiet Friday is a zero rather
-      than a gap — a chart that silently drops empty days compresses time and
-      makes a bad week look like a normal one.
+      Each part claims its parameters as it is added, so the numbering is always
+      exactly what the statement mentions: Postgres refuses a statement handed a
+      parameter it never uses, and a fixed list with optional parts is how this
+      page once went down for everybody without revenue.
     */
-    const series = (
-      await c.query(
-        `with days as (
-           select generate_series(
-             (now() at time zone $2)::date - interval '13 days',
-             (now() at time zone $2)::date,
-             interval '1 day')::date as day
-         )
-         select to_char(d.day, 'YYYY-MM-DD') as day,
-                ${
-                  /*
-                    Not selected for somebody who may not see it. The chart was
-                    already hidden, but fourteen days of the clinic's daily
-                    takings still travelled to every member's browser in the
-                    page payload — including a doctor's, which is exactly the
-                    number the owner asked to keep off their screens.
-                  */
-                  showRevenue
-                    ? "coalesce(p.amount, 0)::float8 as revenue,"
-                    : "0::float8 as revenue,"
-                }
-                coalesce(ap.n, 0)::int as appointments
-           from days d
-           ${
-             showRevenue
-               ? `left join (
-             select (pay.paid_at at time zone $2)::date as day, sum(pay.amount) as amount
-               from payments pay
-               join invoices v on v.id = pay.invoice_id and v.status <> 'void'
-              where pay.clinic_id = $1 and pay.paid_at >= now() - interval '15 days'
-              group by 1
-           ) p on p.day = d.day`
-               : ""
-           }
-           left join (
-             select (starts_at at time zone $2)::date as day, count(*) as n
-               from appointments
-              where clinic_id = $1 and starts_at >= now() - interval '15 days'
-                and starts_at < now() + interval '1 day' and status <> 'cancelled'
-              group by 1
-           ) ap on ap.day = d.day
-          order by d.day`,
-        [a.clinicId, tz]
-      )
-    ).rows;
-
-    /*
-      Who did the work this month. Appointment-based rather than invoice-based,
-      so it means something in a clinic that has not switched invoicing on, and
-      it carries the misses beside the completions — a doctor with a high count
-      and a high no-show rate is a different conversation from a busy one.
-    */
-    const doctors = (
-      await c.query(
-        `select coalesce(u.full_name, '') as name,
-                count(*) filter (where ap.status = 'completed')::int as completed,
-                count(*) filter (where ap.status = 'no_show')::int as no_show
-           from appointments ap
-           left join clinic_members cm on cm.id = ap.doctor_member_id
-           left join users u on u.id = cm.user_id
-          where ap.clinic_id = $1 and ap.starts_at >= $2 and ap.starts_at < $3
-            and ap.status in ('completed', 'no_show')
-          group by 1
-          order by 2 desc, 3 asc
-          limit 6`,
-        [a.clinicId, month.start, month.end]
-      )
-    ).rows;
-
-    /*
-      Only for somebody who may see money. Skipped rather than filtered out
-      later, because the cheapest query is the one that does not run — and this
-      is the most-opened page in the product.
-    */
-    const services = showRevenue
-      ? (
-          await c.query(
-            `select coalesce(nullif(s.name_ar, ''), s.name, '') as name,
-                    sum(ii.amount)::float8 as amount
-               from invoice_items ii
-               join invoices i on i.id = ii.invoice_id
-               left join services s on s.id = ii.service_id
-              where ii.clinic_id = $1 and i.status <> 'void'
-                and i.created_at >= $2 and i.created_at < $3
-              group by 1
-              order by 2 desc
-              limit 6`,
-            [a.clinicId, month.start, month.end]
-          )
-        ).rows
-      : [];
-
-    /*
-      The same money, rolled up to the part of the clinic that earned it.
-
-      Both name columns travel rather than being collapsed with `coalesce` the
-      way the services query above does it — that picks Arabic for an English
-      reader, which is a bug in the older query, not a pattern to copy.
-
-      Skipped entirely when the clinic has no sections, so the dashboard does
-      not grow a card of one unnamed row for everybody who never uses them.
-    */
-    const sections =
-      showRevenue && (await c.query(`select 1 from service_sections where clinic_id = $1 limit 1`, [a.clinicId])).rowCount
-        ? (
-            await c.query(
-              `select sec.id, sec.name, sec.name_ar, sum(ii.amount)::float8 as amount
-                 from invoice_items ii
-                 join invoices i on i.id = ii.invoice_id
-                 left join services s on s.id = ii.service_id
-                 left join service_sections sec on sec.id = s.section_id
-                where ii.clinic_id = $1 and i.status <> 'void'
-                  and i.created_at >= $2 and i.created_at < $3
-                group by sec.id, sec.name, sec.name_ar
-                order by 4 desc
-                limit 6`,
-              [a.clinicId, month.start, month.end]
-            )
-          ).rows
-        : [];
+    const params: unknown[] = [a.clinicId];
+    const $ = (v: unknown) => {
+      params.push(v);
+      return `$${params.length}`;
+    };
+    const parts: string[] = [];
+    if (showInbox) parts.push(`(select coalesce(sum(unread_count),0) from conversations where clinic_id=$1)::int as unread`);
+    if (showCalendar) {
+      parts.push(
+        `(select count(*) from appointments where clinic_id=$1 and status in ('scheduled','pending_approval') and starts_at > now())::int as unconfirmed`
+      );
+    }
+    if (showMoney) {
+      /*
+        How many are unpaid, not how much: somebody who works the invoice list
+        needs it whether or not they may see money. Counted over exactly the
+        invoices its link lists — their own for a doctor, today's for a
+        today-only member (2026-11-20).
+      */
+      const scope = invoiceScopeSql(a, "i", params.length + 1);
+      params.push(...scope.params);
+      const day = invoiceDaySql(a, "i", params.length + 1);
+      params.push(...day.params);
+      parts.push(`(select count(*) from invoices i where i.clinic_id=$1 and ${owedSql("i")}${scope.sql}${day.sql})::int as unpaid`);
+    }
+    if (showRevenue) {
+      // The invoices page's "Collected today", to the cent: a cancelled invoice's payments are not takings.
+      parts.push(
+        `(select coalesce(sum(p.amount),0) from payments p join invoices v on v.id = p.invoice_id and v.status <> 'void'
+           where p.clinic_id=$1 and p.paid_at >= ${$(today.start)} and p.paid_at < ${$(today.end)})::float8 as collected_today`
+      );
+    }
+    if (isAgency) {
+      // Demos booked through the public link this month, and prospects waiting on an answer.
+      parts.push(
+        `(select count(*) from appointments where clinic_id=$1 and source='booking_link' and starts_at >= ${$(month.start)} and starts_at < ${$(month.end)})::int as self_booked`
+      );
+      if (showPatients) parts.push(`(select count(*) from patients where clinic_id=$1 and merged_into is null and status='lead')::int as leads`);
+    }
+    const stats: Record<string, number> = parts.length ? (await c.query(`select ${parts.join(",\n")}`, params)).rows[0] : {};
 
     // Patients the doctor asked to see again, not booked yet — the desk's recall list.
     const dueBack = showCalendar ? await dueBackCount(c, a.clinicId) : 0;
@@ -346,255 +177,98 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         : [];
     // What on the face chart's shelf needs ordering or throwing out, for whoever keeps Stock.
     const stock = a.clinic.features.aesthetic && can(a, "stock") ? await loadStockAttention(c, a.clinicId) : [];
-    return { appts, stats, series, doctors, services, sections, dueBack, setup, todo, stock };
+    return { appts, stats, dueBack, setup, todo, stock };
   });
 
-  const revThis = Number(data.stats.rev_this);
-  const revLast = Number(data.stats.rev_last);
-  const revUp = revThis >= revLast;
-  const owed = Number(data.stats.owed);
-  const noShowRate =
-    data.stats.finished > 0 ? Math.round((data.stats.noshow / data.stats.finished) * 100) : 0;
   const base = `/c/${slug}`;
+  const money = (n: number) => fmtMoney(n, a.clinic.currency, locale);
 
+  // The two things the front page starts; invoice and inbox keep their keys (I, M) from the shell.
   const actions: QuickAction[] = [
     ...(showCalendar ? (["appointment"] as const) : []),
     ...(showPatients ? (["patient"] as const) : []),
-    ...(showMoney ? (["invoice"] as const) : []),
-    ...(showInbox ? (["inbox"] as const) : []),
   ];
 
   /*
-    Four tiles, chosen by what this member can see rather than by hiding gaps in
-    a fixed row of six. A receptionist without invoices gets no-show rate and new
-    patients where the money would have been, so the row is always full and
-    always says something.
+    What is waiting on somebody, in the order the desk works it. A row this
+    member may see is always there — a zero says "nothing waiting", which is
+    an answer — and only the parts that come and go (To do, stock, setup)
+    disappear when empty.
   */
-  const tiles: Tile[] = [
-    {
-      key: "today",
-      label: t.dashboard.todayAppointments,
-      value: String(data.appts.length),
-      href: showCalendar ? `${base}/calendar` : undefined,
-    },
+  const rows: NeedsRow[] = [
+    ...(showCalendar
+      ? [{ key: "unconfirmed", href: `${base}/calendar?show=unconfirmed`, icon: CalendarClock, label: t.dashboard.unconfirmed, count: data.stats.unconfirmed ?? 0 }]
+      : []),
+    ...(showMoney
+      ? [{ key: "unpaid", href: `${base}/invoices?status=unpaid`, icon: ReceiptText, label: t.dashboard.unpaidInvoices, count: data.stats.unpaid ?? 0 }]
+      : []),
     ...(showInbox
-      ? [
-          {
-            key: "unread",
-            label: t.dashboard.unreadConversations,
-            value: String(data.stats.unread),
-            href: `${base}/conversations`,
-          },
-        ]
+      ? [{ key: "unread", href: `${base}/conversations`, icon: MessageCircle, label: t.dashboard.unreadConversations, count: data.stats.unread ?? 0 }]
       : []),
-    ...(showRevenue
-      ? [
-          {
-            key: "revenue",
-            label: t.dashboard.revenueWeek,
-            value: fmtMoney(revThis, a.clinic.currency, locale),
-            /* Two empty weeks are not a trend: a green "up" arrow over 0.00 vs 0.00 read as good news about nothing. */
-            foot: revThis === 0 && revLast === 0 ? undefined : (
-              <span
-                className={`flex items-center gap-1 text-xs font-semibold ${revUp ? "text-ok" : "text-danger"}`}
-              >
-                {revUp ? (
-                  <TrendingUp className="h-3.5 w-3.5" />
-                ) : (
-                  <TrendingDown className="h-3.5 w-3.5" />
-                )}
-                {fmtMoney(revLast, a.clinic.currency, locale)} {t.dashboard.vsLastWeek}
-              </span>
-            ),
-          },
-          {
-            key: "owed",
-            label: t.dashboard.outstanding,
-            value: fmtMoney(owed, a.clinic.currency, locale),
-            foot: (
-              <span className="text-xs text-ink-500">
-                {t.dashboard.outstandingSub.replace("{n}", String(data.stats.unpaid))}
-              </span>
-            ),
-            href: `${base}/invoices?status=unpaid`,
-          },
-        ]
+    ...(showCalendar
+      ? [{ key: "due-back", href: `${base}/calendar?tab=waitlist`, icon: CalendarPlus, label: t.finishVisit.dueBack, count: data.dueBack }]
       : []),
-    /*
-      The workspace that sells the product asks different questions of its own
-      front page. How many demos were booked, and how many prospects are waiting
-      on an answer, are the two numbers that decide what the day looks like — and
-      a no-show rate on a sales call means much less than it does on a filling.
-
-      Built from columns that already exist: `source = 'booking_link'` and the
-      three patient statuses. No pipeline field, no deal value, nothing new to
-      keep up to date.
-    */
-    ...(isAgency
-      ? [
-          {
-            key: "demos",
-            label: t.dashboard.demosMonth,
-            value: String(data.stats.self_booked),
-            href: `${base}/calendar`,
-          },
-          ...(showPatients
-            ? [
-                {
-                  key: "prospects",
-                  label: t.patients.statusLead,
-                  value: String(data.stats.leads),
-                  href: `${base}/patients?status=lead`,
-                },
-              ]
-            : []),
-        ]
-      : [
-          { key: "noshow", label: t.dashboard.noShowRate, value: `${noShowRate}%` },
-          ...(showPatients
-            ? [
-                {
-                  key: "newpatients",
-                  label: t.dashboard.newPatientsMonth,
-                  value: String(data.stats.new_patients),
-                  href: `${base}/patients`,
-                },
-              ]
-            : []),
-        ]),
   ];
+  const setupLeft = data.setup && data.setup.some((i) => !i.done) ? data.setup : null;
+  const hasNeeds = rows.length > 0 || data.todo.length > 0 || data.stock.length > 0 || !!setupLeft;
 
-  const revenuePoints: Point[] = data.series.map((d) => ({
-    label: String(d.day).slice(5),
-    value: Number(d.revenue),
-    sub: String(d.day),
-  }));
-  const apptPoints: Point[] = data.series.map((d) => ({
-    label: String(d.day).slice(5),
-    value: Number(d.appointments),
-    sub: String(d.day),
-  }));
-  const maxService = Math.max(1, ...data.services.map((s) => Number(s.amount)));
-  const maxSection = Math.max(1, ...data.sections.map((s) => Number(s.amount)));
-  const maxDoctor = Math.max(1, ...data.doctors.map((d) => Number(d.completed)));
+  /*
+    The day's money, and for the workspace that sells the product its two
+    numbers, as pills on the line under the date (Yamen, 2026-11-15: a glance
+    figure is a line, not a card).
+  */
+  const figures: { hook: string; label: string; value: string }[] = [
+    ...(showRevenue ? [{ hook: "collected-today", label: t.invoices.collectedToday, value: money(data.stats.collected_today ?? 0) }] : []),
+    ...(isAgency ? [{ hook: "demos", label: t.dashboard.demosMonth, value: String(data.stats.self_booked ?? 0) }] : []),
+    ...(isAgency && showPatients ? [{ hook: "leads", label: t.patients.statusLead, value: String(data.stats.leads ?? 0) }] : []),
+  ];
 
   return (
     <>
-      {/*
-        No WhatsApp or AI status badges here. They are settings, not news: they
-        change a handful of times a year and told a receptionist nothing she
-        needed while she was looking at today's list. A disconnection still
-        reaches the owner as a notification, which is the moment it matters.
-      */}
-      {/* The date under the title: the front desk's first question of the
-          screen is "which day am I looking at", and the clinic's day is not
-          always the device's. */}
+      {/* The date is the title: the desk's first question of this screen is which day it is looking at, and the clinic's day is not always the device's. */}
       <PageHeader
-        title={t.dashboard.title}
-        sub={fmtLongToday(tz, locale)}
+        title={fmtLongToday(tz, locale)}
+        sub={
+          figures.length > 0 ? (
+            <span className="mt-1.5 flex flex-wrap items-center gap-2">
+              {figures.map((f) => (
+                <span key={f.hook} data-figure={f.hook} className="inline-flex items-baseline gap-2 rounded-full bg-ink-900/5 px-3 py-1">
+                  <span className="text-[0.75rem] text-ink-500">{f.label}</span>
+                  <span className="text-[0.8125rem] font-semibold text-ink-900 tnum">{f.value}</span>
+                </span>
+              ))}
+            </span>
+          ) : undefined
+        }
         action={actions.length > 0 ? <QuickActions slug={slug} actions={actions} /> : undefined}
       />
 
       {/*
-        One column below 360px. Two tiles across a 320px screen leaves about
-        113px of usable width each, and "JOD 120.00" does not fit in it at any
-        size somebody would want to read — the currency was being eaten by the
-        ellipsis, which is the one part of a money figure that must never be the
-        bit that goes. An iPhone SE gets four full-width tiles instead; every
-        other phone keeps the pair.
-      */}
-      {/*
-        On a phone the question is who is here and who is next — for the desk
-        as much as for a doctor between rooms — so today's list comes first and
-        the numbers after it, for everybody. Wider screens keep the tiles on top.
-      */}
-      <div className="flex flex-col gap-4">
-      {data.setup && data.setup.some((i) => !i.done) && <SetupCard base={base} items={data.setup} t={t} />}
-      {data.todo.length > 0 && <TodoCard slug={slug} rows={JSON.parse(JSON.stringify(data.todo))} canOpenPatient={showPatients} />}
-      <StockCard slug={slug} items={data.stock} t={t} locale={locale} />
-      <div className="grid grid-cols-1 gap-3 max-lg:order-last min-[360px]:grid-cols-2 xl:grid-cols-4">
-        {tiles.slice(0, 4).map((tile) => {
-          const Icon = tileIcons[tile.key];
-          const body = (
-            <Card className="@container h-full p-4">
-              {/*
-                The mark sits in a chip in the corner where the tile has room,
-                and shrinks to a glyph beside the label where it does not: on a
-                phone the chip took a fifth of the tile and pushed every label
-                onto two lines.
-              */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="eyebrow flex min-w-0 items-center gap-1.5">
-                  {Icon && <Icon className="h-3.5 w-3.5 shrink-0 text-brand-500 @[10rem]:hidden" strokeWidth={2} />}
-                  <span className="min-w-0">{tile.label}</span>
-                </div>
-                {Icon && (
-                  <span className="hidden h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-500 ring-1 ring-brand-100 @[10rem]:grid">
-                    <Icon className="h-[15px] w-[15px]" strokeWidth={1.9} />
-                  </span>
-                )}
-              </div>
-              {/*
-                Sized to fit the tile, not only to the screen. A fixed 26/32px
-                still lost the currency to the ellipsis once a balance reached
-                five figures — "…D 17,472.00" on a desktop, "…17,472.00" on a
-                phone — and the currency is the one part of a money figure that
-                must never be the bit that goes. The size is the smaller of the
-                old one and whatever lets this many characters span the tile
-                (a bold figure runs about 0.62em a character); `truncate` stays
-                as the backstop.
-              */}
-              <div
-                className="font-display mt-2 min-w-0 truncate font-bold leading-none tnum [--kpi-max:26px] sm:[--kpi-max:32px]"
-                style={{ fontSize: `min(var(--kpi-max), ${(100 / (Math.max(1, tile.value.length) * 0.62)).toFixed(1)}cqi)` }}
-              >
-                {tile.value}
-              </div>
-              {tile.foot && <div className="mt-2">{tile.foot}</div>}
-            </Card>
-          );
-          return tile.href ? (
-            <Link
-              key={tile.key}
-              href={tile.href}
-              className="rounded-card transition-[box-shadow,transform] duration-140 ease-out hover:-translate-y-px hover:shadow-pop"
-            >
-              {body}
-            </Link>
-          ) : (
-            <div key={tile.key}>{body}</div>
-          );
-        })}
-      </div>
-
-      {/*
         grid-cols-1 below lg, not a bare grid: an implicit column is floored at
         the min-content width of its widest child, and one appointment row with
-        a long patient name held the dashboard open past the screen. The third
-        instance of this bug — see automations-client and weekly-hours-editor.
+        a long patient name held the page open past the screen. On a phone the
+        day comes first and Needs you under it — a doctor between rooms opens
+        this for who is next.
       */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        <Card className={hasNeeds ? "lg:col-span-2" : "lg:col-span-3"}>
           <CardHeader
             title={t.dashboard.todayAppointments}
             action={
-              <Link
-                href={`${base}/calendar`}
-                className="flex items-center gap-1 text-[0.8125rem] font-medium text-brand-700 hover:text-brand-800"
-              >
-                {/* The board of today's patients opens first on that page. */}
-                {t.dashboard.viewCalendar}
-                <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" />
-              </Link>
+              showCalendar ? (
+                <Link
+                  href={`${base}/calendar`}
+                  className="flex items-center gap-1 text-[0.8125rem] font-medium text-brand-700 hover:text-brand-800"
+                >
+                  {/* The board of today's patients opens first on that page. */}
+                  {t.dashboard.viewCalendar}
+                  <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" />
+                </Link>
+              ) : undefined
             }
           />
           {data.appts.length === 0 ? (
-            <EmptyState
-              bare
-              icon={<CalendarDays />}
-              title={t.dashboard.noAppointmentsToday}
-              body={t.dashboard.emptyDay}
-            />
+            <EmptyState bare icon={<CalendarDays />} title={t.dashboard.noAppointmentsToday} />
           ) : (
             <TodayList
               slug={slug}
@@ -607,265 +281,104 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           )}
         </Card>
 
-        <Card className="h-fit">
-          <CardHeader title={t.dashboard.pending} />
-          <ul className="grid gap-1 p-3">
-            {showMoney && (
-              <FollowUpRow
-                href={`${base}/invoices?status=unpaid`}
-                icon={ReceiptText}
-                label={t.dashboard.unpaidInvoices}
-                count={data.stats.unpaid}
-              />
-            )}
-            {showCalendar && (
-              <FollowUpRow
-                href={`${base}/calendar?show=unconfirmed`}
-                icon={CalendarClock}
-                label={t.dashboard.unconfirmed}
-                count={data.stats.unconfirmed}
-              />
-            )}
-            {showCalendar && (
-              <FollowUpRow href={`${base}/calendar?tab=waitlist`} icon={CalendarPlus} label={t.finishVisit.dueBack} count={data.dueBack} />
-            )}
-          </ul>
-        </Card>
-      </div>
-      </div>
-
-      {/*
-        A fortnight of zeros is a sentence, not a chart: fourteen flat stubs
-        took a screen of a phone to say "nothing yet", which is what a new
-        clinic sees for its first weeks.
-      */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {showRevenue && (
-          <Card>
-            <CardHeader title={t.dashboard.revenueTrend} />
-            {revenuePoints.some((p) => p.value > 0) ? (
-              <div className="px-5 py-4">
-                <BarChart data={revenuePoints} locale={intl} />
-              </div>
-            ) : (
-              <p className="px-5 py-4 text-[0.8125rem] text-ink-500" data-chart-quiet>{t.dashboard.quietFortnight}</p>
-            )}
-          </Card>
+        {hasNeeds && (
+          <div data-needs-you>
+            <Card>
+              <CardHeader title={t.dashboard.needsYou} />
+              {rows.length > 0 && (
+                <ul className="p-2">
+                  {rows.map((r) => (
+                    <NeedsLine key={r.key} row={r} />
+                  ))}
+                </ul>
+              )}
+              <TodoList slug={slug} rows={JSON.parse(JSON.stringify(data.todo))} canOpenPatient={showPatients} />
+              <StockLines slug={slug} items={data.stock} t={t} locale={locale} />
+              {setupLeft && <Setup base={base} items={setupLeft} t={t} />}
+            </Card>
+          </div>
         )}
-        {/* Widens to fill the row when the chart beside it is not there, so a
-            member without the revenue view gets a full-width page rather than a
-            half-empty one. */}
-        <Card className={showRevenue ? "" : "lg:col-span-2"}>
-          <CardHeader title={t.dashboard.appointmentsTrend} />
-          {apptPoints.some((p) => p.value > 0) ? (
-            <div className="px-5 py-4">
-              <BarChart data={apptPoints} locale={intl} />
-            </div>
-          ) : (
-            <p className="px-5 py-4 text-[0.8125rem] text-ink-500" data-chart-quiet>{t.dashboard.quietFortnight}</p>
-          )}
-        </Card>
-      </div>
-
-      {data.sections.length > 0 && (
-        <Card className="mt-4">
-          <CardHeader title={t.dashboard.topSections} sub={t.dashboard.topServicesSub} />
-          <ul className="grid gap-3 px-5 py-4">
-            {data.sections.map((s, i) => (
-              <li key={i}>
-                <div className="flex min-w-0 items-baseline justify-between gap-3">
-                  <span className="min-w-0 truncate text-sm">
-                    {(locale === "ar" ? s.name_ar || s.name : s.name) || t.dashboard.unassigned}
-                  </span>
-                  <span className="shrink-0 text-sm font-semibold tnum">
-                    {fmtMoney(Number(s.amount), a.clinic.currency, locale)}
-                  </span>
-                </div>
-                <div className="mt-1.5">
-                  <RowBar value={Number(s.amount)} max={maxSection} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {showRevenue && (
-          <Card>
-            <CardHeader title={t.dashboard.topServices} sub={t.dashboard.topServicesSub} />
-            {data.services.length === 0 ? (
-              <p className="px-5 py-4 text-[0.8125rem] text-ink-500">{t.dashboard.noneYet}</p>
-            ) : (
-              <ul className="grid gap-3 px-5 py-4">
-                {data.services.map((s, i) => (
-                  <li key={i}>
-                    <div className="flex min-w-0 items-baseline justify-between gap-3">
-                      <span className="min-w-0 truncate text-sm">
-                        {s.name || t.dashboard.unassigned}
-                      </span>
-                      <span className="shrink-0 text-sm font-semibold tnum">
-                        {fmtMoney(Number(s.amount), a.clinic.currency, locale)}
-                      </span>
-                    </div>
-                    <div className="mt-1.5">
-                      <RowBar value={Number(s.amount)} max={maxService} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        )}
-
-        <Card className={showRevenue ? "" : "lg:col-span-2"}>
-          {/*
-            The clinic-wide rate lives here rather than in a tile of its own.
-            A bare percentage is a number to worry about; the same number above
-            the per-doctor breakdown is the start of knowing what to do — and it
-            survives for a full-access owner, whose four tiles are taken by
-            money and today's list.
-          */}
-          <CardHeader
-            title={t.dashboard.byDoctor}
-            sub={
-              data.stats.finished > 0
-                ? t.dashboard.noShowShare.replace("{n}", String(noShowRate))
-                : t.dashboard.byDoctorSub
-            }
-          />
-          {data.doctors.length === 0 ? (
-            <p className="px-5 py-4 text-[0.8125rem] text-ink-500">{t.dashboard.noneYet}</p>
-          ) : (
-            <ul className="grid gap-3 px-5 py-4">
-              {data.doctors.map((d, i) => (
-                <li key={i}>
-                  <div className="flex min-w-0 items-baseline justify-between gap-3">
-                    <span className="min-w-0 truncate text-sm">
-                      {d.name || t.dashboard.unassigned}
-                    </span>
-                    <span className="shrink-0 text-[0.8125rem] tnum">
-                      <span className="font-semibold">{d.completed}</span>{" "}
-                      <span className="text-ink-500">{t.dashboard.completedShort}</span>
-                      {d.no_show > 0 && (
-                        <span className="text-danger">
-                          {" · "}
-                          {d.no_show} {t.dashboard.noShowShort}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="mt-1.5">
-                    <RowBar value={Number(d.completed)} max={maxDoctor} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
       </div>
     </>
   );
 }
 
-/**
- * One thing waiting on somebody, and how many of it.
- *
- * The count is a chip so that "11 waiting" and "nothing waiting" look different
- * at a glance — amber when there is work, quiet when there is none — rather
- * than the same bold digit either way.
- */
-/*
-  What is left to set up, each item a link to the page that does it; the card
-  goes when the last one is done.
-
-  Only what is left gets a full row. Finished items used to keep theirs, struck
-  through, so a clinic one step from done opened its front page to seven rows
-  of checklist — the whole first screen of a phone — to learn about one. The
-  count and the bar say how far along it is; what is done shrinks to a line of
-  ticked chips under the list, still links, for whoever wants to revisit one.
-*/
-function SetupCard({ base, items, t }: { base: string; items: SetupItem[]; t: Awaited<ReturnType<typeof dictForClinic>> }) {
-  const left = items.filter((i) => !i.done);
-  const finished = items.filter((i) => i.done);
-  return (
-    <div data-setup-card>
-      <Card>
-        <CardHeader title={t.setup.title} sub={t.setup.progress.replace("{done}", String(finished.length)).replace("{total}", String(items.length))} />
-        <div className="mx-5 mb-2 h-1.5 overflow-hidden rounded-full bg-sunken">
-          <div className="h-full rounded-full bg-brand-600" style={{ width: `${Math.round((finished.length / items.length) * 100)}%` }} />
-        </div>
-        <ul className={`grid gap-1 p-3 ${left.length > 1 ? "sm:grid-cols-2" : ""}`}>
-          {left.map((i) => {
-            const words = t.setup.items[i.key];
-            return (
-              <li key={i.key}>
-                <Link
-                  href={`${base}${i.path}`}
-                  className="flex min-h-12 items-center gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-sunken"
-                  data-setup-item={i.key}
-                  data-done="0"
-                >
-                  <Circle className="h-5 w-5 shrink-0 text-ink-300" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-ink-900">{words.label}</span>
-                    <span className="block text-[0.78125rem] text-ink-500">{words.hint}</span>
-                  </span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-400 rtl:rotate-180" />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-        {finished.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 border-t border-line px-5 py-3">
-            {finished.map((i) => (
-              <Link
-                key={i.key}
-                href={`${base}${i.path}`}
-                className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-[0.75rem] text-ink-500 transition-colors hover:text-ink-900"
-                data-setup-item={i.key}
-                data-done="1"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-brand-700" />
-                {t.setup.items[i.key].label}
-              </Link>
-            ))}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function FollowUpRow({
-  href,
-  icon: Icon,
-  label,
-  count,
-}: {
+type NeedsRow = {
+  key: string;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   label: string;
   count: number;
-}) {
+};
+
+/**
+ * One thing waiting on somebody, and how many of it. The count is a chip so
+ * that "11 waiting" and "nothing waiting" look different at a glance — amber
+ * when there is work, quiet when there is none.
+ */
+function NeedsLine({ row }: { row: NeedsRow }) {
+  const Icon = row.icon;
   return (
     <li>
       <Link
-        href={href}
-        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors duration-140 ease-out hover:bg-ink-900/4"
+        href={row.href}
+        data-needs-row={row.key}
+        data-count={row.count}
+        className="flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-[0.8125rem] transition-colors duration-140 ease-out hover:bg-ink-900/4"
       >
         <Icon className="h-4 w-4 shrink-0 text-ink-400" strokeWidth={1.75} />
-        <span className="min-w-0 flex-1">{label}</span>
+        <span className={`min-w-0 flex-1 ${row.count > 0 ? "font-medium text-ink-900" : "text-ink-500"}`}>{row.label}</span>
         <span
           className={`rounded-full px-2 py-0.5 text-[0.75rem] font-semibold tnum ${
-            count > 0 ? "bg-st-pending-soft text-st-pending" : "bg-ink-900/4 text-ink-500"
+            row.count > 0 ? "bg-st-pending-soft text-st-pending" : "bg-ink-900/4 text-ink-400"
           }`}
         >
-          {count}
+          {row.count}
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
       </Link>
     </li>
+  );
+}
+
+/*
+  What is left to set up, folded behind one line with its progress (Yamen,
+  2026-11-16: setup belongs behind a button). Open, every step is a link to the
+  page that does it, ticked when the clinic has done it. The line goes when the
+  last step is done.
+*/
+function Setup({ base, items, t }: { base: string; items: SetupItem[]; t: Dict }) {
+  const done = items.filter((i) => i.done).length;
+  return (
+    <details data-setup-card className="group border-t border-line">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-5 py-2 text-[0.8125rem] transition-colors hover:bg-ink-900/4 [&::-webkit-details-marker]:hidden">
+        <ListChecks className="h-4 w-4 shrink-0 text-ink-400" strokeWidth={1.75} />
+        <span className="min-w-0 flex-1 font-medium text-ink-900">{t.setup.title}</span>
+        <span className="rounded-full bg-ink-900/5 px-2 py-0.5 text-[0.75rem] font-semibold text-ink-500 tnum">
+          {done}/{items.length}
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-ink-300 transition-transform group-open:rotate-180" />
+      </summary>
+      <ul className="grid gap-0.5 px-2 pb-2">
+        {items.map((i) => (
+          <li key={i.key}>
+            <Link
+              href={`${base}${i.path}`}
+              className="flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-[0.8125rem] transition-colors hover:bg-ink-900/4"
+              data-setup-item={i.key}
+              data-done={i.done ? "1" : "0"}
+            >
+              {i.done ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-700" />
+              ) : (
+                <Circle className="h-4 w-4 shrink-0 text-ink-300" />
+              )}
+              <span className={`min-w-0 flex-1 ${i.done ? "text-ink-400 line-through" : "text-ink-900"}`}>{t.setup.items[i.key].label}</span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

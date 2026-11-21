@@ -190,7 +190,8 @@ async function live() {
     await page.click('button[type="submit"]');
     await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 120_000 });
 
-    await page.goto(`${BASE}/c/demo2`);
+    // Analytics, since the front page stopped drawing charts (2026-11-21).
+    await page.goto(`${BASE}/c/demo2/analytics?p=all`);
     await page.waitForLoadState("networkidle");
 
     /*
@@ -202,10 +203,12 @@ async function live() {
       bar is actually painted.
     */
     const seen = await page.evaluate(() => {
-      const bar = document.querySelector('[role="img"] span') as HTMLElement | null;
+      // A line is painted with its stroke, a column or a bar with its background.
+      const mark = document.querySelector("[data-chart-mark]") as Element | null;
       const anywhere = document.querySelector("main, aside") as HTMLElement | null;
+      // Inline, not a named helper: tsx wraps named functions in __name, which the page does not have.
       return {
-        bar: bar ? getComputedStyle(bar).backgroundColor : null,
+        bar: mark ? (mark instanceof SVGElement ? getComputedStyle(mark).stroke : getComputedStyle(mark).backgroundColor) : null,
         token: anywhere
           ? getComputedStyle(anywhere).getPropertyValue("--color-chart").trim()
           : "",
@@ -235,7 +238,7 @@ async function live() {
     check(
       "a rendered bar is painted in it",
       seen.bar === null || seen.bar === asRgb(expected),
-      seen.bar === null ? "no chart on this dashboard" : `${seen.bar} vs ${asRgb(expected)}`
+      seen.bar === null ? "no chart on analytics" : `${seen.bar} vs ${asRgb(expected)}`
     );
   } finally {
     await browser.close();

@@ -433,11 +433,11 @@ async function main() {
   );
   check(
     "nor the unpaid invoice count",
-    (await page.getByText("unpaid invoices").count()) === 0
+    (await page.getByText("Unpaid invoices").count()) === 0
   );
   check(
     "but does show what they kept",
-    (await page.getByText("Unread conversations").count()) > 0
+    (await page.getByText("Unread messages").count()) > 0
   );
   check(
     "they still reach the staff screen that was delegated to them",

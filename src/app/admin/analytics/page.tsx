@@ -6,7 +6,7 @@ import { fmtRelative } from "@/lib/dates";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
-import { BarChart, RowBar, type Point } from "@/components/ui/chart";
+import { ColumnChart, RowBar, type ChartPoint } from "@/components/ui/chart";
 import {
   BarChart3,
   Users,
@@ -216,8 +216,8 @@ export default async function AnalyticsPage({
     const [y, mo] = m.split("-");
     return new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString(intl, { month: "short" });
   };
-  const points = (key: "patients" | "appointments" | "messages" | "documents" | "ai_tokens"): Point[] =>
-    months.map((r) => ({ label: monthLabel(r.month), sub: monthLabel(r.month), value: Number(r[key] ?? 0) }));
+  const points = (key: "patients" | "appointments" | "messages" | "documents" | "ai_tokens"): ChartPoint[] =>
+    months.map((r) => ({ label: monthLabel(r.month), value: Number(r[key] ?? 0) }));
 
   // Busiest first. The table exists to find who is thriving and who has gone
   // quiet; alphabetical order answers neither question.
@@ -312,7 +312,7 @@ export default async function AnalyticsPage({
                 <div className="mb-3 text-sm font-medium">
                   {label} <span className="text-ink-400">· {t.admin.growth}</span>
                 </div>
-                <BarChart data={points(key)} locale={intl} />
+                <ColumnChart data={points(key)} label={label} locale={intl} compact />
               </Card>
             ))}
           </div>
@@ -395,7 +395,7 @@ export default async function AnalyticsPage({
               </div>
               <p className="mb-3 text-[0.75rem] text-ink-400">{t.admin.aiCostSub}</p>
               <div className="mb-3 text-2xl font-semibold tnum">{num(totals.ai_tokens)}</div>
-              <BarChart data={points("ai_tokens")} locale={intl} />
+              <ColumnChart data={points("ai_tokens")} label={t.admin.aiCost} locale={intl} compact />
               {clinics.some((c) => Number(c.ai_tokens) > 0) && (
                 <ul className="mt-4 grid gap-1.5 border-t border-line pt-3">
                   {[...clinics]
