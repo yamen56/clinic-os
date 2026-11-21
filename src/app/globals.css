@@ -541,10 +541,6 @@
     --glow-b: rgb(19 34 64 / 0.65);
     --glow-c: rgb(15 25 43 / 0.45);
   }
-  /* The welcome at night is the brand navy, so it stands off the black page. */
-  :root[data-theme="dark"] .welcome-art {
-    background-color: var(--color-night);
-  }
   .shell[data-sidebar="collapsed"] {
     --sb: 72px;
   }
@@ -933,8 +929,9 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
 */
 
 /*
-  The front page's welcome (2026-11-21): the sign-in page's soft light on its
-  black, so the first screen after signing in feels like the same place. Drawn
+  The front page's welcome (2026-11-21): the sign-in page's soft light, on the
+  brand navy in both themes — Yamen asked for the light view to match the
+  dark one, where the navy is what stands it off the black page. Drawn
   as glows rather than the sign-in shapes themselves: those are corner pieces,
   cut straight where they meet the screen's edge, and moved inside a banner the
   cut shows. One glow from above, past the greeting; one rising from below; the
@@ -943,7 +940,7 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
 */
 @layer components {
   .welcome-art {
-    background-color: #000;
+    background-color: var(--color-night);
     background-image:
       radial-gradient(20rem 9rem at 66% -10%, rgb(226 232 240 / 0.6), rgb(148 163 184 / 0.2) 45%, transparent 72%),
       radial-gradient(26rem 10rem at 40% 120%, rgb(203 213 225 / 0.42), rgb(148 163 184 / 0.14) 45%, transparent 72%),
