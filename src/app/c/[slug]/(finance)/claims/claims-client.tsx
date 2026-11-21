@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { ExportMenu } from "@/components/export-menu";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
@@ -121,10 +122,7 @@ export function ClaimsClient({
         sub={T.sub}
         action={
           canWork ? (
-            <a href={exportHref} className={buttonClass({ variant: "outline", size: "sm" })}>
-              <Download className="h-4 w-4" />
-              {T.statement}
-            </a>
+            <ExportMenu href={exportHref} size="sm" />
           ) : undefined
         }
       />

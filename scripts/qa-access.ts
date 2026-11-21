@@ -582,7 +582,7 @@ async function main() {
   );
   check(
     "offers the statement to somebody who works them",
-    (await page.locator('main a[href*="/claims/export"]').count()) > 0
+    (await page.locator("main [data-export]").count()) > 0
   );
   check(
     "but does not link into invoices they cannot open",

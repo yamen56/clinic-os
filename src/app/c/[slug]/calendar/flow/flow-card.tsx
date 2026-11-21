@@ -13,7 +13,7 @@ import { nextWhen } from "@/lib/next-visit";
 import { visitServiceLabel } from "@/lib/services";
 import type { FlowStep } from "../flow-actions";
 import type { Appt, PageCaps, Room } from "../types";
-import { Menu, MenuItem } from "./menu";
+import { Menu, MenuItem } from "@/components/ui/menu";
 import {
   Armchair,
   DoorOpen,

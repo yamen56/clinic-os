@@ -11,6 +11,8 @@ import { dictForClinic } from "@/lib/i18n";
 import { patientFilterSql, type PatientFilters } from "@/lib/patients";
 import { canSeeOwes } from "@/lib/invoice-scope";
 import { can, hasRecentAuth } from "@/lib/auth";
+import { toCsv } from "@/lib/exports/csv";
+import type { ExportSheet } from "@/lib/exports/table";
 
 /**
  * Never cached, not even privately.
@@ -88,7 +90,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   }
 
   const url = new URL(req.url);
-  const wantsSheet = url.searchParams.get("format") === "xlsx";
+  /*
+    Three formats since 2026-11-21. The PDF (the default) is the record; Excel
+    is the data, six sheets; CSV is Excel's Patients sheet alone, for loading
+    into other software. Excel and CSV share the larger cap — neither goes
+    through Chromium.
+  */
+  const format = url.searchParams.get("format");
+  const wantsCsv = format === "csv";
+  const wantsSheet = format === "xlsx" || wantsCsv;
   const limit = wantsSheet ? MAX_SHEET_RECORDS : MAX_EXPORT_RECORDS;
   const filters: PatientFilters = {
     q: url.searchParams.get("q") ?? undefined,
@@ -135,7 +145,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
         ).rows.map((r) => r.id as string);
         return loadPatientExportBatch(c, access.clinicId, ids);
       });
-      buf = Buffer.from(await buildPatientWorkbook(batch, t).xlsx.writeBuffer());
+      const wb = buildPatientWorkbook(batch, t);
+      buf = wantsCsv ? Buffer.from(toCsv(firstSheet(wb)), "utf8") : Buffer.from(await wb.xlsx.writeBuffer());
     } catch (e) {
       console.error("[patients export-all xlsx]", (e as Error).message);
       return NextResponse.json({ error: "render_failed" }, { status: 502 });
@@ -149,15 +160,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
         action: "patient.export_all",
         entity: "clinic",
         entityId: access.clinicId,
-        detail: { count: total, bytes: buf.length, filters: { ...filters, owes }, format: "xlsx" },
+        detail: { count: total, bytes: buf.length, filters: { ...filters, owes }, format: wantsCsv ? "csv" : "xlsx" },
       })
     );
 
     return new NextResponse(new Uint8Array(buf), {
       headers: fileResponseHeaders({
-        declaredType:
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        fileName: `${safeSlug}-patients-${stamp}.xlsx`,
+        declaredType: wantsCsv
+          ? "text/csv; charset=utf-8"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        fileName: `${safeSlug}-patients-${stamp}.${wantsCsv ? "csv" : "xlsx"}`,
         size: buf.length,
         wantsDownload: true,
         cacheControl: NO_CACHE,
@@ -202,4 +214,24 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       cacheControl: NO_CACHE,
     }),
   });
+}
+
+/** The workbook's first sheet — the patients, one row each — as an export table for CSV. */
+function firstSheet(wb: ReturnType<typeof buildPatientWorkbook>): ExportSheet {
+  const ws = wb.worksheets[0];
+  const header = ((ws.getRow(1).values as unknown[]) ?? []).slice(1).map((v) => String(v ?? ""));
+  const rows: ExportSheet["rows"] = [];
+  ws.eachRow((row, n) => {
+    if (n === 1) return;
+    const values = (row.values as unknown[]).slice(1);
+    rows.push(
+      Object.fromEntries(
+        header.map((_, i) => {
+          const v = values[i];
+          return [String(i), typeof v === "number" ? v : v === null || v === undefined ? null : String(v)];
+        })
+      )
+    );
+  });
+  return { name: ws.name, columns: header.map((label, i) => ({ key: String(i), label })), rows };
 }

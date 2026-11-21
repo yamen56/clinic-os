@@ -348,7 +348,7 @@ async function main() {
     await staffPage.addStyleTag({ content: "nextjs-portal{display:none!important}" });
     check(
       "and is not shown a button they cannot use",
-      (await staffPage.getByRole("button", { name: ar.patients.exportAll }).count()) === 0,
+      (await staffPage.locator("[data-export]").count()) === 0,
       ""
     );
     await staffCtx.close();
@@ -462,16 +462,11 @@ async function main() {
       side, because they answer different questions — one is what you hand to a
       patient or a lawyer, the other is what you sort and count.
     */
-    check(
-      "the owner is offered the printed record",
-      (await page.getByRole("button", { name: ar.patients.exportPdf }).count()) > 0,
-      ""
-    );
-    check(
-      "and the spreadsheet beside it",
-      (await page.getByRole("button", { name: ar.patients.exportExcel }).count()) > 0,
-      ""
-    );
+    /* One Export button since 2026-11-21, which asks: Excel, CSV or the printed record. */
+    await page.click("[data-export] button");
+    const offered = await page.locator("[data-export-format]").evaluateAll((els) => els.map((e) => e.getAttribute("data-export-format")));
+    check("the owner is offered the printed record", offered.includes("pdf"), offered.join(","));
+    check("and the spreadsheet, and a CSV, beside it", offered.includes("xlsx") && offered.includes("csv"), offered.join(","));
   } finally {
     await browser.close();
   }

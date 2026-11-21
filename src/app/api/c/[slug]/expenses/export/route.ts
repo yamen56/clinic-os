@@ -1,79 +1,28 @@
-import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
+import { dictForClinic, getLocale } from "@/lib/i18n";
+import { asExportFormat } from "@/lib/exports/table";
+import { MAX_SHEET_ROWS } from "@/lib/exports/payments";
+import { expensesTable } from "@/lib/exports/expenses";
+import { sendExport, tooMany } from "@/lib/exports/respond";
 
-/** Expenses as CSV (Excel-friendly UTF-8 BOM). The accountant's deliverable. */
+/**
+ * What was spent in a period — the accountant's deliverable. Excel, CSV (the
+ * default, as it always was) or PDF. See lib/exports.
+ */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
   const g = await apiClinic(slug, "expenses");
   if (!g.ok) return g.res;
 
   const url = new URL(req.url);
-  const from = url.searchParams.get("from");
-  const to = url.searchParams.get("to");
+  const format = asExportFormat(url.searchParams.get("format"), "csv");
+  // Calendar days on both sides: `spent_on` is a `date`.
+  const day = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const range = { from: day(url.searchParams.get("from")), to: day(url.searchParams.get("to")) };
+  const t = await dictForClinic(g.access.clinic.vocabulary);
+  const locale = (await getLocale()) === "ar" ? "ar" : "en";
 
-  const rows = await inClinic(g.access, async (c) => {
-    const conds = ["e.clinic_id = $1"];
-    const vals: unknown[] = [g.access.clinicId];
-    // Calendar dates on both sides — `spent_on` is a `date`, and a timestamp
-    // bound would move a day for every clinic east of UTC.
-    if (from) {
-      vals.push(from);
-      conds.push(`e.spent_on >= $${vals.length}::date`);
-    }
-    if (to) {
-      vals.push(to);
-      conds.push(`e.spent_on < $${vals.length}::date`);
-    }
-    const r = await c.query(
-      `select e.spent_on, e.amount, e.method, e.vendor, e.note,
-              ec.name as category, u.full_name as recorded_by,
-              e.schedule_id is not null as recurring
-         from expenses e
-         left join expense_categories ec on ec.id = e.category_id
-         left join users u on u.id = e.created_by
-        where ${conds.join(" and ")}
-        order by e.spent_on desc
-        limit 5000`,
-      vals
-    );
-    return r.rows;
-  });
-
-  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines = [
-    ["date", "amount", "currency", "method", "category", "paid_to", "note", "recurring", "recorded_by"].join(","),
-  ];
-  for (const r of rows) {
-    lines.push(
-      [
-        // Already a plain day, and never put through a zone conversion.
-        String(r.spent_on).slice(0, 10),
-        Number(r.amount).toFixed(2),
-        g.access.clinic.currency,
-        r.method,
-        /*
-          Everything a person can type goes through `esc`. The payments export
-          escapes only half its columns, which is safe there because the rest
-          are enum-constrained or generated — `vendor`, `note` and a
-          clinic-named `category` are none of those, and a comma in "Amman Lab,
-          Ltd" would otherwise split the row.
-        */
-        esc(r.category),
-        esc(r.vendor),
-        esc(r.note),
-        r.recurring ? "yes" : "no",
-        esc(r.recorded_by),
-      ].join(",")
-    );
-  }
-
-  return new NextResponse("﻿" + lines.join("\n"), {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="expenses-${slug}.csv"`,
-      // Not cached: one member's export must not sit in a shared browser
-      // profile for the next.
-      "Cache-Control": "no-store, private",
-    },
-  });
+  const { table, over } = await inClinic(g.access, (c) => expensesTable(c, g.access, range, t, locale));
+  if (over) return tooMany(over, MAX_SHEET_ROWS);
+  return sendExport({ access: g.access, table, format, action: "expenses.export", detail: range });
 }

@@ -16,11 +16,11 @@ import { SearchInput, Select, Field, Input, Textarea } from "@/components/ui/inp
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, Avatar } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
-import { ReauthPrompt } from "@/components/reauth-prompt";
+import { ExportMenu } from "@/components/export-menu";
 import { useToast } from "@/components/ui/toast";
 import { createPatientAction } from "./actions";
 import { splitTyped } from "@/components/appointments/patient-picker";
-import { Users, Plus, Upload, Download, BellOff, Sheet, SlidersHorizontal, X } from "lucide-react";
+import { Users, Plus, Upload, BellOff, SlidersHorizontal, X } from "lucide-react";
 
 type Row = {
   id: string;
@@ -133,14 +133,6 @@ export function PatientsList({
       return v === undefined || v === null || (typeof v === "string" && !v.trim());
     });
   const [pending, start] = useTransition();
-  /*
-    Which format is in flight, not merely whether one is. Two buttons sharing a
-    single boolean would put the spinner on both and leave somebody unsure which
-    file is coming.
-  */
-  const [exporting, setExporting] = useState<"pdf" | "xlsx" | null>(null);
-  /** Which export is waiting on the password, if any. See ReauthPrompt. */
-  const [reauthFor, setReauthFor] = useState<"pdf" | "xlsx" | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /*
@@ -259,80 +251,6 @@ export function PatientsList({
       router.push(`/c/${slug}/patients/${r.id}`);
     });
 
-  /*
-    Fetched rather than linked, because this one takes real time: the worker
-    renders every record in a single Chromium pass, which is a moment for a
-    small clinic and most of a minute for a large one. A plain <a download>
-    would sit there looking broken for all of it, so the button goes busy on
-    the click and the file is handed to the browser once the bytes arrive.
-
-    It exports what is on screen. The filters are the ones the list is already
-    showing, so "export all" after a search means that search — and the cover
-    sheet says which, so nobody mistakes a slice for the whole.
-  */
-  const exportAll = async (format: "pdf" | "xlsx") => {
-    setExporting(format);
-    try {
-      const p = new URLSearchParams();
-      if (format === "xlsx") p.set("format", "xlsx");
-      if (f.q) p.set("q", f.q);
-      if (f.tag) p.set("tag", f.tag);
-      if (f.source) p.set("source", f.source);
-      if (f.visit) p.set("visit", f.visit);
-      if (f.optedOut) p.set("optedOut", f.optedOut);
-      if (f.owes) p.set("owes", f.owes);
-      const res = await fetch(`/api/c/${slug}/patients/export-all${p.size ? `?${p}` : ""}`);
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          error?: string;
-          count?: number;
-          max?: number;
-        };
-        /*
-          The server decides that the password is needed, not this button.
-          Remember which format was asked for so that confirming resumes the
-          same export rather than dropping the person back on the list to
-          start again.
-        */
-        if (body.error === "reauth_required") {
-          setReauthFor(format);
-          return;
-        }
-        if (body.error === "too_many") {
-          toast(
-            t.patients.exportAllTooMany
-              .replace("{n}", String(body.count))
-              .replace("{max}", String(body.max)),
-            "error"
-          );
-        } else {
-          toast(
-            body.error === "empty" ? t.patients.exportAllEmpty : t.patients.exportAllFailed,
-            "error"
-          );
-        }
-        return;
-      }
-      const name =
-        decodeURIComponent(
-          res.headers.get("content-disposition")?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)/i)?.[1] ?? ""
-        ) || `${slug}-patients.${format}`;
-      const href = URL.createObjectURL(await res.blob());
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(href);
-      toast(t.patients.exportDone, "success");
-    } catch {
-      toast(t.patients.exportAllFailed, "error");
-    } finally {
-      setExporting(null);
-    }
-  };
-
   const sourceLabel = (s: string) =>
     (t.patients.sources as Record<string, string>)[s] ?? s;
   // The person who typed the patient in, when one did; the source otherwise.
@@ -364,6 +282,11 @@ export function PatientsList({
   ];
   const menuCount = [f.tag, f.source, f.visit && f.visit !== "90" ? f.visit : "", f.optedOut].filter(Boolean).length;
   const filtered = Boolean(f.q || f.tag || f.source || f.visit || f.optedOut || f.owes);
+  const exportHref = (() => {
+    const p = new URLSearchParams();
+    for (const k of ["q", "tag", "source", "visit", "optedOut", "owes"] as const) if (f[k]) p.set(k, f[k]);
+    return `/api/c/${slug}/patients/export-all${p.size ? `?${p}` : ""}`;
+  })();
 
   /*
     The table's columns, as one template for the header and every row. "Added
@@ -390,28 +313,12 @@ export function PatientsList({
         }
         action={
           <>
-            {canExportAll && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => exportAll("xlsx")}
-                  loading={exporting === "xlsx"}
-                  disabled={exporting !== null}
-                >
-                  <Sheet className="h-4 w-4" />
-                  {exporting === "xlsx" ? t.patients.exportAllPreparing : t.patients.exportExcel}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => exportAll("pdf")}
-                  loading={exporting === "pdf"}
-                  disabled={exporting !== null}
-                >
-                  <Download className="h-4 w-4" />
-                  {exporting === "pdf" ? t.patients.exportAllPreparing : t.patients.exportPdf}
-                </Button>
-              </>
-            )}
+            {/*
+              One button that asks which file (2026-11-21). It exports what is on
+              screen — the search and filters the list is showing — and the PDF's
+              cover sheet says which, so nobody mistakes a slice for the whole.
+            */}
+            {canExportAll && <ExportMenu href={exportHref} pdfHint={t.exports.patientsPdfHint} />}
             {canImport && (
               <Link href={`/c/${slug}/patients/import`} className={buttonClass({ variant: "outline" })}>
                 <Upload className="h-4 w-4" />
@@ -722,16 +629,6 @@ export function PatientsList({
         </div>
       </Modal>
 
-      <ReauthPrompt
-        open={reauthFor !== null}
-        onClose={() => setReauthFor(null)}
-        onVerified={() => {
-          const format = reauthFor;
-          setReauthFor(null);
-          if (format) void exportAll(format);
-        }}
-        t={t}
-      />
     </>
   );
 }

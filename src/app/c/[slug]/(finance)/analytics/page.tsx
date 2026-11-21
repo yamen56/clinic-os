@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DateTime } from "luxon";
-import { ArrowDownRight, ArrowUpRight, Download, Minus } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { can, hasFullControl } from "@/lib/auth";
@@ -13,6 +13,7 @@ import { asPeriodParam } from "@/lib/finance-periods";
 import { financeAnalytics, firstMoneyDate, periodOf, type Period, type SeriesPoint } from "@/lib/finance-analytics";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { buttonClass } from "@/components/ui/button-class";
+import { ExportMenu } from "@/components/export-menu";
 import { AreaTrend, ColumnChart, RankedRow as Row, type ChartPoint } from "@/components/ui/chart";
 import { PeriodPicker, type MenuYear } from "./period-picker";
 
@@ -164,12 +165,7 @@ export default async function FinanceAnalyticsPage({
             ? `${span(period.from, period.to)} · ${F.comparedWith.replace("{range}", span(period.prevFrom, period.prevTo))}`
             : F.allSince.replace("{date}", day(period.from, true))
         }
-        action={
-          <a href={exportHref} download className={buttonClass({ variant: "outline" })}>
-            <Download className="h-4 w-4" />
-            {t.invoices.exportCsv}
-          </a>
-        }
+        action={<ExportMenu href={exportHref} />}
       />
 
       <PeriodPicker slug={slug} current={period.key} menu={menu} />

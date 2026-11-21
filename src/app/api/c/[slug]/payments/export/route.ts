@@ -1,71 +1,36 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
-import { DateTime } from "luxon";
+import { ownInvoicesOnly } from "@/lib/invoice-scope";
+import { dictForClinic, getLocale } from "@/lib/i18n";
+import { asExportFormat } from "@/lib/exports/table";
+import { MAX_SHEET_ROWS, paymentsTable } from "@/lib/exports/payments";
+import { sendExport, tooMany } from "@/lib/exports/respond";
 
-/** Payments as CSV (Excel-friendly UTF-8 BOM). */
+/**
+ * The payments taken in a period — Excel, CSV (the default, as it always was)
+ * or PDF. See lib/exports.
+ */
 export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
   /*
     `invoices.analytics`, not `invoices`. This file is every payment the clinic
-    has ever taken — the same number as the tiles on the invoices page, in a
-    different shape — and it was guarded one rung lower than they are. A
-    receptionist who had just been stopped from seeing the week's takings could
-    still download them from the button sitting directly above the hidden tiles.
+    has ever taken — the same number as the Analytics figures, in a different
+    shape — and it was guarded one rung lower than they are. A receptionist who
+    had just been stopped from seeing the takings could still download them.
+    And never for a member filtered to their own invoices, whom the Analytics
+    page turns away for the same reason: every row here is the clinic's.
   */
   const g = await apiClinic(slug, "invoices.analytics");
   if (!g.ok) return g.res;
+  if (ownInvoicesOnly(g.access)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+
   const url = new URL(req.url);
-  const from = url.searchParams.get("from");
-  const to = url.searchParams.get("to");
+  const format = asExportFormat(url.searchParams.get("format"), "csv");
+  const range = { from: url.searchParams.get("from"), to: url.searchParams.get("to") };
+  const t = await dictForClinic(g.access.clinic.vocabulary);
+  const locale = (await getLocale()) === "ar" ? "ar" : "en";
 
-  const rows = await inClinic(g.access, async (c) => {
-    // A cancelled invoice's payments are not money taken, so they are not exported as such.
-    const conds = ["pay.clinic_id = $1", "i.status <> 'void'"];
-    const vals: unknown[] = [g.access.clinicId];
-    if (from) {
-      vals.push(from);
-      conds.push(`pay.paid_at >= $${vals.length}`);
-    }
-    if (to) {
-      vals.push(to);
-      conds.push(`pay.paid_at < $${vals.length}`);
-    }
-    const r = await c.query(
-      `select pay.paid_at, pay.amount, pay.method, pay.reference,
-              i.number as invoice_number, i.currency, p.full_name as patient, u.full_name as recorded_by
-       from payments pay
-       join invoices i on i.id = pay.invoice_id
-       join patients p on p.id = pay.patient_id
-       left join users u on u.id = pay.recorded_by
-       where ${conds.join(" and ")}
-       order by pay.paid_at desc limit 5000`,
-      vals
-    );
-    return r.rows;
-  });
-
-  const tz = g.access.clinic.timezone;
-
-  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines = [
-    ["date", "amount", "currency", "method", "invoice", "patient", "reference", "recorded_by"].join(","),
-    ...rows.map((r) =>
-      [
-        DateTime.fromJSDate(new Date(r.paid_at)).setZone(tz).toFormat("yyyy-MM-dd HH:mm"),
-        Number(r.amount).toFixed(2),
-        r.currency,
-        r.method,
-        r.invoice_number,
-        esc(r.patient),
-        esc(r.reference),
-        esc(r.recorded_by),
-      ].join(",")
-    ),
-  ];
-  return new NextResponse("﻿" + lines.join("\n"), {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="payments-${slug}.csv"`,
-    },
-  });
+  const { table, over } = await inClinic(g.access, (c) => paymentsTable(c, g.access, range, t, locale));
+  if (over) return tooMany(over, MAX_SHEET_ROWS);
+  return sendExport({ access: g.access, table, format, action: "payments.export", detail: range });
 }

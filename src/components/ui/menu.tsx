@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * A small dropdown anchored to its button — the board's "more" menu and its
- * room picker. Closes on a tap outside, on Escape, and after a choice.
+ * A small dropdown anchored to its button — the board's "more" menu, its room
+ * picker, and every Export button's choice of file. Closes on a tap outside,
+ * on Escape, and after a choice.
  */
 export function Menu({
   label,
@@ -81,7 +82,7 @@ export function MenuItem({
   danger?: boolean;
   hint?: React.ReactNode;
 }) {
-  const cls = `flex w-full items-center gap-2.5 px-3 py-2 text-start text-[0.8125rem] font-medium transition-colors ${
+  const cls = `flex w-full items-center gap-2.5 px-3 py-2 text-start max-md:min-h-11 text-[0.8125rem] font-medium transition-colors ${
     disabled ? "cursor-default text-ink-300" : danger ? "text-danger hover:bg-danger-soft" : "text-ink-700 hover:bg-sunken"
   } [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0`;
   const body = (

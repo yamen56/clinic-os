@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { RowBar } from "@/components/ui/chart";
+import { ExportMenu } from "@/components/export-menu";
 import type { ExpenseCategoryTotal, ExpenseRow } from "@/lib/expenses";
 import type { Bill, SupplierOwed } from "@/lib/bills";
 import {
@@ -451,14 +452,7 @@ export function ExpensesClient({
         sub={E.sub}
         action={
           <>
-            <a
-              href={`/api/c/${slug}/expenses/export?from=${monthFrom}&to=${monthTo}`}
-              download
-              className={buttonClass({ variant: "outline" })}
-            >
-              <Download className="h-4 w-4" />
-              {t.invoices.exportCsv}
-            </a>
+            <ExportMenu href={`/api/c/${slug}/expenses/export?from=${monthFrom}&to=${monthTo}`} />
             <Button onClick={() => setDraft(emptyDraft())}>
               <Plus className="h-4 w-4" />
               {t.expenses.add}
