@@ -36,8 +36,8 @@ export function BrandLockup({ className = "" }: { className?: string }) {
     <img
       /*
         White on transparency, cut from logo-mark-wide.png (white on a #0b1220
-        plate): the dark theme's sidebar is black, and the plate showed as a
-        navy box on it.
+        plate), so the panel behind it can be any dark colour without the plate
+        showing as a box.
       */
       src="/assets/logo-lockup-white.png"
       alt="Clinicti"

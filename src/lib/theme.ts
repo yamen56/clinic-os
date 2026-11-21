@@ -26,17 +26,6 @@ export type SidebarPref = "auto" | "collapsed" | "expanded";
 export const THEMED_PATH = /^\/(c|admin)(\/|$)/;
 
 /**
- * The phone's status bar (`<meta name="theme-color">`): the sidebar's colour,
- * so an installed app's top edge runs into the shell. Navy in light; in dark
- * the sidebar is black (globals.css), and a navy strip above it showed.
- */
-export const THEME_BAR = { light: "#0b1220", dark: "#0b0b0d" } as const;
-
-export function setThemeBar(mode: "light" | "dark") {
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_BAR[mode]);
-}
-
-/**
  * Runs in <head> before the first paint, so a dark-theme user never sees the
  * page flash white while React loads. Kept tiny and dependency-free: it is a
  * string, not a module. `ThemeScope` takes over once the app has hydrated.
@@ -47,8 +36,7 @@ document.documentElement.setAttribute("data-density","compact");
 var m=document.cookie.match(/(?:^|; )${THEME_COOKIE}=(light|dark|system)/);
 var p=m?m[1]:"light";
 if(p==="system")p=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";
-if(p==="dark"){document.documentElement.setAttribute("data-theme","dark");
-var t=document.querySelector('meta[name="theme-color"]');if(t)t.setAttribute("content","${THEME_BAR.dark}");}
+if(p==="dark")document.documentElement.setAttribute("data-theme","dark");
 }catch(e){}})();`;
 
 export function readThemeCookie(cookie: string): ThemePref {
