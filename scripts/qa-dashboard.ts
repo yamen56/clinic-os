@@ -249,10 +249,20 @@ async function main() {
       )
     ).rows[0].n as number;
     check("bookings to confirm, as the calendar counts them", (await count(page, "unconfirmed")) === String(unconfirmed), `${await count(page, "unconfirmed")} vs ${unconfirmed}`);
-    check("no unread messages is still a row, saying 0", (await count(page, "unread")) === "0", String(await count(page, "unread")));
     check("each row opens its list", (await page.locator('[data-needs-row="unpaid"]').getAttribute("href")) === `/c/${slug}/invoices?status=unpaid`);
-    check("the charts moved to Analytics", (await page.locator("[data-chart-mark]").count()) === 0, "");
-    check("and so did the tiles", !body.includes("180.00") && !body.includes("300.00"), "");
+
+    /* The welcome and the four figures (2026-11-21, "more welcoming"). */
+    const welcome = (await page.locator("[data-welcome]").innerText()).replace(/\s+/g, " ");
+    check("it greets the member by name", /QA/.test(welcome) && /(صباح|مساء) الخير/.test(welcome), welcome.slice(0, 80));
+    const figures = await page.locator("[data-figures] [data-figure]").evaluateAll((els) => els.map((e) => e.getAttribute("data-figure")));
+    check("four figures for the owner: today, collected, unread, patients", figures.join(",") === "today,collected-today,unread,patients", figures.join(","));
+    check(
+      "today's figure counts the day without the cancelled one",
+      (await page.locator('[data-figure="today"]').innerText()).includes(String(live)),
+      await page.locator('[data-figure="today"]').innerText()
+    );
+    check("no unread messages says 0", /\b0\b/.test(await page.locator('[data-figure="unread"]').innerText()));
+    check("the breakdowns stay on Analytics", !body.includes("180.00") && !body.includes("300.00"), "");
 
     /* =============================================================== keys */
     console.log("\n[the shortcuts]");
@@ -318,8 +328,13 @@ async function main() {
     check("but she still gets today's list", deskBody.includes(ar.dashboard.todayAppointments), "");
     check(
       "and what is waiting on her",
-      (await p2.locator('[data-needs-row="unread"]').count()) === 1 && (await p2.locator('[data-needs-row="unconfirmed"]').count()) === 1,
+      (await p2.locator('[data-figure="unread"]').count()) === 1 && (await p2.locator('[data-needs-row="unconfirmed"]').count()) === 1,
       ""
+    );
+    check(
+      "the week's bookings stand where the takings would be",
+      (await p2.locator('[data-figure="week"]').count()) === 1,
+      (await p2.locator("[data-figures] [data-figure]").evaluateAll((els) => els.map((e) => e.getAttribute("data-figure")))).join(",")
     );
     check("no invoice shortcut for her", !deskBody.includes(ar.dashboard.newInvoice), "");
     await ctx2.close();

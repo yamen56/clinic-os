@@ -199,6 +199,9 @@ const AGENCY_EN: Patch = {
     newAppointment: "Meeting",
     newPatient: "Clinic",
     demosMonth: "Demos booked this month",
+    patients: "Clinics",
+    thisWeek: "Meetings this week",
+    welcomeLine: "Here's the pipeline today.",
   },
   /*
     The public booking page. Until now it imported the raw dictionaries and could
@@ -353,6 +356,9 @@ const AGENCY_AR: Patch = {
     newAppointment: "اجتماع",
     newPatient: "عيادة",
     demosMonth: "عروض توضيحية هذا الشهر",
+    patients: "العيادات",
+    thisWeek: "اجتماعات هذا الأسبوع",
+    welcomeLine: "إليك المبيعات اليوم.",
   },
   book: {
     chooseService: "ما الذي تودّ حجزه؟",

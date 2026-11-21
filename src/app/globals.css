@@ -884,3 +884,28 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
   plain 16px. Fields keep 16px on a phone through their own `text-base`, which
   is what stops iOS zooming in on focus.
 */
+
+/*
+  The front page's welcome (2026-11-21): the sign-in page's soft light on its
+  black, so the first screen after signing in feels like the same place. Drawn
+  as glows rather than the sign-in shapes themselves: those are corner pieces,
+  cut straight where they meet the screen's edge, and moved inside a banner the
+  cut shows. One glow from above, past the greeting; one rising from below; the
+  faintest warm one, like the shapes' amber rim. Clear of the buttons at the far
+  end, so they mirror in Arabic.
+*/
+@layer components {
+  .welcome-art {
+    background-color: #000;
+    background-image:
+      radial-gradient(20rem 9rem at 66% -10%, rgb(226 232 240 / 0.6), rgb(148 163 184 / 0.2) 45%, transparent 72%),
+      radial-gradient(26rem 10rem at 40% 120%, rgb(203 213 225 / 0.42), rgb(148 163 184 / 0.14) 45%, transparent 72%),
+      radial-gradient(14rem 7rem at 52% 105%, rgb(251 191 36 / 0.1), transparent 70%);
+  }
+  [dir="rtl"] .welcome-art {
+    background-image:
+      radial-gradient(20rem 9rem at 34% -10%, rgb(226 232 240 / 0.6), rgb(148 163 184 / 0.2) 45%, transparent 72%),
+      radial-gradient(26rem 10rem at 60% 120%, rgb(203 213 225 / 0.42), rgb(148 163 184 / 0.14) 45%, transparent 72%),
+      radial-gradient(14rem 7rem at 20% 105%, rgb(251 191 36 / 0.1), transparent 70%);
+  }
+}

@@ -186,7 +186,7 @@ export function CommandPalette({
 
   return createPortal(
     <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label={t.search.title} data-command-palette>
-      <button type="button" aria-label={t.common.close} onClick={onClose} className="absolute inset-0 bg-night/30 animate-fade-in max-md:hidden" />
+      <button type="button" aria-label={t.common.close} onClick={onClose} className="absolute inset-0 bg-night/25 backdrop-blur-[2px] animate-fade-in max-md:hidden" />
       <div className="relative mx-auto flex h-full w-full flex-col bg-surface animate-fade-in md:mt-[12vh] md:h-auto md:max-h-[70vh] md:max-w-xl md:rounded-xl md:border md:border-line md:shadow-pop">
         <div className="flex items-center gap-2 border-b border-line px-3 pt-[env(safe-area-inset-top)] md:pt-0">
           <Search className="h-5 w-5 shrink-0 text-ink-400" />
@@ -200,6 +200,13 @@ export function CommandPalette({
             autoComplete="off"
             placeholder={canSearch ? t.search.placeholder : t.search.placeholderNoPatients}
             className="h-14 min-w-0 flex-1 bg-transparent text-base text-ink-900 outline-none placeholder:text-ink-400"
+            /*
+              No focus ring here (Yamen, 2026-11-21: the open search "has a big
+              border around"). The whole bar is the field and the caret is in
+              it; the app-wide 3px ring (globals.css, unlayered, so no utility
+              can lift it) drew a second box inside the first.
+            */
+            style={{ boxShadow: "none" }}
             data-palette-input
           />
           <button type="button" onClick={onClose} aria-label={t.common.close} className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full text-ink-500 hover:bg-sunken md:hidden">

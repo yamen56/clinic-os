@@ -199,7 +199,7 @@ export function TodayList({
             data-today-mine={mine ? "1" : undefined}
           >
             <Link href={href} className="-my-1 flex min-w-0 flex-1 items-center gap-3 rounded-md py-1 hover:bg-sunken/60 sm:gap-4">
-              <span className="w-12 shrink-0 text-sm font-semibold tnum sm:w-16">{fmtTime(ap.starts_at, tz, locale)}</span>
+              <span className="min-w-12 shrink-0 whitespace-nowrap text-sm font-semibold tnum sm:min-w-[4.5rem]">{fmtTime(ap.starts_at, tz, locale)}</span>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{ap.patient_name}</div>
                 <div className="truncate text-[0.8125rem] text-ink-500">

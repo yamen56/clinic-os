@@ -151,7 +151,8 @@ async function main() {
     /* 13px at a 16px root; the workspace runs compact on wider screens, so measure against the root. */
     const small = await page.evaluate(() => `${(13 * parseFloat(getComputedStyle(document.documentElement).fontSize)) / 16}px`);
     const quick = await page.evaluate(() => {
-      const a = document.querySelector<HTMLElement>('main a[href$="/calendar?new=1"]');
+      // "Open appointments" over today's list: a 13px link (the welcome's own buttons are full-size).
+      const a = document.querySelector<HTMLElement>('main a[href$="/calendar"][class*="0.8125rem"]');
       return a ? getComputedStyle(a).fontSize : null;
     });
     check("a small action renders at its own 13px", quick === small, `${quick} vs ${small}`);

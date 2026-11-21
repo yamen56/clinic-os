@@ -6,7 +6,9 @@
   - AreaTrend: money or counts flowing over time (falls back to columns under four points).
   - ColumnChart: counts, or money that arrives in lumps; `compact` for a row of small multiples.
   - RankedRow / RowBar: a breakdown, largest first, on one shared scale.
+  - Sparkline: a week's shape in the corner of a figure card, no scale.
 */
 export { AreaTrend, ColumnChart, type ChartPoint } from "./trend";
 export { RankedRow, RowBar } from "./ranked";
+export { Sparkline } from "./sparkline";
 export { niceTicks, niceStep, formatValue } from "./scale";
