@@ -751,6 +751,26 @@ async function runStep(env: Env, step: Step): Promise<StepResult> {
         : run.conversation_id
           ? `/c/${slug}/conversations?open=${run.conversation_id}`
           : undefined;
+      /*
+        Not to anybody the reply itself already reached. A flow that tells the
+        desk "she replied: «…»" right after a patient's message is the second
+        buzz for one message — the first was the message (Team alerts → a
+        patient writes on WhatsApp), still unread on their bell. Clinics' own
+        copies of the older templates do exactly this; nobody misses anything,
+        since the line they have carries the same words.
+      */
+      const reply = (run.context?.reply ?? null) as { conversation?: string | null; at?: string } | null;
+      const fresh = reply?.at ? Date.now() - new Date(reply.at).getTime() < 15 * 60_000 : false;
+      if (reply?.conversation && fresh && users.size) {
+        const told = await c.query(
+          `select user_id from notifications
+            where kind = 'whatsapp_message' and read_at is null
+              and dedupe_key = any(select $1 || ':' || u::text from unnest($2::uuid[]) u)`,
+          [`wa:${reply.conversation}`, [...users]]
+        );
+        for (const row of told.rows) users.delete(row.user_id as string);
+        if (!users.size) return next("skipped", { reason: "already_alerted" });
+      }
       for (const userId of users) {
         await notifyUser(c, userId, { clinicId: run.clinic_id, kind: "automation", title, body, url });
       }
@@ -1229,9 +1249,15 @@ async function sendWhatsapp(env: Env, cfg: Record<string, unknown>): Promise<Ste
   */
   const sendAt = DateTime.now();
   await c.query(
+    /*
+      created_at from the clock, not the transaction: two messages one after
+      the other in a flow — a confirmation, then a first visit's directions —
+      are written in one transaction, and with one timestamp between them they
+      went out, and showed in the inbox, in either order.
+    */
     `insert into messages (clinic_id, conversation_id, direction, sender_kind, msg_type, body,
-                           media_path, media_name, media_mime, status, scheduled_at, automation_run_id)
-     values ($1, $2, 'out', 'automation', $3, $4, $5, $6, $7, 'queued', $8, $9)`,
+                           media_path, media_name, media_mime, status, scheduled_at, automation_run_id, created_at)
+     values ($1, $2, 'out', 'automation', $3, $4, $5, $6, $7, 'queued', $8, $9, clock_timestamp())`,
     [
       run.clinic_id,
       conversationId,
@@ -1521,10 +1547,11 @@ export async function resumeOnReply(
             set status = 'running', wake_at = null, waiting_for = null,
                 context = coalesce(context, '{}'::jsonb)
                           || jsonb_build_object('resume_handle', $2::text,
-                                                'reply', jsonb_build_object('text', $3::text, 'at', now()))
+                                                'reply', jsonb_build_object('text', $3::text, 'at', now(),
+                                                                            'conversation', $4::uuid))
           where id = $1 and status = 'waiting'
           returning id`,
-        [w.id, handle, body.slice(0, 2000)]
+        [w.id, handle, body.slice(0, 2000), payload.conversationId ?? null]
       );
       if (r.rowCount) {
         await log(c, clinicId, w.id, w.current_step_id, "ok", { branch: handle, reply: body.slice(0, 200) });

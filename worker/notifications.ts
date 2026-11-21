@@ -200,7 +200,10 @@ async function teamExtras(c: PoolClient, n: Pending): Promise<Partial<PushPayloa
     screen would tell the patient it was read without anybody having answered.
   */
   if (n.kind === "whatsapp_message") {
-    return { actions: [{ action: "reply", title: asLocale(n.locale) === "en" ? "Reply" : "رد" }] };
+    const en = asLocale(n.locale) === "en";
+    // A doctor who cannot open the inbox is sent to the team chat (0111): the button says so.
+    const toTeam = (n.url ?? "").includes("/conversations/team");
+    return { actions: [{ action: "reply", title: toTeam ? (en ? "Tell the team" : "أبلغ الفريق") : en ? "Reply" : "رد" }] };
   }
   if ((n.kind !== "team_message" && n.kind !== "team_reaction") || !n.slug || !n.url) return {};
   const threadId = new URL(n.url, "https://x").searchParams.get("t");
@@ -479,7 +482,7 @@ export async function dailyDigests() {
        join clinics cl on cl.id = a.clinic_id
        where a.enabled and a.at_hour is not null
          and a.kind not in ('appointment_reminder', 'appointment_booked',
-                            'appointment_cancelled', 'appointment_rescheduled')
+                            'appointment_cancelled', 'appointment_rescheduled', 'patient_message')
          and cl.subscription_status <> 'suspended' and cl.deleted_at is null
        order by a.clinic_id, a.sort`
     );

@@ -187,6 +187,52 @@ async function main() {
     const stranger = (await alerts(ownerId)).find((x) => x.body === "Hi");
     check(stranger?.title === "Stranger Name", "a number with no file is named by its WhatsApp name", stranger?.title);
 
+    /* ── 1b. The patient's doctor (0111) ───────────────────────────── */
+    console.log("1b. The patient's own doctor hears it too, and it can be switched off");
+    const [docM] = await q(`select id from clinic_members where clinic_id = $1 and user_id = $2`, [clinic.id, docId]);
+    const soon = DateTime.now().plus({ days: 2 });
+    await q(
+      `insert into appointments (clinic_id, patient_id, doctor_member_id, starts_at, ends_at, status, source)
+       values ($1, $2, $3, $4, $5, 'scheduled', 'staff')`,
+      [clinic.id, patient.id, docM.id, soon.toISO(), soon.plus({ minutes: 30 }).toISO()]
+    );
+    await say("Doctor, the pain is back");
+    const [doc1] = await alerts(docId);
+    check(String(doc1?.body ?? "").endsWith("Doctor, the pain is back"), "her doctor is told, though he cannot open the inbox", JSON.stringify(doc1));
+    check(String(doc1?.url).endsWith(`/c/${slug}/conversations/team`), "and is taken to the team chat to tell the desk", doc1?.url);
+    const [row] = await q(`select id, roles from clinic_staff_alerts where clinic_id = $1 and kind = 'patient_message'`, [clinic.id]);
+    check(!!row && (row.roles as string[]).includes("doctor"), "it is a team alert of its own, with doctors on it", JSON.stringify(row));
+    await q(`update clinic_staff_alerts set roles = array['owner', 'receptionist'] where id = $1`, [row.id]);
+    await q(`delete from notifications where user_id = $1 and kind = 'whatsapp_message'`, [docId]);
+    await say("Still hurts");
+    check((await alerts(docId)).length === 0, "with Doctors unticked, the doctor is not told");
+    check((await alerts(ownerId)).some((x) => x.body?.includes("Still hurts")), "while the owner still is");
+    await q(`update clinic_staff_alerts set roles = array['owner', 'receptionist', 'doctor'] where id = $1`, [row.id]);
+
+    /* ── 1c. A reply an automation dealt with ───────────────────────── */
+    console.log("1c. A reply an automation already understood does not ring anybody");
+    const [conv] = await q(`select id from conversations where clinic_id = $1 and phone_e164 = '+962790007070'`, [clinic.id]);
+    const [auto] = await q(
+      `insert into automations (clinic_id, name, trigger_type, active) values ($1, 'QA reminder', 'before_appointment', true) returning id`,
+      [clinic.id]
+    );
+    const [step] = await q(
+      `insert into automation_steps (clinic_id, automation_id, sort, step_type, config)
+       values ($1, $2, 0, 'wait_for_reply', $3) returning id`,
+      [clinic.id, auto.id, JSON.stringify({ amount: 12, unit: "hours", options: [{ label: "yes", keywords: ["1", "yes"] }] })]
+    );
+    await q(
+      `insert into automation_runs (clinic_id, automation_id, patient_id, conversation_id, status, waiting_for, current_step_id, context)
+       values ($1, $2, $3, $4, 'waiting', 'reply', $5, jsonb_build_object('waiting_since', now()))`,
+      [clinic.id, auto.id, patient.id, conv.id, step.id]
+    );
+    await q(`update notifications set read_at = now() where user_id = $1 and kind = 'whatsapp_message'`, [ownerId]);
+    await say("1");
+    check(!(await alerts(ownerId)).some((x) => !x.read_at), "a 1 that confirms is not announced");
+    await say("1 and can I bring my son too?");
+    check((await alerts(ownerId)).some((x) => !x.read_at && x.body?.includes("bring my son")), "a longer reply that happens to contain it still is");
+    await q(`delete from automations where id = $1`, [auto.id]);
+
     /* ── 4a. Dates, on their own ────────────────────────────────────── */
     console.log("4. Dates written down afterwards");
     check(pastDayInstant(null, TZ).ok && (pastDayInstant(null, TZ) as { at: string | null }).at === null, "no day chosen is now");

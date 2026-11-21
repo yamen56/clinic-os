@@ -79,17 +79,21 @@ export default async function AutomationBuilderPage({
         edges: [],
         active: false,
         updatedAt: null,
+        session: null,
       };
+      let recipeKey: string | null = null;
       if (sp.template) {
         const r = (
           await c.query(`select * from recipe_templates where key = $1 and active`, [String(sp.template).slice(0, 80)])
         ).rows[0];
         if (r) {
+          recipeKey = r.key;
           const graph = treeToGraph((Array.isArray(r.steps) ? r.steps : []) as RecipeStep[], () => randomUUID());
           initial = {
             ...initial,
             name: (locale === "ar" ? r.name_ar : r.name) || r.name,
-            description: r.description ?? "",
+            // In the clinic's language, like the name.
+            description: ((locale === "ar" ? r.description_ar : r.description) || r.description || "").slice(0, 1000),
             trigger: r.trigger_type,
             triggerConfig: normalizeTriggerConfig(r.trigger_type, r.trigger_config),
             settings: defaultSettingsFor(r.trigger_type),
@@ -98,7 +102,7 @@ export default async function AutomationBuilderPage({
           };
         }
       }
-      return { initial, lookups, stats: {} as Record<string, StepStats>, runs: [] };
+      return { initial, lookups, stats: {} as Record<string, StepStats>, runs: [], recipeKey };
     }
 
     const flow = await loadFlow(c, access.clinicId, id);
@@ -142,8 +146,9 @@ export default async function AutomationBuilderPage({
       edges: flow.edges,
       active: flow.active,
       updatedAt: flow.updatedAt,
+      session: typeof flow.canvas.session === "string" ? flow.canvas.session : null,
     };
-    return { initial, lookups, stats, runs };
+    return { initial, lookups, stats, runs, recipeKey: null };
   });
 
   if (!data) notFound();
@@ -157,6 +162,7 @@ export default async function AutomationBuilderPage({
       lookups={JSON.parse(JSON.stringify(data.lookups))}
       stats={data.stats}
       runs={data.runs}
+      recipeKey={data.recipeKey}
       initialTab={sp.tab === "history" || sp.tab === "activity" ? "activity" : sp.tab === "settings" ? "settings" : "flow"}
     />
   );

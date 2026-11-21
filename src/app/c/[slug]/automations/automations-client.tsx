@@ -22,10 +22,12 @@ import type { StaffAlert } from "@/lib/staff-alerts";
 import type { Specialty } from "@/lib/specialties";
 import type { FeatureMap } from "@/lib/features";
 import { TRIGGER_CATEGORIES, triggerDef, type TriggerCategory } from "@/lib/automation/catalog";
-import { STEP_ICONS, TRIGGER_ICONS, fill, toneOf, triggerSummary, type Lookups } from "./flow-meta";
+import { TRIGGER_ICONS, fill, triggerSummary, type Lookups } from "./flow-meta";
+import { TEMPLATE_GROUPS, type TemplateGroup } from "@/lib/automation/template-library";
 import {
   AlertTriangle,
   BellOff,
+  Check,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -33,7 +35,6 @@ import {
   MoreHorizontal,
   Plus,
   Search,
-  Sparkles,
   Star,
   Trash2,
   Workflow,
@@ -68,7 +69,10 @@ export type GalleryTemplate = {
   triggerConfig: Record<string, unknown>;
   steps: string[];
   specialty: string;
-  suggested: boolean;
+  /** What it is for — the gallery's sections. */
+  group: TemplateGroup;
+  /** The clinic's own flow made from it (or, for a reminder, one doing the same job), if any. */
+  added: { id: string; active: boolean } | null;
 };
 
 export function AutomationsClient({
@@ -474,59 +478,57 @@ function TemplateGallery({
 }) {
   const { t, locale } = useI18n();
   const f = t.automations.flow;
-  const [showAll, setShowAll] = useState(false);
   const usable = templates.filter((tp) => {
     const def = triggerDef(tp.trigger);
     return def && modules[def.module];
   });
-  const suggested = usable.filter((tp) => tp.suggested);
-  const others = usable.filter((tp) => !tp.suggested);
 
-  const card = (tp: GalleryTemplate) => {
+  /*
+    One row each, grouped by what it is for, with what the clinic already runs
+    marked and opened rather than added a second time — two copies of the
+    day-before reminder is every patient reminded twice.
+  */
+  const row = (tp: GalleryTemplate) => {
     const Icon = TRIGGER_ICONS[tp.trigger] ?? Zap;
     const sum = triggerSummary(t.automations, tp.trigger, tp.triggerConfig, { services: lookups.services, members: lookups.members as Lookups["members"] }, locale);
+    const about = locale === "ar" ? tp.about_ar || tp.about : tp.about;
     return (
-      <Link
-        key={tp.key}
-        href={`/c/${slug}/automations/new?template=${encodeURIComponent(tp.key)}`}
-        data-template={tp.key}
-        className="flex flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 transition-colors hover:border-brand-400 hover:bg-brand-50/40"
-      >
-        <div className="flex items-start gap-2.5">
+      <li key={tp.key}>
+        <Link
+          href={tp.added ? `/c/${slug}/automations/${tp.added.id}` : `/c/${slug}/automations/new?template=${encodeURIComponent(tp.key)}`}
+          data-template={tp.key}
+          data-template-added={tp.added ? "1" : undefined}
+          className="flex items-start gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-sunken"
+        >
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700">
             <Icon className="h-4.5 w-4.5" />
           </span>
-          <span className="min-w-0">
-            <span className="block text-[13px] font-semibold text-ink-900">{(locale === "ar" ? tp.name_ar : tp.name) || tp.name}</span>
-            <span className="mt-0.5 block text-[12px] text-ink-500">
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-[14px] font-semibold text-ink-900">{(locale === "ar" ? tp.name_ar : tp.name) || tp.name}</span>
+              {tp.added && (
+                <Badge status={tp.added.active ? "ok" : "neutral"}>
+                  <Check className="h-3 w-3" />
+                  {tp.added.active ? f.templateOn : f.templateAdded}
+                </Badge>
+              )}
+            </span>
+            {/* What it is for — the problem it solves and what the patient receives. */}
+            {about && (
+              <span className="mt-0.5 line-clamp-2 block text-[12.5px] leading-relaxed text-ink-700" data-template-about>
+                {about}
+              </span>
+            )}
+            <span className="mt-1 block text-[11.5px] text-ink-400">
               {sum.title}
-              {sum.detail ? ` · ${sum.detail}` : ""}
+              {sum.detail ? ` · ${sum.detail}` : ""} · {tp.steps.length === 1 ? f.stepOne : fill(f.stepsN, { n: tp.steps.length })}
             </span>
           </span>
-        </div>
-        {/* What it is for — the problem it solves and what the patient receives — not only its name. */}
-        {(locale === "ar" ? tp.about_ar || tp.about : tp.about) && (
-          <p className="line-clamp-3 text-[12.5px] leading-relaxed text-ink-700" data-template-about>
-            {locale === "ar" ? tp.about_ar || tp.about : tp.about}
-          </p>
-        )}
-        <div className="flex flex-wrap items-center gap-1">
-          {tp.steps.slice(0, 7).map((s, i) => {
-            const S = STEP_ICONS[s] ?? Zap;
-            return (
-              <span key={i} className={`grid h-6 w-6 place-items-center rounded-md ${toneOf(s).chip}`} title={(t.automations.steps as Record<string, string>)[s]}>
-                <S className="h-3.5 w-3.5" />
-              </span>
-            );
-          })}
-          <span className="ms-1 text-[11px] text-ink-400">{tp.steps.length === 1 ? f.stepOne : fill(f.stepsN, { n: tp.steps.length })}</span>
-        </div>
-      </Link>
+          <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
+        </Link>
+      </li>
     );
   };
-
-  const grouped = (list: GalleryTemplate[]) =>
-    TRIGGER_CATEGORIES.map((c) => ({ c, items: list.filter((tp) => triggerDef(tp.trigger)?.category === c) })).filter((g) => g.items.length);
 
   return (
     <Modal open={open} onClose={onClose} title={f.gallery} wide>
@@ -545,35 +547,18 @@ function TemplateGallery({
         </span>
       </Link>
 
-      <div className="mb-2 flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-brand-500" />
-        <h3 className="text-sm font-semibold">{f.forYou}</h3>
-      </div>
       <div className="grid gap-5">
-        {grouped(suggested).map((g) => (
-          <section key={g.c}>
-            <h4 className="eyebrow mb-2">{(f.templateCategories as Record<string, string>)[g.c]}</h4>
-            <div className="grid gap-2 sm:grid-cols-2">{g.items.map(card)}</div>
-          </section>
-        ))}
+        {TEMPLATE_GROUPS.map((g) => {
+          const items = usable.filter((tp) => tp.group === g);
+          if (!items.length) return null;
+          return (
+            <section key={g}>
+              <h4 className="eyebrow mb-1 px-3">{(f.templateGroups as Record<string, string>)[g]}</h4>
+              <ul className="-mx-1 grid gap-0.5">{items.map(row)}</ul>
+            </section>
+          );
+        })}
       </div>
-
-      {others.length > 0 && (
-        <div className="mt-6">
-          <button
-            type="button"
-            onClick={() => setShowAll((o) => !o)}
-            className="flex items-center gap-1.5 text-[13px] font-semibold text-brand-700"
-            aria-expanded={showAll}
-          >
-            <ChevronDown className={`h-4 w-4 transition-transform ${showAll ? "rotate-180" : ""}`} />
-            {f.allTemplates} · {others.length}
-          </button>
-          {showAll && (
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">{others.map(card)}</div>
-          )}
-        </div>
-      )}
     </Modal>
   );
 }

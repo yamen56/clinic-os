@@ -6,7 +6,8 @@ import { can } from "@/lib/auth";
 import { loadSystemMessages } from "@/lib/system-messages";
 import { loadStaffAlerts } from "@/lib/staff-alerts";
 import { asSpecialty, clinicSpecialties } from "@/lib/specialties";
-import { normalizeTriggerConfig } from "@/lib/automation/catalog";
+import { normalizeTriggerConfig, triggerDef } from "@/lib/automation/catalog";
+import { offeredTemplates, templateGroup } from "@/lib/automation/template-library";
 import type { RecipeStep } from "@/lib/automation/graph";
 
 /** The step types of a recipe in the order they run, branches included. */
@@ -99,7 +100,27 @@ export default async function AutomationsPage({
   });
 
   const mine = clinicSpecialties(data.clinic.specialty, data.clinic.specialties ?? []);
-  const templates: GalleryTemplate[] = data.recipes.map((r) => ({
+  /*
+    Which templates the clinic already runs: its copy of that template, or —
+    for a reminder, where two mean the same patient reminded twice — a flow of
+    its own on the same trigger at the same lead time.
+  */
+  const byRecipe = new Map<string, { id: string; active: boolean }>();
+  for (const a of data.automations) if (a.recipe_key && !byRecipe.has(a.recipe_key)) byRecipe.set(a.recipe_key, { id: a.id, active: a.active });
+  const addedAs = (r: { key: string; trigger_type: string; trigger_config: unknown }) => {
+    const own = byRecipe.get(r.key);
+    if (own) return own;
+    if (r.trigger_type !== "before_appointment") return null;
+    const hours = Number(normalizeTriggerConfig(r.trigger_type, r.trigger_config).hours);
+    const same = data.automations.find((a) => a.active && a.trigger_type === r.trigger_type && Number(a.trigger_config.hours) === hours);
+    return same ? { id: same.id as string, active: true } : null;
+  };
+  const offered = offeredTemplates(
+    data.recipes.map((r) => ({ ...r, specialty: (r.specialty as string) ?? "general" })),
+    mine,
+    new Set(byRecipe.keys())
+  );
+  const templates: GalleryTemplate[] = offered.map((r) => ({
     key: r.key,
     name: r.name,
     name_ar: r.name_ar,
@@ -108,8 +129,9 @@ export default async function AutomationsPage({
     trigger: r.trigger_type,
     triggerConfig: normalizeTriggerConfig(r.trigger_type, r.trigger_config),
     steps: stepTypes(Array.isArray(r.steps) ? (r.steps as RecipeStep[]) : []),
-    specialty: r.specialty ?? "general",
-    suggested: (r.specialty ?? "general") === "general" || mine.includes(r.specialty),
+    specialty: r.specialty,
+    group: templateGroup(r.key, triggerDef(r.trigger_type)?.category),
+    added: addedAs(r),
   }));
 
   return (

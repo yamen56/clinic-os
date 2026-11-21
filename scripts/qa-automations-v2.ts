@@ -453,45 +453,84 @@ async function main() {
   const templateNodes = await page.locator(".react-flow__node-step").count();
   check("the template is drawn on the canvas", templateNodes >= 8, `${templateNodes} steps`);
   check("its name is filled in", (await page.inputValue('input[aria-label="Name this automation"]')).length > 3);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await page.waitForURL(/automations\/[0-9a-f-]{36}$/, { timeout: 60000 });
-  const savedId = page.url().split("/").pop()!;
+  check("there is no Save button any more, only Done", (await page.getByRole("button", { name: "Save", exact: true }).count()) === 0 && (await page.locator("[data-flow-done]").count()) === 1);
+  // Opened and untouched, a template makes nothing; Done keeps it.
+  check("a template opened and not touched is not saved yet", !(await one(`select id from automations where clinic_id = $1 and recipe_key = 'reminder_24h'`, [clinic.id])));
+  await page.click("[data-flow-done]");
+  await page.waitForURL(/automations$/, { timeout: 60000 });
+  const savedRow = await until(() => one(`select id from automations where clinic_id = $1 and recipe_key = 'reminder_24h'`, [clinic.id]), 20000);
+  check("Done saves it, remembers the template, and goes back to the list", Boolean(savedRow));
+  const savedId = savedRow?.id as string;
   const counts = await one(
     `select (select count(*)::int from automation_steps where automation_id = $1) as steps,
             (select count(*)::int from automation_edges where automation_id = $1) as edges`,
     [savedId]
   );
   check("saving writes its steps and edges", counts.steps === templateNodes && counts.edges >= templateNodes, JSON.stringify(counts));
-  await page.reload();
+  await page.getByRole("button", { name: "New automation" }).first().click();
+  await page.waitForSelector('[data-template="reminder_24h"]', { timeout: 30000 });
+  check("the gallery now marks it as added", (await page.locator('[data-template="reminder_24h"][data-template-added]').count()) === 1);
+  check("and no longer offers what other features already do", (await page.locator('[data-template="unanswered_alert"], [data-template="first_visit_welcome"]').count()) === 0);
+  check("nor another specialty's templates", (await page.locator('[data-template="ophtha_annual_exam"]').count()) === 0);
+  await page.keyboard.press("Escape");
+
+  await page.goto(`${BASE}/c/${slug}/automations/${savedId}`);
   await page.waitForSelector(".react-flow__node-step", { timeout: 60000 });
   check("reloaded, the same flow is drawn", (await page.locator(".react-flow__node-step").count()) === templateNodes);
 
-  // A step added from a node's own "+".
+  // A step added from a node's own "+": saved by itself, no button.
   await page.locator('button[aria-label="Add step"]').first().click();
   await page.waitForSelector('[data-pick="add_tag"]', { timeout: 15000 });
   await page.click('[data-pick="add_tag"]');
   await page.locator("[data-inspector] input").first().fill("qa-canvas-tag");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await until(async () => (await one(`select count(*)::int as n from automation_steps where automation_id = $1`, [savedId])).n === templateNodes + 1, 20000);
-  const added = await one(`select config from automation_steps where automation_id = $1 and step_type = 'add_tag' and config->>'tag' = 'qa-canvas-tag'`, [savedId]);
-  check("a step added from a node's “+” is saved, connected", Boolean(added) && (await one(`select count(*)::int as n from automation_edges e join automation_steps s on s.id = e.to_step_id where e.automation_id = $1 and s.config->>'tag' = 'qa-canvas-tag'`, [savedId])).n === 1);
+  const autosaved = await until(
+    async () => (await one(`select count(*)::int as n from automation_steps where automation_id = $1 and config->>'tag' = 'qa-canvas-tag'`, [savedId])).n === 1,
+    20000
+  );
+  check("a step added and filled in is saved on its own", Boolean(autosaved));
+  check("a step added from a node's “+” is saved, connected", (await one(`select count(*)::int as n from automation_edges e join automation_steps s on s.id = e.to_step_id where e.automation_id = $1 and s.config->>'tag' = 'qa-canvas-tag'`, [savedId])).n === 1);
+  check("and the screen says saved", Boolean(await until(async () => (await page.locator('[data-flow-status="saved"]').count()) === 1, 15000)));
+  // Switched on from the header, and kept without a Save.
+  await page.locator('main [role="switch"]').first().click();
+  const on = await until(async () => (await one(`select active from automations where id = $1`, [savedId]))?.active === true, 20000);
+  check("the header switch turns it on, and that is saved too", Boolean(on));
 
-  // From scratch: the trigger question opens by itself.
+  // The long ones: a "reply 1 to book" template has a booking step, whose "already booked" way out could not be saved.
+  await page.goto(`${BASE}/c/${slug}/automations/new?template=recall_6_months`);
+  await page.waitForSelector(".react-flow__node-step", { timeout: 60000 });
+  await page.fill('input[aria-label="Name this automation"]', "QA long recall");
+  const longRow = await until(() => one(`select id from automations where clinic_id = $1 and name = 'QA long recall'`, [clinic.id]), 30000);
+  check("a template with a booking step saves (the 'already booked' branch was refused)", Boolean(longRow));
+  if (longRow) {
+    const longEdges = await one(`select count(*)::int as n from automation_edges where automation_id = $1 and handle = 'already_booked'`, [longRow.id]);
+    check("with every branch kept", longEdges.n === 1, JSON.stringify(longEdges));
+    const moved = await until(async () => page.url().endsWith(`/automations/${longRow.id}`), 15000);
+    check("its address is the saved flow's now", Boolean(moved), page.url());
+  }
+
+  // From scratch: the trigger question opens by itself, and picking it already saves a draft.
   await page.goto(`${BASE}/c/${slug}/automations/new`);
   await page.waitForSelector('[data-pick="patient_created"]', { timeout: 60000 });
   await page.click('[data-pick="patient_created"]');
+  await page.waitForURL(/automations\/[0-9a-f-]{36}$/, { timeout: 60000 });
   await page.getByRole("button", { name: "Add the first step" }).click();
   await page.click('[data-pick="send_whatsapp"]');
   await page.locator("[data-inspector] textarea").first().fill("أهلاً {{patient.first_name}}");
   await page.fill('input[aria-label="Name this automation"]', "QA scratch");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await page.waitForURL(/automations\/[0-9a-f-]{36}$/, { timeout: 60000 });
+  await page.click("[data-flow-done]");
+  await page.waitForURL(/automations$/, { timeout: 60000 });
   const scratch = await one(
-    `select a.trigger_type, (select count(*)::int from automation_edges e where e.automation_id = a.id) as edges
+    `select a.trigger_type, (select count(*)::int from automation_edges e where e.automation_id = a.id) as edges,
+            (select config->>'message' from automation_steps s where s.automation_id = a.id limit 1) as message
        from automations a where a.clinic_id = $1 and a.name = 'QA scratch'`,
     [clinic.id]
   );
-  check("a flow from scratch is saved with its trigger and edge", scratch?.trigger_type === "patient_created" && scratch.edges === 1, JSON.stringify(scratch));
+  check(
+    "a flow from scratch is saved with its trigger, edge and words",
+    scratch?.trigger_type === "patient_created" && scratch.edges === 1 && scratch.message === "أهلاً {{patient.first_name}}",
+    JSON.stringify(scratch)
+  );
+  check("one flow, not a copy per save", Number((await one(`select count(*)::int as n from automations where clinic_id = $1 and name = 'QA scratch'`, [clinic.id])).n) === 1);
 
   // Arabic, read the way a person sees it.
   await db.query(`update users set locale = 'ar' where id = $1`, [owner.id]);
@@ -512,6 +551,13 @@ async function main() {
     const over = await pp.evaluate("document.documentElement.scrollWidth - window.innerWidth");
     check(`${path.endsWith(savedId) ? "the builder" : "the list"} fits a phone`, Number(over) <= 1, `${over}px over`);
   }
+  await pp.goto(`${BASE}/c/${slug}/automations/${savedId}`, { timeout: 90000 });
+  await pp.waitForSelector(".react-flow__node-step", { timeout: 60000 });
+  await pp.locator(".react-flow__node-step").first().click();
+  const sheetDone = pp.locator("[data-inspector-done]");
+  check("on a phone a step opens as a sheet with Done at the bottom", Boolean(await until(async () => (await sheetDone.count()) === 1, 15000)));
+  if (await sheetDone.count()) await sheetDone.click();
+  check("and Done puts it away", Boolean(await until(async () => (await sheetDone.count()) === 0, 10000)));
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
   await browser.close();
 

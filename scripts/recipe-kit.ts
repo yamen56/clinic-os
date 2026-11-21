@@ -91,13 +91,8 @@ export function replyToBook(opts: {
           },
         },
       ],
-      other: [
-        { step_type: "flag_conversation", config: { reason: "ردّ على دعوة للحجز" } },
-        {
-          step_type: "notify_staff",
-          config: { title: "{{patient.name}} ردّ على دعوة للحجز", body: "«{{reply.text}}»", roles: ["receptionist"] },
-        },
-      ],
+      // Already on the inbox's phones as the message it is (Team alerts); flagged here, not announced twice.
+      other: [{ step_type: "flag_conversation", config: { reason: "ردّ على دعوة للحجز" } }],
       ...(opts.onSilence ? { timeout: opts.onSilence } : {}),
     },
   };

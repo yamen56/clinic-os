@@ -20,7 +20,8 @@ export type StoredFlow = {
   trigger: string;
   triggerConfig: Record<string, unknown>;
   settings: FlowSettings;
-  canvas: { trigger?: { x: number; y: number } | null };
+  /** Where the trigger card sits, and which open editor saved it last. */
+  canvas: { trigger?: { x: number; y: number } | null; session?: string };
   active: boolean;
   updatedAt: string;
   recipeKey: string | null;
@@ -86,6 +87,8 @@ export async function writeFlowGraph(
   const existing = new Set<string>(
     (await c.query(`select id from automation_steps where automation_id = $1`, [automationId])).rows.map((r) => r.id)
   );
+  // The same step twice in one save would make the batched upsert below fail outright.
+  nodes = [...new Map(nodes.map((n) => [n.id, n])).values()];
   const keep = new Set(nodes.map((n) => n.id));
   const removed = [...existing].filter((id) => !keep.has(id));
 
@@ -111,40 +114,43 @@ export async function writeFlowGraph(
     ]);
   }
 
-  let sort = 0;
-  for (const n of nodes) {
-    const values = [
-      n.id,
-      clinicId,
-      automationId,
-      sort++,
-      n.type,
-      JSON.stringify(n.config ?? {}),
-      n.position ? JSON.stringify({ x: Math.round(n.position.x), y: Math.round(n.position.y) }) : null,
-      (n.label ?? "").slice(0, 80),
-    ];
-    if (existing.has(n.id)) {
-      await c.query(
-        `update automation_steps set sort = $4, step_type = $5, config = $6, position = $7, label = $8,
-                parent_step_id = null, branch = null
-          where id = $1 and clinic_id = $2 and automation_id = $3`,
-        values
-      );
-    } else {
-      await c.query(
-        `insert into automation_steps (id, clinic_id, automation_id, sort, step_type, config, position, label)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        values
-      );
-    }
+  /*
+    One statement for every step and one for every edge. This used to be a
+    query per step and per edge, one after another on one connection — a
+    sixty-step flow was a couple of hundred round trips to the database on
+    every save, which autosave now makes several times a minute.
+  */
+  const rows = nodes.map((n, sort) => ({
+    id: n.id,
+    sort,
+    step_type: n.type,
+    config: n.config ?? {},
+    position: n.position ? { x: Math.round(n.position.x), y: Math.round(n.position.y) } : null,
+    label: (n.label ?? "").slice(0, 80),
+  }));
+  if (rows.length) {
+    await c.query(
+      `insert into automation_steps (id, clinic_id, automation_id, sort, step_type, config, position, label)
+       select x.id, $1, $2, x.sort, x.step_type, coalesce(x.config, '{}'::jsonb), x.position, coalesce(x.label, '')
+         from jsonb_to_recordset($3::jsonb)
+           as x(id uuid, sort int, step_type text, config jsonb, position jsonb, label text)
+       on conflict (id) do update set
+         sort = excluded.sort, step_type = excluded.step_type, config = excluded.config,
+         position = excluded.position, label = excluded.label, parent_step_id = null, branch = null
+       where automation_steps.automation_id = excluded.automation_id
+         and automation_steps.clinic_id = excluded.clinic_id`,
+      // Stringified whole: a jsonb parameter must never reach pg as a JS array.
+      [clinicId, automationId, JSON.stringify(rows)]
+    );
   }
 
   await c.query(`delete from automation_edges where automation_id = $1`, [automationId]);
-  for (const e of edges) {
+  if (edges.length) {
     await c.query(
       `insert into automation_edges (clinic_id, automation_id, from_step_id, handle, to_step_id)
-       values ($1, $2, $3, $4, $5)`,
-      [clinicId, automationId, e.from, e.handle, e.to]
+       select $1, $2, x.from_step_id, x.handle, x.to_step_id
+         from jsonb_to_recordset($3::jsonb) as x(from_step_id uuid, handle text, to_step_id uuid)`,
+      [clinicId, automationId, JSON.stringify(edges.map((e) => ({ from_step_id: e.from, handle: e.handle, to_step_id: e.to })))]
     );
   }
   return { cancelledRuns };

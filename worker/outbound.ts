@@ -157,7 +157,7 @@ export async function processOnce() {
                select id from messages
                where clinic_id = $1 and status = 'queued' and scheduled_at <= now()
                order by case when sender_kind in ('staff', 'ai') then 0 else 1 end,
-                        created_at
+                        created_at, scheduled_at
                limit 1
                for update skip locked
              )

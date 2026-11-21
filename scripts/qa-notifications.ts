@@ -713,7 +713,7 @@ async function main() {
     );
     check("and it is on screen, not folded into a menu", await phoneBell.isVisible());
 
-    // The owner's side: templates for each role on the team-alerts tab.
+    // The owner's side: the team-alerts tab, every alert once.
     const op = await login(`qa-owner-${tag}@test.local`);
     await op.goto(`${BASE}/c/${slug}/automations?tab=alerts`);
     await op.waitForLoadState("networkidle");
@@ -722,25 +722,28 @@ async function main() {
       "the new team alerts are listed",
       alertsText.includes(ar.automations.alertKinds.appointment_booked) && alertsText.includes(ar.automations.alertKinds.weekly_summary)
     );
+    check("and a patient writing on WhatsApp is one of them (0111)", alertsText.includes(ar.automations.alertKinds.patient_message));
     const before = await count(`select count(*)::int n from clinic_staff_alerts where clinic_id = $1`, [clinic.id]);
     await op.getByRole("button", { name: ar.automations.addAlert }).first().click();
     const dialog = op.getByRole("dialog");
     await dialog.waitFor({ timeout: 15000 });
-    check("templates are offered by role", (await dialog.innerText()).includes(ar.automations.templatesFor.receptionist));
-    await dialog.locator('[data-template="rec-unconfirmed"]').click();
-    await dialog.getByRole("button", { name: ar.common.save }).click();
-    const added = await until(async () => {
-      const r = await db.query(
-        `select kind, roles, at_hour from clinic_staff_alerts where clinic_id = $1 order by created_at desc limit 1`,
-        [clinic.id]
-      );
-      const n = await count(`select count(*)::int n from clinic_staff_alerts where clinic_id = $1`, [clinic.id]);
-      return n === before + 1 ? r.rows[0] : null;
-    });
     check(
-      "and picking one saves exactly that alert",
-      added?.kind === "unconfirmed_tomorrow" && added.roles.join() === "receptionist" && added.at_hour === 17,
-      JSON.stringify(added)
+      "no list of the same alerts once per role any more",
+      !(await dialog.innerText()).includes(ar.automations.templatesFor.receptionist)
+    );
+    // An instant alert the clinic already has: the editor opens that one, and reception joins it.
+    await dialog.locator("select").first().selectOption("appointment_booked");
+    await dialog.getByRole("button", { name: ar.automations.alertRoles.receptionist, exact: true }).click();
+    await dialog.getByRole("button", { name: ar.common.save }).click();
+    const merged = await until(async () => {
+      const r = await db.query(`select roles from clinic_staff_alerts where clinic_id = $1 and kind = 'appointment_booked'`, [clinic.id]);
+      return r.rows.length === 1 && (r.rows[0].roles as string[]).includes("receptionist") ? r.rows[0] : null;
+    });
+    const after = await count(`select count(*)::int n from clinic_staff_alerts where clinic_id = $1`, [clinic.id]);
+    check(
+      "adding one it already has adds the people to it, not a second row",
+      !!merged && (merged.roles as string[]).includes("doctor") && after === before,
+      JSON.stringify({ merged, before, after })
     );
 
     check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Copy, MoreHorizontal, Play, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Copy, MoreHorizontal, Play, RefreshCw, Trash2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
+import { useAutosave } from "@/lib/use-autosave";
 import { PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Toggle } from "@/components/ui/input";
 import { Avatar, Skeleton, Tabs } from "@/components/ui/misc";
 import { ConfirmDialog, Modal } from "@/components/ui/modal";
+import { SaveIndicator } from "@/components/ui/save-indicator";
 import { useToast } from "@/components/ui/toast";
 import {
   defaultSettingsFor,
@@ -31,6 +33,7 @@ import {
   duplicateAutomationAction,
   saveAutomationAction,
   testRunAction,
+  type SaveFlowResult,
 } from "../actions";
 import { fill, type Lookups } from "../flow-meta";
 import type { CanvasProps, StepStats } from "./flow-canvas";
@@ -60,9 +63,45 @@ export type BuilderInitial = {
   edges: FlowEdge[];
   active: boolean;
   updatedAt: string | null;
+  /** The editor that saved it last (canvas.session), to tell its own unsent edits from a stranger's. */
+  session: string | null;
 };
 
-type FlowState = Omit<BuilderInitial, "id" | "updatedAt">;
+type FlowState = Omit<BuilderInitial, "id" | "updatedAt" | "session">;
+
+/**
+ * Edits a previous visit to this flow left unconfirmed (offline, a closed tab),
+ * kept by useAutosave under its key. Shown again rather than the server's
+ * copy, since they are what the hook is about to send — but only while nobody
+ * else has saved the flow since, or the hook's send would be refused anyway.
+ */
+function takeLocalDraft(id: string | null, updatedAt: string | null, session: string | null): FlowState | null {
+  if (!id || typeof window === "undefined") return null;
+  const key = `autosave:automation:${id}`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const flow = (JSON.parse(raw)?.patch?.flow ?? null) as Record<string, unknown> | null;
+    const ours = flow && ((flow.session && flow.session === session) || (flow.baseUpdatedAt && flow.baseUpdatedAt === updatedAt));
+    if (!flow || !ours || !Array.isArray(flow.nodes) || !Array.isArray(flow.edges)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return {
+      name: String(flow.name ?? ""),
+      description: String(flow.description ?? ""),
+      trigger: (flow.trigger as string) ?? null,
+      triggerConfig: (flow.triggerConfig as Record<string, unknown>) ?? {},
+      settings: flow.settings as FlowSettings,
+      triggerPos: ((flow.canvas as { trigger?: XY | null } | undefined)?.trigger ?? null) as XY | null,
+      nodes: flow.nodes as FlowNode[],
+      edges: flow.edges as FlowEdge[],
+      active: Boolean(flow.active),
+    };
+  } catch {
+    return null;
+  }
+}
 
 /** A step id the server will keep. randomUUID needs a secure context; a LAN test does not have one. */
 function newId(): string {
@@ -110,6 +149,7 @@ export function BuilderClient({
   stats,
   runs,
   initialTab,
+  recipeKey,
 }: {
   slug: string;
   tz: string;
@@ -119,6 +159,8 @@ export function BuilderClient({
   stats: Record<string, StepStats>;
   runs: RunRow[];
   initialTab: "flow" | "activity" | "settings";
+  /** The template a new flow was opened from, recorded on its first save. */
+  recipeKey?: string | null;
 }) {
   const { t } = useI18n();
   const f = t.automations.flow;
@@ -127,17 +169,55 @@ export function BuilderClient({
   const wide = useWide();
 
   const [id, setId] = useState(initial.id);
-  const [updatedAt, setUpdatedAt] = useState(initial.updatedAt);
+  const idRef = useRef(initial.id);
+  idRef.current = id;
   const [state, setState] = useState<FlowState>(() => {
-    const { id: _id, updatedAt: _u, ...rest } = initial;
+    const { id: _id, updatedAt: _u, session: _s, ...rest } = initial;
     void _id;
     void _u;
+    void _s;
     return rest;
   });
   const stateRef = useRef(state);
   stateRef.current = state;
-  const [baseline, setBaseline] = useState(() => JSON.stringify(state));
-  const dirty = JSON.stringify(state) !== baseline;
+
+  /*
+    Autosave (Yamen, 2026-11-21: "it should have auto save and a done when I
+    finish"). Every change goes to the server a moment after it is made, the
+    whole flow each time, through useAutosave — so a link clicked mid-save
+    waits for it, a closed tab still sends it, and an offline edit is retried.
+    `lastQueued` is the flow as last handed to the server; a change is
+    anything that differs from it.
+  */
+  const [session] = useState(newId);
+  const baseUpdatedAt = useRef(initial.updatedAt);
+  const lastQueued = useRef(JSON.stringify(state));
+  const [conflict, setConflict] = useState(false);
+  const conflictRef = useRef(false);
+  const [rejected, setRejected] = useState<{ error: string; nodeId: string | null } | null>(null);
+  // Read on the client only, in the first render, before useAutosave's own effect sends what it holds.
+  const [localDraft] = useState(() => takeLocalDraft(initial.id, initial.updatedAt, initial.session));
+  const autosave = useAutosave({
+    url: `/api/c/${slug}/automations/${id ?? "new"}`,
+    entityKey: `automation:${id ?? "new"}`,
+    onConflict: () => {
+      conflictRef.current = true;
+      setConflict(true);
+    },
+    onRejected: (rej) => {
+      const r = rej.flow as { error?: string; nodeId?: string | null } | undefined;
+      setRejected(r?.error ? { error: r.error, nodeId: r.nodeId ?? null } : null);
+    },
+  });
+  const autosaveState = useRef(autosave.state);
+  autosaveState.current = autosave.state;
+  useEffect(() => {
+    if (!localDraft) return;
+    lastQueued.current = JSON.stringify(localDraft);
+    setState(localDraft);
+    // Once, with what was found on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* Undo / redo. Structural changes push at once; editing a step's settings
      pushes once, when the step is put down, so undo takes back the whole edit. */
@@ -215,10 +295,148 @@ export function BuilderClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* Leaving with unsaved work asks first: a reload or a closed tab, and any
-     link inside the app. */
+  /* -----------------------------------------------------------------------
+     Autosave
+     ----------------------------------------------------------------------- */
+
+  const payloadOf = (s: FlowState) => ({
+    baseUpdatedAt: baseUpdatedAt.current,
+    session,
+    name: s.name.trim() || f.untitled,
+    description: s.description,
+    trigger: s.trigger,
+    triggerConfig: s.triggerConfig,
+    settings: s.settings,
+    canvas: { trigger: s.triggerPos },
+    nodes: s.nodes,
+    edges: s.edges,
+    active: s.active,
+  });
+
+  const json = JSON.stringify(state);
+  /*
+    A flow that is switched on is never replaced by one that cannot run — the
+    server refuses it, and asking would only fill the screen with refusals
+    while somebody is halfway through an edit. Held here instead, and said
+    so beside the Done button, with the way out.
+  */
+  const heldBack = state.active && !canEnable && json !== lastQueued.current;
+
+  const saveError = (r: SaveFlowResult) => {
+    const msg =
+      r.error === "conflict"
+        ? f.conflict
+        : r.error === "invalid_flow"
+          ? f.invalidFlow
+          : r.error === "bad_media"
+            ? f.badMedia
+            : r.error === "bad_target"
+              ? f.badTarget
+              : r.error === "invalid" && r.nodeId
+                ? f.invalidStep
+                : t.common.genericError;
+    if (r.error === "invalid_flow") setIssuesOpen(true);
+    if (r.nodeId) {
+      select(r.nodeId);
+      setFocusNonce((x) => x + 1);
+    }
+    toast(msg, "error");
+  };
+
+  /*
+    A new flow is made the first time there is something to keep — a trigger
+    picked, or a template changed — through the server action, which hands
+    back its id; autosave takes over from there. Opening a template and
+    leaving it untouched makes nothing.
+  */
+  const creating = useRef<Promise<boolean> | null>(null);
+  const create = (): Promise<boolean> => {
+    if (creating.current) return creating.current;
+    const s = stateRef.current;
+    const sent = JSON.stringify(s);
+    const p = (async () => {
+      const r = await saveAutomationAction(slug, { ...payloadOf(s), recipeKey: recipeKey ?? undefined });
+      lastQueued.current = sent;
+      if (r.error || !r.id) {
+        saveError(r);
+        return false;
+      }
+      baseUpdatedAt.current = r.updatedAt ?? null;
+      idRef.current = r.id;
+      setId(r.id);
+      // The address the flow now has, without reloading the page under the person editing it.
+      window.history.replaceState(null, "", `/c/${slug}/automations/${r.id}`);
+      return true;
+    })().finally(() => {
+      creating.current = null;
+    });
+    creating.current = p;
+    return p;
+  };
+
   useEffect(() => {
-    if (!dirty) return;
+    if (conflict || !state.trigger || json === lastQueued.current) return;
+    if (state.active && !canEnable) return;
+    if (!id) {
+      void create();
+      return;
+    }
+    lastQueued.current = json;
+    autosave.patch({ flow: payloadOf(state) });
+    // `json` stands for `state`; payloadOf and create read refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [json, id, conflict, canEnable]);
+
+  /** Switch the flow off so what is on the canvas can be kept while it is finished. */
+  const switchOffAndSave = () => setState((s) => ({ ...s, active: false }));
+
+  /*
+    Done: everything sent and confirmed, then back to the list. What could not
+    be saved keeps the screen open and says why.
+  */
+  const done = () =>
+    start(async () => {
+      select(null);
+      const list = `/c/${slug}/automations`;
+      if (conflictRef.current) {
+        toast(f.conflict, "error");
+        return;
+      }
+      const s = stateRef.current;
+      if (!s.trigger) {
+        router.push(list);
+        return;
+      }
+      const v = validateFlow({ trigger: s.trigger, triggerConfig: s.triggerConfig, nodes: s.nodes, edges: s.edges, settings: s.settings });
+      if (s.active && blocking(v)) {
+        setIssuesOpen(true);
+        toast(fill(f.cantEnable, { n: v.filter((i) => i.severity === "error").length }), "error");
+        return;
+      }
+      if (!idRef.current && !(await create())) return;
+      await autosave.flush();
+      if (conflictRef.current) {
+        toast(f.conflict, "error");
+        return;
+      }
+      const latest = stateRef.current;
+      if (JSON.stringify(latest) !== lastQueued.current || autosaveState.current === "rejected") {
+        // Typed in the last moment, made while the flow was being created, or refused: said directly.
+        lastQueued.current = JSON.stringify(latest);
+        const r = await saveAutomationAction(slug, { ...payloadOf(latest), id: idRef.current! });
+        if (r.error) {
+          saveError(r);
+          return;
+        }
+      }
+      router.push(list);
+    });
+
+  /* What cannot be kept asks before it is left: a flow that is on with a
+     problem in it, a save refused, somebody else's newer version. */
+  const stuck = heldBack || conflict || (Boolean(id) && autosave.state === "rejected");
+  useEffect(() => {
+    if (!stuck) return;
     const beforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
@@ -239,7 +457,7 @@ export function BuilderClient({
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", onClick, true);
     };
-  }, [dirty, f.leaveConfirm]);
+  }, [stuck, f.leaveConfirm]);
 
   // Undo and redo from the keyboard, but never out of a text box.
   useEffect(() => {
@@ -315,8 +533,19 @@ export function BuilderClient({
     setSelected(node.id);
   };
 
-  const removeNodes = (ids: string[]) => {
+  /*
+    Patients standing on a step lose their place when it goes — and with
+    autosave it goes a moment later, before an undo could bring it back for
+    them. So taking one out asks first when anybody is waiting there.
+  */
+  const [removing, setRemoving] = useState<string[] | null>(null);
+  const waitingAt = (ids: string[]) => ids.reduce((n, nid) => n + (stats[nid]?.waiting ?? 0), 0);
+  const removeNodes = (ids: string[], confirmed = false) => {
     if (!ids.length) return;
+    if (!confirmed && id && waitingAt(ids) > 0) {
+      setRemoving(ids);
+      return;
+    }
     const s = stateRef.current;
     let edges = s.edges;
     for (const nid of ids) {
@@ -415,9 +644,9 @@ export function BuilderClient({
       nodes: s.nodes.map((n) => (positions[n.id] ? { ...n, position: positions[n.id] } : n)),
     };
     if (opts.baseline) {
-      // A layout nobody asked for: not an edit, so the baseline moves with it.
+      // A layout nobody asked for: not an edit, so it is not saved for its own sake.
+      if (JSON.stringify(s) === lastQueued.current) lastQueued.current = JSON.stringify(next);
       setState(next);
-      if (!dirty) setBaseline(JSON.stringify(next));
       return;
     }
     if (opts.history) commit(next);
@@ -441,58 +670,6 @@ export function BuilderClient({
     commit({ ...s, trigger, triggerConfig: { ...defaultTriggerConfig(trigger), ...cfg }, settings });
     if (fresh) select("trigger");
   };
-
-  /* -----------------------------------------------------------------------
-     Save
-     ----------------------------------------------------------------------- */
-
-  const save = (overrides: Partial<FlowState> = {}) =>
-    start(async () => {
-      const s = { ...stateRef.current, ...overrides };
-      if (!s.trigger) {
-        setTriggerPicker(true);
-        return;
-      }
-      const r = await saveAutomationAction(slug, {
-        id: id ?? undefined,
-        baseUpdatedAt: updatedAt,
-        name: s.name.trim() || f.untitled,
-        description: s.description,
-        trigger: s.trigger,
-        triggerConfig: s.triggerConfig,
-        settings: s.settings,
-        canvas: { trigger: s.triggerPos },
-        nodes: s.nodes,
-        edges: s.edges,
-        active: s.active,
-      });
-      if (r.error || !r.id) {
-        const msg =
-          r.error === "conflict"
-            ? f.conflict
-            : r.error === "invalid_flow"
-              ? f.invalidFlow
-              : r.error === "bad_media"
-                ? f.badMedia
-                : r.error === "bad_target"
-                  ? f.badTarget
-                  : t.common.genericError;
-        if (r.error === "invalid_flow") setIssuesOpen(true);
-        toast(msg, "error");
-        return;
-      }
-      const savedState = { ...s, name: s.name.trim() || f.untitled };
-      if (overrides.active !== undefined) setState((cur) => ({ ...cur, active: overrides.active! }));
-      setState((cur) => (cur.name.trim() ? cur : { ...cur, name: savedState.name }));
-      setBaseline(JSON.stringify(savedState));
-      setUpdatedAt(r.updatedAt ?? null);
-      if (r.cancelledRuns) toast(fill(f.runsCancelled, { n: r.cancelledRuns }));
-      toast(t.automations.saved);
-      if (!id) {
-        setId(r.id);
-        router.replace(`/c/${slug}/automations/${r.id}`);
-      }
-    });
 
   /* -----------------------------------------------------------------------
      View
@@ -528,10 +705,54 @@ export function BuilderClient({
       />
     ) : null;
 
-  const statusPill = dirty ? (
-    <span className="rounded-full bg-st-noshow-soft px-2.5 py-1 text-[12px] font-medium text-st-noshow">{f.unsaved}</span>
+  /*
+    Where the flow stands, beside Done. Saving and saved are the hook's own
+    states; the three that need somebody are said in words, with the one
+    thing to do about each.
+  */
+  const statusEl = conflict ? (
+    <span>
+      <button
+        type="button"
+        data-flow-status="conflict"
+        onClick={() => window.location.reload()}
+        className="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-2.5 py-1 text-[12px] font-medium text-danger"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        {f.conflictReload}
+      </button>
+    </span>
+  ) : heldBack ? (
+    <span data-flow-status="held" className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-medium text-st-noshow">
+      <span className="inline-flex items-center gap-1.5">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        {fill(f.notSavedProblems, { n: errors.length })}
+      </span>
+      <button type="button" onClick={switchOffAndSave} className="font-semibold underline underline-offset-2">
+        {f.turnOffAndSave}
+      </button>
+    </span>
+  ) : id && autosave.state === "rejected" ? (
+    <span>
+      <button
+        type="button"
+        data-flow-status="rejected"
+        onClick={() => {
+          if (rejected?.nodeId && rejected.nodeId !== "trigger") {
+            select(rejected.nodeId);
+            setFocusNonce((x) => x + 1);
+          } else setIssuesOpen(true);
+        }}
+        className="inline-flex items-center gap-1.5 text-[12px] font-medium text-danger"
+      >
+        <AlertTriangle className="h-3.5 w-3.5" />
+        {rejected?.nodeId ? f.invalidStep : rejected?.error === "invalid_flow" ? f.invalidFlow : f.notSaved}
+      </button>
+    </span>
   ) : id ? (
-    <span className="rounded-full bg-sunken px-2.5 py-1 text-[12px] font-medium text-ink-500">{f.allSaved}</span>
+    <span data-flow-status={autosave.state}>
+      <SaveIndicator state={autosave.state === "idle" ? "saved" : autosave.state} />
+    </span>
   ) : null;
 
   return (
@@ -547,8 +768,8 @@ export function BuilderClient({
           />
         }
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            {statusPill}
+          <>
+            {statusEl}
             <label className="flex items-center gap-2 pe-1" title={!canEnable && !state.active ? fill(f.cantEnable, { n: errors.length }) : undefined}>
               <Toggle
                 checked={state.active}
@@ -563,9 +784,8 @@ export function BuilderClient({
                 }}
               />
               <span className="text-[13px] font-medium">{state.active ? f.on : f.off}</span>
-            </label>
-            {id && (
-              <Button variant="outline" size="sm" onClick={() => setTestOpen(true)}>
+            </label>            {id && (
+              <Button variant="outline" size="sm" className="max-sm:hidden" onClick={() => setTestOpen(true)}>
                 <Play className="h-4 w-4" />
                 {t.automations.testRun}
               </Button>
@@ -583,7 +803,20 @@ export function BuilderClient({
                         type="button"
                         onClick={() => {
                           setMenuOpen(false);
+                          setTestOpen(true);
+                        }}
+                        className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[13px] hover:bg-sunken sm:hidden"
+                      >
+                        <Play className="h-4 w-4 text-ink-500" />
+                        {t.automations.testRun}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
                           start(async () => {
+                            // The copy is of what is on the screen, so that goes out first.
+                            await autosave.flush();
                             const r = await duplicateAutomationAction(slug, id, fill(f.copyName, { name: state.name || f.untitled }));
                             if (r.error || !r.id) return toast(t.common.genericError, "error");
                             toast(f.duplicated);
@@ -611,10 +844,11 @@ export function BuilderClient({
                 )}
               </div>
             )}
-            <Button onClick={() => save()} loading={pending} disabled={!dirty && Boolean(id)}>
-              {t.common.save}
+            <Button onClick={done} loading={pending} data-flow-done>
+              <Check className="h-4 w-4" />
+              {f.done}
             </Button>
-          </div>
+          </>
         }
       />
 
@@ -632,7 +866,8 @@ export function BuilderClient({
 
       {tab === "flow" && (
         <div className="flex min-w-0 gap-4">
-          <div className="relative h-[68dvh] min-h-[420px] min-w-0 flex-1 overflow-hidden rounded-card border border-line bg-canvas shadow-card lg:h-[calc(100dvh-15rem)]">
+          {/* On a phone the canvas takes the rest of the screen: a shorter one left a strip of flow to scroll inside a scrolling page. */}
+          <div className="relative h-[calc(100dvh-15rem)] min-h-[420px] min-w-0 flex-1 overflow-hidden rounded-card border border-line bg-canvas shadow-card max-sm:-mx-1 max-sm:h-[calc(100dvh-13.5rem)]">
             <FlowCanvas
               trigger={state.trigger}
               triggerConfig={state.triggerConfig}
@@ -747,11 +982,36 @@ export function BuilderClient({
         />
       )}
 
+      {/* A sheet from the bottom on a phone, closed by the Done under the thumb. */}
       {!wide && inspector && tab === "flow" && (
-        <Modal open onClose={() => select(null)} title={f.inspector}>
+        <Modal
+          open
+          onClose={() => select(null)}
+          title={f.inspector}
+          footer={
+            <Button className="w-full sm:w-auto" onClick={() => select(null)} data-inspector-done>
+              <Check className="h-4 w-4" />
+              {f.doneStep}
+            </Button>
+          }
+        >
           {inspector}
         </Modal>
       )}
+
+      <ConfirmDialog
+        open={Boolean(removing)}
+        onClose={() => setRemoving(null)}
+        title={f.removeWaitingTitle}
+        body={fill(f.removeWaitingBody, { n: removing ? waitingAt(removing) : 0 })}
+        confirmLabel={f.delete}
+        cancelLabel={t.common.cancel}
+        onConfirm={() => {
+          const ids = removing;
+          setRemoving(null);
+          if (ids) removeNodes(ids, true);
+        }}
+      />
 
       <StepPicker
         open={Boolean(stepPicker)}
@@ -773,8 +1033,10 @@ export function BuilderClient({
         onConfirm={() =>
           start(async () => {
             if (!id) return;
+            // Nothing left to save: a pending autosave would bring it back.
+            lastQueued.current = JSON.stringify(stateRef.current);
+            await autosave.flush();
             await deleteAutomationAction(slug, id);
-            setBaseline(JSON.stringify(stateRef.current));
             setDeleteOpen(false);
             router.push(`/c/${slug}/automations`);
           })

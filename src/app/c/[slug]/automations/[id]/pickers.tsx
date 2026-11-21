@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { Modal } from "@/components/ui/modal";
@@ -18,11 +18,20 @@ import type { FeatureMap } from "@/lib/features";
 import { CATEGORY_TONE, PRESET_ICONS, STEP_ICONS, TRIGGER_ICONS } from "../flow-meta";
 
 function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  /*
+    Focused straight away with a mouse, not on a phone: there the keyboard
+    came up over half the list on every open, for a search most people never
+    use — they scroll the cards.
+  */
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (window.matchMedia("(pointer: fine)").matches) ref.current?.focus();
+  }, []);
   return (
     <div className="relative mb-4">
       <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
       <input
-        autoFocus
+        ref={ref}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

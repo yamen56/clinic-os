@@ -89,9 +89,28 @@ export function FlowCanvas(props: CanvasProps) {
   );
 }
 
+/*
+  A finger on a phone is panning far more often than it is rearranging, and a
+  card that slid under a pan was a change — saved, with an undo step of its
+  own. On a touch screen the cards stay put; the + buttons, the edges and
+  Tidy do the arranging.
+*/
+function useCoarsePointer(): boolean {
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    const on = () => setCoarse(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return coarse;
+}
+
 function Inner(props: CanvasProps) {
   const { t } = useI18n();
   const rf = useReactFlow();
+  const coarse = useCoarsePointer();
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
 
   const build = useCallback(
@@ -309,6 +328,7 @@ function Inner(props: CanvasProps) {
           }}
           onNodesDelete={(deleted) => props.onRemoveNodes(deleted.map((n) => n.id).filter((id) => id !== "trigger"))}
           deleteKeyCode={["Delete", "Backspace"]}
+          nodesDraggable={!coarse}
           selectionOnDrag={false}
           selectionKeyCode={null}
           multiSelectionKeyCode={null}

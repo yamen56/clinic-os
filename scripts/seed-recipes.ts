@@ -37,9 +37,9 @@ export const RECIPES: Recipe[] = [
     name: "Welcome a new patient",
     name_ar: "ترحيب بمريض جديد",
     description:
-      "A patient the team adds by hand — a walk-in, a phone call — gets the clinic's WhatsApp number and an opening to ask anything. Patients who booked online or wrote to you first are not greeted twice.",
+      "A patient the team adds by hand — a walk-in, a phone call — gets the clinic's WhatsApp number and an opening to ask anything. Anyone booked in the same go gets the booking confirmation instead, and online bookings and chats are not greeted twice.",
     description_ar:
-      "المريض الذي يضيفه الفريق يدوياً — زيارة مباشرة أو اتصال — يصله رقم العيادة على واتساب ودعوة ليسأل عن أي شيء. من حجز إلكترونياً أو راسلكم أولاً لا يصله ترحيب مكرر.",
+      "المريض الذي يضيفه الفريق يدوياً — زيارة مباشرة أو اتصال — يصله رقم العيادة على واتساب ودعوة ليسأل عن أي شيء. من حُجز له موعد معها يصله تأكيد الحجز بدلاً منها، ومن حجز إلكترونياً أو راسلكم أولاً لا يصله ترحيب مكرر.",
     trigger_type: "patient_created",
     /*
       Staff-added files only. A patient who booked online has just had the
@@ -50,6 +50,13 @@ export const RECIPES: Recipe[] = [
     trigger_config: { sources: ["staff"] },
     sort: 0,
     steps: [
+      /*
+        A patient file is usually made on the way to a booking, and the booking
+        confirmation follows a minute later. Both at once was two hellos from
+        the clinic in one go; whoever is booked by now has the confirmation.
+      */
+      { step_type: "wait", config: { mode: "duration", amount: 5, unit: "minutes" } },
+      UNLESS_BOOKED,
       {
         step_type: "send_whatsapp",
         config: {
@@ -70,9 +77,9 @@ export const RECIPES: Recipe[] = [
     name: "Booking confirmation",
     name_ar: "تأكيد الحجز",
     description:
-      "When reception books an appointment, the patient gets the day, time and service in writing at once — fewer calls asking 'what time was it?'. Online and AI bookings send their own.",
+      "When reception books an appointment, the patient gets the day, time and service in writing at once — and on a first visit, the map and what to bring. Online bookings send the built-in confirmation (System messages).",
     description_ar:
-      "عند حجز موعد من الاستقبال، يصل المريض اليوم والساعة والخدمة مكتوبة فوراً — مكالمات أقل للسؤال عن الموعد. الحجز الإلكتروني والمساعد الذكي يرسلان تأكيدهما بنفسهما.",
+      "عند حجز موعد من الاستقبال، يصل المريض اليوم والساعة والخدمة مكتوبة فوراً — وفي الزيارة الأولى الخريطة وما يُحضره معه. الحجز الإلكتروني يرسل التأكيد المدمج (رسائل النظام).",
     trigger_type: "appointment_created",
     trigger_config: { sources: ["staff"] },
     sort: 1,
@@ -85,26 +92,24 @@ export const RECIPES: Recipe[] = [
             "مرحباً {{patient.first_name}} 👋\nتم حجز موعدك في {{clinic.name}}:\n📅 {{appointment.date}}\n🕐 {{appointment.time}}\n{{appointment.service}}\n📍 {{clinic.address}}\n\nإذا حاب تغيّر الموعد راسلنا هنا.",
         },
       },
-    ],
-  },
-  {
-    key: "first_visit_welcome",
-    name: "First visit — how to find us",
-    name_ar: "الزيارة الأولى — كيف تصل إلينا",
-    description:
-      "New patients get lost on the way and arrive without their old reports. On a patient's first booking: the address, the map and what to bring.",
-    description_ar:
-      "المريض الجديد قد يضيع الطريق ويأتي دون تقاريره السابقة. عند أول حجز له: العنوان والخريطة وما يُحضره معه.",
-    trigger_type: "appointment_created",
-    trigger_config: { first_visit: true },
-    sort: 2,
-    steps: [
-      { step_type: "wait", config: { mode: "duration", amount: 10, unit: "minutes" } },
+      /*
+        What "First visit — how to find us" used to send as a template of its
+        own, on the same booking a minute later. One flow now: the first-timer
+        gets it, everybody else just the confirmation.
+      */
       {
-        step_type: "send_whatsapp",
-        config: {
-          message:
-            "أهلاً {{patient.first_name}}، سعيدون بزيارتك الأولى لـ{{clinic.name}} 🌟\n📍 {{clinic.address}}\n🗺 {{clinic.map_link}}\n\nيُفضّل الحضور قبل الموعد بعشر دقائق، وإحضار الهوية وبطاقة التأمين وأي تقارير أو صور أشعة سابقة.",
+        step_type: "condition",
+        config: { match: "all", rules: [{ kind: "first_visit" }] },
+        children: {
+          yes: [
+            {
+              step_type: "send_whatsapp",
+              config: {
+                message:
+                  "بما إنها زيارتك الأولى لـ{{clinic.name}} 🌟\n🗺 {{clinic.map_link}}\n\nيُفضّل الحضور قبل الموعد بعشر دقائق، وإحضار الهوية وبطاقة التأمين وأي تقارير أو صور أشعة سابقة.",
+              },
+            },
+          ],
         },
       },
     ],
@@ -172,17 +177,13 @@ export const RECIPES: Recipe[] = [
               config: { message: "ولا يهمك 🙏 سيتواصل معك فريقنا قريباً لترتيب موعد جديد." },
             },
           ],
-          other: [
-            { step_type: "flag_conversation", config: { reason: "ردّ على تذكير الموعد" } },
-            {
-              step_type: "notify_staff",
-              config: {
-                title: "ردّ على تذكير موعد: {{patient.name}}",
-                body: "«{{reply.text}}»",
-                roles: ["receptionist"],
-              },
-            },
-          ],
+          /*
+            A reply the flow cannot read is a WhatsApp message like any other,
+            and it already reached the inbox's people the moment it came in
+            (Team alerts → a patient writes on WhatsApp). Flagged, not
+            announced a second time.
+          */
+          other: [{ step_type: "flag_conversation", config: { reason: "ردّ على تذكير الموعد" } }],
           timeout: [
             {
               step_type: "condition",
@@ -489,28 +490,6 @@ export const RECIPES: Recipe[] = [
         },
       },
       replyToBook({ like: "last" }),
-    ],
-  },
-  {
-    key: "unanswered_alert",
-    name: "A patient is waiting for a reply",
-    name_ar: "مريض ينتظر الرد",
-    description:
-      "A message left unanswered is a booking lost to the clinic that answered first. After 15 minutes without a reply, reception is alerted — during your messaging hours only.",
-    description_ar:
-      "الرسالة التي لا يُرد عليها حجز يذهب للعيادة التي ردّت أولاً. بعد 15 دقيقة دون رد يُنبَّه الاستقبال — ضمن ساعات المراسلة فقط.",
-    trigger_type: "conversation_unanswered",
-    trigger_config: { minutes: 15 },
-    sort: 14,
-    steps: [
-      {
-        step_type: "notify_staff",
-        config: {
-          title: "رسالة بانتظار الرد منذ 15 دقيقة",
-          body: "{{patient.name}}",
-          roles: ["receptionist"],
-        },
-      },
     ],
   },
   {

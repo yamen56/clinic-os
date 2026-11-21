@@ -19,7 +19,7 @@ const REPLACED_TRIGGERS = ["next_visit_due", "treatment_unbooked"];
 export async function setCoordinator(c: PoolClient, clinicId: string, on: boolean): Promise<void> {
   const keys = [...COORDINATOR_RECIPES];
   if (on) {
-    await c.query(`update automations set active = true where clinic_id = $1 and recipe_key = any($2::text[])`, [clinicId, keys]);
+    await c.query(`update automations set active = true, canvas = coalesce(canvas, '{}'::jsonb) - 'session' where clinic_id = $1 and recipe_key = any($2::text[])`, [clinicId, keys]);
     const missing = await c.query(
       `select * from recipe_templates
         where active and key = any($2::text[])
@@ -30,14 +30,14 @@ export async function setCoordinator(c: PoolClient, clinicId: string, on: boolea
     await installTemplates(c, clinicId, missing.rows);
     await c.query(
       `update automations
-          set active = false, settings = coalesce(settings, '{}'::jsonb) || '{"paused_by": "coordinator"}'::jsonb
+          set active = false, settings = coalesce(settings, '{}'::jsonb) || '{"paused_by": "coordinator"}'::jsonb, canvas = coalesce(canvas, '{}'::jsonb) - 'session'
         where clinic_id = $1 and active and trigger_type = any($2::text[])`,
       [clinicId, REPLACED_TRIGGERS]
     );
   } else {
-    await c.query(`update automations set active = false where clinic_id = $1 and recipe_key = any($2::text[])`, [clinicId, keys]);
+    await c.query(`update automations set active = false, canvas = coalesce(canvas, '{}'::jsonb) - 'session' where clinic_id = $1 and recipe_key = any($2::text[])`, [clinicId, keys]);
     await c.query(
-      `update automations set active = true, settings = settings - 'paused_by'
+      `update automations set active = true, settings = settings - 'paused_by', canvas = coalesce(canvas, '{}'::jsonb) - 'session'
         where clinic_id = $1 and settings->>'paused_by' = 'coordinator'`,
       [clinicId]
     );

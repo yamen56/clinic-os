@@ -1211,11 +1211,38 @@ empty canvas to add there, undo/redo, Tidy up, a settings panel (a bottom sheet 
 per-step 30-day counts, a list of problems that pans to the step. Tabs: Flow · Activity
 (filter, stop a run, stop all waiting) · Settings (description, re-entry, early stops).
 
+**Autosave and Done** (2026-11-21). There is no Save button. Every change goes to
+`POST /api/c/[slug]/automations/[id]` a moment after it is made — the whole flow, through
+`useAutosave`, so a link waits for it, a closed tab still sends it and an offline edit is
+retried — and **Done** sends what is left, confirms it, and goes back to the list. A new flow
+is created by the server action the first time there is something to keep (a trigger picked,
+a template changed); a template opened and left untouched makes nothing. Both paths go through
+`saveFlow` (`src/lib/automation/save.ts`). Beside Done the status says *Saving / Saved*, or
+one of three things that need a person: a flow that is **on** with problems is not saved (it
+says so, with "Switch it off and keep editing"); a step whose settings the server cannot read
+is opened; another screen's newer version asks for a reload. Conflicts are told apart by the
+editor's own session (`canvas.session`), so a screen's later saves are never mistaken for a
+stranger's; the list's on/off switch and the coordinator clear it. Removing a step that
+patients are waiting on asks first. `writeFlowGraph` writes every step and every edge in one
+statement each (it was a query apiece), and the save no longer refuses the `already_booked`
+output (it allowed handles of 12 characters, which made every "reply 1 to book" flow
+unsaveable from the builder) or a description over 300 characters. On a phone the canvas
+takes the rest of the screen, cards are not dragged by a pan, a step opens as a bottom sheet
+with Done under the thumb, and the step picker does not open the keyboard.
+
 ### Templates
 
-`recipe_templates`, seeded from `scripts/seed-recipes.ts` (20 general, plus the coordinator's 3 in `scripts/coordinator-recipes.ts`) and
+`recipe_templates`, seeded from `scripts/seed-recipes.ts` (18 general, plus the coordinator's 3 in `scripts/coordinator-recipes.ts`) and
 `scripts/specialty-recipes.ts` (39 across 14 specialties), offered in the **New automation**
-gallery — the clinic's own field first. Each card says **what problem it solves and what the
+gallery. **What a clinic is offered** (`src/lib/automation/template-library.ts`, 2026-11-21):
+the general templates and its own specialties' — no longer everyone else's behind "All
+templates" — once per job: where each of its specialties has its own version of a general one
+(`REPLACES`: the discreet psychiatry reminder for the day-before reminder, a specialty's own
+recall for the six-month check-up…) the general one is not offered beside it. Grouped by what
+they are for — before the visit, bringing patients back, after the visit, payments and
+documents — and a template the clinic already runs (its `recipe_key`, or for a reminder any
+active flow on the same lead time) is marked **On / Added** and opens that flow instead of
+making a second. A flow made from the gallery now records its `recipe_key`. Each card says **what problem it solves and what the
 patient receives** (`description` / `description_ar`, migration 0101), not only its name. A
 template removed from the code is set `active = false` by the seeder and leaves the gallery.
 New clinics install `RECIPES_ON_BY_DEFAULT` switched on: the welcome (team-added patients
@@ -1240,11 +1267,20 @@ chime already does), the ENT "allergy season" recall (it fired 180 days after an
 whatever the season), and the two specialty "results ready" copies (one general template now).
 The document and booking-approval templates create tasks only: the events already notify.
 
+**De-duplicated 2026-11-21.** Retired: "First visit — how to find us" (its map and what to
+bring are now the second message of the booking confirmation, for a first visit only) and "A
+patient is waiting for a reply" (the instant WhatsApp alert does its job). The welcome waits
+five minutes and stays quiet for a patient booked in the same go — the confirmation was a
+second hello. A reply a flow cannot read is flagged, no longer also announced by
+`notify_staff`: it reached the inbox's people as the message it is. Back-to-back messages in
+one flow keep their order (`created_at = clock_timestamp()`; they shared one timestamp and went
+out either way round).
+
 Notable general templates: a day-before reminder where "1" confirms the appointment and "2"
 gives reception a call to make; the doctor's follow-up, booked by a reply; a post-visit 1–5
 rating that sends happy patients to Google and unhappy ones to the owner; no-show and
 cancellation rebooking by a reply, skipped if they have already rebooked; results ready, booked
-by a reply; reception told when a chat has waited 15 minutes; a check-in three days after a
+by a reply; a check-in three days after a
 prescription.
 
 The two **patient-facing document reminders (24h / 72h) are built in, not recipes** — they
@@ -2140,6 +2176,7 @@ existing clinic.
 
 | Kind | Default | To whom |
 |---|---|---|
+| `patient_message` | instantly, each WhatsApp message (0110; a row since 0111) | owners, whoever else answers the inbox, and **doctors** — the patient's own (next visit's, else last visit's, or the thread's assignee), every message for a doctor who answers the inbox |
 | `appointment_reminder` | each recipient's own `reminder_minutes` | the appointment's doctor |
 | `day_schedule` | 08:00 | each doctor |
 | `unread_digest` | 12:00, only if ≥ 3 unread | owners + receptionists |
@@ -2151,8 +2188,17 @@ existing clinic.
 | `tomorrow_schedule` | 20:00, **off** by default | each doctor |
 | `weekly_summary` | Sunday 09:00 — last 7 days | owners |
 
-- **Templates by role** in the add dialog ("For doctors", "For reception", "For the clinic
-  admin") fill the form; nothing is saved until Save.
+- **One row per job** (0111). The add dialog lists every alert once (it used to offer the
+  same ones per role, "Appointment cancelled" three times, and each pick made another row);
+  picking an instant alert the clinic has opens that row, and a new row of the same kind at
+  the same time adds its people to the existing one. 0111 merged the duplicates clinics had.
+- **A patient writes on WhatsApp** (`worker/wa/message-alert.ts`): one line per conversation
+  and person, replaced by the latest message. A doctor who cannot open the inbox is sent to the
+  team chat (push button "Tell the team") to pass it on. Not sent for a short reply a waiting
+  flow understood — the "1" that confirms or books — since the flow acts on it; a reply it
+  could not read, or a longer one, is. A `notify_staff` step within 15 minutes of a reply
+  skips anyone whose bell still has that message unread. Each person can still set it to app
+  only or off ("Patients' WhatsApp messages"), doctors included.
 - For the reminder and the three instant kinds, *doctor* means **the appointment's own
   doctor**. Nobody is told about a change they made themselves (`actorUserId` in the trigger
   payload). A booking from the public link or the AI assistant does not re-notify the front

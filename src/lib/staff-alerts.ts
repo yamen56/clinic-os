@@ -16,6 +16,11 @@ import type { PoolClient } from "pg";
  */
 
 export const STAFF_ALERT_KINDS = [
+  /*
+    Instant, the moment a patient writes on WhatsApp (0110, a row since 0111).
+    "doctor" here means the patient's own doctor; see worker/wa/message-alert.
+  */
+  "patient_message",
   "appointment_reminder",
   "day_schedule",
   "day_end",
@@ -37,6 +42,7 @@ export type StaffAlertKind = (typeof STAFF_ALERT_KINDS)[number];
 
 /** The kinds that fire on an event rather than at an hour. */
 export const INSTANT_ALERT_KINDS: ReadonlySet<StaffAlertKind> = new Set([
+  "patient_message",
   "appointment_booked",
   "appointment_cancelled",
   "appointment_rescheduled",
@@ -44,7 +50,19 @@ export const INSTANT_ALERT_KINDS: ReadonlySet<StaffAlertKind> = new Set([
 
 /** Where "doctor" means the appointment's own doctor, not every doctor in the clinic. */
 export const followsAppointmentDoctor = (kind: StaffAlertKind) =>
-  kind === "appointment_reminder" || INSTANT_ALERT_KINDS.has(kind);
+  kind === "appointment_reminder" || (INSTANT_ALERT_KINDS.has(kind) && kind !== "patient_message");
+
+/** Where "doctor" means the patient's own doctor: of their next visit, else their last. */
+export const followsPatientDoctor = (kind: StaffAlertKind) => kind === "patient_message";
+
+/**
+ * Whether a clinic may hold more than one row of this kind. A timed one can
+ * be wanted twice — a reminder an hour before and again ten minutes before, a
+ * morning list for doctors at 8 and for reception at 7. An instant one has
+ * no time to differ by: a second row of it is the same alert sent twice, so
+ * adding one adds its people to the row there is.
+ */
+export const allowsSeveral = (kind: StaffAlertKind) => !INSTANT_ALERT_KINDS.has(kind);
 
 /** Same vocabulary as notify.staffInRoles — 'owner' is a flag, not a job title. */
 export const STAFF_ALERT_ROLES = ["owner", "doctor", "receptionist"] as const;
@@ -82,46 +100,6 @@ export function alertShape(kind: StaffAlertKind): {
 }
 
 /**
- * Ready-made alerts, grouped by who they are for.
- *
- * The editor offers these first, so a clinic setting up reception does not have
- * to know that "unconfirmed tomorrow at five" is a thing it could build — it
- * picks "For reception" and sees it. Each is only a starting shape; everything
- * about it stays editable once picked.
- */
-export type AlertTemplate = {
-  id: string;
-  forRole: StaffAlertRole;
-  kind: StaffAlertKind;
-  roles: StaffAlertRole[];
-  minutes_before?: number | null;
-  at_hour?: number | null;
-  weekday?: number | null;
-  threshold?: number;
-};
-
-export const ALERT_TEMPLATES: AlertTemplate[] = [
-  // Doctors
-  { id: "doc-reminder-15", forRole: "doctor", kind: "appointment_reminder", roles: ["doctor"], minutes_before: 15 },
-  { id: "doc-booked", forRole: "doctor", kind: "appointment_booked", roles: ["doctor"] },
-  { id: "doc-cancelled", forRole: "doctor", kind: "appointment_cancelled", roles: ["doctor"] },
-  { id: "doc-moved", forRole: "doctor", kind: "appointment_rescheduled", roles: ["doctor"] },
-  { id: "doc-morning", forRole: "doctor", kind: "day_schedule", roles: ["doctor"], at_hour: 8 },
-  { id: "doc-evening", forRole: "doctor", kind: "tomorrow_schedule", roles: ["doctor"], at_hour: 20 },
-  // Reception
-  { id: "rec-booked", forRole: "receptionist", kind: "appointment_booked", roles: ["receptionist"] },
-  { id: "rec-cancelled", forRole: "receptionist", kind: "appointment_cancelled", roles: ["receptionist"] },
-  { id: "rec-unconfirmed", forRole: "receptionist", kind: "unconfirmed_tomorrow", roles: ["receptionist"], at_hour: 17 },
-  { id: "rec-unread", forRole: "receptionist", kind: "unread_digest", roles: ["receptionist"], at_hour: 12, threshold: 3 },
-  { id: "rec-morning", forRole: "receptionist", kind: "day_schedule", roles: ["receptionist"], at_hour: 8 },
-  // The owner
-  { id: "own-day-end", forRole: "owner", kind: "day_end", roles: ["owner"], at_hour: 20 },
-  { id: "own-week", forRole: "owner", kind: "weekly_summary", roles: ["owner"], at_hour: 9, weekday: 7 },
-  { id: "own-unconfirmed", forRole: "owner", kind: "unconfirmed_tomorrow", roles: ["owner"], at_hour: 17 },
-  { id: "own-cancelled", forRole: "owner", kind: "appointment_cancelled", roles: ["owner"] },
-];
-
-/**
  * What a brand-new clinic gets. The first four are what migration 0033
  * backfilled — precisely the behaviour the worker had hardcoded. The rest came
  * with 0061 and were backfilled the same way. Kept in step with the
@@ -145,6 +123,7 @@ const row = (
 });
 
 export const DEFAULT_STAFF_ALERTS: Omit<StaffAlert, "id">[] = [
+  row("patient_message", ["owner", "receptionist", "doctor"], -1),
   row("appointment_reminder", ["doctor"], 0),
   row("day_schedule", ["doctor"], 1, { at_hour: 8 }),
   row("day_end", ["owner"], 2, { at_hour: 20 }),

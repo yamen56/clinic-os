@@ -203,7 +203,14 @@ async function run(db: Client, recipes: { key: string }[]) {
   await only("welcome_new_patient");
   const pW = await patient("سارة ترحيب");
   await fire("patient_created", { patientId: pW });
+  check("waits a few minutes for a booking to follow", (await runOf("welcome_new_patient", pW))?.status === "waiting");
+  await skip("welcome_new_patient", pW);
   check("a patient the team adds is welcomed", (await texts(pW)).some((t) => t.includes("أهلاً بك في عيادة الوصفات")));
+  const pWa = await patient("رنا مع موعد");
+  await appointment(pWa, { at: today.plus({ days: 2, hours: 10 }) });
+  await fire("patient_created", { patientId: pWa });
+  await skip("welcome_new_patient", pWa);
+  check("one booked in the same go is not welcomed on top of the confirmation", (await texts(pWa)).length === 0);
   const pWb = await patient("ليث حجز", { source: "booking_link" });
   await fire("patient_created", { patientId: pWb });
   check("one who booked online is not greeted twice", (await texts(pWb)).length === 0);
@@ -215,16 +222,14 @@ async function run(db: Client, recipes: { key: string }[]) {
   await fire("appointment_created", { appointmentId: aC, patientId: pC, source: "staff" });
   const tC = (await texts(pC))[0] ?? "";
   check("says booked, with the day, time and address", tC.includes("تم حجز موعدك") && tC.includes("عمّان") && !tC.includes("تم تأكيد"), tC.slice(0, 60));
-
-  console.log("\nfirst_visit_welcome");
-  await only("first_visit_welcome");
-  const pF = await patient("نور أولى");
-  const aF = await appointment(pF, { at: today.plus({ days: 2, hours: 11 }) });
-  await fire("appointment_created", { appointmentId: aF, patientId: pF, source: "staff" });
-  check("waits ten minutes", (await runOf("first_visit_welcome", pF))?.status === "waiting");
-  await skip("first_visit_welcome", pF);
-  const tF = (await texts(pF))[0] ?? "";
-  check("then the address, the map and what to bring", tF.includes("📍 عمّان") && tF.includes("maps.example") && tF.includes("الهوية"));
+  // The first-visit directions, once a template of their own, ride on the confirmation.
+  const tC2 = (await texts(pC))[1] ?? "";
+  check("a first visit also gets the map and what to bring", tC2.includes("maps.example") && tC2.includes("الهوية"), tC2.slice(0, 60));
+  const pCr = await patient("عمر عائد");
+  await appointment(pCr, { at: today.minus({ days: 30 }).plus({ hours: 10 }), status: "completed" });
+  const aCr = await appointment(pCr, { at: today.plus({ days: 4, hours: 10 }) });
+  await fire("appointment_created", { appointmentId: aCr, patientId: pCr, source: "staff" });
+  check("a returning patient gets only the confirmation", (await texts(pCr)).length === 1);
 
   console.log("\nreminder_24h");
   await only("reminder_24h");

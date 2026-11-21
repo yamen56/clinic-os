@@ -118,7 +118,8 @@ export const PREF_DEFS: PrefDef[] = [
     someone sends a message on WhatsApp I can receive it so I can reply
     immediately"). To whoever may open the inbox.
   */
-  { key: "patient_messages", group: "patients", shownTo: (a) => a.caps.conversations === true },
+  // And to a doctor the clinic's team alert includes, who hears about their own patients without the inbox (0111).
+  { key: "patient_messages", group: "patients", shownTo: (a) => a.caps.conversations === true || a.alertKinds.has("patient_message") },
   { key: "documents", group: "patients", shownTo: (a) => a.caps.documents === true },
   {
     key: "prescriptions",

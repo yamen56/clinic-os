@@ -6,17 +6,10 @@ import { inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { isUuid } from "@/lib/uuid";
 import { systemMessageDef, SYSTEM_MESSAGE_KEYS } from "@/lib/system-messages";
-import { STAFF_ALERT_KINDS, STAFF_ALERT_ROLES, alertShape } from "@/lib/staff-alerts";
-import {
-  isStepKey,
-  isTriggerKey,
-  normalizeSettings,
-  normalizeStepConfig,
-  parseStepConfig,
-  parseTriggerConfig,
-  triggerDef,
-} from "@/lib/automation/catalog";
-import { blocking, validateFlow, type FlowEdge, type FlowNode, type Issue } from "@/lib/automation/graph";
+import { STAFF_ALERT_KINDS, STAFF_ALERT_ROLES, alertShape, allowsSeveral, type StaffAlertRole } from "@/lib/staff-alerts";
+import { triggerDef } from "@/lib/automation/catalog";
+import { blocking, validateFlow } from "@/lib/automation/graph";
+import { saveFlow, type SaveFlowResult } from "@/lib/automation/save";
 import { loadFlow, queryRuns, reissueIds, writeFlowGraph, type RunRow } from "@/lib/automation/store";
 import { loadRunContext } from "@/lib/automation/context";
 import { renderMessage } from "@/lib/automation/variables";
@@ -28,170 +21,15 @@ function canEdit(access: ClinicAccess): boolean {
 }
 
 /* -------------------------------------------------------------------------
-   Saving a flow
+   Saving a flow — the rules live in lib/automation/save, shared with the
+   builder's autosave route.
    ------------------------------------------------------------------------- */
 
-const uuid = z.string().refine(isUuid, "uuid");
-const position = z.object({ x: z.number().finite(), y: z.number().finite() });
-
-const saveSchema = z.object({
-  id: uuid.optional(),
-  /** When the editor loaded the flow; a save over somebody else's newer one is refused. */
-  baseUpdatedAt: z.string().nullable().optional(),
-  name: z.string().trim().min(1).max(80),
-  description: z.string().max(300).default(""),
-  trigger: z.string().refine(isTriggerKey, "trigger"),
-  triggerConfig: z.record(z.string(), z.unknown()).default({}),
-  settings: z.unknown().optional(),
-  canvas: z.object({ trigger: position.nullable().optional() }).default({}),
-  nodes: z
-    .array(
-      z.object({
-        id: uuid,
-        type: z.string().refine(isStepKey, "step"),
-        config: z.record(z.string(), z.unknown()).default({}),
-        position: position.nullable().default(null),
-        label: z.string().max(80).default(""),
-      })
-    )
-    .max(80),
-  edges: z.array(z.object({ from: uuid.nullable(), handle: z.string().max(12), to: uuid })).max(300),
-  active: z.boolean().default(false),
-});
-
-export type SaveFlowInput = z.input<typeof saveSchema>;
-
-export type SaveFlowResult = {
-  id?: string;
-  updatedAt?: string;
-  error?: "forbidden" | "invalid" | "invalid_flow" | "not_found" | "conflict" | "bad_media" | "bad_target";
-  issues?: Issue[];
-  /** Runs stopped because the step they were waiting on was removed. */
-  cancelledRuns?: number;
-};
-
-/**
- * A file attached to a message must be one this clinic uploaded through the
- * automations upload route, and its kind is read off the name that route gave
- * it — never taken from the browser.
- */
-function checkMedia(clinicId: string, nodes: FlowNode[]): boolean {
-  for (const n of nodes) {
-    if (n.type !== "send_whatsapp" || !n.config.media) continue;
-    const m = n.config.media as { path: string; kind: string; name: string; mime: string };
-    const match = m.path.match(new RegExp(`^${clinicId}/automation-media/[0-9a-f]{8}-([^/\\\\]+\\.(jpg|pdf))$`));
-    if (!match) return false;
-    const pdf = match[2] === "pdf";
-    n.config.media = { path: m.path, kind: pdf ? "document" : "image", name: m.name || match[1], mime: pdf ? "application/pdf" : "image/jpeg" };
-  }
-  return true;
-}
-
-async function checkTargets(c: PoolClient, clinicId: string, selfId: string | undefined, nodes: FlowNode[]): Promise<boolean> {
-  const targets = nodes
-    .filter((n) => n.type === "goto_automation" && String(n.config.automation_id ?? ""))
-    .map((n) => String(n.config.automation_id));
-  if (!targets.length) return true;
-  if (targets.some((t) => !isUuid(t) || t === selfId)) return false;
-  const r = await c.query(`select count(*)::int as n from automations where clinic_id = $1 and id = any($2::uuid[])`, [
-    clinicId,
-    [...new Set(targets)],
-  ]);
-  return r.rows[0].n === new Set(targets).size;
-}
+export type { SaveFlowInput, SaveFlowResult } from "@/lib/automation/save";
 
 export async function saveAutomationAction(slug: string, data: unknown): Promise<SaveFlowResult> {
   const access = await requireClinic(slug);
-  if (!canEdit(access)) return { error: "forbidden" };
-  const parsed = saveSchema.safeParse(data);
-  if (!parsed.success) return { error: "invalid" };
-  const d = parsed.data;
-
-  const triggerConfig = parseTriggerConfig(d.trigger, d.triggerConfig);
-  if (!triggerConfig.success) return { error: "invalid" };
-  const nodes: FlowNode[] = [];
-  for (const n of d.nodes) {
-    const cfg = parseStepConfig(n.type, normalizeStepConfig(n.type, n.config));
-    if (!cfg.success) return { error: "invalid" };
-    nodes.push({ id: n.id, type: n.type, config: cfg.data as Record<string, unknown>, position: n.position, label: n.label });
-  }
-  if (new Set(nodes.map((n) => n.id)).size !== nodes.length) return { error: "invalid" };
-  const edges: FlowEdge[] = d.edges;
-  const settings = normalizeSettings(d.settings);
-  if (!checkMedia(access.clinicId, nodes)) return { error: "bad_media" };
-
-  const issues = validateFlow({
-    trigger: d.trigger,
-    triggerConfig: triggerConfig.data as Record<string, unknown>,
-    nodes,
-    edges,
-    settings,
-  });
-  // Malformed wiring is never stored, whether or not the flow is switched on.
-  if (issues.some((i) => i.code === "bad_edge")) return { error: "invalid_flow", issues };
-  if (d.active && blocking(issues)) return { error: "invalid_flow", issues };
-
-  return inClinic(access, async (c) => {
-    if (!(await checkTargets(c, access.clinicId, d.id, nodes))) return { error: "bad_target" as const };
-
-    // A step id already used by another flow is not this flow's to overwrite.
-    const foreign = await c.query(
-      `select 1 from automation_steps where id = any($1::uuid[]) and (automation_id <> $2::uuid or clinic_id <> $3) limit 1`,
-      [nodes.map((n) => n.id), d.id ?? "00000000-0000-0000-0000-000000000000", access.clinicId]
-    );
-    if (foreign.rowCount) return { error: "invalid" as const };
-
-    const values = [
-      d.name,
-      d.description,
-      d.trigger,
-      JSON.stringify(triggerConfig.data),
-      d.active,
-      JSON.stringify(settings),
-      JSON.stringify({ trigger: d.canvas.trigger ?? null }),
-    ];
-    let id = d.id;
-    if (id) {
-      const cur = (
-        await c.query(`select updated_at from automations where id = $1 and clinic_id = $2 for update`, [
-          id,
-          access.clinicId,
-        ])
-      ).rows[0];
-      if (!cur) return { error: "not_found" as const };
-      if (d.baseUpdatedAt && new Date(cur.updated_at).getTime() !== new Date(d.baseUpdatedAt).getTime()) {
-        return { error: "conflict" as const };
-      }
-      await c.query(
-        `update automations set name = $3, description = $4, trigger_type = $5, trigger_config = $6, active = $7,
-                settings = $8, canvas = $9
-          where id = $1 and clinic_id = $2`,
-        [id, access.clinicId, ...values]
-      );
-    } else {
-      const r = await c.query(
-        `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, settings, canvas)
-         values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
-        [access.clinicId, ...values]
-      );
-      id = r.rows[0].id as string;
-    }
-    const { cancelledRuns } = await writeFlowGraph(c, access.clinicId, id!, nodes, edges);
-    const updatedAt = new Date(
-      (await c.query(`select updated_at from automations where id = $1`, [id])).rows[0].updated_at
-    ).toISOString();
-    await audit(c, {
-      clinicId: access.clinicId,
-      userId: access.session.user.id,
-      impersonatedBy: access.session.impersonatedBy,
-      action: d.id ? "automation.update" : "automation.create",
-      entity: "automation",
-      entityId: id!,
-      detail: { name: d.name, active: d.active, steps: nodes.length, cancelledRuns },
-    });
-    revalidatePath(`/c/${slug}/automations`);
-    return { id, updatedAt, issues, cancelledRuns };
-  });
+  return saveFlow(access, slug, data);
 }
 
 /**
@@ -213,7 +51,8 @@ export async function toggleAutomationAction(
       const issues = validateFlow({ ...flow, triggerConfig: flow.triggerConfig });
       if (blocking(issues)) return { error: "invalid_flow" as const };
     }
-    const r = await c.query(`update automations set active = $3 where id = $1 and clinic_id = $2`, [
+    // An editor open on this flow must not quietly switch it back: its next save is told to reload.
+    const r = await c.query(`update automations set active = $3, canvas = coalesce(canvas, '{}'::jsonb) - 'session' where id = $1 and clinic_id = $2`, [
       id,
       access.clinicId,
       active,
@@ -273,7 +112,7 @@ export async function duplicateAutomationAction(
     const r = await c.query(
       `insert into automations (clinic_id, name, description, trigger_type, trigger_config, active, settings, canvas,
                                 recipe_specialty)
-       select clinic_id, $3, description, trigger_type, trigger_config, false, settings, canvas, recipe_specialty
+       select clinic_id, $3, description, trigger_type, trigger_config, false, settings, coalesce(canvas, '{}'::jsonb) - 'session', recipe_specialty
          from automations where id = $1 and clinic_id = $2
        returning id`,
       [id, access.clinicId, name.trim().slice(0, 80) || flow.name]
@@ -586,6 +425,28 @@ export async function saveStaffAlertAction(
 
   return inClinic(access, async (c) => {
     let id = d.id;
+    /*
+      A new alert that is one the clinic already has — the same kind, at the
+      same time — is that alert with more people on it, not a second row
+      sending the same thing (0111). For an instant kind the time cannot
+      differ, so any row of it will do.
+    */
+    if (!id) {
+      const same = (
+        await c.query(
+          `select id, roles from clinic_staff_alerts
+            where clinic_id = $1 and kind = $2
+              and ($3::boolean or (minutes_before is not distinct from $4 and at_hour is not distinct from $5
+                                   and weekday is not distinct from $6 and threshold = $7))
+            order by enabled desc, sort, created_at limit 1`,
+          [access.clinicId, d.kind, !allowsSeveral(d.kind), minutes, hour, weekday, threshold]
+        )
+      ).rows[0];
+      if (same) {
+        id = same.id as string;
+        d.roles = [...new Set([...(same.roles as StaffAlertRole[]), ...d.roles])];
+      }
+    }
     if (id) {
       const r = await c.query(
         `update clinic_staff_alerts

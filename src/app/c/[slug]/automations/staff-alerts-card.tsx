@@ -9,13 +9,14 @@ import { EmptyState } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import {
-  ALERT_TEMPLATES,
+  DEFAULT_STAFF_ALERTS,
   INSTANT_ALERT_KINDS,
   STAFF_ALERT_KINDS,
   STAFF_ALERT_ROLES,
   alertShape,
+  allowsSeveral,
   followsAppointmentDoctor,
-  type AlertTemplate,
+  followsPatientDoctor,
   type StaffAlert,
   type StaffAlertKind,
   type StaffAlertRole,
@@ -25,17 +26,29 @@ import { BellRing, Pencil, Plus, Trash2 } from "lucide-react";
 
 /** A new row's starting shape, per kind — the same defaults a clinic is seeded with. */
 function blank(kind: StaffAlertKind): Omit<StaffAlert, "id"> & { id?: string } {
+  const seeded = DEFAULT_STAFF_ALERTS.find((a) => a.kind === kind);
   return {
     kind,
-    roles: followsAppointmentDoctor(kind) ? ["doctor"] : ["owner"],
+    roles: seeded?.roles ?? (followsAppointmentDoctor(kind) ? ["doctor"] : ["owner"]),
     // null is a value here, not a gap: "whatever each person set for themselves".
     minutes_before: null,
-    at_hour: alertShape(kind).hour ? 8 : null,
-    weekday: kind === "weekly_summary" ? 7 : null,
-    threshold: kind === "unread_digest" ? 3 : 0,
+    at_hour: alertShape(kind).hour ? (seeded?.at_hour ?? 8) : null,
+    weekday: kind === "weekly_summary" ? (seeded?.weekday ?? 7) : null,
+    threshold: kind === "unread_digest" ? (seeded?.threshold ?? 3) : 0,
     enabled: true,
     sort: 99,
   };
+}
+
+/** "Doctors", or which doctor it is when the alert is about one patient or one appointment. */
+function useRoleLabel() {
+  const { t } = useI18n();
+  return (r: StaffAlertRole, kind: StaffAlertKind) =>
+    r === "doctor" && followsAppointmentDoctor(kind)
+      ? t.automations.doctorOfAppointment
+      : r === "doctor" && followsPatientDoctor(kind)
+        ? t.automations.doctorOfPatient
+        : t.automations.alertRoles[r];
 }
 
 export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffAlert[] }) {
@@ -58,14 +71,9 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
 
   const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
+  const roleLabel = useRoleLabel();
   const summary = (a: StaffAlert) => {
-    const who = a.roles
-      .map((r) =>
-        r === "doctor" && followsAppointmentDoctor(a.kind)
-          ? t.automations.doctorOfAppointment
-          : t.automations.alertRoles[r]
-      )
-      .join("، ");
+    const who = a.roles.map((r) => roleLabel(r, a.kind)).join("، ");
     if (INSTANT_ALERT_KINDS.has(a.kind)) return `${t.automations.instantly} · ${who}`;
     if (a.kind === "appointment_reminder") {
       const lead =
@@ -189,8 +197,11 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
 
       {editing && (
         <AlertEditor
+          key={editing.id ?? "new"}
           slug={slug}
           initial={editing}
+          rows={rows}
+          onSwitch={(row) => setEditing(row)}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -205,15 +216,21 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
 function AlertEditor({
   slug,
   initial,
+  rows,
+  onSwitch,
   onClose,
   onSaved,
 }: {
   slug: string;
   initial: Omit<StaffAlert, "id"> & { id?: string };
+  /** The clinic's alerts, so a new one that already exists opens that one instead. */
+  rows: StaffAlert[];
+  onSwitch: (row: StaffAlert) => void;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const roleLabel = useRoleLabel();
   const { toast } = useToast();
   const [saving, startSaving] = useTransition();
   const [kind, setKind] = useState<StaffAlertKind>(initial.kind);
@@ -224,20 +241,6 @@ function AlertEditor({
   const [threshold, setThreshold] = useState<number>(initial.threshold);
 
   const shape = alertShape(kind);
-
-  /*
-    A template fills the form; it does not save. Somebody picking "For
-    reception → unconfirmed tomorrow" still sees exactly what will be sent, to
-    whom and when, and presses Save themselves.
-  */
-  const applyTemplate = (tpl: AlertTemplate) => {
-    setKind(tpl.kind);
-    setRoles(tpl.roles);
-    setMinutes(tpl.minutes_before ?? null);
-    if (tpl.at_hour != null) setHour(tpl.at_hour);
-    if (tpl.weekday != null) setWeekday(tpl.weekday);
-    setThreshold(tpl.threshold ?? (tpl.kind === "unread_digest" ? 3 : 0));
-  };
 
   const submit = () => {
     if (!roles.length) return toast(t.automations.noRecipients, "error");
@@ -274,46 +277,36 @@ function AlertEditor({
       }
     >
       <div className="grid gap-4">
-        {!initial.id && (
-          <div>
-            <div className="mb-1.5 text-[13px] font-semibold text-ink-900">{t.automations.templates}</div>
-            <div className="grid gap-2.5">
-              {STAFF_ALERT_ROLES.map((forRole) => (
-                <div key={forRole}>
-                  <div className="mb-1 text-[12px] font-medium text-ink-500">
-                    {t.automations.templatesFor[forRole]}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {ALERT_TEMPLATES.filter((tpl) => tpl.forRole === forRole).map((tpl) => (
-                      <button
-                        key={tpl.id}
-                        type="button"
-                        data-template={tpl.id}
-                        onClick={() => applyTemplate(tpl)}
-                        className="rounded-full border border-line bg-surface px-2.5 py-1 text-[12px] font-medium text-ink-700 transition-colors duration-140 hover:border-brand-600 hover:text-brand-700"
-                      >
-                        {t.automations.alertKinds[tpl.kind]}
-                        {tpl.minutes_before ? ` · ${tpl.minutes_before} ${t.automations.minutesUnit}` : ""}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
+        {/*
+          What used to sit here — "templates" for doctors, reception and the
+          admin — listed the same alerts once per role ("Appointment cancelled"
+          three times), and each pick made another row of an alert the clinic
+          already had. The list below is every alert once; who gets it is the
+          next question.
+        */}
         <Field label={t.automations.trigger} hint={t.automations.alertKindHints[kind]}>
           <Select
             value={kind}
             onChange={(e) => {
               const next = e.target.value as StaffAlertKind;
+              // One the clinic already has, and can only have once: that one, to change.
+              const existing = !initial.id && !allowsSeveral(next) ? rows.find((r) => r.kind === next) : undefined;
+              if (existing) {
+                onSwitch(existing);
+                return;
+              }
               setKind(next);
-              // Each kind carries different fields; move to that kind's own
-              // sensible starting point rather than keeping numbers that mean
-              // nothing here.
-              if (next === "unread_digest" && !threshold) setThreshold(3);
-              if (next === "appointment_reminder") setMinutes(null);
+              // Each kind carries different fields; start from that kind's own
+              // defaults — who it is for, and when — rather than numbers that
+              // mean nothing here.
+              if (!initial.id) {
+                const b = blank(next);
+                setRoles(b.roles);
+                setHour(b.at_hour ?? 8);
+                setWeekday(b.weekday ?? 7);
+                setThreshold(b.threshold);
+                setMinutes(null);
+              }
             }}
           >
             {STAFF_ALERT_KINDS.map((k) => (
@@ -345,9 +338,7 @@ function AlertEditor({
                   {/* For a reminder, "doctors" means the one doctor this
                       appointment belongs to — saying so here stops it reading
                       as "every doctor in the clinic, for every appointment". */}
-                  {r === "doctor" && followsAppointmentDoctor(kind)
-                    ? t.automations.doctorOfAppointment
-                    : t.automations.alertRoles[r]}
+                  {roleLabel(r, kind)}
                 </button>
               );
             })}
