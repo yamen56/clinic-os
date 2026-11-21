@@ -755,7 +755,7 @@ export function DocumentDetailClient({
                         </Link>
                       ) : f.fixHint === "clinic" ? (
                         <Link
-                          href={`/c/${slug}/settings`}
+                          href={`/c/${slug}/settings/profile`}
                           className="font-medium text-brand-700 hover:underline"
                         >
                           {t.docs.fixInClinic}

@@ -127,15 +127,15 @@ async function main() {
     check("and the database agrees", (await dbName()) === "Name B", await dbName());
 
     /* ---------------------------------------- settings tab and straight back */
-    await page.goto(`${BASE}/c/${slug}/settings`);
+    await page.goto(`${BASE}/c/${slug}/settings/profile`);
     const addr = page.locator('input[value="OLD-ADDR"]').first();
     await addr.waitFor({ timeout: 60_000 });
     await addr.fill("NEW-ADDR");
     await page.waitForTimeout(150);
     await page.locator(`a[href="/c/${slug}/settings/hours"]`).first().click();
     await page.waitForURL((u) => u.pathname.endsWith("/settings/hours"), { timeout: 60_000 });
-    await page.locator(`a[href="/c/${slug}/settings"]`).first().click();
-    await page.waitForURL((u) => u.pathname === `/c/${slug}/settings`, { timeout: 60_000 });
+    await page.locator(`a[href="/c/${slug}/settings/profile"]`).first().click();
+    await page.waitForURL((u) => u.pathname === `/c/${slug}/settings/profile`, { timeout: 60_000 });
     await page.waitForTimeout(300);
     const values = await page.locator("input").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
     check(

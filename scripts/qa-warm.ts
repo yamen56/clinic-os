@@ -34,6 +34,7 @@ const ROUTES = [
   "/notifications",
   "/signature",
   "/settings",
+  "/settings/profile",
   "/settings/staff",
   "/settings/services",
   "/settings/rooms",

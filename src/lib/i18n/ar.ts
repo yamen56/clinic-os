@@ -2,6 +2,7 @@ import { en, type Dict } from "./en";
 
 export const ar: Dict = {
   common: {
+    moreInfo: "ما هذا؟",
     appName: "كلينيكتي",
     dateDone: "تاريخ التنفيذ",
     changeDate: "تغيير التاريخ",
@@ -1773,7 +1774,7 @@ export const ar: Dict = {
   },
   staff: {
     title: "الموظفون والصلاحيات",
-    sub: "من يعمل في العيادة وما الذي يستطيع كل واحد الوصول إليه بالضبط.",
+    sub: "من يعمل هنا وما يستطيع كلٌّ منهم فتحه.",
     addStaff: "إضافة موظف",
     photoTitle: "الصورة الشخصية",
     photoAdd: "إضافة صورة",
@@ -1830,14 +1831,12 @@ export const ar: Dict = {
     payListSalary: "راتب · {amount} شهريًا",
     payListOnCall: "عند الطلب · {amount} للزيارة",
     accessTitle: "الصلاحيات",
-    accessSub: "ما الذي يستطيع فتحه والقيام به. الوظيفة أعلاه تخص جدولة المواعيد لا الصلاحيات.",
+    accessSub: "ما يستطيع فتحه وفعله.",
     fullAccess: "صلاحية كاملة",
-    fullAccessHint:
-      "كل شيء في العيادة، بما في ذلك أي ميزة تُضاف لاحقًا — لن تحتاج للعودة إلى هنا عند إطلاق أي جديد.",
+    fullAccessHint: "كل شيء، بما فيه الميزات التي تُضاف لاحقاً.",
     partialAccessLabel: "صلاحية محدودة",
     partialAccess: "صلاحية محدودة · {n} من {total} أقسام",
-    accessCustomHint:
-      "اختر قسمًا قسمًا. تفعيل أي قسم يفعّل كل ما فيه — ثم ألغِ ما لا يجب أن يقوم به هذا الشخص.",
+    accessCustomHint: "فعّل ما يستطيع فتحه.",
     accessAreas: {
       daily: "العمل اليومي",
       money: "المال",
@@ -1850,9 +1849,8 @@ export const ar: Dict = {
     accessNeeds: "يحتاج {what} أيضًا",
     accessReset: "إعادة الصلاحيات الافتراضية لهذه الوظيفة",
     accessSectionsOn: "{n} من {total} أقسام مفعّلة",
-    ownerAccessLocked:
-      "مدير العيادة له صلاحية كاملة دائمًا، ولا يمكن تحديدها من هنا حتى لا تُغلق العيادة الباب على حسابها.",
-    selfAccessLocked: "لا يمكنك تغيير صلاحياتك بنفسك — وهذا ما يمنع أن يسحب أحدهم الصلاحية الوحيدة التي يحتاجها ليعيدها.",
+    ownerAccessLocked: "مدير العيادة لديه كل الصلاحيات دائماً.",
+    selfAccessLocked: "لا يمكنك تغيير صلاحياتك بنفسك.",
     deactivate: "إيقاف",
     reactivate: "إعادة التفعيل",
     removedN: "لم يعودوا في العيادة ({n})",
@@ -1866,7 +1864,7 @@ export const ar: Dict = {
     addedEmailed: "هذا البريد له حساب بالفعل — أرسلنا رسالة تُعلم صاحبه بإضافته إلى عيادتك.",
     added: "تمت إضافة الموظف",
     invited: "تم إرسال الدعوة",
-    inviteExplainer: "سيصله بريد فيه رابط ليضع كلمة المرور بنفسه. أنت لا تتعامل مع كلمات مرور أحد.",
+    inviteExplainer: "سيصله بريد ليضع كلمة المرور بنفسه.",
     inviteLinkTitle: "أرسل هذا الرابط",
     inviteLinkBody: "البريد غير مُعدّ بعد، فأرسل رابط الدعوة هذا مباشرة. ينتهي خلال ٧ أيام.",
     resendInvite: "إعادة إرسال الدعوة",

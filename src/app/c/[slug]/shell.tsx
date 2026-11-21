@@ -424,14 +424,20 @@ export function Shell({
   };
   const segmentsOf = (href: string) => href.split(/[?#]/)[0].slice(base.length).split("/").filter(Boolean);
   const here = segmentsOf(pathname);
+  /*
+    A settings section (2026-11-21): /settings is a menu, and a section opened
+    from it gets Back to the menu — on a phone and a tablet, where the menu is
+    not beside it. From lg up the side menu is, so no Back.
+  */
+  const settingsSection = here[0] === "settings" && here.length === 2;
   const isInner =
     here.length > 0 &&
     !(here.length === 1 && here[0] in sections) &&
-    !(here[0] === "settings" && here.length === 2) &&
     // The team chat is a tab of Conversations, not a page inside it.
     !(here[0] === "conversations" && here[1] === "team" && here.length === 2);
   const upHref = here.length > 1 ? `${base}/${here.slice(0, -1).join("/")}` : (visible[0]?.href ?? base);
-  const backHref = useBackHref(upHref, base);
+  const trailBack = useBackHref(upHref, base);
+  const backHref = settingsSection ? `${base}/settings` : trailBack;
   /* Named when it is a section, so the link says where it goes; "Back" for a patient, an invoice. */
   const backLabel = (() => {
     const to = segmentsOf(backHref);
@@ -821,7 +827,7 @@ export function Shell({
         <main className="mx-auto max-w-7xl px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-6">
           {/* From a tablet up there is no top bar, so Back sits over the page title. */}
           {isInner && (
-            <div className="-ms-2 -mt-2 mb-2 max-md:hidden">
+            <div className={`-ms-2 -mt-2 mb-2 max-md:hidden ${settingsSection ? "lg:hidden" : ""}`}>
               <BackLink href={backHref} label={backLabel} />
             </div>
           )}

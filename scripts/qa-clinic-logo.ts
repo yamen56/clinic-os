@@ -74,7 +74,7 @@ async function main() {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
-  const settings = `${BASE}/c/${slug}/settings`;
+  const settings = `${BASE}/c/${slug}/settings/profile`;
   const logoImg = 'img[alt="الشعار"]';
   const sidebarLogo = 'aside img[src*="clinic-logo"]';
 

@@ -1,3 +1,4 @@
+import { CardTitle } from "./hints";
 /*
   Cards are white with a hairline and shadow-1 — never a colored left edge and
   never a gradient. Status belongs in a chip, not the card border.
@@ -53,8 +54,7 @@ export function CardHeader({
     */
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
       <div className="min-w-0">
-        <h3 className="font-display text-base font-semibold text-ink-900">{title}</h3>
-        {sub && <p className="mt-0.5 text-[0.8125rem] text-ink-500">{sub}</p>}
+        <CardTitle title={title} sub={sub} />
       </div>
       {action}
     </div>

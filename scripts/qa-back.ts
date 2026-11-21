@@ -234,6 +234,13 @@ async function main() {
     await page.waitForURL((u) => u.pathname === `${C}/patients`, { timeout: 60000 });
     check(true, "phone: tapping Back lands on the list");
 
+    // Settings is a menu (2026-11-21): a section has Back to it, wherever it was opened from.
+    await go(page, `${C}/settings`);
+    check((await back(page, "header")) === null, "phone: no Back on the settings menu");
+    await go(page, `${C}/settings/hours`);
+    const sb = await back(page, "header");
+    check(sb?.path === `${C}/settings`, "phone: a settings section has Back to the menu", sb?.href);
+
     // The inbox thread: an arrow back to the list.
     await go(page, `${C}/conversations`);
     // A row of the list: a full-width button with a rule under it.

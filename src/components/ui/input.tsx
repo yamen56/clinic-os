@@ -1,7 +1,8 @@
 "use client";
 
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useId, useRef, useState } from "react";
 import { Search } from "lucide-react";
+import { HintToggle, useFoldedHints } from "./hints";
 
 /*
   `text-base md:text-sm` is a mobile fix, not a type choice: iOS zooms the whole
@@ -149,14 +150,23 @@ export function Field({
     that simply wraps its control is associated with it implicitly, which is
     what every one of these was already doing.
   */
+  /* Inside Settings the hint waits behind a "?" beside the name (components/ui/hints). */
+  const folded = useFoldedHints() && !!hint && !error;
+  const [open, setOpen] = useState(false);
+  const hintId = useId();
   return (
     <label className="block">
       <span className="mb-1.5 flex items-baseline gap-1 text-[0.8125rem] font-semibold text-ink-900">
         {label}
         {required && <span className="text-danger">*</span>}
+        {folded && <HintToggle open={open} onToggle={() => setOpen((o) => !o)} controls={hintId} />}
       </span>
       {children}
-      {hint && !error && <span className="mt-1 block text-xs text-ink-500">{hint}</span>}
+      {hint && !error && (
+        <span id={hintId} hidden={folded && !open} className="mt-1 block text-xs text-ink-500">
+          {hint}
+        </span>
+      )}
       {error && <span className="mt-1 block text-xs text-danger">{error}</span>}
     </label>
   );

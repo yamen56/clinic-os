@@ -1,9 +1,7 @@
 import { guardClinic } from "@/lib/guard";
 import { redirect } from "next/navigation";
-import { dictForClinic } from "@/lib/i18n";
-import { PageHeader } from "@/components/ui/card";
-import { SettingsNav } from "./settings-nav";
 import { can } from "@/lib/auth";
+import { SettingsFrame } from "./settings-nav";
 
 export default async function SettingsLayout({
   children,
@@ -15,15 +13,18 @@ export default async function SettingsLayout({
   const { slug } = await params;
   const access = await guardClinic(slug);
   if (!can(access, "settings")) redirect(`/c/${slug}`);
-  const t = await dictForClinic(access.clinic.vocabulary);
 
   return (
-    <>
-      <PageHeader title={t.settings.title} />
-      <div className="grid gap-6 lg:grid-cols-[13rem_1fr]">
-        <SettingsNav slug={slug} caps={access.caps} hasEinvoicing={access.clinic.features.einvoicing} hasDental={!!access.clinic.features.dental} hasFace={!!access.clinic.features.aesthetic} />
-        <div className="min-w-0">{children}</div>
-      </div>
-    </>
+    <SettingsFrame
+      slug={slug}
+      caps={access.caps}
+      has={{
+        einvoicing: access.clinic.features.einvoicing,
+        dental: !!access.clinic.features.dental,
+        face: !!access.clinic.features.aesthetic,
+      }}
+    >
+      {children}
+    </SettingsFrame>
   );
 }

@@ -17,7 +17,7 @@ export type SetupKey = (typeof SETUP_KEYS)[number];
 export type SetupItem = { key: SetupKey; done: boolean; /** Under /c/<slug>. */ path: string };
 
 const PATHS: Record<SetupKey, string> = {
-  details: "/settings",
+  details: "/settings/profile",
   services: "/settings/services",
   team: "/settings/staff",
   whatsapp: "/settings/whatsapp",

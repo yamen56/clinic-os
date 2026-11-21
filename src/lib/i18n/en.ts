@@ -1,5 +1,6 @@
 export const en = {
   common: {
+    moreInfo: "What is this?",
     appName: "Clinicti",
     dateDone: "Date done",
     changeDate: "Change date",
@@ -1829,7 +1830,7 @@ export const en = {
   },
   staff: {
     title: "Staff & access",
-    sub: "Who works in this clinic and exactly what each of them can reach.",
+    sub: "Who works here and what each of them can open.",
     addStaff: "Add staff member",
     photoTitle: "Photo",
     photoAdd: "Add a photo",
@@ -1886,14 +1887,12 @@ export const en = {
     payListSalary: "Salary · {amount} a month",
     payListOnCall: "On call · {amount} a visit",
     accessTitle: "Access",
-    accessSub: "What this person can open and do. The job above decides scheduling, not access.",
+    accessSub: "What they can open and do.",
     fullAccess: "Full access",
-    fullAccessHint:
-      "Everything in the clinic, including features added later — you won't have to come back here when something new ships.",
+    fullAccessHint: "Everything, including features added later.",
     partialAccessLabel: "Limited access",
     partialAccess: "Limited access · {n} of {total} sections",
-    accessCustomHint:
-      "Pick section by section. Switching a section on turns on everything in it — then untick what this person shouldn't do.",
+    accessCustomHint: "Switch on what they can open.",
     accessAreas: {
       daily: "Daily work",
       money: "Money",
@@ -1906,10 +1905,8 @@ export const en = {
     accessNeeds: "Needs {what} as well",
     accessReset: "Reset to this job's defaults",
     accessSectionsOn: "{n} of {total} sections on",
-    ownerAccessLocked:
-      "The clinic admin always has full access. That can't be limited here — otherwise a clinic could lock itself out of its own account.",
-    selfAccessLocked:
-      "You can't change your own access — that's what stops somebody removing the one permission they'd need to put it back.",
+    ownerAccessLocked: "The clinic admin always has full access.",
+    selfAccessLocked: "You can't change your own access.",
     deactivate: "Deactivate",
     reactivate: "Reactivate",
     /* Who is no longer here, out of the way (2026-11-20). */
@@ -1924,7 +1921,7 @@ export const en = {
     addedEmailed: "They already have an account — we emailed them that they were added.",
     added: "Staff member added",
     invited: "Invitation sent",
-    inviteExplainer: "They'll get an email with a link to set their own password. You never handle their credentials.",
+    inviteExplainer: "They'll get an email to set their own password.",
     inviteLinkTitle: "Send this link",
     inviteLinkBody: "Email isn't configured yet, so send this invitation link to them directly. It expires in 7 days.",
     resendInvite: "Resend invitation",
