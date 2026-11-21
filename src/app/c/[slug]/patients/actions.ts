@@ -530,6 +530,29 @@ export async function mergePatientsAction(
     const keep = both.rows.find((r) => r.id === keepId)!;
     const dup = both.rows.find((r) => r.id === duplicateId)!;
 
+    /*
+      Both files in the same automation at once — a welcome flow that started
+      for each when they were added. Moved as they are, the duplicate's run
+      would be a second live run of one flow for one patient, which
+      automation_runs_dedupe refuses, and the whole merge failed with it
+      (found 2026-11-21: qa-phase2's merge). The kept file's run carries on; the
+      duplicate's is closed the way the dedupe migration closed its doubles.
+    */
+    await c.query(
+      `update automation_runs d set status = 'cancelled', finished_at = now(), error = 'duplicate'
+        where d.clinic_id = $3 and d.patient_id = $2 and d.status in ('running', 'waiting')
+          and exists (
+            select 1 from automation_runs k
+             where k.clinic_id = $3 and k.patient_id = $1 and k.automation_id = d.automation_id
+               and k.status in ('running', 'waiting')
+               and k.appointment_id is not distinct from d.appointment_id
+               and k.invoice_id is not distinct from d.invoice_id
+               and k.document_id is not distinct from d.document_id
+               and k.conversation_id is not distinct from d.conversation_id
+          )`,
+      [keepId, duplicateId, access.clinicId]
+    );
+
     // Re-point every child record
     for (const [table, col] of [
       ["patient_notes", "patient_id"],
