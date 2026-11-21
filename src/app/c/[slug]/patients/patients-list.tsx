@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
-import { fmtDate } from "@/lib/dates";
+import { DateTime } from "luxon";
+import { fmtDate, fmtMoney } from "@/lib/dates";
 import { countryFromClinic, formatPhone } from "@/lib/phone";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { addedByLabel, type AddedBy } from "@/lib/added-by";
@@ -19,7 +20,7 @@ import { ReauthPrompt } from "@/components/reauth-prompt";
 import { useToast } from "@/components/ui/toast";
 import { createPatientAction } from "./actions";
 import { splitTyped } from "@/components/appointments/patient-picker";
-import { Users, Plus, Upload, Download, BellOff, Sheet } from "lucide-react";
+import { Users, Plus, Upload, Download, BellOff, Sheet, SlidersHorizontal, X } from "lucide-react";
 
 type Row = {
   id: string;
@@ -34,6 +35,9 @@ type Row = {
   nextAppointment: string | null;
   mutedFromAutomations: boolean;
   addedBy: AddedBy | null;
+  fileNo: number | null;
+  /** Null when this reader may not see it. */
+  owed: number | null;
 };
 
 /** One of the clinic's patient fields (Settings → Fields), as the new-patient form needs it. */
@@ -63,6 +67,8 @@ export function PatientsList({
   openNew,
   canExportAll,
   canImport,
+  canSeeOwes = false,
+  currency,
 }: {
   slug: string;
   /** The first page, rendered on the server and arriving with the document. */
@@ -73,7 +79,7 @@ export function PatientsList({
   /** The clinic's patient fields: labels for the ones asked on adding, and which are required. */
   fields?: FieldDef[];
   tz: string;
-  initialFilters: { q: string; tag: string; source: string; visit: string; optedOut: string };
+  initialFilters: { q: string; tag: string; source: string; visit: string; optedOut: string; owes: string };
   /** Open the new-patient dialog on arrival — the dashboard shortcut. */
   openNew?: boolean;
   /*
@@ -83,6 +89,9 @@ export function PatientsList({
   */
   canExportAll: boolean;
   canImport: boolean;
+  /** Invoices, not filtered to their own work: the Owes column and the "Owe money" preset. */
+  canSeeOwes?: boolean;
+  currency: string;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -175,6 +184,7 @@ export function PatientsList({
       if (f.source) p.set("source", f.source);
       if (f.visit) p.set("visit", f.visit);
       if (f.optedOut) p.set("optedOut", f.optedOut);
+      if (f.owes) p.set("owes", f.owes);
       p.set("cursorTs", last.createdAt);
       p.set("cursorId", last.id);
       const res = await fetch(`/api/c/${slug}/patients/list?${p}`);
@@ -210,6 +220,7 @@ export function PatientsList({
       if (next.source) p.set("source", next.source);
       if (next.visit) p.set("visit", next.visit);
       if (next.optedOut) p.set("optedOut", next.optedOut);
+      if (next.owes) p.set("owes", next.owes);
       router.replace(`/c/${slug}/patients${p.size ? `?${p}` : ""}`);
     }, 300);
   };
@@ -269,6 +280,7 @@ export function PatientsList({
       if (f.source) p.set("source", f.source);
       if (f.visit) p.set("visit", f.visit);
       if (f.optedOut) p.set("optedOut", f.optedOut);
+      if (f.owes) p.set("owes", f.owes);
       const res = await fetch(`/api/c/${slug}/patients/export-all${p.size ? `?${p}` : ""}`);
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
@@ -327,21 +339,57 @@ export function PatientsList({
   const originLabel = (p: { source: string; addedBy: AddedBy | null }) =>
     p.addedBy ? addedByLabel(p.addedBy, t) : sourceLabel(p.source);
 
+  const F = t.patients.filters;
+  const intl = locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB";
+  const money = (n: number) => fmtMoney(n, currency, locale);
+  /*
+    Three presets and one menu (Yamen, 2026-11-16: few options). The presets are
+    the questions the list is opened for — everyone, who owes us, who has not
+    been back — and they replace one another; the menu holds the rest.
+  */
+  const preset = f.owes === "1" ? "owes" : f.visit === "90" ? "notSeen" : f.tag || f.source || f.visit || f.optedOut ? null : "all";
+  const presets: { key: "all" | "owes" | "notSeen"; label: string; next: typeof f }[] = [
+    { key: "all", label: F.all, next: { ...f, owes: "", visit: "", tag: "", source: "", optedOut: "" } },
+    ...(canSeeOwes ? [{ key: "owes" as const, label: F.owes, next: { ...f, owes: "1", visit: "" } }] : []),
+    { key: "notSeen", label: F.notSeen, next: { ...f, visit: "90", owes: "" } },
+  ];
+  /* What the Filters menu has set, as chips that each take one filter off. */
+  const chips: { key: string; label: string; clear: typeof f }[] = [
+    ...(f.tag ? [{ key: "tag", label: f.tag, clear: { ...f, tag: "" } }] : []),
+    ...(f.source ? [{ key: "source", label: sourceLabel(f.source), clear: { ...f, source: "" } }] : []),
+    ...(f.visit && f.visit !== "90"
+      ? [{ key: "visit", label: f.visit === "30" ? F.noVisit30 : F.noVisit180, clear: { ...f, visit: "" } }]
+      : []),
+    ...(f.optedOut ? [{ key: "muted", label: F.mutedOnly, clear: { ...f, optedOut: "" } }] : []),
+  ];
+  const menuCount = [f.tag, f.source, f.visit && f.visit !== "90" ? f.visit : "", f.optedOut].filter(Boolean).length;
+  const filtered = Boolean(f.q || f.tag || f.source || f.visit || f.optedOut || f.owes);
+
+  /*
+    The table's columns, as one template for the header and every row. "Added
+    by" joins on a wide screen only; the money column only for somebody who may
+    see what patients owe (canSeeOwes) — the amount is not in the page at all
+    otherwise.
+  */
+  const cols = ["minmax(0,2.4fr)", "minmax(0,1.2fr)", "minmax(0,1fr)", "minmax(0,1fr)", ...(canSeeOwes ? ["minmax(0,0.9fr)"] : [])];
+  const gridVars = {
+    "--cols": cols.join(" "),
+    "--cols-xl": [...cols, "minmax(0,1.2fr)"].join(" "),
+  } as React.CSSProperties;
+
   return (
     <>
       <PageHeader
-        title={t.patients.title}
+        title={
+          <span className="flex items-baseline gap-2">
+            {t.patients.title}
+            <span className="text-[1rem] font-semibold text-ink-400 tnum" data-patient-total>
+              {total.toLocaleString(intl)}
+            </span>
+          </span>
+        }
         action={
           <>
-            {/* Beside "new patient", because a clinic arriving with a list is
-                looking for it on this screen and nowhere else. */}
-            {/*
-              Two formats, because they answer different questions. The PDF is
-              the record — what a clinic hands to a patient, a lawyer or the next
-              practice. The spreadsheet is the data — what somebody sorts, counts
-              and pivots, and the only one of the two that a clinic with
-              thousands of files can actually get out.
-            */}
             {canExportAll && (
               <>
                 <Button
@@ -377,85 +425,66 @@ export function PatientsList({
           </>
         }
       />
-      {/*
-        Two to a row on a phone. Wrapped at their natural widths the four
-        filters fell into lines of one, two and one, each a different length;
-        a grid gives them equal halves and flush edges on both sides. The grid
-        is phone-only (`max-sm:grid`) rather than `grid` undone at sm, so on a
-        desktop this row carries no grid class for a selector to mistake it by.
-      */}
-      <div className="mb-4 flex flex-wrap gap-2 max-sm:grid max-sm:grid-cols-2">
+
+      {/* Search, the presets, and one Filters menu for everything else. No bare `grid` here: qa-phase2 finds the new-patient name by `.grid input`. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <SearchInput
-          className="w-full max-sm:col-span-2 sm:w-72"
+          className="w-full sm:w-72"
           placeholder={t.patients.searchPlaceholder}
           value={f.q}
           onChange={(e) => apply({ ...f, q: e.target.value })}
         />
-        <Select
-          className="min-w-0 sm:!w-auto"
-          value={f.tag}
-          onChange={(e) => apply({ ...f, tag: e.target.value })}
-        >
-          <option value="">{t.patients.filters.allTags}</option>
-          {allTags.map((tag) => (
-            <option key={tag} value={tag}>
-              {tag}
-            </option>
-          ))}
-        </Select>
-        <Select
-          className="min-w-0 sm:!w-auto"
-          value={f.source}
-          onChange={(e) => apply({ ...f, source: e.target.value })}
-        >
-          <option value="">{t.patients.filters.allSources}</option>
-          {Object.entries(t.patients.sources).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </Select>
-        <Select
-          className="min-w-0 sm:!w-auto"
-          value={f.visit}
-          onChange={(e) => apply({ ...f, visit: e.target.value })}
-        >
-          <option value="">{t.patients.filters.anyVisit}</option>
-          <option value="30">{t.patients.filters.noVisit30}</option>
-          <option value="90">{t.patients.filters.noVisit90}</option>
-          <option value="180">{t.patients.filters.noVisit180}</option>
-        </Select>
-        {/*
-          Two states, not three: "everyone" and "only the muted ones". Nobody
-          asks to see the list minus the handful of people who opted out — that
-          list is the list.
-        */}
-        <Select
-          className="min-w-0 sm:!w-auto"
-          value={f.optedOut}
-          onChange={(e) => apply({ ...f, optedOut: e.target.value })}
-        >
-          <option value="">{t.patients.filters.anyMessaging}</option>
-          <option value="1">{t.patients.filters.mutedOnly}</option>
-        </Select>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-full bg-ink-900/5 p-1" role="group" data-patient-presets>
+            {presets.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => apply(p.next)}
+                aria-pressed={preset === p.key}
+                data-preset={p.key}
+                className={`h-8 touch-manipulation whitespace-nowrap rounded-full px-3 text-[0.8125rem] font-medium transition-colors duration-140 ease-out max-md:h-10 ${
+                  preset === p.key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <FilterMenu
+            label={F.button}
+            count={menuCount}
+            f={f}
+            onChange={apply}
+            allTags={allTags}
+            sources={t.patients.sources as Record<string, string>}
+            words={F}
+          />
+        </div>
       </div>
 
-      {/* Still says what is on screen — but it is no longer a dead end. */}
-      {total > shown.length && (
-        <p className="mb-2 text-[0.8125rem] text-ink-500">
-          {t.patients.showingOf
-            .replace("{shown}", String(shown.length))
-            .replace("{total}", String(total))}
-        </p>
+      {chips.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5" data-filter-chips>
+          {chips.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => apply(c.clear)}
+              className="inline-flex h-8 touch-manipulation items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[0.78125rem] text-ink-700 transition-colors hover:border-line-strong max-md:h-10"
+            >
+              {c.label}
+              <X className="h-3.5 w-3.5 text-ink-400" aria-label={F.clear} />
+            </button>
+          ))}
+        </div>
       )}
 
       {shown.length === 0 ? (
         <EmptyState
           icon={<Users />}
-          title={f.q || f.tag || f.source ? t.common.noResults : t.patients.noPatients}
-          body={f.q || f.tag || f.source ? undefined : t.patients.noPatientsBody}
+          title={filtered ? t.common.noResults : t.patients.noPatients}
           action={
-            !f.q && !f.tag && !f.source ? (
+            !filtered ? (
               <Button onClick={() => setNewOpen(true)}>{t.patients.newPatient}</Button>
             ) : f.q.trim().length >= 2 ? (
               /* Nobody by that name or number: they are new, and what was searched is how they start. */
@@ -473,40 +502,86 @@ export function PatientsList({
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
+        <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card" style={gridVars} data-patient-table>
+          {/* The column names, on a screen wide enough for columns. */}
+          <div className="hidden gap-4 border-b border-line bg-sunken/60 px-5 py-2 text-[0.75rem] font-medium text-ink-500 lg:grid lg:[grid-template-columns:var(--cols)] xl:[grid-template-columns:var(--cols-xl)]" aria-hidden>
+            <span>{F.colPatient}</span>
+            <span>{t.patients.phone}</span>
+            <span>{t.patients.lastVisit}</span>
+            <span>{F.colNext}</span>
+            {canSeeOwes && <span className="text-end">{F.colOwes}</span>}
+            <span className="hidden xl:block">{F.colAddedBy}</span>
+          </div>
           <ul className="divide-y divide-line">
             {shown.map((p) => (
               <li key={p.id}>
                 <Link
                   href={`/c/${slug}/patients/${p.id}`}
-                  className="flex items-center gap-3.5 px-4 py-3 transition-colors hover:bg-sunken"
+                  className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-140 ease-out hover:bg-sunken lg:grid lg:gap-4 lg:px-5 lg:py-2 lg:[grid-template-columns:var(--cols)] xl:[grid-template-columns:var(--cols-xl)]"
                 >
-                  <Avatar name={p.fullName} size={38} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium">{p.fullName}</span>
-                      {p.status === "lead" && <Badge status="pending">{t.patients.statusLead}</Badge>}
-                      {p.mutedFromAutomations && (
-                        <BellOff className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-label={t.patients.automations.muted} />
-                      )}
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.8125rem] text-ink-500">
-                      {p.phone && <span className="num tnum">{formatPhone(p.phone)}</span>}
-                      <span data-added-by={p.addedBy ? "person" : p.source}>{originLabel(p)}</span>
-                      {p.lastVisitAt && (
-                        <span>
-                          {t.patients.lastVisit}: {fmtDate(p.lastVisitAt, tz, locale)}
-                        </span>
-                      )}
+                  {/* Who: the face of the row, and on a phone everything but one chip. */}
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <Avatar name={p.fullName} size={34} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-medium text-ink-900">{p.fullName}</span>
+                        {p.status === "lead" && <Badge status="pending">{t.patients.statusLead}</Badge>}
+                        {p.mutedFromAutomations && (
+                          <BellOff className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-label={t.patients.automations.muted} />
+                        )}
+                      </div>
+                      <div className="mt-0.5 flex min-w-0 items-center gap-x-2 text-[0.75rem] text-ink-500">
+                        {p.phone && <span className="num tnum lg:hidden">{formatPhone(p.phone)}</span>}
+                        {p.fileNo !== null && <span className="tnum text-ink-400">#{p.fileNo}</span>}
+                        {p.tags.slice(0, 2).map((tag) => (
+                          <span key={tag} className="hidden truncate rounded-full bg-brand-100 px-1.5 text-[length:max(11px,0.6875rem)] text-brand-700 sm:inline">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  <div className="hidden flex-wrap justify-end gap-1 sm:flex">
-                    {p.tags.slice(0, 3).map((tag) => (
-                      <Badge key={tag} status="brand">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
+
+                  <span className="hidden text-[0.8125rem] text-ink-700 lg:block">
+                    {p.phone ? <span className="num tnum">{formatPhone(p.phone)}</span> : <Dash />}
+                  </span>
+                  <span className="hidden text-[0.8125rem] text-ink-700 lg:block">
+                    {p.lastVisitAt ? (
+                      <span title={fmtDate(p.lastVisitAt, tz, locale)} suppressHydrationWarning>
+                        {ago(p.lastVisitAt, intl)}
+                      </span>
+                    ) : (
+                      <Dash />
+                    )}
+                  </span>
+                  <span className="hidden lg:block">
+                    {p.nextAppointment ? (
+                      <span className="inline-flex rounded-full bg-st-confirmed-soft px-2 py-0.5 text-[0.75rem] font-medium text-st-confirmed tnum">
+                        {shortDay(p.nextAppointment, tz, intl)}
+                      </span>
+                    ) : (
+                      <Dash />
+                    )}
+                  </span>
+                  {canSeeOwes && (
+                    <span className="hidden text-end text-[0.8125rem] lg:block" data-owed={p.owed ?? 0}>
+                      {p.owed && p.owed > 0 ? <span className="font-semibold text-danger tnum">{money(p.owed)}</span> : <Dash />}
+                    </span>
+                  )}
+                  <span className="hidden truncate text-[0.8125rem] text-ink-500 xl:block" data-added-by={p.addedBy ? "person" : p.source}>
+                    {originLabel(p)}
+                  </span>
+
+                  {/* On a phone: the one thing about them worth a glance — what they owe, else when they are next in. */}
+                  <span className="shrink-0 lg:hidden">
+                    {canSeeOwes && p.owed && p.owed > 0 ? (
+                      <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[0.75rem] font-semibold text-danger tnum">{money(p.owed)}</span>
+                    ) : p.nextAppointment ? (
+                      <span className="rounded-full bg-st-confirmed-soft px-2 py-0.5 text-[0.75rem] font-medium text-st-confirmed tnum">
+                        {shortDay(p.nextAppointment, tz, intl)}
+                      </span>
+                    ) : null}
+                  </span>
                 </Link>
               </li>
             ))}
@@ -514,16 +589,12 @@ export function PatientsList({
         </div>
       )}
 
-      {/*
-        The way out of the first hundred.
-
-        This list used to stop dead at its page size — the footer said "Showing
-        100 of 3,412" and there was nothing to press. On a clinic with years of
-        files that made every record past the hundredth reachable only by
-        already knowing enough about the person to search for them.
-      */}
+      {/* The way out of the first hundred: a count of what is on screen, and the button for the rest. */}
       {shown.length > 0 && hasMore && (
         <div className="mt-3 flex flex-col items-center gap-2">
+          <p className="text-[0.75rem] text-ink-400 tnum">
+            {t.patients.showingOf.replace("{shown}", String(shown.length)).replace("{total}", String(total))}
+          </p>
           <Button variant="outline" onClick={loadMore} loading={loadingMore}>
             {t.patients.loadMore.replace("{n}", String(pageSize))}
           </Button>
@@ -664,3 +735,119 @@ export function PatientsList({
     </>
   );
 }
+
+/** An empty cell: a quiet dash, so a column of blanks still reads as a column. */
+function Dash() {
+  return <span className="text-ink-300">—</span>;
+}
+
+/** "3 weeks ago", in the reader's language — how long since, which is what a last visit is read for. */
+function ago(iso: string, intl: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  const rtf = new Intl.RelativeTimeFormat(intl, { numeric: "auto" });
+  if (days < 1) return rtf.format(0, "day");
+  if (days < 7) return rtf.format(-days, "day");
+  if (days < 60) return rtf.format(-Math.round(days / 7), "week");
+  if (days < 365) return rtf.format(-Math.round(days / 30), "month");
+  return rtf.format(-Math.round(days / 365), "year");
+}
+
+/** "Tue 25 Nov" in the clinic's zone — a coming visit is read by its day. */
+function shortDay(iso: string, tz: string, intl: string): string {
+  return DateTime.fromJSDate(new Date(iso)).setZone(tz).setLocale(intl).toFormat("ccc d LLL");
+}
+
+/**
+ * Everything but the presets, behind one button: tag, source, how long since
+ * the last visit, and muted from messages. Native selects inside, so a phone
+ * gets its own picker. The count on the button says how many are set; the
+ * chips under the search take them off one at a time.
+ */
+function FilterMenu({
+  label,
+  count,
+  f,
+  onChange,
+  allTags,
+  sources,
+  words,
+}: {
+  label: string;
+  count: number;
+  f: { q: string; tag: string; source: string; visit: string; optedOut: string; owes: string };
+  onChange: (next: FilterMenuProps["f"]) => void;
+  allTags: string[];
+  sources: Record<string, string>;
+  words: Record<string, string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={box}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        data-filters-toggle
+        className={buttonClass({ variant: "outline", size: "sm", className: "max-md:h-10" })}
+      >
+        <SlidersHorizontal className="h-4 w-4" />
+        {label}
+        {count > 0 && (
+          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand-600 px-1 text-[length:max(11px,0.6875rem)] font-semibold text-on-brand tnum">
+            {count}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div
+          className="absolute end-0 top-full z-30 mt-2 flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-2 rounded-card border border-line bg-surface p-3 shadow-pop"
+          data-filters-menu
+        >
+          <Select className="min-w-0" value={f.tag} onChange={(e) => onChange({ ...f, tag: e.target.value })}>
+            <option value="">{words.allTags}</option>
+            {allTags.map((tag) => (
+              <option key={tag} value={tag}>
+                {tag}
+              </option>
+            ))}
+          </Select>
+          <Select className="min-w-0" value={f.source} onChange={(e) => onChange({ ...f, source: e.target.value })}>
+            <option value="">{words.allSources}</option>
+            {Object.entries(sources).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </Select>
+          <Select className="min-w-0" value={f.visit} onChange={(e) => onChange({ ...f, visit: e.target.value, owes: "" })}>
+            <option value="">{words.anyVisit}</option>
+            <option value="30">{words.noVisit30}</option>
+            <option value="90">{words.noVisit90}</option>
+            <option value="180">{words.noVisit180}</option>
+          </Select>
+          {/* Two states, not three: nobody asks for the list minus the few who opted out — that list is the list. */}
+          <Select className="min-w-0" value={f.optedOut} onChange={(e) => onChange({ ...f, optedOut: e.target.value })}>
+            <option value="">{words.anyMessaging}</option>
+            <option value="1">{words.mutedOnly}</option>
+          </Select>
+        </div>
+      )}
+    </div>
+  );
+}
+type FilterMenuProps = { f: { q: string; tag: string; source: string; visit: string; optedOut: string; owes: string } };

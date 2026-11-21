@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { isUuid } from "@/lib/uuid";
+import { canSeeOwes } from "@/lib/invoice-scope";
 import {
   patientFilterSql,
   patientListRowsSql,
@@ -54,8 +55,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
     return NextResponse.json({ error: "bad_cursor" }, { status: 400 });
   }
 
-  const { where, values } = patientFilterSql(g.access.clinicId, filters);
-  const sql = patientListRowsSql(where, hasCursor ? values.length + 1 : null);
+  const owesOk = canSeeOwes(g.access);
+  const { where, values } = patientFilterSql(g.access.clinicId, filters, 1, { owes: owesOk && url.searchParams.get("owes") === "1" });
+  const sql = patientListRowsSql(where, hasCursor ? values.length + 1 : null, { owes: owesOk });
   if (hasCursor) values.push(cursorTs, cursorId);
 
   const rows = await inClinic(g.access, async (c) => (await c.query(sql, values)).rows);

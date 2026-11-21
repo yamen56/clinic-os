@@ -9,6 +9,7 @@ import { MAX_EXPORT_RECORDS, loadPatientExportBatch } from "@/lib/patient-export
 import { buildPatientWorkbook, MAX_SHEET_RECORDS } from "@/lib/patient-sheet";
 import { dictForClinic } from "@/lib/i18n";
 import { patientFilterSql, type PatientFilters } from "@/lib/patients";
+import { canSeeOwes } from "@/lib/invoice-scope";
 import { can, hasRecentAuth } from "@/lib/auth";
 
 /**
@@ -99,7 +100,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
 
   /* Count before rendering. The print page applies the identical filter, so
      this is the number that will be in the document. */
-  const { where, values } = patientFilterSql(access.clinicId, filters);
+  // "Owe money" only for somebody who may see it — the list hides the preset from everybody else, and so does the door.
+  const owes = canSeeOwes(access) && url.searchParams.get("owes") === "1";
+  const { where, values } = patientFilterSql(access.clinicId, filters, 1, { owes });
   const total = await inClinic(access, async (c) => {
     const r = await c.query(`select count(*)::int as n from patients p where ${where}`, values);
     return r.rows[0].n as number;
@@ -146,7 +149,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
         action: "patient.export_all",
         entity: "clinic",
         entityId: access.clinicId,
-        detail: { count: total, bytes: buf.length, filters, format: "xlsx" },
+        detail: { count: total, bytes: buf.length, filters: { ...filters, owes }, format: "xlsx" },
       })
     );
 
@@ -165,6 +168,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   const { exp, sig } = printKeyFor(access.clinicId, "patients");
   const qs = new URLSearchParams({ kind: "patients", exp: String(exp), sig });
   for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v);
+  if (owes) qs.set("owes", "1");
 
   let pdf: Buffer;
   try {

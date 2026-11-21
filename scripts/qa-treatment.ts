@@ -240,7 +240,9 @@ async function main() {
     await deskAr.waitForSelector("[data-added-by]", { timeout: 60000 });
     check((await deskAr.locator("[data-added-by]").first().innerText()).includes("واتساب"), "a patient who came by WhatsApp says واتساب");
     await deskAr.goto(`${BASE}/c/${slug}/patients`, { timeout: 120000 });
-    await deskAr.waitForSelector("select", { timeout: 60000 });
+    // The filters live behind one button since 2026-11-21.
+    await deskAr.click("[data-filters-toggle]", { timeout: 60000 });
+    await deskAr.waitForSelector("[data-filters-menu] select", { timeout: 60000 });
     const sources = await deskAr.locator("select option").allInnerTexts();
     check(sources.includes("فريق العيادة") && !sources.includes("الموظفون"), "the source filter offers «فريق العيادة», not «الموظفون»", sources.join(", "));
 

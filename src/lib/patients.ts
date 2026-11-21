@@ -1,3 +1,4 @@
+import { owedSql } from "./invoices";
 import type { PoolClient } from "pg";
 import { normalizePhone, toAsciiDigits, type CountryCode } from "./phone";
 import type { AddedBy } from "./added-by";
@@ -127,7 +128,14 @@ export function patientFilterSql(
   clinicId: string,
   f: PatientFilters,
   /** First placeholder number to use, when the caller already has parameters. */
-  paramOffset = 1
+  paramOffset = 1,
+  /*
+    Filters a caller grants rather than reads from a request. "Owes money"
+    reveals who owes the clinic, so it is not part of PatientFilters — campaign
+    actions take a filter object from the browser, and a field there could be
+    set by anyone. A caller passes it only after canSeeOwes (lib/invoice-scope).
+  */
+  opts: { owes?: boolean } = {}
 ): { where: string; values: unknown[] } {
   const values: unknown[] = [clinicId];
   const n = () => paramOffset + values.length - 1;
@@ -152,6 +160,8 @@ export function patientFilterSql(
     );
   }
   if (f.optedOut === "1") conds.push("p.automation_opt_out");
+  // Has an invoice still to pay, by the one rule for "owed" (lib/invoices owedSql). Covered by invoices_patient_idx.
+  if (opts.owes) conds.push(`exists (select 1 from invoices i where i.patient_id = p.id and i.clinic_id = p.clinic_id and ${owedSql("i")})`);
   return { where: conds.join(" and "), values };
 }
 
@@ -188,13 +198,24 @@ export const PATIENT_PAGE_SIZE = 100;
  * @param cursorParam  placeholder number for the cursor's timestamp; the id
  *                     follows it. Null for the first page.
  */
-export function patientListRowsSql(where: string, cursorParam: number | null): string {
+export function patientListRowsSql(
+  where: string,
+  cursorParam: number | null,
+  /** Whether to add what each patient owes — only for a reader who may see it (canSeeOwes). */
+  opts: { owes?: boolean } = {}
+): string {
   const after =
     cursorParam === null
       ? ""
       : ` and (p.created_at, p.id) < ($${cursorParam}::timestamptz, $${cursorParam + 1}::uuid)`;
   return `select p.id, p.full_name, p.phone_e164, p.tags, p.source, p.status,
-                 p.last_visit_at, p.automation_opt_out,
+                 p.last_visit_at, p.automation_opt_out, p.file_no,${
+                   opts.owes
+                     ? `
+                 (select coalesce(sum(i.total - i.amount_paid), 0) from invoices i
+                   where i.patient_id = p.id and i.clinic_id = p.clinic_id and ${owedSql("i")})::float8 as owed,`
+                     : ""
+                 }
                  /*
                    As text, and this is not cosmetic — it is the difference
                    between paging that works and paging that silently loses
@@ -241,6 +262,10 @@ export type PatientListRow = {
   mutedFromAutomations: boolean;
   /** Who typed them in or imported them; null when no person did. */
   addedBy: AddedBy | null;
+  /** The clinic's own file number, "#1042". */
+  fileNo: number | null;
+  /** What they still owe; null when the reader may not see it. */
+  owed: number | null;
 };
 
 /** The one place a row from `patientListRowsSql` becomes a `PatientListRow`. */
@@ -257,6 +282,8 @@ export function toPatientListRow(r: Record<string, unknown>): PatientListRow {
     nextAppointment: r.next_appointment ? String(r.next_appointment) : null,
     mutedFromAutomations: Boolean(r.automation_opt_out),
     addedBy: (r.added_by as AddedBy | null) ?? null,
+    fileNo: r.file_no === null || r.file_no === undefined ? null : Number(r.file_no),
+    owed: r.owed === undefined || r.owed === null ? null : Number(r.owed),
   };
 }
 

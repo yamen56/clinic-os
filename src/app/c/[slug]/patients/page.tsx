@@ -1,5 +1,6 @@
 import { guardCap } from "@/lib/guard";
 import { can } from "@/lib/auth";
+import { canSeeOwes } from "@/lib/invoice-scope";
 import { inClinic } from "@/lib/clinic-api";
 import {
   patientFilterSql,
@@ -21,6 +22,8 @@ export default async function PatientsPage({
     visit?: string;
     /** "1" — only patients muted from automations. Linked from the flows page. */
     optedOut?: string;
+    /** "1" — only patients with something still to pay; honoured only for a reader who may see it. */
+    owes?: string;
     new?: string;
   }>;
 }) {
@@ -28,10 +31,12 @@ export default async function PatientsPage({
   const sp = await searchParams;
   const access = await guardCap(slug, "patients");
 
-  const { where, values } = patientFilterSql(access.clinicId, sp);
+  const owesOk = canSeeOwes(access);
+  const owes = owesOk && sp.owes === "1";
+  const { where, values } = patientFilterSql(access.clinicId, sp, 1, { owes });
 
   const data = await inClinic(access, async (c) => {
-    const rows = (await c.query(patientListRowsSql(where, null), values)).rows;
+    const rows = (await c.query(patientListRowsSql(where, null, { owes: owesOk }), values)).rows;
 
     /*
       Two round trips, not three.
@@ -92,6 +97,8 @@ export default async function PatientsPage({
       fields={JSON.parse(JSON.stringify(data.fields))}
       canExportAll={can(access, "patients.export") || access.session.user.isSuperAdmin}
       canImport={can(access, "patients.import")}
+      canSeeOwes={owesOk}
+      currency={access.clinic.currency}
       tz={access.clinic.timezone}
       initialFilters={{
         q: sp.q ?? "",
@@ -99,6 +106,7 @@ export default async function PatientsPage({
         source: sp.source ?? "",
         visit: sp.visit ?? "",
         optedOut: sp.optedOut === "1" ? "1" : "",
+        owes: owes ? "1" : "",
       }}
       /* ?new=1 — what the dashboard shortcut and its keyboard accelerator open. */
       openNew={sp.new === "1"}

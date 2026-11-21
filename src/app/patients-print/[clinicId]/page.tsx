@@ -54,7 +54,8 @@ export default async function PatientsPrintPage({
     const exists = (await c.query(`select 1 from clinics where id = $1`, [clinicId])).rows[0];
     if (!exists) return null;
 
-    const { where, values } = patientFilterSql(clinicId, filters);
+    // The export route sets owes only for a member who may see it; this page is reached only with its signed key.
+    const { where, values } = patientFilterSql(clinicId, filters, 1, { owes: sp.owes === "1" });
     /*
       Alphabetical, and capped here as well as at the route. This page is the
       thing that actually does the work, so it is the thing that must not be
@@ -92,6 +93,8 @@ export default async function PatientsPrintPage({
       `${t.patients.source}: ${(t.patients.sources as Record<string, string>)[filters.source] ?? filters.source}`
     );
   if (filters.visit) applied.push(`${t.patients.lastVisit}: ${filters.visit}+`);
+  if (filters.optedOut === "1") applied.push(t.patients.filters.mutedOnly);
+  if (sp.owes === "1") applied.push(t.patients.filters.owes);
 
   const header = (
     <header className="head">

@@ -1013,8 +1013,7 @@ export const en = {
     deletedVisitsN: "{n} deleted",
     lastVisit: "Last visit",
     noPatients: "No patients yet",
-    noPatientsBody: "Add your first patient, or they'll appear here automatically when they message you on WhatsApp.",
-    showingOf: "Showing {shown} of {total} — use search to find a specific patient.",
+    showingOf: "Showing {shown} of {total}",
     loadMore: "Show {n} more",
     loadMoreFailed: "Could not load more. Try again.",
     existingPatient: "A patient with this number already exists — opened their file.",
@@ -1215,6 +1214,17 @@ export const en = {
       noVisit180: "No visit in 6 months",
       anyMessaging: "Everyone",
       mutedOnly: "Muted only",
+      /* The three presets and the menu beside them (2026-11-21). */
+      all: "All",
+      owes: "Owe money",
+      notSeen: "Not seen in 3 months",
+      button: "Filters",
+      clear: "Remove",
+      /* The table's column names. */
+      colPatient: "Patient",
+      colNext: "Next visit",
+      colOwes: "Owes",
+      colAddedBy: "Added by",
     },
     /** The per-patient switch that silences every automation and campaign. */
     automations: {

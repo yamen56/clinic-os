@@ -131,3 +131,13 @@ export function paymentDaySql(access: ClinicAccess, alias: string, nextParam: nu
     params: [access.clinic.timezone],
   };
 }
+
+/**
+ * Whether this member may see what each patient owes — the amount in the
+ * patient list's Owes column and its "Owe money" filter. The same answer as
+ * the balance on a patient's file: Invoices, and not filtered to their own
+ * work (a doctor on their own invoices would otherwise read the clinic's).
+ */
+export function canSeeOwes(access: ClinicAccess): boolean {
+  return can(access, "invoices") && !ownInvoicesOnly(access);
+}
