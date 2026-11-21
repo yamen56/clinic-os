@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession, landingPathFor, safeNextPath } from "@/lib/auth";
+import { landingPathIn } from "@/lib/permissions";
 import { LoginForm } from "./login-form";
 import { LanguageToggle } from "@/components/language-toggle";
 import { BrandMark } from "@/components/brand-mark";
@@ -19,12 +20,21 @@ export default async function LoginPage({
   const next = safeNextPath(sp.next);
   const s = await getSession();
   if (s) {
+    /*
+      Where the sign-in action sends them, for the same reason (see
+      login/actions.ts): setting the session cookie re-renders this page, and
+      this redirect used to win the race to the form's own — landing a member
+      whose dashboard was taken away on /c/<slug> and bouncing them from there.
+    */
+    const only = s.memberships.length === 1 && !s.user.isSuperAdmin ? s.memberships[0] : null;
     redirect(
       next ??
-        landingPathFor({
-          isSuperAdmin: s.user.isSuperAdmin,
-          clinicSlugs: s.memberships.map((m) => m.clinicSlug),
-        })
+        (only
+          ? landingPathIn(only.clinicSlug, only.caps)
+          : landingPathFor({
+              isSuperAdmin: s.user.isSuperAdmin,
+              clinicSlugs: s.memberships.map((m) => m.clinicSlug),
+            }))
     );
   }
   return (
