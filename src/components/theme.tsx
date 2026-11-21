@@ -3,7 +3,7 @@
 import { useLayoutEffect, useSyncExternalStore } from "react";
 import { Moon, Sun, MonitorSmartphone } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
-import { THEME_COOKIE, readThemeCookie, type ThemePref } from "@/lib/theme";
+import { THEME_COOKIE, readThemeCookie, setThemeBar, type ThemePref } from "@/lib/theme";
 
 /*
   One preference, many controls: the sidebar's button, the phone's sheet and
@@ -34,8 +34,10 @@ function resolve(p: ThemePref): "light" | "dark" {
 
 function apply(p: ThemePref) {
   const el = document.documentElement;
-  if (resolve(p) === "dark") el.setAttribute("data-theme", "dark");
+  const mode = resolve(p);
+  if (mode === "dark") el.setAttribute("data-theme", "dark");
   else el.removeAttribute("data-theme");
+  setThemeBar(mode);
 }
 
 /*
@@ -77,7 +79,13 @@ export function ThemeScope() {
     mq.addEventListener("change", follow);
     return () => mq.removeEventListener("change", follow);
   }, [pref]);
-  useLayoutEffect(() => () => document.documentElement.removeAttribute("data-theme"), []);
+  useLayoutEffect(
+    () => () => {
+      document.documentElement.removeAttribute("data-theme");
+      setThemeBar("light");
+    },
+    [],
+  );
   /*
     The compact size goes with the theme: on in the workspace and the agency
     panel, off again on the way out to a patient's page (globals.css, the

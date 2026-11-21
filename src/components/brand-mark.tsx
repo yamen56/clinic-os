@@ -34,7 +34,12 @@ export function BrandLockup({ className = "" }: { className?: string }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/assets/logo-mark-wide.png"
+      /*
+        White on transparency, cut from logo-mark-wide.png (white on a #0b1220
+        plate): the dark theme's sidebar is black, and the plate showed as a
+        navy box on it.
+      */
+      src="/assets/logo-lockup-white.png"
       alt="Clinicti"
       /*
         Width-driven, not height-driven: the asset is 4:1, and the sidebar's
