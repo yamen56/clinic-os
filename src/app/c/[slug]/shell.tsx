@@ -818,7 +818,7 @@ export function Shell({
               </button>
             </div>
           ))}
-        <main className="mx-auto max-w-6xl px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-6">
+        <main className="mx-auto max-w-7xl px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-6">
           {/* From a tablet up there is no top bar, so Back sits over the page title. */}
           {isInner && (
             <div className="-ms-2 -mt-2 mb-2 max-md:hidden">

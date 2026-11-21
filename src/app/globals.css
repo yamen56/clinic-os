@@ -311,6 +311,24 @@
   }
 
   /*
+    Compact on a tablet or a desktop (Yamen, 2026-11-21: "a little smaller so
+    you can see more data"). Everything in the workspace is sized in rem, so
+    one root size moves text, controls and spacing together. A percentage, not
+    15px, so somebody who has raised their browser's text size keeps it.
+
+    Not on a phone: a doctor's buttons stay a thumb's height and inputs stay at
+    16px, below which iOS zooms in on focus. Not on a patient's page either —
+    `data-density` is only set where the theme applies (THEMED_PATH). The
+    breakpoint is unaffected: media queries in rem read the browser default,
+    not this.
+  */
+  @media (width >= 48rem) {
+    :root[data-density="compact"] {
+      font-size: 93.75%;
+    }
+  }
+
+  /*
     Dark: built for a reception desk at night and a doctor's phone in a dim
     room, not as an inversion. Surfaces step up in lightness as they come
     forward — canvas, then the card, then a hover — the way shadows can no

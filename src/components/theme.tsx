@@ -78,6 +78,16 @@ export function ThemeScope() {
     return () => mq.removeEventListener("change", follow);
   }, [pref]);
   useLayoutEffect(() => () => document.documentElement.removeAttribute("data-theme"), []);
+  /*
+    The compact size goes with the theme: on in the workspace and the agency
+    panel, off again on the way out to a patient's page (globals.css, the
+    `data-density` rule). The boot script has usually set it before paint.
+  */
+  useLayoutEffect(() => {
+    const el = document.documentElement;
+    el.setAttribute("data-density", "compact");
+    return () => el.removeAttribute("data-density");
+  }, []);
   return null;
 }
 

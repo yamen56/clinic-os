@@ -77,9 +77,11 @@ export function Avatar({
     <span
       className="font-display relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold"
       style={{
-        width: size,
-        height: size,
-        fontSize: size * 0.38,
+        // `size` is in px at a 16px root; rem, so the circle follows the
+        // workspace's compact density like the text beside it.
+        width: `${size / 16}rem`,
+        height: `${size / 16}rem`,
+        fontSize: `${(size * 0.38) / 16}rem`,
         background: color || "var(--color-brand-100)",
         // Initials sit on a colour the clinic chose, so white is not a safe
         // assumption — a pale brand colour made them invisible.

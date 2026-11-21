@@ -32,6 +32,7 @@ export const THEMED_PATH = /^\/(c|admin)(\/|$)/;
  */
 export const THEME_BOOT_SCRIPT = `(function(){try{
 if(!${THEMED_PATH.toString()}.test(location.pathname))return;
+document.documentElement.setAttribute("data-density","compact");
 var m=document.cookie.match(/(?:^|; )${THEME_COOKIE}=(light|dark|system)/);
 var p=m?m[1]:"light";
 if(p==="system")p=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";

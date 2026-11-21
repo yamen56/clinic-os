@@ -12,6 +12,7 @@ const SUITES = [
   ["unit: Arabic-insensitive search", "scripts/test-search.ts"],
   ["unit: readable ink on a clinic colour", "scripts/test-contrast.ts"],
   ["unit: text sized in rem, so it follows the density", "scripts/qa-no-px-text.ts"],
+  ["density: compact on a tablet or desktop, full size on a phone and a patient's page", "scripts/qa-density.ts"],
   ["phones: country codes and RTL display", "scripts/qa-phone-ui.ts"],
   ["numbers: a price you can actually delete", "scripts/qa-number-fields.ts"],
   ["unit: surviving a database blip", "scripts/qa-db-resilience.ts"],
