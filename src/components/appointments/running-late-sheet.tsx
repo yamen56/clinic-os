@@ -57,7 +57,7 @@ export function RunningLateSheet({
 
   return createPortal(
     <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label={L.title} data-late-sheet>
-      <button type="button" aria-label={t.common.close} onClick={onClose} className="absolute inset-0 bg-night/35 animate-fade-in" />
+      <button type="button" aria-label={t.common.close} onClick={onClose} className="absolute inset-0 bg-night/30 backdrop-blur-[4px] animate-fade-in" />
       <div className="absolute inset-x-0 bottom-0 flex max-h-[88vh] flex-col rounded-t-2xl bg-surface shadow-pop animate-fade-up md:inset-x-auto md:bottom-auto md:left-1/2 md:top-[10vh] md:w-full md:max-w-lg md:-translate-x-1/2 md:rounded-2xl">
         <div className="flex items-start gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0 flex-1">

@@ -848,7 +848,7 @@ function RxSheet({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-4">
       <div
-        className="absolute inset-0 hidden bg-[rgb(11_18_32/0.55)] animate-fade-in sm:block"
+        className="absolute inset-0 hidden bg-[rgb(11_18_32/0.4)] backdrop-blur-[6px] animate-fade-in sm:block"
         onClick={() => close.current()}
       />
       <div

@@ -79,7 +79,7 @@ export function Modal({
       data-latin-island={dir === "ltr" || undefined}
       className={`fixed inset-0 z-50 flex items-end justify-center sm:items-center ${dir === "ltr" ? "font-sans" : ""}`}
     >
-      <div className="absolute inset-0 bg-[rgb(11_18_32/0.55)] animate-fade-in" onClick={onClose} />
+      <div className="absolute inset-0 bg-[rgb(11_18_32/0.4)] backdrop-blur-[6px] animate-fade-in" onClick={onClose} />
       <div
         ref={box}
         role="dialog"

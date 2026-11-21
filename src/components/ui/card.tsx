@@ -1,7 +1,8 @@
 import { CardTitle } from "./hints";
 /*
-  Cards are white with a hairline and shadow-1 — never a colored left edge and
-  never a gradient. Status belongs in a chip, not the card border.
+  Cards are frosted glass (`bg-glass`: the surface let slightly through, over
+  the workspace glow) with a hairline and shadow-1 — never a colored left edge
+  and never a gradient. Status belongs in a chip, not the card border.
 */
 export function Card({
   className = "",
@@ -23,7 +24,7 @@ export function Card({
       shrink gets its own scroller.
     */
     <div
-      className={`min-w-0 rounded-card border border-line bg-surface shadow-card ${
+      className={`min-w-0 rounded-card border border-line bg-glass shadow-card ${
         clickable ? "cursor-pointer transition-shadow duration-220 ease-out hover:shadow-pop" : ""
       } ${className}`}
     >

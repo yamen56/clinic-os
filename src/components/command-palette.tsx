@@ -186,8 +186,8 @@ export function CommandPalette({
 
   return createPortal(
     <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label={t.search.title} data-command-palette>
-      <button type="button" aria-label={t.common.close} onClick={onClose} className="absolute inset-0 bg-night/25 backdrop-blur-[2px] animate-fade-in max-md:hidden" />
-      <div className="relative mx-auto flex h-full w-full flex-col bg-surface animate-fade-in md:mt-[12vh] md:h-auto md:max-h-[70vh] md:max-w-xl md:rounded-xl md:border md:border-line md:shadow-pop">
+      <button type="button" aria-label={t.common.close} onClick={onClose} className="absolute inset-0 bg-night/25 backdrop-blur-[6px] animate-fade-in max-md:hidden" />
+      <div className="relative mx-auto flex h-full w-full flex-col bg-surface animate-fade-in md:mt-[12vh] md:bg-surface/85 md:backdrop-blur-2xl md:backdrop-saturate-150 md:h-auto md:max-h-[70vh] md:max-w-xl md:rounded-xl md:border md:border-line md:shadow-pop">
         <div className="flex items-center gap-2 border-b border-line px-3 pt-[env(safe-area-inset-top)] md:pt-0">
           <Search className="h-5 w-5 shrink-0 text-ink-400" />
           <input

@@ -47,6 +47,16 @@
   --color-paper: #ffffff;
   --color-surface: #ffffff;
   /*
+    Frosted glass (Yamen, 2026-11-21: "use a frosted glass effect in the
+    platform"). A card is the surface let slightly through, over the soft
+    glow `.shell` lays behind the workspace; bars, menus, toasts and the
+    search window are the same fill with a real backdrop blur, because
+    something scrolls or sits behind them. Cards are not blurred: a blur on
+    every card costs a phone dearly, and `backdrop-filter` makes an element
+    the frame for any `position: fixed` window inside it.
+  */
+  --color-glass: rgb(255 255 255 / 0.76);
+  /*
     The working screens' backdrop: the staff workspace and the agency panel.
 
     One step off white so a white card has an edge to stand on. On a white page
@@ -242,7 +252,8 @@
     value into each utility: a literal here could not be re-pointed for dark,
     where the same alpha on night is no shadow at all.
   */
-  --shadow-card: 0 1px 2px var(--sh-a), 0 1px 1px var(--sh-b);
+  /* The inset line is glass catching the light along its top edge. */
+  --shadow-card: 0 1px 2px var(--sh-a), 0 1px 1px var(--sh-b), inset 0 1px 0 var(--sh-edge);
   --shadow-pop: 0 12px 32px var(--sh-c), 0 4px 12px var(--sh-b);
   --shadow-modal: 0 24px 64px var(--sh-d), 0 8px 20px var(--sh-a);
 
@@ -307,6 +318,7 @@
     --sh-b: rgb(11 18 32 / 0.045);
     --sh-c: rgb(11 18 32 / 0.09);
     --sh-d: rgb(11 18 32 / 0.14);
+    --sh-edge: rgb(255 255 255 / 0.6);
     --focus-ring: rgb(125 141 164 / 0.45);
   }
 
@@ -347,50 +359,53 @@
     --sh-b: rgb(0 0 0 / 0.24);
     --sh-c: rgb(0 0 0 / 0.42);
     --sh-d: rgb(0 0 0 / 0.55);
+    --sh-edge: rgb(255 255 255 / 0.06);
     --focus-ring: rgb(255 255 255 / 0.32);
 
     /*
-      Mostly black, still Clinicti (Yamen, 2026-11-21). First "decrease the
-      dark blue and add more black", then, of the all-black result: the navy is
-      the identity — "use black but not fully". So the sidebar keeps the brand
-      navy exactly, as in light, and everything you work on is black with a
-      breath of that navy in it: each neutral sits 40% of the way (in OKLab)
-      from a neutral near-black toward the old all-navy theme. Cards stand off
-      the page at 1.11:1, as the navy ones did at 1.12.
+      Black page, navy things on it (Yamen, 2026-11-21, after three passes:
+      "decrease the dark blue, add more black"; then "the dark blue is the
+      identity, use black but not fully"; then, of a black-and-gray result,
+      "use more [navy] in the actual screens, specially instead of that dark
+      gray"). So the page is near-black and everything that sits on it — cards,
+      panels, menus, the gray steps — is the Clinicti navy, lighter than the
+      sidebar's #0b1220 so a card comes forward from both: card on page
+      1.15:1, card on sidebar 1.06:1.
     */
-    --color-paper: #07090d;
-    --color-surface: #13171e;
-    --color-canvas: #07090d;
-    --color-subtle: #171a22;
-    --color-sunken: #1c1f28;
-    --color-ink-900: #ebecf0;
-    --color-ink-700: #c3c6ce;
-    --color-ink-500: #989da8;
-    --color-ink-400: #737783;
-    --color-ink-300: #474b56;
-    --color-line: #272c35;
-    --color-line-strong: #373c47;
-    --color-graphite: #d7d9df;
+    --color-paper: #04060b;
+    --color-surface: #0f192b;
+    --color-canvas: #04060b;
+    --color-subtle: #132036;
+    --color-sunken: #17253d;
+    --color-ink-900: #e9edf3;
+    --color-ink-700: #c0c8d4;
+    --color-ink-500: #94a0b0;
+    --color-ink-400: #6f7b8c;
+    --color-ink-300: #465163;
+    --color-line: #1f2e47;
+    --color-line-strong: #2f405d;
+    --color-graphite: #d5dbe4;
+    --color-glass: rgb(15 25 43 / 0.74);
 
     /*
       The primary inverts: a white fill with navy ink, the way the mark itself
-      is white on navy. 50–500 are the same grays, sunk for night.
+      is white on navy. 50–500 are navy steps, lifted for night.
     */
-    --color-brand-50: #171a22;
-    --color-brand-100: #1f232c;
-    --color-brand-200: #292e38;
-    --color-brand-300: #383d49;
-    --color-brand-400: #575b67;
-    --color-brand-500: #a4a8b3;
-    --color-brand-600: #f0f1f4;
-    --color-brand-700: #ebecf0;
-    --color-brand-800: #f4f5f7;
+    --color-brand-50: #132036;
+    --color-brand-100: #1a2942;
+    --color-brand-200: #243552;
+    --color-brand-300: #334563;
+    --color-brand-400: #52627d;
+    --color-brand-500: #a3adbb;
+    --color-brand-600: #eef1f6;
+    --color-brand-700: #e9edf3;
+    --color-brand-800: #f3f5f8;
     --color-brand-900: #ffffff;
-    --color-brand-hover: #d4d7dd;
+    --color-brand-hover: #d3d9e2;
     --color-on-brand: #0b1220;
 
-    --color-chart: #a4a8b3;
-    --color-chart-soft: #1f232c;
+    --color-chart: #a3adbb;
+    --color-chart-soft: #1a2942;
     --color-cyan-ink: #6cc6df;
     --color-deep-blue: #9db8e8;
 
@@ -405,7 +420,7 @@
     --color-st-confirmed: #4cc38a;
     --color-st-confirmed-soft: #12291f;
     --color-st-completed: #c9ced6;
-    --color-st-completed-soft: #24262d;
+    --color-st-completed-soft: #1d2738;
     --color-st-noshow: #e0a84e;
     --color-st-noshow-soft: #2e2414;
     --color-st-cancelled: #ef7a7a;
@@ -443,6 +458,7 @@
     color-scheme: light;
     --color-paper: #ffffff;
     --color-surface: #ffffff;
+    --color-glass: rgb(255 255 255 / 0.76);
     --color-subtle: #f7f8fa;
     --color-sunken: #f0f3f7;
     --color-ink-900: #141821;
@@ -501,6 +517,33 @@
   */
   .shell {
     --sb: 248px;
+    /*
+      The glow the glass is held up against: wide, soft pools of the brand's
+      own grays (navy at night), fixed to the window so the cards slide over
+      it. iOS ignores `fixed` and lets it scroll, which reads the same.
+    */
+    --glow-a: rgb(186 197 213 / 0.75);
+    --glow-b: rgb(164 177 195 / 0.45);
+    --glow-c: rgb(214 221 231 / 0.7);
+    /* The far side from the sidebar, which would otherwise sit over the brightest pool. */
+    --glow-x: 0%;
+    background-image:
+      radial-gradient(60rem 36rem at var(--glow-x) -10%, var(--glow-a), transparent 70%),
+      radial-gradient(52rem 32rem at calc(100% - var(--glow-x)) 110%, var(--glow-b), transparent 70%),
+      radial-gradient(40rem 26rem at 50% 45%, var(--glow-c), transparent 70%);
+    background-attachment: fixed;
+  }
+  [dir="ltr"] .shell {
+    --glow-x: 100%;
+  }
+  :root[data-theme="dark"] .shell {
+    --glow-a: rgb(30 52 96 / 0.5);
+    --glow-b: rgb(19 34 64 / 0.65);
+    --glow-c: rgb(15 25 43 / 0.45);
+  }
+  /* The welcome at night is the brand navy, so it stands off the black page. */
+  :root[data-theme="dark"] .welcome-art {
+    background-color: var(--color-night);
   }
   .shell[data-sidebar="collapsed"] {
     --sb: 72px;
@@ -912,4 +955,19 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
       radial-gradient(26rem 10rem at 60% 120%, rgb(203 213 225 / 0.42), rgb(148 163 184 / 0.14) 45%, transparent 72%),
       radial-gradient(14rem 7rem at 20% 105%, rgb(251 191 36 / 0.1), transparent 70%);
   }
+}
+
+/*
+  At night a faint ink tint (white at 4–8%) is gray on the black page — the
+  trays behind segmented controls, the count pills, the quiet chips. Yamen
+  wanted navy there, not "that dark gray" (2026-11-21), so in dark those
+  tints are the navy step instead. In the utilities layer, beside the classes
+  it re-points: a components-layer rule would lose to them whatever its
+  specificity.
+*/
+@layer utilities {
+  :root[data-theme="dark"] .bg-ink-900\/4 { background-color: rgb(26 41 66 / 0.5); }
+  :root[data-theme="dark"] .bg-ink-900\/5 { background-color: rgb(26 41 66 / 0.6); }
+  :root[data-theme="dark"] .bg-ink-900\/6 { background-color: rgb(26 41 66 / 0.7); }
+  :root[data-theme="dark"] .bg-ink-900\/8 { background-color: rgb(26 41 66 / 0.85); }
 }

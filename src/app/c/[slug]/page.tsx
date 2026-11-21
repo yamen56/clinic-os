@@ -718,7 +718,7 @@ function Figure({ card }: { card: FigureCard }) {
   const Icon = card.icon;
   const body = (
     <div
-      className="flex h-full flex-col rounded-card border border-line bg-surface p-4 shadow-card transition-[border-color,box-shadow,transform] duration-140 ease-out group-hover:-translate-y-px group-hover:border-line-strong group-hover:shadow-pop"
+      className="flex h-full flex-col rounded-card border border-line bg-glass p-4 shadow-card transition-[border-color,box-shadow,transform] duration-140 ease-out group-hover:-translate-y-px group-hover:border-line-strong group-hover:shadow-pop"
       data-figure={card.key}
     >
       <div className="flex items-center gap-2">

@@ -419,7 +419,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
 
   return createPortal(
     <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label={T.recordTitle} data-record-sheet={appointmentId ?? "day"}>
-      <button type="button" aria-label={t.common.close} onClick={store.closeSheet} className="absolute inset-0 bg-night/35 animate-fade-in" />
+      <button type="button" aria-label={t.common.close} onClick={store.closeSheet} className="absolute inset-0 bg-night/30 backdrop-blur-[4px] animate-fade-in" />
       <div className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-2xl bg-surface shadow-pop animate-fade-up md:inset-x-auto md:bottom-auto md:left-1/2 md:top-[6vh] md:max-h-[88vh] md:w-full md:max-w-xl md:-translate-x-1/2 md:rounded-2xl">
         <div className="flex items-center gap-1 border-b border-line py-3 pe-5 ps-2">
           {/* Back, where a thumb expects it: the file is right behind the sheet. */}

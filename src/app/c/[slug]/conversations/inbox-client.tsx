@@ -693,7 +693,7 @@ export function InboxClient({
 
       {/* ------ Patient panel ------ */}
       {thread && panelOpen && (
-        <button type="button" aria-label={t.common.close} onClick={() => setPanelOpen(false)} className="fixed inset-0 z-40 bg-night/25 animate-fade-in xl:hidden" />
+        <button type="button" aria-label={t.common.close} onClick={() => setPanelOpen(false)} className="fixed inset-0 z-40 bg-night/25 backdrop-blur-[3px] animate-fade-in xl:hidden" />
       )}
       {thread && (
         <div
