@@ -66,7 +66,7 @@ export function FeaturePicker({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-[13px] text-ink-500 tnum">
+        <span className="text-[0.8125rem] text-ink-500 tnum">
           {on === counted.length
             ? t.admin.featuresAll
             : t.admin.featuresOf
@@ -78,7 +78,7 @@ export function FeaturePicker({
             type="button"
             disabled={disabled}
             onClick={() => setAll(true)}
-            className="rounded-full px-2.5 py-1 text-[12px] font-medium text-ink-500 hover:bg-ink-900/5 hover:text-ink-900 disabled:opacity-50"
+            className="rounded-full px-2.5 py-1 text-[0.75rem] font-medium text-ink-500 hover:bg-ink-900/5 hover:text-ink-900 disabled:opacity-50"
           >
             {t.common.all}
           </button>
@@ -86,7 +86,7 @@ export function FeaturePicker({
             type="button"
             disabled={disabled}
             onClick={() => setAll(false)}
-            className="rounded-full px-2.5 py-1 text-[12px] font-medium text-ink-500 hover:bg-ink-900/5 hover:text-ink-900 disabled:opacity-50"
+            className="rounded-full px-2.5 py-1 text-[0.75rem] font-medium text-ink-500 hover:bg-ink-900/5 hover:text-ink-900 disabled:opacity-50"
           >
             {t.common.none}
           </button>
@@ -107,7 +107,7 @@ export function FeaturePicker({
                 className={`h-4 w-4 shrink-0 ${value[f] ? "text-brand-700" : "text-ink-300"}`}
                 strokeWidth={1.75}
               />
-              <span className="flex-1 text-[13px] font-medium">{t.caps[f]}</span>
+              <span className="flex-1 text-[0.8125rem] font-medium">{t.caps[f]}</span>
               <Toggle
                 checked={value[f]}
                 disabled={disabled}
@@ -121,7 +121,7 @@ export function FeaturePicker({
 
       {/* The sentence that makes the switch usable. Without it, nobody dares
           turn one off on a clinic that has real work in it. */}
-      <p className="mt-2 text-[12px] leading-relaxed text-ink-400">{t.admin.featuresHint}</p>
+      <p className="mt-2 text-[0.75rem] leading-relaxed text-ink-400">{t.admin.featuresHint}</p>
 
       {/* One field, so the whole map survives a plain form POST — see
           featureListSchema in the admin actions. */}

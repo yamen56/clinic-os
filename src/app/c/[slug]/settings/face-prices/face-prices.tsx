@@ -119,15 +119,15 @@ export function FacePrices({
   return (
     <div className="grid gap-4" data-face-prices>
       <div>
-        <h2 className="text-[17px] font-semibold">{P.title}</h2>
-        <p className="mt-1 max-w-3xl text-[13px] text-ink-500">{P.sub}</p>
+        <h2 className="text-[1.0625rem] font-semibold">{P.title}</h2>
+        <p className="mt-1 max-w-3xl text-[0.8125rem] text-ink-500">{P.sub}</p>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
           <Button size="sm" variant="outline" className="min-h-10" onClick={() => setAdding(true)} data-face-prices-add>
             <Plus className="h-4 w-4" />
             {P.addTreatment}
           </Button>
           {stockHref && (
-            <Link href={stockHref} className="text-[13px] font-semibold text-brand-700 hover:underline" data-face-prices-stock>
+            <Link href={stockHref} className="text-[0.8125rem] font-semibold text-brand-700 hover:underline" data-face-prices-stock>
               {P.stockLink}
             </Link>
           )}
@@ -160,7 +160,7 @@ export function FacePrices({
         return (
           <Card key={f} className="overflow-hidden">
             <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-              <FamilyTag family={f} label={P.families[f]} className="h-6 text-[12.5px]" />
+              <FamilyTag family={f} label={P.families[f]} className="h-6 text-[0.78125rem]" />
             </div>
             <ul className="divide-y divide-line">
               {list.map((x) => {
@@ -197,25 +197,25 @@ export function FacePrices({
                                   data-face-swatch={c}
                                 />
                               ))}
-                              <button type="button" onClick={() => paint(x, null)} className="col-span-6 mt-1 min-h-8 rounded-ctl text-[12.5px] font-semibold text-brand-700 hover:bg-sunken" data-face-swatch-reset>
+                              <button type="button" onClick={() => paint(x, null)} className="col-span-6 mt-1 min-h-8 rounded-ctl text-[0.78125rem] font-semibold text-brand-700 hover:bg-sunken" data-face-swatch-reset>
                                 {P.familyColor}
                               </button>
                             </span>
                           )}
                         </span>
                         <div className="min-w-0">
-                        <div className="text-[13.5px] font-semibold" dir="ltr">
+                        <div className="text-[0.84375rem] font-semibold" dir="ltr">
                           {x.en} <span className="font-normal text-ink-500">· {x.ar}</span>
                         </div>
                         {u && (
-                          <div className="text-[12px] text-ink-500 tnum">
+                          <div className="text-[0.75rem] text-ink-500 tnum">
                             {P.used.replace("{n}", String(u.used))}
                             {u.unpriced > 0 && <span className="text-danger"> · {P.unpriced.replace("{n}", String(u.unpriced))}</span>}
                           </div>
                         )}
                         </div>
                       </div>
-                      <span className="text-[12.5px] text-ink-500">{P.pricedBy[x.pricedBy]}</span>
+                      <span className="text-[0.78125rem] text-ink-500">{P.pricedBy[x.pricedBy]}</span>
                       <span className="flex items-center gap-1.5">
                         <PriceBox
                           value={base?.price ?? null}
@@ -224,7 +224,7 @@ export function FacePrices({
                           hook={x.key}
                           onSave={(v) => save(x.key, null, v)}
                         />
-                        <span className="text-[12.5px] text-ink-500">{currency}</span>
+                        <span className="text-[0.78125rem] text-ink-500">{currency}</span>
                       </span>
                       <button
                         type="button"
@@ -245,7 +245,7 @@ export function FacePrices({
                             const mine = priceOf(x.key, v.id);
                             return (
                               <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1" data-face-variant-price={`${x.key}:${v.name}`}>
-                                <span className="min-w-0 flex-[1_1_12rem] text-[13px]" dir="auto">
+                                <span className="min-w-0 flex-[1_1_12rem] text-[0.8125rem]" dir="auto">
                                   {P.kind.replace("{kind}", locale === "ar" ? v.nameAr || v.name : v.name)}
                                 </span>
                                 <span className="flex items-center gap-1.5">
@@ -256,7 +256,7 @@ export function FacePrices({
                                     hook={`${x.key}:${v.id}`}
                                     onSave={(val) => save(x.key, v.id, val)}
                                   />
-                                  <span className="text-[12.5px] text-ink-500">{currency}</span>
+                                  <span className="text-[0.78125rem] text-ink-500">{currency}</span>
                                 </span>
                               </li>
                             );
@@ -269,7 +269,7 @@ export function FacePrices({
                           const mine = priceOf(x.key, p.id);
                           return (
                             <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1" data-face-product-price={`${x.key}:${p.id}`}>
-                              <span className="min-w-0 flex-[1_1_12rem] text-[13px]" dir="auto">
+                              <span className="min-w-0 flex-[1_1_12rem] text-[0.8125rem]" dir="auto">
                                 {P.withProduct.replace("{product}", p.name)}
                                 {p.company && <span className="text-ink-500"> · {p.company}</span>}
                               </span>
@@ -281,7 +281,7 @@ export function FacePrices({
                                   hook={`${x.key}:${p.id}`}
                                   onSave={(v) => save(x.key, p.id, v)}
                                 />
-                                <span className="text-[12.5px] text-ink-500">{currency}</span>
+                                <span className="text-[0.78125rem] text-ink-500">{currency}</span>
                               </span>
                             </li>
                           );
@@ -298,14 +298,14 @@ export function FacePrices({
       {removedList.length > 0 && (
         <Card className="overflow-hidden" data-face-removed={removedList.length}>
           <div className="border-b border-line px-4 py-2.5">
-            <div className="text-[13.5px] font-semibold">{P.removedTitle}</div>
-            <div className="text-[12px] text-ink-500">{P.removedHint}</div>
+            <div className="text-[0.84375rem] font-semibold">{P.removedTitle}</div>
+            <div className="text-[0.75rem] text-ink-500">{P.removedHint}</div>
           </div>
           <ul className="divide-y divide-line">
             {removedList.map((x) => (
               <li key={x.key} className="flex items-center gap-3 px-4 py-2" data-face-removed-row={x.key}>
                 <span className="h-3 w-3 shrink-0 rounded-full opacity-60" style={{ background: treatmentColor(x, x.family) }} aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink-700" dir="ltr">
+                <span className="min-w-0 flex-1 truncate text-[0.84375rem] text-ink-700" dir="ltr">
                   {x.en} <span className="text-ink-500">· {x.ar}</span>
                 </span>
                 <Button size="sm" variant="outline" className="min-h-9" onClick={() => remove(x, false)} data-face-bring-back={x.key}>

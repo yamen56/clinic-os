@@ -151,8 +151,8 @@ export function ReadyToBillDesk({
             data-desk-expand={g.patientId}
           >
             <span className="min-w-0">
-              <span className="block truncate text-[14px] font-semibold">{g.name}</span>
-              <span className="block truncate text-[12px] text-ink-500">
+              <span className="block truncate text-[0.875rem] font-semibold">{g.name}</span>
+              <span className="block truncate text-[0.75rem] text-ink-500">
                 {g.lines.length === 1 ? I.treatmentsOne : I.treatmentsN.replace("{n}", String(g.lines.length))} · {fmtDate(g.lastAt, tz, locale)}
               </span>
             </span>
@@ -201,12 +201,12 @@ export function ReadyToBillDesk({
                     aria-label={l.description}
                   />
                   <span className={`min-w-0 flex-1 ${on ? "" : "text-ink-500"}`}>
-                    <span className="block text-[13px] font-medium" dir="auto">
+                    <span className="block text-[0.8125rem] font-medium" dir="auto">
                       {l.description}
                     </span>
                     {/* Which chart it came from, and who did it — under the words, so a phone gives the words the line. */}
-                    <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-500">
-                      <span className="inline-flex h-[18px] items-center rounded-md border border-line-strong bg-sunken px-1.5 text-[11px] font-semibold text-ink-700">
+                    <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[0.75rem] text-ink-500">
+                      <span className="inline-flex h-[18px] items-center rounded-md border border-line-strong bg-sunken px-1.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-700">
                         {l.chart === "general" ? I.chartGeneral : l.chart === "aesthetic" ? I.chartFace : I.chartDental}
                       </span>
                       {l.doctorName}
@@ -214,9 +214,9 @@ export function ReadyToBillDesk({
                   </span>
                   <span className="shrink-0 text-end">
                     {l.priced ? (
-                      <span className={`text-[13.5px] font-semibold tnum ${on ? "" : "text-ink-500 line-through"}`}>{money(amountOf(l))}</span>
+                      <span className={`text-[0.84375rem] font-semibold tnum ${on ? "" : "text-ink-500 line-through"}`}>{money(amountOf(l))}</span>
                     ) : (
-                      <span className="block text-[12px] font-semibold text-st-pending">
+                      <span className="block text-[0.75rem] font-semibold text-st-pending">
                         {I.noPriceYet}
                         {priceHref && (
                           <Link href={priceHref} className="ms-1.5 text-brand-700 hover:underline">
@@ -240,7 +240,7 @@ export function ReadyToBillDesk({
               );
             })}
             <li className="border-t border-line px-3 py-2">
-              <Link href={`/c/${slug}/patients/${g.patientId}?tab=invoices`} className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand-700 hover:underline">
+              <Link href={`/c/${slug}/patients/${g.patientId}?tab=invoices`} className="inline-flex items-center gap-1 text-[0.78125rem] font-semibold text-brand-700 hover:underline">
                 {I.openFile}
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </Link>
@@ -264,10 +264,10 @@ export function ReadyToBillDesk({
           data-ready-toggle
         >
           <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-semibold">{I.readyToBill}</span>
-            {open && <span className="mt-0.5 block text-[13px] text-ink-500">{I.deskSub}</span>}
+            <span className="block text-[0.9375rem] font-semibold">{I.readyToBill}</span>
+            {open && <span className="mt-0.5 block text-[0.8125rem] text-ink-500">{I.deskSub}</span>}
           </span>
-          <span className="shrink-0 rounded-full bg-sunken px-3 py-1 text-[12.5px] font-semibold text-ink-700 tnum" data-desk-total={Math.round(total * 100) / 100}>
+          <span className="shrink-0 rounded-full bg-sunken px-3 py-1 text-[0.78125rem] font-semibold text-ink-700 tnum" data-desk-total={Math.round(total * 100) / 100}>
             {live.length === 1 ? I.deskPatientsOne : I.deskPatients.replace("{n}", String(live.length))} · {money(total)}
           </span>
           <ChevronDown className={`h-4.5 w-4.5 shrink-0 text-ink-400 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -276,7 +276,7 @@ export function ReadyToBillDesk({
           <>
             <ul className="divide-y divide-line border-t border-line">{(all ? live : live.slice(0, SHOWN)).map(group)}</ul>
             {live.length > SHOWN && !all && (
-              <button type="button" onClick={() => setAll(true)} className="block w-full border-t border-line px-4 py-2.5 text-start text-[13px] font-medium text-brand-700 hover:bg-sunken sm:px-5">
+              <button type="button" onClick={() => setAll(true)} className="block w-full border-t border-line px-4 py-2.5 text-start text-[0.8125rem] font-medium text-brand-700 hover:bg-sunken sm:px-5">
                 {I.showAllN.replace("{n}", String(live.length))}
               </button>
             )}

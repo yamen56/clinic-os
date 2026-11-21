@@ -38,7 +38,7 @@ function IssueList({ issues }: { issues: Issue[] }) {
       {issues.map((i, n) => (
         <li
           key={n}
-          className={`rounded-md px-2.5 py-1.5 text-[12px] ${
+          className={`rounded-md px-2.5 py-1.5 text-[0.75rem] ${
             i.severity === "error" ? "bg-danger-soft text-danger" : "bg-st-noshow-soft text-st-noshow"
           }`}
         >
@@ -103,8 +103,8 @@ export function TriggerInspector({
         </span>
         <div className="min-w-0 flex-1">
           <div className="eyebrow">{f.when}</div>
-          <div className="text-[15px] font-semibold">{sum.title}</div>
-          <p className="mt-0.5 text-[12px] text-ink-500">{(f.triggerHints as Record<string, string>)[trigger]}</p>
+          <div className="text-[0.9375rem] font-semibold">{sum.title}</div>
+          <p className="mt-0.5 text-[0.75rem] text-ink-500">{(f.triggerHints as Record<string, string>)[trigger]}</p>
         </div>
       </div>
       <Button variant="outline" size="sm" onClick={onChangeTrigger}>
@@ -178,7 +178,7 @@ export function TriggerInspector({
             onChange={(action) => set({ action })}
             options={(["book", "invite"] as const).map((a) => ({ value: a, label: f.sessionAction[a] }))}
           />
-          <p className="text-[12px] leading-snug text-ink-500">{f.sessionActionHint[config.action === "invite" ? "invite" : "book"]}</p>
+          <p className="text-[0.75rem] leading-snug text-ink-500">{f.sessionActionHint[config.action === "invite" ? "invite" : "book"]}</p>
           <Field label={f.daysAheadOfSession}>
             <NumberInput dir="ltr" min={0} max={30} value={Number(config.days_ahead ?? 7)} fallback={7} onChange={(v) => set({ days_ahead: Math.round(v) })} />
           </Field>
@@ -215,7 +215,7 @@ export function TriggerInspector({
             />
           </Section>
           {list("treatments").length > 0 && (
-            <p className="flex flex-wrap items-center gap-2 text-[12px] text-ink-500" data-trigger-treatments>
+            <p className="flex flex-wrap items-center gap-2 text-[0.75rem] text-ink-500" data-trigger-treatments>
               {f.someTreatments.replace("{n}", String(list("treatments").length))}
               <button type="button" className="font-semibold text-brand-700 hover:underline" onClick={() => set({ treatments: [] })}>
                 {f.anyOfThem}
@@ -301,8 +301,8 @@ export function StepInspector({
           <Icon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-semibold">{(t.automations.steps as Record<string, string>)[node.type]}</div>
-          <p className="mt-0.5 text-[12px] text-ink-500">{(f.stepHints as Record<string, string>)[node.type]}</p>
+          <div className="text-[0.9375rem] font-semibold">{(t.automations.steps as Record<string, string>)[node.type]}</div>
+          <p className="mt-0.5 text-[0.75rem] text-ink-500">{(f.stepHints as Record<string, string>)[node.type]}</p>
         </div>
         <div className="flex shrink-0 gap-1">
           <button type="button" title={f.duplicate} aria-label={f.duplicate} onClick={onDuplicate} className="grid h-8 w-8 place-items-center rounded-md text-ink-500 hover:bg-sunken">
@@ -406,7 +406,7 @@ export function StepInspector({
           <Section title={f.answers} hint={f.answersHint}>
             <ReplyOptionsEditor options={(cfg.options as ReplyOption[]) ?? []} onChange={onReplyOptions} />
           </Section>
-          <p className="rounded-md bg-sunken px-2.5 py-2 text-[12px] leading-snug text-ink-500">{f.replyTip}</p>
+          <p className="rounded-md bg-sunken px-2.5 py-2 text-[0.75rem] leading-snug text-ink-500">{f.replyTip}</p>
         </>
       )}
 
@@ -433,7 +433,7 @@ export function StepInspector({
         </Field>
       )}
 
-      {node.type === "stop" && <p className="text-[13px] text-ink-500">{f.stopHint}</p>}
+      {node.type === "stop" && <p className="text-[0.8125rem] text-ink-500">{f.stopHint}</p>}
 
       {(node.type === "add_tag" || node.type === "remove_tag") && (
         <Section title={t.automations.tag}>
@@ -472,7 +472,7 @@ export function StepInspector({
               </Field>
             </>
           ) : (
-            <p className="text-[12px] text-ink-500">{f.noCustomFields}</p>
+            <p className="text-[0.75rem] text-ink-500">{f.noCustomFields}</p>
           )}
         </>
       )}
@@ -498,7 +498,7 @@ export function StepInspector({
             onChange={(status) => set({ status })}
             options={(["confirmed", "cancelled"] as const).map((s) => ({ value: s, label: f.apptAction[s] }))}
           />
-          <p className="text-[12px] leading-snug text-ink-500">{f.apptActionHint}</p>
+          <p className="text-[0.75rem] leading-snug text-ink-500">{f.apptActionHint}</p>
           {(coordinator || Boolean(cfg.quiet)) && cfg.status === "cancelled" && (
             <Check checked={Boolean(cfg.quiet)} onChange={(quiet) => set({ quiet })} label={f.book.quietCancel} />
           )}
@@ -551,7 +551,7 @@ export function StepInspector({
         </Field>
       )}
 
-      {node.type === "close_conversation" && <p className="text-[13px] text-ink-500">{f.closeHint}</p>}
+      {node.type === "close_conversation" && <p className="text-[0.8125rem] text-ink-500">{f.closeHint}</p>}
 
       {node.type === "create_task" && (
         <>
@@ -704,7 +704,7 @@ function BookingFields({
           <Section title={b.after}>
             <div className="grid grid-cols-[minmax(0,0.8fr)_auto_minmax(0,1.2fr)] items-center gap-2">
               <NumberInput dir="ltr" min={0} max={730} value={Number(cfg.after_days) || 0} onChange={(after_days) => set({ after_days })} data-book-after />
-              <span className="text-[13px] text-ink-500">{b.afterDays}</span>
+              <span className="text-[0.8125rem] text-ink-500">{b.afterDays}</span>
               <Select value={str("from")} onChange={(e) => set({ from: e.target.value })}>
                 {(["now", "appointment", "due"] as const)
                   .filter((v) => (v !== "appointment" || hasAppt) && (v !== "due" || offered(v, "from", course)))
@@ -719,7 +719,7 @@ function BookingFields({
           <Section title={b.searchDays}>
             <div className="grid grid-cols-[minmax(0,0.8fr)_auto] items-center gap-2">
               <NumberInput dir="ltr" min={1} max={60} value={Number(cfg.search_days) || 14} onChange={(search_days) => set({ search_days })} />
-              <span className="text-[13px] text-ink-500">{b.searchDaysUnit}</span>
+              <span className="text-[0.8125rem] text-ink-500">{b.searchDaysUnit}</span>
             </div>
           </Section>
           <Section title={b.partOfDay}>
@@ -741,14 +741,14 @@ function BookingFields({
             />
           </Section>
           <Check checked={Boolean(cfg.skip_if_booked)} onChange={(skip_if_booked) => set({ skip_if_booked })} label={b.skipIfBooked} />
-          <p className="rounded-md bg-sunken px-2.5 py-2 text-[12px] leading-snug text-ink-500">{b.outputsHint}</p>
+          <p className="rounded-md bg-sunken px-2.5 py-2 text-[0.75rem] leading-snug text-ink-500">{b.outputsHint}</p>
         </>
       ) : (
         <>
           <Section title={b.withinDays}>
             <div className="grid grid-cols-[minmax(0,0.8fr)_auto] items-center gap-2">
               <NumberInput dir="ltr" min={1} max={365} value={Number(cfg.within_days) || 30} onChange={(within_days) => set({ within_days })} />
-              <span className="text-[13px] text-ink-500">{t.automations.flow.units.days}</span>
+              <span className="text-[0.8125rem] text-ink-500">{t.automations.flow.units.days}</span>
             </div>
           </Section>
           <Field label={b.waitNote}>

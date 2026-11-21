@@ -64,7 +64,7 @@ export function RedoSheet({
   if (!candidates.length) {
     return (
       <div className="grid gap-4" data-redo-sheet>
-        <p className="rounded-ctl border border-dashed border-line-strong px-3 py-4 text-center text-[13px] text-ink-500" data-redo-nothing>
+        <p className="rounded-ctl border border-dashed border-line-strong px-3 py-4 text-center text-[0.8125rem] text-ink-500" data-redo-nothing>
           {P.redoNothing}
         </p>
         <div className="flex justify-end">
@@ -80,11 +80,11 @@ export function RedoSheet({
     <div className="grid gap-4" data-redo-sheet>
       <div className="flex items-start gap-3 rounded-card bg-brand-50 px-3 py-2.5">
         <Repeat className="mt-0.5 h-5 w-5 shrink-0 text-brand-700" />
-        <p className="text-[13px] text-ink-900">{P.redoIntro}</p>
+        <p className="text-[0.8125rem] text-ink-900">{P.redoIntro}</p>
       </div>
 
       <div>
-        <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{P.redoWhich}</div>
+        <div className="mb-1.5 text-[0.75rem] font-semibold text-ink-500">{P.redoWhich}</div>
         <div className="grid gap-1.5" role="radiogroup" aria-label={P.redoWhich}>
           {candidates.map((m) => {
             const on = m.id === pick;
@@ -104,11 +104,11 @@ export function RedoSheet({
               >
                 {tr && <TreatmentGlyph tr={tr} paint={paintAt(m, null) ?? "existing"} context={isToothSite(m.site) ? toothOf(m.site) : null} size={38} />}
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-semibold text-ink-900">
+                  <span className="block text-[0.84375rem] font-semibold text-ink-900">
                     {isToothSite(m.site) ? `${m.site} · ` : ""}
                     {markLabel(m, locale)}
                   </span>
-                  <span className="block text-[12px] text-ink-500">
+                  <span className="block text-[0.75rem] text-ink-500">
                     {[T.status[m.status], fmtDate(m.doneAt ?? m.createdAt, tz, locale), m.performedBy?.name, n > 1 ? P.redoTimes.replace("{n}", String(n - 1)) : null]
                       .filter(Boolean)
                       .join(" · ")}
@@ -119,14 +119,14 @@ export function RedoSheet({
           })}
         </div>
         {original && as && as.key !== original.treatmentKey && (
-          <p className="mt-1.5 text-[12px] text-ink-500" data-redo-as={as.key}>
+          <p className="mt-1.5 text-[0.75rem] text-ink-500" data-redo-as={as.key}>
             {P.redoAs.replace("{name}", locale === "ar" ? as.ar : as.en)}
           </p>
         )}
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-[12px] font-semibold text-ink-500">{P.redoWhy}</span>
+        <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{P.redoWhy}</span>
         <input
           dir="auto"
           value={why}

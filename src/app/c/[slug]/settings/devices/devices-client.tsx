@@ -109,10 +109,10 @@ function Code({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="mt-3" dir="ltr">
-      {label && <div className="mb-1 font-mono text-[11px] font-semibold text-ink-500">{label}</div>}
+      {label && <div className="mb-1 font-mono text-[length:max(11px,0.6875rem)] font-semibold text-ink-500">{label}</div>}
       {/* The button's own class positions it `relative`, so the corner is held by a wrapper. */}
       <div className="relative">
-        <pre className="max-w-full overflow-x-auto rounded-lg border border-line bg-ink-900/4 p-3 pe-24 font-mono text-[12px] leading-relaxed text-ink-900">
+        <pre className="max-w-full overflow-x-auto rounded-lg border border-line bg-ink-900/4 p-3 pe-24 font-mono text-[0.75rem] leading-relaxed text-ink-900">
           {text}
         </pre>
         <span className="absolute end-2 top-2">

@@ -65,7 +65,7 @@ export function PatientPicker({
           <Avatar name={r.full_name} size={26} />
           <span className="flex-1 font-medium">{r.full_name}</span>
           {r.phone_e164 && (
-            <span dir="ltr" className="text-[12px] text-ink-400 tnum">
+            <span dir="ltr" className="text-[0.75rem] text-ink-400 tnum">
               {formatPhone(r.phone_e164)}
             </span>
           )}

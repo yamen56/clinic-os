@@ -79,7 +79,7 @@ export default async function ServicesSettingsPage({
     {access.clinic.features.dental && (
       <div className="mt-5" data-prices-link>
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <p className="min-w-0 text-[13px] text-ink-700">{t.services.dental.servicesLink}</p>
+          <p className="min-w-0 text-[0.8125rem] text-ink-700">{t.services.dental.servicesLink}</p>
           <Link href={`/c/${slug}/settings/prices`} className={buttonClass({ variant: "outline", size: "sm" })}>
             {t.services.dental.openPrices}
             <ArrowUpRight className="h-4 w-4" />

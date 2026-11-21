@@ -97,8 +97,8 @@ export function DentalLabs({
       <Card className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-[17px] font-semibold">{S.title}</h2>
-            <p className="mt-1 max-w-2xl text-[13px] text-ink-500">{S.sub}</p>
+            <h2 className="text-[1.0625rem] font-semibold">{S.title}</h2>
+            <p className="mt-1 max-w-2xl text-[0.8125rem] text-ink-500">{S.sub}</p>
           </div>
           {!draft && (
             <Button variant="soft" size="sm" onClick={() => setDraft(blank)} data-lab-new>
@@ -129,9 +129,9 @@ export function DentalLabs({
             </div>
             <label className="flex items-center gap-2.5">
               <Toggle checked={draft.inHouse} onChange={(v) => setDraft({ ...draft, inHouse: v })} />
-              <span className="text-[13px] font-medium">{S.inHouse}</span>
+              <span className="text-[0.8125rem] font-medium">{S.inHouse}</span>
             </label>
-            <p className="text-[12px] text-ink-500">{draft.inHouse ? S.inHouseHint : S.outsideHint}</p>
+            <p className="text-[0.75rem] text-ink-500">{draft.inHouse ? S.inHouseHint : S.outsideHint}</p>
             <Field label={S.note} hint={t.common.optional}>
               <Input value={draft.note} maxLength={500} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
             </Field>
@@ -163,9 +163,9 @@ export function DentalLabs({
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
               <button type="button" onClick={() => setOpen(isOpen ? null : lab.id)} className="flex min-w-0 flex-1 items-center gap-2 text-start">
                 <FlaskConical className="h-4 w-4 shrink-0 text-ink-400" />
-                <span className="truncate text-[15px] font-semibold">{lab.name}</span>
-                {lab.inHouse && <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11.5px] font-semibold text-brand-700">{S.inHouseTag}</span>}
-                <span className="text-[12px] text-ink-500 tnum">
+                <span className="truncate text-[0.9375rem] font-semibold">{lab.name}</span>
+                {lab.inHouse && <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold text-brand-700">{S.inHouseTag}</span>}
+                <span className="text-[0.75rem] text-ink-500 tnum">
                   {S.pricesN.replace("{n}", String(set))}
                   {used[lab.id] ? ` · ${S.usedN.replace("{n}", String(used[lab.id]))}` : ""}
                 </span>
@@ -182,26 +182,26 @@ export function DentalLabs({
             </div>
             {isOpen && (
               <ul className="divide-y divide-line border-t border-line" data-lab-prices={lab.id}>
-                <li className="px-4 py-2 text-[12px] text-ink-500">{S.pricesHint}</li>
+                <li className="px-4 py-2 text-[0.75rem] text-ink-500">{S.pricesHint}</li>
                 {treatments.map((tr) => {
                   const field = PRICE_BY[tr.key] ? tr.details?.find((d) => d.key === PRICE_BY[tr.key]) : undefined;
                   const base = costOf(lab.id, tr.key, null);
                   return (
                     <li key={tr.key} className="grid gap-2 px-4 py-2.5" data-lab-price-row={tr.key}>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <div className="min-w-[10rem] flex-1 text-[14px] font-medium">
+                        <div className="min-w-[10rem] flex-1 text-[0.875rem] font-medium">
                           <bdi>{tr.en}</bdi>
-                          <span className="ms-2 text-[12px] font-normal text-ink-500" dir="auto">
+                          <span className="ms-2 text-[0.75rem] font-normal text-ink-500" dir="auto">
                             {tr.ar}
                           </span>
                         </div>
                         <span className="flex items-center gap-1.5">
                           <PriceBox value={base} label={`${lab.name} · ${tr.en}`} hook={`${lab.id}:${tr.key}`} onSave={(v) => savePrice(lab.id, tr.key, null, v)} />
-                          <span className="text-[12px] text-ink-500">{currency}</span>
+                          <span className="text-[0.75rem] text-ink-500">{currency}</span>
                         </span>
                       </div>
                       {field && (
-                        <div className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-x-2 gap-y-1.5 text-[13px] sm:w-fit sm:grid-cols-[minmax(7rem,auto)_6rem] sm:gap-x-3 sm:ps-4">
+                        <div className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-x-2 gap-y-1.5 text-[0.8125rem] sm:w-fit sm:grid-cols-[minmax(7rem,auto)_6rem] sm:gap-x-3 sm:ps-4">
                           {field.options.map((o) => (
                             <div key={o.key} className="contents" data-lab-price-variant={`${tr.key}:${o.key}`}>
                               <bdi className="min-w-0 break-words text-ink-700">{o.en}</bdi>

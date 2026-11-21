@@ -82,8 +82,8 @@ export function AnnouncementsClient({ announcements }: { announcements: Announce
                 />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{a.title}</div>
-                  {a.body && <p className="mt-0.5 text-[13px] text-ink-500">{a.body}</p>}
-                  <div className="mt-0.5 text-[12px] text-ink-400">{a.author ?? ""}</div>
+                  {a.body && <p className="mt-0.5 text-[0.8125rem] text-ink-500">{a.body}</p>}
+                  <div className="mt-0.5 text-[0.75rem] text-ink-400">{a.author ?? ""}</div>
                 </div>
                 <button
                   aria-label={t.common.delete}

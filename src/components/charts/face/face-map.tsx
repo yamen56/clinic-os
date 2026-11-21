@@ -159,12 +159,12 @@ export function FaceMap({
       </div>
       {/* Which side is which: across the front, and which side a turned head shows. */}
       {view === "front" ? (
-        <div className="mt-1.5 flex justify-between px-1 text-[12px] text-ink-500">
+        <div className="mt-1.5 flex justify-between px-1 text-[0.75rem] text-ink-500">
           <span>{labels.right}</span>
           <span>{labels.left}</span>
         </div>
       ) : (
-        <div className="mt-1.5 text-center text-[12px] text-ink-500" data-face-view-caption>
+        <div className="mt-1.5 text-center text-[0.75rem] text-ink-500" data-face-view-caption>
           {VIEW_CAPTION[view]}
         </div>
       )}

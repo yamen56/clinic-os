@@ -132,33 +132,33 @@ export default async function PublicReceiptPage({
               <div>
                 <h1 className="font-display text-xl font-bold">{clinicName}</h1>
                 {inv.seller_tax_number && (
-                  <p className="text-[13px] text-ink-500">
+                  <p className="text-[0.8125rem] text-ink-500">
                     {L.taxNo}: <span className="tnum" dir="ltr">{inv.seller_tax_number}</span>
                   </p>
                 )}
-                {address && <p className="text-[13px] text-ink-500">{address}</p>}
+                {address && <p className="text-[0.8125rem] text-ink-500">{address}</p>}
                 {inv.clinic_phone && (
-                  <p className="text-[13px] text-ink-500 tnum" dir="ltr">
+                  <p className="text-[0.8125rem] text-ink-500 tnum" dir="ltr">
                     {inv.clinic_phone}
                   </p>
                 )}
               </div>
             </div>
             <div className="text-end">
-              <div className="text-[13px] font-semibold uppercase tracking-widest text-ink-500">
+              <div className="text-[0.8125rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.receipt}
               </div>
               <div className="font-display text-lg font-bold tnum" dir="ltr">
                 {inv.receipt_number}
               </div>
-              <div className="mt-1 text-[13px] text-ink-500">
+              <div className="mt-1 text-[0.8125rem] text-ink-500">
                 {L.date}:{" "}
                 {inv.receipt_issued_at
                   ? fmtDate(inv.receipt_issued_at, inv.timezone, locale)
                   : fmtDateOnly(inv.issue_date ?? inv.created_at, locale)}
               </div>
               <span
-                className="mt-2 inline-block rounded-full px-3 py-1 text-[12px] font-bold text-white"
+                className="mt-2 inline-block rounded-full px-3 py-1 text-[0.75rem] font-bold text-white"
                 style={{ background: "var(--bk)" }}
               >
                 {L.paidInFull}
@@ -168,12 +168,12 @@ export default async function PublicReceiptPage({
 
           <section className="mt-8 flex flex-wrap items-start justify-between gap-6">
             <div className="min-w-0">
-              <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+              <div className="text-[0.75rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.receivedFrom}
               </div>
-              <div className="mt-1 text-[15px] font-semibold">{inv.patient_name}</div>
+              <div className="mt-1 text-[0.9375rem] font-semibold">{inv.patient_name}</div>
               {inv.patient_phone && (
-                <div className="text-[13px] text-ink-500 tnum" dir="ltr">
+                <div className="text-[0.8125rem] text-ink-500 tnum" dir="ltr">
                   {inv.patient_phone}
                 </div>
               )}
@@ -184,10 +184,10 @@ export default async function PublicReceiptPage({
               document.
             */}
             <div className="text-end">
-              <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+              <div className="text-[0.75rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.forInvoice}
               </div>
-              <div className="mt-1 font-display text-[15px] font-semibold tnum" dir="ltr">
+              <div className="mt-1 font-display text-[0.9375rem] font-semibold tnum" dir="ltr">
                 {inv.number}
               </div>
             </div>
@@ -195,7 +195,7 @@ export default async function PublicReceiptPage({
 
           {/* How the money actually arrived — the thing an invoice cannot say. */}
           <section className="mt-8 overflow-x-auto">
-            <table className="w-full border-collapse text-[13px]">
+            <table className="w-full border-collapse text-[0.8125rem]">
               <thead>
                 <tr className="border-b-2" style={{ borderColor: "var(--bk)" }}>
                   <th className="py-2 text-start font-semibold">{L.date}</th>
@@ -224,12 +224,12 @@ export default async function PublicReceiptPage({
 
           <section className="mt-6 flex justify-end">
             <div className="w-full max-w-xs">
-              <div className="flex justify-between py-1 text-[13px] text-ink-500">
+              <div className="flex justify-between py-1 text-[0.8125rem] text-ink-500">
                 <span>{L.invoiceTotal}</span>
                 <span className="tnum">{money(inv.total)}</span>
               </div>
               <div
-                className="mt-1 flex justify-between border-t-2 pt-2 text-[15px] font-bold"
+                className="mt-1 flex justify-between border-t-2 pt-2 text-[0.9375rem] font-bold"
                 style={{ borderColor: "var(--bk)" }}
               >
                 <span>{L.totalReceived}</span>
@@ -238,16 +238,16 @@ export default async function PublicReceiptPage({
             </div>
           </section>
 
-          <p className="mt-8 text-[13px] text-ink-500">{L.thanks}</p>
+          <p className="mt-8 text-[0.8125rem] text-ink-500">{L.thanks}</p>
           {/*
             Said plainly, because a receipt that looks like an invoice is exactly
             how a clinic ends up with two documents claiming to be the tax record
             of one visit.
           */}
-          <p className="mt-2 text-[12px] leading-relaxed text-ink-400">{L.notATaxInvoice}</p>
+          <p className="mt-2 text-[0.75rem] leading-relaxed text-ink-400">{L.notATaxInvoice}</p>
 
           {inv.invoice_footer && (
-            <p className="mt-8 border-t border-line pt-4 text-center text-[12px] text-ink-400">
+            <p className="mt-8 border-t border-line pt-4 text-center text-[0.75rem] text-ink-400">
               {inv.invoice_footer}
             </p>
           )}

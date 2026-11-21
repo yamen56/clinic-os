@@ -34,7 +34,7 @@ export function DepartmentPicker({
             aria-pressed={on}
             data-department={s}
             onClick={() => onChange(on ? value.filter((x) => x !== s) : [...value, s])}
-            className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition-colors duration-140 disabled:opacity-50 ${
+            className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[0.8125rem] font-semibold transition-colors duration-140 disabled:opacity-50 ${
               on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
             }`}
           >

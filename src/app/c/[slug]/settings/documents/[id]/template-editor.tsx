@@ -291,7 +291,7 @@ export function TemplateEditor({
           </Field>
         </div>
         <label className="mt-4 flex items-center justify-between gap-3">
-          <span className="text-[13px] font-medium">{t.docTemplates.active}</span>
+          <span className="text-[0.8125rem] font-medium">{t.docTemplates.active}</span>
           <Toggle checked={isActive} onChange={setIsActive} label={t.docTemplates.active} />
         </label>
       </Card>
@@ -307,8 +307,8 @@ export function TemplateEditor({
         <Card className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-[13px] font-semibold">{t.docTemplates.uploadedPdf}</div>
-              <p className="mt-0.5 text-[12px] text-ink-500">{t.docTemplates.uploadedPdfHint}</p>
+              <div className="text-[0.8125rem] font-semibold">{t.docTemplates.uploadedPdf}</div>
+              <p className="mt-0.5 text-[0.75rem] text-ink-500">{t.docTemplates.uploadedPdfHint}</p>
             </div>
             {pdfPath && (
               <a
@@ -340,7 +340,7 @@ export function TemplateEditor({
               </div>
             )}
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[13px] font-semibold">
+              <span className="text-[0.8125rem] font-semibold">
                 {tab === "ar" ? t.docTemplates.bodyAr : t.docTemplates.bodyEn}
               </span>
             </div>
@@ -351,19 +351,19 @@ export function TemplateEditor({
               placeholder={tab === "ar" ? t.docTemplates.bodyAr : t.docTemplates.bodyEn}
               onChange={setCurrentBody}
             />
-            <p className="mt-2 text-[12px] text-ink-500">{t.docTemplates.bodyHint}</p>
+            <p className="mt-2 text-[0.75rem] text-ink-500">{t.docTemplates.bodyHint}</p>
           </Card>
 
           <Card className="h-fit p-4">
-            <h3 className="flex items-center gap-2 text-[13px] font-semibold">
+            <h3 className="flex items-center gap-2 text-[0.8125rem] font-semibold">
               <Braces className="h-4 w-4 text-ink-400" />
               {t.docTemplates.variables}
             </h3>
-            <p className="mt-1 text-[12px] text-ink-500">{t.docTemplates.variablesSub}</p>
+            <p className="mt-1 text-[0.75rem] text-ink-500">{t.docTemplates.variablesSub}</p>
             <div className="mt-3 grid max-h-96 gap-1 overflow-y-auto">
               {(["patient", "context"] as const).map((scope) => (
                 <div key={scope}>
-                  <div className="mb-1 mt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                  <div className="mb-1 mt-2 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">
                     {scope === "patient" ? t.fields.onRecord : t.fields.fromContext}
                   </div>
                   {defs
@@ -385,7 +385,7 @@ export function TemplateEditor({
                               currentBody
                           );
                         }}
-                        className="block w-full rounded-md px-2 py-1 text-start text-[12px] transition-colors hover:bg-brand-50"
+                        className="block w-full rounded-md px-2 py-1 text-start text-[0.75rem] transition-colors hover:bg-brand-50"
                       >
                         {locale === "ar" ? d.label_ar || d.label : d.label}
                       </button>
@@ -395,7 +395,7 @@ export function TemplateEditor({
             </div>
             <Link
               href={`/c/${slug}/settings/fields`}
-              className="mt-3 block text-[12px] font-medium text-brand-700 hover:underline"
+              className="mt-3 block text-[0.75rem] font-medium text-brand-700 hover:underline"
             >
               {t.docTemplates.manageVariables}
             </Link>
@@ -406,8 +406,8 @@ export function TemplateEditor({
       {/* --------------------------------------------------------- signers */}
       <Card>
         <div className="border-b border-line px-5 py-4">
-          <h2 className="text-[15px] font-semibold">{t.docTemplates.signerSetup}</h2>
-          <p className="mt-0.5 text-[13px] text-ink-500">{t.docTemplates.signerSetupSub}</p>
+          <h2 className="text-[0.9375rem] font-semibold">{t.docTemplates.signerSetup}</h2>
+          <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docTemplates.signerSetupSub}</p>
         </div>
         <div className="grid gap-3 p-5">
           <Field label={t.docs.signingOrder} hint={mode === "sequential" ? t.docs.sequentialHint : t.docs.parallelHint}>
@@ -424,7 +424,7 @@ export function TemplateEditor({
                 className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2"
               >
                 {mode === "sequential" && (
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[11px] font-semibold text-brand-700 tnum">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 tnum">
                     {i + 1}
                   </span>
                 )}
@@ -443,7 +443,7 @@ export function TemplateEditor({
                     </option>
                   ))}
                 </Select>
-                <label className="flex items-center gap-2 text-[12px]">
+                <label className="flex items-center gap-2 text-[0.75rem]">
                   <Toggle
                     checked={s.required}
                     label={t.docs.requiredSigner}
@@ -513,8 +513,8 @@ export function TemplateEditor({
       <Card>
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>
-            <h2 className="text-[15px] font-semibold">{t.docTemplates.extraFields}</h2>
-            <p className="mt-0.5 text-[13px] text-ink-500">{t.docTemplates.extraFieldsSub}</p>
+            <h2 className="text-[0.9375rem] font-semibold">{t.docTemplates.extraFields}</h2>
+            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docTemplates.extraFieldsSub}</p>
           </div>
           <Button
             variant="outline"
@@ -600,8 +600,8 @@ export function TemplateEditor({
       {services.length > 0 && (
         <Card>
           <div className="border-b border-line px-5 py-4">
-            <h2 className="text-[15px] font-semibold">{t.docTemplates.attachedServices}</h2>
-            <p className="mt-0.5 text-[13px] text-ink-500">{t.docTemplates.attachedServicesSub}</p>
+            <h2 className="text-[0.9375rem] font-semibold">{t.docTemplates.attachedServices}</h2>
+            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docTemplates.attachedServicesSub}</p>
           </div>
           <div className="grid gap-2 p-5">
             <ServiceChips
@@ -618,7 +618,7 @@ export function TemplateEditor({
             />
             {serviceIds.length > 0 && (
               <label className="mt-2 flex items-center justify-between gap-3">
-                <span className="text-[13px] font-medium">{t.docTemplates.autoSend}</span>
+                <span className="text-[0.8125rem] font-medium">{t.docTemplates.autoSend}</span>
                 <Toggle checked={autoSend} onChange={setAutoSend} label={t.docTemplates.autoSend} />
               </label>
             )}
@@ -627,7 +627,7 @@ export function TemplateEditor({
       )}
 
       {!isOwner && (
-        <p className="text-[12px] text-ink-400">{t.docs.errors.forbidden}</p>
+        <p className="text-[0.75rem] text-ink-400">{t.docs.errors.forbidden}</p>
       )}
 
       <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title={t.docTemplates.previewAs} wide>
@@ -648,14 +648,14 @@ export function TemplateEditor({
                 </Badge>
                 {v.name}
               </span>
-              <span className="text-[12px] text-ink-400">
+              <span className="text-[0.75rem] text-ink-400">
                 {fmtDateTime(v.created_at, "UTC", locale)}
                 {v.author ? ` · ${v.author}` : ""}
               </span>
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-[12px] text-ink-500">{t.docTemplates.versionHint}</p>
+        <p className="mt-3 text-[0.75rem] text-ink-500">{t.docTemplates.versionHint}</p>
       </Modal>
     </div>
   );

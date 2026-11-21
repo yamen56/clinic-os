@@ -129,7 +129,7 @@ export function NewClinicForm() {
       {/* A medical centre's other fields — a dental department puts the tooth chart on its files. */}
       <div>
         <div className="mb-1 text-sm font-medium text-ink-900">{t.admin.departments}</div>
-        <p className="mb-2.5 text-[13px] text-ink-500">{t.admin.departmentsSub}</p>
+        <p className="mb-2.5 text-[0.8125rem] text-ink-500">{t.admin.departmentsSub}</p>
         <DepartmentPicker value={departments} onChange={pickDepartments} primary={specialty} disabled={pending} />
         <input type="hidden" name="departments" value={departments.filter((d) => d !== specialty).join(",")} />
       </div>
@@ -137,7 +137,7 @@ export function NewClinicForm() {
       <div className="my-1 border-t border-line" />
       <div>
         <div className="mb-1 text-sm font-medium text-ink-900">{t.admin.features}</div>
-        <p className="mb-2.5 text-[13px] text-ink-500">{t.admin.featuresSub}</p>
+        <p className="mb-2.5 text-[0.8125rem] text-ink-500">{t.admin.featuresSub}</p>
         <FeaturePicker value={features} onChange={setFeatures} disabled={pending} />
       </div>
       <div className="my-1 border-t border-line" />
@@ -151,7 +151,7 @@ export function NewClinicForm() {
       </div>
       {/* Says what will happen, because the missing password field is otherwise
           the most obvious thing about this form. */}
-      <p className="rounded-md bg-sunken px-3 py-2 text-[13px] text-ink-500">
+      <p className="rounded-md bg-sunken px-3 py-2 text-[0.8125rem] text-ink-500">
         {t.admin.ownerInviteHint}
       </p>
       {state?.error && (

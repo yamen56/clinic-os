@@ -105,9 +105,9 @@ export function FieldsClient({
               {t.fields.hidden}
             </Badge>
           )}
-          {d.is_required && <span className="text-[11px] text-danger">*</span>}
+          {d.is_required && <span className="text-[length:max(11px,0.6875rem)] text-danger">*</span>}
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px] text-ink-400">
+        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[0.75rem] text-ink-400">
           {/* `max-w-full` and a breakable token: `{{patient.national_id}}` is
              183px in a mono face and the column beside the row controls is 168px
              on a phone, so without these the chip simply hangs outside it. */}
@@ -178,8 +178,8 @@ export function FieldsClient({
       <Card>
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>
-            <h2 className="text-[15px] font-semibold">{t.fields.onRecord}</h2>
-            <p className="mt-0.5 text-[13px] text-ink-500">{t.fields.onRecordSub}</p>
+            <h2 className="text-[0.9375rem] font-semibold">{t.fields.onRecord}</h2>
+            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.fields.onRecordSub}</p>
           </div>
           {isOwner && (
             <Button
@@ -202,15 +202,15 @@ export function FieldsClient({
             {patientFields.map((d, i) => row(d, i, patientFields.length))}
           </ul>
         )}
-        <p className="border-t border-line px-5 py-3 text-[12px] text-ink-400">
+        <p className="border-t border-line px-5 py-3 text-[0.75rem] text-ink-400">
           {t.fields.builtInHint}
         </p>
       </Card>
 
       <Card>
         <div className="border-b border-line px-5 py-4">
-          <h2 className="text-[15px] font-semibold">{t.fields.fromContext}</h2>
-          <p className="mt-0.5 text-[13px] text-ink-500">{t.fields.fromContextSub}</p>
+          <h2 className="text-[0.9375rem] font-semibold">{t.fields.fromContext}</h2>
+          <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.fields.fromContextSub}</p>
         </div>
         <ul className="divide-y divide-line">
           {contextFields.map((d, i) => row(d, i, contextFields.length))}
@@ -226,8 +226,8 @@ export function FieldsClient({
           <div className="grid gap-4">
             {editing.key && (
               <div className="rounded-lg border border-line bg-sunken px-3 py-2">
-                <div className="text-[12px] font-semibold text-ink-500">{t.fields.key}</div>
-                <code className="mono text-[13px]" dir="ltr">{`{{${editing.key}}}`}</code>
+                <div className="text-[0.75rem] font-semibold text-ink-500">{t.fields.key}</div>
+                <code className="mono text-[0.8125rem]" dir="ltr">{`{{${editing.key}}}`}</code>
               </div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
@@ -287,14 +287,14 @@ export function FieldsClient({
             {editing.scope !== "context" && (
               <div className="grid gap-3">
                 <label className="flex items-center justify-between gap-3">
-                  <span className="text-[13px] font-medium">{t.fields.required}</span>
+                  <span className="text-[0.8125rem] font-medium">{t.fields.required}</span>
                   <Toggle
                     checked={!!editing.is_required}
                     onChange={(v) => setEditing({ ...editing, is_required: v })}
                   />
                 </label>
                 <label className="flex items-center justify-between gap-3">
-                  <span className="text-[13px] font-medium">{t.fields.showInProfile}</span>
+                  <span className="text-[0.8125rem] font-medium">{t.fields.showInProfile}</span>
                   <Toggle
                     checked={editing.show_in_profile !== false}
                     onChange={(v) => setEditing({ ...editing, show_in_profile: v })}
@@ -304,8 +304,8 @@ export function FieldsClient({
             )}
             <label className="flex items-center justify-between gap-3">
               <span>
-                <span className="block text-[13px] font-medium">{t.fields.hidden}</span>
-                <span className="block text-[12px] text-ink-500">{t.fields.hiddenHint}</span>
+                <span className="block text-[0.8125rem] font-medium">{t.fields.hidden}</span>
+                <span className="block text-[0.75rem] text-ink-500">{t.fields.hiddenHint}</span>
               </span>
               <Toggle
                 checked={!!editing.hidden}
@@ -447,7 +447,7 @@ function OptionsEditor({
   */
   return (
     <div className="block">
-      <span className="mb-1.5 flex items-baseline gap-1 text-[13px] font-semibold text-ink-900">
+      <span className="mb-1.5 flex items-baseline gap-1 text-[0.8125rem] font-semibold text-ink-900">
         {t.fields.options}
       </span>
       <div className="grid gap-2">
@@ -458,7 +458,7 @@ function OptionsEditor({
               {/* The position, so the row reads as "third in the dropdown"
                   rather than as a free-floating text box. `tnum` keeps the
                   column from shifting when the list passes nine. */}
-              <span className="w-5 shrink-0 text-center text-[12px] text-ink-400 tnum">{i + 1}</span>
+              <span className="w-5 shrink-0 text-center text-[0.75rem] text-ink-400 tnum">{i + 1}</span>
               <Input
                 ref={(el) => {
                   refs.current[i] = el;

@@ -116,7 +116,7 @@ export function PayEditor({
   if (!kinds.includes(value.kind)) kinds.unshift(value.kind);
   const set = (patch: Partial<PayDraft>) => onChange({ ...value, ...patch });
   const money = (
-    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-[12px] font-semibold text-ink-400">
+    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-[0.75rem] font-semibold text-ink-400">
       {currency}
     </span>
   );
@@ -124,8 +124,8 @@ export function PayEditor({
   return (
     <div className="rounded-lg border border-line p-3" data-pay-editor={value.kind}>
       <div className="mb-2.5">
-        <div className="text-[13px] font-semibold">{S.pay}</div>
-        <p className="text-[12px] text-ink-500">{S.payHint}</p>
+        <div className="text-[0.8125rem] font-semibold">{S.pay}</div>
+        <p className="text-[0.75rem] text-ink-500">{S.payHint}</p>
       </div>
       {/* Two by two on a phone, where four words in a row truncate; one row from a tablet up. */}
       <div role="radiogroup" aria-label={S.pay} className="flex w-full gap-0.5 rounded-ctl bg-sunken p-1 ring-1 ring-line max-sm:grid max-sm:grid-cols-2">
@@ -139,7 +139,7 @@ export function PayEditor({
               aria-checked={on}
               data-pay-kind={k}
               onClick={() => set({ kind: k })}
-              className={`flex h-9 min-w-0 flex-1 touch-manipulation items-center justify-center rounded-[6px] px-1.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+              className={`flex h-9 min-w-0 flex-1 touch-manipulation items-center justify-center rounded-[6px] px-1.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
                 on ? "bg-surface text-ink-900 shadow-card ring-1 ring-line" : "text-ink-500 hover:text-ink-900"
               }`}
             >
@@ -166,7 +166,7 @@ export function PayEditor({
                   className="pe-9"
                   data-pay-percent
                 />
-                <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-[13px] font-semibold text-ink-400">%</span>
+                <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-[0.8125rem] font-semibold text-ink-400">%</span>
               </div>
             </Field>
             <Field label={S.costsRule} hint={S.costsRuleHint}>
@@ -213,7 +213,7 @@ export function PayEditor({
                 />
               </Field>
             </div>
-            <p className="mt-2 text-[12px] leading-relaxed text-ink-500">{S.paySalaryHint}</p>
+            <p className="mt-2 text-[0.75rem] leading-relaxed text-ink-500">{S.paySalaryHint}</p>
           </>
         )}
         {value.kind === "on_call" && (
@@ -234,7 +234,7 @@ export function PayEditor({
             </div>
           </Field>
         )}
-        {value.kind === "none" && <p className="text-[12px] leading-relaxed text-ink-500">{S.payNoneHint}</p>}
+        {value.kind === "none" && <p className="text-[0.75rem] leading-relaxed text-ink-500">{S.payNoneHint}</p>}
       </div>
     </div>
   );

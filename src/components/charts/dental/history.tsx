@@ -34,10 +34,10 @@ export function PaintPill({ m }: { m: Mark }) {
   const { t } = useI18n();
   const paint = m.voidedAt ? null : paintAt(m, null);
   if (!paint) {
-    return <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-ink-500">{t.dental.voided}</span>;
+    return <span className="rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-500">{t.dental.voided}</span>;
   }
   return (
-    <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: SOFT[paint], color: INK[paint] }}>
+    <span className="rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold" style={{ background: SOFT[paint], color: INK[paint] }}>
       {t.dental.status[paint]}
     </span>
   );
@@ -111,20 +111,20 @@ export function EntryRow({
           data-entry-open={onOpen && !m.voidedAt ? m.id : undefined}
         >
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={`text-[13.5px] font-semibold text-ink-900 ${m.voidedAt ? "line-through" : ""}`}>{markLabel(m, locale)}</span>
+            <span className={`text-[0.84375rem] font-semibold text-ink-900 ${m.voidedAt ? "line-through" : ""}`}>{markLabel(m, locale)}</span>
             <PaintPill m={m} />
           </span>
-          <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">
+          <span className="mt-0.5 block text-[0.75rem] leading-snug text-ink-500">
             {[extra ?? details.join(" · "), m.performedBy?.name, fmtDate(m.doneAt ?? m.createdAt, tz, locale)].filter(Boolean).join(" · ")}
           </span>
           {money && (
-            <span className="mt-0.5 block text-[12px] font-semibold text-ink-700 tnum" data-entry-price={m.id}>
+            <span className="mt-0.5 block text-[0.75rem] font-semibold text-ink-700 tnum" data-entry-price={m.id}>
               {money}
             </span>
           )}
-          {m.note && <span className="mt-1 block text-[12.5px] text-ink-700">{m.note}</span>}
+          {m.note && <span className="mt-1 block text-[0.78125rem] text-ink-700">{m.note}</span>}
           {progress && m.status === "planned" && !m.voidedAt && (
-            <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[12px]" data-entry-progress={`${progress.done}/${progress.total}`}>
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[0.75rem]" data-entry-progress={`${progress.done}/${progress.total}`}>
               <span className="inline-flex gap-0.5" aria-hidden>
                 {Array.from({ length: progress.total }, (_, i) => (
                   <span key={i} className="h-2 w-2 rounded-full" style={{ background: i < progress.done ? INK.progress : "var(--color-line)" }} />
@@ -143,7 +143,7 @@ export function EntryRow({
           <button
             type="button"
             onClick={onOpen}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl px-2.5 text-[12.5px] font-semibold"
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl px-2.5 text-[0.78125rem] font-semibold"
             style={{ background: SOFT.progress, color: INK.progress }}
             data-open-item={m.id}
           >
@@ -155,7 +155,7 @@ export function EntryRow({
           <button
             type="button"
             onClick={() => onMarkDone(m.id)}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl px-2.5 text-[12.5px] font-semibold"
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl px-2.5 text-[0.78125rem] font-semibold"
             style={{ background: SOFT.done, color: INK.done }}
           >
             <Check className="h-3.5 w-3.5" />
@@ -173,7 +173,7 @@ export function EntryRow({
           {/* A detail a step chooses (a crown's type, at its preparation) is chosen there, unless the work was already there. */}
           {tr.details?.filter((d) => !(d.key === "implants" && m.groupId) && (m.status === "existing" || !stepCarries(m.treatmentKey, d.key))).map((d) => (
             <div key={d.key}>
-              <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{T.details[d.key]}</div>
+              <div className="mb-1.5 text-[0.75rem] font-semibold text-ink-500">{T.details[d.key]}</div>
               <div className="flex flex-wrap gap-1.5">
                 {d.options.map((o) => {
                   const on = m.detail[d.key] === o.key;
@@ -183,7 +183,7 @@ export function EntryRow({
                       type="button"
                       disabled={!editable}
                       onClick={() => onDetail(m.id, d.key, o.key)}
-                      className={`h-8 rounded-full border px-3 text-[12.5px] font-semibold transition-colors duration-140 disabled:opacity-60 ${
+                      className={`h-8 rounded-full border px-3 text-[0.78125rem] font-semibold transition-colors duration-140 disabled:opacity-60 ${
                         on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                       }`}
                     >
@@ -195,7 +195,7 @@ export function EntryRow({
             </div>
           ))}
           <label className="block">
-            <span className="mb-1 block text-[12px] font-semibold text-ink-500">{T.performedBy}</span>
+            <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{T.performedBy}</span>
             <select
               disabled={!editable}
               value={m.performedBy?.id ?? ""}
@@ -212,7 +212,7 @@ export function EntryRow({
           {/* Done on another day than it was recorded: the day it was really done (2026-11-20). */}
           {m.status === "done" && onDate && editable && <DoneDateField doneAt={m.doneAt} tz={tz} onChange={(day) => onDate(m.id, day)} />}
           <label className="block">
-            <span className="mb-1 block text-[12px] font-semibold text-ink-500">{T.note}</span>
+            <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{T.note}</span>
             <textarea
               disabled={!editable}
               defaultValue={m.note}
@@ -222,7 +222,7 @@ export function EntryRow({
               className="w-full rounded-ctl border border-line bg-surface px-3 py-2 text-base disabled:bg-subtle md:text-sm"
             />
           </label>
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink-500">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[0.75rem] text-ink-500">
             <span>
               {T.recordedBy.replace("{name}", m.recordedBy.name)} · {fmtDateTime(m.createdAt, tz, locale)}
             </span>
@@ -234,7 +234,7 @@ export function EntryRow({
             )}
           </div>
           {m.voidedAt && (
-            <p className="text-[12px] text-ink-500">
+            <p className="text-[0.75rem] text-ink-500">
               {T.voided} · {m.voidedBy?.name} · {fmtDateTime(m.voidedAt, tz, locale)}
               {m.voidReason ? ` — ${m.voidReason}` : ""}
             </p>
@@ -281,7 +281,7 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
   const byId = new Map(marks.map((m) => [m.id, m]));
   // Filing under a case, changing a price or a cost: in the record, off the chart. Lab work is on it — it is where the crown is.
   const rows = events.filter((e) => e.action !== "case" && e.action !== "fee" && e.action !== "cost").sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  if (rows.length === 0) return <p className="py-3 text-[13px] text-ink-500">{T.noHistory}</p>;
+  if (rows.length === 0) return <p className="py-3 text-[0.8125rem] text-ink-500">{T.noHistory}</p>;
   return (
     <ol className="relative ms-2.5 grid gap-0.5 border-s border-line ps-6">
       {rows.map((e) => {
@@ -298,7 +298,7 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
             >
               <Icon className="h-3 w-3" strokeWidth={2.6} />
             </span>
-            <div className="text-[13px] leading-snug text-ink-900">
+            <div className="text-[0.8125rem] leading-snug text-ink-900">
               {showSite && <span className="font-semibold">{siteLabel(m.site, T)} · </span>}
               <span className={e.action === "void" ? "line-through" : ""}>{markLabel(m, locale)}</span>
               <span className="text-ink-500">
@@ -317,7 +317,7 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
               </span>
               {e.action === "step" && e.reason === EMERGENCY_STEP && <Siren className="ms-1 inline h-3 w-3 text-danger" />}
             </div>
-            <div className="text-[12px] text-ink-500">
+            <div className="text-[0.75rem] text-ink-500">
               {[
                 e.action === "created" || e.action === "done" ? m.performedBy?.name : null,
                 fmtDateTime(e.at, tz, locale),

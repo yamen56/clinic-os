@@ -332,12 +332,12 @@ export function FilesTab({
             <Camera className="h-4 w-4" />
             {T.takePhoto}
           </Button>
-          <span className="text-[13px] text-ink-400">{t.patients.files.dropHint}</span>
+          <span className="text-[0.8125rem] text-ink-400">{t.patients.files.dropHint}</span>
         </div>
 
         {/* Who this patient is on the machine: the number to give them there, and the names it has already been taught. */}
         {machines && (machineId || links.length > 0) && (
-          <div className="mt-3 grid gap-2 border-t border-line pt-3 text-[13px] text-ink-700" data-machine-id={machineId ?? ""}>
+          <div className="mt-3 grid gap-2 border-t border-line pt-3 text-[0.8125rem] text-ink-700" data-machine-id={machineId ?? ""}>
             {machineId && (
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span>{T.machineIdIntro}</span>
@@ -366,7 +366,7 @@ export function FilesTab({
                 {links.map((l) => (
                   <span
                     key={l.id}
-                    className="inline-flex items-center gap-1 rounded-full border border-line bg-surface py-0.5 pe-1 ps-2.5 text-[12.5px] font-semibold text-ink-900"
+                    className="inline-flex items-center gap-1 rounded-full border border-line bg-surface py-0.5 pe-1 ps-2.5 text-[0.78125rem] font-semibold text-ink-900"
                     data-machine-link={l.id}
                   >
                     <span dir="auto">{l.key.startsWith("id:") ? T.machinePatientId.replace("{id}", l.label) : l.label}</span>
@@ -391,8 +391,8 @@ export function FilesTab({
       {likely.length > 0 && (
         <Card className="p-4">
           <div data-likely-section>
-          <h3 className="font-display text-[15px] font-semibold text-ink-900">{T.likelyTitle}</h3>
-          <p className="mb-3 mt-0.5 text-[13px] text-ink-500">{T.likelyBody}</p>
+          <h3 className="font-display text-[0.9375rem] font-semibold text-ink-900">{T.likelyTitle}</h3>
+          <p className="mb-3 mt-0.5 text-[0.8125rem] text-ink-500">{T.likelyBody}</p>
           <ul className="grid gap-2">
             {likely.map((l) => (
               <li key={l.id} className="flex flex-wrap items-center gap-3 rounded-ctl border border-line p-2.5" data-likely={l.id}>
@@ -404,7 +404,7 @@ export function FilesTab({
                     <FileText className="h-5 w-5 text-white/70" />
                   )}
                 </span>
-                <div className="min-w-0 flex-1 text-[13px]">
+                <div className="min-w-0 flex-1 text-[0.8125rem]">
                   <div className="truncate font-semibold text-ink-900">{l.file_name}</div>
                   <div className="text-ink-500">
                     {kindLabel(l.kind)}
@@ -439,7 +439,7 @@ export function FilesTab({
                   setFilter(k);
                   setViewFilter("all");
                 }}
-                className={`rounded-full px-3 py-1 text-[13px] font-semibold transition-colors ${on ? "bg-ink-900 text-surface" : "bg-surface text-ink-700 ring-1 ring-line hover:bg-sunken"}`}
+                className={`rounded-full px-3 py-1 text-[0.8125rem] font-semibold transition-colors ${on ? "bg-ink-900 text-surface" : "bg-surface text-ink-700 ring-1 ring-line hover:bg-sunken"}`}
                 data-files-filter={k}
               >
                 {k === "all" ? T.allKinds : kindLabel(k)} <span className="tnum opacity-70">{n}</span>
@@ -460,7 +460,7 @@ export function FilesTab({
                 type="button"
                 onClick={() => setViewFilter(v)}
                 aria-pressed={on}
-                className={`rounded-full px-2.5 py-0.5 text-[12.5px] font-semibold transition-colors ${on ? "bg-brand-600 text-on-brand" : "bg-sunken text-ink-700 hover:bg-line"}`}
+                className={`rounded-full px-2.5 py-0.5 text-[0.78125rem] font-semibold transition-colors ${on ? "bg-brand-600 text-on-brand" : "bg-sunken text-ink-700 hover:bg-line"}`}
                 data-files-view={v}
               >
                 {v === "all" ? T.allKinds : viewLabels[v]} <span className="tnum opacity-70">{n}</span>
@@ -491,16 +491,16 @@ export function FilesTab({
                         <FileText className="h-9 w-9" />
                       </span>
                     )}
-                    <span className="absolute start-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white" data-file-label>
+                    <span className="absolute start-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-white" data-file-label>
                       {(fileView && viewLabels[fileView]) || kindLabel(f.kind)}
                     </span>
                     {f.edited_from && (
-                      <span className="absolute end-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-ink-900" data-file-edited>
+                      <span className="absolute end-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-900" data-file-edited>
                         {t.viewer.editedSuffix}
                       </span>
                     )}
                     {fileTeeth.length > 0 && (
-                      <span dir="ltr" className="absolute bottom-2 start-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-brand-700 tnum" data-file-teeth>
+                      <span dir="ltr" className="absolute bottom-2 start-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 tnum" data-file-teeth>
                         <Tooth className="h-3 w-3" />
                         {fileTeeth.join(" · ")}
                       </span>
@@ -508,8 +508,8 @@ export function FilesTab({
                   </button>
                   <div className="flex items-start gap-1.5 p-2.5">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-medium text-ink-900">{f.file_name}</div>
-                      <div className="truncate text-[11.5px] text-ink-500">
+                      <div className="truncate text-[0.8125rem] font-medium text-ink-900">{f.file_name}</div>
+                      <div className="truncate text-[length:max(11px,0.71875rem)] text-ink-500">
                         {fmtDate(f.created_at, tz, locale)}
                         {f.device_name ? (
                           <span data-file-device> · {T.fromDevice.replace("{device}", f.device_name)}</span>
@@ -518,7 +518,7 @@ export function FilesTab({
                       {f.dicom && (
                         <a
                           href={`/api/c/${slug}/files/${f.id}/dicom`}
-                          className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700 hover:underline"
+                          className="mt-0.5 inline-flex items-center gap-1 text-[length:max(11px,0.71875rem)] font-semibold text-brand-700 hover:underline"
                           data-file-dicom={f.dicom.instances}
                         >
                           <Download className="h-3 w-3" />

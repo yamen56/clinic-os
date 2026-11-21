@@ -280,7 +280,7 @@ export default async function FinanceAnalyticsPage({
                 </dd>
               </div>
             </dl>
-            <p className="border-t border-line px-5 py-3 text-[12px] leading-relaxed text-ink-500">
+            <p className="border-t border-line px-5 py-3 text-[0.75rem] leading-relaxed text-ink-500">
               {a.commission === null ? F.afterExpensesNote : t.earnings.keptNote}
             </p>
           </Card>
@@ -375,7 +375,7 @@ export default async function FinanceAnalyticsPage({
                       ) : (
                         <span className="block truncate text-sm font-medium text-ink-900">{p.name}</span>
                       )}
-                      <span className="block text-[12px] text-ink-400">{F.invoicesCount.replace("{n}", String(p.invoices))}</span>
+                      <span className="block text-[0.75rem] text-ink-400">{F.invoicesCount.replace("{n}", String(p.invoices))}</span>
                     </span>
                     <span className="shrink-0 text-sm font-semibold text-ink-900 tnum">{money(p.owed)}</span>
                   </li>
@@ -461,11 +461,11 @@ function Tile({
   return (
     <Card className={`p-4 ${className}`}>
       <div data-figure={hook}>
-        <div className="text-[13px] text-ink-500">{label}</div>
-        <div className={`mt-1.5 font-display text-[22px] font-bold leading-tight ${negative ? "text-danger" : "text-ink-900"}`}>
+        <div className="text-[0.8125rem] text-ink-500">{label}</div>
+        <div className={`mt-1.5 font-display text-[1.375rem] font-bold leading-tight ${negative ? "text-danger" : "text-ink-900"}`}>
           {value}
         </div>
-        <div className="mt-2 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-400">
+        <div className="mt-2 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-ink-400">
           {d !== null && d !== undefined && (
             /*
               Direction is the arrow and the word, never the colour alone: the
@@ -511,14 +511,14 @@ function Row({
 }) {
   return (
     <li className="px-5 py-3">
-      <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[13px]">
+      <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[0.8125rem]">
         <span className="flex min-w-0 items-baseline gap-2">
           <span className="truncate text-ink-900">{name}</span>
-          {note && <span className="shrink-0 text-[12px] text-ink-400 tnum">{note}</span>}
+          {note && <span className="shrink-0 text-[0.75rem] text-ink-400 tnum">{note}</span>}
         </span>
         <span className="shrink-0 tnum">
           <span className="font-semibold text-ink-900">{amount}</span>
-          {share !== null && share !== undefined && <span className="ms-2 inline-block w-9 text-end text-[12px] text-ink-400">{share}%</span>}
+          {share !== null && share !== undefined && <span className="ms-2 inline-block w-9 text-end text-[0.75rem] text-ink-400">{share}%</span>}
         </span>
       </div>
       <RowBar value={value} max={max} />
@@ -537,5 +537,5 @@ function Line({ label, value }: { label: string; value: string }) {
 
 /** An empty card says so in a line. A drawing of a chart with nothing in it would be decoration. */
 function Quiet({ children }: { children: React.ReactNode }) {
-  return <p className="py-6 text-center text-[13px] text-ink-400">{children}</p>;
+  return <p className="py-6 text-center text-[0.8125rem] text-ink-400">{children}</p>;
 }

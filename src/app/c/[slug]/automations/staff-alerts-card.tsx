@@ -171,7 +171,7 @@ export function StaffAlertsCard({ slug, alerts }: { slug: string; alerts: StaffA
                   <div className="min-w-0 truncate text-sm font-semibold">
                     {t.automations.alertKinds[a.kind]}
                   </div>
-                  <div className="mt-0.5 truncate text-[13px] text-ink-500">{summary(a)}</div>
+                  <div className="mt-0.5 truncate text-[0.8125rem] text-ink-500">{summary(a)}</div>
                 </button>
                 <button
                   type="button"
@@ -318,7 +318,7 @@ function AlertEditor({
         </Field>
 
         <div>
-          <div className="mb-1.5 text-[13px] font-semibold text-ink-900">
+          <div className="mb-1.5 text-[0.8125rem] font-semibold text-ink-900">
             {t.automations.recipients}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -329,7 +329,7 @@ function AlertEditor({
                   key={r}
                   type="button"
                   onClick={() => setRoles(on ? roles.filter((x) => x !== r) : [...roles, r])}
-                  className={`rounded-ctl border px-3 py-1.5 text-[13px] font-medium transition-colors duration-140 ${
+                  className={`rounded-ctl border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors duration-140 ${
                     on
                       ? "border-brand-600 bg-brand-100 text-brand-700"
                       : "border-line bg-surface text-ink-700 hover:border-line-strong"

@@ -84,11 +84,11 @@ export function PriceLine({ m, tz }: { m: Mark; tz: string }) {
 
   return (
     <div className="grid gap-1.5" data-price-line={m.id} data-amount={cash.amount ?? ""} data-fee-manual={m.feeManual ? "yes" : "no"}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
-        <span className="text-[12px] font-semibold text-ink-500">{P.label}</span>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem]">
+        <span className="text-[0.75rem] font-semibold text-ink-500">{P.label}</span>
         <span className={`font-semibold tnum ${text ? "text-ink-900" : "text-ink-500"}`} data-price-text>{text ?? P.none}</span>
         {m.feeManual && (
-          <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11.5px] font-semibold text-brand-700" data-fee-edited>
+          <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold text-brand-700" data-fee-edited>
             {P.edited}
             {list && list.price !== m.fee ? ` · ${P.listWas.replace("{fee}", fmt(list.price))}` : ""}
           </span>
@@ -97,18 +97,18 @@ export function PriceLine({ m, tz }: { m: Mark; tz: string }) {
           <FeeEditor m={m} currency={store.currency} label={text ? P.edit : P.setForPatient} onSave={(fee) => w.setFee(m, fee)} />
         )}
         {m.feeManual && mayChoose && (
-          <button type="button" onClick={() => void w.setFee(m, null)} className="text-[12px] font-semibold text-ink-500 hover:text-ink-900 hover:underline" data-fee-reset>
+          <button type="button" onClick={() => void w.setFee(m, null)} className="text-[0.75rem] font-semibold text-ink-500 hover:text-ink-900 hover:underline" data-fee-reset>
             {P.useList}
           </button>
         )}
         {!text && store.canPrice && (
-          <Link href={`/c/${store.slug}/settings/prices`} className="text-[12px] font-semibold text-brand-700 hover:underline">
+          <Link href={`/c/${store.slug}/settings/prices`} className="text-[0.75rem] font-semibold text-brand-700 hover:underline">
             {P.setPrices}
           </Link>
         )}
         {store.canBill && text && (
           <span
-            className="ms-auto rounded-full px-2 py-0.5 text-[11.5px] font-semibold"
+            className="ms-auto rounded-full px-2 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold"
             style={cash.billed ? { background: SOFT.done, color: INK.done } : { background: "var(--color-sunken)", color: "var(--color-ink-500)" }}
             data-billed={cash.billed ? "yes" : "no"}
           >
@@ -118,7 +118,7 @@ export function PriceLine({ m, tz }: { m: Mark; tz: string }) {
       </div>
       {/* Paid off over the visits, on the one invoice: how far it has got. */}
       {paid && (
-        <div className="text-[12.5px] font-semibold tnum text-ink-700" data-paid-line={m.id} data-left={cash.left}>
+        <div className="text-[0.78125rem] font-semibold tnum text-ink-700" data-paid-line={m.id} data-left={cash.left}>
           {paid}
         </div>
       )}
@@ -153,7 +153,7 @@ function FeeEditor({
           setText(m.fee == null ? "" : String(m.fee));
           setOpen(true);
         }}
-        className="inline-flex h-7 items-center gap-1 rounded-ctl px-1.5 text-[12px] font-semibold text-brand-700 hover:bg-brand-50"
+        className="inline-flex h-7 items-center gap-1 rounded-ctl px-1.5 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50"
         data-fee-edit={m.id}
       >
         <Pencil className="h-3.5 w-3.5" />
@@ -177,7 +177,7 @@ function FeeEditor({
       }}
       data-fee-form={m.id}
     >
-      <label className="flex items-center gap-2 text-[12px] font-semibold text-ink-500">
+      <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-500">
         {P.forPatient}
         {/* The focus ring goes round the whole box, the currency with it, not the number alone. */}
         <span className="flex h-9 items-center rounded-ctl border border-line bg-surface focus-within:border-brand-600 focus-within:shadow-[0_0_0_3px_rgb(125_141_164/0.45)]" dir="ltr">
@@ -195,14 +195,14 @@ function FeeEditor({
             className="h-full w-24 rounded-ctl bg-transparent px-2 text-base font-semibold text-ink-900 tnum focus:outline-none focus-visible:!shadow-none md:text-sm"
             data-fee-input
           />
-          <span className="pe-2 text-[12px] font-semibold text-ink-400">{currency}</span>
+          <span className="pe-2 text-[0.75rem] font-semibold text-ink-400">{currency}</span>
         </span>
       </label>
       <div className="ms-auto flex gap-1.5">
-        <button type="button" onClick={() => setOpen(false)} className="h-8 rounded-ctl px-2.5 text-[12.5px] font-semibold text-ink-500 hover:bg-sunken">
+        <button type="button" onClick={() => setOpen(false)} className="h-8 rounded-ctl px-2.5 text-[0.78125rem] font-semibold text-ink-500 hover:bg-sunken">
           {P.cancel}
         </button>
-        <button type="submit" disabled={!valid || busy} className="h-8 rounded-ctl bg-brand-600 px-3 text-[12.5px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-45" data-fee-save>
+        <button type="submit" disabled={!valid || busy} className="h-8 rounded-ctl bg-brand-600 px-3 text-[0.78125rem] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-45" data-fee-save>
           {P.save}
         </button>
       </div>

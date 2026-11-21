@@ -129,7 +129,7 @@ export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string
                   {isSelf && <Badge status="brand">{t.admin.adminYou}</Badge>}
                   {a.invitePending && <Badge status="pending">{t.admin.ownerInvitePending}</Badge>}
                 </div>
-                <div className="text-[13px] text-ink-500" dir="ltr">
+                <div className="text-[0.8125rem] text-ink-500" dir="ltr">
                   {a.email}
                 </div>
               </div>
@@ -143,7 +143,7 @@ export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string
                   </Badge>
                 )}
                 {a.lastSession && (
-                  <span className="text-[12px] text-ink-400" suppressHydrationWarning>
+                  <span className="text-[0.75rem] text-ink-400" suppressHydrationWarning>
                     {fmtRelative(a.lastSession, locale)}
                   </span>
                 )}
@@ -210,7 +210,7 @@ export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string
 
           <AccessEditor form={form} setForm={setForm} />
 
-          <p className="rounded-md bg-sunken px-3 py-2 text-[13px] text-ink-500">
+          <p className="rounded-md bg-sunken px-3 py-2 text-[0.8125rem] text-ink-500">
             {t.admin.adminInviteHint}
           </p>
           {error && (
@@ -255,7 +255,7 @@ export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string
             <AccessEditor form={form} setForm={setForm} />
 
             {isLastFull(editing) && (
-              <p className="rounded-md bg-sunken px-3 py-2 text-[13px] text-ink-500">
+              <p className="rounded-md bg-sunken px-3 py-2 text-[0.8125rem] text-ink-500">
                 {t.admin.lastAdmin}
               </p>
             )}
@@ -316,7 +316,7 @@ export function TeamClient({ admins, selfId }: { admins: Admin[]; selfId: string
               <Avatar name={confirmRevoke.fullName} size={30} />
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{confirmRevoke.fullName}</div>
-                <div className="truncate text-[12px] text-ink-500" dir="ltr">
+                <div className="truncate text-[0.75rem] text-ink-500" dir="ltr">
                   {confirmRevoke.email}
                 </div>
               </div>
@@ -404,7 +404,7 @@ function AccessEditor({
                 {lvl === "full" ? t.admin.adminFullAccess : t.admin.adminLimited}
               </span>
               {lvl === "full" && (
-                <span className="mt-0.5 block text-[12px] leading-relaxed text-ink-500">
+                <span className="mt-0.5 block text-[0.75rem] leading-relaxed text-ink-500">
                   {t.admin.adminFullAccessHint}
                 </span>
               )}
@@ -416,13 +416,13 @@ function AccessEditor({
       {form.level === "custom" && (
         <>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[12px] text-ink-400">{t.admin.adminPresets}</span>
+            <span className="text-[0.75rem] text-ink-400">{t.admin.adminPresets}</span>
             {ADMIN_PRESETS.map((p) => (
               <button
                 key={p.key}
                 type="button"
                 onClick={() => setForm({ ...form, caps: adminCapabilitiesFor(p.caps) })}
-                className="rounded-full border border-line px-2.5 py-1 text-[12px] font-medium text-ink-700 transition-colors hover:bg-brand-100 hover:text-brand-700"
+                className="rounded-full border border-line px-2.5 py-1 text-[0.75rem] font-medium text-ink-700 transition-colors hover:bg-brand-100 hover:text-brand-700"
               >
                 {(t.admin.presets as Record<string, string>)[p.key] ?? p.key}
               </button>
@@ -432,7 +432,7 @@ function AccessEditor({
           <div className="grid gap-3 rounded-ctl border border-line p-3">
             {ADMIN_CAPABILITY_GROUPS.map((g) => (
               <div key={g.key}>
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                <div className="mb-1 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">
                   {groupLabel(g.key)}
                 </div>
                 <div className="grid gap-1">
@@ -441,7 +441,7 @@ function AccessEditor({
                       key={c}
                       className="flex cursor-pointer items-center gap-2.5 rounded-ctl px-1.5 py-1.5 hover:bg-sunken"
                     >
-                      <span className="flex-1 text-[13px]">{capLabel(c)}</span>
+                      <span className="flex-1 text-[0.8125rem]">{capLabel(c)}</span>
                       <Toggle
                         checked={form.caps[c] === true}
                         label={capLabel(c)}
@@ -471,9 +471,9 @@ function InviteLink({ url, onDone }: { url: string; onDone: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
     <Card className="mt-4 p-4">
-      <div className="mb-2 text-[13px] text-ink-500">{t.admin.inviteLinkCopy}</div>
+      <div className="mb-2 text-[0.8125rem] text-ink-500">{t.admin.inviteLinkCopy}</div>
       <div className="flex flex-wrap items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-ctl bg-sunken px-3 py-2 text-[12px]" dir="ltr">
+        <code className="min-w-0 flex-1 truncate rounded-ctl bg-sunken px-3 py-2 text-[0.75rem]" dir="ltr">
           {url}
         </code>
         <Button

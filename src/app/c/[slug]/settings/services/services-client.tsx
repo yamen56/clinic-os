@@ -185,7 +185,7 @@ export function ServicesClient({
           {/* The exception is the news: nearly every service is bookable online, so a badge on each said nothing. */}
           {s.active && !s.bookable_online && <Badge status="neutral">{t.services.notOnline}</Badge>}
         </div>
-        <div className="text-[13px] text-ink-500 tnum">
+        <div className="text-[0.8125rem] text-ink-500 tnum">
           {s.duration_min} {t.common.min} · {fmtMoney(Number(s.price), currency, locale)}
           {s.doctor_ids.length > 0 &&
             ` · ${
@@ -290,7 +290,7 @@ export function ServicesClient({
               >
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{label(sec)}</div>
-                  <div className="text-[13px] text-ink-500 tnum">{countLabel(sec.service_count)}</div>
+                  <div className="text-[0.8125rem] text-ink-500 tnum">{countLabel(sec.service_count)}</div>
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-1.5">
@@ -379,11 +379,11 @@ export function ServicesClient({
           <div className="divide-y divide-line">
             {grouped.map((g) => (
               <div key={g.sec?.id ?? "__unfiled"}>
-                <div className="bg-sunken px-5 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-500">
+                <div className="bg-sunken px-5 py-1.5 text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500">
                   {g.sec ? label(g.sec) : t.sections.unfiled}
                 </div>
                 {g.items.length === 0 ? (
-                  <p className="px-5 py-3 text-[13px] text-ink-400">{t.sections.noServices}</p>
+                  <p className="px-5 py-3 text-[0.8125rem] text-ink-400">{t.sections.noServices}</p>
                 ) : (
                   <ul className="divide-y divide-line">{g.items.map(serviceRow)}</ul>
                 )}
@@ -458,10 +458,10 @@ export function ServicesClient({
                     checked={draft.courseSessions !== null}
                     onChange={(v) => setDraft({ ...draft, courseSessions: v ? 6 : null })}
                   />
-                  <span className="text-[13px] font-medium">{t.services.course.toggle}</span>
+                  <span className="text-[0.8125rem] font-medium">{t.services.course.toggle}</span>
                 </label>
                 {draft.courseSessions !== null && (
-                  <div className="grid grid-cols-[5rem_auto_5rem_minmax(0,1fr)] items-center gap-2 text-[13px] text-ink-700">
+                  <div className="grid grid-cols-[5rem_auto_5rem_minmax(0,1fr)] items-center gap-2 text-[0.8125rem] text-ink-700">
                     <NumberInput
                       dir="ltr"
                       min={2}
@@ -493,7 +493,7 @@ export function ServicesClient({
                     </Select>
                   </div>
                 )}
-                <p className="text-[12px] leading-snug text-ink-500">{t.services.course.hint}</p>
+                <p className="text-[0.75rem] leading-snug text-ink-500">{t.services.course.hint}</p>
               </div>
             )}
             <Field label={t.services.feeCode} hint={t.services.feeCodeHint}>
@@ -515,7 +515,7 @@ export function ServicesClient({
               </Field>
               <label className="flex items-center gap-2.5 pt-5">
                 <Toggle checked={draft.bookableOnline} onChange={(v) => setDraft({ ...draft, bookableOnline: v })} />
-                <span className="text-[13px] font-medium">{t.services.bookableOnline}</span>
+                <span className="text-[0.8125rem] font-medium">{t.services.bookableOnline}</span>
               </label>
             </div>
             <div className="grid grid-cols-1 gap-4">
@@ -536,7 +536,7 @@ export function ServicesClient({
                 </Select>
               </Field>
               {draft.locationKind === "online" && (
-                <p className="text-[13px] text-ink-500">{t.services.onlineHint}</p>
+                <p className="text-[0.8125rem] text-ink-500">{t.services.onlineHint}</p>
               )}
             </div>
             {doctors.length > 0 && (
@@ -555,7 +555,7 @@ export function ServicesClient({
                               : [...draft.doctorIds, d.id],
                           })
                         }
-                        className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                        className={`rounded-full border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors ${
                           on
                             ? "border-brand-500 bg-brand-50 text-brand-800"
                             : "border-line-strong text-ink-500 hover:bg-sunken"
@@ -636,7 +636,7 @@ export function ServicesClient({
                 checked={sectionDraft.active}
                 onChange={(v) => setSectionDraft({ ...sectionDraft, active: v })}
               />
-              <span className="text-[13px] font-medium">
+              <span className="text-[0.8125rem] font-medium">
                 {sectionDraft.active ? t.sections.shown : t.sections.hidden}
               </span>
             </label>

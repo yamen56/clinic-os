@@ -47,7 +47,7 @@ export function PrivacyLink({
 }) {
   if (as === "text") {
     return (
-      <span className={`text-[11px] leading-none text-ink-400 ${className}`}>
+      <span className={`text-[length:max(11px,0.6875rem)] leading-none text-ink-400 ${className}`}>
         {label} · privacy.clinicti.app
       </span>
     );
@@ -57,7 +57,7 @@ export function PrivacyLink({
       href={CLINICTI_PRIVACY_URL}
       target="_blank"
       rel="noopener noreferrer"
-      className={`text-[11px] leading-none text-ink-400 no-underline transition-colors hover:text-ink-700 ${className}`}
+      className={`text-[length:max(11px,0.6875rem)] leading-none text-ink-400 no-underline transition-colors hover:text-ink-700 ${className}`}
     >
       {label}
     </a>
@@ -83,7 +83,7 @@ export function PoweredBy({
       href={CLINICTI_URL}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex items-center gap-1.5 text-[11px] leading-none text-ink-400 no-underline transition-colors hover:text-ink-700 ${className}`}
+      className={`inline-flex items-center gap-1.5 text-[length:max(11px,0.6875rem)] leading-none text-ink-400 no-underline transition-colors hover:text-ink-700 ${className}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

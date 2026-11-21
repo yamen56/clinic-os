@@ -46,7 +46,7 @@ export function HoursClient({
         <CardHeader title={t.hours.blockedDates} sub={t.hours.blockedSub} />
         <div className="flex flex-wrap items-center gap-2 p-5">
           {blocked.map((d) => (
-            <span key={d} className="flex items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-[13px] font-medium text-danger tnum">
+            <span key={d} className="flex items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-[0.8125rem] font-medium text-danger tnum">
               {d}
               {isOwner && (
                 <button

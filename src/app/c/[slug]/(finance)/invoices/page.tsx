@@ -226,11 +226,11 @@ export default async function InvoicesPage({
           showToday ? (
             <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5" data-today-takings={todayTotal.toFixed(2)}>
               <span className="inline-flex items-baseline gap-2 rounded-full bg-ink-900/5 px-3 py-1">
-                <span className="text-[12px] text-ink-500">{t.invoices.collectedToday}</span>
-                <span className="text-[13px] font-semibold text-ink-900 tnum">{money(todayTotal)}</span>
+                <span className="text-[0.75rem] text-ink-500">{t.invoices.collectedToday}</span>
+                <span className="text-[0.8125rem] font-semibold text-ink-900 tnum">{money(todayTotal)}</span>
               </span>
               {data.todayByMethod.map((m) => (
-                <span key={m.method} className="text-[12px] text-ink-400">
+                <span key={m.method} className="text-[0.75rem] text-ink-400">
                   {(t.invoices.methods as Record<string, string>)[m.method] ?? m.method}{" "}
                   <span className="font-medium text-ink-700 tnum">{money(m.amount)}</span>
                 </span>
@@ -288,7 +288,7 @@ export default async function InvoicesPage({
               <Link
                 key={key || "all"}
                 href={listHref({ status: key || undefined })}
-                className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-140 ease-out ${
+                className={`rounded-full px-3 py-1 text-[0.75rem] font-medium transition-colors duration-140 ease-out ${
                   on ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8 hover:text-ink-700"
                 }`}
               >
@@ -307,13 +307,13 @@ export default async function InvoicesPage({
       )}
       {/* Whoever sees only today's (no `invoices.history`) is told so, and where the rest of a patient's bills are. */}
       {onlyToday && (
-        <p className="-mt-2 mb-4 text-[12px] text-ink-500" data-today-only>
+        <p className="-mt-2 mb-4 text-[0.75rem] text-ink-500" data-today-only>
           {t.invoices.todayOnlyNote}
         </p>
       )}
       {/* Why some cancelled invoices cannot be deleted, said where they are listed. */}
       {cancelledView && Number(data.stats.cancelled_count) > Number(data.stats.deletable_count) && (
-        <p className="-mt-2 mb-4 text-[12px] text-ink-500" data-filed-stay>
+        <p className="-mt-2 mb-4 text-[0.75rem] text-ink-500" data-filed-stay>
           {t.invoices.filedStays}
         </p>
       )}
@@ -364,7 +364,7 @@ export default async function InvoicesPage({
                       className="flex items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-sunken max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4 sm:px-5"
                     >
                       <span
-                        className="order-3 min-w-0 justify-self-start truncate text-[12px] text-ink-500 tnum sm:order-none sm:w-36 sm:shrink-0 sm:text-sm sm:font-semibold sm:text-ink-900"
+                        className="order-3 min-w-0 justify-self-start truncate text-[0.75rem] text-ink-500 tnum sm:order-none sm:w-36 sm:shrink-0 sm:text-sm sm:font-semibold sm:text-ink-900"
                         dir="ltr"
                       >
                         {String(inv.number)}
@@ -378,12 +378,12 @@ export default async function InvoicesPage({
                       <span className="order-1 flex min-w-0 flex-1 items-baseline gap-2 sm:order-none">
                         <span className="truncate text-sm font-medium sm:font-normal">{String(inv.patient_name)}</span>
                         {inv.title ? (
-                          <span className="truncate text-[13px] text-ink-400">
+                          <span className="truncate text-[0.8125rem] text-ink-400">
                             {String(inv.title)}
                           </span>
                         ) : null}
                       </span>
-                      <span className="hidden text-[13px] text-ink-400 sm:block">
+                      <span className="hidden text-[0.8125rem] text-ink-400 sm:block">
                         {inv.issue_day ? fmtDateOnly(String(inv.issue_day), locale) : fmtDate(String(inv.created_at), tz, locale)}
                       </span>
                       {/*
@@ -397,7 +397,7 @@ export default async function InvoicesPage({
                           {fmtMoney(partial ? paid : total, access.clinic.currency, locale)}
                         </span>
                         {partial && (
-                          <span className="block text-[12px] text-ink-400 tnum">
+                          <span className="block text-[0.75rem] text-ink-400 tnum">
                             {t.invoices.ofTotal.replace(
                               "{total}",
                               fmtMoney(total, access.clinic.currency, locale)
@@ -410,7 +410,7 @@ export default async function InvoicesPage({
                           {(t.invoices.statuses as Record<string, string>)[String(inv.status)]}
                         </Badge>
                         {partial && (
-                          <span className="mt-0.5 block text-[12px] font-medium text-st-pending tnum">
+                          <span className="mt-0.5 block text-[0.75rem] font-medium text-st-pending tnum">
                             {t.invoices.leftToPay.replace(
                               "{amount}",
                               fmtMoney(left, access.clinic.currency, locale)
@@ -464,7 +464,7 @@ export default async function InvoicesPage({
                 <span className="flex min-w-0 flex-1 basis-full flex-wrap items-baseline gap-x-2 sm:basis-auto">
                   <span className="truncate text-sm">{String(p.patient_name)}</span>
                   <span
-                    className={`text-[12px] ${open ? "text-st-pending" : "text-ink-400"}`}
+                    className={`text-[0.75rem] ${open ? "text-st-pending" : "text-ink-400"}`}
                   >
                     {open
                       ? t.invoices.leftBalance.replace(
@@ -476,12 +476,12 @@ export default async function InvoicesPage({
                 </span>
                 <Link
                   href={`${base}/${p.invoice_id}`}
-                  className="shrink-0 text-[13px] text-brand-700 tnum"
+                  className="shrink-0 text-[0.8125rem] text-brand-700 tnum"
                   dir="ltr"
                 >
                   {String(p.number)}
                 </Link>
-                <span className="hidden text-[13px] text-ink-400 sm:block">
+                <span className="hidden text-[0.8125rem] text-ink-400 sm:block">
                   {fmtDate(String(p.paid_at), tz, locale)}
                 </span>
               </li>

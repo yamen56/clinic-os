@@ -201,7 +201,7 @@ function Inbox({ slug, tz, onUnread }: { slug: string; tz: string; onUnread: (n:
       type="button"
       onClick={() => setFilter(key)}
       aria-pressed={filter === key}
-      className={`rounded-full border px-3 py-1 text-[13px] font-medium transition-colors duration-140 ${
+      className={`rounded-full border px-3 py-1 text-[0.8125rem] font-medium transition-colors duration-140 ${
         filter === key
           ? "border-brand-600 bg-brand-100 text-brand-700"
           : "border-line bg-surface text-ink-700 hover:border-line-strong"
@@ -265,8 +265,8 @@ function Inbox({ slug, tz, onUnread }: { slug: string; tz: string; onUnread: (n:
                       are one per line, and collapsing them ran the labels and
                       values together into something unreadable.
                     */}
-                    {n.body && <p className="mt-0.5 whitespace-pre-line text-[13px] text-ink-500">{n.body}</p>}
-                    <div className="mt-0.5 text-[12px] text-ink-400" suppressHydrationWarning>
+                    {n.body && <p className="mt-0.5 whitespace-pre-line text-[0.8125rem] text-ink-500">{n.body}</p>}
+                    <div className="mt-0.5 text-[0.75rem] text-ink-400" suppressHydrationWarning>
                       {fmtDateTime(n.created_at, tz, locale)}
                     </div>
                   </div>
@@ -385,8 +385,8 @@ function Settings({
   ) => (
     <div className="flex items-center justify-between gap-3 py-2">
       <div className="min-w-0">
-        <div className="text-[13px] font-medium text-ink-900">{label}</div>
-        <div className="text-[12px] text-ink-500">{hint}</div>
+        <div className="text-[0.8125rem] font-medium text-ink-900">{label}</div>
+        <div className="text-[0.75rem] text-ink-500">{hint}</div>
       </div>
       <Toggle checked={checked} onChange={onChange} label={label} disabled={disabled} />
     </div>
@@ -397,24 +397,24 @@ function Settings({
       <Card>
         <CardHeader title={t.notifications.preferences} sub={t.notifications.preferencesHint} />
         {rows.length === 0 ? (
-          <p className="px-5 py-4 text-[13px] text-ink-500">{t.notifications.nothingForYou}</p>
+          <p className="px-5 py-4 text-[0.8125rem] text-ink-500">{t.notifications.nothingForYou}</p>
         ) : (
           GROUPS.map((g) => {
             const inGroup = rows.filter((r) => r.group === g);
             if (!inGroup.length) return null;
             return (
               <section key={g} className="border-b border-line px-5 py-3 last:border-b-0">
-                <h4 className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-ink-400">
+                <h4 className="mb-1 text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">
                   {t.notifications.groups[g]}
                 </h4>
                 <ul className="divide-y divide-line/60">
                   {inGroup.map((r) => (
                     <li key={r.key} className="flex items-center justify-between gap-3 py-2.5" data-pref={r.key}>
                       <div className="min-w-0">
-                        <div className="text-[13px] font-medium text-ink-900">
+                        <div className="text-[0.8125rem] font-medium text-ink-900">
                           {t.notifications.prefs[r.key].label}
                         </div>
-                        <div className="text-[12px] text-ink-500">
+                        <div className="text-[0.75rem] text-ink-500">
                           {r.lockOff ? t.notifications.cantTurnOff : t.notifications.prefs[r.key].hint}
                         </div>
                       </div>
@@ -423,7 +423,7 @@ function Settings({
                   ))}
                   {g === "schedule" && showReminder && (
                     <li className="flex items-center justify-between gap-3 py-2.5">
-                      <label className="min-w-0 text-[13px] font-medium text-ink-900" htmlFor="reminder-minutes">
+                      <label className="min-w-0 text-[0.8125rem] font-medium text-ink-900" htmlFor="reminder-minutes">
                         {t.notifications.reminderMinutes}
                       </label>
                       <NumberInput
@@ -449,8 +449,8 @@ function Settings({
             className="flex items-center justify-between gap-3 border-t border-line px-5 py-3.5 transition-colors hover:bg-sunken"
           >
             <span className="min-w-0">
-              <span className="block text-[13px] font-semibold text-brand-700">{t.notifications.teamAlerts}</span>
-              <span className="block text-[12px] text-ink-500">{t.notifications.teamAlertsHint}</span>
+              <span className="block text-[0.8125rem] font-semibold text-brand-700">{t.notifications.teamAlerts}</span>
+              <span className="block text-[0.75rem] text-ink-500">{t.notifications.teamAlertsHint}</span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
           </Link>
@@ -498,7 +498,7 @@ function Settings({
           </div>
           <div className="border-t border-line px-5 py-3">
             <label className="flex items-center justify-between gap-3">
-              <span className="text-[13px] font-medium text-ink-900">{t.notifications.language}</span>
+              <span className="text-[0.8125rem] font-medium text-ink-900">{t.notifications.language}</span>
               <Select
                 value={language}
                 onChange={(e) => {
@@ -533,7 +533,7 @@ function Settings({
               <>
                 <div className="grid grid-cols-2 gap-3 py-2">
                   <label className="block">
-                    <span className="mb-1 block text-[12px] font-semibold text-ink-700">{t.notifications.quietFrom}</span>
+                    <span className="mb-1 block text-[0.75rem] font-semibold text-ink-700">{t.notifications.quietFrom}</span>
                     <Select
                       dir="ltr"
                       value={quiet.from}
@@ -548,7 +548,7 @@ function Settings({
                     </Select>
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-[12px] font-semibold text-ink-700">{t.notifications.quietTo}</span>
+                    <span className="mb-1 block text-[0.75rem] font-semibold text-ink-700">{t.notifications.quietTo}</span>
                     <Select
                       dir="ltr"
                       value={quiet.to}

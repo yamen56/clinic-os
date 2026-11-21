@@ -81,16 +81,16 @@ export function SignatureSettings({
     <div className="grid gap-4">
       <Card>
         <div className="border-b border-line px-5 py-4">
-          <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+          <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold">
             <PenTool className="h-4 w-4 text-ink-400" />
             {t.mySignature.title}
           </h2>
-          <p className="mt-0.5 text-[13px] text-ink-500">{t.mySignature.sub}</p>
+          <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.mySignature.sub}</p>
         </div>
         <div className="p-5">
           {drawing ? (
             <>
-              <p className="mb-3 text-[13px] text-ink-500">{t.mySignature.firstTime}</p>
+              <p className="mb-3 text-[0.8125rem] text-ink-500">{t.mySignature.firstTime}</p>
               <SignaturePad
                 ref={padRef}
                 suggestedName={myName}
@@ -115,7 +115,7 @@ export function SignatureSettings({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={currentSignature} alt="" className="h-16 max-w-64 object-contain" />
                 ) : (
-                  <span className="text-[13px] text-ink-400">{t.mySignature.none}</span>
+                  <span className="text-[0.8125rem] text-ink-400">{t.mySignature.none}</span>
                 )}
               </div>
               <Button variant="outline" onClick={() => setDrawing(true)}>
@@ -131,7 +131,7 @@ export function SignatureSettings({
           {/* Wraps, so the badge drops below the heading rather than widening
               it — a heading row that cannot break is how a card ends up wider
               than the phone holding it. */}
-          <h2 className="flex flex-wrap items-center gap-2 text-[15px] font-semibold">
+          <h2 className="flex flex-wrap items-center gap-2 text-[0.9375rem] font-semibold">
             <Lock className="h-4 w-4 text-ink-400" />
             {t.mySignature.pin}
             {hasPin ? (
@@ -140,7 +140,7 @@ export function SignatureSettings({
               <Badge status="neutral">{t.mySignature.pinNone}</Badge>
             )}
           </h2>
-          <p className="mt-0.5 text-[13px] text-ink-500">
+          <p className="mt-0.5 text-[0.8125rem] text-ink-500">
             {t.mySignature.pinSub}
             {!hasPin && ` ${t.mySignature.pinNoneHint}`}
           </p>

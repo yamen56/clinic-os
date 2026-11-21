@@ -70,8 +70,8 @@ function Card({
         <Icon className="h-4.5 w-4.5" />
       </span>
       <span className="min-w-0">
-        <span className="block text-[13px] font-semibold text-ink-900">{title}</span>
-        <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">{disabledReason || hint}</span>
+        <span className="block text-[0.8125rem] font-semibold text-ink-900">{title}</span>
+        <span className="mt-0.5 block text-[0.75rem] leading-snug text-ink-500">{disabledReason || hint}</span>
       </span>
     </button>
   );

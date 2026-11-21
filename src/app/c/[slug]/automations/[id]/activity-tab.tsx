@@ -108,7 +108,7 @@ export function ActivityTab({
                 setFilter(s);
                 load(s, null);
               }}
-              className={`rounded-full border px-3 py-1 text-[12px] font-medium ${
+              className={`rounded-full border px-3 py-1 text-[0.75rem] font-medium ${
                 filter === s ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:border-line-strong"
               }`}
             >
@@ -151,17 +151,17 @@ export function ActivityTab({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">
                         {r.patient_name ?? f.noPatient}
-                        {r.test && <span className="ms-2 rounded bg-sunken px-1.5 py-0.5 text-[11px] text-ink-500">{f.test}</span>}
+                        {r.test && <span className="ms-2 rounded bg-sunken px-1.5 py-0.5 text-[length:max(11px,0.6875rem)] text-ink-500">{f.test}</span>}
                       </span>
                       {r.status === "waiting" && (
-                        <span className="block truncate text-[12px] text-ink-500" suppressHydrationWarning>
+                        <span className="block truncate text-[0.75rem] text-ink-500" suppressHydrationWarning>
                           {stepName(r.current_step_id, null)}
                           {r.wake_at ? ` · ${fill(f.nextStepAt, { when: fmtRelative(r.wake_at, locale) })}` : ""}
                         </span>
                       )}
                       {problem && (
                         <span
-                          className={`block truncate text-[12px] ${problem.note?.kind === "undelivered" ? "text-warning" : "text-danger"}`}
+                          className={`block truncate text-[0.75rem] ${problem.note?.kind === "undelivered" ? "text-warning" : "text-danger"}`}
                           data-run-message-problem
                         >
                           {t.delivery.message} ·{" "}
@@ -171,7 +171,7 @@ export function ActivityTab({
                         </span>
                       )}
                     </span>
-                    <span className="hidden text-[12px] text-ink-400 sm:block" suppressHydrationWarning>
+                    <span className="hidden text-[0.75rem] text-ink-400 sm:block" suppressHydrationWarning>
                       {fmtRelative(r.started_at, locale)}
                     </span>
                     <ChevronDown className={`h-4 w-4 shrink-0 text-ink-300 transition-transform ${open === r.id ? "rotate-180" : ""}`} />
@@ -179,21 +179,21 @@ export function ActivityTab({
                   {open === r.id && (
                     <div className="border-t border-line bg-subtle px-4 py-3">
                       {r.error && !["step_removed", "cancelled_by_staff", "automation_off", "module_off", "duplicate", "stalled"].includes(r.error) && (
-                        <p className="mb-2 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger">{r.error}</p>
+                        <p className="mb-2 rounded-md bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger">{r.error}</p>
                       )}
                       <ol className="grid gap-2">
                         {r.logs.map((l, i) => {
                           const text = describe(l);
                           return (
-                            <li key={i} className="flex items-start gap-2.5 text-[13px]">
+                            <li key={i} className="flex items-start gap-2.5 text-[0.8125rem]">
                               <Badge status={l.status === "ok" ? "confirmed" : l.status === "failed" ? "no_show" : l.status === "waiting" ? "pending" : "neutral"}>
                                 {(t.automations.stepResult as Record<string, string>)[l.status] ?? l.status}
                               </Badge>
                               <span className="min-w-0 flex-1">
                                 <span className="block font-medium">{l.step_id || l.step ? stepName(l.step_id, l.step) : "—"}</span>
-                                {text && <span className="block break-words text-[12px] text-ink-500">{text}</span>}
+                                {text && <span className="block break-words text-[0.75rem] text-ink-500">{text}</span>}
                               </span>
-                              <span className="shrink-0 text-[12px] text-ink-400" suppressHydrationWarning>
+                              <span className="shrink-0 text-[0.75rem] text-ink-400" suppressHydrationWarning>
                                 {fmtDateTime(l.at, tz, locale)}
                               </span>
                             </li>
@@ -203,25 +203,25 @@ export function ActivityTab({
                       {sent.length > 0 && (
                         <ol className="mt-3 grid gap-2 border-t border-line pt-3" data-run-messages>
                           {sent.map(({ m, note }) => (
-                            <li key={m.id} className="flex items-start gap-2.5 text-[13px]">
+                            <li key={m.id} className="flex items-start gap-2.5 text-[0.8125rem]">
                               <Badge status={messageBadge[m.status] ?? "neutral"}>
                                 {(t.delivery.status as Record<string, string>)[m.status] ?? m.status}
                               </Badge>
                               <span className="min-w-0 flex-1">
                                 <span className="block font-medium">{t.delivery.message}</span>
                                 {note && (
-                                  <span className="block break-words text-[12px] text-ink-500" suppressHydrationWarning>
+                                  <span className="block break-words text-[0.75rem] text-ink-500" suppressHydrationWarning>
                                     {deliveryText(note, t.delivery, (at) => fmtDateTime(at, tz, locale))}
                                   </span>
                                 )}
                                 <Link
                                   href={`/c/${slug}/conversations?open=${m.conversation_id}`}
-                                  className="text-[12px] font-medium text-brand-700 hover:underline"
+                                  className="text-[0.75rem] font-medium text-brand-700 hover:underline"
                                 >
                                   {t.wa.openChat}
                                 </Link>
                               </span>
-                              <span className="shrink-0 text-[12px] text-ink-400" suppressHydrationWarning>
+                              <span className="shrink-0 text-[0.75rem] text-ink-400" suppressHydrationWarning>
                                 {fmtDateTime(m.created_at, tz, locale)}
                               </span>
                             </li>
@@ -230,7 +230,7 @@ export function ActivityTab({
                       )}
                       <div className="mt-3 flex flex-wrap gap-2">
                         {r.patient_id && (
-                          <Link href={`/c/${slug}/patients/${r.patient_id}`} className="text-[13px] font-medium text-brand-700 hover:underline">
+                          <Link href={`/c/${slug}/patients/${r.patient_id}`} className="text-[0.8125rem] font-medium text-brand-700 hover:underline">
                             {t.patients.notes.openPatientFile}
                           </Link>
                         )}
@@ -246,7 +246,7 @@ export function ActivityTab({
                                 toast(fill(f.cancelledN, { n: res.cancelled ?? 0 }));
                               })
                             }
-                            className="text-[13px] font-medium text-danger hover:underline"
+                            className="text-[0.8125rem] font-medium text-danger hover:underline"
                           >
                             {f.cancelRun}
                           </button>

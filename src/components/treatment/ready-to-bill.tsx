@@ -46,8 +46,8 @@ export function TreatmentReadyToBill({ className = "mb-4 p-4" }: { className?: s
       <Card className={className}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-[15px] font-semibold">{I.readyToBill}</h3>
-            <p className="mt-0.5 text-[13px] text-ink-500">{T.readyHint}</p>
+            <h3 className="text-[0.9375rem] font-semibold">{I.readyToBill}</h3>
+            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{T.readyHint}</p>
           </div>
           {chosen.length > 0 && (
             <a
@@ -68,15 +68,15 @@ export function TreatmentReadyToBill({ className = "mb-4 p-4" }: { className?: s
                 <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2">
                   <input type="checkbox" className="h-4.5 w-4.5 shrink-0 accent-brand-600" checked={on} onChange={() => toggle(m.id)} aria-label={name} />
                   <span className={`min-w-0 flex-1 ${on ? "" : "text-ink-500"}`}>
-                    <span className="block text-[13px] font-medium" dir="auto">
+                    <span className="block text-[0.8125rem] font-medium" dir="auto">
                       {name}
                     </span>
-                    <span className="block text-[12px] text-ink-500">
+                    <span className="block text-[0.75rem] text-ink-500">
                       {fmtDate(m.doneAt ?? m.createdAt, store.tz, locale)}
                       {m.performedBy?.name ? ` · ${m.performedBy.name}` : ""}
                     </span>
                   </span>
-                  <span className={`shrink-0 text-[13.5px] font-semibold tnum ${m.fee == null ? "text-st-pending" : on ? "" : "text-ink-500 line-through"}`}>
+                  <span className={`shrink-0 text-[0.84375rem] font-semibold tnum ${m.fee == null ? "text-st-pending" : on ? "" : "text-ink-500 line-through"}`}>
                     {m.fee == null ? I.noPriceYet : fmt(m.fee)}
                   </span>
                 </label>

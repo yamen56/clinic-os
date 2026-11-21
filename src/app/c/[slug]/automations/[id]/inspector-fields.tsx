@@ -27,9 +27,9 @@ import { previewMessageAction } from "../actions";
 export function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 text-[13px] font-semibold text-ink-900">{title}</div>
+      <div className="mb-1.5 text-[0.8125rem] font-semibold text-ink-900">{title}</div>
       {children}
-      {hint && <p className="mt-1.5 text-[12px] leading-snug text-ink-500">{hint}</p>}
+      {hint && <p className="mt-1.5 text-[0.75rem] leading-snug text-ink-500">{hint}</p>}
     </div>
   );
 }
@@ -55,7 +55,7 @@ export function Chips<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onChange(single ? [o.value] : on ? value.filter((v) => v !== o.value) : [...value, o.value])}
-            className={`rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors ${
+            className={`rounded-full border px-2.5 py-1 text-[0.75rem] font-medium transition-colors ${
               on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:border-line-strong"
             }`}
           >
@@ -84,7 +84,7 @@ export function Segmented<T extends string>({
           type="button"
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`min-w-0 rounded-md px-2 py-1.5 text-[12px] font-medium leading-tight transition-colors ${
+          className={`min-w-0 rounded-md px-2 py-1.5 text-[0.75rem] font-medium leading-tight transition-colors ${
             value === o.value ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
           }`}
         >
@@ -99,7 +99,7 @@ export function Check({ checked, onChange, label }: { checked: boolean; onChange
   return (
     <div className="flex items-center gap-2.5">
       <Toggle checked={checked} onChange={onChange} label={label} />
-      <span className="text-[13px] text-ink-700">{label}</span>
+      <span className="text-[0.8125rem] text-ink-700">{label}</span>
     </div>
   );
 }
@@ -130,7 +130,7 @@ export function KeywordInput({
       {value.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {value.map((w) => (
-            <span key={w} className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-[12px] font-medium text-ink-900">
+            <span key={w} className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-[0.75rem] font-medium text-ink-900">
               {w}
               <button
                 type="button"
@@ -332,7 +332,7 @@ export function MessageComposer({
         <div className="grid gap-2">
           {groups.map((g) => (
             <div key={g.group} className="flex flex-wrap items-center gap-1.5">
-              <span className="w-full text-[11px] font-semibold text-ink-500">
+              <span className="w-full text-[length:max(11px,0.6875rem)] font-semibold text-ink-500">
                 {(f.varGroups as Record<string, string>)[g.group]}
               </span>
               {g.vars.map((v) => (
@@ -342,7 +342,7 @@ export function MessageComposer({
                   dir="ltr"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => insert(`{{${g.group}.${v}}}`)}
-                  className="rounded-md border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-ink-700 hover:border-brand-600 hover:text-brand-700"
+                  className="rounded-md border border-line bg-surface px-1.5 py-0.5 font-mono text-[length:max(11px,0.6875rem)] text-ink-700 hover:border-brand-600 hover:text-brand-700"
                 >
                   {`${g.group}.${v}`}
                 </button>
@@ -350,22 +350,22 @@ export function MessageComposer({
             </div>
           ))}
         </div>
-        <p className="mt-2 text-[11px] leading-snug text-ink-500">{f.composeHint}</p>
+        <p className="mt-2 text-[length:max(11px,0.6875rem)] leading-snug text-ink-500">{f.composeHint}</p>
       </div>
       {missing.length > 0 && (
-        <p className="rounded-md bg-st-noshow-soft px-2.5 py-1.5 text-[12px] text-st-noshow">
+        <p className="rounded-md bg-st-noshow-soft px-2.5 py-1.5 text-[0.75rem] text-st-noshow">
           {missing.map((v) => fill(f.unavailableVar, { v: `{{${v}}}` })).join(" · ")}
         </p>
       )}
 
       {allowMedia && onMedia && (
         <div>
-          <div className="mb-1.5 text-[13px] font-semibold text-ink-900">{f.attachment}</div>
+          <div className="mb-1.5 text-[0.8125rem] font-semibold text-ink-900">{f.attachment}</div>
           {media ? (
             <div className="flex items-center gap-2 rounded-ctl border border-line bg-surface px-3 py-2">
               {media.kind === "image" ? <ImageIcon className="h-4 w-4 text-ink-500" /> : <FileText className="h-4 w-4 text-ink-500" />}
-              <span className="min-w-0 flex-1 truncate text-[13px]">{media.name}</span>
-              <button type="button" onClick={() => onMedia(null)} className="text-[12px] font-medium text-danger hover:underline">
+              <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{media.name}</span>
+              <button type="button" onClick={() => onMedia(null)} className="text-[0.75rem] font-medium text-danger hover:underline">
                 {f.remove}
               </button>
             </div>
@@ -375,7 +375,7 @@ export function MessageComposer({
               {uploading ? f.uploading : f.attach}
             </Button>
           )}
-          {uploadError && <p className="mt-1.5 text-[12px] text-danger">{f.uploadFailed}</p>}
+          {uploadError && <p className="mt-1.5 text-[0.75rem] text-danger">{f.uploadFailed}</p>}
           <input
             ref={fileRef}
             type="file"
@@ -392,7 +392,7 @@ export function MessageComposer({
 
       <div>
         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[13px] font-semibold text-ink-900">{f.preview}</span>
+          <span className="text-[0.8125rem] font-semibold text-ink-900">{f.preview}</span>
           <PatientPicker
             slug={slug}
             value={patient}
@@ -406,10 +406,10 @@ export function MessageComposer({
         <div className="rounded-xl bg-sunken p-3">
           <div
             dir="auto"
-            className="ms-auto max-w-[92%] whitespace-pre-wrap break-words rounded-lg rounded-se-none bg-st-confirmed-soft px-3 py-2 text-[13px] leading-relaxed text-ink-900 shadow-card"
+            className="ms-auto max-w-[92%] whitespace-pre-wrap break-words rounded-lg rounded-se-none bg-st-confirmed-soft px-3 py-2 text-[0.8125rem] leading-relaxed text-ink-900 shadow-card"
           >
             {media && (
-              <div className="mb-1.5 flex items-center gap-1.5 rounded bg-white/60 px-2 py-1 text-[12px] text-ink-700">
+              <div className="mb-1.5 flex items-center gap-1.5 rounded bg-white/60 px-2 py-1 text-[0.75rem] text-ink-700">
                 {media.kind === "image" ? <ImageIcon className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
                 <span className="truncate">{media.name}</span>
               </div>
@@ -417,7 +417,7 @@ export function MessageComposer({
             {pending ? "…" : preview || "—"}
           </div>
         </div>
-        <p className="mt-1 text-[11px] text-ink-500">{patient ? patient.name : f.previewSample}</p>
+        <p className="mt-1 text-[length:max(11px,0.6875rem)] text-ink-500">{patient ? patient.name : f.previewSample}</p>
       </div>
     </div>
   );
@@ -440,14 +440,14 @@ function PatientPicker({
 
   if (value) {
     return (
-      <button type="button" onClick={() => onPick(null)} className="text-[12px] font-medium text-brand-700 hover:underline">
+      <button type="button" onClick={() => onPick(null)} className="text-[0.75rem] font-medium text-brand-700 hover:underline">
         {t.automations.flow.previewSample}
       </button>
     );
   }
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="text-[12px] font-medium text-brand-700 hover:underline">
+      <button type="button" onClick={() => setOpen(true)} className="text-[0.75rem] font-medium text-brand-700 hover:underline">
         {t.automations.flow.previewFor}
       </button>
     );
@@ -479,7 +479,7 @@ function PatientPicker({
                 setQ("");
                 setResults([]);
               }}
-              className="rounded-md px-2.5 py-1.5 text-start text-[13px] hover:bg-sunken"
+              className="rounded-md px-2.5 py-1.5 text-start text-[0.8125rem] hover:bg-sunken"
             >
               {r.full_name}
             </button>
@@ -616,7 +616,7 @@ function RuleValue({
     case "patient_status":
       return chips(PATIENT_STATUSES.map((s) => ({ value: s, label: (f.patientStatuses as Record<string, string>)[s] })));
     case "custom_field":
-      if (!lookups.customFields.length) return <p className="text-[12px] text-ink-500">{f.noCustomFields}</p>;
+      if (!lookups.customFields.length) return <p className="text-[0.75rem] text-ink-500">{f.noCustomFields}</p>;
       return (
         <div className="grid gap-2">
           <Select value={r.key} onChange={(e) => onChange({ key: e.target.value })}>

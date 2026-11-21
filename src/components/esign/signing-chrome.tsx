@@ -65,7 +65,7 @@ export function SigningChrome({
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[14px] font-semibold">{clinic?.name ?? ""}</div>
+          <div className="truncate text-[0.875rem] font-semibold">{clinic?.name ?? ""}</div>
         </div>
         {header}
       </header>
@@ -78,7 +78,7 @@ export function SigningChrome({
         {credit === "link" ? (
           <PoweredBy label={t.sign.poweredBy} />
         ) : (
-          <span className="text-[11px] text-ink-400">{t.sign.poweredBy}</span>
+          <span className="text-[length:max(11px,0.6875rem)] text-ink-400">{t.sign.poweredBy}</span>
         )}
         <PrivacyLink label={t.sign.privacy} as={credit === "link" ? "link" : "text"} />
       </footer>
@@ -93,10 +93,10 @@ export function StepIndicator({ step, locale }: { step: number; locale: Locale }
   return (
     <div className="mb-4">
       <div className="mb-1.5 flex items-baseline justify-between gap-2">
-        <span className="text-[13px] font-semibold text-ink-700">
+        <span className="text-[0.8125rem] font-semibold text-ink-700">
           {t.sign.stepOf.replace("{n}", String(step)).replace("{total}", "3")}
         </span>
-        <span className="text-[13px] text-ink-500">{labels[step - 1]}</span>
+        <span className="text-[0.8125rem] text-ink-500">{labels[step - 1]}</span>
       </div>
       {/*
         Three separate bars rather than one filling bar: on a 3-step flow the

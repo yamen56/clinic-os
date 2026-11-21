@@ -292,9 +292,9 @@ export function OtherNoteCard({ o, tz }: { o: Other; tz: string }) {
   return (
     <div data-feed-source={o.source} data-feed-key={o.key}>
       <Card className="p-4">
-        <div className="mb-1.5 flex items-start justify-between gap-2 text-[12px] text-ink-400">
+        <div className="mb-1.5 flex items-start justify-between gap-2 text-[0.75rem] text-ink-400">
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-            <span className="inline-flex h-5 items-center gap-1 rounded-full bg-brand-50 px-2 text-[11px] font-semibold text-brand-700">
+            <span className="inline-flex h-5 items-center gap-1 rounded-full bg-brand-50 px-2 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700">
               <Icon className="h-3 w-3" />
               {N.sources[o.source]}
             </span>
@@ -309,7 +309,7 @@ export function OtherNoteCard({ o, tz }: { o: Other; tz: string }) {
             <button
               type="button"
               onClick={o.open}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[0.75rem] font-medium text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
               data-feed-open={o.key}
             >
               {N.openSource}
@@ -318,12 +318,12 @@ export function OtherNoteCard({ o, tz }: { o: Other; tz: string }) {
           )}
         </div>
         {o.body && (
-          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900" dir="auto">
+          <p className="whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-ink-900" dir="auto">
             {o.body}
           </p>
         )}
         {o.lines.length > 0 && (
-          <ul className={`grid gap-0.5 text-[12.5px] text-ink-700 ${o.body ? "mt-1.5" : ""}`}>
+          <ul className={`grid gap-0.5 text-[0.78125rem] text-ink-700 ${o.body ? "mt-1.5" : ""}`}>
             {o.lines.map((l, i) => (
               <li key={i} dir="auto">
                 {l}
@@ -347,17 +347,17 @@ export function OnFile({ summary, onSummary }: { summary: string; onSummary: () 
   if (!summary.trim()) return null;
   return (
     <div className="grid gap-2" data-on-file>
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{N.onFile}</h3>
+      <h3 className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{N.onFile}</h3>
       <div data-on-file-summary>
         <Card className="p-4">
-          <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px] text-ink-400">
-            <span className="inline-flex h-5 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-semibold text-ink-700">{N.sources.summary}</span>
-            <button type="button" onClick={onSummary} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-ink-500 hover:bg-ink-900/5 hover:text-ink-900">
+          <div className="mb-1.5 flex items-center justify-between gap-2 text-[0.75rem] text-ink-400">
+            <span className="inline-flex h-5 items-center gap-1 rounded-full bg-sunken px-2 text-[length:max(11px,0.6875rem)] font-semibold text-ink-700">{N.sources.summary}</span>
+            <button type="button" onClick={onSummary} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[0.75rem] font-medium text-ink-500 hover:bg-ink-900/5 hover:text-ink-900">
               {N.openSource}
               <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>
-          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900" dir="auto">
+          <p className="whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-ink-900" dir="auto">
             {summary}
           </p>
         </Card>

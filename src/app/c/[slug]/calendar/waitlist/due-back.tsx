@@ -51,7 +51,7 @@ export function DueBackList({
     <div data-due-back className="mb-4">
       <Card>
         <CardHeader title={`${F.dueBack} · ${due.length}`} />
-        <p className="-mt-2 px-5 pb-2 text-[12.5px] text-ink-500">{F.dueBackHint}</p>
+        <p className="-mt-2 px-5 pb-2 text-[0.78125rem] text-ink-500">{F.dueBackHint}</p>
         <ul className="divide-y divide-line">
           {due.map((d) => {
             const service = (locale === "ar" ? d.serviceNameAr : null) || d.serviceName;
@@ -59,7 +59,7 @@ export function DueBackList({
               <li key={d.patientId} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3" data-due-back-row={d.patientId}>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{d.patientName}</div>
-                  <div className="flex flex-wrap gap-x-2 text-[12.5px] text-ink-500">
+                  <div className="flex flex-wrap gap-x-2 text-[0.78125rem] text-ink-500">
                     <span className={d.daysLate > 0 ? "font-semibold text-st-late" : ""}>
                       {d.daysLate > 0 ? F.overdue.replace("{n}", String(d.daysLate)) : F.dueOn.replace("{date}", fmtDate(d.dueAt, tz, locale))}
                     </span>
@@ -67,7 +67,7 @@ export function DueBackList({
                     {d.doctorName && <span>· {d.doctorName}</span>}
                   </div>
                   {d.deskNote && (
-                    <p dir="auto" className="mt-0.5 line-clamp-2 text-[12.5px] text-ink-700">
+                    <p dir="auto" className="mt-0.5 line-clamp-2 text-[0.78125rem] text-ink-700">
                       {d.deskNote}
                     </p>
                   )}

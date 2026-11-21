@@ -181,7 +181,7 @@ export function InstallApp({
           aria-expanded={expanded}
           className={
             onDark
-              ? "flex w-full touch-manipulation items-center gap-2.5 rounded-ctl px-3 py-2 text-[13px] font-medium text-white/70 transition-colors duration-140 ease-out hover:bg-white/5 hover:text-white"
+              ? "flex w-full touch-manipulation items-center gap-2.5 rounded-ctl px-3 py-2 text-[0.8125rem] font-medium text-white/70 transition-colors duration-140 ease-out hover:bg-white/5 hover:text-white"
               : "flex w-full touch-manipulation items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken"
           }
         >
@@ -195,7 +195,7 @@ export function InstallApp({
 
       {showSteps && !prompt && manual && (
         <ol
-          className={`mt-1 space-y-1.5 rounded-ctl px-3 py-2.5 text-[12px] leading-snug animate-fade-up ${
+          className={`mt-1 space-y-1.5 rounded-ctl px-3 py-2.5 text-[0.75rem] leading-snug animate-fade-up ${
             onDark ? "bg-white/5 text-white/60" : "bg-sunken text-ink-500"
           }`}
         >

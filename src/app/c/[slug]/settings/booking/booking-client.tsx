@@ -292,7 +292,7 @@ export function BookingLinksClient({
                   {!l.active && <Badge status="cancelled">{t.common.inactive}</Badge>}
                 </div>
                 {/* A slug is one unbroken token, so it needs somewhere to break. */}
-                <div className="mt-0.5 break-all text-[13px] text-ink-500" dir="ltr">
+                <div className="mt-0.5 break-all text-[0.8125rem] text-ink-500" dir="ltr">
                   /book/{l.slug}
                 </div>
               </div>
@@ -393,7 +393,7 @@ export function BookingLinksClient({
                       {q.required && <Badge status="brand">{tb.required}</Badge>}
                       {!q.active && <Badge status="cancelled">{t.common.inactive}</Badge>}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-ink-500">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.8125rem] text-ink-500">
                       <span className="inline-flex items-center gap-1">
                         <Link2 className="h-3.5 w-3.5" />
                         {link ? link.name : tb.allLinks}
@@ -541,7 +541,7 @@ export function BookingLinksClient({
                               : [...(editing.doctor_member_ids ?? []), d.id],
                           })
                         }
-                        className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                        className={`rounded-full border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors ${
                           on
                             ? "border-brand-500 bg-brand-50 text-brand-800"
                             : "border-line-strong text-ink-500 hover:bg-sunken"
@@ -552,7 +552,7 @@ export function BookingLinksClient({
                     );
                   })}
                 </div>
-                <p className="mt-1.5 text-[13px] text-ink-500">
+                <p className="mt-1.5 text-[0.8125rem] text-ink-500">
                   {(editing.doctor_member_ids ?? []).length === 0 ? tb.allDoctorsHint : tb.someDoctorsHint}
                 </p>
               </Field>
@@ -585,7 +585,7 @@ export function BookingLinksClient({
                             service_ids: mode === "services" ? (editing.service_ids ?? []) : [],
                           })
                         }
-                        className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                        className={`rounded-full border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors ${
                           restrictMode === mode
                             ? "border-brand-500 bg-brand-50 text-brand-800"
                             : "border-line-strong text-ink-500 hover:bg-sunken"
@@ -650,7 +650,7 @@ export function BookingLinksClient({
                 bookable online.
               */}
               {editing.skip_service_step && effectiveServiceCount !== 1 && (
-                <p className="text-[13px] text-warning">
+                <p className="text-[0.8125rem] text-warning">
                   {tb.skipServiceStepInactive.replace("{n}", String(effectiveServiceCount))}
                 </p>
               )}
@@ -749,13 +749,13 @@ export function BookingLinksClient({
                 onChange={(v) => setEditing({ ...editing, require_otp: v })}
               />
               {editing.require_otp === false && (
-                <p className="text-[13px] text-warning">{tb.requireOtpOffWarning}</p>
+                <p className="text-[0.8125rem] text-warning">{tb.requireOtpOffWarning}</p>
               )}
             </div>
 
             <label className="flex items-center gap-2.5">
               <Toggle checked={editing.active ?? true} onChange={(v) => setEditing({ ...editing, active: v })} />
-              <span className="text-[13px] font-medium">{t.common.active}</span>
+              <span className="text-[0.8125rem] font-medium">{t.common.active}</span>
             </label>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEditing(null)}>{t.common.cancel}</Button>
@@ -922,7 +922,7 @@ export function BookingLinksClient({
 
       {/* ------------------------------------------- pick a patient field */}
       <Modal open={pickField} onClose={() => setPickField(false)} title={tb.fromPatientFields}>
-        <p className="mb-3 text-[13px] text-ink-500">{tb.fromPatientFieldsHint}</p>
+        <p className="mb-3 text-[0.8125rem] text-ink-500">{tb.fromPatientFieldsHint}</p>
         <ul className="divide-y divide-line">
           {patientFields.map((f) => {
             // A field already asked on this page is not offered twice.
@@ -933,7 +933,7 @@ export function BookingLinksClient({
                   <div className="text-sm font-medium">
                     {locale === "ar" ? f.label_ar || f.label : f.label}
                   </div>
-                  <div className="text-[12px] text-ink-500">
+                  <div className="text-[0.75rem] text-ink-500">
                     {tb.types[(f.field_type as QuestionType) ?? "text"] ?? f.field_type}
                   </div>
                 </div>
@@ -1013,7 +1013,7 @@ export function BookingLinksClient({
 function SectionRule({ label, hint }: { label: string; hint?: string }) {
   return (
     <div className="border-t border-line pt-4">
-      <div className="text-[13px] font-semibold text-ink-900">{label}</div>
+      <div className="text-[0.8125rem] font-semibold text-ink-900">{label}</div>
       {hint && <p className="mt-0.5 text-xs text-ink-500">{hint}</p>}
     </div>
   );
@@ -1034,7 +1034,7 @@ function ToggleRow({
     <label className="flex items-start gap-2.5">
       <Toggle checked={checked} onChange={onChange} label={label} />
       <span className="min-w-0">
-        <span className="block text-[13px] font-medium">{label}</span>
+        <span className="block text-[0.8125rem] font-medium">{label}</span>
         {hint && <span className="block text-xs text-ink-500">{hint}</span>}
       </span>
     </label>

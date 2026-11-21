@@ -634,7 +634,7 @@ export function TeamClient({
       <div className={`flex w-full flex-col border-e border-line lg:w-[17rem] xl:w-80 ${openId ? "hidden lg:flex" : ""}`}>
         <div className="grid gap-2 border-b border-line p-3">
           <div className="flex items-center gap-2">
-            {showPatients ? <ConversationsSwitch slug={slug} active="team" /> : <h1 className="flex-1 text-[15px] font-semibold">{T.title}</h1>}
+            {showPatients ? <ConversationsSwitch slug={slug} active="team" /> : <h1 className="flex-1 text-[0.9375rem] font-semibold">{T.title}</h1>}
             <Button size="sm" variant="outline" onClick={() => setSheet("new")} className="ms-auto min-h-9" data-team-new>
               <Plus className="h-4 w-4" />
               {T.newChat}
@@ -646,7 +646,7 @@ export function TeamClient({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={T.search}
-              className="h-9 w-full rounded-full border border-line bg-sunken pe-8 ps-9 text-[16px] outline-none focus:border-brand-400 sm:text-sm"
+              className="h-9 w-full rounded-full border border-line bg-sunken pe-8 ps-9 text-[1rem] outline-none focus:border-brand-400 sm:text-sm"
               dir="auto"
               data-team-search
             />
@@ -658,7 +658,7 @@ export function TeamClient({
           </div>
         </div>
         <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto" data-team-threads>
-          {threads === null && <li className="p-4 text-[13px] text-ink-500">…</li>}
+          {threads === null && <li className="p-4 text-[0.8125rem] text-ink-500">…</li>}
           {shownThreads?.map((th) => {
             const other = th.kind === "direct" ? otherOf(th) : null;
             const typingHere = typingLine(th.id);
@@ -679,26 +679,26 @@ export function TeamClient({
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
-                      <span className={`truncate text-[14px] ${th.unread ? "font-semibold" : "font-medium"}`} dir="auto">
+                      <span className={`truncate text-[0.875rem] ${th.unread ? "font-semibold" : "font-medium"}`} dir="auto">
                         {nameOf(th)}
                       </span>
                       {th.muted && <BellOff className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-label={T.muted} />}
-                      {th.lastMessageAt && <span className={`ms-auto shrink-0 text-[11.5px] tnum ${th.unread ? "font-semibold text-brand-700" : "text-ink-400"}`}>{fmt.list(th.lastMessageAt)}</span>}
+                      {th.lastMessageAt && <span className={`ms-auto shrink-0 text-[length:max(11px,0.71875rem)] tnum ${th.unread ? "font-semibold text-brand-700" : "text-ink-400"}`}>{fmt.list(th.lastMessageAt)}</span>}
                     </span>
                     <span className="flex items-center gap-2">
                       {typingHere ? (
-                        <span className="truncate text-[12.5px] font-medium italic text-brand-700" data-team-typing-list>
+                        <span className="truncate text-[0.78125rem] font-medium italic text-brand-700" data-team-typing-list>
                           {typingHere}
                         </span>
                       ) : (
-                        <span className="truncate text-[12.5px] text-ink-500" dir="auto">
+                        <span className="truncate text-[0.78125rem] text-ink-500" dir="auto">
                           {preview(th)}
                         </span>
                       )}
                       <span className="ms-auto flex shrink-0 items-center gap-1">
                         {th.pinned && <Pin className="h-3.5 w-3.5 rotate-45 text-ink-400" aria-label={T.pinnedChat} data-team-pinned-chat />}
                         {th.unread > 0 && (
-                          <span className="min-w-[20px] rounded-full bg-brand-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-on-brand tnum" data-team-unread={th.unread}>
+                          <span className="min-w-[20px] rounded-full bg-brand-600 px-1.5 text-center text-[length:max(11px,0.6875rem)] font-semibold leading-5 text-on-brand tnum" data-team-unread={th.unread}>
                             {th.unread > 99 ? "99+" : th.unread}
                           </span>
                         )}
@@ -710,11 +710,11 @@ export function TeamClient({
             );
           })}
           {hits && (
-            <li className="bg-sunken/60 px-3 py-2 text-[12px] font-semibold text-ink-500" data-team-hits={hits.length}>
+            <li className="bg-sunken/60 px-3 py-2 text-[0.75rem] font-semibold text-ink-500" data-team-hits={hits.length}>
               {T.search}
             </li>
           )}
-          {hits?.length === 0 && <li className="px-3 py-3 text-[13px] text-ink-500">{T.searchEmpty}</li>}
+          {hits?.length === 0 && <li className="px-3 py-3 text-[0.8125rem] text-ink-500">{T.searchEmpty}</li>}
           {hits?.map((h) => {
             const th = threads?.find((x) => x.id === h.threadId);
             return (
@@ -729,13 +729,13 @@ export function TeamClient({
                   className="block w-full px-3 py-2.5 text-start hover:bg-sunken"
                   data-team-hit={h.messageId}
                 >
-                  <span className="flex items-baseline gap-2 text-[12.5px]">
+                  <span className="flex items-baseline gap-2 text-[0.78125rem]">
                     <span className="truncate font-semibold" dir="auto">
                       {th ? nameOf(th) : ""}
                     </span>
-                    <span className="ms-auto shrink-0 text-[11px] text-ink-400 tnum">{fmt.list(h.createdAt)}</span>
+                    <span className="ms-auto shrink-0 text-[length:max(11px,0.6875rem)] text-ink-400 tnum">{fmt.list(h.createdAt)}</span>
                   </span>
-                  <span className="line-clamp-2 text-[13px] text-ink-700" dir="auto">
+                  <span className="line-clamp-2 text-[0.8125rem] text-ink-700" dir="auto">
                     {h.senderName ? `${shortName(h.senderName)}: ` : ""}
                     {h.body}
                   </span>
@@ -765,7 +765,7 @@ export function TeamClient({
         }}
       >
         {!open ? (
-          <div className="grid flex-1 place-items-center p-6 text-center text-[13px] text-ink-500">{threads?.length ? T.pick : "…"}</div>
+          <div className="grid flex-1 place-items-center p-6 text-center text-[0.8125rem] text-ink-500">{threads?.length ? T.pick : "…"}</div>
         ) : (
           <>
             <div className="flex items-center gap-2 border-b border-line px-2 py-2 sm:px-3">
@@ -780,15 +780,15 @@ export function TeamClient({
                 </span>
               )}
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[15px] font-semibold" dir="auto" data-team-title>
+                <div className="truncate text-[0.9375rem] font-semibold" dir="auto" data-team-title>
                   {nameOf(open)}
                 </div>
                 {typingNow ? (
-                  <div className="truncate text-[12px] font-medium italic text-brand-700" data-team-typing>
+                  <div className="truncate text-[0.75rem] font-medium italic text-brand-700" data-team-typing>
                     {typingNow}
                   </div>
                 ) : (
-                  open.kind !== "direct" && <div className="truncate text-[12px] text-ink-500">{T.members.replace("{n}", String(open.members.length))}</div>
+                  open.kind !== "direct" && <div className="truncate text-[0.75rem] text-ink-500">{T.members.replace("{n}", String(open.members.length))}</div>
                 )}
               </div>
               <div className="relative">
@@ -841,8 +841,8 @@ export function TeamClient({
               <div className="flex items-center gap-2 border-b border-line bg-sunken/60 px-3 py-1.5" data-team-pinned={open.pinnedMessage.id}>
                 <Pin className="h-4 w-4 shrink-0 rotate-45 text-brand-700" />
                 <button type="button" onClick={() => void jumpTo(open.pinnedMessage!.id)} className="min-w-0 flex-1 text-start">
-                  <span className="block text-[11.5px] font-semibold text-brand-700">{T.pinned}</span>
-                  <span className="block truncate text-[13px] text-ink-700" dir="auto">
+                  <span className="block text-[length:max(11px,0.71875rem)] font-semibold text-brand-700">{T.pinned}</span>
+                  <span className="block truncate text-[0.8125rem] text-ink-700" dir="auto">
                     {open.pinnedMessage.body || (open.pinnedMessage.fileMime?.startsWith("image/") ? `📷 ${T.photo}` : `📎 ${open.pinnedMessage.fileName ?? T.file}`)}
                   </span>
                 </button>
@@ -861,12 +861,12 @@ export function TeamClient({
             <div ref={scroller} onScroll={() => nearBottom() && below && setBelow(0)} className="min-h-0 flex-1 overflow-y-auto px-3 py-3" data-team-messages>
               {list && list.length >= 60 && !earlierDone[open.id] && (
                 <div className="mb-3 text-center">
-                  <button type="button" onClick={() => void earlier()} className="text-[12.5px] font-semibold text-brand-700 hover:underline">
+                  <button type="button" onClick={() => void earlier()} className="text-[0.78125rem] font-semibold text-brand-700 hover:underline">
                     {T.earlier}
                   </button>
                 </div>
               )}
-              {list?.length === 0 && <p className="py-10 text-center text-[13px] text-ink-500">{T.empty}</p>}
+              {list?.length === 0 && <p className="py-10 text-center text-[0.8125rem] text-ink-500">{T.empty}</p>}
               <ul className="grid gap-1">
                 {list?.map((m, i) => {
                   const prev = list[i - 1];
@@ -878,11 +878,11 @@ export function TeamClient({
                     <Fragment key={m.id}>
                       {newDay && (
                         <li className="sticky top-0 z-10 my-2 flex justify-center" aria-hidden>
-                          <span className="rounded-full bg-surface/95 px-3 py-0.5 text-[11.5px] font-semibold text-ink-500 shadow-card">{fmt.dayLabel(m.createdAt)}</span>
+                          <span className="rounded-full bg-surface/95 px-3 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold text-ink-500 shadow-card">{fmt.dayLabel(m.createdAt)}</span>
                         </li>
                       )}
                       {isDivider && (
-                        <li className="my-2 flex items-center gap-2 text-[11.5px] font-semibold text-brand-700" data-team-new-line>
+                        <li className="my-2 flex items-center gap-2 text-[length:max(11px,0.71875rem)] font-semibold text-brand-700" data-team-new-line>
                           <span className="h-px flex-1 bg-brand-200" />
                           {T.newMessages.replace("{n}", String(unreadAtOpen.current[open.id] ?? ""))}
                           <span className="h-px flex-1 bg-brand-200" />
@@ -926,7 +926,7 @@ export function TeamClient({
               <button
                 type="button"
                 onClick={() => toBottom()}
-                className="absolute bottom-20 end-4 z-10 flex h-10 items-center gap-1 rounded-full border border-line bg-surface px-3 text-[12.5px] font-semibold text-brand-700 shadow-pop"
+                className="absolute bottom-20 end-4 z-10 flex h-10 items-center gap-1 rounded-full border border-line bg-surface px-3 text-[0.78125rem] font-semibold text-brand-700 shadow-pop"
                 data-team-below={below}
               >
                 <ArrowDown className="h-4 w-4" />
@@ -935,7 +935,7 @@ export function TeamClient({
             )}
 
             {dragging && (
-              <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-brand-600/10 text-[15px] font-semibold text-brand-700 ring-2 ring-inset ring-brand-400">
+              <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-brand-600/10 text-[0.9375rem] font-semibold text-brand-700 ring-2 ring-inset ring-brand-400">
                 {T.dropHere}
               </div>
             )}
@@ -946,15 +946,15 @@ export function TeamClient({
                   <div className="min-w-0 flex-1">
                     {editing ? (
                       <div className="rounded-lg border-s-[3px] border-brand-600 bg-sunken px-2 py-1">
-                        <span className="block text-[12px] font-semibold text-brand-700">{T.editing}</span>
-                        <span className="block truncate text-[12.5px] text-ink-500" dir="auto">
+                        <span className="block text-[0.75rem] font-semibold text-brand-700">{T.editing}</span>
+                        <span className="block truncate text-[0.78125rem] text-ink-500" dir="auto">
                           {editing.body}
                         </span>
                       </div>
                     ) : (
                       replyTo && (
                         <>
-                          <span className="mb-0.5 block text-[11.5px] font-semibold text-ink-500">{T.replyingTo.replace("{name}", replyTo.senderName ?? T.formerMember)}</span>
+                          <span className="mb-0.5 block text-[length:max(11px,0.71875rem)] font-semibold text-ink-500">{T.replyingTo.replace("{name}", replyTo.senderName ?? T.formerMember)}</span>
                           <QuoteLine q={replyTo} label={{ photo: T.photo, voice: T.voice, file: T.file, deleted: T.deleted, you: T.you }} />
                         </>
                       )
@@ -987,7 +987,7 @@ export function TeamClient({
                         data-team-mention={p.userId}
                       >
                         <Avatar name={p.name} size={28} src={photo(p)} color={p.color ?? undefined} />
-                        <span className="text-[14px]" dir="auto">
+                        <span className="text-[0.875rem]" dir="auto">
                           {p.name}
                         </span>
                       </button>
@@ -1039,7 +1039,7 @@ export function TeamClient({
                   placeholder={T.write}
                   title={canMention ? T.mentionHint : undefined}
                   dir="auto"
-                  className="max-h-32 min-h-10 flex-1 resize-none rounded-2xl border border-line bg-sunken px-3 py-2 text-[16px] outline-none focus:border-brand-400 sm:text-[14px]"
+                  className="max-h-32 min-h-10 flex-1 resize-none rounded-2xl border border-line bg-sunken px-3 py-2 text-[1rem] outline-none focus:border-brand-400 sm:text-[0.875rem]"
                   data-team-input
                 />
                 {text.trim() || editing ? (
@@ -1113,7 +1113,7 @@ export function TeamClient({
                       <Users className="h-4 w-4" />
                     </span>
                   )}
-                  <span className="text-[14px]" dir="auto">
+                  <span className="text-[0.875rem]" dir="auto">
                     {nameOf(th)}
                   </span>
                 </button>
@@ -1148,7 +1148,7 @@ function MenuItem({ icon, label, onClick, data, danger }: { icon: React.ReactNod
       type="button"
       role="menuitem"
       onClick={onClick}
-      className={`flex min-h-11 w-full items-center gap-3 px-3.5 text-start text-[14px] hover:bg-sunken ${danger ? "text-st-cancelled" : "text-ink-900"}`}
+      className={`flex min-h-11 w-full items-center gap-3 px-3.5 text-start text-[0.875rem] hover:bg-sunken ${danger ? "text-st-cancelled" : "text-ink-900"}`}
       data-team-action={data}
     >
       <span className="text-ink-500">{icon}</span>
@@ -1201,7 +1201,7 @@ function MessageSheet({
               key={e}
               type="button"
               onClick={() => onReact(current === e ? null : e)}
-              className={`grid h-11 w-11 place-items-center rounded-full text-[24px] transition-transform active:scale-110 ${current === e ? "bg-brand-100" : "hover:bg-surface"}`}
+              className={`grid h-11 w-11 place-items-center rounded-full text-[1.5rem] transition-transform active:scale-110 ${current === e ? "bg-brand-100" : "hover:bg-surface"}`}
               aria-pressed={current === e}
               data-team-sheet-react={e}
             >
@@ -1219,8 +1219,8 @@ function MessageSheet({
         </div>
         {seenBy && (
           <div data-team-seen-by={seenBy.length}>
-            <div className="mb-1 text-[12.5px] font-semibold text-ink-500">{T.seenBy.replace("{n}", String(seenBy.length))}</div>
-            <p className="text-[13px] text-ink-700" dir="auto">
+            <div className="mb-1 text-[0.78125rem] font-semibold text-ink-500">{T.seenBy.replace("{n}", String(seenBy.length))}</div>
+            <p className="text-[0.8125rem] text-ink-700" dir="auto">
               {seenBy.map((p) => p.name).join("، ") || "—"}
             </p>
           </div>
@@ -1270,7 +1270,7 @@ function NewChat({
       }
     >
       <div className="grid gap-3">
-        <button type="button" onClick={() => setGroup((g) => !g)} className="flex min-h-10 items-center gap-2 text-[14px] font-semibold text-brand-700" data-team-group-toggle>
+        <button type="button" onClick={() => setGroup((g) => !g)} className="flex min-h-10 items-center gap-2 text-[0.875rem] font-semibold text-brand-700" data-team-group-toggle>
           <Users className="h-4 w-4" />
           {group ? T.newChat : T.newGroup}
         </button>
@@ -1295,12 +1295,12 @@ function NewChat({
                     data-team-pick={p.userId}
                   />
                   <Avatar name={p.name} size={32} src={p.hasPhoto && p.memberId ? `/api/c/${slug}/staff/${p.memberId}/photo` : null} color={p.color ?? undefined} />
-                  <span className="text-[14px]" dir="auto">{p.name}</span>
+                  <span className="text-[0.875rem]" dir="auto">{p.name}</span>
                 </label>
               ) : (
                 <button type="button" onClick={() => onDirect(p.userId)} className="flex min-h-12 w-full items-center gap-3 py-1.5 text-start hover:bg-sunken" data-team-person={p.userId}>
                   <Avatar name={p.name} size={32} src={p.hasPhoto && p.memberId ? `/api/c/${slug}/staff/${p.memberId}/photo` : null} color={p.color ?? undefined} />
-                  <span className="text-[14px]" dir="auto">{p.name}</span>
+                  <span className="text-[0.875rem]" dir="auto">{p.name}</span>
                 </button>
               )}
             </li>
@@ -1344,12 +1344,12 @@ function GroupSettings({
           </Button>
         </div>
         <div>
-          <div className="mb-1 text-[13px] font-semibold">{T.members.replace("{n}", String(thread.members.length))}</div>
-          <p className="text-[13px] text-ink-700" dir="auto">{thread.members.map((m) => m.name).join("، ")}</p>
+          <div className="mb-1 text-[0.8125rem] font-semibold">{T.members.replace("{n}", String(thread.members.length))}</div>
+          <p className="text-[0.8125rem] text-ink-700" dir="auto">{thread.members.map((m) => m.name).join("، ")}</p>
         </div>
         {outside.length > 0 && (
           <div>
-            <div className="mb-1 text-[13px] font-semibold">{T.addPeople}</div>
+            <div className="mb-1 text-[0.8125rem] font-semibold">{T.addPeople}</div>
             <ul className="divide-y divide-line">
               {outside.map((p) => (
                 <li key={p.userId}>
@@ -1368,7 +1368,7 @@ function GroupSettings({
                       }
                       data-team-add-pick={p.userId}
                     />
-                    <span className="text-[14px]" dir="auto">{p.name}</span>
+                    <span className="text-[0.875rem]" dir="auto">{p.name}</span>
                   </label>
                 </li>
               ))}

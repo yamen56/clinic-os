@@ -272,7 +272,7 @@ export function TimeGrid({
               >
                 {/* header */}
                 <div
-                  className={`sticky top-0 z-[8] flex h-11 items-center justify-center gap-1.5 border-b border-line px-1.5 text-[12px] font-medium ${
+                  className={`sticky top-0 z-[8] flex h-11 items-center justify-center gap-1.5 border-b border-line px-1.5 text-[0.75rem] font-medium ${
                     isToday && col.kind === "day" ? "bg-brand-50 text-ink-900" : "bg-surface text-ink-500"
                   }`}
                 >
@@ -280,13 +280,13 @@ export function TimeGrid({
                     <>
                       <span>{col.day.setLocale(fmt).toFormat("ccc")}</span>
                       <span
-                        className={`grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12.5px] font-semibold tnum ${
+                        className={`grid h-6 min-w-6 place-items-center rounded-full px-1 text-[0.78125rem] font-semibold tnum ${
                           isToday ? "bg-brand-600 text-on-brand" : "text-ink-900"
                         }`}
                       >
                         {col.day.day}
                       </span>
-                      {count > 0 && <span className="text-[11px] text-ink-400 tnum">· {count}</span>}
+                      {count > 0 && <span className="text-[length:max(11px,0.6875rem)] text-ink-400 tnum">· {count}</span>}
                     </>
                   ) : (
                     <>
@@ -295,7 +295,7 @@ export function TimeGrid({
                       )}
                       <span className="truncate font-semibold text-ink-900">{col.label}</span>
                       {count > 0 && (
-                        <span className="rounded-full bg-sunken px-1.5 text-[11px] font-semibold text-ink-500 tnum">{count}</span>
+                        <span className="rounded-full bg-sunken px-1.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-500 tnum">{count}</span>
                       )}
                     </>
                   )}

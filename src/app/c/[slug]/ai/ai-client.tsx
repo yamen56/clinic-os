@@ -139,13 +139,13 @@ export function AiClient({
       />
 
       {!hasApiKey && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-card border border-st-pending/30 bg-st-pending-soft px-4 py-3 text-[13px] text-st-pending">
+        <div className="mb-4 flex items-center gap-2.5 rounded-card border border-st-pending/30 bg-st-pending-soft px-4 py-3 text-[0.8125rem] text-st-pending">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {t.ai.noKey}
         </div>
       )}
       {hasApiKey && a.enabled && !waConnected && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-card border border-st-pending/30 bg-st-pending-soft px-4 py-3 text-[13px] text-st-pending">
+        <div className="mb-4 flex items-center gap-2.5 rounded-card border border-st-pending/30 bg-st-pending-soft px-4 py-3 text-[0.8125rem] text-st-pending">
           <MessageCircle className="h-4 w-4 shrink-0" />
           {t.wa.disconnected} — {t.invoices.waDisconnected}
         </div>
@@ -255,11 +255,11 @@ export function AiClient({
             </Card>
 
             <Card className="p-5">
-              <h3 className="mb-1.5 flex items-center gap-2 text-[15px] font-semibold">
+              <h3 className="mb-1.5 flex items-center gap-2 text-[0.9375rem] font-semibold">
                 <ShieldCheck className="h-4.5 w-4.5 text-brand-700" />
                 {t.ai.guardrails}
               </h3>
-              <p className="text-[13px] leading-6 text-ink-700">{t.ai.guardrailsBody}</p>
+              <p className="text-[0.8125rem] leading-6 text-ink-700">{t.ai.guardrailsBody}</p>
             </Card>
           </>
         )}
@@ -304,7 +304,7 @@ export function AiClient({
                           {empty && <Badge status="pending">{t.ai.itemEmpty}</Badge>}
                         </div>
                         {k.content && (
-                          <p className="mt-1 line-clamp-2 text-[13px] text-ink-500">{k.content}</p>
+                          <p className="mt-1 line-clamp-2 text-[0.8125rem] text-ink-500">{k.content}</p>
                         )}
                       </div>
                       <div className="flex gap-1">
@@ -333,7 +333,7 @@ export function AiClient({
                 [t.ai.tokens, totals.tokens],
               ].map(([label, val], i) => (
                 <Card key={i} className="p-4">
-                  <div className="text-[13px] text-ink-500">{String(label)}</div>
+                  <div className="text-[0.8125rem] text-ink-500">{String(label)}</div>
                   <div className="mt-1 text-2xl font-semibold tnum">
                     {Number(val).toLocaleString("en-GB")}
                   </div>

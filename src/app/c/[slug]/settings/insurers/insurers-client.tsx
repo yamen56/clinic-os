@@ -104,12 +104,12 @@ export function InsurersClient({ slug, initial }: { slug: string; initial: Insur
                 >
                   <span className="block truncate text-sm font-semibold">{i.name}</span>
                   {i.code && (
-                    <span className="block truncate text-[13px] text-ink-500" dir="ltr">
+                    <span className="block truncate text-[0.8125rem] text-ink-500" dir="ltr">
                       {i.code}
                     </span>
                   )}
                   {ruleText(i, t) && (
-                    <span className="block truncate text-[13px] text-brand-700">{ruleText(i, t)}</span>
+                    <span className="block truncate text-[0.8125rem] text-brand-700">{ruleText(i, t)}</span>
                   )}
                 </button>
                 {i.open_claims > 0 && (
@@ -117,7 +117,7 @@ export function InsurersClient({ slug, initial }: { slug: string; initial: Insur
                     {i.open_claims} {t.insurers.openClaims}
                   </Badge>
                 )}
-                <span className="text-[13px] text-ink-400">
+                <span className="text-[0.8125rem] text-ink-400">
                   {i.patients} {t.insurers.patients}
                 </span>
                 {!i.active && <Badge status="neutral">{t.insurers.inactive}</Badge>}

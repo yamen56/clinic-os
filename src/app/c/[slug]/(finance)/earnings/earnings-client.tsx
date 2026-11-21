@@ -208,7 +208,7 @@ export function EarningsClient({
             >
               <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </button>
-            <span className="min-w-28 text-center text-[13px] font-medium tabular-nums sm:min-w-36">
+            <span className="min-w-28 text-center text-[0.8125rem] font-medium tabular-nums sm:min-w-36">
               {month}
             </span>
             <button
@@ -249,7 +249,7 @@ export function EarningsClient({
             {/* Whether the clinic has handed it over yet (0091) — what a doctor opens this page to find out at the start of a month. */}
             {(self.earned > 0 || mine.length > 0) && (
               <div
-                className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line pt-3 text-[13px]"
+                className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line pt-3 text-[0.8125rem]"
                 data-my-payout={mine.length === 0 ? "unpaid" : myLeft > SETTLED ? "part" : "paid"}
               >
                 {mine.length === 0 ? (
@@ -280,17 +280,17 @@ export function EarningsClient({
               what the patient handed over.
             */}
             {!visitOnly && (
-              <p className="mt-4 border-t border-line pt-3 text-[12px] leading-relaxed text-ink-500">
+              <p className="mt-4 border-t border-line pt-3 text-[0.75rem] leading-relaxed text-ink-500">
                 {t.earnings.exTaxNote}
               </p>
             )}
             {/* The deal, said once: how what the work cost — materials, the lab — came into the share above. */}
             {myVisitFee !== null ? (
-              <p className={`text-[12px] leading-relaxed text-ink-500 ${visitOnly ? "mt-4 border-t border-line pt-3" : "mt-2"}`} data-on-call>
+              <p className={`text-[0.75rem] leading-relaxed text-ink-500 ${visitOnly ? "mt-4 border-t border-line pt-3" : "mt-2"}`} data-on-call>
                 {t.earnings.onCallNote}
               </p>
             ) : (
-              <p className="mt-2 text-[12px] leading-relaxed text-ink-500" data-costs-rule={myCostsRule}>
+              <p className="mt-2 text-[0.75rem] leading-relaxed text-ink-500" data-costs-rule={myCostsRule}>
                 {myCostsRule === "doctor" ? t.earnings.costsDoctorNote : t.earnings.costsSharedNote}
               </p>
             )}
@@ -304,9 +304,9 @@ export function EarningsClient({
               <p className="px-5 py-8 text-center text-sm text-ink-400">{t.earnings.nothingThisMonth}</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
+                <table className="w-full text-[0.8125rem]">
                   <thead>
-                    <tr className="border-b border-line text-[11px] uppercase tracking-wide text-ink-400">
+                    <tr className="border-b border-line text-[length:max(11px,0.6875rem)] uppercase tracking-wide text-ink-400">
                       <th className="px-5 py-2 text-start font-semibold">{t.invoices.invoiceNo}</th>
                       <th className="px-5 py-2 text-start font-semibold">{t.common.date}</th>
                       <th className="px-5 py-2 text-end font-semibold">{t.invoices.produced}</th>
@@ -334,7 +334,7 @@ export function EarningsClient({
                             <span className="font-medium">{l.number}</span>
                           )}
                           {l.status === "void" && (
-                            <span className="ms-2 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500">
+                            <span className="ms-2 rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] text-ink-500">
                               {t.invoices.statuses.void}
                             </span>
                           )}
@@ -384,7 +384,7 @@ export function EarningsClient({
               )}
               {showSpend && <Line label={t.earnings.expenses} value={`− ${money(net.expenses)}`} />}
               <li className="mt-1 flex items-center justify-between gap-3 border-t border-line pt-3">
-                <span className="text-[13px] font-semibold">
+                <span className="text-[0.8125rem] font-semibold">
                   {showSpend ? t.earnings.kept : t.earnings.afterCommission}
                 </span>
                 {/*
@@ -403,7 +403,7 @@ export function EarningsClient({
                 </span>
               </li>
             </ul>
-            <p className="mt-3 border-t border-line pt-3 text-[12px] leading-relaxed text-ink-500">
+            <p className="mt-3 border-t border-line pt-3 text-[0.75rem] leading-relaxed text-ink-500">
               {showSpend ? t.earnings.keptNote : t.earnings.afterCommissionNote}
             </p>
             </div>
@@ -417,9 +417,9 @@ export function EarningsClient({
               <p className="px-5 py-8 text-center text-sm text-ink-400">{t.earnings.nothingThisMonth}</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
+                <table className="w-full text-[0.8125rem]">
                   <thead>
-                    <tr className="border-b border-line text-[11px] uppercase tracking-wide text-ink-400">
+                    <tr className="border-b border-line text-[length:max(11px,0.6875rem)] uppercase tracking-wide text-ink-400">
                       <th className="px-5 py-2 text-start font-semibold">{t.invoices.doctor}</th>
                       {/* On a phone the two figures behind the share give way to whether it was paid. */}
                       <th className="px-5 py-2 text-end font-semibold max-sm:hidden">{t.invoices.produced}</th>
@@ -464,7 +464,7 @@ export function EarningsClient({
                                 >
                                   {state === "part" ? (
                                     /* Each amount whole on its own line before either breaks in the middle, on a phone. */
-                                    <span className="flex flex-wrap items-center justify-end gap-x-1 text-[12.5px] tabular-nums text-ink-700">
+                                    <span className="flex flex-wrap items-center justify-end gap-x-1 text-[0.78125rem] tabular-nums text-ink-700">
                                       <span className="whitespace-nowrap">{money(got)} ·</span>
                                       <span className="whitespace-nowrap font-medium text-ink-900">
                                         {E.paidPart.replace("{left}", money(left))}
@@ -507,7 +507,7 @@ export function EarningsClient({
                         <td className="px-5 py-2.5 text-end tabular-nums" data-payout-total-left={totalLeft}>
                           <div className="whitespace-nowrap font-semibold">{money(totalPaid)}</div>
                           {totalLeft > SETTLED && (
-                            <div className="text-[12px] text-ink-500">
+                            <div className="text-[0.75rem] text-ink-500">
                               {E.stillOwed} <span className="whitespace-nowrap">{money(totalLeft)}</span>
                             </div>
                           )}
@@ -529,7 +529,7 @@ export function EarningsClient({
               {owed.map((o) => (
                 <li
                   key={`${o.doctorMemberId}|${o.period}`}
-                  className="flex items-center justify-between gap-3 px-5 py-2.5 text-[13px]"
+                  className="flex items-center justify-between gap-3 px-5 py-2.5 text-[0.8125rem]"
                   data-payout-earlier-row={o.period}
                 >
                   <span className="min-w-0">
@@ -627,10 +627,10 @@ export function EarningsClient({
               {paid
                 .filter((p) => p.doctorMemberId === history)
                 .map((p) => (
-                  <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px]">
+                  <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[0.8125rem]">
                     <div className="min-w-0">
                       <div className="font-medium tabular-nums">{money(p.amount)}</div>
-                      <div className="text-[12px] text-ink-500">
+                      <div className="text-[0.75rem] text-ink-500">
                         {fmtDateOnly(p.paidOn, locale)} · {t.expenses.methods[p.method]}
                         {p.note ? ` · ${p.note}` : ""}
                       </div>
@@ -687,8 +687,8 @@ export function EarningsClient({
 function Line({ label, value }: { label: string; value: string }) {
   return (
     <li className="flex items-center justify-between gap-3">
-      <span className="text-[13px] text-ink-500">{label}</span>
-      <span dir="ltr" className="text-[13px] tabular-nums">{value}</span>
+      <span className="text-[0.8125rem] text-ink-500">{label}</span>
+      <span dir="ltr" className="text-[0.8125rem] tabular-nums">{value}</span>
     </li>
   );
 }
@@ -696,7 +696,7 @@ function Line({ label, value }: { label: string; value: string }) {
 function Figure({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-ink-400">{label}</div>
+      <div className="text-[length:max(11px,0.6875rem)] uppercase tracking-wide text-ink-400">{label}</div>
       <div className={`mt-1 tabular-nums ${strong ? "text-2xl font-bold text-ink-900" : "text-xl font-semibold text-ink-700"}`}>
         {value}
       </div>

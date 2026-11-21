@@ -16,7 +16,7 @@ export function familyTint(f: Family, alpha = "24"): string {
 export function FamilyTag({ family, label, className = "" }: { family: Family; label: string; className?: string }) {
   return (
     <span
-      className={`inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-[11px] font-semibold text-ink-900 ${className}`}
+      className={`inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-900 ${className}`}
       style={{ background: familyTint(family), borderColor: `${FAMILY_COLOR[family]}80` }}
       data-family={family}
     >

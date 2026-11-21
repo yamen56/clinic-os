@@ -94,7 +94,7 @@ export function AppointmentNotes({
 
   return (
     <div>
-      <span className="mb-0.5 flex items-center gap-1.5 text-[13px] font-medium text-ink-700">
+      <span className="mb-0.5 flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-700">
         <StickyNote className="h-3.5 w-3.5 text-ink-400" />
         {t.patients.notes.visitNotes}
         {rows?.length ? <span className="text-ink-400 tnum">{rows.length}</span> : null}
@@ -103,7 +103,7 @@ export function AppointmentNotes({
           is a clinical record about a named person, and the panel above is a
           form that can still be edited — the heading should not be the only
           thing standing between a note and the wrong patient. */}
-      <p className="mb-1.5 text-[12px] text-ink-500">
+      <p className="mb-1.5 text-[0.75rem] text-ink-500">
         {patientName} · {fmtDateTime(startsAt, tz, locale)}
         {serviceName ? ` · ${serviceName}` : ""}
       </p>
@@ -111,12 +111,12 @@ export function AppointmentNotes({
       {rows === null ? (
         <div className="h-8 rounded-lg bg-sunken" />
       ) : rows.length === 0 ? (
-        <p className="mb-2 text-[12px] text-ink-400">{t.patients.notes.noVisitNotes}</p>
+        <p className="mb-2 text-[0.75rem] text-ink-400">{t.patients.notes.noVisitNotes}</p>
       ) : (
         <ul className="mb-2 grid gap-2">
           {rows.map((n) => (
             <li key={n.id} className="rounded-lg border border-line bg-sunken/40 p-2.5">
-              <div className="mb-0.5 text-[11px] text-ink-400">
+              <div className="mb-0.5 text-[length:max(11px,0.6875rem)] text-ink-400">
                 {n.author ? `${n.author} · ` : ""}
                 {fmtDateTime(n.created_at, tz, locale)}
                 {n.edited_at ? ` · ${t.patients.notes.edited}` : ""}
@@ -129,7 +129,7 @@ export function AppointmentNotes({
                 />
               )}
               {n.body && (
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900">
+                <p className="whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-ink-900">
                   {n.body}
                 </p>
               )}
@@ -147,7 +147,7 @@ export function AppointmentNotes({
       <div className="mt-1.5 flex items-center justify-between gap-2">
         <Link
           href={`/c/${slug}/patients/${patientId}`}
-          className="text-[12px] text-ink-500 hover:text-brand-700"
+          className="text-[0.75rem] text-ink-500 hover:text-brand-700"
         >
           {t.patients.notes.openPatientFile}
         </Link>

@@ -136,7 +136,7 @@ export function Tabs({
         >
           {t.label}
           {typeof t.count === "number" && t.count > 0 && (
-            <span className="ms-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 tnum">
+            <span className="ms-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 tnum">
               {t.count}
             </span>
           )}
@@ -184,7 +184,7 @@ export function LinkTabs({
         >
           {t.label}
           {typeof t.count === "number" && t.count > 0 && (
-            <span className="ms-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 tnum">
+            <span className="ms-1.5 rounded-full bg-brand-100 px-1.5 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 tnum">
               {t.count}
             </span>
           )}

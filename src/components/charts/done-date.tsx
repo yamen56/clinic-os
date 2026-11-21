@@ -29,7 +29,7 @@ export function DoneDateField({
   const day = doneAt ? DateTime.fromISO(doneAt).setZone(tz).toISODate()! : todayIn(tz);
   return (
     <label className="block" data-done-date={day}>
-      <span className="mb-1 block text-[12px] font-semibold text-ink-500">{label ?? t.common.dateDone}</span>
+      <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{label ?? t.common.dateDone}</span>
       <input
         type="date"
         dir="ltr"

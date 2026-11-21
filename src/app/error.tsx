@@ -47,7 +47,7 @@ export default function AppError({
         {t.common.appErrorRetry}
       </Button>
       {error.digest && (
-        <p className="mono text-[12px] text-ink-400" dir="ltr">
+        <p className="mono text-[0.75rem] text-ink-400" dir="ltr">
           {t.common.appErrorRef}: {error.digest}
         </p>
       )}

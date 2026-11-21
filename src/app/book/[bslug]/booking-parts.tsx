@@ -105,9 +105,9 @@ export function AppointmentCard({
         className="flex w-[5.25rem] shrink-0 flex-col items-center justify-center gap-1 rounded-s-[15px] px-2 py-4"
         style={{ background: "var(--bk)", color: "var(--bk-ink)" }}
       >
-        <span className="text-[11.5px] font-semibold leading-none opacity-85">{when.toFormat("ccc")}</span>
-        <span className="font-display text-[30px] font-bold leading-none tabular-nums">{when.day}</span>
-        <span className="text-[11.5px] font-semibold leading-none opacity-85">{when.toFormat("LLL")}</span>
+        <span className="text-[length:max(11px,0.71875rem)] font-semibold leading-none opacity-85">{when.toFormat("ccc")}</span>
+        <span className="font-display text-[1.875rem] font-bold leading-none tabular-nums">{when.day}</span>
+        <span className="text-[length:max(11px,0.71875rem)] font-semibold leading-none opacity-85">{when.toFormat("LLL")}</span>
       </div>
       {/* Where the card tears: a dashed line and the two notches at its ends. */}
       <div className="relative w-0 shrink-0" aria-hidden>
@@ -116,9 +116,9 @@ export function AppointmentCard({
         <span className="absolute -bottom-px left-0 h-4 w-4 -translate-x-1/2 translate-y-1/2 rounded-full border border-line bg-surface [clip-path:inset(0_0_50%_0)]" />
       </div>
       <div className="min-w-0 flex-1 px-4 py-3.5">
-        <div className="font-display text-[20px] font-bold leading-none tabular-nums">{when.toFormat("h:mm a")}</div>
-        <div className="mt-2 text-[14.5px] font-semibold leading-snug">{services.join(" + ")}</div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-500">
+        <div className="font-display text-[1.25rem] font-bold leading-none tabular-nums">{when.toFormat("h:mm a")}</div>
+        <div className="mt-2 text-[0.90625rem] font-semibold leading-snug">{services.join(" + ")}</div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.78125rem] text-ink-500">
           <span className="inline-flex items-center gap-1 tabular-nums">
             <Clock className="h-3.5 w-3.5" />
             {length}
@@ -176,7 +176,7 @@ export function SlotGroups({
     <div className="grid gap-4">
       {groups.map((g) => (
         <div key={g.key}>
-          {groups.length > 1 && <div className="mb-2 text-[12px] font-semibold text-ink-500">{labels[g.key]}</div>}
+          {groups.length > 1 && <div className="mb-2 text-[0.75rem] font-semibold text-ink-500">{labels[g.key]}</div>}
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {g.items.map((s) => {
               const local = DateTime.fromISO(s.startISO).setZone(tz).setLocale(fmtLocale);
@@ -187,7 +187,7 @@ export function SlotGroups({
                   type="button"
                   onClick={() => onPick(s)}
                   aria-pressed={active}
-                  className="h-11 touch-manipulation rounded-xl border text-[14px] font-semibold tnum transition-colors"
+                  className="h-11 touch-manipulation rounded-xl border text-[0.875rem] font-semibold tnum transition-colors"
                   style={
                     active
                       ? { background: "var(--bk)", borderColor: "var(--bk)", color: "var(--bk-ink)" }
@@ -231,7 +231,7 @@ export function QuestionField({
   const ring = invalid ? "border-danger" : "border-line-strong";
   // 16px, or an iPhone zooms the page in on every field it focuses.
   // `scroll-mb-28`: a field the phone scrolls to on focus stops clear of the bottom bar.
-  const box = `w-full scroll-mb-28 rounded-xl border ${ring} bg-surface px-4 text-[16px] outline-none focus:border-[var(--bk-text)]`;
+  const box = `w-full scroll-mb-28 rounded-xl border ${ring} bg-surface px-4 text-[1rem] outline-none focus:border-[var(--bk-text)]`;
 
   if (q.type === "checkbox") {
     return (
@@ -242,9 +242,9 @@ export function QuestionField({
           onChange={(e) => onChange(e.target.checked)}
           className="mt-0.5 h-4.5 w-4.5 shrink-0 accent-[var(--bk-text)]"
         />
-        <span className="text-[14px] leading-6">
+        <span className="text-[0.875rem] leading-6">
           {label}
-          {help && <span className="block text-[12px] text-ink-500">{help}</span>}
+          {help && <span className="block text-[0.75rem] text-ink-500">{help}</span>}
         </span>
       </label>
     );
@@ -252,7 +252,7 @@ export function QuestionField({
 
   return (
     <div>
-      <span className="mb-1.5 block text-[13px] font-semibold">
+      <span className="mb-1.5 block text-[0.8125rem] font-semibold">
         {label}
         {!q.required && <span className="ms-1.5 font-normal text-ink-400">{optionalLabel}</span>}
       </span>
@@ -294,7 +294,7 @@ export function QuestionField({
                       : [...(Array.isArray(value) ? value : []), o]
                   )
                 }
-                className="min-h-10 touch-manipulation rounded-full border px-3.5 py-2 text-[13px] font-medium transition-colors"
+                className="min-h-10 touch-manipulation rounded-full border px-3.5 py-2 text-[0.8125rem] font-medium transition-colors"
                 style={
                   picked
                     ? { background: "var(--bk)", borderColor: "var(--bk)", color: "var(--bk-ink)" }
@@ -318,7 +318,7 @@ export function QuestionField({
         />
       )}
 
-      {help && <p className="mt-1.5 text-[12px] leading-5 text-ink-500">{help}</p>}
+      {help && <p className="mt-1.5 text-[0.75rem] leading-5 text-ink-500">{help}</p>}
     </div>
   );
 }
@@ -386,7 +386,7 @@ export function AddToCalendar({
     <a
       href={href}
       download="appointment.ics"
-      className="inline-flex h-11 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-[13.5px] font-semibold"
+      className="inline-flex h-11 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-[0.84375rem] font-semibold"
     >
       <CalendarPlus className="h-4 w-4" />
       {label}
@@ -402,7 +402,7 @@ export function AddToCalendar({
 */
 export function PrivacyNote({ t }: { t: { privacyConsent: string; privacy: string } }) {
   return (
-    <p className="mt-4 text-center text-[11.5px] leading-5 text-ink-400">
+    <p className="mt-4 text-center text-[length:max(11px,0.71875rem)] leading-5 text-ink-400">
       {t.privacyConsent.split("{link}")[0]}
       <a
         href={CLINICTI_PRIVACY_URL}
@@ -453,7 +453,7 @@ export function DoctorFace({ bslug, doctor }: { bslug: string; doctor: Doctor })
   }
   return (
     <span
-      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[15px] font-bold"
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[0.9375rem] font-bold"
       style={{ background: "var(--bk-soft)", color: "var(--bk-text)" }}
     >
       {initial}

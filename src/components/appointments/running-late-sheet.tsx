@@ -51,7 +51,7 @@ export function RunningLateSheet({
   const ok = Number.isFinite(minutes) && minutes >= 1 && minutes <= 240;
 
   const chip = (on: boolean) =>
-    `h-11 min-w-14 touch-manipulation rounded-full border px-3.5 text-[14px] font-semibold tnum transition-colors duration-100 ${
+    `h-11 min-w-14 touch-manipulation rounded-full border px-3.5 text-[0.875rem] font-semibold tnum transition-colors duration-100 ${
       on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line-strong bg-surface text-ink-700 hover:bg-sunken"
     }`;
 
@@ -61,8 +61,8 @@ export function RunningLateSheet({
       <div className="absolute inset-x-0 bottom-0 flex max-h-[88vh] flex-col rounded-t-2xl bg-surface shadow-pop animate-fade-up md:inset-x-auto md:bottom-auto md:left-1/2 md:top-[10vh] md:w-full md:max-w-lg md:-translate-x-1/2 md:rounded-2xl">
         <div className="flex items-start gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[16px] font-semibold">{L.title}</h2>
-            <p className="truncate text-[13px] text-ink-500">
+            <h2 className="text-[1rem] font-semibold">{L.title}</h2>
+            <p className="truncate text-[0.8125rem] text-ink-500">
               {patientName} · <span className="tnum">{time}</span>
             </p>
           </div>
@@ -73,7 +73,7 @@ export function RunningLateSheet({
 
         <div className="grid gap-5 overflow-y-auto overscroll-contain px-5 py-4">
           <section>
-            <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-400">{L.howLate}</h3>
+            <h3 className="mb-2 text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{L.howLate}</h3>
             <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={L.howLate}>
               {CHOICES.map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={minutes === m} onClick={() => setMinutes(m)} className={chip(minutes === m)} data-late-minutes={m}>
@@ -99,16 +99,16 @@ export function RunningLateSheet({
 
           <section>
             <div className="mb-1 flex items-baseline gap-2">
-              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{L.tellTitle}</h3>
-              <span className="text-[12px] text-ink-400">{L.tellOptional}</span>
+              <h3 className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{L.tellTitle}</h3>
+              <span className="text-[0.75rem] text-ink-400">{L.tellOptional}</span>
             </div>
             {next.length === 0 ? (
-              <p className="text-[13px] text-ink-500" data-late-nobody>
+              <p className="text-[0.8125rem] text-ink-500" data-late-nobody>
                 {L.nobodyAfter}
               </p>
             ) : (
               <>
-                <p className="mb-2 text-[13px] text-ink-500">{L.tellHint.replace("{n}", ok ? String(minutes) : "…")}</p>
+                <p className="mb-2 text-[0.8125rem] text-ink-500">{L.tellHint.replace("{n}", ok ? String(minutes) : "…")}</p>
                 <ul className="overflow-hidden rounded-ctl border border-line">
                   {next.map((n) => (
                     <li key={n.id} className="border-t border-line first:border-t-0">
@@ -127,12 +127,12 @@ export function RunningLateSheet({
                             })
                           }
                         />
-                        <span className="w-12 shrink-0 text-[13px] font-semibold tnum">{n.time}</span>
-                        <span className="min-w-0 flex-1 truncate text-[14px]">{n.name}</span>
+                        <span className="w-12 shrink-0 text-[0.8125rem] font-semibold tnum">{n.time}</span>
+                        <span className="min-w-0 flex-1 truncate text-[0.875rem]">{n.name}</span>
                         {!n.hasPhone ? (
-                          <span className="shrink-0 text-[12px] text-ink-400">{L.noPhone}</span>
+                          <span className="shrink-0 text-[0.75rem] text-ink-400">{L.noPhone}</span>
                         ) : n.toldAt ? (
-                          <span className="shrink-0 text-[12px] text-ink-500 tnum">{L.toldAt.replace("{time}", n.toldAt)}</span>
+                          <span className="shrink-0 text-[0.75rem] text-ink-500 tnum">{L.toldAt.replace("{time}", n.toldAt)}</span>
                         ) : null}
                       </label>
                     </li>

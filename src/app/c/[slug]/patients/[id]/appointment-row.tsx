@@ -209,11 +209,11 @@ export function AppointmentRow({
     }
   };
 
-  const chip = "inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[11px] font-medium text-ink-500";
+  const chip = "inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-sunken px-2 text-[length:max(11px,0.6875rem)] font-medium text-ink-500";
   const row = (label: string, value: React.ReactNode, key: string) => (
     <div className="grid gap-0.5 sm:grid-cols-[9rem_1fr] sm:gap-3" data-detail={key}>
-      <dt className="text-[12px] font-semibold text-ink-500">{label}</dt>
-      <dd className="min-w-0 text-[13.5px] text-ink-900">{value}</dd>
+      <dt className="text-[0.75rem] font-semibold text-ink-500">{label}</dt>
+      <dd className="min-w-0 text-[0.84375rem] text-ink-900">{value}</dd>
     </div>
   );
 
@@ -223,7 +223,7 @@ export function AppointmentRow({
         <ChevronRight className={`mt-0.5 h-4 w-4 shrink-0 text-ink-300 transition-transform rtl:rotate-180 ${open ? "rotate-90 rtl:rotate-90" : ""}`} />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium">{service || "—"}</div>
-          <div className="text-[13px] text-ink-500">
+          <div className="text-[0.8125rem] text-ink-500">
             {fmtDateTime(a.starts_at, tz, locale)}
             {a.doctor_name ? ` · ${a.doctor_name}` : ""}
           </div>
@@ -319,7 +319,7 @@ export function AppointmentRow({
                 "invoice"
               )}
             <div className="pt-0.5">
-              <Link href={`/c/${slug}/calendar?open=${a.id}`} className="inline-flex min-h-9 items-center gap-1.5 text-[13px] font-semibold text-brand-700 hover:underline" data-detail-calendar>
+              <Link href={`/c/${slug}/calendar?open=${a.id}`} className="inline-flex min-h-9 items-center gap-1.5 text-[0.8125rem] font-semibold text-brand-700 hover:underline" data-detail-calendar>
                 <CalendarDays className="h-4 w-4" />
                 {D.openInCalendar}
                 <ExternalLink className="h-3.5 w-3.5" />
@@ -349,19 +349,19 @@ export function AppointmentRow({
 
           {/* Whose visit and which one, restated where a note is about to be written. */}
           <div>
-            <p className="mb-2 text-[12px] text-ink-500">
+            <p className="mb-2 text-[0.75rem] text-ink-500">
               {patientName} · {fmtDateTime(a.starts_at, tz, locale)}
               {service ? ` · ${service}` : ""}
             </p>
             {notes.length === 0 ? (
-              <p className="mb-2 text-[12px] text-ink-400">{t.patients.notes.noVisitNotes}</p>
+              <p className="mb-2 text-[0.75rem] text-ink-400">{t.patients.notes.noVisitNotes}</p>
             ) : (
               <ul className="mb-2 grid gap-2">
                 {notes.map((n) => {
                   const cat = n.category_id ? byId.get(n.category_id) : null;
                   return (
                     <li key={n.id} className="rounded-lg border border-line bg-surface p-2.5">
-                      <div className="mb-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-400">
+                      <div className="mb-0.5 flex flex-wrap items-center gap-1.5 text-[length:max(11px,0.6875rem)] text-ink-400">
                         {cat && (
                           <span className="inline-flex h-4 items-center rounded-full px-1.5 font-semibold" style={{ color: cat.color, background: "var(--color-sunken)" }}>
                             {locale === "ar" ? cat.name_ar || cat.name : cat.name}
@@ -372,7 +372,7 @@ export function AppointmentRow({
                         {n.edited_at ? ` · ${t.patients.notes.edited}` : ""}
                       </div>
                       {n.audio_path && <VoiceNote src={`/api/c/${slug}/notes/${n.id}/audio`} seconds={n.audio_seconds} label={t.patients.notes.playVoice} />}
-                      {n.body && <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900">{n.body}</p>}
+                      {n.body && <p className="whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-ink-900">{n.body}</p>}
                     </li>
                   );
                 })}

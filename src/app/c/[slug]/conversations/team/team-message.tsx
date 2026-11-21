@@ -79,10 +79,10 @@ export function QuoteLine({ q, label, onClick, mine }: { q: TeamQuote; label: { 
       className={`mb-1 block w-full min-w-0 rounded-lg border-s-[3px] px-2 py-1 text-start ${mine ? "border-surface/70 bg-surface/15" : "border-brand-600 bg-ink-900/5"}`}
       data-team-quote={q.id}
     >
-      <span className="block truncate text-[12px] font-semibold opacity-90" dir="auto">
+      <span className="block truncate text-[0.75rem] font-semibold opacity-90" dir="auto">
         {q.senderName ?? label.you}
       </span>
-      <span className="line-clamp-2 block text-[12.5px] opacity-80" dir="auto">
+      <span className="line-clamp-2 block text-[0.78125rem] opacity-80" dir="auto">
         {what}
       </span>
     </button>
@@ -171,16 +171,16 @@ export function Bubble({
         data-team-bubble={m.id}
       >
         {showSender && (
-          <div className="mb-0.5 text-[12px] font-semibold" style={senderColor ? { color: senderColor } : undefined} dir="auto">
+          <div className="mb-0.5 text-[0.75rem] font-semibold" style={senderColor ? { color: senderColor } : undefined} dir="auto">
             {m.senderName ?? T.formerMember}
           </div>
         )}
         {m.deleted ? (
-          <span className="text-[13px] italic opacity-70">{T.deleted}</span>
+          <span className="text-[0.8125rem] italic opacity-70">{T.deleted}</span>
         ) : (
           <>
             {m.forwarded && (
-              <div className="mb-0.5 flex items-center gap-1 text-[11.5px] italic opacity-75" data-team-forwarded>
+              <div className="mb-0.5 flex items-center gap-1 text-[length:max(11px,0.71875rem)] italic opacity-75" data-team-forwarded>
                 <Forward className="h-3 w-3" />
                 {T.forwarded}
               </div>
@@ -188,7 +188,7 @@ export function Bubble({
             {m.replyTo && <QuoteLine q={m.replyTo} label={labels} mine={mine} onClick={() => onJump(m.replyTo!.id)} />}
             {m.file &&
               (m.pending ? (
-                <span className="block text-[13px] opacity-80">{m.file.name}…</span>
+                <span className="block text-[0.8125rem] opacity-80">{m.file.name}…</span>
               ) : m.file.mime.startsWith("image/") ? (
                 <a href={fileUrl} target="_blank" rel="noreferrer">
                   {/* eslint-disable-next-line @next/next/no-img-element -- a private file behind a session, not something Next can optimise */}
@@ -199,7 +199,7 @@ export function Bubble({
                   <VoiceNote src={fileUrl} seconds={m.file.seconds} label={T.voice} />
                 </div>
               ) : (
-                <a href={fileUrl} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold underline">
+                <a href={fileUrl} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-1.5 text-[0.8125rem] font-semibold underline">
                   <Paperclip className="h-3.5 w-3.5" />
                   <span className="truncate" dir="auto">
                     {m.file.name}
@@ -207,7 +207,7 @@ export function Bubble({
                 </a>
               ))}
             {m.body && (
-              <p className="whitespace-pre-wrap break-words text-[14px] leading-snug" dir="auto">
+              <p className="whitespace-pre-wrap break-words text-[0.875rem] leading-snug" dir="auto">
                 <MessageBody text={m.body} mentions={mentions} mine={mine} />
               </p>
             )}
@@ -243,12 +243,12 @@ export function Bubble({
                   type="button"
                   onClick={() => onReact(me ? null : r.emoji)}
                   title={reactionNames(r.userIds)}
-                  className={`flex h-6 items-center gap-0.5 rounded-full border bg-surface px-1.5 text-[12.5px] leading-none text-ink-700 shadow-card ${me ? "border-brand-400" : "border-line"}`}
+                  className={`flex h-6 items-center gap-0.5 rounded-full border bg-surface px-1.5 text-[0.78125rem] leading-none text-ink-700 shadow-card ${me ? "border-brand-400" : "border-line"}`}
                   data-team-reaction={r.emoji}
                   aria-pressed={me}
                 >
                   <span>{r.emoji}</span>
-                  {r.userIds.length > 1 && <span className="text-[11px] font-semibold tnum">{r.userIds.length}</span>}
+                  {r.userIds.length > 1 && <span className="text-[length:max(11px,0.6875rem)] font-semibold tnum">{r.userIds.length}</span>}
                 </button>
               );
             })}
@@ -281,7 +281,7 @@ export function Bubble({
                     setPicking(false);
                     onReact(mineReaction === e ? null : e);
                   }}
-                  className={`grid h-9 w-9 place-items-center rounded-full text-[20px] transition-transform hover:scale-125 ${mineReaction === e ? "bg-brand-100" : ""}`}
+                  className={`grid h-9 w-9 place-items-center rounded-full text-[1.25rem] transition-transform hover:scale-125 ${mineReaction === e ? "bg-brand-100" : ""}`}
                   data-team-react={e}
                 >
                   {e}

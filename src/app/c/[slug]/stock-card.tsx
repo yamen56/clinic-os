@@ -31,7 +31,7 @@ export function StockCard({ slug, items, t, locale }: { slug: string; items: Sto
         <CardHeader
           title={`${t.dashboard.stock} · ${items.length}`}
           action={
-            <Link href={`/c/${slug}/stock`} className="text-[13px] font-semibold text-brand-700 hover:underline">
+            <Link href={`/c/${slug}/stock`} className="text-[0.8125rem] font-semibold text-brand-700 hover:underline">
               {t.dashboard.stockOpen}
             </Link>
           }
@@ -43,9 +43,9 @@ export function StockCard({ slug, items, t, locale }: { slug: string; items: Sto
               <div className="min-w-0 flex-1">
                 <div dir="auto" className="text-sm font-medium">
                   {a.name}
-                  {a.lot && <bdi className="ms-2 text-[12.5px] font-normal text-ink-500">{a.lot}</bdi>}
+                  {a.lot && <bdi className="ms-2 text-[0.78125rem] font-normal text-ink-500">{a.lot}</bdi>}
                 </div>
-                <div className={`text-[12.5px] ${a.kind === "out" || a.kind === "expired" ? "font-semibold text-danger" : "text-ink-500"}`}>{say(a)}</div>
+                <div className={`text-[0.78125rem] ${a.kind === "out" || a.kind === "expired" ? "font-semibold text-danger" : "text-ink-500"}`}>{say(a)}</div>
               </div>
             </li>
           ))}

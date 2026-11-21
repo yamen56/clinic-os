@@ -139,7 +139,7 @@ export function VisitBanner({
         data-visit-banner={inRoom ? "in_room" : "waiting"}
       >
         {/* With two buttons beside it a phone has no room left for the words: there they take the line above. */}
-        <div className={`flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold text-ink-900 ${treatment?.canWrite ? "max-sm:basis-full" : ""}`}>
+        <div className={`flex min-w-0 flex-1 items-center gap-2 text-[0.875rem] font-semibold text-ink-900 ${treatment?.canWrite ? "max-sm:basis-full" : ""}`}>
           {inRoom ? <DoorOpen className="h-4 w-4 shrink-0" /> : <Clock className="h-4 w-4 shrink-0" />}
           <span className="min-w-0 truncate">
             {inRoom ? (room ? t.visitBanner.inRoomNamed.replace("{room}", room) : t.visitBanner.inRoom) : t.visitBanner.waiting}
@@ -151,7 +151,7 @@ export function VisitBanner({
           <button
             type="button"
             onClick={() => treatment.openSheet(visit.id)}
-            className="inline-flex h-10 touch-manipulation items-center gap-1.5 rounded-full border border-line-strong bg-surface px-4 text-[13px] font-semibold text-ink-900 hover:bg-sunken max-sm:flex-1 max-sm:justify-center"
+            className="inline-flex h-10 touch-manipulation items-center gap-1.5 rounded-full border border-line-strong bg-surface px-4 text-[0.8125rem] font-semibold text-ink-900 hover:bg-sunken max-sm:flex-1 max-sm:justify-center"
             data-visit-record-open
           >
             <ClipboardPen className="h-4 w-4" />
@@ -164,7 +164,7 @@ export function VisitBanner({
               type="button"
               disabled={busy}
               onClick={() => setFinishing(true)}
-              className="inline-flex h-10 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[13px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60 max-sm:flex-1 max-sm:justify-center"
+              className="inline-flex h-10 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[0.8125rem] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60 max-sm:flex-1 max-sm:justify-center"
               data-visit-finish
             >
               <CheckCheck className="h-4 w-4" />
@@ -175,7 +175,7 @@ export function VisitBanner({
               type="button"
               disabled={busy}
               onClick={callIn}
-              className="inline-flex h-10 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[13px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60 max-sm:flex-1 max-sm:justify-center"
+              className="inline-flex h-10 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[0.8125rem] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60 max-sm:flex-1 max-sm:justify-center"
               data-visit-call-in
             >
               <DoorOpen className="h-4 w-4" />

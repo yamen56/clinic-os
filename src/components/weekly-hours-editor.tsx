@@ -32,8 +32,8 @@ export function WeeklyHoursEditor({
         const ranges = value[day] ?? [];
         return (
           <div key={day} className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-subtle px-3 py-2">
-            <span className="w-20 shrink-0 text-[13px] font-medium">{(t.hours.days as Record<string, string>)[day]}</span>
-            {ranges.length === 0 && <span className="text-[13px] text-ink-400">{t.hours.closed}</span>}
+            <span className="w-20 shrink-0 text-[0.8125rem] font-medium">{(t.hours.days as Record<string, string>)[day]}</span>
+            {ranges.length === 0 && <span className="text-[0.8125rem] text-ink-400">{t.hours.closed}</span>}
             {ranges.map(([from, to], i) => (
               // A native time input carries its own intrinsic width, and two of
               // them plus the separator will not fit beside the day name on a
@@ -49,7 +49,7 @@ export function WeeklyHoursEditor({
                     next[i] = [e.target.value, to];
                     setDay(day, next);
                   }}
-                  className="bg-transparent text-[13px] tnum outline-none"
+                  className="bg-transparent text-[0.8125rem] tnum outline-none"
                 />
                 <span className="text-ink-400">–</span>
                 <input
@@ -61,7 +61,7 @@ export function WeeklyHoursEditor({
                     next[i] = [from, e.target.value];
                     setDay(day, next);
                   }}
-                  className="bg-transparent text-[13px] tnum outline-none"
+                  className="bg-transparent text-[0.8125rem] tnum outline-none"
                 />
                 {!disabled && (
                   <button
@@ -79,7 +79,7 @@ export function WeeklyHoursEditor({
               <button
                 type="button"
                 onClick={() => setDay(day, [...ranges, ranges.length ? ["14:00", "18:00"] : ["09:00", "17:00"]] as [string, string][])}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-brand-700 hover:bg-brand-50"
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[0.75rem] font-medium text-brand-700 hover:bg-brand-50"
               >
                 <Plus className="h-3.5 w-3.5" />
                 {t.hours.addRange}

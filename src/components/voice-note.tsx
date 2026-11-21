@@ -115,7 +115,7 @@ export function VoiceNote({
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="shrink-0 text-[12px] font-medium tnum text-ink-500">
+      <span className="shrink-0 text-[0.75rem] font-medium tnum text-ink-500">
         {mmss(playing || at > 0 ? at : total)}
       </span>
     </div>

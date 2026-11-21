@@ -55,8 +55,8 @@ export function FacePackages({
     <div className="grid gap-4" data-face-packages>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[17px] font-semibold">{P.title}</h2>
-          <p className="mt-1 max-w-3xl text-[13px] text-ink-500">{P.sub}</p>
+          <h2 className="text-[1.0625rem] font-semibold">{P.title}</h2>
+          <p className="mt-1 max-w-3xl text-[0.8125rem] text-ink-500">{P.sub}</p>
         </div>
         <Button onClick={() => setEditing("new")} data-plan-new>
           <Plus className="h-4 w-4" />
@@ -64,7 +64,7 @@ export function FacePackages({
         </Button>
       </div>
       {plans.length === 0 ? (
-        <Card className="p-6 text-[14px] text-ink-500">{P.empty}</Card>
+        <Card className="p-6 text-[0.875rem] text-ink-500">{P.empty}</Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {plans.map((p) => (
@@ -72,16 +72,16 @@ export function FacePackages({
               <div data-plan={p.id}>
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="text-[15px] font-semibold" dir="auto">
+                    <div className="text-[0.9375rem] font-semibold" dir="auto">
                       {locale === "ar" ? p.nameAr || p.name : p.name}
                     </div>
                     {p.nameAr && locale !== "ar" && (
-                      <div className="text-[12.5px] text-ink-500" dir="rtl">
+                      <div className="text-[0.78125rem] text-ink-500" dir="rtl">
                         {p.nameAr}
                       </div>
                     )}
                   </div>
-                  <div className="text-[17px] font-bold tnum">{fmtMoney(p.price, currency, locale)}</div>
+                  <div className="text-[1.0625rem] font-bold tnum">{fmtMoney(p.price, currency, locale)}</div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5" dir="ltr">
                   {p.items.map((i, n) => {
@@ -89,7 +89,7 @@ export function FacePackages({
                     return tr ? <FamilyTag key={n} family={tr.family} label={`${tr.en} × ${i.sessions}`} /> : null;
                   })}
                 </div>
-                <div className="mt-2 flex items-center gap-2 text-[12.5px] text-ink-500">
+                <div className="mt-2 flex items-center gap-2 text-[0.78125rem] text-ink-500">
                   <span>{p.validMonths ? P.validFor.replace("{n}", String(p.validMonths)) : P.noExpiry}</span>
                   {!p.active && <span>· {P.inactive}</span>}
                   <Button size="sm" variant="outline" className="ms-auto" onClick={() => setEditing(p)}>
@@ -204,7 +204,7 @@ function PlanForm({
         )}
       </div>
       <div className="mt-4">
-        <div className="text-[13px] font-semibold text-ink-900">{P.items}</div>
+        <div className="text-[0.8125rem] font-semibold text-ink-900">{P.items}</div>
         <div className="text-xs text-ink-500">{P.itemsHint}</div>
         <div className="mt-2 grid gap-2" dir="ltr">
           {items.map((it, n) => (
@@ -216,7 +216,7 @@ function PlanForm({
                   </option>
                 ))}
               </Select>
-              <span className="text-[13px] text-ink-500">×</span>
+              <span className="text-[0.8125rem] text-ink-500">×</span>
               <div className="w-20 shrink-0">
                 <Input
                   type="text"
@@ -243,7 +243,7 @@ function PlanForm({
           <button
             type="button"
             onClick={() => setItems((prev) => [...prev, { treatmentKey: "aes_toxin", sessions: 1 }])}
-            className="mt-2 inline-flex items-center gap-1 text-[13px] font-semibold text-brand-700 hover:underline"
+            className="mt-2 inline-flex items-center gap-1 text-[0.8125rem] font-semibold text-brand-700 hover:underline"
             data-plan-add-item
           >
             <Plus className="h-3.5 w-3.5" />
@@ -253,7 +253,7 @@ function PlanForm({
       </div>
       {plan && (
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3">
-          <span className="text-[13px] font-semibold">{P.active}</span>
+          <span className="text-[0.8125rem] font-semibold">{P.active}</span>
           <Toggle checked={active} onChange={setActive} label={P.active} />
         </div>
       )}

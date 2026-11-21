@@ -63,7 +63,7 @@ function MedicalEditor({ open, onClose, value, tz, onSave }: { open: boolean; on
     >
       <div className="grid gap-4" data-medical-editor>
         <div>
-          <span className="mb-1.5 block text-[12px] font-semibold text-ink-500">{M.conditions}</span>
+          <span className="mb-1.5 block text-[0.75rem] font-semibold text-ink-500">{M.conditions}</span>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {CONDITIONS.map((c) => {
               const on = h.conditions.includes(c.key);
@@ -74,7 +74,7 @@ function MedicalEditor({ open, onClose, value, tz, onSave }: { open: boolean; on
                   aria-pressed={on}
                   data-condition={c.key}
                   onClick={() => toggle(c.key)}
-                  className={`flex h-10 items-center gap-2 rounded-ctl border px-3 text-start text-[13px] font-semibold transition-colors duration-140 ${
+                  className={`flex h-10 items-center gap-2 rounded-ctl border px-3 text-start text-[0.8125rem] font-semibold transition-colors duration-140 ${
                     on ? (c.alert ? "border-danger bg-danger-soft text-danger" : "border-brand-600 bg-brand-50 text-brand-700") : "border-line bg-surface text-ink-700 hover:bg-sunken"
                   }`}
                 >
@@ -86,7 +86,7 @@ function MedicalEditor({ open, onClose, value, tz, onSave }: { open: boolean; on
           </div>
         </div>
         <label className="block">
-          <span className="mb-1 block text-[12px] font-semibold text-ink-500">{M.allergies}</span>
+          <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{M.allergies}</span>
           <input dir="auto" value={h.allergies} onChange={(e) => setH({ ...h, allergies: e.target.value.slice(0, 300) })} placeholder={M.allergiesPlaceholder} className={`${area} h-10 py-0`} data-allergies />
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {COMMON_ALLERGIES.filter((a) => !h.allergies.toLowerCase().includes(a.toLowerCase())).map((a) => (
@@ -94,7 +94,7 @@ function MedicalEditor({ open, onClose, value, tz, onSave }: { open: boolean; on
                 key={a}
                 type="button"
                 onClick={() => setH({ ...h, allergies: h.allergies.trim() ? `${h.allergies.trim()}, ${a}` : a })}
-                className="h-7 rounded-full border border-line px-2.5 text-[12px] font-semibold text-ink-700 hover:bg-sunken"
+                className="h-7 rounded-full border border-line px-2.5 text-[0.75rem] font-semibold text-ink-700 hover:bg-sunken"
                 dir="ltr"
               >
                 + {a}
@@ -103,15 +103,15 @@ function MedicalEditor({ open, onClose, value, tz, onSave }: { open: boolean; on
           </div>
         </label>
         <label className="block">
-          <span className="mb-1 block text-[12px] font-semibold text-ink-500">{M.medications}</span>
+          <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{M.medications}</span>
           <textarea dir="auto" rows={2} value={h.medications} onChange={(e) => setH({ ...h, medications: e.target.value.slice(0, 1000) })} placeholder={M.medicationsPlaceholder} className={area} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[12px] font-semibold text-ink-500">{M.notes}</span>
+          <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{M.notes}</span>
           <textarea dir="auto" rows={2} value={h.notes} onChange={(e) => setH({ ...h, notes: e.target.value.slice(0, 2000) })} className={area} />
         </label>
         {value.updatedAt && (
-          <p className="text-[12px] text-ink-500">{M.updatedBy.replace("{date}", fmtDate(value.updatedAt, tz, locale)).replace("{name}", value.updatedBy ?? "")}</p>
+          <p className="text-[0.75rem] text-ink-500">{M.updatedBy.replace("{date}", fmtDate(value.updatedAt, tz, locale)).replace("{name}", value.updatedBy ?? "")}</p>
         )}
       </div>
     </Modal>
@@ -129,7 +129,7 @@ export function MedicalCard({ tz, value: h, onSave }: { tz: string; value: Medic
     <div data-medical-card>
       <Card className="p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-[15px] font-semibold">
+          <h3 className="flex items-center gap-2 text-[0.9375rem] font-semibold">
             <HeartPulse className="h-4 w-4 text-danger" />
             {M.title}
           </h3>
@@ -139,11 +139,11 @@ export function MedicalCard({ tz, value: h, onSave }: { tz: string; value: Medic
           </Button>
         </div>
         {hasHistory(h) ? (
-          <div className="grid gap-2 text-[13px]">
+          <div className="grid gap-2 text-[0.8125rem]">
             {alerts.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {alerts.map((a) => (
-                  <span key={a} className="rounded-full bg-danger-soft px-2 py-0.5 text-[12px] font-semibold text-danger" data-medical-alert>
+                  <span key={a} className="rounded-full bg-danger-soft px-2 py-0.5 text-[0.75rem] font-semibold text-danger" data-medical-alert>
                     {a}
                   </span>
                 ))}
@@ -166,10 +166,10 @@ export function MedicalCard({ tz, value: h, onSave }: { tz: string; value: Medic
                 {h.notes}
               </p>
             )}
-            {h.updatedAt && <p className="text-[12px] text-ink-400">{M.updatedBy.replace("{date}", fmtDate(h.updatedAt, tz, locale)).replace("{name}", h.updatedBy ?? "")}</p>}
+            {h.updatedAt && <p className="text-[0.75rem] text-ink-400">{M.updatedBy.replace("{date}", fmtDate(h.updatedAt, tz, locale)).replace("{name}", h.updatedBy ?? "")}</p>}
           </div>
         ) : (
-          <p className="text-[13px] text-ink-500">{M.none}</p>
+          <p className="text-[0.8125rem] text-ink-500">{M.none}</p>
         )}
       </Card>
       <MedicalEditor key={h.updatedAt ?? "none"} open={open} onClose={() => setOpen(false)} value={h} tz={tz} onSave={onSave} />

@@ -122,7 +122,7 @@ function SurfaceChips({ fdi, picked, short, onToggle }: { fdi: string; picked: S
             title={l.long}
             aria-label={short ? l.long : undefined}
             data-surface-chip={s}
-            className={`h-9 rounded-ctl border text-[12.5px] font-semibold transition-colors duration-140 ${short ? "min-w-9 px-2" : "px-2.5"} ${
+            className={`h-9 rounded-ctl border text-[0.78125rem] font-semibold transition-colors duration-140 ${short ? "min-w-9 px-2" : "px-2.5"} ${
               on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
             }`}
           >
@@ -160,7 +160,7 @@ function CompactTooth({ fdi, st, picked, flash, hint, onToggle }: { fdi: string;
         )}
       </div>
       {/* Said only when it matters: the treatment needs surfaces and none are chosen. */}
-      {flash && <p className="mt-1.5 text-[12px] font-semibold text-danger">{hint}</p>}
+      {flash && <p className="mt-1.5 text-[0.75rem] font-semibold text-danger">{hint}</p>}
     </div>
   );
 }
@@ -169,9 +169,9 @@ function CompactTooth({ fdi, st, picked, flash, hint, onToggle }: { fdi: string;
 function Heading({ title, count, children }: { title: string; count?: number; children?: React.ReactNode }) {
   return (
     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-      <h4 className="text-[13px] font-semibold text-ink-900">
+      <h4 className="text-[0.8125rem] font-semibold text-ink-900">
         {title}
-        {count !== undefined && <span className="ms-1.5 rounded-full bg-sunken px-2 py-0.5 text-[12px] font-semibold text-ink-500 tnum">{count}</span>}
+        {count !== undefined && <span className="ms-1.5 rounded-full bg-sunken px-2 py-0.5 text-[0.75rem] font-semibold text-ink-500 tnum">{count}</span>}
       </h4>
       {children}
     </div>
@@ -354,7 +354,7 @@ export function ToothPanel({
       aria-label={big ? T.panelSmaller : T.panelBigger}
       title={big ? T.panelSmaller : T.panelBigger}
       data-expand-panel={big ? "big" : "compact"}
-      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
     >
       {big ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
       <span className="hidden sm:inline">{big ? T.panelSmaller : T.panelBigger}</span>
@@ -370,7 +370,7 @@ export function ToothPanel({
       type="button"
       onClick={() => a.onOpenImages(toothImages, 0)}
       data-open-tooth-images
-      className="mt-1.5 inline-flex h-7 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-2.5 text-[12px] font-semibold text-brand-700 hover:bg-brand-100"
+      className="mt-1.5 inline-flex h-7 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-2.5 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100"
     >
       <ImageIcon className="h-3.5 w-3.5" />
       {T.imagesOfTooth} · {toothImages.length}
@@ -389,18 +389,18 @@ export function ToothPanel({
 
   const spanBox = span && (
     <div className="rounded-ctl border border-brand-200 bg-brand-50 p-3">
-      <p className="text-[13px] font-semibold text-ink-900">{T.span.replace("{name}", spanName)}</p>
+      <p className="text-[0.8125rem] font-semibold text-ink-900">{T.span.replace("{name}", spanName)}</p>
       <div className="mt-2 flex gap-2">
         <button
           type="button"
           disabled={teeth.length < 2}
           onClick={a.onSpanRecord}
           data-span-record
-          className="h-9 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-on-brand disabled:opacity-45"
+          className="h-9 rounded-ctl bg-brand-600 px-3 text-[0.8125rem] font-semibold text-on-brand disabled:opacity-45"
         >
           {T.spanRecord.replace("{n}", String(teeth.length))}
         </button>
-        <button type="button" onClick={a.onSpanCancel} className="h-9 rounded-ctl border border-line bg-surface px-3 text-[13px] font-semibold text-ink-700">
+        <button type="button" onClick={a.onSpanCancel} className="h-9 rounded-ctl border border-line bg-surface px-3 text-[0.8125rem] font-semibold text-ink-700">
           {T.cancel}
         </button>
       </div>
@@ -415,7 +415,7 @@ export function ToothPanel({
           <BigTooth fdi={single} st={st} picked={picked} flash={flash} onToggle={a.onTogglePicked} />
           {tt && !st.gone && (
             <div className="mt-3">
-              <div className={`mb-1.5 text-center text-[12px] font-semibold ${flash ? "text-danger" : "text-ink-500"}`}>{T.surfacesHint}</div>
+              <div className={`mb-1.5 text-center text-[0.75rem] font-semibold ${flash ? "text-danger" : "text-ink-500"}`}>{T.surfacesHint}</div>
               <SurfaceChips fdi={single} picked={picked} onToggle={a.onTogglePicked} />
             </div>
           )}
@@ -436,7 +436,7 @@ export function ToothPanel({
           aria-checked={status === s}
           title={T.statusHint[s]}
           onClick={() => a.onStatus(s)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-semibold transition-colors duration-140"
+          className="inline-flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold transition-colors duration-140"
           style={status === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
         >
           <PaintSwatch paint={s} size={14} />
@@ -447,12 +447,12 @@ export function ToothPanel({
   );
   const controlsFor = (withStatus: boolean) =>
     locked ? (
-      <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700" data-read-only>{afterPlan ? T.readOnlyPlan : past ? T.readOnlyPast : T.readOnly}</p>
+      <p className="rounded-ctl bg-sunken px-3 py-2 text-[0.8125rem] text-ink-700" data-read-only>{afterPlan ? T.readOnlyPlan : past ? T.readOnlyPast : T.readOnly}</p>
     ) : (
     <div className="flex flex-wrap items-center gap-2">
       {withStatus && statusGroup}
       <label className="flex min-w-[11rem] flex-1 items-center gap-2">
-        <span className="shrink-0 text-[12px] font-semibold text-ink-500">{T.performedBy}</span>
+        <span className="shrink-0 text-[0.75rem] font-semibold text-ink-500">{T.performedBy}</span>
         <select
           value={performer}
           onChange={(e) => a.onPerformer(e.target.value)}
@@ -502,15 +502,15 @@ export function ToothPanel({
           <TreatmentGlyph tr={findTreatment(m.treatmentKey, custom) ?? { key: m.treatmentKey, kind: m.kind, category: "implant", en: m.label, ar: m.labelAr, scope: "tooth", look: m.look }} paint={paintAt(m, null) ?? "existing"} context={tt} size={42} />
           <div className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className={`text-[13.5px] font-semibold text-ink-900 ${m.voidedAt ? "line-through" : ""}`}>{markLabel(m, locale)}</span>
+              <span className={`text-[0.84375rem] font-semibold text-ink-900 ${m.voidedAt ? "line-through" : ""}`}>{markLabel(m, locale)}</span>
               <PaintPill m={m} />
             </span>
-            <span className="mt-0.5 block text-[12px] text-ink-500">{T.partOf.replace("{name}", `${parentName(parent)} · ${siteLabel(parent.site, T)}`)}</span>
+            <span className="mt-0.5 block text-[0.75rem] text-ink-500">{T.partOf.replace("{name}", `${parentName(parent)} · ${siteLabel(parent.site, T)}`)}</span>
           </div>
           <button
             type="button"
             onClick={() => a.onOpenEntry(parent.id)}
-            className="h-8 shrink-0 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+            className="h-8 shrink-0 rounded-ctl border border-line bg-surface px-2.5 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
           >
             {T.openWhole}
           </button>
@@ -560,7 +560,7 @@ export function ToothPanel({
   // What treatment answered: kept, out of the way, with what answered it.
   const resolvedSection = resolvedFindings.length > 0 && (
     <details className="rounded-ctl border border-line bg-surface px-3 py-2" data-tooth-resolved={resolvedFindings.length}>
-      <summary className="cursor-pointer list-none py-1 text-[13px] font-semibold text-ink-500">
+      <summary className="cursor-pointer list-none py-1 text-[0.8125rem] font-semibold text-ink-500">
         {T.resolvedTitle} <span className="tnum">· {resolvedFindings.length}</span>
       </summary>
       <div className="pt-2">{list(resolvedFindings)}</div>
@@ -568,7 +568,7 @@ export function ToothPanel({
   );
   const voidedSection = voided.length > 0 && (
     <details className="rounded-ctl border border-line bg-surface px-3 py-2">
-      <summary className="cursor-pointer list-none py-1 text-[13px] font-semibold text-ink-500">
+      <summary className="cursor-pointer list-none py-1 text-[0.8125rem] font-semibold text-ink-500">
         {T.voidedTitle} <span className="tnum">· {voided.length}</span>
       </summary>
       <div className="pt-2">{list(voided)}</div>
@@ -577,9 +577,9 @@ export function ToothPanel({
 
   const imageSection = single && (
     <section data-tooth-image-section>
-      <h4 className="mb-2 text-[13px] font-semibold text-ink-900">
+      <h4 className="mb-2 text-[0.8125rem] font-semibold text-ink-900">
         {T.imagesOfTooth}
-        {toothImages.length > 0 && <span className="ms-1 rounded-full bg-sunken px-2 py-0.5 text-[12px] text-ink-500 tnum">{toothImages.length}</span>}
+        {toothImages.length > 0 && <span className="ms-1 rounded-full bg-sunken px-2 py-0.5 text-[0.75rem] text-ink-500 tnum">{toothImages.length}</span>}
       </h4>
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {toothImages.map((img, i) => (
@@ -596,7 +596,7 @@ export function ToothPanel({
       </div>
       {!locked && otherImages.length > 0 && (
         <details className="mt-2">
-          <summary className="cursor-pointer text-[12.5px] font-semibold text-brand-700">{T.pinImage}</summary>
+          <summary className="cursor-pointer text-[0.78125rem] font-semibold text-brand-700">{T.pinImage}</summary>
           <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1">
             {otherImages.map((img) => (
               <ImageThumb key={img.id} img={img} pinned={pins[img.id] ?? []} size="sm" onOpen={() => a.onPinImage(img.id, single)} />
@@ -609,7 +609,7 @@ export function ToothPanel({
 
   const history = (
     <details className="group rounded-ctl border border-line bg-surface px-3 py-2" open={past}>
-      <summary className="cursor-pointer list-none py-1 text-[13px] font-semibold text-ink-900">{T.toothHistory}</summary>
+      <summary className="cursor-pointer list-none py-1 text-[0.8125rem] font-semibold text-ink-900">{T.toothHistory}</summary>
       <div className="pt-2">
         <EventList events={events.filter((e) => hereIds.has(e.markId))} marks={marks} tz={tz} />
       </div>
@@ -623,7 +623,7 @@ export function ToothPanel({
         <div className="flex items-start gap-3">
           {badges}
           <div className="min-w-0 flex-1 pt-0.5">
-            <div className="text-[15px] font-semibold leading-tight text-ink-900">{name}</div>
+            <div className="text-[0.9375rem] font-semibold leading-tight text-ink-900">{name}</div>
             {imagesChip}
           </div>
           {sizeButton}
@@ -657,8 +657,8 @@ export function ToothPanel({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       {badges}
       <div className="min-w-0 flex-1">
-        <div className="text-[16px] font-semibold leading-tight text-ink-900">{name}</div>
-        <div className="mt-0.5 text-[12.5px] text-ink-500" data-tooth-summary>
+        <div className="text-[1rem] font-semibold leading-tight text-ink-900">{name}</div>
+        <div className="mt-0.5 text-[0.78125rem] text-ink-500" data-tooth-summary>
           {summary || T.nothingOnTooth}
         </div>
       </div>
@@ -672,7 +672,7 @@ export function ToothPanel({
             onClick={() => neighbours.prev && onGoTooth(neighbours.prev)}
             aria-label={T.prevTooth}
             title={T.prevTooth}
-            className="inline-flex h-9 items-center gap-0.5 rounded-ctl border border-line bg-surface px-2 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken disabled:opacity-40"
+            className="inline-flex h-9 items-center gap-0.5 rounded-ctl border border-line bg-surface px-2 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken disabled:opacity-40"
             data-go-tooth="prev"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -684,7 +684,7 @@ export function ToothPanel({
             onClick={() => neighbours.next && onGoTooth(neighbours.next)}
             aria-label={T.nextTooth}
             title={T.nextTooth}
-            className="inline-flex h-9 items-center gap-0.5 rounded-ctl border border-line bg-surface px-2 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken disabled:opacity-40"
+            className="inline-flex h-9 items-center gap-0.5 rounded-ctl border border-line bg-surface px-2 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken disabled:opacity-40"
             data-go-tooth="next"
           >
             <span className="tnum">{neighbours.next ?? ""}</span>
@@ -698,7 +698,7 @@ export function ToothPanel({
           onClick={onEmergency}
           aria-label={T.treatment.emergency}
           title={T.treatment.emergency}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-danger/30 bg-danger-soft px-2.5 text-[12.5px] font-semibold text-danger hover:bg-danger/10"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-danger/30 bg-danger-soft px-2.5 text-[0.78125rem] font-semibold text-danger hover:bg-danger/10"
           data-tooth-emergency
         >
           <Siren className="h-4 w-4" />
@@ -712,7 +712,7 @@ export function ToothPanel({
           onClick={onRedo}
           aria-label={T.treatment.redo}
           title={T.treatment.redoTitle}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
           data-tooth-redo
         >
           <Repeat className="h-4 w-4" />
@@ -735,7 +735,7 @@ export function ToothPanel({
     <button
       type="button"
       onClick={() => openAdd("treatment")}
-      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl bg-brand-600 px-3 text-[13px] font-semibold text-on-brand hover:bg-brand-hover"
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl bg-brand-600 px-3 text-[0.8125rem] font-semibold text-on-brand hover:bg-brand-hover"
       data-add-treatment
     >
       <Plus className="h-4 w-4" />
@@ -748,14 +748,14 @@ export function ToothPanel({
       <button
         type="button"
         onClick={() => openAdd(as)}
-        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl border border-line bg-surface px-2.5 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
         data-add-other={as}
       >
         <Plus className="h-3.5 w-3.5" />
         {label}
       </button>
     );
-  const empty = (text: string) => <p className="rounded-ctl border border-dashed border-line-strong px-3 py-3 text-center text-[13px] text-ink-500">{text}</p>;
+  const empty = (text: string) => <p className="rounded-ctl border border-dashed border-line-strong px-3 py-3 text-center text-[0.8125rem] text-ink-500">{text}</p>;
   const quickRow = !locked && quick.length > 0 && (
     <section data-quick-add>
       <Heading title={T.quickAdd} />
@@ -765,7 +765,7 @@ export function ToothPanel({
             key={tr.key}
             type="button"
             onClick={() => a.onPick(tr)}
-            className="inline-flex h-10 items-center gap-2 rounded-ctl border border-line bg-surface ps-1.5 pe-3 text-[13px] font-semibold text-ink-900 hover:border-line-strong hover:bg-brand-50"
+            className="inline-flex h-10 items-center gap-2 rounded-ctl border border-line bg-surface ps-1.5 pe-3 text-[0.8125rem] font-semibold text-ink-900 hover:border-line-strong hover:bg-brand-50"
             data-quick-treatment={tr.key}
           >
             <TreatmentGlyph tr={tr} paint={tr.kind === "finding" ? "finding" : paint} context={tt} size={26} />
@@ -785,7 +785,7 @@ export function ToothPanel({
   ) : adding ? (
     <div className="grid gap-4" data-tooth-pane="add">
       {single && !span && (
-        <button type="button" onClick={() => setPane("tooth")} className="inline-flex w-fit items-center gap-1 text-[13px] font-semibold text-ink-500 hover:text-ink-900" data-back-to-tooth>
+        <button type="button" onClick={() => setPane("tooth")} className="inline-flex w-fit items-center gap-1 text-[0.8125rem] font-semibold text-ink-500 hover:text-ink-900" data-back-to-tooth>
           <ArrowLeft className="h-4 w-4" />
           {T.backToTooth.replace("{n}", single)}
         </button>
@@ -800,7 +800,7 @@ export function ToothPanel({
         <Heading title={T.todoTitle} count={todo.length}>
           {addButton}
         </Heading>
-        {todo.length ? list(todo) : <p className="rounded-ctl border border-dashed border-line-strong px-3 py-4 text-center text-[13px] text-ink-500">{T.nothingToDo}</p>}
+        {todo.length ? list(todo) : <p className="rounded-ctl border border-dashed border-line-strong px-3 py-4 text-center text-[0.8125rem] text-ink-500">{T.nothingToDo}</p>}
       </section>
       {quickRow && (
         <div className="grid gap-2">

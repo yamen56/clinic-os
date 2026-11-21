@@ -119,8 +119,8 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
                   </Badge>
                 )}
               </NameEditor>
-              <span className="num text-[13px] text-ink-500">{me?.email}</span>
-              {me?.specialty && <span className="text-[13px] text-ink-500">{me.specialty}</span>}
+              <span className="num text-[0.8125rem] text-ink-500">{me?.email}</span>
+              {me?.specialty && <span className="text-[0.8125rem] text-ink-500">{me.specialty}</span>}
             </div>
           </div>
         </Card>
@@ -131,7 +131,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
             <Building2 className="h-[18px] w-[18px] shrink-0 text-ink-400" />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium">{access.clinic.nameAr || access.clinic.name}</div>
-              <div className="text-[12px] text-ink-500">
+              <div className="text-[0.75rem] text-ink-500">
                 {level === "full"
                   ? t.staff.fullAccess
                   : t.staff.partialAccess
@@ -153,10 +153,10 @@ export default async function ProfilePage({ params }: { params: Promise<{ slug: 
                   {r.icon}
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">{r.label}</span>
-                    {r.hint && <span className="block text-[12px] text-ink-500">{r.hint}</span>}
+                    {r.hint && <span className="block text-[0.75rem] text-ink-500">{r.hint}</span>}
                   </span>
                   {!!r.badge && (
-                    <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 tnum">
+                    <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 tnum">
                       {r.badge > 99 ? "99+" : r.badge}
                     </span>
                   )}

@@ -235,13 +235,13 @@ export default async function AdminClinicDetail({
                   <div key={f.key} className="grid gap-1" data-pending-flow={f.key}>
                     <div className="text-sm font-semibold">{f.name}</div>
                     {f.message && (
-                      <p dir="rtl" className="whitespace-pre-line rounded-lg bg-sunken px-3 py-2 text-[12.5px] text-ink-700">
+                      <p dir="rtl" className="whitespace-pre-line rounded-lg bg-sunken px-3 py-2 text-[0.78125rem] text-ink-700">
                         {f.message}
                       </p>
                     )}
                   </div>
                 ))}
-                <p className="text-[12px] text-ink-500">
+                <p className="text-[0.75rem] text-ink-500">
                   {locale === "en"
                     ? `About ${perDay} appointment(s) a day in the coming week — each gets a reminder. Daily WhatsApp cap: ${clinic.daily_outbound_cap}.`
                     : `نحو ${perDay} موعد يومياً خلال الأسبوع القادم، لكل منها تذكير. الحد اليومي لواتساب: ${clinic.daily_outbound_cap}.`}
@@ -289,7 +289,7 @@ export default async function AdminClinicDetail({
         ].map(([n, label], i) => (
           <Card key={i} className="p-4 text-center">
             <div className="text-2xl font-semibold tnum">{String(n)}</div>
-            <div className="text-[13px] text-ink-500">{String(label)}</div>
+            <div className="text-[0.8125rem] text-ink-500">{String(label)}</div>
           </Card>
         ))}
       </div>

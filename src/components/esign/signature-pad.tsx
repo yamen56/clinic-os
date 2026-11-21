@@ -414,7 +414,7 @@ export function SignaturePad({
             />
             <span className="sig-baseline" />
             {!hasInk && size.w > 0 && (
-              <span className="pointer-events-none absolute inset-x-0 bottom-[14%] text-center text-[13px] text-ink-400">
+              <span className="pointer-events-none absolute inset-x-0 bottom-[14%] text-center text-[0.8125rem] text-ink-400">
                 {t.sign.drawHint}
               </span>
             )}
@@ -454,7 +454,7 @@ export function SignaturePad({
                 {typed}
               </span>
             ) : (
-              <span className="text-[13px] text-ink-400">{t.sign.typedPreview}</span>
+              <span className="text-[0.8125rem] text-ink-400">{t.sign.typedPreview}</span>
             )}
           </div>
           <div className="mt-2 grid gap-2">

@@ -73,7 +73,7 @@ function Segmented<T extends string>({ value, options, onChange, label }: { valu
           role="radio"
           aria-checked={value === o.key}
           onClick={() => onChange(o.key)}
-          className={`inline-flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-semibold transition-colors duration-140 ${
+          className={`inline-flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold transition-colors duration-140 ${
             value === o.key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
           }`}
         >
@@ -96,7 +96,7 @@ function StatusPicker({ value, onChange }: { value: Status; onChange: (s: Status
           aria-checked={value === s}
           title={t.dental.statusHint[s]}
           onClick={() => onChange(s)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-semibold transition-colors duration-140"
+          className="inline-flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold transition-colors duration-140"
           style={value === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
         >
           <PaintSwatch paint={s} size={14} />
@@ -154,18 +154,18 @@ function CustomTreatmentModal({
       }
     >
       <div className="grid gap-3">
-        <p className="text-[13px] text-ink-500">{C.hint}</p>
+        <p className="text-[0.8125rem] text-ink-500">{C.hint}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-[13px] font-semibold">{C.name}</span>
+            <span className="mb-1 block text-[0.8125rem] font-semibold">{C.name}</span>
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={C.namePlaceholder} className={field} maxLength={80} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[13px] font-semibold">{C.abbr}</span>
+            <span className="mb-1 block text-[0.8125rem] font-semibold">{C.abbr}</span>
             <input dir="ltr" value={abbr} onChange={(e) => setAbbr(e.target.value)} className={field} maxLength={8} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[13px] font-semibold">{C.category}</span>
+            <span className="mb-1 block text-[0.8125rem] font-semibold">{C.category}</span>
             <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className={`${field} select-chevron appearance-none pe-8`}>
               {(["findings", ...PROCEDURE_CATEGORIES] as Category[]).map((c) => (
                 <option key={c} value={c}>
@@ -175,7 +175,7 @@ function CustomTreatmentModal({
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-[13px] font-semibold">{C.scope}</span>
+            <span className="mb-1 block text-[0.8125rem] font-semibold">{C.scope}</span>
             <select value={scope} onChange={(e) => setScope(e.target.value as Scope)} className={`${field} select-chevron appearance-none pe-8`}>
               {(["surface", "tooth", "quadrant", "arch", "mouth"] as Scope[]).map((s) => (
                 <option key={s} value={s}>
@@ -186,7 +186,7 @@ function CustomTreatmentModal({
           </label>
         </div>
         <div>
-          <span className="mb-1.5 block text-[13px] font-semibold">{C.look}</span>
+          <span className="mb-1.5 block text-[0.8125rem] font-semibold">{C.look}</span>
           <div className="flex flex-wrap gap-2">
             {BORROWABLE_LOOKS.map((l) => (
               <button
@@ -201,7 +201,7 @@ function CustomTreatmentModal({
             ))}
           </div>
         </div>
-        <p className="text-[12px] text-ink-500">
+        <p className="text-[0.75rem] text-ink-500">
           {C.byline.replace("{name}", me.name)} · {fmtDateOnly(new Date(), locale)}
         </p>
       </div>
@@ -736,7 +736,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     setLastAdded(null);
   };
   const undoPill = lastAdded && (
-    <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-brand-600 py-1.5 ps-4 pe-1.5 text-[13px] text-on-brand shadow-pop" data-undo-pill>
+    <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-brand-600 py-1.5 ps-4 pe-1.5 text-[0.8125rem] text-on-brand shadow-pop" data-undo-pill>
       <span className="max-w-[60vw] truncate">{lastAdded.text}</span>
       <button type="button" onClick={undo} className="inline-flex h-7 items-center gap-1 rounded-full bg-white/15 px-2.5 font-semibold hover:bg-white/25">
         <Undo2 className="h-3.5 w-3.5" />
@@ -1149,11 +1149,11 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const brushCatalog = useMemo(() => catalog.filter((tr) => tr.scope === "tooth" || tr.scope === "surface"), [catalog]);
   const brushPickerBody = (
     <div className="grid gap-3">
-      <p className="text-[13px] text-ink-500">{T.brushHint}</p>
+      <p className="text-[0.8125rem] text-ink-500">{T.brushHint}</p>
       <div className="flex flex-wrap items-end gap-3">
         <StatusPicker value={status} onChange={setStatus} />
         <label className="block min-w-40 flex-1">
-          <span className="mb-1 block text-[12px] font-semibold text-ink-500">{T.performedBy}</span>
+          <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{T.performedBy}</span>
           <select value={performer} onChange={(e) => setPerformer(e.target.value)} className="select-chevron h-9 w-full appearance-none rounded-ctl border border-line bg-surface ps-3 pe-8 text-base md:text-sm">
             {roster.map((d) => (
               <option key={d.id} value={d.id}>
@@ -1219,13 +1219,13 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
               <button
                 type="button"
                 onClick={() => setBrushPicker(true)}
-                className="inline-flex h-9 max-w-full items-center gap-2 rounded-ctl border border-line bg-surface ps-1.5 pe-2.5 text-[13px] font-semibold hover:bg-sunken"
+                className="inline-flex h-9 max-w-full items-center gap-2 rounded-ctl border border-line bg-surface ps-1.5 pe-2.5 text-[0.8125rem] font-semibold hover:bg-sunken"
                 data-brush={brush?.key ?? ""}
               >
                 {brush ? <TreatmentGlyph tr={brush} paint={brush.kind === "finding" ? "finding" : status} context={null} size={26} /> : <Paintbrush className="ms-1 h-4 w-4 text-ink-400" />}
                 <span className="truncate">{brush ? (locale === "ar" ? brush.ar : brush.en) : T.brushPick}</span>
                 {brush && brush.kind !== "finding" && (
-                  <span className="rounded-full px-1.5 py-0.5 text-[11px]" style={{ background: SOFT[status], color: INK[status] }}>
+                  <span className="rounded-full px-1.5 py-0.5 text-[length:max(11px,0.6875rem)]" style={{ background: SOFT[status], color: INK[status] }}>
                     {T.status[status]}
                   </span>
                 )}
@@ -1240,7 +1240,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
               />
             </div>
           </div>
-          {!canWrite && <p className="mt-2 text-[12.5px] text-ink-500" data-read-only>{T.readOnly}</p>}
+          {!canWrite && <p className="mt-2 text-[0.78125rem] text-ink-500" data-read-only>{T.readOnly}</p>}
 
           {/* Legend: each ink can be hidden, to read one layer of the mouth at a time. */}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -1251,7 +1251,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                 aria-pressed={show[p]}
                 onClick={() => setShow((s) => ({ ...s, [p]: !s[p] }))}
                 title={T.statusHint[p]}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-full border ps-1.5 pe-2.5 text-[12px] font-semibold transition-opacity duration-140 ${show[p] ? "" : "opacity-40"}`}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-full border ps-1.5 pe-2.5 text-[0.75rem] font-semibold transition-opacity duration-140 ${show[p] ? "" : "opacity-40"}`}
                 style={{ borderColor: SOFT[p], background: show[p] ? SOFT[p] : "transparent", color: INK[p] }}
               >
                 <PaintSwatch paint={p} size={18} />
@@ -1275,7 +1275,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
 
           {/* The mouth */}
           <div className="mt-3" dir="ltr" onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
-            <div className="mb-1 flex items-center justify-between px-1 text-[11px] font-semibold text-ink-400">
+            <div className="mb-1 flex items-center justify-between px-1 text-[length:max(11px,0.6875rem)] font-semibold text-ink-400">
               <span>{!phone || half === "right" ? `◀ ${T.patientRight}` : ""}</span>
               <span>{T.upper}</span>
               <span>{!phone || half === "left" ? `${T.patientLeft} ▶` : ""}</span>
@@ -1300,7 +1300,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
               onRegionHover={setMouthHover}
               categoryOf={categoryOf}
             />
-            <div className="mt-1 text-center text-[11px] font-semibold text-ink-400">{T.lower}</div>
+            <div className="mt-1 text-center text-[length:max(11px,0.6875rem)] font-semibold text-ink-400">{T.lower}</div>
           </div>
 
           <ImageStrip
@@ -1338,7 +1338,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                   dir="ltr"
                 />
                 <span
-                  className="min-w-24 text-[13px] font-semibold text-ink-900 tnum"
+                  className="min-w-24 text-[0.8125rem] font-semibold text-ink-900 tnum"
                   data-viewing={showPlan ? "after-plan" : at === null ? "today" : days[dayIdx!]}
                 >
                   {showPlan ? T.afterPlan : at === null ? T.today : T.viewing.replace("{date}", dayLabel)}
@@ -1350,7 +1350,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                       setDayIdx(null);
                       setAfterPlan(false);
                     }}
-                    className="inline-flex h-9 items-center rounded-full px-2 text-[12.5px] font-semibold text-brand-700 hover:underline"
+                    className="inline-flex h-9 items-center rounded-full px-2 text-[0.78125rem] font-semibold text-brand-700 hover:underline"
                   >
                     {T.backToToday}
                   </button>
@@ -1359,7 +1359,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                     <button
                       type="button"
                       onClick={() => setAfterPlan(true)}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3.5 text-[12.5px] font-semibold text-ink-900 hover:bg-sunken"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3.5 text-[0.78125rem] font-semibold text-ink-900 hover:bg-sunken"
                       data-see-result
                     >
                       <Sparkles className="h-3.5 w-3.5 text-dental-done" />
@@ -1369,7 +1369,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                 )}
               </div>
               {showPlan && (
-                <p className="mt-1.5 text-[12.5px] text-ink-500" data-after-plan={planCount}>
+                <p className="mt-1.5 text-[0.78125rem] text-ink-500" data-after-plan={planCount}>
                   {planCount === 1 ? T.afterPlanNoteOne : T.afterPlanNote.replace("{n}", String(planCount))}
                 </p>
               )}
@@ -1479,8 +1479,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
               <div className="flex items-center gap-3">
                 <MouthGlyph region={m.site as MouthRegion} paint={paintAt(m, null) ?? "existing"} icon={iconFor(categoryOf(m.treatmentKey))} size={96} />
                 <div className="min-w-0">
-                  <div className="text-[15px] font-semibold text-ink-900">{locale === "ar" ? m.labelAr : m.label}</div>
-                  <div className="text-[13px] text-ink-500">{siteLabel(m.site, T)}</div>
+                  <div className="text-[0.9375rem] font-semibold text-ink-900">{locale === "ar" ? m.labelAr : m.label}</div>
+                  <div className="text-[0.8125rem] text-ink-500">{siteLabel(m.site, T)}</div>
                 </div>
               </div>
               <ul>
@@ -1561,20 +1561,20 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
         <Card className="p-4">
           <h3 className="mb-3 flex flex-wrap items-center gap-x-2 font-display text-base font-semibold text-ink-900">
             {T.remaining}
-            {remaining.length > 0 && <span className="rounded-full bg-sunken px-2 py-0.5 text-[12px] text-ink-500 tnum">{remaining.length}</span>}
+            {remaining.length > 0 && <span className="rounded-full bg-sunken px-2 py-0.5 text-[0.75rem] text-ink-500 tnum">{remaining.length}</span>}
             {remainingTotal > 0 && (
-              <span className="ms-auto font-sans text-[13px] font-semibold text-ink-500 tnum" data-remaining-total={remainingTotal}>
+              <span className="ms-auto font-sans text-[0.8125rem] font-semibold text-ink-500 tnum" data-remaining-total={remainingTotal}>
                 {T.price.inAll.replace("{amount}", fmtMoney(remainingTotal, store.currency, locale))}
               </span>
             )}
           </h3>
           {remaining.length === 0 ? (
-            <p className="text-[13px] text-ink-500">{T.noRemaining}</p>
+            <p className="text-[0.8125rem] text-ink-500">{T.noRemaining}</p>
           ) : (
             <ul className="grid gap-2">
               {remaining.map((m) => (
                 <li key={m.id} className="grid grid-cols-[2.75rem_1fr] items-start gap-2">
-                  <span className={`mt-2.5 text-center font-bold tnum ${isToothSite(m.site) ? "text-[13px] text-ink-700" : "text-[11.5px] text-ink-500"}`} title={siteLabel(m.site, T)}>
+                  <span className={`mt-2.5 text-center font-bold tnum ${isToothSite(m.site) ? "text-[0.8125rem] text-ink-700" : "text-[length:max(11px,0.71875rem)] text-ink-500"}`} title={siteLabel(m.site, T)}>
                     {isToothSite(m.site) ? m.site : ((T.sitesShort as Record<string, string>)[m.site] ?? m.site)}
                   </span>
                   <ul>
@@ -1629,7 +1629,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       >
         {scoped ? (
           <div className="grid gap-3">
-            <p className="text-[14px] font-semibold text-ink-900">
+            <p className="text-[0.875rem] font-semibold text-ink-900">
               {locale === "ar" ? scoped.ar : scoped.en} — {T.where}
             </p>
             <div className="grid grid-cols-2 gap-2" dir="ltr">
@@ -1639,7 +1639,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                 </Button>
               ))}
             </div>
-            <button type="button" onClick={() => setScoped(null)} className="justify-self-start text-[13px] font-semibold text-brand-700">
+            <button type="button" onClick={() => setScoped(null)} className="justify-self-start text-[0.8125rem] font-semibold text-brand-700">
               {T.cancel}
             </button>
           </div>
@@ -1686,7 +1686,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
         {voiding && (
           <div className="grid gap-3">
             <p className="text-sm text-ink-700">{T.voidBody}</p>
-            <p className="text-[13px] font-semibold text-ink-900">
+            <p className="text-[0.8125rem] font-semibold text-ink-900">
               {siteLabel(voiding.site, T)} · {locale === "ar" ? voiding.labelAr : voiding.label}
             </p>
             <div className="flex justify-end gap-2">

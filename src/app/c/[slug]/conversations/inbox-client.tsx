@@ -382,7 +382,7 @@ export function InboxClient({
               <button
                 key={f.key}
                 onClick={() => setFilter(f.key)}
-                className={`whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium transition-colors ${
+                className={`whitespace-nowrap rounded-full px-3 py-1 text-[0.75rem] font-medium transition-colors ${
                   filter === f.key ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8"
                 }`}
               >
@@ -416,7 +416,7 @@ export function InboxClient({
                   <div className="flex items-baseline justify-between gap-2">
                     <Title cv={row} className="truncate text-sm font-semibold" />
                     {row.last_message_at && (
-                      <span className="shrink-0 text-[11px] text-ink-400" suppressHydrationWarning>
+                      <span className="shrink-0 text-[length:max(11px,0.6875rem)] text-ink-400" suppressHydrationWarning>
                         {fmtRelative(row.last_message_at, locale)}
                       </span>
                     )}
@@ -424,12 +424,12 @@ export function InboxClient({
                   <div className="mt-0.5 flex items-center gap-1.5">
                     {aiActive(row) && <Sparkles className="h-3 w-3 shrink-0 text-brand-500" />}
                     {row.flagged && <AlertCircle className="h-3 w-3 shrink-0 text-st-pending" />}
-                    <span className="truncate text-[13px] text-ink-500">
+                    <span className="truncate text-[0.8125rem] text-ink-500">
                       {row.last_message_direction === "out" && "↩ "}
                       {row.last_message_preview ?? ""}
                     </span>
                     {row.unread_count > 0 && (
-                      <span className="ms-auto shrink-0 rounded-full bg-brand-600 px-1.5 py-0.5 text-[11px] font-bold text-on-brand tnum">
+                      <span className="ms-auto shrink-0 rounded-full bg-brand-600 px-1.5 py-0.5 text-[length:max(11px,0.6875rem)] font-bold text-on-brand tnum">
                         {row.unread_count}
                       </span>
                     )}
@@ -482,11 +482,11 @@ export function InboxClient({
                   looking for where the app hid it.
                 */}
                 {cv.identifier_kind === "lid" ? (
-                  <div className="truncate text-[12px] text-ink-400">
+                  <div className="truncate text-[0.75rem] text-ink-400">
                     {t.conversations.numberNotShared}
                   </div>
                 ) : (
-                  <div className="truncate text-[12px] text-ink-400 tnum" dir="ltr">
+                  <div className="truncate text-[0.75rem] text-ink-400 tnum" dir="ltr">
                     {formatPhone(cv.phone_e164)}
                   </div>
                 )}
@@ -534,17 +534,17 @@ export function InboxClient({
             {/* Messages */}
             <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto bg-subtle px-4 py-4">
               {/* Said once, where the thread starts, the way WhatsApp itself opens a chat. */}
-              <div className="mx-auto mb-2 flex max-w-full items-center gap-1.5 rounded-full bg-st-confirmed-soft px-3 py-1 text-[12px] font-semibold text-st-confirmed" data-thread-whatsapp>
+              <div className="mx-auto mb-2 flex max-w-full items-center gap-1.5 rounded-full bg-st-confirmed-soft px-3 py-1 text-[0.75rem] font-semibold text-st-confirmed" data-thread-whatsapp>
                 <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
                 <span className="truncate">{t.conversations.viaWhatsApp}</span>
               </div>
               {cv.flagged && (
-                <div className="mx-auto mb-2 flex items-center gap-2 rounded-full bg-st-pending-soft py-1 pe-1 ps-4 text-[12px] font-medium text-st-pending" data-thread-flag>
+                <div className="mx-auto mb-2 flex items-center gap-2 rounded-full bg-st-pending-soft py-1 pe-1 ps-4 text-[0.75rem] font-medium text-st-pending" data-thread-flag>
                   <span>{cv.flag_reason || t.conversations.flagged}</span>
                   <button
                     type="button"
                     onClick={() => void command("unflag")}
-                    className="rounded-full bg-surface px-2.5 py-1 text-[12px] font-semibold text-ink-700 shadow-card hover:bg-sunken"
+                    className="rounded-full bg-surface px-2.5 py-1 text-[0.75rem] font-semibold text-ink-700 shadow-card hover:bg-sunken"
                     data-thread-unflag
                   >
                     {t.conversations.handled}
@@ -597,7 +597,7 @@ export function InboxClient({
                           href={`/api/c/${slug}/wa-media/${m.id}`}
                           target="_blank"
                           rel="noreferrer"
-                          className={`mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] underline ${out ? (m.sender_kind === "ai" ? "bg-surface/60" : "bg-on-brand/10") : "bg-sunken"}`}
+                          className={`mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-[0.8125rem] underline ${out ? (m.sender_kind === "ai" ? "bg-surface/60" : "bg-on-brand/10") : "bg-sunken"}`}
                         >
                           <Paperclip className="h-3.5 w-3.5" />
                           {m.media_name ?? m.msg_type}
@@ -617,7 +617,7 @@ export function InboxClient({
                     */}
                     {note && (
                       <div
-                        className={`mt-1 flex max-w-full flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[11px] leading-snug ${noteTone(note)}`}
+                        className={`mt-1 flex max-w-full flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[length:max(11px,0.6875rem)] leading-snug ${noteTone(note)}`}
                         data-delivery-note={note.kind}
                       >
                         <span className="text-end" suppressHydrationWarning>
@@ -720,7 +720,7 @@ export function InboxClient({
                 <Avatar name={thread.patient.full_name} size={56} />
                 <div>
                   <div className="font-semibold">{thread.patient.full_name}</div>
-                  <div className="text-[12px] text-ink-400 tnum" dir="ltr">
+                  <div className="text-[0.75rem] text-ink-400 tnum" dir="ltr">
                     {formatPhone(thread.patient.phone_e164)}
                   </div>
                 </div>
@@ -733,7 +733,7 @@ export function InboxClient({
                   ))}
                 </div>
               </div>
-              <div className="grid gap-2 text-[13px]">
+              <div className="grid gap-2 text-[0.8125rem]">
                 <div className="flex justify-between rounded-lg bg-sunken px-3 py-2">
                   <span className="text-ink-500">{t.patients.overview.balanceDue}</span>
                   <span className="font-semibold tnum">
@@ -768,7 +768,7 @@ export function InboxClient({
               </div>
               {/* A link staff made by hand can be wrong; it has to be undoable here. */}
               <button
-                className="text-[12px] text-ink-400 hover:text-ink-700 disabled:opacity-50"
+                className="text-[0.75rem] text-ink-400 hover:text-ink-700 disabled:opacity-50"
                 disabled={unlinking}
                 onClick={() => {
                   if (!cv) return;
@@ -844,8 +844,8 @@ export function InboxClient({
                 }}
                 className="flex-1 rounded-lg border border-line px-3 py-2 text-start hover:bg-sunken"
               >
-                <div className="text-[13px] font-semibold">{qr.title}</div>
-                <div className="line-clamp-2 text-[12px] text-ink-500">{qr.body}</div>
+                <div className="text-[0.8125rem] font-semibold">{qr.title}</div>
+                <div className="line-clamp-2 text-[0.75rem] text-ink-500">{qr.body}</div>
               </button>
               <button
                 aria-label={t.common.delete}
@@ -943,7 +943,7 @@ function LinkPatientPicker({
 
   return (
     <div className="grid gap-2 border-t border-line pt-3 text-start">
-      <span className="text-[13px] text-ink-500">{t.conversations.linkPatient}</span>
+      <span className="text-[0.8125rem] text-ink-500">{t.conversations.linkPatient}</span>
       <div className="relative">
         <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto h-4 w-4 text-ink-300" />
         <Input
@@ -976,7 +976,7 @@ function LinkPatientPicker({
               >
                 <span className="truncate">{r.full_name}</span>
                 {r.phone_e164 && (
-                  <span className="num tnum text-[12px] text-ink-400" dir="ltr">
+                  <span className="num tnum text-[0.75rem] text-ink-400" dir="ltr">
                     {formatPhone(r.phone_e164)}
                   </span>
                 )}
@@ -986,7 +986,7 @@ function LinkPatientPicker({
         </ul>
       )}
       {searched && results.length === 0 && (
-        <span className="text-[12px] text-ink-400">{t.conversations.linkNoMatch}</span>
+        <span className="text-[0.75rem] text-ink-400">{t.conversations.linkNoMatch}</span>
       )}
     </div>
   );

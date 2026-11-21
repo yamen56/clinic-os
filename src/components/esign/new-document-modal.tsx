@@ -94,11 +94,11 @@ export function NewDocumentModal({
         />
       ) : (
         <>
-          <p className="mb-3 text-[13px] text-ink-500">{t.docs.chooseTemplateSub}</p>
+          <p className="mb-3 text-[0.8125rem] text-ink-500">{t.docs.chooseTemplateSub}</p>
           <div className="grid gap-3">
             {Object.entries(byCategory).map(([category, list]) => (
               <div key={category}>
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                <div className="mb-1 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">
                   {(t.docTemplates.categories as Record<string, string>)[category] ?? category}
                 </div>
                 <div className="grid gap-1">
@@ -126,7 +126,7 @@ export function NewDocumentModal({
           <div className="mt-4 border-t border-line pt-3">
             <Link
               href={`/c/${slug}/settings/documents`}
-              className="text-[12px] font-medium text-brand-700 hover:underline"
+              className="text-[0.75rem] font-medium text-brand-700 hover:underline"
             >
               {t.docs.manageTemplates}
             </Link>

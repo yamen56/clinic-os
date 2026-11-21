@@ -153,10 +153,10 @@ export function ClaimsClient({
                 )}
               </div>
               <div className="mt-1 font-display text-2xl font-bold tnum">{money(s.awaiting)}</div>
-              <div className="text-[12px] text-ink-500">
+              <div className="text-[0.75rem] text-ink-500">
                 {T.awaiting} · {s.open} {T.claimsCount}
               </div>
-              <div className="mt-2 grid grid-cols-4 gap-1 text-[11px] text-ink-500">
+              <div className="mt-2 grid grid-cols-4 gap-1 text-[length:max(11px,0.6875rem)] text-ink-500">
                 {(["d30", "d60", "d90", "older"] as const).map((b) => (
                   <div key={b} className={b === "older" && s.aging.older > 0 ? "text-danger" : undefined}>
                     <div>{T.aging[b]}</div>
@@ -198,7 +198,7 @@ export function ClaimsClient({
         <EmptyState icon={<ShieldCheck />} title={T.emptyTitle} body={T.emptyBody} />
       ) : (
         <Card>
-          <div className="flex items-center gap-3 border-b border-line px-4 py-2.5 text-[13px] text-ink-500">
+          <div className="flex items-center gap-3 border-b border-line px-4 py-2.5 text-[0.8125rem] text-ink-500">
             {canWork && (
               <input
                 type="checkbox"
@@ -235,7 +235,7 @@ export function ClaimsClient({
                           {r.number}
                         </span>
                       )}
-                      <div className="text-[12px] text-ink-500">{fmtDate(`${r.issue_day}T12:00:00Z`, "UTC", locale)}</div>
+                      <div className="text-[0.75rem] text-ink-500">{fmtDate(`${r.issue_day}T12:00:00Z`, "UTC", locale)}</div>
                     </div>
                     <div className="min-w-0">
                       {canOpenPatients ? (
@@ -245,7 +245,7 @@ export function ClaimsClient({
                       ) : (
                         <span className="block truncate text-sm">{r.patient_name}</span>
                       )}
-                      <div className="truncate text-[12px] text-ink-500">
+                      <div className="truncate text-[0.75rem] text-ink-500">
                         {r.national_id ? (
                           <span dir="ltr">{r.national_id}</span>
                         ) : (
@@ -254,7 +254,7 @@ export function ClaimsClient({
                         {r.insurance_no ? <span dir="ltr"> · {r.insurance_no}</span> : null}
                       </div>
                     </div>
-                    <div className="min-w-0 text-[13px]">
+                    <div className="min-w-0 text-[0.8125rem]">
                       <div className="truncate">{r.insurer_name ?? "—"}</div>
                       <div className="tnum font-semibold">{money(r.insurer_amount)}</div>
                     </div>
@@ -263,14 +263,14 @@ export function ClaimsClient({
                         {(t.insurers.claimStatus as Record<string, string>)[r.claim_status] ?? r.claim_status}
                       </Badge>
                       {lapsed && (
-                        <span className="inline-flex items-center gap-1 text-[12px] text-danger" title={T.coverLapsed}>
+                        <span className="inline-flex items-center gap-1 text-[0.75rem] text-danger" title={T.coverLapsed}>
                           <TriangleAlert className="h-3.5 w-3.5" />
                           {T.coverLapsedShort}
                         </span>
                       )}
                     </div>
                     {r.claim_status === "rejected" && r.claim_note && (
-                      <p className="text-[12px] text-danger sm:col-span-4">{r.claim_note}</p>
+                      <p className="text-[0.75rem] text-danger sm:col-span-4">{r.claim_note}</p>
                     )}
                   </div>
                 </li>
@@ -306,7 +306,7 @@ export function ClaimsClient({
 
       <Modal open={paidOpen} onClose={() => setPaidOpen(false)} title={T.paidTitle}>
         <div className="grid gap-4">
-          <p className="text-[13px] text-ink-500">
+          <p className="text-[0.8125rem] text-ink-500">
             {T.paidBody.replace("{n}", String(selected.size)).replace("{amount}", money(chosenTotal))}
           </p>
           <Field label={T.paidReference} hint={T.paidReferenceHint}>

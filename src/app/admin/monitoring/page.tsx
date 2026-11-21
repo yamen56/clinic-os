@@ -253,7 +253,7 @@ export default async function MonitoringPage() {
           },
         ].map((s, i) => (
           <Card key={i} className="p-4">
-            <div className="flex items-center gap-1.5 text-[13px] text-ink-500">
+            <div className="flex items-center gap-1.5 text-[0.8125rem] text-ink-500">
               {s.icon}
               {s.label}
             </div>
@@ -269,7 +269,7 @@ export default async function MonitoringPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[52rem] text-sm">
             <thead>
-              <tr className="border-b border-line text-[12px] uppercase tracking-wide text-ink-400">
+              <tr className="border-b border-line text-[0.75rem] uppercase tracking-wide text-ink-400">
                 <th className="px-5 py-2 text-start font-semibold">Clinic</th>
                 <th className="px-3 py-2 text-start font-semibold">WhatsApp</th>
                 <th className="px-3 py-2 text-end font-semibold">Sent today</th>
@@ -304,7 +304,7 @@ export default async function MonitoringPage() {
                       <Badge status={cl.wa_status === "connected" ? "confirmed" : "no_show"} dot>
                         {cl.wa_status ?? "—"}
                       </Badge>
-                      {live && !live.connected && <span className="ms-1 text-[11px] text-st-pending">(worker: down)</span>}
+                      {live && !live.connected && <span className="ms-1 text-[length:max(11px,0.6875rem)] text-st-pending">(worker: down)</span>}
                       {paused && <Badge status="pending">paused</Badge>}
                     </td>
                     <td className="px-3 py-2.5 text-end tnum">
@@ -313,7 +313,7 @@ export default async function MonitoringPage() {
                       {/* Says why the cap is low, so a warming number does not
                           read as a misconfiguration. */}
                       {warmupDay(cl.warmup_started_at) !== null && (
-                        <span className="ms-1 text-[11px] text-ink-400">
+                        <span className="ms-1 text-[length:max(11px,0.6875rem)] text-ink-400">
                           day {warmupDay(cl.warmup_started_at)}
                         </span>
                       )}
@@ -350,7 +350,7 @@ export default async function MonitoringPage() {
                         <span className="text-ink-300">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-2.5 text-[13px] text-ink-500" suppressHydrationWarning>
+                    <td className="px-5 py-2.5 text-[0.8125rem] text-ink-500" suppressHydrationWarning>
                       {cl.last_activity ? fmtRelative(cl.last_activity, locale) : "—"}
                     </td>
                   </tr>
@@ -373,7 +373,7 @@ export default async function MonitoringPage() {
           />
           <ul className="divide-y divide-line">
             {data.failedJobs.map((j, i) => (
-              <li key={i} className="px-5 py-2.5 text-[13px]">
+              <li key={i} className="px-5 py-2.5 text-[0.8125rem]">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{j.kind}</span>
                   {j.slug && <Badge status="neutral">{j.slug}</Badge>}
@@ -428,13 +428,13 @@ export default async function MonitoringPage() {
               */
               const urgent = a.severity === "urgent";
               return (
-                <li key={a.key} className="px-5 py-2.5 text-[13px]">
+                <li key={a.key} className="px-5 py-2.5 text-[0.8125rem]">
                   <div className="flex items-center justify-between gap-3">
                     <span
                       className={`font-medium ${urgent ? "text-danger" : "text-ink-700"}`}
                     >
                       {!urgent && (
-                        <span className="mr-1.5 rounded bg-sunken px-1.5 py-0.5 text-[11px] font-normal text-ink-500">
+                        <span className="mr-1.5 rounded bg-sunken px-1.5 py-0.5 text-[length:max(11px,0.6875rem)] font-normal text-ink-500">
                           not emailed
                         </span>
                       )}
@@ -485,10 +485,10 @@ export default async function MonitoringPage() {
               */
               const perSession = w.sessions > 0 ? Math.round(w.rss_mb / w.sessions) : null;
               return (
-                <li key={w.worker_id} className="px-5 py-2.5 text-[13px]">
+                <li key={w.worker_id} className="px-5 py-2.5 text-[0.8125rem]">
                   <div className="flex items-center justify-between gap-3">
                     <span className={`font-medium ${stale ? "text-danger" : "text-ink-700"}`}>
-                      <code className="text-[12px]">{w.worker_id.slice(0, 12)}</code>
+                      <code className="text-[0.75rem]">{w.worker_id.slice(0, 12)}</code>
                       {stale && <span className="ms-2">last seen {fmtRelative(w.updated_at, locale)}</span>}
                     </span>
                     <span className="shrink-0 text-ink-400">
@@ -504,7 +504,7 @@ export default async function MonitoringPage() {
                     {perSession !== null && (
                       <span className="num tnum">≈{perSession} MB per session</span>
                     )}
-                    {w.version && <span className="text-[12px] text-ink-400">{w.version}</span>}
+                    {w.version && <span className="text-[0.75rem] text-ink-400">{w.version}</span>}
                   </div>
                 </li>
               );
@@ -535,7 +535,7 @@ export default async function MonitoringPage() {
           />
           <ul className="divide-y divide-line">
             {appErrors.map((e) => (
-              <li key={e.fingerprint} className="px-5 py-2.5 text-[13px]">
+              <li key={e.fingerprint} className="px-5 py-2.5 text-[0.8125rem]">
                 <div className="flex items-start justify-between gap-3">
                   <span className="min-w-0 font-medium text-ink-700">{e.message}</span>
                   <span className="shrink-0 text-ink-400">
@@ -544,7 +544,7 @@ export default async function MonitoringPage() {
                   </span>
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-ink-500">
-                  {e.route && <code className="text-[12px]">{e.route}</code>}
+                  {e.route && <code className="text-[0.75rem]">{e.route}</code>}
                   {e.kind && <Badge status="neutral">{e.kind}</Badge>}
                   {/*
                     The digest is what a production client-side error reports
@@ -552,10 +552,10 @@ export default async function MonitoringPage() {
                     screen a clinic photographed to the fault behind it.
                   */}
                   {e.last_digest && (
-                    <span className="text-[12px] text-ink-400">digest {e.last_digest}</span>
+                    <span className="text-[0.75rem] text-ink-400">digest {e.last_digest}</span>
                   )}
                   {e.count > 1 && (
-                    <span className="text-[12px] text-ink-400">
+                    <span className="text-[0.75rem] text-ink-400">
                       first {fmtRelative(e.first_seen, locale)}
                     </span>
                   )}
@@ -587,14 +587,14 @@ export default async function MonitoringPage() {
           sub={`Nightly, kept 14 days plus one a month for a year · ${BUCKET_HINT}`}
         />
         {backups.length === 0 ? (
-          <p className="px-5 py-4 text-[13px] text-danger">
+          <p className="px-5 py-4 text-[0.8125rem] text-danger">
             No archives at all. The database is not backed up.
           </p>
         ) : (
           <ul className="divide-y divide-line">
             {backups.map((b) => (
-              <li key={b.key} className="flex items-center justify-between gap-3 px-5 py-2.5 text-[13px]">
-                <span className="truncate font-mono text-[12px]">{b.name}</span>
+              <li key={b.key} className="flex items-center justify-between gap-3 px-5 py-2.5 text-[0.8125rem]">
+                <span className="truncate font-mono text-[0.75rem]">{b.name}</span>
                 <span className="flex shrink-0 items-center gap-3 text-ink-500">
                   {/*
                     A size worth reading: an archive that suddenly weighs a

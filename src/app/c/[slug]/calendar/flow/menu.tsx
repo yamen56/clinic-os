@@ -81,7 +81,7 @@ export function MenuItem({
   danger?: boolean;
   hint?: React.ReactNode;
 }) {
-  const cls = `flex w-full items-center gap-2.5 px-3 py-2 text-start text-[13px] font-medium transition-colors ${
+  const cls = `flex w-full items-center gap-2.5 px-3 py-2 text-start text-[0.8125rem] font-medium transition-colors ${
     disabled ? "cursor-default text-ink-300" : danger ? "text-danger hover:bg-danger-soft" : "text-ink-700 hover:bg-sunken"
   } [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0`;
   const body = (
@@ -89,7 +89,7 @@ export function MenuItem({
       {icon}
       <span className="min-w-0 flex-1">
         <span className="block truncate">{children}</span>
-        {hint && <span className="block truncate text-[11.5px] font-normal text-ink-400">{hint}</span>}
+        {hint && <span className="block truncate text-[length:max(11px,0.71875rem)] font-normal text-ink-400">{hint}</span>}
       </span>
     </>
   );

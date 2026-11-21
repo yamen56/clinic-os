@@ -716,14 +716,14 @@ export function BuilderClient({
         type="button"
         data-flow-status="conflict"
         onClick={() => window.location.reload()}
-        className="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-2.5 py-1 text-[12px] font-medium text-danger"
+        className="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-2.5 py-1 text-[0.75rem] font-medium text-danger"
       >
         <RefreshCw className="h-3.5 w-3.5" />
         {f.conflictReload}
       </button>
     </span>
   ) : heldBack ? (
-    <span data-flow-status="held" className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-medium text-st-noshow">
+    <span data-flow-status="held" className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] font-medium text-st-noshow">
       <span className="inline-flex items-center gap-1.5">
         <AlertTriangle className="h-3.5 w-3.5" />
         {fill(f.notSavedProblems, { n: errors.length })}
@@ -743,7 +743,7 @@ export function BuilderClient({
             setFocusNonce((x) => x + 1);
           } else setIssuesOpen(true);
         }}
-        className="inline-flex items-center gap-1.5 text-[12px] font-medium text-danger"
+        className="inline-flex items-center gap-1.5 text-[0.75rem] font-medium text-danger"
       >
         <AlertTriangle className="h-3.5 w-3.5" />
         {rejected?.nodeId ? f.invalidStep : rejected?.error === "invalid_flow" ? f.invalidFlow : f.notSaved}
@@ -783,7 +783,7 @@ export function BuilderClient({
                   setState((s) => ({ ...s, active: v }));
                 }}
               />
-              <span className="text-[13px] font-medium">{state.active ? f.on : f.off}</span>
+              <span className="text-[0.8125rem] font-medium">{state.active ? f.on : f.off}</span>
             </label>            {id && (
               <Button variant="outline" size="sm" className="max-sm:hidden" onClick={() => setTestOpen(true)}>
                 <Play className="h-4 w-4" />
@@ -805,7 +805,7 @@ export function BuilderClient({
                           setMenuOpen(false);
                           setTestOpen(true);
                         }}
-                        className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[13px] hover:bg-sunken sm:hidden"
+                        className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[0.8125rem] hover:bg-sunken sm:hidden"
                       >
                         <Play className="h-4 w-4 text-ink-500" />
                         {t.automations.testRun}
@@ -823,7 +823,7 @@ export function BuilderClient({
                             router.push(`/c/${slug}/automations/${r.id}`);
                           });
                         }}
-                        className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[13px] hover:bg-sunken"
+                        className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[0.8125rem] hover:bg-sunken"
                       >
                         <Copy className="h-4 w-4 text-ink-500" />
                         {f.duplicate}
@@ -834,7 +834,7 @@ export function BuilderClient({
                           setMenuOpen(false);
                           setDeleteOpen(true);
                         }}
-                        className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[13px] text-danger hover:bg-danger-soft"
+                        className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[0.8125rem] text-danger hover:bg-danger-soft"
                       >
                         <Trash2 className="h-4 w-4" />
                         {f.delete}
@@ -906,7 +906,7 @@ export function BuilderClient({
                   type="button"
                   data-flow-issues={errors.length}
                   onClick={() => setIssuesOpen((o) => !o)}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow-card ${
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.75rem] font-semibold shadow-card ${
                     errors.length
                       ? "border-danger/40 bg-danger-soft text-danger"
                       : issues.length
@@ -923,7 +923,7 @@ export function BuilderClient({
                 </button>
                 {issuesOpen && issues.length > 0 && (
                   <div className="mt-2 max-h-72 overflow-auto rounded-xl border border-line bg-surface p-2 shadow-pop max-sm:mb-2 max-sm:mt-0">
-                    <div className="px-1.5 pb-1.5 text-[12px] font-semibold text-ink-500">{f.issuesTitle}</div>
+                    <div className="px-1.5 pb-1.5 text-[0.75rem] font-semibold text-ink-500">{f.issuesTitle}</div>
                     <ul className="grid gap-1">
                       {issues.map((i, n) => {
                         const node = i.nodeId ? state.nodes.find((x) => x.id === i.nodeId) : null;
@@ -937,7 +937,7 @@ export function BuilderClient({
                                 if (i.code === "bad_trigger" && !state.trigger) setTriggerPicker(true);
                                 setFocusNonce((x) => x + 1);
                               }}
-                              className="flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-start text-[12px] hover:bg-sunken"
+                              className="flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-start text-[0.75rem] hover:bg-sunken"
                             >
                               <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${i.severity === "error" ? "bg-danger" : "bg-warning"}`} />
                               <span className="min-w-0">
@@ -959,7 +959,7 @@ export function BuilderClient({
                 )}
               </div>
             </div>
-            <p className="pointer-events-none absolute bottom-2 start-3 hidden max-w-[50%] text-[11px] text-ink-400 md:block">{f.canvasHint}</p>
+            <p className="pointer-events-none absolute bottom-2 start-3 hidden max-w-[50%] text-[length:max(11px,0.6875rem)] text-ink-400 md:block">{f.canvasHint}</p>
           </div>
           {wide && inspector && (
             <aside data-inspector className="w-[380px] shrink-0 overflow-auto rounded-card border border-line bg-surface p-4 shadow-card lg:h-[calc(100dvh-15rem)]">
@@ -1068,7 +1068,7 @@ function TestRunModal({
 
   return (
     <Modal open={open} onClose={onClose} title={t.automations.testRun}>
-      <p className="mb-3 text-[13px] text-ink-500">{t.automations.testRunHint}</p>
+      <p className="mb-3 text-[0.8125rem] text-ink-500">{t.automations.testRunHint}</p>
       <Input
         value={q}
         placeholder={t.patients.searchPlaceholder}

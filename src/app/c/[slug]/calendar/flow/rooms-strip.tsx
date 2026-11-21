@@ -33,7 +33,7 @@ export function RoomsStrip({
   const { t, locale } = useI18n();
   if (!rooms.length) {
     return canSetUp ? (
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-dashed border-line-strong bg-surface px-4 py-3 text-[13px] text-ink-500">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-dashed border-line-strong bg-surface px-4 py-3 text-[0.8125rem] text-ink-500">
         <DoorOpen className="h-4 w-4 shrink-0 text-ink-400" />
         <span className="min-w-0 flex-1">{t.flow.noRoomsHint}</span>
         <Link href={`/c/${slug}/settings/rooms`} className="font-semibold text-ink-900 underline underline-offset-2">
@@ -75,9 +75,9 @@ export function RoomsStrip({
               ) : (
                 <DoorOpen className="h-4 w-4 shrink-0 text-ink-400" strokeWidth={1.75} aria-hidden />
               )}
-              <span className="truncate text-[13px] font-semibold text-ink-900">{name}</span>
+              <span className="truncate text-[0.8125rem] font-semibold text-ink-900">{name}</span>
               <span
-                className={`ms-auto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                className={`ms-auto shrink-0 rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold ${
                   inside ? (over ? "bg-danger-soft text-danger" : "bg-sunken text-ink-700") : "bg-st-confirmed-soft text-st-confirmed"
                 }`}
               >
@@ -90,11 +90,11 @@ export function RoomsStrip({
             </div>
             {inside ? (
               <div className="mt-1 min-w-0">
-                <div className="truncate text-[13px] font-medium text-ink-900">{inside.patient_name}</div>
-                <div className="truncate text-[11.5px] text-ink-500">{inside.doctor_name ?? "—"}</div>
+                <div className="truncate text-[0.8125rem] font-medium text-ink-900">{inside.patient_name}</div>
+                <div className="truncate text-[length:max(11px,0.71875rem)] text-ink-500">{inside.doctor_name ?? "—"}</div>
               </div>
             ) : (
-              <div className="mt-1 h-[2.35rem] text-[11.5px] text-ink-400">
+              <div className="mt-1 h-[2.35rem] text-[length:max(11px,0.71875rem)] text-ink-400">
                 {next && (
                   <span className="block truncate">
                     {t.flow.roomNext.replace("{time}", DateTime.fromISO(next.starts_at).setZone(tz).toFormat("H:mm"))} · {next.patient_name}

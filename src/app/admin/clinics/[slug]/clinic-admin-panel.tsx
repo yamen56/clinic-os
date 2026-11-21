@@ -125,7 +125,7 @@ export function ClinicAdminPanel({
             });
           }}
         >
-          <p className="text-[13px] text-ink-500">
+          <p className="text-[0.8125rem] text-ink-500">
             {t.admin.enterNotice.replace("{h}", String(visitHours))}
           </p>
           <Field
@@ -219,7 +219,7 @@ export function ClinicAdminPanel({
         title={t.admin.specialty}
       >
         <div className="grid gap-4">
-          <p className="text-[13px] text-ink-500">{t.admin.specialtySub}</p>
+          <p className="text-[0.8125rem] text-ink-500">{t.admin.specialtySub}</p>
           <Field label={t.admin.specialty} hint={t.admin.specialtyHint}>
             <Select value={specialty} onChange={(e) => setSpecialty(e.target.value as Specialty)}>
               {SPECIALTIES.map((s) => (
@@ -230,8 +230,8 @@ export function ClinicAdminPanel({
             </Select>
           </Field>
           <div>
-            <div className="mb-1 text-[13px] font-semibold text-ink-900">{t.admin.departments}</div>
-            <p className="mb-2 text-[12px] text-ink-500">{t.admin.departmentsSub}</p>
+            <div className="mb-1 text-[0.8125rem] font-semibold text-ink-900">{t.admin.departments}</div>
+            <p className="mb-2 text-[0.75rem] text-ink-500">{t.admin.departmentsSub}</p>
             <DepartmentPicker value={departments} onChange={setDepartments} primary={specialty} disabled={specPending} />
           </div>
           <SpecialtyAdds specialties={[specialty, ...departments.filter((d) => d !== specialty)]} />
@@ -270,7 +270,7 @@ export function ClinicAdminPanel({
 
       <Modal open={featuresOpen} onClose={() => setFeaturesOpen(false)} title={t.admin.features}>
         <div className="grid gap-4">
-          <p className="text-[13px] text-ink-500">{t.admin.featuresSub}</p>
+          <p className="text-[0.8125rem] text-ink-500">{t.admin.featuresSub}</p>
           <FeaturePicker value={features} onChange={setFeatures} disabled={featPending} />
           <div className="flex justify-end gap-2">
             <Button

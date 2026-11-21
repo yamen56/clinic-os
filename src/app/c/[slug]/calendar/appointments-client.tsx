@@ -373,7 +373,7 @@ export function AppointmentsClient({
               <span className="hidden lg:inline">{x.label}</span>
               <span className="lg:hidden">{x.short}</span>
               {!!x.count && (
-                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none tnum ${x.tone ?? "bg-brand-100 text-brand-700"}`}>
+                <span className={`rounded-full px-1.5 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold leading-none tnum ${x.tone ?? "bg-brand-100 text-brand-700"}`}>
                   {x.count}
                 </span>
               )}
@@ -401,7 +401,7 @@ export function AppointmentsClient({
           <button
             type="button"
             onClick={() => setWalkIn(true)}
-            className="flex h-11 touch-manipulation items-center gap-1.5 rounded-full border border-line bg-surface px-4 text-[13px] font-semibold text-ink-900 shadow-pop active:bg-sunken"
+            className="flex h-11 touch-manipulation items-center gap-1.5 rounded-full border border-line bg-surface px-4 text-[0.8125rem] font-semibold text-ink-900 shadow-pop active:bg-sunken"
           >
             <Footprints className="h-4 w-4" />
             {t.calendar.walkIn}

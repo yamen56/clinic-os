@@ -192,7 +192,7 @@ export function FlowBoard({
   const rooms = data.rooms;
 
   const chip = (on: boolean) =>
-    `inline-flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors ${
+    `inline-flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-full border px-3 text-[0.8125rem] font-medium transition-colors ${
       on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line-strong bg-surface text-ink-700 hover:bg-sunken"
     }`;
 
@@ -259,11 +259,11 @@ export function FlowBoard({
                 onClick={() => setPhoneCol(c)}
                 // A phone shows one column, so its tabs take a drop too.
                 data-drop-col={c}
-                className={`flex min-w-0 touch-manipulation flex-col items-center rounded-full px-1 py-1 text-[11px] font-medium leading-tight transition-colors ${
+                className={`flex min-w-0 touch-manipulation flex-col items-center rounded-full px-1 py-1 text-[length:max(11px,0.6875rem)] font-medium leading-tight transition-colors ${
                   activeCol === c ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"
                 } ${dropClass(c)}`}
               >
-                <span className="text-[15px] font-bold tnum">
+                <span className="text-[0.9375rem] font-bold tnum">
                   {cols[c].length}
                 </span>
                 <span className="max-w-full truncate">{t.flow.columnsShort[c]}</span>
@@ -284,14 +284,14 @@ export function FlowBoard({
                     const Icon = iconOf[c];
                     return <Icon className="h-4 w-4 shrink-0 text-ink-500" strokeWidth={1.75} aria-hidden />;
                   })()}
-                  <h3 className="font-display text-[13.5px] font-semibold text-ink-900">{t.flow.columns[c]}</h3>
-                  <span className="ms-auto rounded-full bg-surface px-2 text-[12px] font-semibold text-ink-500 tnum shadow-card">
+                  <h3 className="font-display text-[0.84375rem] font-semibold text-ink-900">{t.flow.columns[c]}</h3>
+                  <span className="ms-auto rounded-full bg-surface px-2 text-[0.75rem] font-semibold text-ink-500 tnum shadow-card">
                     {cols[c].length}
                   </span>
                 </header>
                 <div className="grid gap-2">
                   {cols[c].length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-line-strong px-3 py-6 text-center text-[12.5px] text-ink-400">
+                    <div className="rounded-xl border border-dashed border-line-strong px-3 py-6 text-center text-[0.78125rem] text-ink-400">
                       {t.flow.emptyColumn}
                     </div>
                   ) : (
@@ -335,8 +335,8 @@ export function FlowBoard({
                 className="flex w-full items-center gap-2 px-4 py-3 text-start"
               >
                 <UserX className="h-4 w-4 shrink-0 text-ink-500" strokeWidth={1.75} aria-hidden />
-                <span className="font-display text-[13.5px] font-semibold text-ink-900">{t.flow.columns.no_show}</span>
-                <span className="rounded-full bg-sunken px-2 text-[12px] font-semibold text-ink-500 tnum">{noShows.length}</span>
+                <span className="font-display text-[0.84375rem] font-semibold text-ink-900">{t.flow.columns.no_show}</span>
+                <span className="rounded-full bg-sunken px-2 text-[0.75rem] font-semibold text-ink-500 tnum">{noShows.length}</span>
                 <ChevronDown className={`ms-auto h-4 w-4 text-ink-400 transition-transform ${showNoShows ? "rotate-180" : ""}`} />
               </button>
               {showNoShows && (
@@ -405,10 +405,10 @@ function Stat({
         <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
       </span>
       <div className="min-w-0">
-        <div className={`truncate text-[11.5px] font-medium ${alert ? "text-st-late" : "text-ink-500"}`}>{label}</div>
+        <div className={`truncate text-[length:max(11px,0.71875rem)] font-medium ${alert ? "text-st-late" : "text-ink-500"}`}>{label}</div>
         <div className="mt-0.5 flex items-baseline gap-1.5">
-          <span className="font-display text-[18px] font-bold leading-none text-ink-900 tnum sm:text-[20px]">{value}</span>
-          {sub && <span className="truncate text-[11px] text-ink-400 tnum">{sub}</span>}
+          <span className="font-display text-[1.125rem] font-bold leading-none text-ink-900 tnum sm:text-[1.25rem]">{value}</span>
+          {sub && <span className="truncate text-[length:max(11px,0.6875rem)] text-ink-400 tnum">{sub}</span>}
         </div>
       </div>
     </div>

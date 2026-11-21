@@ -90,7 +90,7 @@ export function AgendaList({
               }`}
             >
               <span className="text-[10.5px] font-medium">{d.setLocale(fmt).toFormat("ccc")}</span>
-              <span className="text-[15px] font-bold tnum">{d.day}</span>
+              <span className="text-[0.9375rem] font-bold tnum">{d.day}</span>
               <span className={`mt-0.5 h-1.5 w-1.5 rounded-full ${n ? (on ? "bg-white" : "bg-brand-500") : "bg-transparent"}`} />
             </button>
           );
@@ -127,15 +127,15 @@ export function AgendaList({
                     className="flex min-w-0 flex-1 touch-manipulation items-center gap-3 px-3 py-3 text-start active:bg-sunken sm:px-4"
                   >
                     <span className="w-12 shrink-0 text-center">
-                      <span className="block text-[14px] font-bold leading-tight text-ink-900 tnum">{s.toFormat("H:mm")}</span>
-                      <span className="block text-[11px] text-ink-400 tnum">{e.toFormat("H:mm")}</span>
+                      <span className="block text-[0.875rem] font-bold leading-tight text-ink-900 tnum">{s.toFormat("H:mm")}</span>
+                      <span className="block text-[length:max(11px,0.6875rem)] text-ink-400 tnum">{e.toFormat("H:mm")}</span>
                     </span>
                     <span className="h-10 w-px shrink-0 bg-line" />
                     <span className="min-w-0 flex-1">
-                      <span className={`block truncate text-[14px] font-semibold ${a.status === "no_show" ? "text-ink-400 line-through" : "text-ink-900"}`}>
+                      <span className={`block truncate text-[0.875rem] font-semibold ${a.status === "no_show" ? "text-ink-400 line-through" : "text-ink-900"}`}>
                         {a.patient_name}
                       </span>
-                      <span className="block truncate text-[12px] text-ink-500">
+                      <span className="block truncate text-[0.75rem] text-ink-500">
                         {[service, a.doctor_name, room].filter(Boolean).join(" · ") || "—"}
                       </span>
                     </span>
@@ -147,7 +147,7 @@ export function AgendaList({
                       <button
                         type="button"
                         onClick={() => onArrived(a)}
-                        className="h-9 touch-manipulation rounded-full bg-st-waiting px-3.5 text-[13px] font-semibold text-surface shadow-card active:opacity-80"
+                        className="h-9 touch-manipulation rounded-full bg-st-waiting px-3.5 text-[0.8125rem] font-semibold text-surface shadow-card active:opacity-80"
                       >
                         {t.flow.arrived}
                       </button>

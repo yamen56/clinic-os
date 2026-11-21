@@ -377,7 +377,7 @@ export function InvoiceDetailClient({
       */}
       {inv.status !== "void" ? (
         <input
-          className="-mt-3 mb-5 w-full max-w-lg rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[15px] font-medium text-ink-700 outline-none transition-colors placeholder:font-normal placeholder:text-ink-300 hover:border-line focus:border-brand-500 focus:bg-surface"
+          className="-mt-3 mb-5 w-full max-w-lg rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[0.9375rem] font-medium text-ink-700 outline-none transition-colors placeholder:font-normal placeholder:text-ink-300 hover:border-line focus:border-brand-500 focus:bg-surface"
           value={title}
           maxLength={120}
           disabled={savingTitle}
@@ -387,7 +387,7 @@ export function InvoiceDetailClient({
           onBlur={saveTitle}
         />
       ) : (
-        inv.title && <p className="-mt-3 mb-5 text-[15px] font-medium text-ink-700">{inv.title}</p>
+        inv.title && <p className="-mt-3 mb-5 text-[0.9375rem] font-medium text-ink-700">{inv.title}</p>
       )}
 
       {/*
@@ -400,7 +400,7 @@ export function InvoiceDetailClient({
           {visit && (
             <Link
               href={`/c/${slug}/calendar?open=${visit.id}`}
-              className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-sunken px-3 text-[13px] text-ink-700 hover:bg-line"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-sunken px-3 text-[0.8125rem] text-ink-700 hover:bg-line"
             >
               <CalendarClock className="h-3.5 w-3.5 text-ink-400" />
               {t.invoices.visitLine.replace(
@@ -442,7 +442,7 @@ export function InvoiceDetailClient({
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-danger">{t.einvoicing.statusFailed}</div>
               {inv.einvoice_error && (
-                <p className="mt-0.5 break-words text-[13px] text-ink-500">{inv.einvoice_error}</p>
+                <p className="mt-0.5 break-words text-[0.8125rem] text-ink-500">{inv.einvoice_error}</p>
               )}
             </div>
             {/*
@@ -472,7 +472,7 @@ export function InvoiceDetailClient({
 
       {/* The pair, from either end. */}
       {(inv.corrects_number || inv.credit_note_number) && (
-        <p className="mb-4 rounded-lg border border-line bg-subtle px-4 py-2.5 text-[13px]">
+        <p className="mb-4 rounded-lg border border-line bg-subtle px-4 py-2.5 text-[0.8125rem]">
           {inv.corrects_number ? (
             <>
               {t.einvoicing.creditNoteFor}{" "}
@@ -513,7 +513,7 @@ export function InvoiceDetailClient({
                     */}
                     <td className="px-5 py-2.5">
                       {it.description}
-                      <span className="mt-0.5 block text-[12px] text-ink-500 tnum sm:hidden">
+                      <span className="mt-0.5 block text-[0.75rem] text-ink-500 tnum sm:hidden">
                         {Number(it.qty)} × {fmtMoney(Number(it.unit_price), inv.currency, locale)}
                       </span>
                     </td>
@@ -523,7 +523,7 @@ export function InvoiceDetailClient({
                     </td>
                     {/* Only says something when there is something to say — a line
                         with no discount and the clinic's usual tax stays quiet. */}
-                    <td className="w-28 px-2 py-2.5 text-end text-[12px] text-ink-500 tnum">
+                    <td className="w-28 px-2 py-2.5 text-end text-[0.75rem] text-ink-500 tnum">
                       {Number(it.discount_amount) > 0 &&
                         `−${fmtMoney(Number(it.discount_amount), inv.currency, locale)} `}
                       {Number(it.tax_amount) > 0
@@ -631,7 +631,7 @@ export function InvoiceDetailClient({
                 inv.patient_insurer_id === insurerId &&
                 inv.issue_day &&
                 coverState(inv.patient_insurer_id, inv.patient_cover_until, inv.issue_day) === "expired" && (
-                  <p className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">
+                  <p className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger">
                     <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                     {t.insurers.coverExpiredOn.replace(
                       "{date}",
@@ -765,7 +765,7 @@ export function InvoiceDetailClient({
               />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold">{t.einvoicing.fileThisInvoice}</div>
-                <p className="mt-0.5 text-[13px] text-ink-500">
+                <p className="mt-0.5 text-[0.8125rem] text-ink-500">
                   {inv.einvoice_status === "submitted"
                     ? t.einvoicing.alreadyFiled
                     : inv.einvoice_status === "pending"
@@ -787,7 +787,7 @@ export function InvoiceDetailClient({
             <ul className="divide-y divide-line">
               {/* A cancelled invoice's payments are kept here as history and counted nowhere. */}
               {inv.status === "void" && (
-                <li className="px-5 py-2.5 text-[12px] text-ink-500" data-void-payments-note>
+                <li className="px-5 py-2.5 text-[0.75rem] text-ink-500" data-void-payments-note>
                   {t.invoices.voidPaymentsNote}
                 </li>
               )}
@@ -801,7 +801,7 @@ export function InvoiceDetailClient({
                       {(t.invoices.methods as Record<string, string>)[p.method] ?? p.method}
                     </Badge>
                   </div>
-                  <div className="mt-0.5 text-[12px] text-ink-400">
+                  <div className="mt-0.5 text-[0.75rem] text-ink-400">
                     {/* Written down on another day: the day it was paid, not a made-up time of it. */}
                     {p.created_at && fmtDate(p.created_at, inv.timezone, locale) !== fmtDate(p.paid_at, inv.timezone, locale)
                       ? fmtDate(p.paid_at, inv.timezone, locale)

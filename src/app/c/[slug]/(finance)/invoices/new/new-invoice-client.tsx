@@ -285,7 +285,7 @@ export function NewInvoiceClient({
     <>
       <PageHeader title={t.invoices.newInvoice} />
       {existingInvoice && (
-        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-st-pending/30 bg-st-pending-soft px-4 py-3 text-[13px] text-ink-900" data-existing-invoice>
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-st-pending/30 bg-st-pending-soft px-4 py-3 text-[0.8125rem] text-ink-900" data-existing-invoice>
           <span>{t.invoices.visitAlreadyBilled.replace("{number}", existingInvoice.number)}</span>
           <a href={`/c/${slug}/invoices/${existingInvoice.id}`} className="font-semibold text-brand-700 underline">
             {t.invoices.openIt}
@@ -337,13 +337,13 @@ export function NewInvoiceClient({
           </Card>
 
           <Card className="grid grid-cols-1 gap-3 p-4 sm:p-5">
-            <h3 className="text-[15px] font-semibold">{t.invoices.item}</h3>
+            <h3 className="text-[0.9375rem] font-semibold">{t.invoices.item}</h3>
             {offer.length > 0 && (
               <div className="grid gap-2 rounded-xl border border-brand-200 bg-brand-50/40 p-3" data-chart-offer={offer.length}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-[13px] font-semibold">{t.invoices.fromChart}</div>
-                    <div className="text-[12px] text-ink-500">{t.invoices.fromChartHint}</div>
+                    <div className="text-[0.8125rem] font-semibold">{t.invoices.fromChart}</div>
+                    <div className="text-[0.75rem] text-ink-500">{t.invoices.fromChartHint}</div>
                   </div>
                   {offer.length > 1 && (
                     <Button size="sm" variant="outline" onClick={() => offer.forEach(addChartLine)} data-offer-all>
@@ -353,7 +353,7 @@ export function NewInvoiceClient({
                 </div>
                 <ul className="grid gap-1.5">
                   {offer.map((l) => (
-                    <li key={l.markId} className="flex items-center gap-2 text-[13px]" data-offer-line={l.markId}>
+                    <li key={l.markId} className="flex items-center gap-2 text-[0.8125rem]" data-offer-line={l.markId}>
                       <span className="min-w-0 flex-1">{l.description}</span>
                       <span className="shrink-0 text-ink-500 tnum">
                         {l.qty > 1 ? `${l.qty} × ` : ""}
@@ -460,7 +460,7 @@ export function NewInvoiceClient({
                             line carries a discount and a rate as well, position is
                             no longer enough to say which is which. */}
                         <label className="grid min-w-0 gap-1">
-                          <span className="text-[11px] font-medium text-ink-500">{t.invoices.qty}</span>
+                          <span className="text-[length:max(11px,0.6875rem)] font-medium text-ink-500">{t.invoices.qty}</span>
                           <NumberInput
                             dir="ltr" min={1}
                             aria-label={t.invoices.qty}
@@ -470,7 +470,7 @@ export function NewInvoiceClient({
                           />
                         </label>
                         <label className="grid min-w-0 gap-1">
-                          <span className="text-[11px] font-medium text-ink-500">{t.invoices.unitPrice}</span>
+                          <span className="text-[length:max(11px,0.6875rem)] font-medium text-ink-500">{t.invoices.unitPrice}</span>
                           <NumberInput
                             dir="ltr" min={0} step="0.5"
                             aria-label={t.invoices.unitPrice}
@@ -479,8 +479,8 @@ export function NewInvoiceClient({
                           />
                         </label>
                         <div className="grid gap-1 text-end">
-                          <span className="text-[11px] font-medium text-ink-500">{t.invoices.lineTotal}</span>
-                          <span className="flex h-10 items-center justify-end whitespace-nowrap text-[15px] font-semibold tnum">
+                          <span className="text-[length:max(11px,0.6875rem)] font-medium text-ink-500">{t.invoices.lineTotal}</span>
+                          <span className="flex h-10 items-center justify-end whitespace-nowrap text-[0.9375rem] font-semibold tnum">
                             {money(line.net + line.tax)}
                           </span>
                         </div>
@@ -492,13 +492,13 @@ export function NewInvoiceClient({
                         row on a phone, where wrapped at their natural widths
                         they fell into ragged lines of one and two.
                       */}
-                      <div className="grid grid-cols-3 gap-2 border-t border-line pt-2.5 text-[12px] text-ink-500 sm:flex sm:flex-wrap sm:items-end">
+                      <div className="grid grid-cols-3 gap-2 border-t border-line pt-2.5 text-[0.75rem] text-ink-500 sm:flex sm:flex-wrap sm:items-end">
                         <label className="grid min-w-0 gap-1">
                           <span className="truncate">{t.invoices.discount}</span>
                           <NumberInput
                             dir="ltr" min={0} step="0.5"
                             aria-label={t.invoices.discount}
-                            className="!h-8 !text-[13px] sm:!w-24"
+                            className="!h-8 !text-[0.8125rem] sm:!w-24"
                             value={it.discountAmount}
                             onChange={(discountAmount) => setItem(it.uid, { discountAmount })}
                           />
@@ -506,7 +506,7 @@ export function NewInvoiceClient({
                         <label className="grid min-w-0 gap-1">
                           <span className="truncate">{t.invoices.taxCategory}</span>
                           <Select
-                            className="!h-8 !text-[13px] sm:!w-auto"
+                            className="!h-8 !text-[0.8125rem] sm:!w-auto"
                             value={it.taxCategory}
                             onChange={(e) => {
                               const next = e.target.value as TaxCategory;
@@ -531,7 +531,7 @@ export function NewInvoiceClient({
                             <span className="truncate">{taxLabel || t.invoices.tax} %</span>
                             <NumberInput
                               dir="ltr" min={0} max={100} step="0.5"
-                              className="!h-8 !text-[13px] sm:!w-20"
+                              className="!h-8 !text-[0.8125rem] sm:!w-20"
                               value={it.taxRate}
                               onChange={(taxRate) => setItem(it.uid, { taxRate })}
                             />
@@ -548,7 +548,7 @@ export function NewInvoiceClient({
                           <label className="col-span-3 grid min-w-0 gap-1 sm:col-span-1">
                             <span className="truncate">{t.invoices.doctor}</span>
                             <Select
-                              className="!h-8 !text-[13px] sm:!w-auto"
+                              className="!h-8 !text-[0.8125rem] sm:!w-auto"
                               aria-label={t.invoices.doctor}
                               value={it.doctorMemberId ?? ""}
                               onChange={(e) =>
@@ -594,7 +594,7 @@ export function NewInvoiceClient({
                 />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold">{t.einvoicing.fileThisInvoice}</div>
-                  <p className="mt-0.5 text-[13px] text-ink-500">
+                  <p className="mt-0.5 text-[0.8125rem] text-ink-500">
                     {fileEinvoice ? t.einvoicing.fileThisOnHint : t.einvoicing.fileThisOffHint}
                   </p>
                 </div>
@@ -619,7 +619,7 @@ export function NewInvoiceClient({
             {added && (
               <div
                 role="status"
-                className="mb-2.5 flex items-center gap-2 rounded-lg bg-st-confirmed-soft px-2.5 py-1.5 text-[12.5px] font-medium text-st-confirmed animate-fade-up"
+                className="mb-2.5 flex items-center gap-2 rounded-lg bg-st-confirmed-soft px-2.5 py-1.5 text-[0.78125rem] font-medium text-st-confirmed animate-fade-up"
               >
                 <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />
                 <span className="min-w-0 truncate">
@@ -666,7 +666,7 @@ export function NewInvoiceClient({
                   </span>
                 </div>
                 {/* What a phone does not show above: how many lines, and the tax in it. */}
-                <div className="truncate text-[11.5px] text-ink-500 lg:hidden">
+                <div className="truncate text-[length:max(11px,0.71875rem)] text-ink-500 lg:hidden">
                   {t.invoices.lineCount.replace("{n}", String(items.length))}
                   {taxTotal > 0 &&
                     ` · ${t.invoices.includesTax
@@ -684,7 +684,7 @@ export function NewInvoiceClient({
                 {t.common.create}
               </Button>
             </div>
-            {unnamed && <p className="mt-2 text-[12px] font-medium text-st-pending">{t.invoices.nameEveryLine}</p>}
+            {unnamed && <p className="mt-2 text-[0.75rem] font-medium text-st-pending">{t.invoices.nameEveryLine}</p>}
           </Card>
         </div>
       </div>
@@ -729,7 +729,7 @@ function PatientSearch({
           <Avatar name={r.full_name} size={26} />
           <span className="min-w-0 flex-1 truncate font-medium">{r.full_name}</span>
           {r.phone_e164 && (
-            <span className="num shrink-0 text-[12px] text-ink-400 tnum">{formatPhone(r.phone_e164)}</span>
+            <span className="num shrink-0 text-[0.75rem] text-ink-400 tnum">{formatPhone(r.phone_e164)}</span>
           )}
         </button>
       ))}

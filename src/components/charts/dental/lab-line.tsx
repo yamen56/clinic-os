@@ -57,7 +57,7 @@ export function LabLine({ m, tz }: { m: Mark; tz: string }) {
         <CaseRow key={c.id} c={c} name={labName(c.labId)} today={today} fmt={fmt} mayEdit={mayEdit} onOp={(op) => w.labCaseOp(c, op)} />
       ))}
       {mayEdit && !open && (isLabWork || cases.length > 0) && (
-        <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+        <div className="flex flex-wrap items-center gap-2 text-[0.78125rem]">
           {active.length === 0 ? (
             <>
               <span className="text-ink-500">{L.noLabs}</span>
@@ -83,7 +83,7 @@ export function LabLine({ m, tz }: { m: Mark; tz: string }) {
         </div>
       )}
       {mayEdit && !open && !isLabWork && !cases.length && active.length > 0 && (
-        <button type="button" onClick={() => setOpen(true)} className="justify-self-start text-[12px] font-semibold text-ink-500 hover:text-ink-900 hover:underline" data-lab-add={m.id}>
+        <button type="button" onClick={() => setOpen(true)} className="justify-self-start text-[0.75rem] font-semibold text-ink-500 hover:text-ink-900 hover:underline" data-lab-add={m.id}>
           {L.add}
         </button>
       )}
@@ -125,7 +125,7 @@ function CaseRow({
   const value = Number(text.replace(",", "."));
   return (
     <div
-      className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-ctl px-2.5 py-1.5 text-[12.5px] ${c.status === "cancelled" ? "bg-sunken text-ink-400 line-through" : "bg-canvas"}`}
+      className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-ctl px-2.5 py-1.5 text-[0.78125rem] ${c.status === "cancelled" ? "bg-sunken text-ink-400 line-through" : "bg-canvas"}`}
       data-lab-case={c.id}
       data-lab-status={c.status}
     >
@@ -160,7 +160,7 @@ function CaseRow({
           {fmt(c.cost)}
         </span>
       )}
-      {c.paid && <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-ink-500">{L.paid}</span>}
+      {c.paid && <span className="rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-500">{L.paid}</span>}
       {mayEdit && c.status !== "cancelled" && !editing && (
         <span className="ms-auto flex flex-wrap gap-1.5">
           {c.status === "sent" ? (
@@ -225,7 +225,7 @@ function SendForm({ m, tz, onClose }: { m: Mark; tz: string; onClose: () => void
       }}
       data-lab-form={m.id}
     >
-      <label className="grid gap-1 text-[12px] font-semibold text-ink-500">
+      <label className="grid gap-1 text-[0.75rem] font-semibold text-ink-500">
         {L.lab}
         <select
           value={labId}
@@ -246,7 +246,7 @@ function SendForm({ m, tz, onClose }: { m: Mark; tz: string; onClose: () => void
         </select>
       </label>
       <div className="grid grid-cols-2 gap-2.5">
-        <label className="grid gap-1 text-[12px] font-semibold text-ink-500">
+        <label className="grid gap-1 text-[0.75rem] font-semibold text-ink-500">
           {L.cost}
           <span className="flex h-9 items-center rounded-ctl border border-line bg-surface" dir="ltr">
             <input
@@ -256,16 +256,16 @@ function SendForm({ m, tz, onClose }: { m: Mark; tz: string; onClose: () => void
               className="h-full w-full min-w-0 rounded-ctl bg-transparent px-2 text-base font-semibold tnum focus:outline-none md:text-sm"
               data-lab-cost-field
             />
-            <span className="pe-2 text-[12px] font-semibold text-ink-400">{store.currency}</span>
+            <span className="pe-2 text-[0.75rem] font-semibold text-ink-400">{store.currency}</span>
           </span>
         </label>
-        <label className="grid gap-1 text-[12px] font-semibold text-ink-500">
+        <label className="grid gap-1 text-[0.75rem] font-semibold text-ink-500">
           {L.shade}
           <input value={shade} maxLength={40} onChange={(e) => setShade(e.target.value)} placeholder="A2" className="h-9 rounded-ctl border border-line bg-surface px-2 text-base md:text-sm" />
         </label>
       </div>
       <div className="grid gap-1">
-        <span className="text-[12px] font-semibold text-ink-500">{L.dueBack}</span>
+        <span className="text-[0.75rem] font-semibold text-ink-500">{L.dueBack}</span>
         <div className="flex flex-wrap gap-1.5">
           {[3, 5, 7, 10].map((n) => {
             const d = today.plus({ days: n }).toISODate()!;
@@ -275,7 +275,7 @@ function SendForm({ m, tz, onClose }: { m: Mark; tz: string; onClose: () => void
                 type="button"
                 aria-pressed={dueOn === d}
                 onClick={() => setDueOn(dueOn === d ? null : d)}
-                className={`h-8 rounded-full border px-3 text-[12.5px] font-semibold ${dueOn === d ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700"}`}
+                className={`h-8 rounded-full border px-3 text-[0.78125rem] font-semibold ${dueOn === d ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700"}`}
                 data-lab-due={n}
               >
                 {L.inDays.replace("{n}", String(n))}
@@ -288,16 +288,16 @@ function SendForm({ m, tz, onClose }: { m: Mark; tz: string; onClose: () => void
             min={today.toISODate()!}
             onChange={(e) => setDueOn(e.target.value || null)}
             aria-label={L.dueBack}
-            className="h-8 rounded-ctl border border-line bg-surface px-2 text-[12.5px]"
+            className="h-8 rounded-ctl border border-line bg-surface px-2 text-[0.78125rem]"
           />
         </div>
       </div>
       <input value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} placeholder={L.notePlaceholder} className="h-9 rounded-ctl border border-line bg-surface px-2 text-base md:text-sm" />
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onClose} className="h-9 rounded-ctl px-3 text-[13px] font-semibold text-ink-500 hover:bg-sunken">
+        <button type="button" onClick={onClose} className="h-9 rounded-ctl px-3 text-[0.8125rem] font-semibold text-ink-500 hover:bg-sunken">
           {t.dental.price.cancel}
         </button>
-        <button type="submit" disabled={!valid || busy} className="h-9 rounded-ctl bg-brand-600 px-3.5 text-[13px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-45" data-lab-send-save>
+        <button type="submit" disabled={!valid || busy} className="h-9 rounded-ctl bg-brand-600 px-3.5 text-[0.8125rem] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-45" data-lab-send-save>
           {L.sendSave}
         </button>
       </div>

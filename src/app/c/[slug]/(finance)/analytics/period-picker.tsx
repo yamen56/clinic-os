@@ -44,7 +44,7 @@ export function PeriodPicker({ slug, current, menu }: { slug: string; current: s
             aria-selected={on === key}
             onClick={() => setPressed(key)}
             scroll={false}
-            className={`touch-manipulation whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+            className={`touch-manipulation whitespace-nowrap rounded-full px-3.5 py-1.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
               on === key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
             }`}
           >
@@ -61,7 +61,7 @@ export function PeriodPicker({ slug, current, menu }: { slug: string; current: s
           own list.
         */
         <label
-          className={`relative inline-flex items-center gap-1.5 rounded-full py-1.5 ps-3 pe-2.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+          className={`relative inline-flex items-center gap-1.5 rounded-full py-1.5 ps-3 pe-2.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
             picked ? "bg-brand-600 text-on-brand" : "bg-ink-900/5 text-ink-500 hover:text-ink-700"
           }`}
         >

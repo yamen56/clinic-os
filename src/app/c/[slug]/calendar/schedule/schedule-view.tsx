@@ -210,7 +210,7 @@ export function ScheduleView({
             {t.common.today}
           </Button>
         </div>
-        <h2 className="min-w-40 font-display text-[15px] font-semibold tnum">{title}</h2>
+        <h2 className="min-w-40 font-display text-[0.9375rem] font-semibold tnum">{title}</h2>
         {/*
           On a phone the controls are one row that scrolls sideways. Wrapped,
           they stacked four rows deep above a calendar that is sized to the
@@ -223,7 +223,7 @@ export function ScheduleView({
                 key={v}
                 onClick={() => setState({ view: v })}
                 aria-pressed={view === v}
-                className={`rounded-full px-3 py-1 text-[13px] font-medium transition-colors ${
+                className={`rounded-full px-3 py-1 text-[0.8125rem] font-medium transition-colors ${
                   view === v ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"
                 }`}
               >
@@ -238,7 +238,7 @@ export function ScheduleView({
                   key={g}
                   onClick={() => setState({ groupBy: g })}
                   aria-pressed={groupBy === g}
-                  className={`rounded-full px-3 py-1 text-[13px] font-medium transition-colors ${
+                  className={`rounded-full px-3 py-1 text-[0.8125rem] font-medium transition-colors ${
                     groupBy === g ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"
                   }`}
                 >
@@ -248,7 +248,7 @@ export function ScheduleView({
             </div>
           )}
           {!isDoctor && data && data.doctors.length > 0 && (
-            <Select value={doctorFilter} onChange={(e) => setState({ doctorFilter: e.target.value })} className="!h-8 !w-auto text-[13px]">
+            <Select value={doctorFilter} onChange={(e) => setState({ doctorFilter: e.target.value })} className="!h-8 !w-auto text-[0.8125rem]">
               <option value="">{t.calendar.allDoctors}</option>
               {data.doctors.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -262,7 +262,7 @@ export function ScheduleView({
               value={sectionFilter}
               // The service it named may not be in the new section.
               onChange={(e) => setState({ sectionFilter: e.target.value, serviceFilter: "" })}
-              className="!h-8 !w-auto text-[13px]"
+              className="!h-8 !w-auto text-[0.8125rem]"
             >
               <option value="">{t.calendar.allSections}</option>
               {data.sections.map((sec) => (
@@ -273,7 +273,7 @@ export function ScheduleView({
             </Select>
           )}
           {data && data.services.length > 0 && (
-            <Select value={serviceFilter} onChange={(e) => setState({ serviceFilter: e.target.value })} className="!h-8 !w-auto text-[13px]">
+            <Select value={serviceFilter} onChange={(e) => setState({ serviceFilter: e.target.value })} className="!h-8 !w-auto text-[0.8125rem]">
               <option value="">{t.calendar.allServices}</option>
               {filterServices.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -286,7 +286,7 @@ export function ScheduleView({
             type="button"
             aria-pressed={unconfirmedOnly}
             onClick={() => setState({ unconfirmedOnly: !unconfirmedOnly })}
-            className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+            className={`rounded-full border px-3 py-1 text-[0.75rem] font-medium transition-colors ${
               unconfirmedOnly ? "border-brand-600 bg-brand-50 text-brand-700" : "border-line-strong text-ink-500 hover:bg-sunken"
             }`}
             data-unconfirmed-only
@@ -295,7 +295,7 @@ export function ScheduleView({
           </button>
           <button
             onClick={() => setState({ colorBy: colorBy === "service" ? "doctor" : "service" })}
-            className="rounded-full border border-line-strong px-3 py-1 text-[12px] font-medium text-ink-500 hover:bg-sunken"
+            className="rounded-full border border-line-strong px-3 py-1 text-[0.75rem] font-medium text-ink-500 hover:bg-sunken"
           >
             {t.calendar.colorBy}: {colorBy === "service" ? t.calendar.byService : t.calendar.byDoctor}
           </button>
@@ -305,7 +305,7 @@ export function ScheduleView({
       {/* Visits booked before the clinic had rooms hold none — until placed, a
           new booking can land on top of them. */}
       {data && hasRooms && data.unroomed > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-st-pending/30 bg-st-pending-soft px-3 py-2 text-[13px] text-ink-700">
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-st-pending/30 bg-st-pending-soft px-3 py-2 text-[0.8125rem] text-ink-700">
           <DoorOpen className="h-4 w-4 shrink-0 text-st-pending" />
           <span className="min-w-0 flex-1">{t.calendar.unroomed.replace("{n}", String(data.unroomed))}</span>
           {canSetUpRooms && (

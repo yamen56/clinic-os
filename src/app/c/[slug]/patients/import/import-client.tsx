@@ -194,7 +194,7 @@ export function ImportClient({
                   {preview.headers.map((h, i) => (
                     <tr key={i} className="border-b border-line last:border-0">
                       <td className="py-2 pe-3 font-semibold">{h || `#${i + 1}`}</td>
-                      <td className="py-2 pe-3 text-[13px] text-ink-500">
+                      <td className="py-2 pe-3 text-[0.8125rem] text-ink-500">
                         {preview.sample.map((r) => r[i]).filter(Boolean).slice(0, 2).join(" · ")}
                       </td>
                       <td className="w-48 py-2">
@@ -241,7 +241,7 @@ export function ImportClient({
               {/* The skipped rows by name, because "12 skipped" is not something
                   anybody can act on. */}
               {preview.plan.some((p) => p.action === "skip") && (
-                <div className="max-h-40 overflow-y-auto rounded-lg border border-line bg-sunken p-3 text-[13px]">
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-line bg-sunken p-3 text-[0.8125rem]">
                   {preview.plan
                     .filter((p) => p.action === "skip")
                     .slice(0, 50)
@@ -291,7 +291,7 @@ export function ImportClient({
                   <span className="block truncate text-sm font-semibold">
                     {b.filename || t.import.pasted}
                   </span>
-                  <span className="block truncate text-[13px] text-ink-500">
+                  <span className="block truncate text-[0.8125rem] text-ink-500">
                     {fmtDateTime(b.created_at, tz, locale)}
                     {b.by_name ? ` · ${b.by_name}` : ""} · {b.created_count} {t.import.willCreate},{" "}
                     {b.matched_count} {t.import.willMatch}

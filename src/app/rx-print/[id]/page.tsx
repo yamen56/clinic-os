@@ -107,27 +107,27 @@ export default async function PrescriptionPrintPage({
               )}
               <div>
                 <h1 className="font-display text-xl font-bold">{clinicName}</h1>
-                {address && <p className="text-[13px] text-ink-500">{address}</p>}
+                {address && <p className="text-[0.8125rem] text-ink-500">{address}</p>}
                 {rx.clinic_phone && (
-                  <p className="text-[13px] text-ink-500 tnum" dir="ltr">
+                  <p className="text-[0.8125rem] text-ink-500 tnum" dir="ltr">
                     {formatPhone(rx.clinic_phone)}
                   </p>
                 )}
                 {rx.moh_license_no && (
-                  <p className="text-[12px] text-ink-500">
+                  <p className="text-[0.75rem] text-ink-500">
                     {L.facilityLicense}: <bdi className="tnum">{rx.moh_license_no}</bdi>
                   </p>
                 )}
               </div>
             </div>
             <div className="text-end">
-              <div className="text-[13px] font-semibold uppercase tracking-widest text-ink-500">
+              <div className="text-[0.8125rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.title}
               </div>
               <div className="font-display text-lg font-bold tnum" dir="ltr">
                 {rxNumber(rx.number)}
               </div>
-              <div className="mt-1 text-[13px] text-ink-500">
+              <div className="mt-1 text-[0.8125rem] text-ink-500">
                 {L.date}: {fmtDate(rx.created_at, rx.timezone, locale)}
               </div>
             </div>
@@ -138,25 +138,25 @@ export default async function PrescriptionPrintPage({
             style={{ borderColor: "color-mix(in srgb, var(--bk) 25%, transparent)" }}
           >
             <div className="min-w-0">
-              <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+              <div className="text-[0.75rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.patient}
               </div>
-              <div className="mt-1 text-[15px] font-semibold">{rx.patient_name}</div>
+              <div className="mt-1 text-[0.9375rem] font-semibold">{rx.patient_name}</div>
             </div>
             <div className="min-w-0">
-              <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+              <div className="text-[0.75rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.doctor}
               </div>
-              <div className="mt-1 text-[15px] font-semibold">{rx.doctor_name}</div>
+              <div className="mt-1 text-[0.9375rem] font-semibold">{rx.doctor_name}</div>
             </div>
           </section>
 
           {rx.diagnosis && (
             <section className="mt-5">
-              <span className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+              <span className="text-[0.75rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.diagnosis}:
               </span>{" "}
-              <span className="text-[15px]">
+              <span className="text-[0.9375rem]">
                 <bdi>{rx.diagnosis}</bdi>
               </span>
             </section>
@@ -174,7 +174,7 @@ export default async function PrescriptionPrintPage({
                 return (
                   <li key={i} className="flex gap-3 border-b border-line pb-4 last:border-b-0">
                     <span
-                      className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white tnum"
+                      className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.75rem] font-bold text-white tnum"
                       style={{ background: "var(--bk)" }}
                     >
                       {i + 1}
@@ -182,10 +182,10 @@ export default async function PrescriptionPrintPage({
                     <div className="min-w-0">
                       {/* <bdi>: a Latin drug name inside an Arabic sentence
                           must not drag the strength to the wrong side. */}
-                      <div className="text-[16px] font-semibold">
+                      <div className="text-[1rem] font-semibold">
                         <bdi>{it.name}</bdi>
                       </div>
-                      {detail && <div className="mt-0.5 text-[14px] text-ink-700">{detail}</div>}
+                      {detail && <div className="mt-0.5 text-[0.875rem] text-ink-700">{detail}</div>}
                     </div>
                   </li>
                 );
@@ -201,10 +201,10 @@ export default async function PrescriptionPrintPage({
               ) : (
                 <div className="h-20" />
               )}
-              <div className="border-t border-ink-300 pt-2 text-[14px] font-semibold">{rx.doctor_name}</div>
+              <div className="border-t border-ink-300 pt-2 text-[0.875rem] font-semibold">{rx.doctor_name}</div>
               {/* Copied onto the prescription when it was written — see createPrescriptionAction. */}
               {(rx.doctor_license_no || rx.doctor_syndicate_no) && (
-                <div className="text-[12px] text-ink-700">
+                <div className="text-[0.75rem] text-ink-700">
                   {rx.doctor_license_no && (
                     <span>
                       {L.licenseNo}: <bdi className="tnum">{rx.doctor_license_no}</bdi>
@@ -218,7 +218,7 @@ export default async function PrescriptionPrintPage({
                   )}
                 </div>
               )}
-              <div className="text-[12px] text-ink-500">{L.signature}</div>
+              <div className="text-[0.75rem] text-ink-500">{L.signature}</div>
             </div>
           </div>
 

@@ -121,7 +121,7 @@ export function ApptCard({
         {Icon && height > 22 && lanes < 3 && (
           <Icon className="float-end ms-0.5 mt-px h-3 w-3" style={{ color: iconColor }} aria-hidden />
         )}
-        <div className="truncate text-[11px] font-semibold leading-tight tnum">
+        <div className="truncate text-[length:max(11px,0.6875rem)] font-semibold leading-tight tnum">
           {s.toFormat("h:mm")} {appt.patient_name}
         </div>
         {height > 34 && (service || (showRoom && room)) && (

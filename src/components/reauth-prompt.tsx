@@ -90,7 +90,7 @@ export function ReauthPrompt({
         </>
       }
     >
-      <p className="mb-3 text-[13px] leading-relaxed text-ink-700">{body ?? t.auth.reauthBody}</p>
+      <p className="mb-3 text-[0.8125rem] leading-relaxed text-ink-700">{body ?? t.auth.reauthBody}</p>
       <Field label={t.auth.reauthPassword}>
         <Input
           type="password"
@@ -106,7 +106,7 @@ export function ReauthPrompt({
           }}
         />
       </Field>
-      {error && <p className="mt-2 text-[13px] text-danger">{error}</p>}
+      {error && <p className="mt-2 text-[0.8125rem] text-danger">{error}</p>}
     </Modal>
   );
 }

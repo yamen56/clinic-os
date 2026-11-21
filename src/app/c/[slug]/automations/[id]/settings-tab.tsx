@@ -33,7 +33,7 @@ export function SettingsTab({
   return (
     <div className="mx-auto grid max-w-2xl gap-4">
       <Card className="grid gap-2 p-5">
-        <div className="text-[13px] font-semibold text-ink-900">{f.description}</div>
+        <div className="text-[0.8125rem] font-semibold text-ink-900">{f.description}</div>
         <Textarea
           value={description}
           maxLength={300}
@@ -43,12 +43,12 @@ export function SettingsTab({
       </Card>
 
       <Card className="grid gap-3 p-5">
-        <div className="text-[13px] font-semibold text-ink-900">{f.reentry}</div>
+        <div className="text-[0.8125rem] font-semibold text-ink-900">{f.reentry}</div>
         <div className="grid gap-2" role="radiogroup">
           {(["always", "once", "cooldown"] as const).map((opt) => (
             <label
               key={opt}
-              className={`flex cursor-pointer flex-wrap items-center gap-2.5 rounded-ctl border px-3 py-2.5 text-[13px] ${
+              className={`flex cursor-pointer flex-wrap items-center gap-2.5 rounded-ctl border px-3 py-2.5 text-[0.8125rem] ${
                 settings.reentry === opt ? "border-brand-600 bg-brand-50" : "border-line hover:border-line-strong"
               }`}
             >
@@ -81,8 +81,8 @@ export function SettingsTab({
 
       <Card className="grid gap-3 p-5">
         <div>
-          <div className="text-[13px] font-semibold text-ink-900">{f.exitTitle}</div>
-          <p className="mt-0.5 text-[12px] text-ink-500">{f.exitSub}</p>
+          <div className="text-[0.8125rem] font-semibold text-ink-900">{f.exitTitle}</div>
+          <p className="mt-0.5 text-[0.75rem] text-ink-500">{f.exitSub}</p>
         </div>
         <div className="grid gap-2">
           {EXIT_EVENTS.map((ev) => {
@@ -99,8 +99,8 @@ export function SettingsTab({
                   }}
                 />
                 <span className="min-w-0">
-                  <span className="block text-[13px] text-ink-900">{f.exit[ev]}</span>
-                  {reason && <span className="block text-[12px] text-ink-500">{reason}</span>}
+                  <span className="block text-[0.8125rem] text-ink-900">{f.exit[ev]}</span>
+                  {reason && <span className="block text-[0.75rem] text-ink-500">{reason}</span>}
                 </span>
               </div>
             );

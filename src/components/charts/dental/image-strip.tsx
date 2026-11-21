@@ -38,7 +38,7 @@ export function ImageThumb({ img, pinned, onOpen, size = "md" }: { img: ChartIma
           </span>
         )}
       </span>
-      {size === "md" && <span className="mt-1 block text-[11.5px] text-ink-500 tabular-nums">{fmtDateOnly(img.date, locale)}</span>}
+      {size === "md" && <span className="mt-1 block text-[length:max(11px,0.71875rem)] text-ink-500 tabular-nums">{fmtDateOnly(img.date, locale)}</span>}
     </button>
   );
 }
@@ -59,7 +59,7 @@ export function AddImageButtons({
   const T = t.dental;
   const xray = useRef<HTMLInputElement>(null);
   const photo = useRef<HTMLInputElement>(null);
-  const tile = `flex shrink-0 snap-start flex-col items-center justify-center gap-1 rounded-ctl border border-dashed border-line-strong bg-surface text-[11.5px] font-semibold text-ink-700 transition-colors hover:bg-sunken disabled:opacity-50 ${
+  const tile = `flex shrink-0 snap-start flex-col items-center justify-center gap-1 rounded-ctl border border-dashed border-line-strong bg-surface text-[length:max(11px,0.71875rem)] font-semibold text-ink-700 transition-colors hover:bg-sunken disabled:opacity-50 ${
     compact ? "h-16 w-[4.5rem] px-1 text-center leading-tight" : "h-[4.5rem] w-24"
   }`;
   return (
@@ -126,18 +126,18 @@ export function ImageStrip({
   return (
     <section className="mt-4" aria-label={T.images}>
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h4 className="text-[13px] font-semibold text-ink-900">
+        <h4 className="text-[0.8125rem] font-semibold text-ink-900">
           {T.images}
-          {images.length > 0 && <span className="ms-2 rounded-full bg-sunken px-2 py-0.5 text-[12px] text-ink-500 tabular-nums">{images.length}</span>}
+          {images.length > 0 && <span className="ms-2 rounded-full bg-sunken px-2 py-0.5 text-[0.75rem] text-ink-500 tabular-nums">{images.length}</span>}
         </h4>
-        <span className="text-[11.5px] text-ink-500">{busy ? T.uploading : canAdd ? T.savedToFiles : ""}</span>
+        <span className="text-[length:max(11px,0.71875rem)] text-ink-500">{busy ? T.uploading : canAdd ? T.savedToFiles : ""}</span>
       </div>
       <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1" data-image-strip>
         {canAdd && <AddImageButtons onFile={onFile} busy={busy} onCamera={onCamera} />}
         {images.map((img, i) => (
           <ImageThumb key={img.id} img={img} pinned={pins[img.id] ?? []} onOpen={() => onOpen(i)} />
         ))}
-        {images.length === 0 && !canAdd && <p className="py-4 text-[13px] text-ink-500">{T.noImages}</p>}
+        {images.length === 0 && !canAdd && <p className="py-4 text-[0.8125rem] text-ink-500">{T.noImages}</p>}
       </div>
     </section>
   );

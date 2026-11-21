@@ -165,7 +165,7 @@ export function TodayList({
               aria-pressed={group === g}
               onClick={() => setGroup(g)}
               data-today-group={g}
-              className={`inline-flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium transition-colors duration-140 ease-out ${
+              className={`inline-flex h-8 shrink-0 touch-manipulation items-center gap-1.5 rounded-full px-3 text-[0.78125rem] font-medium transition-colors duration-140 ease-out ${
                 group === g ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-700 hover:bg-ink-900/8"
               }`}
             >
@@ -202,7 +202,7 @@ export function TodayList({
               <span className="w-12 shrink-0 text-sm font-semibold tnum sm:w-16">{fmtTime(ap.starts_at, tz, locale)}</span>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{ap.patient_name}</div>
-                <div className="truncate text-[13px] text-ink-500">
+                <div className="truncate text-[0.8125rem] text-ink-500">
                   {(locale === "ar" ? ap.service_name_ar : null) || ap.service_name || "—"}
                   {mine ? (
                     <span className="font-medium text-ink-700">{` · ${t.dashboard.you}`}</span>
@@ -221,7 +221,7 @@ export function TodayList({
                 type="button"
                 disabled={busy === ap.id}
                 onClick={() => (next === "finished" ? setFinishing(base) : step(base, next))}
-                className="inline-flex h-10 shrink-0 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-[13px] font-semibold text-on-brand hover:bg-brand-hover active:opacity-80 disabled:opacity-60 sm:h-8 sm:px-3 sm:text-[12.5px]"
+                className="inline-flex h-10 shrink-0 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-[0.8125rem] font-semibold text-on-brand hover:bg-brand-hover active:opacity-80 disabled:opacity-60 sm:h-8 sm:px-3 sm:text-[0.78125rem]"
                 data-today-action={next}
               >
                 {icon[next]}

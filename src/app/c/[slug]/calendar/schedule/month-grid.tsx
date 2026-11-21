@@ -39,7 +39,7 @@ export function MonthGrid({
 
   return (
     <div className="flex-1 overflow-auto rounded-card border border-line bg-surface shadow-card">
-      <div className="sticky top-0 z-[2] grid min-w-[640px] grid-cols-7 border-b border-line bg-surface text-center text-[12px] font-medium text-ink-500">
+      <div className="sticky top-0 z-[2] grid min-w-[640px] grid-cols-7 border-b border-line bg-surface text-center text-[0.75rem] font-medium text-ink-500">
         {days.slice(0, 7).map((d) => (
           <div key={d.toISO()} className="py-2">
             {d.setLocale(fmt).toFormat("ccc")}
@@ -62,7 +62,7 @@ export function MonthGrid({
             >
               <div className="flex items-center justify-between">
                 <span
-                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-semibold tnum ${
+                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[0.75rem] font-semibold tnum ${
                     k === today ? "bg-brand-600 text-on-brand" : ""
                   }`}
                 >
@@ -82,13 +82,13 @@ export function MonthGrid({
                 {list.slice(0, 3).map((a) => (
                   <span
                     key={a.id}
-                    className="truncate rounded px-1 py-0.5 text-[11px] font-medium text-ink-900"
+                    className="truncate rounded px-1 py-0.5 text-[length:max(11px,0.6875rem)] font-medium text-ink-900"
                     style={{ background: tint(colorOf(a), 18), boxShadow: `inset 2px 0 0 ${colorOf(a)}` }}
                   >
                     <span className="tnum text-ink-500">{DateTime.fromISO(a.starts_at).setZone(tz).toFormat("H:mm")}</span> {a.patient_name}
                   </span>
                 ))}
-                {list.length > 3 && <span className="text-[11px] text-ink-400 tnum">+{list.length - 3}</span>}
+                {list.length > 3 && <span className="text-[length:max(11px,0.6875rem)] text-ink-400 tnum">+{list.length - 3}</span>}
               </div>
             </button>
           );

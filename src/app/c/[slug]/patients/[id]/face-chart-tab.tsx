@@ -457,7 +457,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
     return parts.join(" · ");
   };
 
-  const action = "inline-flex h-9 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-semibold hover:bg-sunken sm:h-7 sm:text-[12px]";
+  const action = "inline-flex h-9 items-center gap-1 rounded-full px-2.5 text-[0.78125rem] font-semibold hover:bg-sunken sm:h-7 sm:text-[0.75rem]";
 
   // A plain function, not a component: a component made here would be a new type each render, and remount — a box being typed in would lose its cursor.
   const row = (m: FaceMark, compact?: boolean) => {
@@ -478,33 +478,33 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       <li key={m.id} className={`py-2.5 ${m.voidedAt ? "opacity-60" : ""}`} data-face-entry={m.id} data-voided={m.voidedAt ? "" : undefined}>
         <div className="flex items-start gap-2.5">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5 text-[13.5px] font-semibold">
-            {isSale ? <span className="inline-flex h-5 items-center rounded-md border border-line-strong bg-sunken px-1.5 text-[11px] font-semibold">{F.packageEntry}</span> : <FamilyTag family={m.family} label={F.families[m.family]} />}
+          <div className="flex flex-wrap items-center gap-1.5 text-[0.84375rem] font-semibold">
+            {isSale ? <span className="inline-flex h-5 items-center rounded-md border border-line-strong bg-sunken px-1.5 text-[length:max(11px,0.6875rem)] font-semibold">{F.packageEntry}</span> : <FamilyTag family={m.family} label={F.families[m.family]} />}
             <span className={m.voidedAt ? "line-through" : ""}>{m.label}</span>
-            {m.voidedAt && <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-ink-500">{F.voided}</span>}
-            {billed && !m.voidedAt && <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-ink-500">{F.billed}</span>}
+            {m.voidedAt && <span className="rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-500">{F.voided}</span>}
+            {billed && !m.voidedAt && <span className="rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-500">{F.billed}</span>}
           </div>
-          {!isSale && <div className="text-[13px] text-ink-700">{whereText(m.areas.map((a) => a.zone), "en")}</div>}
+          {!isSale && <div className="text-[0.8125rem] text-ink-700">{whereText(m.areas.map((a) => a.zone), "en")}</div>}
           {(() => {
             const orig = m.redoOf ? s.marks.find((x) => x.id === m.redoOf) : null;
             const times = work.filter((x) => x.redoOf === m.id && !x.voidedAt).length;
             return (
               <>
-                {orig && <div className="text-[12.5px] font-medium text-brand-700" data-face-retouch-of={m.id}>{F.retouchOf.replace("{date}", fmtDate(orig.doneAt ?? orig.createdAt, tz, locale))}</div>}
-                {times > 0 && <div className="text-[12.5px] font-medium text-ink-700" data-face-retouched={times}>{F.retouched.replace("{n}", String(times))}</div>}
+                {orig && <div className="text-[0.78125rem] font-medium text-brand-700" data-face-retouch-of={m.id}>{F.retouchOf.replace("{date}", fmtDate(orig.doneAt ?? orig.createdAt, tz, locale))}</div>}
+                {times > 0 && <div className="text-[0.78125rem] font-medium text-ink-700" data-face-retouched={times}>{F.retouched.replace("{n}", String(times))}</div>}
               </>
             );
           })()}
           {session && (
-            <div className="text-[12.5px] font-medium text-ink-700" data-face-session={m.id}>
+            <div className="text-[0.78125rem] font-medium text-ink-700" data-face-session={m.id}>
               {F.sessionFrom.replace("{package}", session.pkg.name)} · {F.sessionOf.replace("{n}", String(session.n)).replace("{total}", String(session.total))}
             </div>
           )}
-          <div className="text-[12px] text-ink-500 tnum">{meta}</div>
-          {m.note && !compact && noting?.id !== m.id && <div className="mt-0.5 whitespace-pre-line text-[12.5px] text-ink-700">{m.note}</div>}
-          {m.voidedAt && m.voidReason && !compact && <div className="text-[12px] text-ink-500">{m.voidReason}</div>}
+          <div className="text-[0.75rem] text-ink-500 tnum">{meta}</div>
+          {m.note && !compact && noting?.id !== m.id && <div className="mt-0.5 whitespace-pre-line text-[0.78125rem] text-ink-700">{m.note}</div>}
+          {m.voidedAt && m.voidReason && !compact && <div className="text-[0.75rem] text-ink-500">{m.voidReason}</div>}
           {!m.voidedAt && dueAgain?.id === m.id && (
-            <span className="mt-1 inline-block rounded-full bg-brand-50 px-2.5 py-0.5 text-[12px] font-semibold text-brand-700" data-due-again>
+            <span className="mt-1 inline-block rounded-full bg-brand-50 px-2.5 py-0.5 text-[0.75rem] font-semibold text-brand-700" data-due-again>
               {dueAgain.text}
             </span>
           )}
@@ -561,7 +561,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             </div>
           )}
         </div>
-          {!compact && <span className="shrink-0 text-[13px] font-semibold tnum">{session ? F.covered : m.fee != null ? money(m.fee) : "—"}</span>}
+          {!compact && <span className="shrink-0 text-[0.8125rem] font-semibold tnum">{session ? F.covered : m.fee != null ? money(m.fee) : "—"}</span>}
         </div>
           {/* Under the entry, in a row that wraps: beside it, they squeezed its words to a column on a phone. */}
           {!m.voidedAt && (
@@ -638,7 +638,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       >
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5 text-[14px] font-semibold">
+            <div className="flex flex-wrap items-center gap-1.5 text-[0.875rem] font-semibold">
               {m.label}
               {m.detail.variant && <span className="font-normal text-ink-500">· {m.detail.variant.name}</span>}
             </div>
@@ -648,7 +648,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             <X className="h-4 w-4" />
           </button>
         </div>
-        <dl className="mt-2 grid gap-0.5 text-[12.5px] text-ink-700">
+        <dl className="mt-2 grid gap-0.5 text-[0.78125rem] text-ink-700">
           <div>{fmtDate(m.doneAt ?? m.createdAt, tz, locale)}{m.performedBy ? ` · ${F.by.replace("{name}", m.performedBy.name)}` : ""}</div>
           {area && (
             <div>
@@ -675,7 +675,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                 const zone = zoneAt(p.x, p.y, p.v);
                 if (zone) addPoint({ x: p.x, y: p.y, zone, v: p.v });
               }}
-              className="inline-flex h-8 items-center gap-1 rounded-full bg-brand-600 px-3 text-[12.5px] font-semibold text-on-brand"
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-brand-600 px-3 text-[0.78125rem] font-semibold text-on-brand"
               data-face-spot-again
             >
               <CornerDownRight className="h-3.5 w-3.5 rtl:-scale-x-100" />
@@ -689,7 +689,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               const el = document.querySelector(`[data-face-history] [data-face-entry="${m.id}"]`);
               el?.scrollIntoView({ block: "center", behavior: "smooth" });
             }}
-            className="inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-semibold hover:bg-sunken"
+            className="inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[0.78125rem] font-semibold hover:bg-sunken"
             data-face-spot-entry
           >
             {F.seeEntry}
@@ -715,7 +715,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
         type="button"
         aria-pressed={showPast}
         onClick={() => (setShowPast((v) => !v), setSpot(null))}
-        className={`inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium ${showPast ? "bg-sunken" : "hover:bg-sunken"}`}
+        className={`inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[0.78125rem] font-medium ${showPast ? "bg-sunken" : "hover:bg-sunken"}`}
         data-face-show-past
       >
         {F.showPast}
@@ -726,20 +726,20 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
   const recent = newestFirst.filter((m) => !m.voidedAt).slice(0, 5);
   const voidedCount = s.marks.filter((m) => m.voidedAt).length;
   const shown = showVoided ? newestFirst : newestFirst.filter((m) => !m.voidedAt);
-  const stepBtn = "h-9 w-9 shrink-0 rounded-ctl border border-line-strong text-[17px] hover:bg-sunken";
+  const stepBtn = "h-9 w-9 shrink-0 rounded-ctl border border-line-strong text-[1.0625rem] hover:bg-sunken";
   const stepper = (label: string, value: number, set: (n: number) => void, min = 1) => (
     <div className="flex items-center gap-2.5">
-      <span className="flex-1 text-[13.5px] font-semibold">{label}</span>
+      <span className="flex-1 text-[0.84375rem] font-semibold">{label}</span>
       <button type="button" onClick={() => set(Math.max(min, value - 1))} aria-label={F.less} className={stepBtn}>
         −
       </button>
-      <span className="w-10 text-center text-[15px] font-bold tnum">{value}</span>
+      <span className="w-10 text-center text-[0.9375rem] font-bold tnum">{value}</span>
       <button type="button" onClick={() => set(value + 1)} aria-label={F.oneMore} className={stepBtn}>
         +
       </button>
     </div>
   );
-  const heading = "text-[12px] font-semibold uppercase tracking-wide text-ink-500";
+  const heading = "text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500";
 
   return (
     <div className="grid gap-4">
@@ -758,7 +758,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                     aria-selected={view === v}
                     onClick={() => (setView(v), setSpot(null))}
                     aria-label={VIEW_NAME[v]}
-                    className={`relative flex min-h-9 min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-full px-1.5 text-[12.5px] font-semibold transition-colors sm:flex-none sm:px-3.5 ${
+                    className={`relative flex min-h-9 min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-full px-1.5 text-[0.78125rem] font-semibold transition-colors sm:flex-none sm:px-3.5 ${
                       view === v ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
                     }`}
                     data-face-view-tab={v}
@@ -785,7 +785,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
           </FaceMap>
           <div className="mt-3 flex flex-wrap justify-center gap-1.5 border-t border-line pt-3">
             {onFace.map((t) => (
-              <span key={t.key} className="inline-flex h-6 items-center gap-1.5 rounded-full border border-line px-2 text-[12px] font-medium" data-face-legend={t.key}>
+              <span key={t.key} className="inline-flex h-6 items-center gap-1.5 rounded-full border border-line px-2 text-[0.75rem] font-medium" data-face-legend={t.key}>
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: t.color }} aria-hidden />
                 {t.name}
               </span>
@@ -799,17 +799,17 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
         <Card className="p-4">
           {!sel.length && (
             <div data-face-panel="idle">
-              <h3 className="text-[16px] font-semibold">{F.addTitle}</h3>
-              <p className="mt-0.5 text-[13px] text-ink-500">{s.canWrite ? F.addHint : F.readOnly}</p>
+              <h3 className="text-[1rem] font-semibold">{F.addTitle}</h3>
+              <p className="mt-0.5 text-[0.8125rem] text-ink-500">{s.canWrite ? F.addHint : F.readOnly}</p>
               <h4 className={`mt-4 ${heading}`}>{F.recent}</h4>
-              {recent.length ? <ul className="divide-y divide-line">{recent.map((m) => row(m, true))}</ul> : <p className="mt-1 text-[13px] text-ink-500">{F.nothingYet}</p>}
+              {recent.length ? <ul className="divide-y divide-line">{recent.map((m) => row(m, true))}</ul> : <p className="mt-1 text-[0.8125rem] text-ink-500">{F.nothingYet}</p>}
             </div>
           )}
 
           {sel.length > 0 && !tr && (
             <div data-face-panel="areas">
               <div className="flex items-center gap-2">
-                <h3 className="text-[16px] font-semibold" data-face-points={pts.length}>
+                <h3 className="text-[1rem] font-semibold" data-face-points={pts.length}>
                   {pts.length === 1 ? F.onePoint : F.points.replace("{n}", String(pts.length))}
                 </h3>
                 <Button size="sm" variant="outline" className="ms-auto" onClick={clear}>
@@ -818,11 +818,11 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               </div>
               {/* Where, in words; a dot comes off by tapping it on the face, or the last one here. */}
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-[13px] text-ink-700" data-face-where>{whereText(sel, "en")}</span>
+                <span className="text-[0.8125rem] text-ink-700" data-face-where>{whereText(sel, "en")}</span>
                 <button
                   type="button"
                   onClick={() => removePoint(pts.length - 1)}
-                  className="inline-flex min-h-9 items-center gap-1 text-[12.5px] font-semibold text-brand-700 hover:underline"
+                  className="inline-flex min-h-9 items-center gap-1 text-[0.78125rem] font-semibold text-brand-700 hover:underline"
                   data-face-undo-dot
                 >
                   <Undo2 className="h-3.5 w-3.5" />
@@ -831,7 +831,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               </div>
 
               <h4 className={`mt-4 ${heading}`}>{F.doneHere}</h4>
-              {here.length ? <ul className="divide-y divide-line">{here.map((m) => row(m, true))}</ul> : <p className="mt-1 text-[13px] text-ink-500">{F.nothingHere}</p>}
+              {here.length ? <ul className="divide-y divide-line">{here.map((m) => row(m, true))}</ul> : <p className="mt-1 text-[0.8125rem] text-ink-500">{F.nothingHere}</p>}
 
               {s.canWrite && (
                 <>
@@ -850,7 +850,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                       data-face-find
                     />
                   )}
-                  {term && !shownFits.length && <p className="mt-2 text-[13px] text-ink-500">{F.noMatch}</p>}
+                  {term && !shownFits.length && <p className="mt-2 text-[0.8125rem] text-ink-500">{F.noMatch}</p>}
                   {fits.length ? (
                     <div className="mt-2 grid grid-cols-2 gap-2" data-face-fits={fits.length}>
                       {shownFits.map((x) => {
@@ -863,20 +863,20 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                             className="flex min-h-14 flex-col items-start justify-center gap-1 rounded-ctl border border-line-strong px-3 py-2 text-start hover:bg-sunken"
                             data-face-treatment={x.key}
                           >
-                            <span className="flex items-center gap-1.5 text-[13.5px] font-semibold">
+                            <span className="flex items-center gap-1.5 text-[0.84375rem] font-semibold">
                               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: treatmentColor(x, x.family) }} aria-hidden />
                               {x.en}
                             </span>
                             <span className="flex flex-wrap items-center gap-1.5">
                               <FamilyTag family={x.family} label={F.families[x.family]} />
-                              <span className="text-[12px] text-ink-500 tnum">{p ? `${money(p.price)} ${F.pricedBy[x.pricedBy]}` : F.noPriceShort}</span>
+                              <span className="text-[0.75rem] text-ink-500 tnum">{p ? `${money(p.price)} ${F.pricedBy[x.pricedBy]}` : F.noPriceShort}</span>
                             </span>
                           </button>
                         );
                       })}
                     </div>
                   ) : (
-                    <p className="mt-1 text-[13px] text-ink-500">{F.noneFits}</p>
+                    <p className="mt-1 text-[0.8125rem] text-ink-500">{F.noneFits}</p>
                   )}
                   {/* The clinic's own, made at the chair: the thirteen are a start, not the list. */}
                   <Button size="sm" variant="outline" className="mt-2 min-h-10" onClick={() => setAdding(true)} data-face-add-treatment>
@@ -904,13 +904,13 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             <div className="grid gap-3.5" data-face-panel="record">
               <div className="flex items-start gap-2">
                 <div className="min-w-0">
-                  <h3 className="flex flex-wrap items-center gap-2 text-[16px] font-semibold">
+                  <h3 className="flex flex-wrap items-center gap-2 text-[1rem] font-semibold">
                     {tr.en}
                     <FamilyTag family={tr.family} label={F.families[tr.family]} />
                   </h3>
-                  <div className="text-[13px] text-ink-700">{whereText(sel, "en")}</div>
+                  <div className="text-[0.8125rem] text-ink-700">{whereText(sel, "en")}</div>
                   {retouchOf && (
-                    <div className="text-[12.5px] font-semibold text-brand-700" data-face-retouching>
+                    <div className="text-[0.78125rem] font-semibold text-brand-700" data-face-retouching>
                       {F.retouchOf.replace("{date}", fmtDate(retouchOf.doneAt ?? retouchOf.createdAt, tz, locale))} · {F.retouchHint}
                     </div>
                   )}
@@ -928,7 +928,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                       const name = ZONE_BY_KEY.get(a.zone)?.en ?? a.zone;
                       return (
                         <div key={a.zone} className="flex items-center gap-2.5" data-face-units={a.zone}>
-                          <span className="min-w-0 flex-1 text-[13.5px]">{name}</span>
+                          <span className="min-w-0 flex-1 text-[0.84375rem]">{name}</span>
                           <button
                             type="button"
                             onClick={() => setUnits((u) => ({ ...u, [a.zone]: Math.max(0, (u[a.zone] ?? 0) - 2) }))}
@@ -958,7 +958,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                       );
                     })}
                   </div>
-                  <div className="mt-1 text-end text-[13px] font-bold tnum">{F.unitsTotal.replace("{n}", String(unitsTotal ?? 0))}</div>
+                  <div className="mt-1 text-end text-[0.8125rem] font-bold tnum">{F.unitsTotal.replace("{n}", String(unitsTotal ?? 0))}</div>
                 </div>
               )}
 
@@ -1003,19 +1003,19 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                           data-face-product={p.id}
                         >
                           <span className="min-w-0 flex-1">
-                            <span className="block text-[13.5px] font-semibold">
+                            <span className="block text-[0.84375rem] font-semibold">
                               {p.name}
                               {p.company && <span className="font-normal text-ink-500"> · {p.company}</span>}
                             </span>
                             {p.next && (
-                              <span className="block text-[12px] text-ink-500">
+                              <span className="block text-[0.75rem] text-ink-500">
                                 {p.next.lot
                                   ? F.nextLot.replace("{lot}", p.next.lot).replace("{date}", p.next.expiresOn ? fmtDateOnly(p.next.expiresOn, "en") : "—")
                                   : F.nextBatch.replace("{date}", p.next.expiresOn ? fmtDateOnly(p.next.expiresOn, "en") : "—")}
                               </span>
                             )}
                           </span>
-                          <span className="shrink-0 text-end text-[12.5px] font-semibold tnum">
+                          <span className="shrink-0 text-end text-[0.78125rem] font-semibold tnum">
                             {p.usable > 0 ? (
                               F.onHand.replace("{n}", productAmount(p.unit, p.usable, "en"))
                             ) : p.expired > 0 ? (
@@ -1025,14 +1025,14 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                             ) : (
                               <span className="text-danger">{F.noneOnHand}</span>
                             )}
-                            {low && <span className="block text-[11px] text-ink-500">{F.low}</span>}
+                            {low && <span className="block text-[length:max(11px,0.6875rem)] text-ink-500">{F.low}</span>}
                           </span>
                         </button>
                       );
                     })}
                   </div>
                 ) : (
-                  <p className="mt-1 text-[13px] text-ink-500">
+                  <p className="mt-1 text-[0.8125rem] text-ink-500">
                     {F.noProductsYet}{" "}
                     {s.canStock && (
                       <Link href={`/c/${s.slug}/stock`} className="font-semibold text-brand-700 hover:underline">
@@ -1043,7 +1043,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                 )}
                 {product && (
                   <div className="mt-2 flex items-center gap-2.5">
-                    <span className="flex-1 text-[13.5px] font-semibold">{F.amountUsed}</span>
+                    <span className="flex-1 text-[0.84375rem] font-semibold">{F.amountUsed}</span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -1053,10 +1053,10 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                       aria-label={F.amountUsed}
                       data-face-qty
                     />
-                    <span className="w-16 shrink-0 text-[12.5px] text-ink-500">{productAmount(product.unit, 2, "en").replace(/^2\s?/, "")}</span>
+                    <span className="w-16 shrink-0 text-[0.78125rem] text-ink-500">{productAmount(product.unit, 2, "en").replace(/^2\s?/, "")}</span>
                   </div>
                 )}
-                {preview?.short && <p className="mt-1 text-[12px] text-ink-500">{F.usedWithout}</p>}
+                {preview?.short && <p className="mt-1 text-[0.75rem] text-ink-500">{F.usedWithout}</p>}
               </div>
 
               {covering && (
@@ -1069,15 +1069,15 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                 >
                   <span className={`h-5 w-5 shrink-0 rounded-[5px] border-2 border-brand-600 ${fromPackage ? "bg-brand-600" : ""}`} aria-hidden />
                   <span className="min-w-0">
-                    <span className="block text-[13.5px] font-semibold">{F.fromPackage.replace("{name}", covering.pkg.name)}</span>
-                    <span className="block text-[12px] text-ink-500">
+                    <span className="block text-[0.84375rem] font-semibold">{F.fromPackage.replace("{name}", covering.pkg.name)}</span>
+                    <span className="block text-[0.75rem] text-ink-500">
                       {F.sessionOf.replace("{n}", String(covering.item.used + 1)).replace("{total}", String(covering.item.sessions))}
                     </span>
                   </span>
                 </button>
               )}
 
-              <label className="grid gap-1 text-[12.5px] font-semibold text-ink-500">
+              <label className="grid gap-1 text-[0.78125rem] font-semibold text-ink-500">
                 {F.doneBy}
                 <Select value={doer} onChange={(e) => setDoer(e.target.value)} data-face-doer>
                   <option value="">{F.noDoctor}</option>
@@ -1089,7 +1089,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                 </Select>
               </label>
 
-              <label className="grid gap-1 text-[12.5px] font-semibold text-ink-500">
+              <label className="grid gap-1 text-[0.78125rem] font-semibold text-ink-500">
                 {F.note}
                 <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={F.notePlaceholder} maxLength={2000} className="min-h-16" data-face-note-input />
               </label>
@@ -1097,8 +1097,8 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
               <div className="grid gap-1.5 rounded-ctl bg-sunken px-3.5 py-3">
                 <div className="flex items-baseline gap-2">
                   <span className="flex-1">
-                    <span className="text-[13.5px] font-semibold">{F.price}</span>
-                    <span className="block text-[12px] text-ink-500 tnum">
+                    <span className="text-[0.84375rem] font-semibold">{F.price}</span>
+                    <span className="block text-[0.75rem] text-ink-500 tnum">
                       {covered && worth != null
                         ? F.worth.replace("{amount}", money(worth))
                         : listPrice
@@ -1107,7 +1107,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                     </span>
                   </span>
                   {covered ? (
-                    <span className="text-[14px] font-bold" data-face-fee="0">
+                    <span className="text-[0.875rem] font-bold" data-face-fee="0">
                       {F.covered}
                     </span>
                   ) : (
@@ -1123,23 +1123,23 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                         className="h-10 w-24 rounded-ctl border border-line-strong bg-surface px-2 text-end text-base font-bold tnum focus:border-brand-600 focus:outline-none md:text-sm"
                         data-face-price-input
                       />
-                      <span className="text-[12.5px] text-ink-500">{s.currency}</span>
+                      <span className="text-[0.78125rem] text-ink-500">{s.currency}</span>
                     </span>
                   )}
                 </div>
                 {s.canStock && preview && (
                   <>
-                    <div className="flex items-baseline gap-2 text-[13px]">
+                    <div className="flex items-baseline gap-2 text-[0.8125rem]">
                       <span className="flex-1">{F.productCost}</span>
                       <span className="font-semibold tnum" data-face-cost={preview.cost}>
                         − {money(preview.cost)}
                       </span>
                     </div>
                     {!covered && fee != null && (
-                      <div className="flex items-baseline gap-2 border-t border-line pt-1.5 text-[13px]">
+                      <div className="flex items-baseline gap-2 border-t border-line pt-1.5 text-[0.8125rem]">
                         <span className="flex-1">
                           {F.leftAfter}
-                          <span className="block text-[11.5px] text-ink-500">{F.leftHint}</span>
+                          <span className="block text-[length:max(11px,0.71875rem)] text-ink-500">{F.leftHint}</span>
                         </span>
                         <span className="font-bold tnum">{money(Math.max(0, fee - preview.cost))}</span>
                       </div>
@@ -1175,10 +1175,10 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             data-face-bar={tr ? "save" : "choose"}
           >
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13.5px] font-semibold">
+              <div className="truncate text-[0.84375rem] font-semibold">
                 {tr ? tr.en : pts.length ? (pts.length === 1 ? F.onePoint : F.points.replace("{n}", String(pts.length))) : F.areas.replace("{n}", String(sel.length))}
               </div>
-              <div className="truncate text-[12px] text-ink-500 tnum">{tr ? (covered ? F.covered : fee != null ? money(fee) : F.noPriceShort) : whereText(sel, "en")}</div>
+              <div className="truncate text-[0.75rem] text-ink-500 tnum">{tr ? (covered ? F.covered : fee != null ? money(fee) : F.noPriceShort) : whereText(sel, "en")}</div>
             </div>
             {tr ? (
               <Button className="min-h-11 shrink-0 px-5" onClick={save} disabled={(!!tr.units && (unitsTotal ?? 0) <= 0) || priceMissing} data-face-bar-save>
@@ -1201,7 +1201,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
       {(s.packages.length > 0 || (s.canSell && s.plans.length > 0)) && (
         <Card className="p-4">
           <div className="flex items-center gap-2">
-            <h3 className="text-[15px] font-semibold">{F.packages}</h3>
+            <h3 className="text-[0.9375rem] font-semibold">{F.packages}</h3>
             {s.canSell && (
               <Button size="sm" variant="outline" className="ms-auto" onClick={() => setSelling(true)} data-face-sell>
                 <PackagePlus className="h-4 w-4" />
@@ -1210,7 +1210,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             )}
           </div>
           {s.packages.length === 0 ? (
-            <p className="mt-1 text-[13px] text-ink-500">{F.noPackages}</p>
+            <p className="mt-1 text-[0.8125rem] text-ink-500">{F.noPackages}</p>
           ) : (
             <ul className="mt-2 grid gap-2.5" data-face-packages={s.packages.length}>
               {s.packages.map((p) => {
@@ -1218,9 +1218,9 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                 return (
                   <li key={p.id} className={`rounded-ctl border border-line px-3 py-2.5 ${p.voided ? "opacity-60" : ""}`} data-face-package={p.id}>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className={`text-[14px] font-semibold ${p.voided ? "line-through" : ""}`}>{p.name}</span>
-                      <span className="text-[12.5px] text-ink-500 tnum">· {money(p.price)}</span>
-                      <span className="ms-auto text-[12px] text-ink-500">
+                      <span className={`text-[0.875rem] font-semibold ${p.voided ? "line-through" : ""}`}>{p.name}</span>
+                      <span className="text-[0.78125rem] text-ink-500 tnum">· {money(p.price)}</span>
+                      <span className="ms-auto text-[0.75rem] text-ink-500">
                         {p.voided
                           ? F.packageVoided
                           : p.expiresOn
@@ -1233,7 +1233,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                         const x = s.catalog.byKey.get(i.treatmentKey);
                         return (
                           <div key={i.id} className="flex items-center gap-2" data-face-package-item={i.id} data-used={i.used}>
-                            <span className="min-w-0 flex-[0_1_12rem] truncate text-[12.5px]">{x?.en ?? i.treatmentKey}</span>
+                            <span className="min-w-0 flex-[0_1_12rem] truncate text-[0.78125rem]">{x?.en ?? i.treatmentKey}</span>
                             {/* A session done, in its treatment's colour; one to come, in the line's. */}
                             <span className="flex min-w-0 flex-1 gap-0.5" aria-hidden>
                               {Array.from({ length: i.sessions }, (_, n) => (
@@ -1244,7 +1244,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                                 />
                               ))}
                             </span>
-                            <span className="shrink-0 text-[12px] text-ink-500 tnum">{F.used.replace("{used}", String(i.used)).replace("{total}", String(i.sessions))}</span>
+                            <span className="shrink-0 text-[0.75rem] text-ink-500 tnum">{F.used.replace("{used}", String(i.used)).replace("{total}", String(i.sessions))}</span>
                           </div>
                         );
                       })}
@@ -1262,9 +1262,9 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
 
       <Card className="p-4">
         <div className="flex items-center gap-2">
-          <h3 className="text-[15px] font-semibold">{F.history}</h3>
+          <h3 className="text-[0.9375rem] font-semibold">{F.history}</h3>
           {voidedCount > 0 && (
-            <button type="button" onClick={() => setShowVoided((v) => !v)} className="ms-auto text-[12.5px] font-semibold text-brand-700 hover:underline">
+            <button type="button" onClick={() => setShowVoided((v) => !v)} className="ms-auto text-[0.78125rem] font-semibold text-brand-700 hover:underline">
               {showVoided ? F.hideVoided : F.showVoided.replace("{n}", String(voidedCount))}
             </button>
           )}
@@ -1274,7 +1274,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
             {shown.map((m) => row(m))}
           </ul>
         ) : (
-          <p className="mt-1 text-[13px] text-ink-500">{F.nothingYet}</p>
+          <p className="mt-1 text-[0.8125rem] text-ink-500">{F.nothingYet}</p>
         )}
       </Card>
 
@@ -1319,10 +1319,10 @@ function VariantPicker({
     setTyping(false);
     onAdded(r.variantId, r.custom, r.variants);
   };
-  const chip = (on: boolean) => `inline-flex min-h-9 items-center rounded-full border px-3 text-[13px] font-semibold ${on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line-strong hover:bg-sunken"}`;
+  const chip = (on: boolean) => `inline-flex min-h-9 items-center rounded-full border px-3 text-[0.8125rem] font-semibold ${on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line-strong hover:bg-sunken"}`;
   return (
     <div data-face-variants>
-      <h4 className="text-[12px] font-semibold uppercase tracking-wide text-ink-500">{F.variant}</h4>
+      <h4 className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500">{F.variant}</h4>
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <button type="button" className={chip(!value)} onClick={() => onChange("")} aria-pressed={!value}>
           {F.variantAny}
@@ -1349,7 +1349,7 @@ function VariantPicker({
             </Button>
           </span>
         ) : (
-          <button type="button" className="inline-flex min-h-9 items-center gap-1 px-2 text-[13px] font-semibold text-brand-700 hover:underline" onClick={() => setTyping(true)} data-face-variant-add>
+          <button type="button" className="inline-flex min-h-9 items-center gap-1 px-2 text-[0.8125rem] font-semibold text-brand-700 hover:underline" onClick={() => setTyping(true)} data-face-variant-add>
             <Plus className="h-3.5 w-3.5" />
             {F.addVariant}
           </button>
@@ -1405,7 +1405,7 @@ function SellPackage({ base, onClose }: { base: string; onClose: () => void }) {
       }
     >
       {s.plans.length === 0 ? (
-        <p className="text-[13px] text-ink-500">
+        <p className="text-[0.8125rem] text-ink-500">
           {F.noPlans}{" "}
           {s.canPrice && (
             <Link href={`/c/${s.slug}/settings/face-packages`} className="font-semibold text-brand-700 hover:underline">
@@ -1428,8 +1428,8 @@ function SellPackage({ base, onClose }: { base: string; onClose: () => void }) {
                 data-face-plan={p.id}
               >
                 <span className="flex items-baseline gap-2">
-                  <span className="min-w-0 flex-1 text-[14px] font-semibold">{p.name}</span>
-                  <span className="text-[14px] font-bold tnum">{fmtMoney(p.price, s.currency, locale)}</span>
+                  <span className="min-w-0 flex-1 text-[0.875rem] font-semibold">{p.name}</span>
+                  <span className="text-[0.875rem] font-bold tnum">{fmtMoney(p.price, s.currency, locale)}</span>
                 </span>
                 <span className="mt-1 flex flex-wrap gap-1.5">
                   {p.items.map((i, n) => {
@@ -1440,7 +1440,7 @@ function SellPackage({ base, onClose }: { base: string; onClose: () => void }) {
               </button>
             );
           })}
-          <label className="mt-1 grid gap-1 text-[12.5px] font-semibold text-ink-500">
+          <label className="mt-1 grid gap-1 text-[0.78125rem] font-semibold text-ink-500">
             {F.note}
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} className="min-h-14" />
           </label>

@@ -523,17 +523,17 @@ export function Shell({
               a marked circle rather than a hole. */}
           <Avatar name={clinic.name} size={30} color={clinic.brandColor} src={logoSrc} fit="contain" />
           <div className="min-w-0 sb-mini:sr-only">
-            <div className="truncate text-[13px] font-semibold leading-tight text-white">
+            <div className="truncate text-[0.8125rem] font-semibold leading-tight text-white">
               {clinicDisplay}
             </div>
-            <div className="text-[11px] text-white/45">Clinicti</div>
+            <div className="text-[length:max(11px,0.6875rem)] text-white/45">Clinicti</div>
           </div>
         </div>
         <div className="px-3 pb-1 sb-mini:px-0">
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="flex h-9 w-full items-center gap-2 rounded-ctl border border-white/10 bg-white/5 px-2.5 text-[13px] text-white/55 transition-colors duration-140 ease-out hover:bg-white/10 hover:text-white sb-mini:mx-auto sb-mini:w-9 sb-mini:justify-center sb-mini:px-0"
+            className="flex h-9 w-full items-center gap-2 rounded-ctl border border-white/10 bg-white/5 px-2.5 text-[0.8125rem] text-white/55 transition-colors duration-140 ease-out hover:bg-white/10 hover:text-white sb-mini:mx-auto sb-mini:w-9 sb-mini:justify-center sb-mini:px-0"
             aria-label={t.search.title}
             onMouseEnter={(e) => showTip(e, t.search.title)}
             onMouseLeave={hideTip}
@@ -576,7 +576,7 @@ export function Shell({
                 <span className="min-w-0 flex-1 truncate sb-mini:sr-only">{t.nav[key]}</span>
                 {!!badge && (
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold tnum sb-mini:absolute sb-mini:-end-1 sb-mini:-top-1 sb-mini:min-w-[18px] sb-mini:px-1 sb-mini:py-0 sb-mini:text-center sb-mini:text-[10px] sb-mini:leading-[18px] sb-mini:ring-2 sb-mini:ring-night ${
+                    className={`rounded-full px-1.5 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold tnum sb-mini:absolute sb-mini:-end-1 sb-mini:-top-1 sb-mini:min-w-[18px] sb-mini:px-1 sb-mini:py-0 sb-mini:text-center sb-mini:text-[10px] sb-mini:leading-[18px] sb-mini:ring-2 sb-mini:ring-night ${
                       active ? "bg-night text-white" : "bg-white/12 text-white sb-mini:bg-white sb-mini:text-night"
                     }`}
                   >
@@ -605,8 +605,8 @@ export function Shell({
           >
             <Avatar name={userName} size={30} color="rgb(255 255 255 / 0.14)" src={photoSrc} />
             <div className="min-w-0 flex-1 sb-mini:sr-only">
-              <div className="truncate text-[13px] font-medium text-white">{userName}</div>
-              <div className="truncate text-[11px] text-white/45">{roleLabel}</div>
+              <div className="truncate text-[0.8125rem] font-medium text-white">{userName}</div>
+              <div className="truncate text-[length:max(11px,0.6875rem)] text-white/45">{roleLabel}</div>
             </div>
           </Link>
           <div className="mt-2 space-y-1 px-1 sb-mini:hidden">
@@ -674,7 +674,7 @@ export function Shell({
       {tip && (
         <div
           role="tooltip"
-          className="pointer-events-none fixed start-[calc(var(--sb)+10px)] z-50 hidden -translate-y-1/2 whitespace-nowrap rounded-ctl bg-night px-2.5 py-1.5 text-[12.5px] font-medium text-white shadow-pop ring-1 ring-white/10 animate-fade-in md:block"
+          className="pointer-events-none fixed start-[calc(var(--sb)+10px)] z-50 hidden -translate-y-1/2 whitespace-nowrap rounded-ctl bg-night px-2.5 py-1.5 text-[0.78125rem] font-medium text-white shadow-pop ring-1 ring-white/10 animate-fade-in md:block"
           style={{ top: tip.y }}
         >
           {tip.label}
@@ -696,7 +696,7 @@ export function Shell({
         */}
         <div className="sticky top-0 z-30 pt-[env(safe-area-inset-top)] max-md:bg-surface/90 max-md:backdrop-blur-md md:pt-0">
           {isImpersonating && (
-            <div className="flex items-center justify-center gap-2 bg-danger px-4 py-2 text-center text-[13px] font-medium text-white">
+            <div className="flex items-center justify-center gap-2 bg-danger px-4 py-2 text-center text-[0.8125rem] font-medium text-white">
               <ShieldAlert className="h-4 w-4 shrink-0" />
               {t.admin.impersonating}
               <form action={exitImpersonationAction}>
@@ -725,7 +725,7 @@ export function Shell({
               className="me-auto flex min-w-0 touch-manipulation items-center gap-2.5"
             >
               <Avatar name={clinic.name} size={32} color={clinic.brandColor} src={logoSrc} fit="contain" />
-              <span className="font-display truncate text-[15px] font-bold text-ink-900">
+              <span className="font-display truncate text-[0.9375rem] font-bold text-ink-900">
                 {clinicDisplay}
               </span>
             </Link>
@@ -784,7 +784,7 @@ export function Shell({
           .map((a) => (
             <div
               key={a.id}
-              className="flex items-center gap-3 border-b border-brand-100 bg-brand-50 px-4 py-2 text-[13px] text-ink-900 md:items-start md:px-8 md:py-2.5"
+              className="flex items-center gap-3 border-b border-brand-100 bg-brand-50 px-4 py-2 text-[0.8125rem] text-ink-900 md:items-start md:px-8 md:py-2.5"
               data-announcement
             >
               <Megaphone className="h-4 w-4 shrink-0 text-brand-500 md:mt-0.5" strokeWidth={1.75} />
@@ -881,7 +881,7 @@ export function Shell({
                       href={href}
                       onClick={() => setMoreOpen(false)}
                       aria-current={active ? "page" : undefined}
-                      className="flex min-w-0 touch-manipulation flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center text-[11.5px] font-medium leading-tight text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
+                      className="flex min-w-0 touch-manipulation flex-col items-center gap-1.5 rounded-xl px-1 py-2 text-center text-[length:max(11px,0.71875rem)] font-medium leading-tight text-ink-700 transition-colors duration-140 ease-out hover:bg-sunken active:bg-sunken"
                     >
                       <span
                         className={`relative grid h-11 w-11 place-items-center rounded-2xl ${
@@ -911,7 +911,7 @@ export function Shell({
               <Avatar name={userName} size={34} src={photoSrc} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{userName}</span>
-                <span className="block text-[12px] text-ink-500">{roleLabel}</span>
+                <span className="block text-[0.75rem] text-ink-500">{roleLabel}</span>
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 rtl:rotate-180" />
             </Link>
@@ -957,7 +957,7 @@ export function Shell({
                 key={key}
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-w-0 touch-manipulation flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] transition-colors duration-140 ease-out ${
+                className={`flex min-w-0 touch-manipulation flex-col items-center gap-0.5 pb-1.5 pt-2 text-[length:max(11px,0.6875rem)] transition-colors duration-140 ease-out ${
                   active ? "font-semibold text-ink-900" : "font-medium text-ink-500"
                 }`}
               >
@@ -989,7 +989,7 @@ export function Shell({
           <button
             onClick={() => setMoreOpen((v) => !v)}
             aria-expanded={moreOpen}
-            className={`flex min-w-0 touch-manipulation flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] transition-colors duration-140 ease-out ${
+            className={`flex min-w-0 touch-manipulation flex-col items-center gap-0.5 pb-1.5 pt-2 text-[length:max(11px,0.6875rem)] transition-colors duration-140 ease-out ${
               moreOpen ? "font-semibold text-ink-900" : "font-medium text-ink-500"
             }`}
           >

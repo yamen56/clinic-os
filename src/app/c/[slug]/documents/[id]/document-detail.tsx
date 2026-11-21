@@ -423,7 +423,7 @@ export function DocumentDetailClient({
                     setOverrideKey(m.key);
                     setOverrideValue("");
                   }}
-                  className="rounded-full border border-st-pending/40 bg-surface px-2.5 py-1 text-[12px] font-medium text-st-pending hover:bg-st-pending-soft"
+                  className="rounded-full border border-st-pending/40 bg-surface px-2.5 py-1 text-[0.75rem] font-medium text-st-pending hover:bg-st-pending-soft"
                 >
                   {m.label}
                 </button>
@@ -431,7 +431,7 @@ export function DocumentDetailClient({
               {doc.patient_id && (
                 <Link
                   href={`/c/${slug}/patients/${doc.patient_id}`}
-                  className="rounded-full bg-st-pending px-2.5 py-1 text-[12px] font-semibold text-surface"
+                  className="rounded-full bg-st-pending px-2.5 py-1 text-[0.75rem] font-semibold text-surface"
                 >
                   {t.docs.fixInPatient}
                 </Link>
@@ -498,7 +498,7 @@ export function DocumentDetailClient({
         <Card className="p-6">
           {doc.source === "upload" ? (
             <div className="grid gap-3">
-              <p className="text-[13px] text-ink-500">{t.docTemplates.uploadSub}</p>
+              <p className="text-[0.8125rem] text-ink-500">{t.docTemplates.uploadSub}</p>
               <a
                 href={`/api/c/${slug}/documents/template-pdf?path=${encodeURIComponent(
                   doc.final_pdf_path ?? ""
@@ -515,7 +515,7 @@ export function DocumentDetailClient({
               <DocumentBody html={detail.previewHtml} className="text-sm leading-relaxed" />
             </div>
           )}
-          <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-[12px] text-ink-400">
+          <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-[0.75rem] text-ink-400">
             {doc.content_hash ? (
               <>
                 <span className="flex items-center gap-1.5">
@@ -547,7 +547,7 @@ export function DocumentDetailClient({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {doc.signing_mode === "sequential" && (
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[11px] font-semibold text-brand-700 tnum">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 tnum">
                           {i + 1}
                         </span>
                       )}
@@ -559,7 +559,7 @@ export function DocumentDetailClient({
                         {(t.docs.signerStatuses as Record<string, string>)[s.status] ?? s.status}
                       </Badge>
                       {!s.is_required && (
-                        <span className="text-[11px] text-ink-400">{t.docs.optionalSigner}</span>
+                        <span className="text-[length:max(11px,0.6875rem)] text-ink-400">{t.docs.optionalSigner}</span>
                       )}
                       {isDue && !isTerminal && s.status !== "signed" && (
                         <Badge status="pending">
@@ -568,7 +568,7 @@ export function DocumentDetailClient({
                         </Badge>
                       )}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-ink-500">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.75rem] text-ink-500">
                       {s.phone_e164 && (
                         <span dir="ltr" className="tnum">
                           {formatPhone(s.phone_e164)}
@@ -669,8 +669,8 @@ export function DocumentDetailClient({
       {tab === "values" && (
         <Card>
           <div className="border-b border-line px-5 py-4">
-            <h2 className="text-[15px] font-semibold">{t.docs.mergedValues}</h2>
-            <p className="mt-0.5 text-[13px] text-ink-500">{t.docs.mergedValuesSub}</p>
+            <h2 className="text-[0.9375rem] font-semibold">{t.docs.mergedValues}</h2>
+            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docs.mergedValuesSub}</p>
           </div>
           <ul className="divide-y divide-line">
             {detail.fields.map((f) => {
@@ -679,7 +679,7 @@ export function DocumentDetailClient({
               return (
                 <li key={f.key} className="px-5 py-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="min-w-32 text-[13px] font-medium">{label}</span>
+                    <span className="min-w-32 text-[0.8125rem] font-medium">{label}</span>
                     {editing ? (
                       <span className="flex flex-1 flex-wrap items-center gap-2">
                         <Input
@@ -745,7 +745,7 @@ export function DocumentDetailClient({
                     )}
                   </div>
                   {!f.value && f.fixHint && (
-                    <p className="mt-1 text-[12px] text-ink-500">
+                    <p className="mt-1 text-[0.75rem] text-ink-500">
                       {f.fixHint === "patient" && doc.patient_id ? (
                         <Link
                           href={`/c/${slug}/patients/${doc.patient_id}`}
@@ -790,12 +790,12 @@ export function DocumentDetailClient({
       {tab === "audit" && (
         <Card>
           <div className="border-b border-line px-5 py-4">
-            <h2 className="text-[15px] font-semibold">{t.docs.auditTrail}</h2>
-            <p className="mt-0.5 text-[13px] text-ink-500">{t.docs.auditSub}</p>
+            <h2 className="text-[0.9375rem] font-semibold">{t.docs.auditTrail}</h2>
+            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docs.auditSub}</p>
           </div>
           <ol className="divide-y divide-line">
             {detail.events.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-2.5 text-[13px]">
+              <li key={e.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-2.5 text-[0.8125rem]">
                 <span className="min-w-44 font-medium">
                   {(t.docs.events as Record<string, string>)[e.event_type] ?? e.event_type}
                 </span>
@@ -819,18 +819,18 @@ export function DocumentDetailClient({
       {/* ----------------------------------------------------------- modals */}
 
       <Modal open={!!linkShown} onClose={() => setLinkShown(null)} title={t.docs.copyLink}>
-        <p className="mb-2 text-[13px] text-ink-500">{t.docs.waOfflineBody}</p>
+        <p className="mb-2 text-[0.8125rem] text-ink-500">{t.docs.waOfflineBody}</p>
         <Input readOnly dir="ltr" value={linkShown ?? ""} onFocus={(e) => e.currentTarget.select()} />
       </Modal>
 
       <Modal open={signOpen} onClose={() => setSignOpen(false)} title={t.docs.countersign} wide>
         <div className="grid gap-4">
-          <p className="text-[13px] text-ink-500">{t.docs.countersignHint}</p>
+          <p className="text-[0.8125rem] text-ink-500">{t.docs.countersignHint}</p>
           <div
             dir={doc.language === "ar" ? "rtl" : "ltr"}
             className="max-h-64 overflow-y-auto rounded-card border border-line bg-subtle p-4"
           >
-            <DocumentBody html={detail.previewHtml} className="text-[13px] leading-relaxed" />
+            <DocumentBody html={detail.previewHtml} className="text-[0.8125rem] leading-relaxed" />
           </div>
 
           {detail.extraQuestions
@@ -870,8 +870,8 @@ export function DocumentDetailClient({
 
           {drawing ? (
             <div>
-              <span className="mb-1.5 block text-[13px] font-semibold">{t.mySignature.draw}</span>
-              <p className="mb-2 text-[12px] text-ink-500">{t.mySignature.firstTime}</p>
+              <span className="mb-1.5 block text-[0.8125rem] font-semibold">{t.mySignature.draw}</span>
+              <p className="mb-2 text-[0.75rem] text-ink-500">{t.mySignature.firstTime}</p>
               <SignaturePad ref={padRef} allowTyped />
               {hasSavedSignature && (
                 <Button variant="ghost" size="sm" className="mt-2" onClick={() => setDrawing(false)}>
@@ -881,7 +881,7 @@ export function DocumentDetailClient({
             </div>
           ) : (
             <div className="rounded-card border border-line bg-subtle p-4">
-              <p className="text-[13px]">{t.docs.signWithSaved}</p>
+              <p className="text-[0.8125rem]">{t.docs.signWithSaved}</p>
               <Button variant="ghost" size="sm" className="mt-1" onClick={() => setDrawing(true)}>
                 {t.mySignature.replace}
               </Button>
@@ -913,7 +913,7 @@ export function DocumentDetailClient({
       </Modal>
 
       <Modal open={declineOpen} onClose={() => setDeclineOpen(false)} title={t.sign.declineTitle}>
-        <p className="mb-3 text-[13px] text-ink-500">{t.sign.declineBody}</p>
+        <p className="mb-3 text-[0.8125rem] text-ink-500">{t.sign.declineBody}</p>
         <Field label={t.sign.declineReason}>
           <Textarea value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} />
         </Field>
@@ -1014,7 +1014,7 @@ export function DocumentDetailClient({
       />
 
       <Modal open={voidOpen} onClose={() => setVoidOpen(false)} title={t.docs.voidTitle}>
-        <p className="mb-3 text-[13px] text-ink-500">{t.docs.voidBody}</p>
+        <p className="mb-3 text-[0.8125rem] text-ink-500">{t.docs.voidBody}</p>
         <Field label={t.docs.voidReason} hint={t.common.optional}>
           <Textarea value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
         </Field>
@@ -1070,8 +1070,8 @@ function Banner({
     <div className={`flex items-start gap-2.5 rounded-card border px-4 py-3 ${tones[tone]}`}>
       <span className="mt-0.5 shrink-0">{icon}</span>
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-semibold">{title}</div>
-        {body && <p className="mt-0.5 text-[12px] leading-relaxed opacity-90">{body}</p>}
+        <div className="text-[0.8125rem] font-semibold">{title}</div>
+        {body && <p className="mt-0.5 text-[0.75rem] leading-relaxed opacity-90">{body}</p>}
         {action}
       </div>
     </div>
@@ -1149,24 +1149,24 @@ function UploadSignedCopy({
   return (
     <Modal open={open} onClose={onClose} title={t.docs.uploadSigned}>
       <div className="grid gap-4">
-        <p className="text-[13px] text-ink-500">{t.docs.uploadSignedBody}</p>
+        <p className="text-[0.8125rem] text-ink-500">{t.docs.uploadSignedBody}</p>
 
         <Field label={t.docs.uploadSignedFile} required>
           <FileField accept=".pdf,application/pdf" onFile={setFile} />
         </Field>
 
         <div>
-          <span className="mb-1.5 block text-[13px] font-medium text-ink-700">
+          <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink-700">
             {t.docs.uploadSignedWho}
           </span>
           <ul className="grid gap-1 rounded-lg border border-line p-2">
             {signers.map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-3 px-1.5 py-1">
-                <span className="min-w-0 flex-1 text-[13px]">
+                <span className="min-w-0 flex-1 text-[0.8125rem]">
                   {s.name}
-                  <span className="ms-2 text-[12px] text-ink-400">{s.role}</span>
+                  <span className="ms-2 text-[0.75rem] text-ink-400">{s.role}</span>
                   {s.declined && (
-                    <span className="ms-2 text-[12px] text-danger">
+                    <span className="ms-2 text-[0.75rem] text-danger">
                       {t.docs.signerStatuses.declined}
                     </span>
                   )}

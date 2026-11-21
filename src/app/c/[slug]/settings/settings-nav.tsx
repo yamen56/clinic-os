@@ -88,7 +88,7 @@ export function SettingsNav({
         if (!inGroup.length) return null;
         return (
           <div key={g} className="flex shrink-0 gap-1 lg:mb-2 lg:flex-col" data-settings-group={g}>
-            <div className="px-3 pb-0.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400 max-lg:hidden">{t.settings.groups[g]}</div>
+            <div className="px-3 pb-0.5 pt-1 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400 max-lg:hidden">{t.settings.groups[g]}</div>
             {inGroup.map((i) => {
               const active = i.href === base ? current === base : current.startsWith(i.href);
               return (

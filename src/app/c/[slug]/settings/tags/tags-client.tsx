@@ -78,12 +78,12 @@ export function TagsClient({ slug, tags }: { slug: string; tags: Tag[] }) {
             {tags.map((tag) => (
               <li key={tag.id} className="flex items-center gap-3 px-5 py-3">
                 <span
-                  className="inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[12px] font-medium text-white"
+                  className="inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[0.75rem] font-medium text-white"
                   style={{ background: tag.color }}
                 >
                   {tag.name}
                 </span>
-                <span className="min-w-0 flex-1 text-[12px] text-ink-500">
+                <span className="min-w-0 flex-1 text-[0.75rem] text-ink-500">
                   {tag.used > 0
                     ? t.tags.inUse.replace("{n}", String(tag.used))
                     : t.tags.unused}
@@ -128,7 +128,7 @@ export function TagsClient({ slug, tags }: { slug: string; tags: Tag[] }) {
             </Field>
 
             <div>
-              <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{t.tags.color}</span>
+              <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink-700">{t.tags.color}</span>
               <div className="flex flex-wrap gap-2">
                 {SWATCHES.map((c) => (
                   <button
@@ -150,7 +150,7 @@ export function TagsClient({ slug, tags }: { slug: string; tags: Tag[] }) {
             {/* A preview, because a colour swatch and a filled pill read differently. */}
             <div className="rounded-lg bg-sunken p-3">
               <span
-                className="inline-flex items-center rounded-full px-2.5 py-1 text-[12px] font-medium text-white"
+                className="inline-flex items-center rounded-full px-2.5 py-1 text-[0.75rem] font-medium text-white"
                 style={{ background: editing.color ?? SWATCHES[0] }}
               >
                 {(editing.name ?? "").trim() || t.tags.tagName}
@@ -158,7 +158,7 @@ export function TagsClient({ slug, tags }: { slug: string; tags: Tag[] }) {
             </div>
 
             {editing.id && (editing as Tag).used > 0 && (
-              <p className="text-[12px] text-ink-500">{t.tags.renameHint}</p>
+              <p className="text-[0.75rem] text-ink-500">{t.tags.renameHint}</p>
             )}
 
             <div className="flex justify-end gap-2">

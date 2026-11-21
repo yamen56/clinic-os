@@ -100,11 +100,11 @@ function Chip({
       >
         <TreatmentGlyph tr={tr} paint={tr.kind === "finding" ? "finding" : paint} context={context} size={compact ? 26 : big ? 42 : 34} />
         <span className="min-w-0">
-          <span className={`block font-semibold leading-tight text-ink-900 ${compact ? "truncate text-[13px]" : "line-clamp-2 text-[13px]"}`}>
+          <span className={`block font-semibold leading-tight text-ink-900 ${compact ? "truncate text-[0.8125rem]" : "line-clamp-2 text-[0.8125rem]"}`}>
             {treatmentLabel(tr, locale)}
           </span>
           {!compact && treatmentSubLabel(tr, locale) && (
-            <span className="mt-0.5 block truncate text-[11px] leading-tight text-ink-500">{treatmentSubLabel(tr, locale)}</span>
+            <span className="mt-0.5 block truncate text-[length:max(11px,0.6875rem)] leading-tight text-ink-500">{treatmentSubLabel(tr, locale)}</span>
           )}
         </span>
       </button>
@@ -230,7 +230,7 @@ export function TreatmentPicker({
         <>
           {favRow.length > 0 && (
             <section>
-              <h4 className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-ink-500">
+              <h4 className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-500">
                 <Star className="h-3.5 w-3.5 text-warning" fill="currentColor" />
                 {T.favourites}
               </h4>
@@ -239,7 +239,7 @@ export function TreatmentPicker({
           )}
           {recentRow.length > 0 && (
             <section>
-              <h4 className="mb-1.5 text-[12px] font-semibold text-ink-500">{T.recent}</h4>
+              <h4 className="mb-1.5 text-[0.75rem] font-semibold text-ink-500">{T.recent}</h4>
               <div className={recentCols}>{recentRow.map((tr) => chip(tr, true))}</div>
             </section>
           )}
@@ -253,7 +253,7 @@ export function TreatmentPicker({
                   role="tab"
                   aria-selected={kind === k}
                   onClick={() => setKind(k)}
-                  className={`h-8 rounded-[6px] px-3 text-[13px] font-semibold transition-colors duration-140 ${
+                  className={`h-8 rounded-[6px] px-3 text-[0.8125rem] font-semibold transition-colors duration-140 ${
                     kind === k ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
                   }`}
                 >
@@ -270,7 +270,7 @@ export function TreatmentPicker({
                     key={c}
                     type="button"
                     onClick={() => setCat(c)}
-                    className={`h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-semibold transition-colors duration-140 ${
+                    className={`h-8 shrink-0 rounded-full border px-3 text-[0.78125rem] font-semibold transition-colors duration-140 ${
                       activeCat === c ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                     }`}
                   >
@@ -287,7 +287,7 @@ export function TreatmentPicker({
       <button
         type="button"
         onClick={onAddCustom}
-        className="flex h-10 items-center justify-center gap-2 rounded-ctl border border-dashed border-line-strong text-[13px] font-semibold text-ink-700 transition-colors hover:bg-sunken"
+        className="flex h-10 items-center justify-center gap-2 rounded-ctl border border-dashed border-line-strong text-[0.8125rem] font-semibold text-ink-700 transition-colors hover:bg-sunken"
       >
         <Plus className="h-4 w-4" />
         {T.addCustom}

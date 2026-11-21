@@ -153,7 +153,7 @@ export function WhatsappClient({
                 <div className="text-lg font-semibold tnum" dir="ltr">
                   {st.phone_number}
                 </div>
-                <div className="text-[13px] text-ink-500">
+                <div className="text-[0.8125rem] text-ink-500">
                   {st.display_name ? `${st.display_name} · ` : ""}
                   {t.wa.lastSeen}:{" "}
                   {st.last_seen_at ? fmtRelative(st.last_seen_at, locale) : "—"}
@@ -187,7 +187,7 @@ export function WhatsappClient({
           ) : (
             <div className="flex flex-col items-center gap-4 py-6 text-center">
               <MessageCircle className="h-10 w-10 text-ink-300" />
-              {st.error && <p className="text-[13px] text-danger">{st.error}</p>}
+              {st.error && <p className="text-[0.8125rem] text-danger">{st.error}</p>}
               {canEdit && (
                 <Button size="lg" onClick={() => control("connect")} loading={pending}>
                   {t.wa.connect}
@@ -206,7 +206,7 @@ export function WhatsappClient({
               <div>
                 <label
                   htmlFor="daily-cap"
-                  className="mb-1 block text-[12px] text-ink-500"
+                  className="mb-1 block text-[0.75rem] text-ink-500"
                 >
                   {t.wa.dailyCap}
                 </label>
@@ -228,7 +228,7 @@ export function WhatsappClient({
                 )}
               </div>
               <div>
-                <div className="text-[12px] text-ink-500">{t.wa.sentToday}</div>
+                <div className="text-[0.75rem] text-ink-500">{t.wa.sentToday}</div>
                 <div className="font-semibold tnum">{st.outbound_today}</div>
               </div>
               <div className="flex items-center gap-2 pb-1.5 text-brand-700">
@@ -242,7 +242,7 @@ export function WhatsappClient({
               not a business API: volume to people who never wrote first is what
               gets numbers banned, and a banned number cannot be appealed.
             */}
-            <p className="mt-3 max-w-prose rounded-lg bg-sunken p-3 text-[13px] text-ink-700">
+            <p className="mt-3 max-w-prose rounded-lg bg-sunken p-3 text-[0.8125rem] text-ink-700">
               {t.wa.capWarning}
             </p>
           </div>

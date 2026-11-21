@@ -106,8 +106,8 @@ export default async function DefaultsPage() {
                         )}
                         {!r.active && <Badge status="cancelled">hidden</Badge>}
                       </div>
-                      <p className="mt-0.5 text-[13px] text-ink-500">{r.description}</p>
-                      <div className="mt-1 text-[12px] text-ink-400 tnum">
+                      <p className="mt-0.5 text-[0.8125rem] text-ink-500">{r.description}</p>
+                      <div className="mt-1 text-[0.75rem] text-ink-400 tnum">
                         {steps} step{steps === 1 ? "" : "s"}
                         {u ? ` · in ${u.clinics} clinics, ${u.enabled} enabled` : " · not yet used"}
                       </div>
@@ -138,7 +138,7 @@ export default async function DefaultsPage() {
             </Card>
           </div>
 
-          <p className="mt-4 text-[13px] text-ink-500">
+          <p className="mt-4 text-[0.8125rem] text-ink-500">
             Edit these in <code className="rounded bg-ink-900/5 px-1.5 py-0.5">scripts/seed-recipes.ts</code>, then run{" "}
             <code className="rounded bg-ink-900/5 px-1.5 py-0.5">npm run seed:recipes</code>. Existing clinics keep their
             own copies untouched.

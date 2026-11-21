@@ -54,7 +54,7 @@ export function TodoCard({ slug, rows, canOpenPatient }: { slug: string; rows: T
                 <div dir="auto" className="text-sm font-medium">
                   {r.title}
                 </div>
-                <div className="flex flex-wrap gap-x-2 text-[12.5px] text-ink-500">
+                <div className="flex flex-wrap gap-x-2 text-[0.78125rem] text-ink-500">
                   {r.body && <span dir="auto">{r.body}</span>}
                   {r.patient_id && r.patient_name && canOpenPatient && (
                     <Link href={`/c/${slug}/patients/${r.patient_id}`} className="font-semibold text-brand-700 hover:underline">
@@ -67,7 +67,7 @@ export function TodoCard({ slug, rows, canOpenPatient }: { slug: string; rows: T
               <button
                 type="button"
                 onClick={() => void done(r.id)}
-                className="inline-flex h-9 shrink-0 touch-manipulation items-center gap-1 rounded-full border border-line-strong px-3 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+                className="inline-flex h-9 shrink-0 touch-manipulation items-center gap-1 rounded-full border border-line-strong px-3 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
                 data-todo-done
               >
                 <Check className="h-3.5 w-3.5" />

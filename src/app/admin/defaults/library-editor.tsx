@@ -100,7 +100,7 @@ export function LibraryEditor({ entries, locale }: { entries: Entry[]; locale: L
                     <Badge status="neutral">{t.signerRoles.inUse.replace("{n}", String(e.copies))}</Badge>
                   )}
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px] text-ink-400">
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[0.75rem] text-ink-400">
                   <code className="mono" dir="ltr">
                     {e.key}
                   </code>
@@ -211,7 +211,7 @@ export function LibraryEditor({ entries, locale }: { entries: Entry[]; locale: L
                 />
               </Field>
               <label className="flex items-end justify-between gap-3 pb-1">
-                <span className="text-[13px] font-medium">{t.docTemplates.active}</span>
+                <span className="text-[0.8125rem] font-medium">{t.docTemplates.active}</span>
                 <Toggle
                   checked={editing.active !== false}
                   onChange={(v) => setEditing({ ...editing, active: v })}

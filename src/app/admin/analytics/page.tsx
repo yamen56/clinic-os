@@ -262,7 +262,7 @@ export default async function AnalyticsPage({
                 key={r}
                 href={`/admin/analytics?range=${r}`}
                 prefetch
-                className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors ${
+                className={`rounded-full px-3 py-1 text-[0.75rem] font-medium transition-colors ${
                   r === range ? "bg-brand-600 text-on-brand" : "text-ink-500 hover:text-ink-900"
                 }`}
               >
@@ -280,7 +280,7 @@ export default async function AnalyticsPage({
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-6">
             {tiles.map((s, i) => (
               <Card key={i} className="p-4">
-                <div className="flex items-center gap-1.5 text-[13px] text-ink-500">
+                <div className="flex items-center gap-1.5 text-[0.8125rem] text-ink-500">
                   {s.icon}
                   <span className="truncate">{s.label}</span>
                 </div>
@@ -322,7 +322,7 @@ export default async function AnalyticsPage({
             <div className="overflow-x-auto">
               <table className="w-full min-w-[56rem] text-sm">
                 <thead>
-                  <tr className="border-b border-line text-[12px] uppercase tracking-wide text-ink-400">
+                  <tr className="border-b border-line text-[0.75rem] uppercase tracking-wide text-ink-400">
                     <th className="px-5 py-2 text-start font-semibold">{t.admin.clinics}</th>
                     <th className="px-3 py-2 text-end font-semibold">{t.admin.colPatients}</th>
                     <th className="px-3 py-2 text-end font-semibold">{t.admin.colAppointments}</th>
@@ -364,7 +364,7 @@ export default async function AnalyticsPage({
                           </td>
                         ))}
                         <td className="px-3 py-2.5 text-end tnum">{num(cl.invoiced)}</td>
-                        <td className="px-5 py-2.5 text-[13px]" suppressHydrationWarning>
+                        <td className="px-5 py-2.5 text-[0.8125rem]" suppressHydrationWarning>
                           {cl.last_activity ? (
                             quiet !== null && quiet >= 14 ? (
                               <Badge status="pending">
@@ -393,7 +393,7 @@ export default async function AnalyticsPage({
                 <Sparkles className="h-4 w-4 text-chart" />
                 {t.admin.aiCost}
               </div>
-              <p className="mb-3 text-[12px] text-ink-400">{t.admin.aiCostSub}</p>
+              <p className="mb-3 text-[0.75rem] text-ink-400">{t.admin.aiCostSub}</p>
               <div className="mb-3 text-2xl font-semibold tnum">{num(totals.ai_tokens)}</div>
               <BarChart data={points("ai_tokens")} locale={intl} />
               {clinics.some((c) => Number(c.ai_tokens) > 0) && (
@@ -403,7 +403,7 @@ export default async function AnalyticsPage({
                     .sort((a, b) => Number(b.ai_tokens) - Number(a.ai_tokens))
                     .slice(0, 5)
                     .map((c) => (
-                      <li key={c.id} className="flex items-center justify-between gap-3 text-[13px]">
+                      <li key={c.id} className="flex items-center justify-between gap-3 text-[0.8125rem]">
                         <span className="min-w-0 truncate text-ink-700">{c.name_ar || c.name}</span>
                         <span className="tnum text-ink-500">{num(c.ai_tokens)}</span>
                       </li>
@@ -431,7 +431,7 @@ export default async function AnalyticsPage({
                         // To the clinic's page, not into it: the workspace opens only
                         // through a support visit, which asks why.
                         href={`/admin/clinics/${cl.slug}`}
-                        className="min-w-32 flex-1 truncate text-[13px] font-medium hover:text-brand-700"
+                        className="min-w-32 flex-1 truncate text-[0.8125rem] font-medium hover:text-brand-700"
                       >
                         {cl.name_ar || cl.name}
                       </Link>
@@ -464,7 +464,7 @@ export default async function AnalyticsPage({
                   const used = Number(cl.outbound_today ?? 0);
                   return (
                     <li key={cl.id} className="flex flex-wrap items-center gap-3 px-5 py-2.5">
-                      <span className="min-w-32 flex-1 truncate text-[13px]">
+                      <span className="min-w-32 flex-1 truncate text-[0.8125rem]">
                         {cl.name_ar || cl.name}
                       </span>
                       {/* Dot and word. State is never colour alone. */}
@@ -472,7 +472,7 @@ export default async function AnalyticsPage({
                         {cl.wa_status === "connected" ? t.admin.connected : t.admin.disconnected}
                       </Badge>
                       <span className="w-24">
-                        <span className="mb-0.5 block text-end text-[11px] tnum text-ink-400">
+                        <span className="mb-0.5 block text-end text-[length:max(11px,0.6875rem)] tnum text-ink-400">
                           {used}/{cap}
                         </span>
                         <RowBar value={used} max={cap} />

@@ -203,7 +203,7 @@ function BackToRecord({ tab }: { tab: string }) {
           store.goTab("overview");
           store.openSheet(appointmentId);
         }}
-        className="inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full border border-line-strong bg-surface px-4 text-[14px] font-semibold text-ink-900 hover:bg-sunken"
+        className="inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full border border-line-strong bg-surface px-4 text-[0.875rem] font-semibold text-ink-900 hover:bg-sunken"
       >
         <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
         {t.treatment.backToRecord}
@@ -732,7 +732,7 @@ export function PatientProfile(props: {
             <MedicalAlerts history={medical} />
             <SaveIndicator state={state} />
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-500">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem] text-ink-500">
             {p.file_no != null && (
               <span className="font-semibold text-ink-700 tnum" data-file-no={p.file_no}>
                 {t.devices.fileNo.replace("{n}", String(p.file_no))}
@@ -906,7 +906,7 @@ export function PatientProfile(props: {
                 <PatientMedical tz={tz} history={medical} onSave={saveMedical} />
               </div>
               <Card className="p-5 max-lg:order-5">
-                <h3 className="mb-4 text-[15px] font-semibold">{t.patients.overview.details}</h3>
+                <h3 className="mb-4 text-[0.9375rem] font-semibold">{t.patients.overview.details}</h3>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={defLabel("patient.phone", t.patients.phone)}>
                     <PhoneInput
@@ -960,7 +960,7 @@ export function PatientProfile(props: {
                 </div>
                 {extraDefs.length > 0 && (
                   <>
-                    <h4 className="mb-3 mt-6 text-[13px] font-semibold text-ink-500">
+                    <h4 className="mb-3 mt-6 text-[0.8125rem] font-semibold text-ink-500">
                       {t.patients.overview.customFields}
                     </h4>
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -1045,7 +1045,7 @@ export function PatientProfile(props: {
                   opens, and who typed the patient in is not part of that
                   (Yamen, 2026-10-13).
                 */}
-                <p className="mt-5 border-t border-line pt-3 text-[12px] text-ink-400" data-added-by={p.added_by ? "person" : p.source}>
+                <p className="mt-5 border-t border-line pt-3 text-[0.75rem] text-ink-400" data-added-by={p.added_by ? "person" : p.source}>
                   {p.added_by
                     ? (p.source === "import" ? t.patients.importedBy : t.patients.addedBy).replace("{name}", addedByLabel(p.added_by, t))
                     : (t.patients.sources as Record<string, string>)[p.source] ?? p.source}{" "}
@@ -1080,7 +1080,7 @@ export function PatientProfile(props: {
                 </div>
               )}
               <Card className="p-5 max-lg:order-2">
-                <h3 className="mb-3 text-[15px] font-semibold">{t.patients.overview.summary}</h3>
+                <h3 className="mb-3 text-[0.9375rem] font-semibold">{t.patients.overview.summary}</h3>
                 <Textarea
                   defaultValue={p.notes_summary}
                   placeholder={t.patients.overview.summaryPlaceholder}
@@ -1115,10 +1115,10 @@ export function PatientProfile(props: {
                     onChange={(v) => set({ automation_opt_out: !v })}
                   />
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-[13px] font-semibold text-ink-500">
+                    <h3 className="text-[0.8125rem] font-semibold text-ink-500">
                       {t.patients.automations.title}
                     </h3>
-                    <p className="mt-1 text-[13px] text-ink-500">
+                    <p className="mt-1 text-[0.8125rem] text-ink-500">
                       {p.automation_opt_out
                         ? t.patients.automations.offHint
                         : t.patients.automations.onHint}
@@ -1132,7 +1132,7 @@ export function PatientProfile(props: {
                   and it reads as fact. */}
               {caps.invoices && (
                 <Card className="p-5 max-lg:order-3">
-                  <h3 className="text-[13px] font-semibold text-ink-500">{t.patients.overview.balanceDue}</h3>
+                  <h3 className="text-[0.8125rem] font-semibold text-ink-500">{t.patients.overview.balanceDue}</h3>
                   <div className={`mt-1 text-2xl font-semibold tnum ${props.balanceDue > 0 ? "text-st-pending" : ""}`}>
                     {fmtMoney(props.balanceDue, currency, locale)}
                   </div>
@@ -1145,13 +1145,13 @@ export function PatientProfile(props: {
               )}
               {caps.calendar && (
                 <Card className="p-5 max-lg:order-4">
-                  <h3 className="text-[13px] font-semibold text-ink-500">{t.patients.overview.upcoming}</h3>
+                  <h3 className="text-[0.8125rem] font-semibold text-ink-500">{t.patients.overview.upcoming}</h3>
                   {upcoming ? (
                     <div className="spine mt-2 ps-3" style={{ "--spine-color": "var(--color-st-confirmed)" } as React.CSSProperties}>
                       <div className="text-sm font-medium">
                         {(locale === "ar" ? upcoming.service_name_ar : null) || upcoming.service_name || "—"}
                       </div>
-                      <div className="text-[13px] text-ink-500">
+                      <div className="text-[0.8125rem] text-ink-500">
                         {fmtDateTime(upcoming.starts_at, tz, locale)}
                         {upcoming.doctor_name ? ` · ${upcoming.doctor_name}` : ""}
                       </div>
@@ -1169,13 +1169,13 @@ export function PatientProfile(props: {
                 </Card>
               )}
               <Card className="p-5 max-lg:order-8">
-                <h3 className="mb-2 text-[13px] font-semibold text-ink-500">
+                <h3 className="mb-2 text-[0.8125rem] font-semibold text-ink-500">
                   {t.patients.overview.recentActivity}
                 </h3>
                 {props.activity.length === 0 ? (
                   <p className="text-sm text-ink-400">{t.patients.overview.noActivity}</p>
                 ) : (
-                  <ul className="grid gap-2.5 text-[13px]" data-activity>
+                  <ul className="grid gap-2.5 text-[0.8125rem]" data-activity>
                     {foldActivity(props.activity, 8).map((a, i) => (
                       <li key={i} className="flex justify-between gap-3">
                         <span className="min-w-0">
@@ -1185,9 +1185,9 @@ export function PatientProfile(props: {
                               <span className="ms-1.5 text-ink-400 tnum">{t.patients.overview.activity.times.replace("{n}", String(a.count))}</span>
                             )}
                           </span>
-                          {a.actor && <span className="block truncate text-[12px] text-ink-400">{a.actor}</span>}
+                          {a.actor && <span className="block truncate text-[0.75rem] text-ink-400">{a.actor}</span>}
                         </span>
-                        <span className="shrink-0 text-[12px] text-ink-400" suppressHydrationWarning>
+                        <span className="shrink-0 text-[0.75rem] text-ink-400" suppressHydrationWarning>
                           {fmtRelative(a.at, locale)}
                         </span>
                       </li>
@@ -1366,7 +1366,7 @@ export function PatientProfile(props: {
                           <span className="block truncate text-sm font-medium" dir="auto">
                             {name ?? <span dir="ltr">{inv.number}</span>}
                           </span>
-                          <span className="block truncate text-[12px] text-ink-400">
+                          <span className="block truncate text-[0.75rem] text-ink-400">
                             {name && <span dir="ltr" className="tnum">{inv.number}</span>}
                             {name && " · "}
                             {fmtDate(inv.created_at, tz, locale)}
@@ -1384,7 +1384,7 @@ export function PatientProfile(props: {
                             )}
                           </span>
                           {partial && (
-                            <span className="block text-[12px] text-ink-400 tnum">
+                            <span className="block text-[0.75rem] text-ink-400 tnum">
                               {t.invoices.ofTotal.replace(
                                 "{total}",
                                 fmtMoney(Number(inv.total), currency, locale)
@@ -1407,7 +1407,7 @@ export function PatientProfile(props: {
                             {(t.invoices.statuses as Record<string, string>)[inv.status] ?? inv.status}
                           </Badge>
                           {partial && (
-                            <span className="mt-0.5 block text-[12px] font-medium text-st-pending tnum">
+                            <span className="mt-0.5 block text-[0.75rem] font-medium text-st-pending tnum">
                               {t.invoices.leftToPay.replace(
                                 "{amount}",
                                 fmtMoney(left, currency, locale)
@@ -1483,7 +1483,7 @@ export function PatientProfile(props: {
                           <div
                             /* The meta line sits on a solid brand bubble for an
                                outbound message, where ink-400 is unreadable. */
-                            className={`mt-0.5 text-[11px] ${
+                            className={`mt-0.5 text-[length:max(11px,0.6875rem)] ${
                               out && m.sender_kind !== "ai" ? "text-white/70" : "text-ink-400"
                             }`}
                           >
@@ -1701,11 +1701,11 @@ function VisitPicker({
   return (
     <label className="flex min-w-0 items-center gap-1.5">
       <CalendarPlus className="h-3.5 w-3.5 shrink-0 text-ink-400" />
-      <span className="shrink-0 text-[12px] text-ink-500">{labels.about}</span>
+      <span className="shrink-0 text-[0.75rem] text-ink-500">{labels.about}</span>
       <Select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
-        className="!h-8 max-w-64 !text-[13px]"
+        className="!h-8 max-w-64 !text-[0.8125rem]"
       >
         <option value="">{labels.none}</option>
         {visits.map((v) => (
@@ -1974,7 +1974,7 @@ function NotesTab({
           <Filter className="h-3.5 w-3.5 shrink-0 text-ink-400" />
           <button
             onClick={() => setFilter(null)}
-            className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+            className={`rounded-full border px-3 py-1 text-[0.75rem] font-medium transition-colors ${
               filter === null ? "border-ink-900 bg-ink-900 text-surface" : "border-line-strong text-ink-500"
             }`}
           >
@@ -1984,7 +1984,7 @@ function NotesTab({
           {others.length > 0 && notes.length > 0 && (
             <button
               onClick={() => setFilter(filter === "src:here" ? null : "src:here")}
-              className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+              className={`rounded-full border px-3 py-1 text-[0.75rem] font-medium transition-colors ${
                 filter === "src:here" ? "border-ink-900 bg-ink-900 text-surface" : "border-line-strong text-ink-500"
               }`}
               data-notes-source="here"
@@ -2004,7 +2004,7 @@ function NotesTab({
                 <button
                   key={c.id}
                   onClick={() => setFilter(on ? null : `cat:${c.id}`)}
-                  className="rounded-full border px-3 py-1 text-[12px] font-medium transition-colors"
+                  className="rounded-full border px-3 py-1 text-[0.75rem] font-medium transition-colors"
                   style={
                     on
                       ? { background: c.color, borderColor: c.color, color: inkOn(c.color) }
@@ -2023,7 +2023,7 @@ function NotesTab({
               <button
                 key={s}
                 onClick={() => setFilter(on ? null : `src:${s}`)}
-                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[0.75rem] font-medium transition-colors ${
                   on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line-strong text-ink-500"
                 }`}
                 data-notes-source={s}
@@ -2115,7 +2115,7 @@ function NotesTab({
           </Button>
         </div>
 
-        <p className="mt-3 text-[13px] text-ink-500">{t.patients.notes.categoryDeleteHint}</p>
+        <p className="mt-3 text-[0.8125rem] text-ink-500">{t.patients.notes.categoryDeleteHint}</p>
       </Modal>
 
       <ConfirmDialog
@@ -2219,10 +2219,10 @@ function NoteItem({
 
   return (
     <Card className="p-4">
-      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink-400">
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-[0.75rem] text-ink-400">
         <span className="flex flex-wrap items-center gap-1.5">
           <span
-            className="inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold"
+            className="inline-flex h-5 items-center rounded-full px-2 text-[length:max(11px,0.6875rem)] font-semibold"
             style={{ color: category?.color ?? "var(--color-ink-500)", background: "var(--color-sunken)" }}
           >
             {catName(category)}
@@ -2248,7 +2248,7 @@ function NoteItem({
             somewhere adjacent is worse than a label that goes nowhere.
           */}
           {note.appointment_id && note.appointment_starts_at && (
-            <span className="inline-flex h-5 items-center gap-1 rounded-full bg-brand-50 px-2 text-[11px] font-medium text-brand-700">
+            <span className="inline-flex h-5 items-center gap-1 rounded-full bg-brand-50 px-2 text-[length:max(11px,0.6875rem)] font-medium text-brand-700">
               <CalendarPlus className="h-3 w-3" />
               {visitLabel(
                 {
@@ -2277,7 +2277,7 @@ function NoteItem({
               happens. Label and accessible name should be the same string. */}
           <button
             onClick={openEdit}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[0.75rem] font-medium text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
           >
             <Pencil className="h-3.5 w-3.5" />
             {t.common.edit}
@@ -2298,10 +2298,10 @@ function NoteItem({
         lines — a list of findings collapses into a paragraph without it.
       */}
       {note.body ? (
-        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-900">{note.body}</p>
+        <p className="whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-ink-900">{note.body}</p>
       ) : (
         note.audio_path && (
-          <p className="text-[13px] italic text-ink-400">{t.patients.notes.voicePlaceholder}</p>
+          <p className="text-[0.8125rem] italic text-ink-400">{t.patients.notes.voicePlaceholder}</p>
         )
       )}
 
@@ -2357,7 +2357,7 @@ function NoteItem({
           {/* Says what this dialog does not touch, because a recording is the
               one part of a note nobody can retype. */}
           {note.audio_path && (
-            <p className="text-[12px] text-ink-500">{t.patients.notes.voiceKept}</p>
+            <p className="text-[0.75rem] text-ink-500">{t.patients.notes.voiceKept}</p>
           )}
         </div>
       </Modal>
@@ -2373,14 +2373,14 @@ function NoteItem({
           <ol className="grid gap-3">
             {history.map((v, i) => (
               <li key={v.id} className="rounded-lg border border-line p-3">
-                <div className="mb-1 flex items-center gap-2 text-[12px] text-ink-400">
+                <div className="mb-1 flex items-center gap-2 text-[0.75rem] text-ink-400">
                   <Badge status={i === 0 ? "brand" : "neutral"}>
                     {i === 0 ? t.patients.notes.original : `${t.patients.notes.version} ${i + 1}`}
                   </Badge>
                   {v.author ? `${v.author} · ` : ""}
                   {fmtDateTime(v.created_at, tz, locale)}
                 </div>
-                <p className="whitespace-pre-wrap text-[13px] text-ink-900">
+                <p className="whitespace-pre-wrap text-[0.8125rem] text-ink-900">
                   {v.body || <span className="text-ink-400">{t.patients.notes.emptyVersion}</span>}
                 </p>
               </li>
@@ -2474,7 +2474,7 @@ function DocumentsTab({
                       {(t.docs.statuses as Record<string, string>)[d.status] ?? d.status}
                     </Badge>
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[12px] text-ink-500">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[0.75rem] text-ink-500">
                     {d.waiting_on && !["completed", "voided"].includes(d.status) && (
                       <span className="text-st-pending">
                         {t.docs.waitingOnN.replace("{name}", d.waiting_on)}
@@ -2556,7 +2556,7 @@ function MergeModal({
 
   return (
     <Modal open={open} onClose={onClose} title={t.patients.merge.title}>
-      <p className="mb-4 text-[13px] text-ink-500">{t.patients.merge.hint}</p>
+      <p className="mb-4 text-[0.8125rem] text-ink-500">{t.patients.merge.hint}</p>
       <Field label={t.patients.merge.searchOther}>
         <Input value={q} onChange={(e) => search(e.target.value)} placeholder={t.patients.searchPlaceholder} />
       </Field>
@@ -2572,7 +2572,7 @@ function MergeModal({
             <Avatar name={r.full_name} size={28} />
             <span className="flex-1">{r.full_name}</span>
             {r.phone_e164 && (
-              <span dir="ltr" className="text-[12px] text-ink-400 tnum">
+              <span dir="ltr" className="text-[0.75rem] text-ink-400 tnum">
                 {formatPhone(r.phone_e164)}
               </span>
             )}

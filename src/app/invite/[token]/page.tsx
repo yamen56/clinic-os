@@ -79,7 +79,7 @@ export default async function InvitePage({
           </Link>
           <Link
             href="/forgot"
-            className="mt-4 inline-block text-[13px] text-ink-500 underline underline-offset-4 hover:text-ink-900"
+            className="mt-4 inline-block text-[0.8125rem] text-ink-500 underline underline-offset-4 hover:text-ink-900"
           >
             {t.auth.forgotPassword}
           </Link>

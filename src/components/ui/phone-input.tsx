@@ -153,7 +153,7 @@ export function PhoneInput({
   const hint = country === defaultCountry && placeholder !== undefined ? placeholder : (EXAMPLE[country] ?? "");
   const lg = size === "lg";
   const box = lg
-    ? "h-12 rounded-xl border border-line-strong bg-surface text-[16px] focus-within:border-[var(--bk-text,var(--color-brand-600))]"
+    ? "h-12 rounded-xl border border-line-strong bg-surface text-[1rem] focus-within:border-[var(--bk-text,var(--color-brand-600))]"
     : "h-10 rounded-ctl border border-line bg-surface text-base md:text-sm hover:border-line-strong focus-within:border-brand-600";
 
   return (
@@ -164,7 +164,7 @@ export function PhoneInput({
         phone's native picker is good at.
       */}
       <div className={`relative flex shrink-0 items-center gap-1.5 px-2.5 text-ink-900 ${box} ${disabled ? "bg-subtle opacity-70" : ""}`}>
-        <span aria-hidden className="text-[18px] leading-none">{current.flag}</span>
+        <span aria-hidden className="text-[1.125rem] leading-none">{current.flag}</span>
         <span aria-hidden className="num font-medium tabular-nums">+{current.cc}</span>
         <ChevronDown aria-hidden className="h-3.5 w-3.5 text-ink-400" />
         <select

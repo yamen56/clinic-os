@@ -211,13 +211,13 @@ export function DentalPrices({
       <Card className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-[17px] font-semibold">{S.title}</h2>
-            <p className="mt-1 max-w-2xl text-[13px] text-ink-500">{S.sub}</p>
+            <h2 className="text-[1.0625rem] font-semibold">{S.title}</h2>
+            <p className="mt-1 max-w-2xl text-[0.8125rem] text-ink-500">{S.sub}</p>
           </div>
-          <span className="rounded-full bg-sunken px-2.5 py-1 text-[12px] font-semibold text-ink-500 tnum">{S.count.replace("{n}", String(priced))}</span>
+          <span className="rounded-full bg-sunken px-2.5 py-1 text-[0.75rem] font-semibold text-ink-500 tnum">{S.count.replace("{n}", String(priced))}</span>
         </div>
         {/* Who reads which name: said once, at the top, rather than on every row. */}
-        <p className="mt-3 flex items-start gap-2 rounded-ctl bg-canvas px-3 py-2 text-[12.5px] text-ink-700">
+        <p className="mt-3 flex items-start gap-2 rounded-ctl bg-canvas px-3 py-2 text-[0.78125rem] text-ink-700">
           <ReceiptText className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
           {S.readers}
         </p>
@@ -227,11 +227,11 @@ export function DentalPrices({
       {needs.length > 0 && (
         <div data-needs-price={needs.length}>
           <Card className="border-st-pending/40 p-5">
-            <h3 className="flex items-center gap-2 text-[15px] font-semibold">
+            <h3 className="flex items-center gap-2 text-[0.9375rem] font-semibold">
               <TriangleAlert className="h-4 w-4 text-st-pending" />
               {S.needsTitle}
             </h3>
-            <p className="mt-1 text-[13px] text-ink-500">{S.needsHint}</p>
+            <p className="mt-1 text-[0.8125rem] text-ink-500">{S.needsHint}</p>
             <ul className="mt-3 divide-y divide-line">
               {needs.map((n) => {
                 const tr = byKey.get(n.key);
@@ -241,15 +241,15 @@ export function DentalPrices({
                 return (
                   <li key={`${n.key}:${n.variant ?? ""}`} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5" data-needs-row={`${n.key}:${n.variant ?? ""}`}>
                     <div className="min-w-[12rem] flex-1">
-                      <div className="text-[14px] font-medium">
+                      <div className="text-[0.875rem] font-medium">
                         <bdi>{label}</bdi>
                       </div>
-                      <div className="text-[12px] text-ink-500">
+                      <div className="text-[0.75rem] text-ink-500">
                         {otherName(tr)} · <span className="font-semibold text-st-pending">{S.unpricedN.replace("{n}", String(n.count))}</span>
                       </div>
                     </div>
                     <PriceBox value={null} label={label} hook={`needs:${n.key}:${n.variant ?? ""}`} onSave={(v) => (v == null ? Promise.resolve(true) : save(n.key, n.variant, v))} />
-                    <span className="text-[12px] text-ink-500">{currency}</span>
+                    <span className="text-[0.75rem] text-ink-500">{currency}</span>
                   </li>
                 );
               })}
@@ -269,7 +269,7 @@ export function DentalPrices({
                 onClick={() => setFilter(f)}
                 aria-pressed={filter === f}
                 data-price-filter={f}
-                className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-140 ${
+                className={`rounded-full px-3 py-1 text-[0.75rem] font-medium transition-colors duration-140 ${
                   filter === f ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8 hover:text-ink-700"
                 }`}
               >
@@ -297,7 +297,7 @@ export function DentalPrices({
                   })}
                   className="flex w-full items-center justify-between gap-2 px-4 py-3 text-start"
                 >
-                  <span className="text-[14px] font-semibold">{t.dental.categories[cat]}</span>
+                  <span className="text-[0.875rem] font-semibold">{t.dental.categories[cat]}</span>
                   <ChevronDown className={`h-4 w-4 text-ink-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                 </button>
                 {isOpen && (
@@ -340,31 +340,31 @@ export function DentalPrices({
                           */}
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                             <div className="min-w-0 basis-full sm:min-w-[12rem] sm:flex-1 sm:basis-auto">
-                              <div className="text-[14px] font-medium" data-price-name>
+                              <div className="text-[0.875rem] font-medium" data-price-name>
                                 <bdi>{name}</bdi>
                               </div>
-                              <div className="flex flex-wrap items-center gap-x-2 text-[12px] text-ink-500">
+                              <div className="flex flex-wrap items-center gap-x-2 text-[0.75rem] text-ink-500">
                                 <span dir="auto">{otherName(tr)}</span>
                                 {use && use.used > 0 && <span className="tnum">· {S.usedN.replace("{n}", String(use.used))}</span>}
                               </div>
                             </div>
                             {/* The price for the whole treatment, however many visits it takes. */}
                             <div className="grid w-full grid-cols-2 gap-3 sm:contents">
-                              <label className="grid min-w-0 gap-1 text-[11.5px] font-semibold text-ink-500" data-price-col="price">
+                              <label className="grid min-w-0 gap-1 text-[length:max(11px,0.71875rem)] font-semibold text-ink-500" data-price-col="price">
                                 {S.price}
                                 <span className="flex items-center gap-1.5">
                                   {box(null, `${name} · ${S.price}`, tr.en, undefined, "w-full flex-1 sm:w-24 sm:flex-none")}
-                                  <span className="text-[12px] font-normal">{currency}</span>
+                                  <span className="text-[0.75rem] font-normal">{currency}</span>
                                 </span>
                               </label>
                             </div>
                             {!base && free.length > 0 && (
-                              <label className="flex w-full items-center gap-1.5 self-end text-[12px] text-ink-500 sm:w-auto">
+                              <label className="flex w-full items-center gap-1.5 self-end text-[0.75rem] text-ink-500 sm:w-auto">
                                 <Link2 className="h-3.5 w-3.5 shrink-0" />
                                 <select
                                   value=""
                                   onChange={(e) => e.target.value && void save(tr.key, null, null, e.target.value)}
-                                  className="select-chevron h-9 min-w-0 flex-1 appearance-none rounded-ctl border border-line bg-surface ps-2.5 pe-8 text-[13px] sm:max-w-[12rem] sm:flex-none"
+                                  className="select-chevron h-9 min-w-0 flex-1 appearance-none rounded-ctl border border-line bg-surface ps-2.5 pe-8 text-[0.8125rem] sm:max-w-[12rem] sm:flex-none"
                                   aria-label={S.sameAs}
                                   data-same-as={tr.key}
                                 >
@@ -381,21 +381,21 @@ export function DentalPrices({
                           {/* Each kind of it — a material, a canal count — priced too, in a small table. */}
                           {field && (
                             /* On a phone the kind's name takes what the box leaves; it had a 7rem floor that pushed the table off the screen. */
-                            <div className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-x-2 gap-y-1.5 text-[13px] sm:w-fit sm:grid-cols-[minmax(7rem,auto)_6rem] sm:gap-x-3 sm:ps-4">
+                            <div className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-x-2 gap-y-1.5 text-[0.8125rem] sm:w-fit sm:grid-cols-[minmax(7rem,auto)_6rem] sm:gap-x-3 sm:ps-4">
                               <span />
-                              <span className="self-end text-[11.5px] font-semibold leading-tight text-ink-500">{S.price}</span>
+                              <span className="self-end text-[length:max(11px,0.71875rem)] font-semibold leading-tight text-ink-500">{S.price}</span>
                               {field.options.map((o) => (
                                 <div key={o.key} className="contents" data-price-variant={`${tr.key}:${o.key}`}>
                                   <bdi className="min-w-0 break-words text-ink-700">{o.en}</bdi>
                                   {box(o.key, `${name} · ${o.en}`, `${tr.en} · ${o.en}`, base ? String(base.price) : "—", "w-full")}
                                 </div>
                               ))}
-                              <span className="col-span-2 text-[12px] text-ink-400">{S.variantHint}</span>
+                              <span className="col-span-2 text-[0.75rem] text-ink-400">{S.variantHint}</span>
                             </div>
                           )}
                           {/* What the patient will read, and the way to change it. */}
                           {preview && (
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]" data-invoice-preview={tr.key}>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.78125rem]" data-invoice-preview={tr.key}>
                               <span className="text-ink-500">{S.onInvoice}:</span>
                               <span className="font-medium text-ink-900" dir="auto">«{preview}»</span>
                               <button type="button" onClick={() => openRename(tr)} className="inline-flex items-center gap-1 font-semibold text-brand-700 hover:underline" data-rename-price={tr.key}>
@@ -419,7 +419,7 @@ export function DentalPrices({
       <Modal open={!!renaming} onClose={() => setRenaming(null)} title={S.rename}>
         {renaming && (
           <div className="grid gap-4" data-rename-dialog>
-            <p className="text-[13px] text-ink-500">{S.renameHint}</p>
+            <p className="text-[0.8125rem] text-ink-500">{S.renameHint}</p>
             {prices
               .filter((p) => p.chartKey === renaming.key)
               .map((p) => {
@@ -428,12 +428,12 @@ export function DentalPrices({
                 const title = [nameOf(renaming), kind].filter(Boolean).join(" · ");
                 return (
                   <div key={p.serviceId} className="grid gap-2 rounded-ctl border border-line p-3">
-                    <div className="text-[13px] font-semibold">{title}</div>
-                    <label className="grid gap-1 text-[12px] font-semibold text-ink-500">
+                    <div className="text-[0.8125rem] font-semibold">{title}</div>
+                    <label className="grid gap-1 text-[0.75rem] font-semibold text-ink-500">
                       {S.nameEn}
                       <Input dir="ltr" value={v.name} maxLength={80} onChange={(e) => setNames((prev) => ({ ...prev, [p.serviceId]: { ...v, name: e.target.value } }))} />
                     </label>
-                    <label className="grid gap-1 text-[12px] font-semibold text-ink-500">
+                    <label className="grid gap-1 text-[0.75rem] font-semibold text-ink-500">
                       {S.nameAr}
                       <Input dir="rtl" value={v.nameAr} maxLength={80} onChange={(e) => setNames((prev) => ({ ...prev, [p.serviceId]: { ...v, nameAr: e.target.value } }))} />
                     </label>

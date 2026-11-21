@@ -361,7 +361,7 @@ function Popup({
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-start">
         <span className="block text-sm font-semibold leading-snug text-ink-900">{n.title}</span>
         {n.body && (
-          <span className="mt-0.5 line-clamp-2 block whitespace-pre-line text-[13px] leading-snug text-ink-500">
+          <span className="mt-0.5 line-clamp-2 block whitespace-pre-line text-[0.8125rem] leading-snug text-ink-500">
             {n.body}
           </span>
         )}
@@ -446,11 +446,11 @@ function TeamPopup({ n, onOpen, onClose }: { n: LiveNotif; onOpen: () => void; o
           </span>
         </button>
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-start" data-team-popup-open>
-          <span className="block truncate text-[14px] font-semibold leading-snug text-ink-900" dir="auto">
+          <span className="block truncate text-[0.875rem] font-semibold leading-snug text-ink-900" dir="auto">
             {n.title}
           </span>
           {n.body && (
-            <span className="mt-0.5 line-clamp-3 block whitespace-pre-line text-[13.5px] leading-snug text-ink-700" dir="auto">
+            <span className="mt-0.5 line-clamp-3 block whitespace-pre-line text-[0.84375rem] leading-snug text-ink-700" dir="auto">
               {n.body}
             </span>
           )}
@@ -467,7 +467,7 @@ function TeamPopup({ n, onOpen, onClose }: { n: LiveNotif; onOpen: () => void; o
       {canReply && (
         <div className="flex items-center gap-1.5 border-t border-line bg-sunken/60 px-2.5 py-2">
           {state === "sent" ? (
-            <span className="flex h-9 flex-1 items-center gap-1.5 px-1 text-[13px] font-semibold text-st-confirmed" data-team-popup-sent>
+            <span className="flex h-9 flex-1 items-center gap-1.5 px-1 text-[0.8125rem] font-semibold text-st-confirmed" data-team-popup-sent>
               <Check className="h-4 w-4" />
               {T.sent}
             </span>
@@ -485,7 +485,7 @@ function TeamPopup({ n, onOpen, onClose }: { n: LiveNotif; onOpen: () => void; o
                 placeholder={T.replyTo.replace("{name}", shortName(a.name))}
                 maxLength={4000}
                 dir="auto"
-                className="h-9 min-w-0 flex-1 rounded-full border border-line bg-surface px-3 text-[16px] outline-none focus:border-brand-400 md:text-[13.5px]"
+                className="h-9 min-w-0 flex-1 rounded-full border border-line bg-surface px-3 text-[1rem] outline-none focus:border-brand-400 md:text-[0.84375rem]"
                 data-team-popup-input
               />
               {reply.trim() ? (
@@ -500,7 +500,7 @@ function TeamPopup({ n, onOpen, onClose }: { n: LiveNotif; onOpen: () => void; o
                   <Send className="h-4 w-4 rtl:rotate-180" />
                 </button>
               ) : (
-                <button type="button" onClick={markRead} className="h-9 shrink-0 rounded-full px-3 text-[12.5px] font-semibold text-brand-700 hover:bg-surface" data-team-popup-read>
+                <button type="button" onClick={markRead} className="h-9 shrink-0 rounded-full px-3 text-[0.78125rem] font-semibold text-brand-700 hover:bg-surface" data-team-popup-read>
                   {T.markRead}
                 </button>
               )}

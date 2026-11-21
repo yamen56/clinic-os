@@ -436,7 +436,7 @@ export function ImageViewer({
   const pinned = pins[img.id] ?? [];
   const btn = "grid h-9 w-9 place-items-center rounded-ctl text-white/85 hover:bg-white/10 disabled:opacity-35";
   const pill = (on: boolean) =>
-    `inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl px-2.5 text-[12.5px] font-semibold ${on ? "bg-white text-black" : "text-white/85 hover:bg-white/10"}`;
+    `inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl px-2.5 text-[0.78125rem] font-semibold ${on ? "bg-white text-black" : "text-white/85 hover:bg-white/10"}`;
   // What it can be compared with: pictures of the same teeth, or any picture if none share a tooth.
   const pictures = images.filter((x) => x.id !== img.id && isPicture(x));
   const sharing = pictures.filter((x) => (pins[x.id] ?? []).some((fdi) => pinned.includes(fdi)));
@@ -461,8 +461,8 @@ export function ImageViewer({
       {/* What it is, and the reading tools. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-white/10 px-3 py-2 sm:px-4">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[14px] font-semibold">{img.name}</div>
-          <div className="text-[12px] text-white/60" data-viewer-what>
+          <div className="truncate text-[0.875rem] font-semibold">{img.name}</div>
+          <div className="text-[0.75rem] text-white/60" data-viewer-what>
             {what} · {fmtDateOnly(img.date, locale)}
             {img.sample ? ` · ${T.sampleImage}` : ""}
           </div>
@@ -472,7 +472,7 @@ export function ImageViewer({
             <button type="button" className={btn} onClick={() => setZoom((z) => Math.max(1, z / 1.25))} aria-label={T.zoomOut} disabled={zoom <= 1}>
               <Minus className="h-4 w-4" />
             </button>
-            <span className="w-12 text-center text-[12px] tabular-nums text-white/70">{Math.round(zoom * 100)}%</span>
+            <span className="w-12 text-center text-[0.75rem] tabular-nums text-white/70">{Math.round(zoom * 100)}%</span>
             <button type="button" className={btn} onClick={() => setZoom((z) => Math.min(6, z * 1.25))} aria-label={T.zoomIn} disabled={zoom >= 6}>
               <Plus className="h-4 w-4" />
             </button>
@@ -506,7 +506,7 @@ export function ImageViewer({
               type="button"
               disabled={saving || !natural}
               onClick={() => void save(false)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-ctl bg-white px-3 text-[12.5px] font-semibold text-black hover:bg-white/90 disabled:opacity-60"
+              className="inline-flex h-9 items-center gap-1.5 rounded-ctl bg-white px-3 text-[0.78125rem] font-semibold text-black hover:bg-white/90 disabled:opacity-60"
               data-viewer-save
             >
               {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -517,7 +517,7 @@ export function ImageViewer({
                 type="button"
                 disabled={saving || !natural}
                 onClick={() => void save(true)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-ctl bg-st-confirmed px-3 text-[12.5px] font-semibold text-surface hover:brightness-110 disabled:opacity-60"
+                className="inline-flex h-9 items-center gap-1.5 rounded-ctl bg-st-confirmed px-3 text-[0.78125rem] font-semibold text-surface hover:brightness-110 disabled:opacity-60"
                 data-viewer-save-send
               >
                 <MessageCircle className="h-4 w-4" />
@@ -530,7 +530,7 @@ export function ImageViewer({
           <button
             type="button"
             onClick={() => onSend(img)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-ctl bg-st-confirmed px-3 text-[12.5px] font-semibold text-surface hover:brightness-110"
+            className="inline-flex h-9 items-center gap-1.5 rounded-ctl bg-st-confirmed px-3 text-[0.78125rem] font-semibold text-surface hover:brightness-110"
             data-send-patient
           >
             <MessageCircle className="h-4 w-4" />
@@ -579,7 +579,7 @@ export function ImageViewer({
                     style={look}
                   />
                 }
-                <span className="absolute start-2 top-2 rounded-full bg-black/65 px-2.5 py-0.5 text-[12px] font-semibold tabular-nums">
+                <span className="absolute start-2 top-2 rounded-full bg-black/65 px-2.5 py-0.5 text-[0.75rem] font-semibold tabular-nums">
                   {fmtDateOnly(x.date, locale)}
                 </span>
               </div>
@@ -626,7 +626,7 @@ export function ImageViewer({
           />
         ) : (
           <div className="absolute inset-0 grid place-items-center">
-            <a href={img.src} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-ctl bg-white/10 px-4 py-2.5 text-[14px] font-semibold hover:bg-white/20">
+            <a href={img.src} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-ctl bg-white/10 px-4 py-2.5 text-[0.875rem] font-semibold hover:bg-white/20">
               <ExternalLink className="h-4 w-4" />
               {T.openFile}
             </a>
@@ -640,7 +640,7 @@ export function ImageViewer({
             <button type="button" onClick={() => go(1)} aria-label={T.next} className="absolute end-2 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-black/50 hover:bg-black/70">
               <ChevronRight className="h-5 w-5" />
             </button>
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-2.5 py-0.5 text-[12px] tabular-nums text-white/80">
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-2.5 py-0.5 text-[0.75rem] tabular-nums text-white/80">
               {index + 1} / {images.length}
             </div>
           </>
@@ -653,8 +653,8 @@ export function ImageViewer({
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <Slider icon={<Sun className="h-4 w-4" />} label={T.brightness} min={-100} max={100} value={adjust.bright} onChange={(v) => setAdjust((a) => ({ ...a, bright: v }))} hook="bright" />
             <Slider icon={<Contrast className="h-4 w-4" />} label={T.contrast} min={-100} max={100} value={adjust.contrast} onChange={(v) => setAdjust((a) => ({ ...a, contrast: v }))} hook="contrast" />
-            <Slider icon={<span className="w-4 text-center text-[13px] font-bold">γ</span>} label={T.gamma} min={30} max={300} value={Math.round(adjust.gamma * 100)} shown={adjust.gamma.toFixed(2)} onChange={(v) => setAdjust((a) => ({ ...a, gamma: v / 100 }))} hook="gamma" />
-            <Slider icon={<span className="w-4 text-center text-[13px] font-bold">◆</span>} label={T.sharpness} min={0} max={100} value={adjust.sharp} onChange={(v) => setAdjust((a) => ({ ...a, sharp: v }))} hook="sharp" />
+            <Slider icon={<span className="w-4 text-center text-[0.8125rem] font-bold">γ</span>} label={T.gamma} min={30} max={300} value={Math.round(adjust.gamma * 100)} shown={adjust.gamma.toFixed(2)} onChange={(v) => setAdjust((a) => ({ ...a, gamma: v / 100 }))} hook="gamma" />
+            <Slider icon={<span className="w-4 text-center text-[0.8125rem] font-bold">◆</span>} label={T.sharpness} min={0} max={100} value={adjust.sharp} onChange={(v) => setAdjust((a) => ({ ...a, sharp: v }))} hook="sharp" />
           </div>
           <div className="mt-2 flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none]">
             <button type="button" onClick={() => setAdjust((a) => ({ ...a, invert: !a.invert }))} aria-pressed={adjust.invert} className={pill(adjust.invert)} data-adjust-invert>
@@ -730,7 +730,7 @@ export function ImageViewer({
                   setAngleArm(false);
                 }}
                 aria-pressed={tool === k}
-                className={`flex h-12 min-w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-ctl px-1.5 text-[11px] font-semibold ${tool === k ? "bg-white text-black" : "text-white/80 hover:bg-white/10"}`}
+                className={`flex h-12 min-w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-ctl px-1.5 text-[length:max(11px,0.6875rem)] font-semibold ${tool === k ? "bg-white text-black" : "text-white/80 hover:bg-white/10"}`}
                 data-tool={k}
               >
                 <Icon className="h-4.5 w-4.5" />
@@ -748,7 +748,7 @@ export function ImageViewer({
               <Trash2 className="h-4.5 w-4.5" />
             </button>
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12.5px] text-white/75">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.78125rem] text-white/75">
             <div className="flex items-center gap-1.5" role="radiogroup" aria-label={T.colour}>
               {MARK_COLOURS.map((c) => (
                 <button
@@ -816,7 +816,7 @@ export function ImageViewer({
           </div>
           {calib && (
             <form
-              className="mt-2 flex flex-wrap items-center gap-2 text-[13px]"
+              className="mt-2 flex flex-wrap items-center gap-2 text-[0.8125rem]"
               onSubmit={(e) => {
                 e.preventDefault();
                 const mm = Number(calibMm.replace(",", "."));
@@ -852,7 +852,7 @@ export function ImageViewer({
       {/* Comparing: which other image stands beside this one. */}
       {comparing && (
         <div className="border-t border-white/10 px-3 py-2.5 sm:px-4" data-compare-pick>
-          <div className="mb-1.5 text-[12px] font-semibold text-white/70">{T.compareWith}</div>
+          <div className="mb-1.5 text-[0.75rem] font-semibold text-white/70">{T.compareWith}</div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {candidates.map((x) => (
               <button
@@ -867,7 +867,7 @@ export function ImageViewer({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={x.src} alt="" className="h-14 w-20 bg-black object-cover" />
                 }
-                <span className="block bg-black/70 px-1 text-[11px] tabular-nums">{fmtDateOnly(x.date, locale)}</span>
+                <span className="block bg-black/70 px-1 text-[length:max(11px,0.6875rem)] tabular-nums">{fmtDateOnly(x.date, locale)}</span>
               </button>
             ))}
           </div>
@@ -878,7 +878,7 @@ export function ImageViewer({
       <div className={`border-t border-white/10 px-3 py-2.5 sm:px-4 ${comparing || panel !== null || (!showTeeth && !onView) ? "hidden" : ""}`} data-pins>
         {onView && isPicture(img) && (
           <div className="mb-2.5" data-views>
-            <div className="mb-1.5 text-[12px] font-semibold text-white/70">{T.whatItIs}</div>
+            <div className="mb-1.5 text-[0.75rem] font-semibold text-white/70">{T.whatItIs}</div>
             <div className="flex gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none]" role="radiogroup" aria-label={T.whatItIs}>
               {FILE_VIEWS.map((v) => (
                 <button
@@ -887,7 +887,7 @@ export function ImageViewer({
                   role="radio"
                   aria-checked={img.view === v}
                   onClick={() => onView(img.id, img.view === v ? null : v)}
-                  className={`h-8 shrink-0 rounded-full px-3 text-[12.5px] font-semibold ${img.view === v ? "bg-white text-black" : "bg-white/8 text-white/75 hover:bg-white/15"}`}
+                  className={`h-8 shrink-0 rounded-full px-3 text-[0.78125rem] font-semibold ${img.view === v ? "bg-white text-black" : "bg-white/8 text-white/75 hover:bg-white/15"}`}
                   data-view={v}
                 >
                   {views[v]}
@@ -898,7 +898,7 @@ export function ImageViewer({
         )}
         {showTeeth && (
           <>
-            <div className="mb-1.5 text-[12px] font-semibold text-white/70">{canPin ? T.pinHint : T.pinnedTo}</div>
+            <div className="mb-1.5 text-[0.75rem] font-semibold text-white/70">{canPin ? T.pinHint : T.pinnedTo}</div>
             <div className="grid gap-1 overflow-x-auto" dir="ltr">
               {[PERMANENT_UPPER, PERMANENT_LOWER].map((row, r) => (
                 <div key={r} className="flex gap-1">
@@ -912,7 +912,7 @@ export function ImageViewer({
                         onClick={() => onPin(img.id, fdi)}
                         aria-pressed={on}
                         data-pin={fdi}
-                        className={`h-7 min-w-7 shrink-0 rounded-md px-1 text-[11.5px] font-semibold tabular-nums transition-colors ${i === 8 ? "ms-2" : ""} ${
+                        className={`h-7 min-w-7 shrink-0 rounded-md px-1 text-[length:max(11px,0.71875rem)] font-semibold tabular-nums transition-colors ${i === 8 ? "ms-2" : ""} ${
                           on ? "bg-white text-black" : "bg-white/8 text-white/70 hover:bg-white/15"
                         } disabled:cursor-default`}
                       >
@@ -966,7 +966,7 @@ function Slider({
   hook: string;
 }) {
   return (
-    <label className="flex items-center gap-2 text-[12px] text-white/75" title={label}>
+    <label className="flex items-center gap-2 text-[0.75rem] text-white/75" title={label}>
       {icon}
       <span className="w-20 shrink-0 truncate">{label}</span>
       <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={label} className="w-28 accent-white sm:w-32" data-adjust={hook} />

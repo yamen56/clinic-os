@@ -77,7 +77,7 @@ export default async function AdminClinicsPage() {
                   <Avatar name={cl.name} size={40} />
                   <div className="min-w-40 flex-1">
                     <div className="font-medium">{cl.name_ar || cl.name}</div>
-                    <div className="text-[13px] text-ink-500" dir="ltr">
+                    <div className="text-[0.8125rem] text-ink-500" dir="ltr">
                       /{cl.slug}
                     </div>
                   </div>
@@ -142,7 +142,7 @@ export default async function AdminClinicsPage() {
                       <div className="text-sm font-medium text-ink-500">
                         {cl.name_ar || cl.name}
                       </div>
-                      <div className="text-[12px] text-ink-400" dir="ltr">
+                      <div className="text-[0.75rem] text-ink-400" dir="ltr">
                         /{cl.slug}
                       </div>
                     </div>

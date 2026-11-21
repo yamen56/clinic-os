@@ -135,7 +135,7 @@ export function PrescriptionsTab({
                       <span className="text-sm font-semibold tnum" dir="ltr">
                         {rxNumber(r.number)}
                       </span>
-                      <span className="text-[12px] text-ink-500" suppressHydrationWarning>
+                      <span className="text-[0.75rem] text-ink-500" suppressHydrationWarning>
                         {fmtDate(r.created_at, tz, locale)}
                       </span>
                       {status ? (
@@ -156,7 +156,7 @@ export function PrescriptionsTab({
                         </span>
                       ))}
                     </div>
-                    <div className="mt-0.5 text-[12px] text-ink-500">
+                    <div className="mt-0.5 text-[0.75rem] text-ink-500">
                       {r.doctor_name}
                       {r.by_other && r.author_name && ` · ${T.writtenBy.replace("{name}", r.author_name)}`}
                       {r.diagnosis && (
@@ -209,7 +209,7 @@ type RowActionProps = {
  * a desk. Styled to match it at the wide size.
  */
 function RowAction({ icon, label, onClick, href, busy, disabled }: Omit<RowActionProps, "key">) {
-  const cls = `relative flex min-w-0 touch-manipulation select-none flex-col items-center justify-center gap-1 rounded-ctl border border-line px-2 py-2 text-[12px] font-semibold text-ink-900 transition-colors duration-140 hover:bg-brand-100 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 @2xl:h-9 @2xl:flex-row @2xl:gap-2 @2xl:px-3 @2xl:py-0 @2xl:text-[13px] [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 ${
+  const cls = `relative flex min-w-0 touch-manipulation select-none flex-col items-center justify-center gap-1 rounded-ctl border border-line px-2 py-2 text-[0.75rem] font-semibold text-ink-900 transition-colors duration-140 hover:bg-brand-100 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 @2xl:h-9 @2xl:flex-row @2xl:gap-2 @2xl:px-3 @2xl:py-0 @2xl:text-[0.8125rem] [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 ${
     busy ? "animate-pulse" : ""
   }`;
   const body = (

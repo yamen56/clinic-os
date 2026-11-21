@@ -55,7 +55,7 @@ export function NameEditor({
   if (!open) {
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[17px] font-semibold">
+        <span className="text-[1.0625rem] font-semibold">
           {title ? `${title} ` : ""}
           {name}
         </span>
@@ -86,7 +86,7 @@ export function NameEditor({
           if (e.key === "Escape") close();
         }}
       />
-      <p className="text-[12px] leading-relaxed text-ink-500">{t.profile.nameHint}</p>
+      <p className="text-[0.75rem] leading-relaxed text-ink-500">{t.profile.nameHint}</p>
       <div className="flex items-center gap-2">
         <Button size="sm" loading={pending} disabled={value.trim().length < 2} onClick={save}>
           {t.common.save}

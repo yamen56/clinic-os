@@ -122,7 +122,7 @@ export function PhotoPicker({
             </Button>
           )}
         </div>
-        <p className="text-[12px] text-ink-500">{t.staff.photoHint}</p>
+        <p className="text-[0.75rem] text-ink-500">{t.staff.photoHint}</p>
       </div>
     </div>
   );

@@ -250,13 +250,13 @@ export function CampaignsClient({
                           {t.campaigns.statuses[c.status]}
                         </Badge>
                       </div>
-                      <div className="mt-1 text-[13px] text-ink-500">
+                      <div className="mt-1 text-[0.8125rem] text-ink-500">
                         {formatInterval(c.interval_seconds, everyLabel)} ·{" "}
                         {fmtDate(c.created_at, tz, locale)}
                       </div>
                     </div>
                     <div className="w-32 shrink-0">
-                      <div className="text-[13px] font-semibold tnum">
+                      <div className="text-[0.8125rem] font-semibold tnum">
                         {done} / {c.total_count}
                       </div>
                       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink-900/8">
@@ -334,7 +334,7 @@ export function CampaignsClient({
             so tapping the preview would remove the file or reopen the picker.
           */}
           <div>
-            <span className="mb-1.5 block text-[13px] font-semibold text-ink-900">
+            <span className="mb-1.5 block text-[0.8125rem] font-semibold text-ink-900">
               {t.campaigns.media}
             </span>
             <input
@@ -462,7 +462,7 @@ export function CampaignsClient({
             </Select>
           </Field>
 
-          <div className="rounded-ctl bg-sunken px-4 py-3 text-[13px] text-ink-700">
+          <div className="rounded-ctl bg-sunken px-4 py-3 text-[0.8125rem] text-ink-700">
             {audience ? (
               <>
                 <div className="font-semibold text-ink-900">

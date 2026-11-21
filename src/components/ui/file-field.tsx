@@ -48,11 +48,11 @@ export function FileField({
             onFile(f);
           }}
         />
-        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-ctl bg-brand-50 px-3 py-1.5 text-[13px] font-semibold text-brand-700">
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-ctl bg-brand-50 px-3 py-1.5 text-[0.8125rem] font-semibold text-brand-700">
           <Paperclip className="h-3.5 w-3.5" />
           {t.common.chooseFile}
         </span>
-        <span dir="auto" className={`min-w-0 flex-1 truncate text-[13px] ${name ? "font-medium text-ink-900" : "text-ink-500"}`}>
+        <span dir="auto" className={`min-w-0 flex-1 truncate text-[0.8125rem] ${name ? "font-medium text-ink-900" : "text-ink-500"}`}>
           {name ?? t.common.noFileChosen}
         </span>
       </label>

@@ -166,7 +166,7 @@ export function StockClient({
         action={
           <>
             {pricesHref && (
-              <Link href={pricesHref} className="inline-flex min-h-10 items-center px-2 text-[13px] font-semibold text-brand-700 hover:underline" data-stock-prices>
+              <Link href={pricesHref} className="inline-flex min-h-10 items-center px-2 text-[0.8125rem] font-semibold text-brand-700 hover:underline" data-stock-prices>
                 {S.prices}
               </Link>
             )}
@@ -188,19 +188,19 @@ export function StockClient({
 
       {(alerts.low > 0 || alerts.expiring > 0 || alerts.owed > 0 || toPay > 0) && (
         <div className="mb-4 flex flex-wrap gap-2" data-stock-alerts>
-          {alerts.low > 0 && <span className="rounded-full bg-st-noshow-soft px-3 py-1 text-[12.5px] font-semibold text-ink-900">{S.alerts.low.replace("{n}", String(alerts.low))}</span>}
+          {alerts.low > 0 && <span className="rounded-full bg-st-noshow-soft px-3 py-1 text-[0.78125rem] font-semibold text-ink-900">{S.alerts.low.replace("{n}", String(alerts.low))}</span>}
           {alerts.expiring > 0 && (
-            <span className="rounded-full bg-st-noshow-soft px-3 py-1 text-[12.5px] font-semibold text-ink-900">{S.alerts.expiring.replace("{n}", String(alerts.expiring))}</span>
+            <span className="rounded-full bg-st-noshow-soft px-3 py-1 text-[0.78125rem] font-semibold text-ink-900">{S.alerts.expiring.replace("{n}", String(alerts.expiring))}</span>
           )}
-          {alerts.owed > 0 && <span className="rounded-full bg-danger-soft px-3 py-1 text-[12.5px] font-semibold text-danger">{S.alerts.owed.replace("{n}", String(alerts.owed))}</span>}
+          {alerts.owed > 0 && <span className="rounded-full bg-danger-soft px-3 py-1 text-[0.78125rem] font-semibold text-danger">{S.alerts.owed.replace("{n}", String(alerts.owed))}</span>}
           {/* Money, not units: what the companies are still owed for deliveries taken on credit. */}
           {toPay > 0 &&
             (toPayHref ? (
-              <Link href={toPayHref} className="rounded-full bg-sunken px-3 py-1 text-[12.5px] font-semibold text-ink-900 hover:underline" data-stock-to-pay={toPay}>
+              <Link href={toPayHref} className="rounded-full bg-sunken px-3 py-1 text-[0.78125rem] font-semibold text-ink-900 hover:underline" data-stock-to-pay={toPay}>
                 {S.alerts.toPay.replace("{amount}", money(toPay))}
               </Link>
             ) : (
-              <span className="rounded-full bg-sunken px-3 py-1 text-[12.5px] font-semibold text-ink-900" data-stock-to-pay={toPay}>
+              <span className="rounded-full bg-sunken px-3 py-1 text-[0.78125rem] font-semibold text-ink-900" data-stock-to-pay={toPay}>
                 {S.alerts.toPay.replace("{amount}", money(toPay))}
               </span>
             ))}
@@ -208,7 +208,7 @@ export function StockClient({
       )}
 
       {inUse.length === 0 ? (
-        <Card className="p-6 text-[14px] text-ink-500">{S.empty}</Card>
+        <Card className="p-6 text-[0.875rem] text-ink-500">{S.empty}</Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {inUse.map((p) => {
@@ -219,14 +219,14 @@ export function StockClient({
                 <div data-stock-product={p.id}>
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="text-[15px] font-semibold" dir="auto">
+                      <div className="text-[0.9375rem] font-semibold" dir="auto">
                         {p.name}
                       </div>
-                      <div className="text-[12.5px] text-ink-500">{p.company ?? S.product.noCompany}</div>
+                      <div className="text-[0.78125rem] text-ink-500">{p.company ?? S.product.noCompany}</div>
                     </div>
                     <div className="text-end">
-                      <div className="text-[11.5px] font-semibold uppercase tracking-wide text-ink-500">{S.onHand}</div>
-                      <div className={`text-[20px] font-bold tnum ${st.out ? "text-danger" : ""}`} data-stock-on-hand={p.onHand}>
+                      <div className="text-[length:max(11px,0.71875rem)] font-semibold uppercase tracking-wide text-ink-500">{S.onHand}</div>
+                      <div className={`text-[1.25rem] font-bold tnum ${st.out ? "text-danger" : ""}`} data-stock-on-hand={p.onHand}>
                         {amount(p.unit, Math.max(0, p.onHand))}
                       </div>
                     </div>
@@ -238,10 +238,10 @@ export function StockClient({
                         return tr ? <FamilyTag key={k} family={tr.family} label={tr.en} /> : null;
                       })
                     ) : (
-                      <span className="text-[12px] text-ink-500">{S.nothingUsedIn}</span>
+                      <span className="text-[0.75rem] text-ink-500">{S.nothingUsedIn}</span>
                     )}
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.78125rem]">
                     {p.next && (
                       <span className="text-ink-700">
                         {p.next.lot
@@ -280,7 +280,7 @@ export function StockClient({
                             return n;
                           })
                         }
-                        className="ms-auto inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand-700 hover:underline"
+                        className="ms-auto inline-flex items-center gap-1 text-[0.78125rem] font-semibold text-brand-700 hover:underline"
                       >
                         {shown ? S.hideBatches : S.showBatches.replace("{n}", String(p.batches.length))}
                         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${shown ? "rotate-180" : ""}`} />
@@ -289,7 +289,7 @@ export function StockClient({
                   </div>
                   {shown && (
                     <div className="mt-3 overflow-x-auto">
-                      <table className="w-full text-[12.5px]">
+                      <table className="w-full text-[0.78125rem]">
                         <thead>
                           <tr className="text-start text-ink-500">
                             <th className="px-2 py-1 text-start font-semibold">{S.lot}</th>
@@ -309,7 +309,7 @@ export function StockClient({
                                   {/* A lot is Latin whatever the page: isolated, so it does not run into the date beside it. */}
                                   {b.lot ? <bdi>{b.lot}</bdi> : <span className="text-ink-500">{S.noLot}</span>}
                                   {b.owed != null && b.owed > 0.005 && (
-                                    <span className="ms-2 whitespace-nowrap rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-ink-700" data-batch-unpaid={b.owed}>
+                                    <span className="ms-2 whitespace-nowrap rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-700" data-batch-unpaid={b.owed}>
                                       {S.unpaidBatch.replace("{amount}", money(b.owed))}
                                     </span>
                                   )}
@@ -323,7 +323,7 @@ export function StockClient({
                                 <td className="px-2 py-1.5 text-end tnum">{money(b.unitCost)}</td>
                                 <td className="px-2 py-1.5 text-end">
                                   <span className="inline-flex items-center gap-3">
-                                    <button type="button" onClick={() => setAdjusting({ product: p, batch: b })} className="text-[12px] font-semibold text-brand-700 hover:underline">
+                                    <button type="button" onClick={() => setAdjusting({ product: p, batch: b })} className="text-[0.75rem] font-semibold text-brand-700 hover:underline">
                                       {S.adjust}
                                     </button>
                                     {b.untouched && (
@@ -352,7 +352,7 @@ export function StockClient({
           <button
             type="button"
             onClick={() => setArchivedOpen((v) => !v)}
-            className="inline-flex min-h-10 items-center gap-1 text-[13px] font-semibold text-ink-700 hover:text-ink-900"
+            className="inline-flex min-h-10 items-center gap-1 text-[0.8125rem] font-semibold text-ink-700 hover:text-ink-900"
           >
             {S.archived.replace("{n}", String(archived.length))}
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${archivedOpen ? "rotate-180" : ""}`} />
@@ -362,9 +362,9 @@ export function StockClient({
               <ul className="divide-y divide-line">
                 {archived.map((p) => (
                   <li key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5" data-stock-archived-product={p.id}>
-                    <span className="min-w-0 flex-1 text-[14px]" dir="auto">
+                    <span className="min-w-0 flex-1 text-[0.875rem]" dir="auto">
                       {p.name}
-                      {p.company && <span className="ms-2 text-[12.5px] text-ink-500">{p.company}</span>}
+                      {p.company && <span className="ms-2 text-[0.78125rem] text-ink-500">{p.company}</span>}
                     </span>
                     <Button size="sm" variant="outline" onClick={() => setHistory(p)}>
                       {S.history}
@@ -455,24 +455,24 @@ function HistoryList({ slug, product, canPatients, onClose }: { slug: string; pr
   return (
     <Modal open onClose={onClose} title={S.historyTitle.replace("{name}", product.name)} wide>
       {moves === null ? (
-        <p className="py-6 text-center text-[13px] text-ink-500">…</p>
+        <p className="py-6 text-center text-[0.8125rem] text-ink-500">…</p>
       ) : moves.length === 0 ? (
-        <p className="py-6 text-center text-[13px] text-ink-500">{S.historyEmpty}</p>
+        <p className="py-6 text-center text-[0.8125rem] text-ink-500">{S.historyEmpty}</p>
       ) : (
         <ul className="divide-y divide-line" data-stock-moves>
           {moves.map((m) => (
-            <li key={m.id} className="flex items-start gap-3 py-2 text-[13px]" data-stock-move={m.kind}>
+            <li key={m.id} className="flex items-start gap-3 py-2 text-[0.8125rem]" data-stock-move={m.kind}>
               <span className="min-w-0 flex-1">
                 <span className="font-semibold">{S.moves[m.kind]}</span>
                 {m.lot && <bdi className="ms-2 text-ink-500">{m.lot}</bdi>}
                 {m.treatment && <span className="ms-2 text-ink-500">{m.treatment}</span>}
-                <span className="block text-[12px] text-ink-500">
+                <span className="block text-[0.75rem] text-ink-500">
                   {fmtDateOnly(m.at.slice(0, 10), locale)}
                   {m.by && ` · ${m.by}`}
                   {m.reason && ` · ${m.reason}`}
                 </span>
                 {canPatients && m.patient && (
-                  <Link href={`/c/${slug}/patients/${m.patient.id}`} className="block text-[12px] font-semibold text-brand-700 hover:underline" dir="auto">
+                  <Link href={`/c/${slug}/patients/${m.patient.id}`} className="block text-[0.75rem] font-semibold text-brand-700 hover:underline" dir="auto">
                     {m.patient.name}
                   </Link>
                 )}
@@ -584,11 +584,11 @@ function ProductForm({
         </Field>
       </div>
       <div className="mt-4">
-        <div className="text-[13px] font-semibold text-ink-900">{P.treatments}</div>
+        <div className="text-[0.8125rem] font-semibold text-ink-900">{P.treatments}</div>
         <div className="text-xs text-ink-500">{P.treatmentsHint}</div>
         <div className="mt-2 grid gap-1.5 sm:grid-cols-2" dir="ltr">
           {cat.offered.map((x) => (
-            <label key={x.key} className="flex items-center gap-2 text-[13px]">
+            <label key={x.key} className="flex items-center gap-2 text-[0.8125rem]">
               <input
                 type="checkbox"
                 className="h-4 w-4 accent-brand-600"
@@ -603,7 +603,7 @@ function ProductForm({
       </div>
       {product && (
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3">
-          <span className="text-[13px] font-semibold">{P.active}</span>
+          <span className="text-[0.8125rem] font-semibold">{P.active}</span>
           <Toggle checked={active} onChange={setActive} label={P.active} />
         </div>
       )}
@@ -742,7 +742,7 @@ function ReceiveForm({
         <Field label={R.note}>
           <Textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className="min-h-14" />
         </Field>
-        {summary && <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700 tnum">{summary}</p>}
+        {summary && <p className="rounded-ctl bg-sunken px-3 py-2 text-[0.8125rem] text-ink-700 tnum">{summary}</p>}
       </div>
     </Modal>
   );
@@ -859,26 +859,26 @@ function CompaniesForm({
   return (
     <Modal open={open} onClose={onClose} title={C.title}>
       <div className="grid gap-3" data-companies>
-        {companies.length === 0 && <p className="text-[13px] text-ink-500">{C.none}</p>}
+        {companies.length === 0 && <p className="text-[0.8125rem] text-ink-500">{C.none}</p>}
         <ul className="divide-y divide-line">
           {companies.map((c) => (
             <li key={c.id} className={`flex items-center gap-3 py-2 ${c.active ? "" : "opacity-60"}`} data-company={c.id}>
-              <span className="min-w-0 flex-1 text-[14px] font-medium" dir="auto">
+              <span className="min-w-0 flex-1 text-[0.875rem] font-medium" dir="auto">
                 {c.name}
-                {c.phone && <span className="ms-2 text-[12.5px] text-ink-500" dir="ltr">{c.phone}</span>}
-                {c.note && <span className="block text-[12.5px] font-normal text-ink-500">{c.note}</span>}
+                {c.phone && <span className="ms-2 text-[0.78125rem] text-ink-500" dir="ltr">{c.phone}</span>}
+                {c.note && <span className="block text-[0.78125rem] font-normal text-ink-500">{c.note}</span>}
                 {c.products > 0 && (
-                  <span className="block text-[12px] font-normal text-ink-500 tnum" data-company-summary>
+                  <span className="block text-[0.75rem] font-normal text-ink-500 tnum" data-company-summary>
                     {C.summary.replace("{n}", String(c.products)).replace("{spent}", money(c.spent))}
                   </span>
                 )}
                 {c.owed > 0 && (
-                  <span className="block text-[12px] font-semibold text-ink-900 tnum" data-company-to-pay={c.owed}>
+                  <span className="block text-[0.75rem] font-semibold text-ink-900 tnum" data-company-to-pay={c.owed}>
                     {C.toPay.replace("{amount}", money(c.owed))}
                   </span>
                 )}
               </span>
-              <button type="button" onClick={() => edit(c)} className="text-[12.5px] font-semibold text-brand-700 hover:underline" data-company-edit>
+              <button type="button" onClick={() => edit(c)} className="text-[0.78125rem] font-semibold text-brand-700 hover:underline" data-company-edit>
                 {C.edit}
               </button>
               {c.active ? (
@@ -886,7 +886,7 @@ function CompaniesForm({
                   <Trash2 className="h-4 w-4" />
                 </button>
               ) : (
-                <button type="button" onClick={() => onRestore(c)} className="text-[12.5px] font-semibold text-brand-700 hover:underline" data-company-restore>
+                <button type="button" onClick={() => onRestore(c)} className="text-[0.78125rem] font-semibold text-brand-700 hover:underline" data-company-restore>
                   {C.restore}
                 </button>
               )}

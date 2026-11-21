@@ -67,8 +67,8 @@ export function VisitRecordSheetHost() {
 }
 
 const chip =
-  "inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full border border-line-strong bg-surface px-4 text-start text-[14px] font-semibold text-ink-700 transition-colors duration-100 hover:bg-sunken disabled:opacity-60";
-const heading = "mb-1.5 block text-[12px] font-semibold uppercase tracking-wide text-ink-400";
+  "inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full border border-line-strong bg-surface px-4 text-start text-[0.875rem] font-semibold text-ink-700 transition-colors duration-100 hover:bg-sunken disabled:opacity-60";
+const heading = "mb-1.5 block text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400";
 
 /** The price list, searched: a tap picks a line, and a name that is not on it can be added as typed. */
 function Picker({
@@ -120,13 +120,13 @@ function Picker({
                 onPick(s);
                 setQ("");
               }}
-              className="flex min-h-11 w-full touch-manipulation items-center gap-3 px-3 text-start text-[14px] hover:bg-sunken"
+              className="flex min-h-11 w-full touch-manipulation items-center gap-3 px-3 text-start text-[0.875rem] hover:bg-sunken"
               data-add-service={s.id}
             >
               <span className="min-w-0 flex-1" dir="auto">
                 {(locale === "ar" && s.nameAr) || s.name}
               </span>
-              <span className="shrink-0 text-[12.5px] text-ink-500 tnum">{fmtMoney(s.price, currency, locale)}</span>
+              <span className="shrink-0 text-[0.78125rem] text-ink-500 tnum">{fmtMoney(s.price, currency, locale)}</span>
             </button>
           </li>
         ))}
@@ -141,14 +141,14 @@ function Picker({
               className="flex min-h-11 w-full touch-manipulation flex-col justify-center px-3 py-1.5 text-start hover:bg-sunken"
               data-add-other
             >
-              <span className="text-[14px] font-semibold text-brand-700" dir="auto">
+              <span className="text-[0.875rem] font-semibold text-brand-700" dir="auto">
                 {T.addOther.replace("{name}", q.trim())}
               </span>
-              <span className="text-[12px] text-ink-500">{T.otherHint}</span>
+              <span className="text-[0.75rem] text-ink-500">{T.otherHint}</span>
             </button>
           </li>
         )}
-        {!needle && services.length === 0 && <li className="px-3 py-3 text-[13px] text-ink-500">{T.noServices}</li>}
+        {!needle && services.length === 0 && <li className="px-3 py-3 text-[0.8125rem] text-ink-500">{T.noServices}</li>}
       </ul>
     </div>
   );
@@ -426,15 +426,15 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
           <button
             type="button"
             onClick={store.closeSheet}
-            className="inline-flex h-11 shrink-0 touch-manipulation items-center gap-1 rounded-full px-3 text-[14px] font-semibold text-ink-700 hover:bg-sunken"
+            className="inline-flex h-11 shrink-0 touch-manipulation items-center gap-1 rounded-full px-3 text-[0.875rem] font-semibold text-ink-700 hover:bg-sunken"
             data-record-back
           >
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
             {t.common.back}
           </button>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[16px] font-semibold">{T.recordTitle}</h2>
-            <p className="truncate text-[13px] text-ink-500">
+            <h2 className="text-[1rem] font-semibold">{T.recordTitle}</h2>
+            <p className="truncate text-[0.8125rem] text-ink-500">
               {when}
               {service ? ` · ${service}` : ""}
               {visit?.doctor_name ? ` · ${visit.doctor_name}` : ""}
@@ -448,7 +448,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
               type="button"
               onClick={() => (talk.listening ? talk.stop() : talk.start())}
               aria-pressed={talk.listening}
-              className={`inline-flex h-11 shrink-0 touch-manipulation items-center gap-2 rounded-full px-4 text-[14px] font-semibold ${
+              className={`inline-flex h-11 shrink-0 touch-manipulation items-center gap-2 rounded-full px-4 text-[0.875rem] font-semibold ${
                 talk.listening ? "bg-danger text-white" : "bg-brand-600 text-on-brand hover:bg-brand-hover"
               }`}
               data-talk-toggle
@@ -465,7 +465,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
                   role="radio"
                   aria-checked={talkLang === l}
                   onClick={() => setTalkLang(l)}
-                  className={`touch-manipulation px-3.5 text-[13px] font-semibold ${talkLang === l ? "bg-ink-900 text-surface" : "text-ink-700 hover:bg-sunken"}`}
+                  className={`touch-manipulation px-3.5 text-[0.8125rem] font-semibold ${talkLang === l ? "bg-ink-900 text-surface" : "text-ink-700 hover:bg-sunken"}`}
                   data-talk-lang={l}
                 >
                   {l === "ar" ? "عربي" : "English"}
@@ -473,7 +473,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
               ))}
             </div>
             {/* On a phone the hint would push the record down three lines: there it is only said while listening. */}
-            <p className={`min-w-0 flex-1 basis-full text-[12.5px] text-ink-700 sm:basis-0 ${talk.listening ? "" : "max-sm:hidden"}`} aria-live="polite">
+            <p className={`min-w-0 flex-1 basis-full text-[0.78125rem] text-ink-700 sm:basis-0 ${talk.listening ? "" : "max-sm:hidden"}`} aria-live="polite">
               {talk.listening ? (
                 <>
                   <span className="font-semibold">
@@ -491,13 +491,13 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
         <div className="grid gap-5 overflow-y-auto overscroll-contain px-5 py-4">
           {!appointmentId && isToday && (
             <div className="grid gap-2 rounded-lg border border-st-pending/30 bg-st-pending-soft px-3 py-2.5" data-record-no-visit>
-              <p className="text-[13px] text-ink-900">{T.noVisitHint}</p>
+              <p className="text-[0.8125rem] text-ink-900">{T.noVisitHint}</p>
               <div>
                 <button
                   type="button"
                   disabled={starting}
                   onClick={() => void startHere()}
-                  className="inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[14px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
+                  className="inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[0.875rem] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
                   data-record-start-visit
                 >
                   <Plus className="h-4 w-4 shrink-0" />
@@ -508,8 +508,8 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
           )}
 
           {lastPlan && (
-            <div className="rounded-lg border border-line bg-canvas px-3 py-2 text-[13px]" data-record-last-plan>
-              <div className="mb-0.5 text-[12px] font-semibold text-ink-500">{T.lastPlan.replace("{date}", fmtDate(lastPlan.at, tz, locale))}</div>
+            <div className="rounded-lg border border-line bg-canvas px-3 py-2 text-[0.8125rem]" data-record-last-plan>
+              <div className="mb-0.5 text-[0.75rem] font-semibold text-ink-500">{T.lastPlan.replace("{date}", fmtDate(lastPlan.at, tz, locale))}</div>
               <p className="whitespace-pre-wrap text-ink-900" dir="auto">
                 {lastPlan.plan}
               </p>
@@ -519,7 +519,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
           <div className="grid gap-2">
             {field("complaint", 2)}
             {said.length > 0 && (
-              <div className="rounded-lg bg-canvas px-3 py-2 text-[12.5px] text-ink-700" data-record-booking>
+              <div className="rounded-lg bg-canvas px-3 py-2 text-[0.78125rem] text-ink-700" data-record-booking>
                 <div className="mb-0.5 font-semibold text-ink-500">{T.fromBooking}</div>
                 {said.map((l, i) => (
                   <p key={i} className="whitespace-pre-wrap" dir="auto">
@@ -536,9 +536,9 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
             {field("diagnosis", 1)}
             {!text.diagnosis.trim() && earlier.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5" data-record-earlier>
-                <span className="text-[12px] text-ink-500">{T.earlier}</span>
+                <span className="text-[0.75rem] text-ink-500">{T.earlier}</span>
                 {earlier.map((d) => (
-                  <button key={d} type="button" onClick={() => set("diagnosis", d)} className="inline-flex min-h-9 max-w-full touch-manipulation items-center rounded-full border border-line bg-surface px-3 text-[13px] text-ink-700 hover:bg-sunken">
+                  <button key={d} type="button" onClick={() => set("diagnosis", d)} className="inline-flex min-h-9 max-w-full touch-manipulation items-center rounded-full border border-line bg-surface px-3 text-[0.8125rem] text-ink-700 hover:bg-sunken">
                     <span className="truncate" dir="auto">
                       {d}
                     </span>
@@ -554,10 +554,10 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
               <ul className="mb-2 grid gap-1.5">
                 {done.map((m) => (
                   <li key={m.id} className="flex items-center gap-2 rounded-lg bg-canvas py-1 pe-1 ps-3" data-done-line={m.id}>
-                    <span className="min-w-0 flex-1 text-[14px] font-medium" dir="auto">
+                    <span className="min-w-0 flex-1 text-[0.875rem] font-medium" dir="auto">
                       {markName(m)}
                     </span>
-                    <span className="shrink-0 text-[12.5px] text-ink-500 tnum">{m.fee == null ? T.noPrice : fmtMoney(m.fee, store.currency, locale)}</span>
+                    <span className="shrink-0 text-[0.78125rem] text-ink-500 tnum">{m.fee == null ? T.noPrice : fmtMoney(m.fee, store.currency, locale)}</span>
                     <button
                       type="button"
                       onClick={() => void remove(m)}
@@ -582,7 +582,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
               <button
                 type="button"
                 onClick={() => setPicking("done")}
-                className="mb-3 inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[14px] font-semibold text-on-brand hover:bg-brand-hover"
+                className="mb-3 inline-flex min-h-11 touch-manipulation items-center gap-1.5 rounded-full bg-brand-600 px-4 text-[0.875rem] font-semibold text-on-brand hover:bg-brand-hover"
                 data-record-pick
               >
                 <Plus className="h-4 w-4 shrink-0" />
@@ -597,7 +597,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
             {/* Or one already in view: what an earlier visit planned, and what this one was booked for. */}
             {waiting.length > 0 && (
               <div className="mb-2" data-record-planned-offer={waiting.length}>
-                <div className="mb-1.5 text-[12px] text-ink-500">{T.plannedEarlier}</div>
+                <div className="mb-1.5 text-[0.75rem] text-ink-500">{T.plannedEarlier}</div>
                 <div className="flex flex-wrap gap-2">
                   {waiting.map((m) => (
                     <button key={m.id} type="button" onClick={() => void finish(m)} className={chip} data-finish-planned={m.id}>
@@ -611,7 +611,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
 
             {booked.length > 0 && (
               <div className="mb-2" data-record-booked={booked.length}>
-                <div className="mb-1.5 text-[12px] text-ink-500">{T.booked}</div>
+                <div className="mb-1.5 text-[0.75rem] text-ink-500">{T.booked}</div>
                 <div className="flex flex-wrap gap-2">
                   {booked.map((s) => (
                     <button key={s.id} type="button" onClick={() => void add(s, undefined, "done")} className={chip} data-add-booked={s.id}>
@@ -625,7 +625,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
 
             {(dental || face) && (
               <div className="mt-3 grid gap-2 rounded-lg bg-canvas p-3" data-record-charts>
-                <p className="text-[12.5px] text-ink-500">{T.chartHint}</p>
+                <p className="text-[0.78125rem] text-ink-500">{T.chartHint}</p>
                 <div className="flex flex-wrap gap-2">
                   {dental && (
                     <button type="button" onClick={() => openChart("dental")} className={chip} data-open-chart="dental">
@@ -653,11 +653,11 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
               {(rx.length > 0 || files.length > 0) && (
                 <ul className="mb-2 grid gap-1.5">
                   {rx.map((r) => (
-                    <li key={r.id} className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-[14px]" data-record-rx={r.id}>
+                    <li key={r.id} className="flex items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-[0.875rem]" data-record-rx={r.id}>
                       <Pill className="h-4 w-4 shrink-0 text-ink-500" />
                       <span className="min-w-0 flex-1">
                         <span className="font-medium">{T.rxNumber.replace("{n}", String(r.number))}</span>
-                        <span className="block truncate text-[12.5px] text-ink-500" dir="auto">
+                        <span className="block truncate text-[0.78125rem] text-ink-500" dir="auto">
                           {r.items.map((i) => i.name).filter(Boolean).join(" · ")}
                         </span>
                       </span>
@@ -665,7 +665,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
                   ))}
                   {files.map((f) => (
                     <li key={f.id} data-record-file={f.id}>
-                      <a href={`/api/c/${store.slug}/files/${f.id}`} target="_blank" rel="noopener" className="flex min-h-11 items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-[14px] hover:bg-sunken">
+                      <a href={`/api/c/${store.slug}/files/${f.id}`} target="_blank" rel="noopener" className="flex min-h-11 items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-[0.875rem] hover:bg-sunken">
                         {f.mime_type.startsWith("image/") ? (
                           <img src={`/api/c/${store.slug}/files/${f.id}?thumb=1`} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover" />
                         ) : (
@@ -711,12 +711,12 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
             {field("plan", 2)}
             {/* The plan as things to do, not only words: each waits on the record until a visit marks it done. */}
             <div data-record-planned={waiting.length}>
-              <div className="mb-1.5 text-[12px] text-ink-500">{T.forLater}</div>
+              <div className="mb-1.5 text-[0.75rem] text-ink-500">{T.forLater}</div>
               {waiting.length > 0 && (
                 <ul className="mb-2 grid gap-1.5">
                   {waiting.map((m) => (
                     <li key={m.id} className="flex items-center gap-2 rounded-lg bg-canvas py-1 pe-1 ps-3" data-planned-line={m.id}>
-                      <span className="min-w-0 flex-1 text-[14px] font-medium" dir="auto">
+                      <span className="min-w-0 flex-1 text-[0.875rem] font-medium" dir="auto">
                         {markName(m)}
                       </span>
                       <button

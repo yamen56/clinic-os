@@ -146,18 +146,20 @@ async function main() {
     );
     check("no button sits inside a link", nested === 0, `${nested} nested controls`);
 
+    /* 13px at a 16px root; the workspace runs compact on wider screens, so measure against the root. */
+    const small = await page.evaluate(() => `${(13 * parseFloat(getComputedStyle(document.documentElement).fontSize)) / 16}px`);
     const quick = await page.evaluate(() => {
       const a = document.querySelector<HTMLElement>('main a[href$="/calendar?new=1"]');
       return a ? getComputedStyle(a).fontSize : null;
     });
-    check("a small action renders at its own 13px", quick === "13px", String(quick));
+    check("a small action renders at its own 13px", quick === small, `${quick} vs ${small}`);
     const realButton = await page.evaluate(() => {
       const b = [...document.querySelectorAll<HTMLButtonElement>("button")].find((x) =>
-        x.className.includes("text-[13px]")
+        x.className.includes("text-[0.8125rem]")
       );
       return b ? getComputedStyle(b).fontSize : null;
     });
-    check("and so does a real <button> with that class", realButton === "13px", String(realButton));
+    check("and so does a real <button> with that class", realButton === small, `${realButton} vs ${small}`);
 
     /* --------------------------------------------------- realtime, batched */
     // Not networkidle: the inbox holds its event stream open, so the network never goes quiet.

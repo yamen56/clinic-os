@@ -54,7 +54,7 @@ export function CardHeader({
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
       <div className="min-w-0">
         <h3 className="font-display text-base font-semibold text-ink-900">{title}</h3>
-        {sub && <p className="mt-0.5 text-[13px] text-ink-500">{sub}</p>}
+        {sub && <p className="mt-0.5 text-[0.8125rem] text-ink-500">{sub}</p>}
       </div>
       {action}
     </div>
@@ -73,7 +73,7 @@ export function PageHeader({
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3 md:mb-6">
       <div className="min-w-0">
-        <h1 className="font-display text-[22px] font-bold text-ink-900 md:text-2xl">{title}</h1>
+        <h1 className="font-display text-[1.375rem] font-bold text-ink-900 md:text-2xl">{title}</h1>
         {sub && <p className="mt-1 text-sm text-ink-500">{sub}</p>}
       </div>
       {/*

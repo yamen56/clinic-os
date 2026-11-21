@@ -104,8 +104,8 @@ export function DocumentSettingsClient({
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>
-            <h2 className="text-[15px] font-semibold">{t.docTemplates.title}</h2>
-            <p className="mt-0.5 text-[13px] text-ink-500">{t.docTemplates.sub}</p>
+            <h2 className="text-[0.9375rem] font-semibold">{t.docTemplates.title}</h2>
+            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docTemplates.sub}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {library.length > 0 && (
@@ -149,7 +149,7 @@ export function DocumentSettingsClient({
                       </Badge>
                     )}
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] text-ink-400">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.75rem] text-ink-400">
                     <span>
                       {(t.docTemplates.categories as Record<string, string>)[tpl.category] ??
                         tpl.category}
@@ -189,11 +189,11 @@ export function DocumentSettingsClient({
       <Card>
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>
-            <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+            <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold">
               <Users className="h-4 w-4 text-ink-400" />
               {t.signerRoles.title}
             </h2>
-            <p className="mt-0.5 text-[13px] text-ink-500">{t.signerRoles.sub}</p>
+            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.signerRoles.sub}</p>
           </div>
           {isOwner && (
             <Button size="sm" variant="outline" onClick={() => setRoleEdit({ is_staff: false })}>
@@ -215,7 +215,7 @@ export function DocumentSettingsClient({
                 </div>
                 {/* Breakable: `clinic_representative` is 189px in a mono face
                    and this column is 150px on the narrowest phone. */}
-                <code className="mono block break-all text-[12px] text-ink-400" dir="ltr">
+                <code className="mono block break-all text-[0.75rem] text-ink-400" dir="ltr">
                   {r.key}
                 </code>
               </div>
@@ -249,11 +249,11 @@ export function DocumentSettingsClient({
       {/* ---------------------------------------------------------- settings */}
       <Card>
         <div className="border-b border-line px-5 py-4">
-          <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+          <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold">
             <ShieldCheck className="h-4 w-4 text-ink-400" />
             {t.esignSettings.title}
           </h2>
-          <p className="mt-0.5 text-[13px] text-ink-500">{t.esignSettings.sub}</p>
+          <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.esignSettings.sub}</p>
         </div>
         <div className="grid gap-4 p-5">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -282,10 +282,10 @@ export function DocumentSettingsClient({
           </div>
           <label className="flex items-start justify-between gap-4 rounded-lg border border-line bg-subtle px-4 py-3">
             <span>
-              <span className="block text-[13px] font-semibold">
+              <span className="block text-[0.8125rem] font-semibold">
                 {t.esignSettings.requireCode}
               </span>
-              <span className="mt-0.5 block max-w-xl text-[12px] leading-relaxed text-ink-500">
+              <span className="mt-0.5 block max-w-xl text-[0.75rem] leading-relaxed text-ink-500">
                 {t.esignSettings.requireCodeHint}
               </span>
             </span>
@@ -312,7 +312,7 @@ export function DocumentSettingsClient({
         onClose={() => setLibraryOpen(false)}
         title={t.docTemplates.fromLibrary}
       >
-        <p className="mb-4 text-[13px] text-ink-500">{t.docTemplates.fromLibrarySub}</p>
+        <p className="mb-4 text-[0.8125rem] text-ink-500">{t.docTemplates.fromLibrarySub}</p>
         <div className="grid gap-2">
           {library.map((l) => (
             <div
@@ -321,7 +321,7 @@ export function DocumentSettingsClient({
             >
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">{locale === "ar" ? l.name_ar || l.name : l.name}</div>
-                <div className="text-[12px] text-ink-400">
+                <div className="text-[0.75rem] text-ink-400">
                   {(t.docTemplates.categories as Record<string, string>)[l.category] ?? l.category}
                 </div>
               </div>
@@ -372,8 +372,8 @@ export function DocumentSettingsClient({
             </div>
             <label className="flex items-start justify-between gap-4">
               <span>
-                <span className="block text-[13px] font-medium">{t.signerRoles.isStaff}</span>
-                <span className="block text-[12px] text-ink-500">{t.signerRoles.isStaffHint}</span>
+                <span className="block text-[0.8125rem] font-medium">{t.signerRoles.isStaff}</span>
+                <span className="block text-[0.75rem] text-ink-500">{t.signerRoles.isStaffHint}</span>
               </span>
               <Toggle
                 checked={!!roleEdit.is_staff}

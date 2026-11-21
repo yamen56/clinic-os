@@ -94,7 +94,7 @@ export function DangerZone({
             }
           />
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-            <p className="text-[13px] text-ink-500" suppressHydrationWarning>
+            <p className="text-[0.8125rem] text-ink-500" suppressHydrationWarning>
               {left > 0 ? t.admin.purgeIn.replace("{n}", String(left)) : t.admin.purgeDueNow}
             </p>
             <div className="flex gap-2">
@@ -129,7 +129,7 @@ export function DangerZone({
       <Card className="mt-4 border-danger/20">
         <CardHeader title={<span className="text-danger">{t.admin.dangerZone}</span>} />
         <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
-          <p className="max-w-lg text-[13px] leading-relaxed text-ink-500">
+          <p className="max-w-lg text-[0.8125rem] leading-relaxed text-ink-500">
             {t.admin.deleteClinicBody.replace("{days}", String(RESTORE_WINDOW_DAYS))}
           </p>
           <Button variant="danger" onClick={() => setMode("delete")}>

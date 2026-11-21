@@ -78,13 +78,13 @@ export function FullArchSheet({
       <div className="flex items-center gap-3">
         <TreatmentGlyph tr={tr} paint={status} context={null} size={48} />
         <div className="min-w-0">
-          <div className="text-[15px] font-semibold text-ink-900">{tr.en}</div>
-          <div className="text-[13px] text-ink-500">{implanted ? F.hintImplants : F.hintDenture}</div>
+          <div className="text-[0.9375rem] font-semibold text-ink-900">{tr.en}</div>
+          <div className="text-[0.8125rem] text-ink-500">{implanted ? F.hintImplants : F.hintDenture}</div>
         </div>
       </div>
 
       <div>
-        <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{F.arch}</div>
+        <div className="mb-1.5 text-[0.75rem] font-semibold text-ink-500">{F.arch}</div>
         <div className="grid grid-cols-2 gap-2" dir="ltr">
           {(["upper", "lower"] as Arch[]).map((a) => (
             <button
@@ -93,7 +93,7 @@ export function FullArchSheet({
               onClick={() => setArch(a)}
               aria-pressed={arch === a}
               data-arch={a}
-              className={`h-11 rounded-ctl border text-[14px] font-semibold transition-colors duration-140 ${
+              className={`h-11 rounded-ctl border text-[0.875rem] font-semibold transition-colors duration-140 ${
                 arch === a ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
               }`}
             >
@@ -106,7 +106,7 @@ export function FullArchSheet({
       {arch && implanted && (
         <div>
           <div className="mb-1.5 flex items-center justify-between gap-2">
-            <span className="text-[12px] font-semibold text-ink-500">{F.implants}</span>
+            <span className="text-[0.75rem] font-semibold text-ink-500">{F.implants}</span>
             <div className="inline-flex rounded-ctl bg-sunken p-0.5" role="radiogroup">
               {IMPLANT_COUNTS.map((n) => (
                 <button
@@ -115,7 +115,7 @@ export function FullArchSheet({
                   role="radio"
                   aria-checked={count === n}
                   onClick={() => setImplants(defaultImplantSites(arch, n))}
-                  className={`h-8 min-w-10 rounded-[6px] px-2.5 text-[13px] font-semibold ${count === n ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"}`}
+                  className={`h-8 min-w-10 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold ${count === n ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"}`}
                 >
                   {n}
                 </button>
@@ -135,7 +135,7 @@ export function FullArchSheet({
                   aria-pressed={on}
                   data-implant-site={f}
                   title={on ? F.implantHere : F.noImplantHere}
-                  className={`grid h-11 place-items-center rounded-ctl border text-[13px] font-bold tnum transition-colors duration-140 ${
+                  className={`grid h-11 place-items-center rounded-ctl border text-[0.8125rem] font-bold tnum transition-colors duration-140 ${
                     on ? "border-transparent text-white" : inBridge ? "border-line bg-surface text-ink-700 hover:bg-sunken" : "border-dashed border-line bg-canvas text-ink-400"
                   }`}
                   style={on ? { background: INK[planned ? "planned" : status] } : undefined}
@@ -145,14 +145,14 @@ export function FullArchSheet({
               );
             })}
           </div>
-          <p className="mt-1.5 text-[12px] text-ink-500">
+          <p className="mt-1.5 text-[0.75rem] text-ink-500">
             {T.implantsAt.replace("{n}", String(count)).replace("{list}", inChartOrder(implants).join(" · ") || "—")} · {F.tapToMove}
           </p>
         </div>
       )}
 
       {arch && (
-        <p className="rounded-ctl bg-canvas px-3 py-2 text-[13px] text-ink-700" data-bridge-teeth={bridge.join(",")}>
+        <p className="rounded-ctl bg-canvas px-3 py-2 text-[0.8125rem] text-ink-700" data-bridge-teeth={bridge.join(",")}>
           {(implanted && count >= 4 ? F.bridgeTeeth : F.dentureTeeth).replace("{from}", bridge[0] ?? "").replace("{to}", bridge[bridge.length - 1] ?? "")}
         </p>
       )}
@@ -160,9 +160,9 @@ export function FullArchSheet({
       {arch && planned && standing.length > 0 && (
         <label className="flex items-start gap-3 rounded-ctl border border-line px-3 py-2.5">
           <input type="checkbox" checked={extract} onChange={(e) => setExtract(e.target.checked)} className="mt-0.5 h-4.5 w-4.5 accent-brand-600" data-extract-standing />
-          <span className="text-[13px] text-ink-900">
+          <span className="text-[0.8125rem] text-ink-900">
             {F.extract.replace("{n}", String(standing.length))}
-            <span className="mt-0.5 block text-[12px] text-ink-500 tnum" dir="ltr">{standing.join(" · ")}</span>
+            <span className="mt-0.5 block text-[0.75rem] text-ink-500 tnum" dir="ltr">{standing.join(" · ")}</span>
           </span>
         </label>
       )}
@@ -177,7 +177,7 @@ export function FullArchSheet({
               aria-checked={status === s}
               title={T.statusHint[s]}
               onClick={() => onStatus(s)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-semibold"
+              className="inline-flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold"
               style={status === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
             >
               <PaintSwatch paint={s} size={14} />

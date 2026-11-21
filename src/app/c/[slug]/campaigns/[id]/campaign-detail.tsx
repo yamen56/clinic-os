@@ -135,7 +135,7 @@ export function CampaignDetail({
       />
 
       {campaign.status === "running" && campaign.wa_status !== "connected" && (
-        <div className="mb-4 flex items-center gap-2 rounded-ctl bg-danger-soft px-4 py-3 text-[13px] text-danger">
+        <div className="mb-4 flex items-center gap-2 rounded-ctl bg-danger-soft px-4 py-3 text-[0.8125rem] text-danger">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {t.campaigns.waOffline}
         </div>
@@ -146,11 +146,11 @@ export function CampaignDetail({
           <div className="flex items-end justify-between">
             <div>
               <div className="eyebrow">{t.campaigns.progress}</div>
-              <div className="font-display mt-1 text-[32px] font-bold leading-none tnum">
+              <div className="font-display mt-1 text-[2rem] font-bold leading-none tnum">
                 {settled} <span className="text-ink-400">/ {campaign.total_count}</span>
               </div>
             </div>
-            <div className="text-end text-[13px] text-ink-500">
+            <div className="text-end text-[0.8125rem] text-ink-500">
               {campaign.status === "running" && remaining > 0 && (
                 <div>
                   {t.campaigns.remainingTime.replace(
@@ -170,7 +170,7 @@ export function CampaignDetail({
               style={{ width: `${pct}%` }}
             />
           </div>
-          <div className="mt-3 flex flex-wrap gap-4 text-[13px]">
+          <div className="mt-3 flex flex-wrap gap-4 text-[0.8125rem]">
             <span className="text-ok">
               {t.campaigns.sentN.replace("{n}", String(sent))}
             </span>
@@ -226,7 +226,7 @@ export function CampaignDetail({
             <li key={r.id} className="flex items-center gap-3 px-5 py-2.5">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{r.full_name}</div>
-                <div className="text-[13px] text-ink-500" dir="ltr">
+                <div className="text-[0.8125rem] text-ink-500" dir="ltr">
                   {formatPhone(r.phone_e164)}
                 </div>
               </div>

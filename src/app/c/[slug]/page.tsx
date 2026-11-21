@@ -580,7 +580,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             action={
               <Link
                 href={`${base}/calendar`}
-                className="flex items-center gap-1 text-[13px] font-medium text-brand-700 hover:text-brand-800"
+                className="flex items-center gap-1 text-[0.8125rem] font-medium text-brand-700 hover:text-brand-800"
               >
                 {/* The board of today's patients opens first on that page. */}
                 {t.dashboard.viewCalendar}
@@ -648,7 +648,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
                 <BarChart data={revenuePoints} locale={intl} />
               </div>
             ) : (
-              <p className="px-5 py-4 text-[13px] text-ink-500" data-chart-quiet>{t.dashboard.quietFortnight}</p>
+              <p className="px-5 py-4 text-[0.8125rem] text-ink-500" data-chart-quiet>{t.dashboard.quietFortnight}</p>
             )}
           </Card>
         )}
@@ -662,7 +662,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
               <BarChart data={apptPoints} locale={intl} />
             </div>
           ) : (
-            <p className="px-5 py-4 text-[13px] text-ink-500" data-chart-quiet>{t.dashboard.quietFortnight}</p>
+            <p className="px-5 py-4 text-[0.8125rem] text-ink-500" data-chart-quiet>{t.dashboard.quietFortnight}</p>
           )}
         </Card>
       </div>
@@ -695,7 +695,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
           <Card>
             <CardHeader title={t.dashboard.topServices} sub={t.dashboard.topServicesSub} />
             {data.services.length === 0 ? (
-              <p className="px-5 py-4 text-[13px] text-ink-500">{t.dashboard.noneYet}</p>
+              <p className="px-5 py-4 text-[0.8125rem] text-ink-500">{t.dashboard.noneYet}</p>
             ) : (
               <ul className="grid gap-3 px-5 py-4">
                 {data.services.map((s, i) => (
@@ -735,7 +735,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
             }
           />
           {data.doctors.length === 0 ? (
-            <p className="px-5 py-4 text-[13px] text-ink-500">{t.dashboard.noneYet}</p>
+            <p className="px-5 py-4 text-[0.8125rem] text-ink-500">{t.dashboard.noneYet}</p>
           ) : (
             <ul className="grid gap-3 px-5 py-4">
               {data.doctors.map((d, i) => (
@@ -744,7 +744,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
                     <span className="min-w-0 truncate text-sm">
                       {d.name || t.dashboard.unassigned}
                     </span>
-                    <span className="shrink-0 text-[13px] tnum">
+                    <span className="shrink-0 text-[0.8125rem] tnum">
                       <span className="font-semibold">{d.completed}</span>{" "}
                       <span className="text-ink-500">{t.dashboard.completedShort}</span>
                       {d.no_show > 0 && (
@@ -809,7 +809,7 @@ function SetupCard({ base, items, t }: { base: string; items: SetupItem[]; t: Aw
                   <Circle className="h-5 w-5 shrink-0 text-ink-300" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium text-ink-900">{words.label}</span>
-                    <span className="block text-[12.5px] text-ink-500">{words.hint}</span>
+                    <span className="block text-[0.78125rem] text-ink-500">{words.hint}</span>
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-ink-400 rtl:rotate-180" />
                 </Link>
@@ -823,7 +823,7 @@ function SetupCard({ base, items, t }: { base: string; items: SetupItem[]; t: Aw
               <Link
                 key={i.key}
                 href={`${base}${i.path}`}
-                className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-[12px] text-ink-500 transition-colors hover:text-ink-900"
+                className="inline-flex items-center gap-1 rounded-full bg-sunken px-2.5 py-1 text-[0.75rem] text-ink-500 transition-colors hover:text-ink-900"
                 data-setup-item={i.key}
                 data-done="1"
               >
@@ -858,7 +858,7 @@ function FollowUpRow({
         <Icon className="h-4 w-4 shrink-0 text-ink-400" strokeWidth={1.75} />
         <span className="min-w-0 flex-1">{label}</span>
         <span
-          className={`rounded-full px-2 py-0.5 text-[12px] font-semibold tnum ${
+          className={`rounded-full px-2 py-0.5 text-[0.75rem] font-semibold tnum ${
             count > 0 ? "bg-st-pending-soft text-st-pending" : "bg-ink-900/4 text-ink-500"
           }`}
         >

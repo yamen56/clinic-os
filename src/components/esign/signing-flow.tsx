@@ -292,7 +292,7 @@ export function SigningFlow({
       <StepIndicator step={step} locale={locale} />
 
       {resume && resume.lastStep > 1 && step === resume.lastStep && (
-        <p className="mb-3 rounded-ctl bg-brand-50 px-3 py-2 text-[12px] font-medium text-brand-800">
+        <p className="mb-3 rounded-ctl bg-brand-50 px-3 py-2 text-[0.75rem] font-medium text-brand-800">
           {t.sign.resumed}
         </p>
       )}
@@ -300,11 +300,11 @@ export function SigningFlow({
       {step === 1 && (
         <>
           <h1 className="font-display text-xl font-bold">{view.document?.title}</h1>
-          <p className="mt-1 text-[13px] leading-relaxed text-ink-500">{greeting}</p>
+          <p className="mt-1 text-[0.8125rem] leading-relaxed text-ink-500">{greeting}</p>
 
           <div
             ref={scrollRef}
-            className="relative mt-4 max-h-[58dvh] overflow-y-auto rounded-card border border-line bg-surface p-4 text-[15px] leading-[1.85] sm:p-5"
+            className="relative mt-4 max-h-[58dvh] overflow-y-auto rounded-card border border-line bg-surface p-4 text-[0.9375rem] leading-[1.85] sm:p-5"
           >
             {view.document?.source === "upload" && token ? (
               <PdfPreview src={`/api/public/sign/${token}/pdf`} onEnd={() => setScrolledToEnd(true)} />
@@ -322,7 +322,7 @@ export function SigningFlow({
                     behavior: "smooth",
                   })
                 }
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-ctl border border-line bg-surface text-[14px] font-semibold text-ink-500"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-ctl border border-line bg-surface text-[0.875rem] font-semibold text-ink-500"
               >
                 <ChevronDown className="h-4 w-4 animate-bounce" />
                 {t.sign.scrollToEnd}
@@ -349,15 +349,15 @@ export function SigningFlow({
               }}
               className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
             />
-            <span className="text-[14px] leading-relaxed">{t.sign.consentLabel}</span>
+            <span className="text-[0.875rem] leading-relaxed">{t.sign.consentLabel}</span>
           </label>
 
           {view.extraQuestions.length > 0 && (
             <div className="mt-4 grid gap-3">
-              <h2 className="text-[13px] font-semibold text-ink-700">{t.sign.extraQuestions}</h2>
+              <h2 className="text-[0.8125rem] font-semibold text-ink-700">{t.sign.extraQuestions}</h2>
               {view.extraQuestions.map((q) => (
                 <label key={q.key} className="block">
-                  <span className="mb-1.5 flex items-baseline gap-1 text-[13px] font-semibold">
+                  <span className="mb-1.5 flex items-baseline gap-1 text-[0.8125rem] font-semibold">
                     {locale === "ar" ? q.label_ar || q.label : q.label || q.label_ar}
                     {q.required && <span className="text-danger">*</span>}
                   </span>
@@ -365,7 +365,7 @@ export function SigningFlow({
                     <select
                       value={String(answers[q.key] ?? "")}
                       onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                      className="h-11 w-full rounded-ctl border border-line bg-surface px-3 text-[15px]"
+                      className="h-11 w-full rounded-ctl border border-line bg-surface px-3 text-[0.9375rem]"
                     >
                       <option value="">—</option>
                       {q.options.map((o) => (
@@ -385,14 +385,14 @@ export function SigningFlow({
                     <textarea
                       value={String(answers[q.key] ?? "")}
                       onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                      className="min-h-20 w-full rounded-ctl border border-line bg-surface px-3 py-2 text-[15px]"
+                      className="min-h-20 w-full rounded-ctl border border-line bg-surface px-3 py-2 text-[0.9375rem]"
                     />
                   ) : (
                     <input
                       type={q.type === "number" ? "number" : q.type === "date" ? "date" : "text"}
                       value={String(answers[q.key] ?? "")}
                       onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                      className="h-11 w-full rounded-ctl border border-line bg-surface px-3 text-[15px]"
+                      className="h-11 w-full rounded-ctl border border-line bg-surface px-3 text-[0.9375rem]"
                     />
                   )}
                 </label>
@@ -410,15 +410,15 @@ export function SigningFlow({
               {t.sign.continue}
             </Button>
             {!consent && (
-              <p className="text-center text-[12px] text-ink-500">{t.sign.consentRequired}</p>
+              <p className="text-center text-[0.75rem] text-ink-500">{t.sign.consentRequired}</p>
             )}
             <div className="flex items-center justify-between">
-              <button onClick={() => goTo(1)} className="text-[13px] font-medium text-ink-500 underline">
+              <button onClick={() => goTo(1)} className="text-[0.8125rem] font-medium text-ink-500 underline">
                 {t.sign.back}
               </button>
               <button
                 onClick={() => setDeclineOpen(true)}
-                className="text-[13px] font-medium text-danger underline"
+                className="text-[0.8125rem] font-medium text-danger underline"
               >
                 {t.sign.decline}
               </button>
@@ -448,7 +448,7 @@ export function SigningFlow({
           </div>
 
           {error && (
-            <p className="mt-3 rounded-ctl bg-danger-soft px-3 py-2 text-[13px] font-medium text-danger">
+            <p className="mt-3 rounded-ctl bg-danger-soft px-3 py-2 text-[0.8125rem] font-medium text-danger">
               {(t.docs.errors as Record<string, string>)[error] ?? t.common.genericError}
             </p>
           )}
@@ -456,11 +456,11 @@ export function SigningFlow({
             <div className="mt-3 flex items-start gap-2 rounded-ctl bg-st-pending-soft px-3 py-2.5 text-st-pending">
               <WifiOff className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="flex-1">
-                <div className="text-[13px] font-semibold">{t.sign.offlineTitle}</div>
-                <p className="text-[12px]">{t.sign.offlineBody}</p>
+                <div className="text-[0.8125rem] font-semibold">{t.sign.offlineTitle}</div>
+                <p className="text-[0.75rem]">{t.sign.offlineBody}</p>
                 <button
                   onClick={() => pendingPayload.current && void doSubmit(pendingPayload.current)}
-                  className="mt-1 text-[12px] font-semibold underline"
+                  className="mt-1 text-[0.75rem] font-semibold underline"
                 >
                   {t.sign.retryNow}
                 </button>
@@ -480,12 +480,12 @@ export function SigningFlow({
               {submitting ? t.sign.submitting : t.sign.finish}
             </Button>
             <div className="flex items-center justify-between">
-              <button onClick={() => goTo(2)} className="text-[13px] font-medium text-ink-500 underline">
+              <button onClick={() => goTo(2)} className="text-[0.8125rem] font-medium text-ink-500 underline">
                 {t.sign.back}
               </button>
               <button
                 onClick={() => setDeclineOpen(true)}
-                className="text-[13px] font-medium text-danger underline"
+                className="text-[0.8125rem] font-medium text-danger underline"
               >
                 {t.sign.decline}
               </button>
@@ -499,13 +499,13 @@ export function SigningFlow({
           <div className="absolute inset-0 bg-[rgb(11_18_32/0.55)]" onClick={() => setDeclineOpen(false)} />
           <div className="relative w-full rounded-t-modal bg-surface p-5 shadow-modal animate-fade-up sm:max-w-md sm:rounded-modal">
             <h2 className="font-display text-lg font-semibold">{t.sign.declineTitle}</h2>
-            <p className="mt-1 text-[13px] text-ink-500">{t.sign.declineBody}</p>
+            <p className="mt-1 text-[0.8125rem] text-ink-500">{t.sign.declineBody}</p>
             <label className="mt-3 block">
-              <span className="mb-1.5 block text-[13px] font-semibold">{t.sign.declineReason}</span>
+              <span className="mb-1.5 block text-[0.8125rem] font-semibold">{t.sign.declineReason}</span>
               <textarea
                 value={declineReason}
                 onChange={(e) => setDeclineReason(e.target.value)}
-                className="min-h-20 w-full rounded-ctl border border-line bg-surface px-3 py-2 text-[15px]"
+                className="min-h-20 w-full rounded-ctl border border-line bg-surface px-3 py-2 text-[0.9375rem]"
               />
             </label>
             <div className="mt-4 flex justify-end gap-2">
@@ -569,7 +569,7 @@ function CodeGate({
   return (
     <div className="flex min-h-[60dvh] flex-col justify-center">
       <h1 className="font-display text-xl font-bold">{t.sign.codeTitle}</h1>
-      <p className="mt-1 text-[13px] text-ink-500">{t.sign.codeHint}</p>
+      <p className="mt-1 text-[0.8125rem] text-ink-500">{t.sign.codeHint}</p>
       <input
         value={code}
         onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -581,7 +581,7 @@ function CodeGate({
         className="mt-4 h-14 w-full rounded-ctl border border-line bg-surface text-center text-2xl font-semibold tracking-[0.4em] tnum outline-none focus:border-brand-600"
       />
       {err && (
-        <p className="mt-2 text-[13px] font-medium text-danger">
+        <p className="mt-2 text-[0.8125rem] font-medium text-danger">
           {err === "wrong_code"
             ? t.sign.codeWrong
             : err === "expired_code"
@@ -601,7 +601,7 @@ function CodeGate({
       {sent && (
         <button
           onClick={() => void call({})}
-          className="mt-3 text-center text-[13px] font-medium text-ink-500 underline"
+          className="mt-3 text-center text-[0.8125rem] font-medium text-ink-500 underline"
         >
           {t.sign.requestNewLink}
         </button>
@@ -635,9 +635,9 @@ function Outcome({
         {icon}
       </span>
       <h1 className="font-display text-xl font-bold">{title}</h1>
-      <p className="max-w-sm text-[14px] leading-relaxed text-ink-700">{body}</p>
-      {extra && <p className="max-w-sm text-[13px] text-ink-500">{extra}</p>}
-      {hint && <p className="mt-2 text-[12px] text-ink-400">{hint}</p>}
+      <p className="max-w-sm text-[0.875rem] leading-relaxed text-ink-700">{body}</p>
+      {extra && <p className="max-w-sm text-[0.8125rem] text-ink-500">{extra}</p>}
+      {hint && <p className="mt-2 text-[0.75rem] text-ink-400">{hint}</p>}
     </div>
   );
 }

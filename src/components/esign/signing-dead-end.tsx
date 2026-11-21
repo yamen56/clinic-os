@@ -172,7 +172,7 @@ function Panel({
     <div className="flex min-h-[62dvh] flex-col items-center justify-center gap-3 text-center">
       <span className={`grid h-16 w-16 place-items-center rounded-full ${tones[tone]}`}>{icon}</span>
       <h1 className="font-display text-xl font-bold">{title}</h1>
-      <p className="max-w-sm text-[14px] leading-relaxed text-ink-700">{body}</p>
+      <p className="max-w-sm text-[0.875rem] leading-relaxed text-ink-700">{body}</p>
       {action && <div className="mt-3">{action}</div>}
     </div>
   );

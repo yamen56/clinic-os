@@ -144,7 +144,7 @@ export function ThemePicker() {
   ];
   return (
     <div className="grid w-full gap-2">
-      <div className="text-[13px] font-semibold text-ink-900">{t.theme.title}</div>
+      <div className="text-[0.8125rem] font-semibold text-ink-900">{t.theme.title}</div>
       <div role="radiogroup" aria-label={t.theme.title} className="inline-flex w-full max-w-sm rounded-ctl bg-sunken p-1 ring-1 ring-line">
         {options.map(({ key, label, Icon }) => {
           const on = pref === key;
@@ -155,7 +155,7 @@ export function ThemePicker() {
               role="radio"
               aria-checked={on}
               onClick={() => setThemePref(key)}
-              className={`flex h-9 flex-1 touch-manipulation items-center justify-center gap-1.5 rounded-[6px] text-[13px] font-semibold transition-colors duration-140 ease-out ${
+              className={`flex h-9 flex-1 touch-manipulation items-center justify-center gap-1.5 rounded-[6px] text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
                 on ? "bg-surface text-ink-900 shadow-card ring-1 ring-line" : "text-ink-500 hover:text-ink-900"
               }`}
             >

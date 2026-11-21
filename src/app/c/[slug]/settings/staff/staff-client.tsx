@@ -251,11 +251,11 @@ export function StaffClient({
                   )}
                   {!m.active && <Badge status="cancelled">{t.common.inactive}</Badge>}
                 </div>
-                <div className="truncate text-[13px] text-ink-500" dir="ltr">
+                <div className="truncate text-[0.8125rem] text-ink-500" dir="ltr">
                   {m.email}
                   {m.specialty ? ` · ${m.specialty}` : ""}
                 </div>
-                <div className="text-[12px] text-ink-400">
+                <div className="text-[0.75rem] text-ink-400">
                   {accessSummary(m)}
                   {/* Only the owner's browser is sent anybody's pay, so for anyone else this is always empty. */}
                   {viewerIsOwner && payLine(m, currency, locale, t.staff) && <span data-pay-line> · {payLine(m, currency, locale, t.staff)}</span>}
@@ -279,7 +279,7 @@ export function StaffClient({
               type="button"
               onClick={() => setShowRemoved((v) => !v)}
               aria-expanded={showRemoved}
-              className="flex min-h-11 w-full touch-manipulation items-center justify-between gap-2 px-5 py-2.5 text-[13px] font-semibold text-ink-500 transition-colors hover:bg-sunken"
+              className="flex min-h-11 w-full touch-manipulation items-center justify-between gap-2 px-5 py-2.5 text-[0.8125rem] font-semibold text-ink-500 transition-colors hover:bg-sunken"
               data-staff-removed-toggle={removed.length}
             >
               <span>{t.staff.removedN.replace("{n}", String(removed.length))}</span>
@@ -294,8 +294,8 @@ export function StaffClient({
                     </span>
                     {/* A name room to read before the buttons: on a phone they wrap under it rather than crushing it. */}
                     <div className="min-w-0 flex-1 basis-40">
-                      <div className="truncate text-[13px] font-medium text-ink-700">{m.full_name}</div>
-                      <div className="truncate text-[12px] text-ink-400" dir="ltr">
+                      <div className="truncate text-[0.8125rem] font-medium text-ink-700">{m.full_name}</div>
+                      <div className="truncate text-[0.75rem] text-ink-400" dir="ltr">
                         {m.email}
                       </div>
                     </div>
@@ -317,7 +317,7 @@ export function StaffClient({
                         {t.staff.reactivate}
                       </Button>
                       {m.has_history ? (
-                        <span className="px-2 text-[12px] text-ink-400" title={t.staff.keptHint} data-staff-kept={m.id}>
+                        <span className="px-2 text-[0.75rem] text-ink-400" title={t.staff.keptHint} data-staff-kept={m.id}>
                           {t.staff.kept}
                         </span>
                       ) : (
@@ -367,7 +367,7 @@ export function StaffClient({
             </Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <p className="rounded-ctl bg-sunken px-3 py-2 text-[13px] text-ink-700">
+            <p className="rounded-ctl bg-sunken px-3 py-2 text-[0.8125rem] text-ink-700">
               {t.staff.inviteExplainer}
             </p>
             <Field label={t.staff.role} hint={t.staff.roleHint}>
@@ -418,7 +418,7 @@ export function StaffClient({
             <div data-add-pay>
               <PayEditor role={form.role} value={form.pay} onChange={(pay) => setForm((f) => ({ ...f, pay }))} currency={currency} />
               {addPayMissing && form.pay.kind !== "none" && (
-                <p className="mt-1.5 text-[12px] text-st-pending">{t.staff.payInvalid}</p>
+                <p className="mt-1.5 text-[0.75rem] text-st-pending">{t.staff.payInvalid}</p>
               )}
             </div>
           )}
@@ -517,7 +517,7 @@ export function StaffClient({
         title={t.staff.inviteLinkTitle}
       >
         <p className="text-sm text-ink-700">{t.staff.inviteLinkBody}</p>
-        <p className="mt-3 break-all rounded-ctl bg-sunken px-3 py-2 font-mono text-[12px] text-ink-900">
+        <p className="mt-3 break-all rounded-ctl bg-sunken px-3 py-2 font-mono text-[0.75rem] text-ink-900">
           {inviteLink}
         </p>
         <div className="mt-4 flex justify-end gap-2">
@@ -595,7 +595,7 @@ function AccessEditor({
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3.5">
         <div className="min-w-0 flex-1 basis-60">
           <span className="block text-sm font-semibold text-ink-900">{t.staff.accessTitle}</span>
-          <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">{t.staff.accessSub}</p>
+          <p className="mt-0.5 text-[0.75rem] leading-relaxed text-ink-500">{t.staff.accessSub}</p>
         </div>
         {/*
           A segmented control: two settings, one chosen. Only the level moves.
@@ -616,7 +616,7 @@ function AccessEditor({
               role="radio"
               aria-checked={level === lv}
               onClick={() => onLevel(lv)}
-              className={`touch-manipulation rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+              className={`touch-manipulation rounded-full px-3.5 py-1.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
                 level === lv ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
               }`}
             >
@@ -629,11 +629,11 @@ function AccessEditor({
       {level === "custom" ? (
         <div className="grid gap-5 p-4">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <p className="min-w-0 flex-1 basis-64 text-[12px] leading-relaxed text-ink-500">
+            <p className="min-w-0 flex-1 basis-64 text-[0.75rem] leading-relaxed text-ink-500">
               {t.staff.accessCustomHint}
             </p>
             <div className="flex shrink-0 items-center gap-2">
-              <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[12px] font-semibold text-brand-700 ring-1 ring-brand-100 tnum">
+              <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[0.75rem] font-semibold text-brand-700 ring-1 ring-brand-100 tnum">
                 {t.staff.accessSectionsOn
                   .replace("{n}", String(sectionsOn))
                   .replace("{total}", String(CAPABILITY_GROUPS.length))}
@@ -641,7 +641,7 @@ function AccessEditor({
               <button
                 type="button"
                 onClick={() => onCaps(capabilitiesFor(ROLE_DEFAULTS[role]))}
-                className="inline-flex touch-manipulation items-center gap-1 rounded-full px-2 py-1 text-[12px] font-medium text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
+                className="inline-flex touch-manipulation items-center gap-1 rounded-full px-2 py-1 text-[0.75rem] font-medium text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 {t.staff.accessReset}
@@ -651,7 +651,7 @@ function AccessEditor({
 
           {AREAS.map((area) => (
             <section key={area}>
-              <h4 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              <h4 className="mb-2 px-1 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">
                 {t.staff.accessAreas[area]}
               </h4>
               <div className="grid gap-2">
@@ -676,16 +676,16 @@ function AccessEditor({
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            <span className="text-[13px] font-semibold text-ink-900">{t.caps[section]}</span>
+                            <span className="text-[0.8125rem] font-semibold text-ink-900">{t.caps[section]}</span>
                             {on && actions.length > 0 && (
-                              <span className="text-[11px] font-medium text-ink-500 tnum">
+                              <span className="text-[length:max(11px,0.6875rem)] font-medium text-ink-500 tnum">
                                 {t.staff.accessCount
                                   .replace("{n}", String(granted))
                                   .replace("{total}", String(actions.length))}
                               </span>
                             )}
                           </span>
-                          <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">
+                          <span className="mt-0.5 block text-[0.75rem] leading-snug text-ink-500">
                             {t.capsHelp[section]}
                           </span>
                         </span>
@@ -709,14 +709,14 @@ function AccessEditor({
                             <button
                               type="button"
                               onClick={() => setActions(actions, true)}
-                              className="touch-manipulation rounded-md px-2 py-0.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-100"
+                              className="touch-manipulation rounded-md px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 hover:bg-brand-100"
                             >
                               {t.staff.accessAll}
                             </button>
                             <button
                               type="button"
                               onClick={() => setActions(actions, false)}
-                              className="touch-manipulation rounded-md px-2 py-0.5 text-[11px] font-semibold text-ink-500 hover:bg-ink-900/5"
+                              className="touch-manipulation rounded-md px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-500 hover:bg-ink-900/5"
                             >
                               {t.staff.accessNone}
                             </button>
@@ -732,8 +732,8 @@ function AccessEditor({
                                     }`}
                                   >
                                     <span className="min-w-0 flex-1">
-                                      <span className="block text-[13px] font-medium text-ink-900">{t.caps[a]}</span>
-                                      <span className="block text-[11.5px] leading-snug text-ink-500">
+                                      <span className="block text-[0.8125rem] font-medium text-ink-900">{t.caps[a]}</span>
+                                      <span className="block text-[length:max(11px,0.71875rem)] leading-snug text-ink-500">
                                         {missing.length
                                           ? t.staff.accessNeeds.replace(
                                               "{what}",
@@ -769,7 +769,7 @@ function AccessEditor({
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-on-brand">
             <ShieldCheck className="h-4 w-4" strokeWidth={1.9} />
           </span>
-          <p className="text-[13px] leading-relaxed text-ink-700">{t.staff.fullAccessHint}</p>
+          <p className="text-[0.8125rem] leading-relaxed text-ink-700">{t.staff.fullAccessHint}</p>
         </div>
       )}
     </div>
@@ -941,12 +941,12 @@ function EditMember({
       {viewerIsOwner && (
         <div data-edit-pay>
           <PayEditor role={m.role} value={pay} onChange={setPay} currency={currency} />
-          {payMissing && pay.kind !== "none" && <p className="mt-1.5 text-[12px] text-st-pending">{t.staff.payInvalid}</p>}
+          {payMissing && pay.kind !== "none" && <p className="mt-1.5 text-[0.75rem] text-st-pending">{t.staff.payInvalid}</p>}
         </div>
       )}
 
       {accessLocked ? (
-        <p className="rounded-lg border border-line bg-sunken px-4 py-3 text-[12px] leading-relaxed text-ink-500">
+        <p className="rounded-lg border border-line bg-sunken px-4 py-3 text-[0.75rem] leading-relaxed text-ink-500">
           {member.is_owner ? t.staff.ownerAccessLocked : t.staff.selfAccessLocked}
         </p>
       ) : (
@@ -965,7 +965,7 @@ function EditMember({
                   setM({ ...m, working_hours: { sun: [["09:00", "17:00"]], mon: [["09:00", "17:00"]], tue: [["09:00", "17:00"]], wed: [["09:00", "17:00"]], thu: [["09:00", "17:00"]], fri: [], sat: [] } });
               }}
             />
-            <span className="text-[13px] font-medium">
+            <span className="text-[0.8125rem] font-medium">
               {ownHours ? t.staff.ownHours : t.staff.useClinicHours}
             </span>
           </label>

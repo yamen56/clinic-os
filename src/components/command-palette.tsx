@@ -153,8 +153,8 @@ export function CommandPalette({
         <button key={it.id} type="button" className={cls} data-palette-index={index} data-palette-patient={p.id} onMouseMove={() => setHi(index)} onClick={() => go(it)}>
           <Avatar name={p.full_name} size={30} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px] font-semibold text-ink-900">{p.full_name}</span>
-            <span className="flex flex-wrap gap-x-2 text-[12px] text-ink-500">
+            <span className="block truncate text-[0.875rem] font-semibold text-ink-900">{p.full_name}</span>
+            <span className="flex flex-wrap gap-x-2 text-[0.75rem] text-ink-500">
               {p.phone_e164 && (
                 <span dir="ltr" className="tnum">
                   {formatPhone(p.phone_e164)}
@@ -164,7 +164,7 @@ export function CommandPalette({
             </span>
           </span>
           {p.next_at && (
-            <span className="shrink-0 text-end text-[11.5px] leading-tight text-ink-500">
+            <span className="shrink-0 text-end text-[length:max(11px,0.71875rem)] leading-tight text-ink-500">
               <span className="block">{t.search.next}</span>
               <span className="block font-semibold text-ink-700 tnum">{fmtDateTime(p.next_at, tz, locale)}</span>
             </span>
@@ -178,7 +178,7 @@ export function CommandPalette({
         <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-sunken text-ink-500">
           <Icon className={`h-4 w-4 ${it.kind === "page" ? "rtl:rotate-180" : ""}`} />
         </span>
-        <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{it.kind === "action" ? it.a.label : it.g.label}</span>
+        <span className="min-w-0 flex-1 truncate text-[0.875rem] font-medium">{it.kind === "action" ? it.a.label : it.g.label}</span>
         {active && <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-ink-400 max-md:hidden" />}
       </button>
     );
@@ -205,23 +205,23 @@ export function CommandPalette({
           <button type="button" onClick={onClose} aria-label={t.common.close} className="grid h-10 w-10 shrink-0 touch-manipulation place-items-center rounded-full text-ink-500 hover:bg-sunken md:hidden">
             <X className="h-5 w-5" />
           </button>
-          <kbd className="rounded border border-line px-1.5 text-[11px] font-semibold text-ink-400 max-md:hidden">Esc</kbd>
+          <kbd className="rounded border border-line px-1.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-400 max-md:hidden">Esc</kbd>
         </div>
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
           {patients.length > 0 && (
             <>
-              <div className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.search.patients}</div>
+              <div className="px-3 pb-1 pt-1.5 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">{t.search.patients}</div>
               {patients.map((it) => row(it, items.indexOf(it)))}
             </>
           )}
           {canSearch && patientHref && term.length >= 2 && !loading && patients.length === 0 && (
-            <p className="px-3 py-3 text-[13px] text-ink-500" data-palette-empty>
+            <p className="px-3 py-3 text-[0.8125rem] text-ink-500" data-palette-empty>
               {t.search.noPatients.replace("{q}", term)}
             </p>
           )}
           {rest.length > 0 && (
             <>
-              <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{term ? t.search.actionsAndPages : t.search.actions}</div>
+              <div className="px-3 pb-1 pt-2 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">{term ? t.search.actionsAndPages : t.search.actions}</div>
               {rest.map((it) => row(it, items.indexOf(it)))}
             </>
           )}

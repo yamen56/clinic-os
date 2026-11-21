@@ -77,16 +77,16 @@ export function AddTreatment({
       }
     >
       <div className="grid gap-3">
-        <label className="grid gap-1 text-[13px] font-semibold">
+        <label className="grid gap-1 text-[0.8125rem] font-semibold">
           {N.name}
           <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} data-face-new-name />
         </label>
-        <label className="grid gap-1 text-[13px] font-semibold">
+        <label className="grid gap-1 text-[0.8125rem] font-semibold">
           {N.nameAr}
           <Input value={nameAr} onChange={(e) => setNameAr(e.target.value)} maxLength={80} dir="rtl" />
         </label>
         <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1 text-[13px] font-semibold">
+          <label className="grid gap-1 text-[0.8125rem] font-semibold">
             {N.family}
             <Select value={family} onChange={(e) => setFamily(e.target.value as Family)} data-face-new-family>
               {FAMILIES.map((f) => (
@@ -96,7 +96,7 @@ export function AddTreatment({
               ))}
             </Select>
           </label>
-          <label className="grid gap-1 text-[13px] font-semibold">
+          <label className="grid gap-1 text-[0.8125rem] font-semibold">
             {N.pricedBy}
             <Select value={pricedBy} onChange={(e) => setPricedBy(e.target.value as PricedBy)} data-face-new-priced>
               {(["session", "area", "unit", "syringe", "thread"] as const).map((p) => (
@@ -107,19 +107,19 @@ export function AddTreatment({
             </Select>
           </label>
         </div>
-        <label className="flex min-h-10 items-center gap-2 text-[13.5px]">
+        <label className="flex min-h-10 items-center gap-2 text-[0.84375rem]">
           <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={units || pricedBy === "unit"} disabled={pricedBy === "unit"} onChange={(e) => setUnits(e.target.checked)} />
           {N.units}
         </label>
         <div className="grid gap-1">
-          <div className="text-[13px] font-semibold">{N.where}</div>
+          <div className="text-[0.8125rem] font-semibold">{N.where}</div>
           {zones.length > 0 && (
-            <label className="flex min-h-10 items-center gap-2 text-[13.5px]">
+            <label className="flex min-h-10 items-center gap-2 text-[0.84375rem]">
               <input type="radio" name="where" className="h-4 w-4 accent-brand-600" checked={!anywhere} onChange={() => setAnywhere(false)} />
               {N.whereSelected}: {whereText(zones, "en")}
             </label>
           )}
-          <label className="flex min-h-10 items-center gap-2 text-[13.5px]">
+          <label className="flex min-h-10 items-center gap-2 text-[0.84375rem]">
             <input type="radio" name="where" className="h-4 w-4 accent-brand-600" checked={anywhere} onChange={() => setAnywhere(true)} data-face-new-anywhere />
             {N.whereAll}
           </label>

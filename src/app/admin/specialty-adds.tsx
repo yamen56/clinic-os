@@ -12,9 +12,9 @@ import { profileFor } from "@/lib/specialty-profile";
 export function SpecialtyAdds({ specialties }: { specialties: string[] }) {
   const { t } = useI18n();
   const p = profileFor(specialties);
-  const chip = "inline-flex rounded-full bg-brand-50 px-2.5 py-0.5 text-[12.5px] font-medium text-ink-900";
+  const chip = "inline-flex rounded-full bg-brand-50 px-2.5 py-0.5 text-[0.78125rem] font-medium text-ink-900";
   return (
-    <div className="grid gap-2 rounded-ctl border border-line bg-canvas px-3.5 py-3 text-[13px]" data-specialty-adds>
+    <div className="grid gap-2 rounded-ctl border border-line bg-canvas px-3.5 py-3 text-[0.8125rem]" data-specialty-adds>
       <div className="font-semibold text-ink-900">{t.admin.specialtyAdds}</div>
       {p.modules.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5" data-adds-modules>

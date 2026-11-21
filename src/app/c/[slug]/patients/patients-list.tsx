@@ -442,7 +442,7 @@ export function PatientsList({
 
       {/* Still says what is on screen — but it is no longer a dead end. */}
       {total > shown.length && (
-        <p className="mb-2 text-[13px] text-ink-500">
+        <p className="mb-2 text-[0.8125rem] text-ink-500">
           {t.patients.showingOf
             .replace("{shown}", String(shown.length))
             .replace("{total}", String(total))}
@@ -490,7 +490,7 @@ export function PatientsList({
                         <BellOff className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-label={t.patients.automations.muted} />
                       )}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-ink-500">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.8125rem] text-ink-500">
                       {p.phone && <span className="num tnum">{formatPhone(p.phone)}</span>}
                       <span data-added-by={p.addedBy ? "person" : p.source}>{originLabel(p)}</span>
                       {p.lastVisitAt && (
@@ -528,7 +528,7 @@ export function PatientsList({
             {t.patients.loadMore.replace("{n}", String(pageSize))}
           </Button>
           {moreError && (
-            <p className="text-[13px] text-danger" role="alert">
+            <p className="text-[0.8125rem] text-danger" role="alert">
               {t.patients.loadMoreFailed}
             </p>
           )}
@@ -639,7 +639,7 @@ export function PatientsList({
               );
             })}
           </div>
-          {err?.field === "form" && <p className="text-[13px] text-danger">{err.text}</p>}
+          {err?.field === "form" && <p className="text-[0.8125rem] text-danger">{err.text}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setNewOpen(false)}>
               {t.common.cancel}

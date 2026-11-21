@@ -120,12 +120,12 @@ export function PushManager({ compact }: { compact?: boolean }) {
 
   if (state === "unsupported") {
     return compact ? null : (
-      <p className="text-[13px] text-ink-500">{t.notifications.pushUnsupported}</p>
+      <p className="text-[0.8125rem] text-ink-500">{t.notifications.pushUnsupported}</p>
     );
   }
   if (state === "blocked") {
     return (
-      <p className="flex items-center gap-2 text-[13px] text-st-pending">
+      <p className="flex items-center gap-2 text-[0.8125rem] text-st-pending">
         <BellOff className="h-4 w-4" />
         {t.notifications.pushBlocked}
       </p>

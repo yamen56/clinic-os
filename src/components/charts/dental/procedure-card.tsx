@@ -143,7 +143,7 @@ function StepForm({
           const cols = f.columns;
           return (
             <div key={fi} className="grid gap-1.5">
-              <div className="grid items-center gap-1.5 text-[11.5px] font-semibold text-ink-500" style={{ gridTemplateColumns: `3.25rem repeat(${cols.length}, minmax(0, 1fr)) 1.75rem` }}>
+              <div className="grid items-center gap-1.5 text-[length:max(11px,0.71875rem)] font-semibold text-ink-500" style={{ gridTemplateColumns: `3.25rem repeat(${cols.length}, minmax(0, 1fr)) 1.75rem` }}>
                 <span>{P.canal}</span>
                 {cols.includes("length") && <span>{P.length}</span>}
                 {cols.includes("ref") && <span>{P.reference}</span>}
@@ -172,7 +172,7 @@ function StepForm({
                               const ordered = [...FILE_SIZES.filter((x) => next.includes(x)), ...next.filter((x) => !(FILE_SIZES as readonly string[]).includes(x))];
                               setCanal(i, { file: ordered.join(", ") });
                             }}
-                            className={`h-8 rounded-full border px-2.5 text-[12.5px] font-semibold tnum transition-colors duration-140 ${
+                            className={`h-8 rounded-full border px-2.5 text-[0.78125rem] font-semibold tnum transition-colors duration-140 ${
                               on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                             }`}
                           >
@@ -180,7 +180,7 @@ function StepForm({
                           </button>
                         );
                       })}
-                      {lengthOf(c.name) != null && <span className="ps-1 text-[11.5px] text-ink-400 tnum">{lengthOf(c.name)} mm</span>}
+                      {lengthOf(c.name) != null && <span className="ps-1 text-[length:max(11px,0.71875rem)] text-ink-400 tnum">{lengthOf(c.name)} mm</span>}
                     </div>
                   )}
                   {(data.canals?.length ?? 0) > 1 ? (
@@ -196,7 +196,7 @@ function StepForm({
                 <button
                   type="button"
                   onClick={() => set({ canals: [...(data.canals ?? []), { name: `C${(data.canals?.length ?? 0) + 1}`, ...(cols.includes("length") ? { length: null, ref: "" } : {}), ...(cols.includes("file") ? { file: "" } : {}) }] })}
-                  className="inline-flex items-center gap-1 justify-self-start text-[12.5px] font-semibold text-brand-700"
+                  className="inline-flex items-center gap-1 justify-self-start text-[0.78125rem] font-semibold text-brand-700"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   {P.addCanal}
@@ -210,7 +210,7 @@ function StepForm({
             <div key={fi} className="grid gap-2">
               {(data.implants ?? []).map((im, i) => (
                 <div key={im.site} className="grid gap-1.5 rounded-ctl border border-line p-2" data-implant-row={im.site}>
-                  <div className="text-[12.5px] font-bold text-ink-900 tnum">
+                  <div className="text-[0.78125rem] font-bold text-ink-900 tnum">
                     {P.implantSite} {im.site}
                   </div>
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
@@ -220,7 +220,7 @@ function StepForm({
                     <Decimal value={im.torque} onChange={(v) => setImplant(i, { torque: v })} label={P.implantTorque} />
                     <input value={im.lot ?? ""} onChange={(e) => setImplant(i, { lot: e.target.value.slice(0, 40) })} placeholder={P.implantLot} aria-label={P.implantLot} className={`${field} col-span-2 sm:col-span-2`} />
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5 text-[11px] text-ink-400 sm:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-1.5 text-[length:max(11px,0.6875rem)] text-ink-400 sm:grid-cols-3">
                     <span>{P.implantSystem}</span>
                     <span>{P.implantDiameter}</span>
                     <span>{P.implantLength}</span>
@@ -235,7 +235,7 @@ function StepForm({
           const v = data[f.key];
           return (
             <div key={fi} data-step-detail={f.key}>
-              <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{f.en}</div>
+              <div className="mb-1.5 text-[0.75rem] font-semibold text-ink-500">{f.en}</div>
               <div className="flex flex-wrap gap-1.5">
                 {detailOptions(mark.treatmentKey, f.key).map((o) => {
                   const on = v === o.key;
@@ -250,7 +250,7 @@ function StepForm({
                         set({ [f.key]: o.key });
                         if (!initial && onDetail && mark.detail[f.key] !== o.key) onDetail(f.key, o.key);
                       }}
-                      className={`h-9 rounded-full border px-3 text-[13px] font-semibold transition-colors duration-140 ${
+                      className={`h-9 rounded-full border px-3 text-[0.8125rem] font-semibold transition-colors duration-140 ${
                         on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                       }`}
                     >
@@ -267,7 +267,7 @@ function StepForm({
           const chosen = new Set(Array.isArray(v) ? (v as string[]) : typeof v === "string" ? [v] : []);
           return (
             <div key={fi}>
-              <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{f.en}</div>
+              <div className="mb-1.5 text-[0.75rem] font-semibold text-ink-500">{f.en}</div>
               <div className="flex flex-wrap gap-1.5">
                 {f.options.map((o) => {
                   const on = chosen.has(o.key);
@@ -281,7 +281,7 @@ function StepForm({
                         if (f.multi) set({ [f.key]: on ? [...chosen].filter((k) => k !== o.key) : [...chosen, o.key] });
                         else set({ [f.key]: on ? undefined : o.key });
                       }}
-                      className={`h-9 rounded-full border px-3 text-[13px] font-semibold transition-colors duration-140 ${
+                      className={`h-9 rounded-full border px-3 text-[0.8125rem] font-semibold transition-colors duration-140 ${
                         on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                       }`}
                     >
@@ -295,7 +295,7 @@ function StepForm({
         }
         return (
           <label key={fi} className="block">
-            <span className="mb-1 block text-[12px] font-semibold text-ink-500">{f.en}</span>
+            <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{f.en}</span>
             <input value={(data[f.key] as string) ?? ""} onChange={(e) => set({ [f.key]: e.target.value.slice(0, 60) })} placeholder={f.placeholder} className={field} />
           </label>
         );
@@ -303,12 +303,12 @@ function StepForm({
       {canWrite && (
         <div className="flex gap-2">
           {onCancel && (
-            <Button variant="outline" className="h-11 text-[15px]" onClick={onCancel}>
+            <Button variant="outline" className="h-11 text-[0.9375rem]" onClick={onCancel}>
               {P.cancelEdit}
             </Button>
           )}
           <Button
-            className="h-11 flex-1 text-[15px]"
+            className="h-11 flex-1 text-[0.9375rem]"
             loading={busy}
             data-step-done={initial ? undefined : def.key}
             data-step-save={initial ? def.key : undefined}
@@ -445,7 +445,7 @@ export function ProcedureCard({
   return (
     <div ref={rootRef} className="flex flex-col gap-4" data-procedure={m.id} data-procedure-status={m.status}>
       <div className="flex items-start gap-3">
-        <button type="button" onClick={onBack} className="inline-flex h-9 shrink-0 items-center gap-1 rounded-ctl px-2 text-[13px] font-semibold text-ink-500 hover:bg-sunken" data-card-back>
+        <button type="button" onClick={onBack} className="inline-flex h-9 shrink-0 items-center gap-1 rounded-ctl px-2 text-[0.8125rem] font-semibold text-ink-500 hover:bg-sunken" data-card-back>
           <ArrowLeft className="h-4 w-4" />
           {backLabel}
         </button>
@@ -454,7 +454,7 @@ export function ProcedureCard({
             type="button"
             onClick={onExpand}
             title={T.expandCard}
-            className="ms-auto inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+            className="ms-auto inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
             data-expand-card
           >
             <Maximize2 className="h-4 w-4" />
@@ -467,13 +467,13 @@ export function ProcedureCard({
         {tr && <TreatmentGlyph tr={tr} paint={paintAt(m, null) ?? "existing"} context={tt} size={52} />}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="grid h-8 min-w-8 place-items-center rounded-lg bg-brand-600 px-1.5 font-display text-[15px] font-bold text-on-brand tnum">
+            <span className="grid h-8 min-w-8 place-items-center rounded-lg bg-brand-600 px-1.5 font-display text-[0.9375rem] font-bold text-on-brand tnum">
               {isToothSite(m.site) ? m.site : siteLabel(m.site, T).split(" ")[0]}
             </span>
-            <span className="text-[16px] font-semibold leading-tight text-ink-900">{locale === "ar" ? m.labelAr : m.label}</span>
+            <span className="text-[1rem] font-semibold leading-tight text-ink-900">{locale === "ar" ? m.labelAr : m.label}</span>
             <PaintPill m={m} />
           </div>
-          <div className="mt-1 text-[12.5px] text-ink-500" data-card-meta>
+          <div className="mt-1 text-[0.78125rem] text-ink-500" data-card-meta>
             {[tt ? null : siteLabel(m.site, T), extra, ...carriedText, m.performedBy?.name].filter(Boolean).join(" · ")}
           </div>
         </div>
@@ -485,19 +485,19 @@ export function ProcedureCard({
             <button
               type="button"
               onClick={() => store.setOpenItem(original.id)}
-              className="flex w-full items-center gap-2 rounded-ctl border border-line bg-canvas px-3 py-2 text-start text-[12.5px] text-ink-700 hover:bg-sunken"
+              className="flex w-full items-center gap-2 rounded-ctl border border-line bg-canvas px-3 py-2 text-start text-[0.78125rem] text-ink-700 hover:bg-sunken"
               data-redo-of={original.id}
             >
               <Repeat className="h-4 w-4 shrink-0 text-brand-700" />
               <span className="min-w-0 flex-1">{P.redoOf.replace("{name}", locale === "ar" ? original.labelAr : original.label).replace("{date}", fmtDate(original.doneAt ?? original.createdAt, tz, locale))}</span>
-              {attempt > 1 && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11.5px] font-semibold text-brand-700">{P.redoTimes.replace("{n}", String(attempt - 1))}</span>}
+              {attempt > 1 && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold text-brand-700">{P.redoTimes.replace("{n}", String(attempt - 1))}</span>}
             </button>
           )}
           {redo && (
             <button
               type="button"
               onClick={() => store.setOpenItem(redo.id)}
-              className="flex w-full items-center gap-2 rounded-ctl border border-line bg-canvas px-3 py-2 text-start text-[12.5px] text-ink-700 hover:bg-sunken"
+              className="flex w-full items-center gap-2 rounded-ctl border border-line bg-canvas px-3 py-2 text-start text-[0.78125rem] text-ink-700 hover:bg-sunken"
               data-redone-by={redo.id}
             >
               <Repeat className="h-4 w-4 shrink-0 text-ink-400" />
@@ -512,7 +512,7 @@ export function ProcedureCard({
         <div className="grid gap-2">
           {details.map((d) => (
             <div key={d.key} className="flex flex-wrap items-center gap-1.5">
-              <span className="me-1 text-[12px] font-semibold text-ink-500">{T.details[d.key]}</span>
+              <span className="me-1 text-[0.75rem] font-semibold text-ink-500">{T.details[d.key]}</span>
               {d.options.map((o) => {
                 const on = m.detail[d.key] === o.key;
                 return (
@@ -521,7 +521,7 @@ export function ProcedureCard({
                     type="button"
                     disabled={!editable}
                     onClick={() => onDetail(m.id, d.key, o.key)}
-                    className={`h-8 rounded-full border px-3 text-[12.5px] font-semibold transition-colors duration-140 disabled:opacity-60 ${
+                    className={`h-8 rounded-full border px-3 text-[0.78125rem] font-semibold transition-colors duration-140 disabled:opacity-60 ${
                       on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                     }`}
                   >
@@ -547,7 +547,7 @@ export function ProcedureCard({
                 <span key={s.key} className="h-1.5 flex-1 rounded-full" style={{ background: prog.done.has(s.key) ? INK[m.status === "done" ? "done" : "progress"] : "var(--color-line)" }} />
               ))}
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-ink-500" data-progress={`${prog.requiredDone}/${prog.required}`}>
+          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[0.78125rem] text-ink-500" data-progress={`${prog.requiredDone}/${prog.required}`}>
             <span className="font-semibold text-ink-700">
               {m.status === "done" ? P.finished.replace("{date}", fmtDate(m.doneAt ?? m.createdAt, tz, locale)) : P.progress.replace("{done}", String(prog.requiredDone)).replace("{total}", String(prog.required))}
             </span>
@@ -581,7 +581,7 @@ export function ProcedureCard({
                   className="flex w-full items-start gap-3 text-start disabled:cursor-default"
                 >
                   <span
-                    className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[12px] font-bold"
+                    className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[0.75rem] font-bold"
                     style={
                       isDone
                         ? { background: INK.done, color: "white" }
@@ -593,14 +593,14 @@ export function ProcedureCard({
                     {isDone ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-x-2 text-[14px] font-semibold text-ink-900">
+                    <span className="flex flex-wrap items-center gap-x-2 text-[0.875rem] font-semibold text-ink-900">
                       {def.en}
-                      {def.optional && <span className="text-[11.5px] font-medium text-ink-400">{P.optional}</span>}
-                      {def.repeatable && recs.length > 1 && <span className="text-[12px] font-semibold text-ink-500">{P.times.replace("{n}", String(recs.length))}</span>}
-                      {isNext && <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: SOFT.progress, color: INK.progress }}>{P.nextBadge}</span>}
+                      {def.optional && <span className="text-[length:max(11px,0.71875rem)] font-medium text-ink-400">{P.optional}</span>}
+                      {def.repeatable && recs.length > 1 && <span className="text-[0.75rem] font-semibold text-ink-500">{P.times.replace("{n}", String(recs.length))}</span>}
+                      {isNext && <span className="rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold" style={{ background: SOFT.progress, color: INK.progress }}>{P.nextBadge}</span>}
                     </span>
                     {recs.map((r) => (
-                      <span key={r.id} className="mt-0.5 block text-[12px] text-ink-500">
+                      <span key={r.id} className="mt-0.5 block text-[0.75rem] text-ink-500">
                         {[
                           fmtDate(r.doneAt, tz, locale),
                           r.performedBy?.name ?? r.recordedBy.name,
@@ -609,7 +609,7 @@ export function ProcedureCard({
                           .filter(Boolean)
                           .join(" · ")}
                         {stepSummary(def, r.data, m.treatmentKey) && (
-                          <span className="block text-[12.5px] font-medium text-ink-700" data-step-summary>
+                          <span className="block text-[0.78125rem] font-medium text-ink-700" data-step-summary>
                             {stepSummary(def, r.data, m.treatmentKey)}
                           </span>
                         )}
@@ -632,7 +632,7 @@ export function ProcedureCard({
                               setEditing(editing === r.id ? null : r.id);
                             }}
                             aria-expanded={editing === r.id}
-                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:underline"
+                            className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:underline"
                             data-step-edit={def.key}
                           >
                             <Pencil className="h-3 w-3" />
@@ -640,11 +640,11 @@ export function ProcedureCard({
                           </button>
                         )}
                         {r.recordedBy.id === store.me.id && Date.now() - Date.parse(r.doneAt) < UNDO_MS ? (
-                          <button type="button" onClick={() => void w.withdrawStep(r, { undo: true })} className="text-[12px] font-semibold text-brand-700 hover:underline" data-step-undo={def.key}>
+                          <button type="button" onClick={() => void w.withdrawStep(r, { undo: true })} className="text-[0.75rem] font-semibold text-brand-700 hover:underline" data-step-undo={def.key}>
                             {P.stepUndo}
                           </button>
                         ) : (
-                          <button type="button" onClick={() => setVoiding(r)} className="text-[12px] font-semibold text-ink-400 hover:text-danger">
+                          <button type="button" onClick={() => setVoiding(r)} className="text-[0.75rem] font-semibold text-ink-400 hover:text-danger">
                             {P.stepVoid}
                           </button>
                         )}
@@ -700,10 +700,10 @@ export function ProcedureCard({
           {urgent.map((r) => (
             <li key={r.id} className="flex items-start gap-2.5 rounded-card border border-line bg-surface px-3 py-2.5" data-emergency-step>
               <Siren className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
-              <span className="min-w-0 flex-1 text-[13px]">
+              <span className="min-w-0 flex-1 text-[0.8125rem]">
                 <span className="font-semibold text-ink-900">{P.emergency}</span>
                 <span className="text-ink-500"> · {fmtDateTime(r.doneAt, tz, locale)} · {r.performedBy?.name ?? r.recordedBy.name}</span>
-                <span className="block text-[12.5px] text-ink-700">
+                <span className="block text-[0.78125rem] text-ink-700">
                   {[r.data.complaint, ...((r.data.done as string[] | undefined) ?? []).map((k) => (P.emergencyActions as Record<string, string>)[k] ?? k)].filter(Boolean).join(" · ")}
                 </span>
               </span>
@@ -713,7 +713,7 @@ export function ProcedureCard({
       )}
 
       {/* Where it goes from here. */}
-      <div className="grid gap-2 rounded-card bg-canvas px-3 py-3 text-[13px]">
+      <div className="grid gap-2 rounded-card bg-canvas px-3 py-3 text-[0.8125rem]">
         {planned && (
           <div className="flex flex-wrap items-center justify-between gap-2" data-next-visit={next?.id ?? ""}>
             <span className="text-ink-700">
@@ -736,13 +736,13 @@ export function ProcedureCard({
         )}
         {m.status === "done" && followUps.length > 0 && editable && isToothSite(m.site) && (
           <div className="flex flex-wrap items-center gap-2" data-follow-ups>
-            <span className="text-[12px] font-semibold text-ink-500">{P.followUp}</span>
+            <span className="text-[0.75rem] font-semibold text-ink-500">{P.followUp}</span>
             {followUps.map((f) => (
               <button
                 key={f.key}
                 type="button"
                 onClick={() => onPlan(f.key, m.site)}
-                className="h-8 rounded-full border border-line bg-surface px-3 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+                className="h-8 rounded-full border border-line bg-surface px-3 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
                 data-follow-up={f.key}
               >
                 {P.planIt.replace("{name}", f.en)}
@@ -777,7 +777,7 @@ export function ProcedureCard({
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-[12px] font-semibold text-ink-500">{T.note}</span>
+        <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{T.note}</span>
         <textarea
           disabled={!editable}
           defaultValue={m.note}

@@ -40,11 +40,11 @@ export function OwnerInvite({ clinicId }: { clinicId: string }) {
         {t.admin.resendInvite}
       </Button>
       {link && (
-        <div className="grid gap-1 rounded-md bg-sunken px-3 py-2 text-[13px]">
+        <div className="grid gap-1 rounded-md bg-sunken px-3 py-2 text-[0.8125rem]">
           <span className="text-ink-500">{t.admin.inviteLinkCopy}</span>
           {/* Selectable rather than a link: it is meant to be copied and sent,
               and opening it here would burn the token on the wrong person. */}
-          <code className="break-all font-mono text-[12px] text-ink-900 select-all" dir="ltr">
+          <code className="break-all font-mono text-[0.75rem] text-ink-900 select-all" dir="ltr">
             {link}
           </code>
         </div>

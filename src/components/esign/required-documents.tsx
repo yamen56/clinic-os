@@ -104,7 +104,7 @@ export function RequiredDocuments({
     <div>
       <div className="mb-1.5 flex items-center gap-2">
         <FileSignature className="h-4 w-4 text-ink-400" />
-        <span className="text-[13px] font-semibold">{t.docs.requiredDocuments}</span>
+        <span className="text-[0.8125rem] font-semibold">{t.docs.requiredDocuments}</span>
         {allSigned && (
           <Badge status="confirmed">
             <Check className="h-3 w-3" />
@@ -120,7 +120,7 @@ export function RequiredDocuments({
               key={r.templateId}
               className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2"
             >
-              <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{name}</span>
+              <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">{name}</span>
               {r.documentId ? (
                 <>
                   <Badge status={(DOC_STATUS_BADGE[r.status ?? ""] ?? "neutral") as StatusKey}>

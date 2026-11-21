@@ -99,7 +99,7 @@ export function LoginForm({
           on the screen.
         */}
         {(apple || google) && (
-          <div className="flex items-center gap-3 text-[12px] text-ink-400">
+          <div className="flex items-center gap-3 text-[0.75rem] text-ink-400">
             <span className="h-px flex-1 bg-line" />
             {t.auth.orDivider}
             <span className="h-px flex-1 bg-line" />
@@ -109,7 +109,7 @@ export function LoginForm({
         {google && <GoogleButton next={next} />}
         <Link
           href="/forgot"
-          className="text-center text-[13px] text-ink-500 underline underline-offset-4 hover:text-ink-900"
+          className="text-center text-[0.8125rem] text-ink-500 underline underline-offset-4 hover:text-ink-900"
         >
           {t.auth.forgotPassword}
         </Link>

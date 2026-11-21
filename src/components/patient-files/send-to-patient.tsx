@@ -49,10 +49,10 @@ export function SendToPatient({
           }
           <div className="min-w-0">
             <h2 className="font-display text-lg font-semibold">{T.sendToPatient}</h2>
-            <p className="truncate text-[13px] text-ink-500">{img.name}</p>
+            <p className="truncate text-[0.8125rem] text-ink-500">{img.name}</p>
           </div>
         </div>
-        <label className="block text-[13px] font-semibold">
+        <label className="block text-[0.8125rem] font-semibold">
           {T.sendCaption}
           <textarea
             dir="auto"

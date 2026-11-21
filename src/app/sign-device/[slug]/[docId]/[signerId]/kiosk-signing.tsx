@@ -194,10 +194,10 @@ export function KioskSigning({
         <div className="fixed inset-x-0 top-0 z-40 flex items-start gap-2.5 bg-brand-700 px-4 py-2.5 text-white">
           <Tablet className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-semibold">
+            <div className="text-[0.8125rem] font-semibold">
               {t.sign.kioskHandOver.replace("{name}", view.signer?.displayName ?? "")}
             </div>
-            <p className="text-[11px] opacity-80">{t.sign.kioskHandOverHint}</p>
+            <p className="text-[length:max(11px,0.6875rem)] opacity-80">{t.sign.kioskHandOverHint}</p>
           </div>
           <button
             onClick={() => setHandoverSeen(true)}
@@ -228,7 +228,7 @@ export function KioskSigning({
           <div className="shrink-0 px-4 pb-2 text-center">
             <button
               onClick={() => setUnlockOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-ink-400 hover:bg-sunken"
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.75rem] font-medium text-ink-400 hover:bg-sunken"
             >
               <Lock className="h-3.5 w-3.5" />
               {t.sign.kioskExit}
@@ -264,8 +264,8 @@ function Centered({
         {icon}
       </span>
       <h1 className="font-display text-2xl font-bold">{title}</h1>
-      {extra && <p className="text-[15px] font-semibold text-ink-700">{extra}</p>}
-      {body && <p className="max-w-sm text-[14px] leading-relaxed text-ink-500">{body}</p>}
+      {extra && <p className="text-[0.9375rem] font-semibold text-ink-700">{extra}</p>}
+      {body && <p className="max-w-sm text-[0.875rem] leading-relaxed text-ink-500">{body}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -299,7 +299,7 @@ function UnlockSheet({
       <div className="absolute inset-0 bg-[rgb(11_18_32/0.65)]" onClick={onClose} />
       <div className="relative w-full rounded-t-modal bg-surface p-5 shadow-modal animate-fade-up sm:max-w-sm sm:rounded-modal">
         <h2 className="font-display text-lg font-semibold">{t.sign.kioskExitTitle}</h2>
-        <p className="mt-1 text-[13px] text-ink-500">
+        <p className="mt-1 text-[0.8125rem] text-ink-500">
           {hasPin ? t.sign.kioskPinHint : t.sign.kioskPasswordHint}
         </p>
         <input
@@ -315,7 +315,7 @@ function UnlockSheet({
             unlockError ? "border-danger" : "border-line focus:border-brand-600"
           }`}
         />
-        {unlockError && <p className="mt-2 text-[13px] font-medium text-danger">{t.sign.kioskWrong}</p>}
+        {unlockError && <p className="mt-2 text-[0.8125rem] font-medium text-danger">{t.sign.kioskWrong}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
             {t.common.cancel}

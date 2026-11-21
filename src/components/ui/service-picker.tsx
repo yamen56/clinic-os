@@ -104,13 +104,13 @@ export function ServiceChips({
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: g.section.color }}
               />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              <span className="text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">
                 {serviceLabel(g.section, locale)}
               </span>
             </div>
           )}
           {g.section === null && groups.length > 1 && (
-            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+            <div className="mb-1.5 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">
               {t.sections.unfiled}
             </div>
           )}
@@ -120,7 +120,7 @@ export function ServiceChips({
                 key={s.id}
                 type="button"
                 onClick={() => onToggle(s.id)}
-                className={`rounded-full border px-3 py-1 text-[12px] font-medium transition ${
+                className={`rounded-full border px-3 py-1 text-[0.75rem] font-medium transition ${
                   on.has(s.id)
                     ? "border-brand-400 bg-brand-50 text-brand-700"
                     : "border-line-strong text-ink-500 hover:border-brand-400"
@@ -199,7 +199,7 @@ export function ServiceAddMenu({
 
       <div className="max-h-64 overflow-y-auto rounded-lg border border-line">
         {groups.length === 0 ? (
-          <p className="px-3 py-6 text-center text-[12px] text-ink-400">{t.common.noResults}</p>
+          <p className="px-3 py-6 text-center text-[0.75rem] text-ink-400">{t.common.noResults}</p>
         ) : (
           groups.map((g) => (
             <div key={g.section?.id ?? "__unfiled"}>
@@ -211,7 +211,7 @@ export function ServiceAddMenu({
                       style={{ backgroundColor: g.section.color }}
                     />
                   )}
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                  <span className="text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">
                     {g.section ? serviceLabel(g.section, locale) : t.sections.unfiled}
                   </span>
                 </div>
@@ -225,18 +225,18 @@ export function ServiceAddMenu({
                     key={flashing ? `${s.id}:${flash?.key}` : s.id}
                     type="button"
                     onClick={() => onPick(s)}
-                    className={`flex w-full touch-manipulation items-center gap-3 px-3 py-2.5 text-start text-[13px] transition-colors hover:bg-sunken active:bg-sunken sm:py-2 ${
+                    className={`flex w-full touch-manipulation items-center gap-3 px-3 py-2.5 text-start text-[0.8125rem] transition-colors hover:bg-sunken active:bg-sunken sm:py-2 ${
                       flashing ? "animate-line-in" : ""
                     }`}
                   >
                     <span className={`min-w-0 flex-1 truncate ${count ? "font-semibold text-ink-900" : ""}`}>
                       {serviceLabel(s, locale)}
                     </span>
-                    <span className="shrink-0 tabular-nums text-[12px] text-ink-500">
+                    <span className="shrink-0 tabular-nums text-[0.75rem] text-ink-500">
                       {Number(s.price).toFixed(2)} {currency}
                     </span>
                     {count > 0 ? (
-                      <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center gap-0.5 rounded-full bg-st-confirmed-soft px-1.5 text-[11px] font-semibold text-st-confirmed tnum">
+                      <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center gap-0.5 rounded-full bg-st-confirmed-soft px-1.5 text-[length:max(11px,0.6875rem)] font-semibold text-st-confirmed tnum">
                         <Check className="h-3 w-3" strokeWidth={2.5} />
                         {count > 1 ? `×${count}` : ""}
                       </span>
@@ -256,7 +256,7 @@ export function ServiceAddMenu({
       <button
         type="button"
         onClick={onCustom}
-        className="flex items-center justify-center gap-1 rounded-lg border border-dashed border-line-strong px-3 py-2 text-[12px] font-medium text-ink-500 hover:border-brand-400"
+        className="flex items-center justify-center gap-1 rounded-lg border border-dashed border-line-strong px-3 py-2 text-[0.75rem] font-medium text-ink-500 hover:border-brand-400"
       >
         <Plus className="h-3 w-3" />
         {t.invoices.freeItem}

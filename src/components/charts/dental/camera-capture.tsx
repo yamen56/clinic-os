@@ -122,7 +122,7 @@ export function CameraCapture({ open, onClose, onPhoto }: { open: boolean; onClo
       <div className="grid gap-3" data-camera>
         {devices.length > 1 && !shot && (
           <label className="flex items-center gap-2">
-            <span className="text-[12px] font-semibold text-ink-500">{T.cameraPick}</span>
+            <span className="text-[0.75rem] font-semibold text-ink-500">{T.cameraPick}</span>
             <select
               value={device}
               onChange={(e) => {
@@ -143,7 +143,7 @@ export function CameraCapture({ open, onClose, onPhoto }: { open: boolean; onClo
         )}
         <div className="relative aspect-video overflow-hidden rounded-card bg-night">
           {error ? (
-            <div className="absolute inset-0 grid place-items-center p-6 text-center text-[14px] text-white/80">{error === "denied" ? T.cameraDenied : T.cameraNone}</div>
+            <div className="absolute inset-0 grid place-items-center p-6 text-center text-[0.875rem] text-white/80">{error === "denied" ? T.cameraDenied : T.cameraNone}</div>
           ) : shot ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={shot.url} alt="" className="h-full w-full object-contain" />

@@ -143,7 +143,7 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
   };
 
   const row = (m: Mark, amount: number | null, isReady: boolean) => (
-    <li key={m.id} className="flex items-center gap-3 py-2 text-[13px]" data-ready-item={isReady ? m.id : undefined} data-ahead-item={isReady ? undefined : m.id}>
+    <li key={m.id} className="flex items-center gap-3 py-2 text-[0.8125rem]" data-ready-item={isReady ? m.id : undefined} data-ahead-item={isReady ? undefined : m.id}>
       <input
         type="checkbox"
         className="h-4.5 w-4.5 shrink-0 accent-brand-600"
@@ -176,8 +176,8 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
           <div data-ready-to-bill={ready.length || undefined} data-ready-total={readyTotal}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="text-[15px] font-semibold">{I.readyToBill}</h3>
-                <p className="mt-0.5 text-[13px] text-ink-500">{I.readyToBillHint}</p>
+                <h3 className="text-[0.9375rem] font-semibold">{I.readyToBill}</h3>
+                <p className="mt-0.5 text-[0.8125rem] text-ink-500">{I.readyToBillHint}</p>
               </div>
               {chosen.length > 0 ? (
                 <a
@@ -195,8 +195,8 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
             {ready.length > 0 && <ul className="mt-2 divide-y divide-line">{ready.map((x) => row(x.m, x.cash.due, true))}</ul>}
             {ahead.length > 0 && (
               <div className="mt-3" data-bill-ahead={ahead.length}>
-                <div className="text-[12px] font-semibold text-ink-500">{I.notStarted}</div>
-                <div className="text-[12px] text-ink-400">{I.notStartedHint}</div>
+                <div className="text-[0.75rem] font-semibold text-ink-500">{I.notStarted}</div>
+                <div className="text-[0.75rem] text-ink-400">{I.notStartedHint}</div>
                 <ul className="mt-1 divide-y divide-line">{ahead.map((x) => row(x.m, x.cash.amount, false))}</ul>
               </div>
             )}
@@ -205,8 +205,8 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
 
         {invoices.length > 0 && (
           <div className={ready.length || ahead.length ? "mt-4 border-t border-line pt-4" : ""} data-billed-list={invoices.length}>
-            <h3 className="text-[15px] font-semibold">{I.billedTitle}</h3>
-            <p className="mt-0.5 text-[13px] text-ink-500">{I.billedHint}</p>
+            <h3 className="text-[0.9375rem] font-semibold">{I.billedTitle}</h3>
+            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{I.billedHint}</p>
             <ul className="mt-2 grid gap-2">
               {invoices.map(({ inv, marks }) => {
                 const total = inv.total ?? 0;
@@ -215,7 +215,7 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
                 const deletable = store.canDeleteInvoices && paid <= 0 && !inv.filed;
                 return (
                   <li key={inv.id} className="rounded-ctl border border-line px-3 py-2.5" data-billed-invoice={inv.id}>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem]">
                       <Check className="h-4 w-4 shrink-0 text-st-confirmed" />
                       <Link href={`/c/${store.slug}/invoices/${inv.id}`} className="font-semibold text-ink-900 hover:underline" dir="ltr">
                         {inv.number}
@@ -223,14 +223,14 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
                       <span className="text-ink-500 tnum">· {fmt(total)}</span>
                       <span className={`tnum ${paid >= total && total > 0 ? "text-st-confirmed" : "text-ink-500"}`}>· {status}</span>
                       <span className="ms-auto flex gap-1.5">
-                        <Link href={`/c/${store.slug}/invoices/${inv.id}`} className="inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-semibold text-brand-700 hover:bg-sunken">
+                        <Link href={`/c/${store.slug}/invoices/${inv.id}`} className="inline-flex h-7 items-center rounded-full px-2.5 text-[0.75rem] font-semibold text-brand-700 hover:bg-sunken">
                           {I.openInvoice}
                         </Link>
                         {deletable && (
                           <button
                             type="button"
                             onClick={() => setDeleting(inv)}
-                            className="inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] font-semibold text-ink-500 hover:bg-danger-soft hover:text-danger"
+                            className="inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[0.75rem] font-semibold text-ink-500 hover:bg-danger-soft hover:text-danger"
                             data-delete-bill={inv.id}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -239,7 +239,7 @@ export function ReadyToBill({ tz, className = "mb-4 p-4" }: { tz: string; classN
                         )}
                       </span>
                     </div>
-                    <ul className="mt-1 grid gap-0.5 ps-6 text-[12.5px] text-ink-700">
+                    <ul className="mt-1 grid gap-0.5 ps-6 text-[0.78125rem] text-ink-700">
                       {marks.map((m) => (
                         <li key={m.id}>{lineOf(m)}</li>
                       ))}

@@ -214,7 +214,7 @@ export function ConnectWizard({
               </span>
               <span>
                 <span className="block font-semibold text-ink-900">{T.choiceUpload}</span>
-                <span className="mt-0.5 block text-[13px] leading-snug text-ink-700">{T.choiceUploadBody}</span>
+                <span className="mt-0.5 block text-[0.8125rem] leading-snug text-ink-700">{T.choiceUploadBody}</span>
               </span>
             </Link>
             <p className="mb-3 text-sm text-ink-700">{T.whatTitle}</p>
@@ -224,7 +224,7 @@ export function ConnectWizard({
               <Tile icon={<ScanLine />} title={T.choiceDicom} body={T.choiceDicomBody} onClick={() => pick("dicom")} id="dicom" />
               <Tile icon={<ScanText />} title={T.choiceFiles} body={T.choiceFilesBody} onClick={() => pick("files")} id="files" />
             </div>
-            <button type="button" onClick={onApi} className="mt-4 text-[13px] text-ink-500 underline hover:text-ink-700">
+            <button type="button" onClick={onApi} className="mt-4 text-[0.8125rem] text-ink-500 underline hover:text-ink-700">
               {T.orApi}
             </button>
           </div>
@@ -234,11 +234,11 @@ export function ConnectWizard({
           <ol className="grid gap-3">
             {[T.cameraStep1, T.cameraStep2, T.cameraStep3].map((s, i) => (
               <li key={i} className="flex gap-3 text-sm text-ink-900">
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-100 text-[13px] font-bold text-brand-700">{i + 1}</span>
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-100 text-[0.8125rem] font-bold text-brand-700">{i + 1}</span>
                 <span className="pt-0.5">{s}</span>
               </li>
             ))}
-            <li className="mt-2 flex items-center gap-2 text-[13px] text-ink-500">
+            <li className="mt-2 flex items-center gap-2 text-[0.8125rem] text-ink-500">
               <Camera className="h-4 w-4" />
               {T.choiceCameraBody}
             </li>
@@ -273,7 +273,7 @@ export function ConnectWizard({
                 <div className="grid gap-3 text-sm text-ink-700">
                   <p>
                     {T.installHelp}{" "}
-                    <span dir="ltr" className="break-all font-mono text-[12.5px] text-ink-900">
+                    <span dir="ltr" className="break-all font-mono text-[0.78125rem] text-ink-900">
                       {pageUrl}
                     </span>
                   </p>
@@ -290,13 +290,13 @@ export function ConnectWizard({
                       <span dir="ltr" className="rounded-xl border border-line bg-canvas px-4 py-2 font-mono text-3xl font-bold tracking-[0.2em] text-ink-900" data-pair-code={code}>
                         {code}
                       </span>
-                      <span className="text-[13px] text-ink-500">{T.codeExpires.replace("{m}", String(minutesLeft))}</span>
+                      <span className="text-[0.8125rem] text-ink-500">{T.codeExpires.replace("{m}", String(minutesLeft))}</span>
                     </div>
                   ) : (
-                    <p className="text-[13px] text-ink-500">{code ? T.codeExpired : ""}</p>
+                    <p className="text-[0.8125rem] text-ink-500">{code ? T.codeExpired : ""}</p>
                   )}
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className="inline-flex items-center gap-2 text-[13px] text-ink-500">
+                    <span className="inline-flex items-center gap-2 text-[0.8125rem] text-ink-500">
                       <LoaderCircle className="h-4 w-4 animate-spin" />
                       {T.waitingPair}
                     </span>
@@ -322,12 +322,12 @@ export function ConnectWizard({
                       <dd className="font-mono text-base font-semibold text-ink-900">{b.dicom.aet}</dd>
                     </dl>
                   ) : (
-                    <p className="rounded-xl bg-canvas px-4 py-3 text-[13px] text-ink-500">{T.afterPair}</p>
+                    <p className="rounded-xl bg-canvas px-4 py-3 text-[0.8125rem] text-ink-500">{T.afterPair}</p>
                   )}
-                  <p className="text-[13px] text-ink-500">{T.worklistHelp}</p>
+                  <p className="text-[0.8125rem] text-ink-500">{T.worklistHelp}</p>
                   <p>{T.pressTest}</p>
                   <Status ok={machineOk} hook="echo" text={machineOk ? T.echoOk : T.waitingEcho} />
-                  {!machineOk && paired && <p className="text-[13px] text-ink-500">{T.firewallHint}</p>}
+                  {!machineOk && paired && <p className="text-[0.8125rem] text-ink-500">{T.firewallHint}</p>}
                 </div>
               </Step>
             ) : (
@@ -338,7 +338,7 @@ export function ConnectWizard({
                     <Status key={f.path} ok={f.ok} hook="watching" text={(f.ok ? T.watching : T.folderMissing).replace("{path}", f.path)} />
                   ))}
                   {!b?.folders?.length && <Status ok={false} hook="watching" text={T.waitingFolder} />}
-                  <p className="text-[13px] text-ink-500">
+                  <p className="text-[0.8125rem] text-ink-500">
                     {T.noInstall}{" "}
                     <Link href={`/c/${slug}/devices`} className="font-semibold text-brand-700 underline">
                       {T.openImaging}
@@ -381,7 +381,7 @@ function Tile({ icon, title, body, onClick, id }: { icon: React.ReactNode; title
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-100 text-brand-700 [&_svg]:h-5 [&_svg]:w-5">{icon}</span>
       <span>
         <span className="block font-semibold text-ink-900">{title}</span>
-        <span className="mt-0.5 block text-[13px] leading-snug text-ink-500">{body}</span>
+        <span className="mt-0.5 block text-[0.8125rem] leading-snug text-ink-500">{body}</span>
       </span>
     </button>
   );
@@ -391,7 +391,7 @@ function Step({ n, done, title, children, hook, dim }: { n: number; done: boolea
   return (
     <li className={`rounded-xl border p-4 ${done ? "border-st-confirmed/40 bg-st-confirmed-soft/40" : "border-line"} ${dim ? "opacity-60" : ""}`} data-wizard-step={hook} data-done={done ? "" : undefined}>
       <div className="mb-2 flex items-center gap-2.5">
-        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-bold ${done ? "bg-st-confirmed text-surface" : "bg-brand-100 text-brand-700"}`}>
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[0.8125rem] font-bold ${done ? "bg-st-confirmed text-surface" : "bg-brand-100 text-brand-700"}`}>
           {done ? <CircleCheck className="h-4.5 w-4.5" /> : n}
         </span>
         <span className="font-semibold text-ink-900">{title}</span>
@@ -403,7 +403,7 @@ function Step({ n, done, title, children, hook, dim }: { n: number; done: boolea
 
 function Status({ ok, text, hook }: { ok: boolean; text: string; hook: string }) {
   return (
-    <p className={`flex items-start gap-2 text-[13.5px] ${ok ? "font-semibold text-st-confirmed" : "text-ink-500"}`} data-status={hook} data-ok={ok ? "" : undefined}>
+    <p className={`flex items-start gap-2 text-[0.84375rem] ${ok ? "font-semibold text-st-confirmed" : "text-ink-500"}`} data-status={hook} data-ok={ok ? "" : undefined}>
       {ok ? <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" /> : <Circle className="mt-0.5 h-4 w-4 shrink-0" />}
       <span className="min-w-0 break-words">{text}</span>
     </p>

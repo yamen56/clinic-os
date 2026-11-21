@@ -33,7 +33,7 @@ export function AppleButton({ next }: { next?: string }) {
   return (
     <a
       href={href}
-      className="flex h-11 w-full items-center justify-center gap-2.5 rounded-ctl bg-black text-[14px] font-medium text-white transition-opacity hover:opacity-85"
+      className="flex h-11 w-full items-center justify-center gap-2.5 rounded-ctl bg-black text-[0.875rem] font-medium text-white transition-opacity hover:opacity-85"
     >
       <span className="-mt-px flex">
         <AppleMark />

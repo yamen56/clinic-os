@@ -93,7 +93,7 @@ export function ClinicProfileForm({
   return (
     <Card className="p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[15px] font-semibold">{t.settings.profile}</h2>
+        <h2 className="text-[0.9375rem] font-semibold">{t.settings.profile}</h2>
         <SaveIndicator state={state} />
       </div>
       {/*

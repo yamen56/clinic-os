@@ -112,7 +112,7 @@ export function TreatmentsList({
     <div data-treatments className="mb-4">
       <Card>
         <CardHeader title={rows.length ? `${C.title} · ${rows.length}` : C.title} />
-        <p className="-mt-2 px-5 pb-2 text-[12.5px] text-ink-500">{C.hint}</p>
+        <p className="-mt-2 px-5 pb-2 text-[0.78125rem] text-ink-500">{C.hint}</p>
         {/* The test's scorecard: of what it booked, how much was kept and how much undone. */}
         <dl className="mx-5 mb-3 grid grid-cols-3 gap-2 rounded-ctl bg-sunken p-3 text-center sm:grid-cols-6" data-coordinator-stats>
           {(
@@ -126,17 +126,17 @@ export function TreatmentsList({
             ] as const
           ).map(([k, v]) => (
             <div key={k} className="min-w-0">
-              <dt className="truncate text-[11px] text-ink-500">{C.stats[k]}</dt>
-              <dd className="text-[15px] font-semibold tabular-nums">{v}</dd>
+              <dt className="truncate text-[length:max(11px,0.6875rem)] text-ink-500">{C.stats[k]}</dt>
+              <dd className="text-[0.9375rem] font-semibold tabular-nums">{v}</dd>
             </div>
           ))}
         </dl>
-        <p className="-mt-1 px-5 pb-3 text-[11.5px] text-ink-500">
+        <p className="-mt-1 px-5 pb-3 text-[length:max(11px,0.71875rem)] text-ink-500">
           {C.statsWindow}
           {consult ? ` · ${C.consultationIs.replace("{service}", consult)}` : ` · ${C.noConsultation}`}
         </p>
         {rows.length === 0 ? (
-          <p className="border-t border-line px-5 py-4 text-[13px] text-ink-500">{C.none}</p>
+          <p className="border-t border-line px-5 py-4 text-[0.8125rem] text-ink-500">{C.none}</p>
         ) : (
           <ul className="divide-y divide-line border-t border-line">
             {rows.map((r) => {
@@ -154,7 +154,7 @@ export function TreatmentsList({
                       {/* A due one says so on its date line; the chip is for what that line does not say. */}
                       {(r.state !== "due" || r.action === "invite") && (
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          className={`rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold ${
                             r.state === "stalled"
                               ? "bg-st-noshow-soft text-st-noshow"
                               : r.state === "auto_booked"
@@ -166,13 +166,13 @@ export function TreatmentsList({
                         </span>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-x-2 text-[12.5px] text-ink-500">
+                    <div className="flex flex-wrap gap-x-2 text-[0.78125rem] text-ink-500">
                       <span>{session}</span>
                       {name && <span dir="auto">· {name}</span>}
                       {r.tooth && <span dir="ltr">· {r.tooth}</span>}
                       {r.others > 0 && <span>· {C.more.replace("{n}", String(r.others))}</span>}
                     </div>
-                    <div className="text-[12.5px]">
+                    <div className="text-[0.78125rem]">
                       {r.state === "auto_booked" && r.bookedAt ? (
                         <span className="text-ink-700">
                           {C.bookedFor.replace("{date}", fmtDate(r.bookedAt, tz, locale)).replace("{time}", fmtTime(r.bookedAt, tz, locale))}

@@ -31,13 +31,13 @@ export function VisitLineView({ line, onOpen }: { line: Pick<VisitLine, "markId"
   const steps = line.steps.map((s) => (s === EMERGENCY_STEP ? t.calendar.emergencyStep : (stepOf(line.treatmentKey, s)?.en ?? s)));
   const body = (
     <>
-      <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-md bg-surface px-1.5 text-[12px] font-bold tnum shadow-card" dir="ltr">
+      <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-md bg-surface px-1.5 text-[0.75rem] font-bold tnum shadow-card" dir="ltr">
         {whereOf(line.site, t)}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate">{(locale === "ar" && line.labelAr) || line.label}</span>
         {steps.length > 0 && (
-          <span className="block text-[12px] text-ink-500">
+          <span className="block text-[0.75rem] text-ink-500">
             <bdi>{steps.join(", ")}</bdi>
           </span>
         )}
@@ -45,11 +45,11 @@ export function VisitLineView({ line, onOpen }: { line: Pick<VisitLine, "markId"
     </>
   );
   return onOpen ? (
-    <button type="button" onClick={onOpen} className="flex w-full items-start gap-2 text-start text-[13px] hover:text-brand-700" data-visit-work-item={line.markId}>
+    <button type="button" onClick={onOpen} className="flex w-full items-start gap-2 text-start text-[0.8125rem] hover:text-brand-700" data-visit-work-item={line.markId}>
       {body}
     </button>
   ) : (
-    <div className="flex items-start gap-2 text-[13px]">{body}</div>
+    <div className="flex items-start gap-2 text-[0.8125rem]">{body}</div>
   );
 }
 
@@ -99,7 +99,7 @@ export function VisitWork({ appointmentId, onOpenChart }: { appointmentId: strin
     <div className="grid gap-3 rounded-lg border border-line bg-canvas p-3" data-visit-work={planned.length + done.length}>
       {done.length > 0 && (
         <div className="grid gap-1.5" data-visit-done={done.length}>
-          <div className="text-[12px] font-semibold text-ink-500">{t.calendar.doneAtVisit}</div>
+          <div className="text-[0.75rem] font-semibold text-ink-500">{t.calendar.doneAtVisit}</div>
           <ul className="grid gap-1.5">
             {done.map((d) => (
               <li key={d.markId}>
@@ -111,7 +111,7 @@ export function VisitWork({ appointmentId, onOpenChart }: { appointmentId: strin
       )}
       {planned.length > 0 && (
         <div className="grid gap-1.5" data-visit-planned={planned.length}>
-          <div className="text-[12px] font-semibold text-ink-500">{t.calendar.plannedTreatment}</div>
+          <div className="text-[0.75rem] font-semibold text-ink-500">{t.calendar.plannedTreatment}</div>
           <ul className="grid gap-1.5">
             {planned.map((m) => (
               <li key={m.id}>

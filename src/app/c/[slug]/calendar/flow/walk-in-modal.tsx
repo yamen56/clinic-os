@@ -75,7 +75,7 @@ export function WalkInModal({
   return (
     <Modal open={open} onClose={onClose} title={t.flow.walkInTitle}>
       <div className="grid gap-4" data-walk-in>
-        <p className="-mt-1 text-[13px] text-ink-500">{t.flow.walkInHint}</p>
+        <p className="-mt-1 text-[0.8125rem] text-ink-500">{t.flow.walkInHint}</p>
         <Field label={t.calendar.patient} required>
           {patient ? (
             <div className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2">
@@ -100,7 +100,7 @@ export function WalkInModal({
                 placeholder="xxxxxxxxxx"
                 onChange={(v) => setNewPatient((np) => (np ? { ...np, phone: v } : np))}
               />
-              <button onClick={() => setNewPatient(null)} className="justify-self-start text-[12px] text-ink-500 underline">
+              <button onClick={() => setNewPatient(null)} className="justify-self-start text-[0.75rem] text-ink-500 underline">
                 {t.common.cancel}
               </button>
             </div>

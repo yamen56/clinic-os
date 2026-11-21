@@ -148,7 +148,7 @@ export function DocumentsListClient({
                         {(t.docs.statuses as Record<string, string>)[r.status] ?? r.status}
                       </Badge>
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-ink-500">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.75rem] text-ink-500">
                       {r.patient_name && <span className="font-medium">{r.patient_name}</span>}
                       {r.waiting_on && !["completed", "voided"].includes(r.status) && (
                         <span className="flex items-center gap-1 text-st-pending">

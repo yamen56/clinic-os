@@ -158,35 +158,35 @@ export default async function PublicInvoicePage({
                     has to be the name and number ISTD holds, not the trade name
                     in the header above. */}
                 {inv.seller_tax_number && (
-                  <p className="text-[13px] text-ink-500">
+                  <p className="text-[0.8125rem] text-ink-500">
                     {L.taxNo}: <span className="tnum" dir="ltr">{inv.seller_tax_number}</span>
                   </p>
                 )}
-                {address && <p className="text-[13px] text-ink-500">{address}</p>}
+                {address && <p className="text-[0.8125rem] text-ink-500">{address}</p>}
                 {inv.clinic_phone && (
-                  <p className="text-[13px] text-ink-500 tnum" dir="ltr">
+                  <p className="text-[0.8125rem] text-ink-500 tnum" dir="ltr">
                     {inv.clinic_phone}
                   </p>
                 )}
               </div>
             </div>
             <div className="text-end">
-              <div className="text-[13px] font-semibold uppercase tracking-widest text-ink-500">
+              <div className="text-[0.8125rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.invoice}
               </div>
               <div className="font-display text-lg font-bold tnum" dir="ltr">
                 {inv.number}
               </div>
-              <div className="mt-1 text-[13px] text-ink-500">
+              <div className="mt-1 text-[0.8125rem] text-ink-500">
                 {L.date}: {inv.issue_date ? fmtDateOnly(inv.issue_date, locale) : fmtDate(inv.created_at, inv.timezone, locale)}
               </div>
               {inv.status === "paid" && (
-                <span className="mt-2 inline-block rounded-full px-3 py-1 text-[12px] font-bold text-white" style={{ background: "var(--bk)" }}>
+                <span className="mt-2 inline-block rounded-full px-3 py-1 text-[0.75rem] font-bold text-white" style={{ background: "var(--bk)" }}>
                   {L.statusPaid}
                 </span>
               )}
               {inv.status === "void" && (
-                <span className="mt-2 inline-block rounded-full bg-ink-400 px-3 py-1 text-[12px] font-bold text-white">
+                <span className="mt-2 inline-block rounded-full bg-ink-400 px-3 py-1 text-[0.75rem] font-bold text-white">
                   {L.statusVoid}
                 </span>
               )}
@@ -195,12 +195,12 @@ export default async function PublicInvoicePage({
 
           <section className="mt-8 flex flex-wrap items-start justify-between gap-6">
             <div className="min-w-0">
-              <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+              <div className="text-[0.75rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.billTo}
               </div>
-              <div className="mt-1 text-[15px] font-semibold">{inv.patient_name}</div>
+              <div className="mt-1 text-[0.9375rem] font-semibold">{inv.patient_name}</div>
               {inv.patient_phone && (
-                <div className="text-[13px] text-ink-500 tnum" dir="ltr">
+                <div className="text-[0.8125rem] text-ink-500 tnum" dir="ltr">
                   {inv.patient_phone}
                 </div>
               )}
@@ -214,17 +214,17 @@ export default async function PublicInvoicePage({
             */}
             {inv.title && (
               <div className="min-w-0 max-w-[80mm] text-end">
-                <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+                <div className="text-[0.75rem] font-semibold uppercase tracking-widest text-ink-500">
                   {L.subject}
                 </div>
-                <div className="mt-1 text-[15px] font-semibold">{inv.title}</div>
+                <div className="mt-1 text-[0.9375rem] font-semibold">{inv.title}</div>
               </div>
             )}
           </section>
 
           <table className="mt-8 w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b-2 text-[12px] uppercase tracking-wide text-ink-500" style={{ borderColor: "var(--bk)" }}>
+              <tr className="border-b-2 text-[0.75rem] uppercase tracking-wide text-ink-500" style={{ borderColor: "var(--bk)" }}>
                 <th className="py-2 text-start font-semibold">{L.item}</th>
                 <th className="w-16 py-2 text-center font-semibold">{L.qty}</th>
                 <th className="w-28 py-2 text-end font-semibold">{L.price}</th>
@@ -250,7 +250,7 @@ export default async function PublicInvoicePage({
                     </td>
                   )}
                   {taxed.length > 0 && (
-                    <td className="py-2.5 text-end text-[13px] tnum">
+                    <td className="py-2.5 text-end text-[0.8125rem] tnum">
                       {Number(it.tax_amount) > 0
                         ? `${Number(it.tax_rate)}%`
                         : L.cat[String(it.tax_category)] || "—"}
@@ -310,7 +310,7 @@ export default async function PublicInvoicePage({
           {/* A credit note is only meaningful against what it corrects, so it
               says so on its face rather than only in the database. */}
           {inv.corrects_number && (
-            <p className="mt-6 rounded-lg border border-line bg-subtle px-4 py-2.5 text-[13px]">
+            <p className="mt-6 rounded-lg border border-line bg-subtle px-4 py-2.5 text-[0.8125rem]">
               {L.creditNote}{" "}
               <span className="font-semibold tnum" dir="ltr">
                 {inv.corrects_number}
@@ -322,7 +322,7 @@ export default async function PublicInvoicePage({
             <section className="mt-8 flex items-center gap-4 border-t border-line pt-6">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrDataUrl} alt="" className="h-24 w-24" />
-              <div className="text-[12px] text-ink-500">
+              <div className="text-[0.75rem] text-ink-500">
                 <div className="font-semibold text-ink-700">{L.scan}</div>
                 {inv.einvoice_uuid && (
                   <div className="mt-1 tnum" dir="ltr">
@@ -335,16 +335,16 @@ export default async function PublicInvoicePage({
 
           {inv.payment_instructions && inv.status !== "paid" && inv.status !== "void" && (
             <section className="mt-8 rounded-xl border border-line bg-subtle p-4">
-              <div className="text-[12px] font-semibold uppercase tracking-widest text-ink-500">
+              <div className="text-[0.75rem] font-semibold uppercase tracking-widest text-ink-500">
                 {L.payTitle}
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-[13px] leading-6">{inv.payment_instructions}</p>
+              <p className="mt-1 whitespace-pre-wrap text-[0.8125rem] leading-6">{inv.payment_instructions}</p>
             </section>
           )}
 
-          {inv.notes && <p className="mt-6 text-[13px] text-ink-500">{inv.notes}</p>}
+          {inv.notes && <p className="mt-6 text-[0.8125rem] text-ink-500">{inv.notes}</p>}
           {inv.invoice_footer && (
-            <p className="mt-8 border-t border-line pt-4 text-center text-[12px] text-ink-400">
+            <p className="mt-8 border-t border-line pt-4 text-center text-[0.75rem] text-ink-400">
               {inv.invoice_footer}
             </p>
           )}

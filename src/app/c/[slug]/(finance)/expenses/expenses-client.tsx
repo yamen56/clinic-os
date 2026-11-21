@@ -477,7 +477,7 @@ export function ExpensesClient({
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
         <Card className="p-5">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-[13px] text-ink-500">{E.views.spent}</span>
+            <span className="text-[0.8125rem] text-ink-500">{E.views.spent}</span>
             <div className="flex items-center gap-1">
               <button
                 aria-label={t.earnings.previousMonth}
@@ -486,7 +486,7 @@ export function ExpensesClient({
               >
                 <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
               </button>
-              <span className="min-w-28 text-center text-[13px] font-semibold text-ink-900 tabular-nums">
+              <span className="min-w-28 text-center text-[0.8125rem] font-semibold text-ink-900 tabular-nums">
                 {monthLabel(timezone, offset, locale)}
               </span>
               <button
@@ -499,10 +499,10 @@ export function ExpensesClient({
               </button>
             </div>
           </div>
-          <div className="mt-2 font-display text-[26px] font-bold leading-tight text-ink-900" data-month-spent={total}>
+          <div className="mt-2 font-display text-[1.625rem] font-bold leading-tight text-ink-900" data-month-spent={total}>
             {money(total)}
           </div>
-          <div className="mt-1 text-[12px] text-ink-400">{E.expensesCount.replace("{n}", String(rows.length))}</div>
+          <div className="mt-1 text-[0.75rem] text-ink-400">{E.expensesCount.replace("{n}", String(rows.length))}</div>
         </Card>
 
         {/* The whole card opens what is owed. A raw button, not Card: the hook has to reach the element. */}
@@ -513,11 +513,11 @@ export function ExpensesClient({
           className="min-w-0 rounded-card border border-line bg-surface p-5 text-start shadow-card transition-shadow duration-220 ease-out hover:shadow-pop"
         >
           <div className="flex h-7 items-center justify-between gap-3">
-            <span className="text-[13px] text-ink-500">{E.stillToPay}</span>
+            <span className="text-[0.8125rem] text-ink-500">{E.stillToPay}</span>
             <ChevronRight className="h-4 w-4 text-ink-400 rtl:rotate-180" aria-hidden />
           </div>
-          <div className="mt-2 font-display text-[26px] font-bold leading-tight text-ink-900">{money(owedTotal)}</div>
-          <div className="mt-1 flex flex-wrap gap-x-2 text-[12px] text-ink-400">
+          <div className="mt-2 font-display text-[1.625rem] font-bold leading-tight text-ink-900">{money(owedTotal)}</div>
+          <div className="mt-1 flex flex-wrap gap-x-2 text-[0.75rem] text-ink-400">
             {owedTotal <= 0 ? (
               E.nothingOwedShort
             ) : (
@@ -547,14 +547,14 @@ export function ExpensesClient({
               aria-selected={view === key}
               onClick={() => show(key)}
               data-expenses-view={key}
-              className={`flex touch-manipulation items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+              className={`flex touch-manipulation items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-1.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
                 view === key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
               }`}
             >
               {/* From a tablet up: on a phone the icons push Categories onto a line of its own. */}
               <Icon className="h-3.5 w-3.5 shrink-0 max-sm:hidden" aria-hidden />
               {label}
-              {count > 0 && <span className="text-[12px] font-medium text-ink-400 tnum">{count}</span>}
+              {count > 0 && <span className="text-[0.75rem] font-medium text-ink-400 tnum">{count}</span>}
             </button>
           ))}
         </div>
@@ -580,7 +580,7 @@ export function ExpensesClient({
               {days.map((d) => (
                 <section key={d.day}>
                   {/* The day, and what went out on it. */}
-                  <div className="flex items-baseline justify-between gap-3 border-b border-line bg-sunken/70 px-5 py-2 text-[12px]">
+                  <div className="flex items-baseline justify-between gap-3 border-b border-line bg-sunken/70 px-5 py-2 text-[0.75rem]">
                     <span className="font-semibold text-ink-700">
                       {DateTime.fromISO(d.day).setLocale(intl).toFormat("cccc d LLLL")}
                     </span>
@@ -598,11 +598,11 @@ export function ExpensesClient({
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className="truncate text-[14px] font-medium text-ink-900" dir="auto">
+                              <span className="truncate text-[0.875rem] font-medium text-ink-900" dir="auto">
                                 {e.vendor || cat}
                               </span>
                               {e.recurring && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] text-ink-500">
                                   <RotateCw className="h-3 w-3" />
                                   {E.recurring}
                                 </span>
@@ -611,33 +611,33 @@ export function ExpensesClient({
                                 (stockHref ? (
                                   <Link
                                     href={stockHref}
-                                    className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-brand-700 hover:underline"
+                                    className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 hover:underline"
                                     data-expense-stock
                                   >
                                     <Package className="h-3 w-3" />
                                     {E.fromDelivery.replace("{product}", e.fromStock)}
                                   </Link>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500" data-expense-stock>
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] text-ink-500" data-expense-stock>
                                     <Package className="h-3 w-3" />
                                     {E.fromDelivery.replace("{product}", e.fromStock)}
                                   </span>
                                 ))}
                               {/* A delivery's payment already says which delivery; anything else paid toward a bill says so. */}
                               {e.towardBill && !e.fromStock && (
-                                <span className="inline-flex items-center whitespace-nowrap rounded-full bg-sunken px-2 py-0.5 text-[11px] text-ink-500" data-expense-bill>
+                                <span className="inline-flex items-center whitespace-nowrap rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] text-ink-500" data-expense-bill>
                                   {E.towardBill}
                                 </span>
                               )}
                               {e.hasReceipt && <Paperclip className="h-3.5 w-3.5 text-ink-400" aria-label={E.receipt} />}
                             </div>
-                            <div className="truncate text-[12px] text-ink-500" dir="auto">
+                            <div className="truncate text-[0.75rem] text-ink-500" dir="auto">
                               {[e.vendor ? cat : null, (E.methods as Record<string, string>)[e.method] ?? e.method, e.note || null]
                                 .filter(Boolean)
                                 .join(" · ")}
                             </div>
                           </div>
-                          <span className="shrink-0 text-[14px] font-semibold text-ink-900 tnum">{money(e.amount)}</span>
+                          <span className="shrink-0 text-[0.875rem] font-semibold text-ink-900 tnum">{money(e.amount)}</span>
                           <div className="flex shrink-0 items-center">
                             <Button variant="ghost" size="icon" aria-label={t.common.edit} onClick={() => editExpense(e)}>
                               <Pencil className="h-4 w-4" />
@@ -660,7 +660,7 @@ export function ExpensesClient({
                 <ul className="divide-y divide-line">
                   {byCategory.map((b) => (
                     <li key={b.categoryId ?? "__unfiled"} className="px-5 py-3">
-                      <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[13px]">
+                      <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[0.8125rem]">
                         <span className="flex min-w-0 items-center gap-2">
                           <span
                             className="h-2 w-2 shrink-0 rounded-full"
@@ -671,7 +671,7 @@ export function ExpensesClient({
                         </span>
                         <span className="shrink-0 tnum">
                           <span className="font-semibold text-ink-900">{money(b.total)}</span>
-                          <span className="ms-2 inline-block w-9 text-end text-[12px] text-ink-400">
+                          <span className="ms-2 inline-block w-9 text-end text-[0.75rem] text-ink-400">
                             {total > 0 ? Math.round((b.total / total) * 100) : 0}%
                           </span>
                         </span>
@@ -701,21 +701,21 @@ export function ExpensesClient({
               }
             />
             {owedTotal <= 0 ? (
-              <p className="px-5 py-8 text-center text-[13px] text-ink-400">{E.nothingOwed}</p>
+              <p className="px-5 py-8 text-center text-[0.8125rem] text-ink-400">{E.nothingOwed}</p>
             ) : (
               <ul className="divide-y divide-line">
                 {suppliers.map((s) => (
                   <li key={s.key} className="px-5 py-4" data-supplier={s.name}>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[14px] font-semibold" dir="auto">
+                        <div className="truncate text-[0.875rem] font-semibold" dir="auto">
                           {s.name || "—"}
                         </div>
-                        <div className="text-[12px] text-ink-500">
+                        <div className="text-[0.75rem] text-ink-500">
                           {E.since.replace("{date}", fmtDateOnly(s.bills[0].incurredOn, locale))}
                         </div>
                       </div>
-                      <span className="whitespace-nowrap text-[15px] font-bold tabular-nums" data-supplier-owed={s.owed}>
+                      <span className="whitespace-nowrap text-[0.9375rem] font-bold tabular-nums" data-supplier-owed={s.owed}>
                         {money(s.owed)}
                       </span>
                       <Button
@@ -730,7 +730,7 @@ export function ExpensesClient({
                       {s.bills.map((b) => {
                         const late = !!b.dueOn && b.dueOn < todayLocal;
                         return (
-                          <li key={b.id} className="flex items-center gap-2 rounded-ctl bg-sunken py-1.5 ps-3 pe-1 text-[12.5px]" data-bill={b.id}>
+                          <li key={b.id} className="flex items-center gap-2 rounded-ctl bg-sunken py-1.5 ps-3 pe-1 text-[0.78125rem]" data-bill={b.id}>
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-ink-900" dir="auto">
                                 {b.product || b.note || E.billFallback}
@@ -769,10 +769,10 @@ export function ExpensesClient({
                 {labsOwed && (
                   <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4" data-labs-owed={labsOwed.owed}>
                     <div className="min-w-0 flex-1">
-                      <div className="text-[14px] font-semibold">{E.labWork}</div>
-                      <div className="text-[12px] text-ink-500">{E.labsSub}</div>
+                      <div className="text-[0.875rem] font-semibold">{E.labWork}</div>
+                      <div className="text-[0.75rem] text-ink-500">{E.labsSub}</div>
                     </div>
-                    <span className="whitespace-nowrap text-[15px] font-bold tabular-nums">{money(labsOwed.owed)}</span>
+                    <span className="whitespace-nowrap text-[0.9375rem] font-bold tabular-nums">{money(labsOwed.owed)}</span>
                     {labsOwed.href && (
                       <Link href={labsOwed.href} className={buttonClass({ variant: "outline", size: "sm" })}>
                         {E.openLabs}
@@ -804,27 +804,27 @@ export function ExpensesClient({
             }
           />
           {schedules.length === 0 ? (
-            <p className="px-5 py-8 text-center text-[13px] text-ink-400">{E.noRepeating}</p>
+            <p className="px-5 py-8 text-center text-[0.8125rem] text-ink-400">{E.noRepeating}</p>
           ) : (
             <ul className="divide-y divide-line">
               {schedules.map((s) => (
                 <li key={s.id} className={`flex items-center gap-3 py-3 ps-5 pe-3 ${s.active ? "" : "opacity-60"}`}>
                   {/* The day of the month it lands on, as a date would be printed on a calendar. */}
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-ctl bg-sunken text-[15px] font-bold text-ink-900 tnum" aria-hidden>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-ctl bg-sunken text-[0.9375rem] font-bold text-ink-900 tnum" aria-hidden>
                     {s.day_of_month}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-[14px] font-medium text-ink-900" dir="auto">
+                      <span className="truncate text-[0.875rem] font-medium text-ink-900" dir="auto">
                         {s.vendor || label({ name: s.category_name, name_ar: s.category_name_ar })}
                       </span>
                       {!s.active && <Badge status="cancelled">{E.paused}</Badge>}
                     </div>
-                    <div className="truncate text-[12px] text-ink-500">
+                    <div className="truncate text-[0.75rem] text-ink-500">
                       {E.everyMonthOn.replace("{d}", String(s.day_of_month))} · {label({ name: s.category_name, name_ar: s.category_name_ar })}
                     </div>
                   </div>
-                  <span className="shrink-0 text-[14px] font-semibold text-ink-900 tnum">{money(s.amount)}</span>
+                  <span className="shrink-0 text-[0.875rem] font-semibold text-ink-900 tnum">{money(s.amount)}</span>
                   <div className="flex shrink-0 items-center">
                     <Button
                       variant="ghost"
@@ -853,12 +853,12 @@ export function ExpensesClient({
       */}
       <Modal open={catsOpen} onClose={() => setCatsOpen(false)} title={E.categories}>
         <div className="grid gap-4" data-categories>
-          <p className="text-[13px] leading-relaxed text-ink-500">{E.categoriesSub}</p>
+          <p className="text-[0.8125rem] leading-relaxed text-ink-500">{E.categoriesSub}</p>
           <ul className="divide-y divide-line rounded-ctl border border-line">
             {categories.map((c) => (
               <li key={c.id} className={`flex items-center gap-3 py-1.5 ps-3.5 pe-1.5 ${c.active ? "" : "opacity-50"}`}>
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: c.color }} aria-hidden />
-                <span className="flex-1 text-[13px]">{label(c)}</span>
+                <span className="flex-1 text-[0.8125rem]">{label(c)}</span>
                 {!c.active && <Badge status="cancelled">{E.hidden}</Badge>}
                 <Button
                   variant="ghost"
@@ -917,7 +917,7 @@ export function ExpensesClient({
                     aria-checked={kindOf(draft) === k}
                     onClick={() => setDraft({ ...draft, unpaid: k === "owed", repeat: k === "monthly" })}
                     data-kind={k}
-                    className={`flex touch-manipulation items-center justify-center gap-1.5 rounded-md px-2 py-2 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+                    className={`flex touch-manipulation items-center justify-center gap-1.5 rounded-md px-2 py-2 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
                       kindOf(draft) === k ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
                     }`}
                   >
@@ -928,7 +928,7 @@ export function ExpensesClient({
                 ))}
               </div>
             )}
-            {draft.repeat && !draft.scheduleId && <p className="-mt-1 text-[12px] leading-relaxed text-ink-500">{E.repeatHint}</p>}
+            {draft.repeat && !draft.scheduleId && <p className="-mt-1 text-[0.75rem] leading-relaxed text-ink-500">{E.repeatHint}</p>}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={partOn(draft) ? E.totalAmount : t.expenses.amount} required>
                 <Input
@@ -972,7 +972,7 @@ export function ExpensesClient({
               <div className="grid gap-3 rounded-ctl border border-line px-3 py-2.5" data-part-paid={draft.partPaid}>
                 <label className="flex min-h-10 cursor-pointer items-center gap-2.5">
                   <Toggle checked={draft.partPaid} onChange={(v) => setDraft({ ...draft, partPaid: v })} />
-                  <span className="text-[13px] font-medium">{E.partPaid}</span>
+                  <span className="text-[0.8125rem] font-medium">{E.partPaid}</span>
                 </label>
                 {draft.partPaid && (
                   <>
@@ -1073,7 +1073,7 @@ export function ExpensesClient({
                       href={`/api/c/${slug}/expenses/${draft.id}/receipt`}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[13px] font-medium text-brand-700 hover:underline"
+                      className="text-[0.8125rem] font-medium text-brand-700 hover:underline"
                     >
                       {t.expenses.viewReceipt}
                     </a>
@@ -1102,7 +1102,7 @@ export function ExpensesClient({
                         router.refresh();
                       }}
                     />
-                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-[12px] font-medium text-ink-700 hover:border-brand-400">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-[0.75rem] font-medium text-ink-700 hover:border-brand-400">
                       <Paperclip className="h-3.5 w-3.5" />
                       {uploading
                         ? t.common.saving
@@ -1127,7 +1127,7 @@ export function ExpensesClient({
             {draft.scheduleId && (
               <label className="flex items-center gap-2.5">
                 <Toggle checked={draft.active} onChange={(v) => setDraft({ ...draft, active: v })} />
-                <span className="text-[13px] font-medium">{draft.active ? E.running : E.paused}</span>
+                <span className="text-[0.8125rem] font-medium">{draft.active ? E.running : E.paused}</span>
               </label>
             )}
             <div className="flex justify-end gap-2">
@@ -1294,7 +1294,7 @@ export function ExpensesClient({
                 checked={catDraft.active}
                 onChange={(v) => setCatDraft({ ...catDraft, active: v })}
               />
-              <span className="text-[13px] font-medium">
+              <span className="text-[0.8125rem] font-medium">
                 {catDraft.active ? t.expenses.shown : t.expenses.hidden}
               </span>
             </label>
@@ -1384,7 +1384,7 @@ export function ExpensesClient({
             const left = Math.round((paying.group.owed - (amt || 0)) * 100) / 100;
             return (
               <div className="grid gap-4" data-pay-form>
-                <p className="text-[13px] leading-relaxed text-ink-500">{E.payOwed.replace("{amount}", money(paying.group.owed))}</p>
+                <p className="text-[0.8125rem] leading-relaxed text-ink-500">{E.payOwed.replace("{amount}", money(paying.group.owed))}</p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={t.expenses.amount} required>
                     <Input
@@ -1411,8 +1411,8 @@ export function ExpensesClient({
                     ))}
                   </Select>
                 </Field>
-                {amt > 0 && left > 0.005 && <p className="text-[12.5px] text-ink-700">{E.payPart.replace("{left}", money(left))}</p>}
-                {left < -0.005 && <p className="text-[12.5px] font-semibold text-danger">{E.payTooMuch}</p>}
+                {amt > 0 && left > 0.005 && <p className="text-[0.78125rem] text-ink-700">{E.payPart.replace("{left}", money(left))}</p>}
+                {left < -0.005 && <p className="text-[0.78125rem] font-semibold text-danger">{E.payTooMuch}</p>}
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setPaying(null)}>
                     {t.common.cancel}

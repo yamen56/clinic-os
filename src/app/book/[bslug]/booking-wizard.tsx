@@ -582,7 +582,7 @@ export function BookingWizard({
   } else if (step === "service") {
     bar = (
       <>
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-700 tabular-nums" data-picked-summary aria-live="polite">
+        <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold text-ink-700 tabular-nums" data-picked-summary aria-live="polite">
           {picked.length > 0 &&
             (picked.length === 1 ? t.onePicked : t.servicesPicked)
               .replace("{n}", String(picked.length))
@@ -701,20 +701,20 @@ export function BookingWizard({
             />
           ) : (
             <span
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl font-display text-[22px] font-bold"
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl font-display text-[1.375rem] font-bold"
               style={{ color: "var(--bk)", background: banded ? "#ffffff" : "var(--bk-soft)" }}
             >
               {clinicName.slice(0, 1)}
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <h1 className="font-display text-[19px] font-bold leading-tight">{clinicName}</h1>
+            <h1 className="font-display text-[1.1875rem] font-bold leading-tight">{clinicName}</h1>
             {address && (
               <a
                 href={clinic.mapsUrl ?? undefined}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-1 flex items-center gap-1 text-[13px] opacity-85"
+                className="mt-1 flex items-center gap-1 text-[0.8125rem] opacity-85"
               >
                 <MapPin className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{address}</span>
@@ -725,7 +725,7 @@ export function BookingWizard({
             type="button"
             onClick={() => setLocale(isAr ? "en" : "ar")}
             aria-label={isAr ? "English" : "العربية"}
-            className="grid h-10 min-w-10 shrink-0 touch-manipulation place-items-center rounded-full border px-3 text-[13px] font-semibold"
+            className="grid h-10 min-w-10 shrink-0 touch-manipulation place-items-center rounded-full border px-3 text-[0.8125rem] font-semibold"
             style={{
               borderColor: !banded
                 ? "var(--color-line-strong)"
@@ -746,12 +746,12 @@ export function BookingWizard({
               /* Nothing to book: say so, and how to book instead. */
               <section className="py-8 text-center" data-booking-empty>
                 <CalendarX className="mx-auto mb-3 h-10 w-10 text-ink-300" />
-                <h2 className="text-[16px] font-semibold">{t.noServices}</h2>
-                <p className="mt-1 text-[14px] text-ink-500">{t.noServicesHint}</p>
+                <h2 className="text-[1rem] font-semibold">{t.noServices}</h2>
+                <p className="mt-1 text-[0.875rem] text-ink-500">{t.noServicesHint}</p>
                 {clinic.phone && (
                   <a
                     href={`tel:${clinic.phone}`}
-                    className="mt-5 inline-flex h-11 items-center gap-2 rounded-full px-5 text-[14px] font-semibold"
+                    className="mt-5 inline-flex h-11 items-center gap-2 rounded-full px-5 text-[0.875rem] font-semibold"
                     style={{ background: "var(--bk)", color: "var(--bk-ink)" }}
                   >
                     <Phone className="h-4 w-4" />
@@ -764,17 +764,17 @@ export function BookingWizard({
                 {/* The clinic's own words, once, before the first question. */}
                 {step === firstStep && !retiming && (headline || intro) && (
                   <div className="mb-5 border-b border-line pb-5" data-booking-intro>
-                    {headline && <p className="font-display text-[18px] font-bold leading-snug">{headline}</p>}
-                    {intro && <p className="mt-1.5 whitespace-pre-line text-[14px] leading-6 text-ink-500">{intro}</p>}
+                    {headline && <p className="font-display text-[1.125rem] font-bold leading-snug">{headline}</p>}
+                    {intro && <p className="mt-1.5 whitespace-pre-line text-[0.875rem] leading-6 text-ink-500">{intro}</p>}
                   </div>
                 )}
 
                 {step !== "done" && (
                   <>
-                    <p className="text-[12px] font-semibold text-ink-500 tabular-nums">
+                    <p className="text-[0.75rem] font-semibold text-ink-500 tabular-nums">
                       {t.stepOf.replace("{n}", String(stepIndex + 1)).replace("{total}", String(totalSteps))}
                     </p>
-                    <h2 className="mt-1 font-display text-[21px] font-bold leading-tight">{title[step]}</h2>
+                    <h2 className="mt-1 font-display text-[1.3125rem] font-bold leading-tight">{title[step]}</h2>
                     {/* One mark per step this link has; qa counts them. */}
                     <div className="mb-5 mt-3 flex gap-1" data-booking-progress={totalSteps} aria-hidden>
                       {Array.from({ length: totalSteps }, (_, i) => (
@@ -802,12 +802,12 @@ export function BookingWizard({
                         className={plainCard}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="text-[15.5px] font-semibold">
+                          <div className="text-[0.96875rem] font-semibold">
                             {/* An unfiled group has no name of its own — it is
                                 whatever the clinic has not filed yet. */}
                             {sec.id === null ? t.otherSection : nameOf(sec)}
                           </div>
-                          <div className="mt-0.5 text-[13px] text-ink-500 tabular-nums">
+                          <div className="mt-0.5 text-[0.8125rem] text-ink-500 tabular-nums">
                             {sec.count === 1 ? t.oneService : t.servicesCount.replace("{n}", String(sec.count))}
                           </div>
                         </div>
@@ -832,8 +832,8 @@ export function BookingWizard({
                         className={plainCard}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="text-[15.5px] font-semibold leading-snug">{nameOf(s)}</div>
-                          <div className="mt-1 flex items-center gap-1.5 text-[13px] text-ink-500 tabular-nums">
+                          <div className="text-[0.96875rem] font-semibold leading-snug">{nameOf(s)}</div>
+                          <div className="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-ink-500 tabular-nums">
                             <Clock className="h-3.5 w-3.5" />
                             {s.durationMin} {t.duration}
                             {price(s)}
@@ -846,7 +846,7 @@ export function BookingWizard({
                 )}
                 {step === "service" && multi && (
                   <section className="grid gap-4 animate-fade-up motion-reduce:animate-none" data-multi-services>
-                    <p className="-mt-2 text-[13.5px] leading-5 text-ink-500">{t.chooseServicesHint}</p>
+                    <p className="-mt-2 text-[0.84375rem] leading-5 text-ink-500">{t.chooseServicesHint}</p>
                     {(sections.length > 1
                       ? sections.map((sec) => ({ sec, items: services.filter((s) => s.sectionId === sec.id) }))
                       : [{ sec: null as Section | null, items: services }]
@@ -855,7 +855,7 @@ export function BookingWizard({
                       .map((g) => (
                         <div key={g.sec?.id ?? "__all"} className="grid gap-2">
                           {g.sec && (
-                            <h3 className="text-[12.5px] font-semibold text-ink-500">
+                            <h3 className="text-[0.78125rem] font-semibold text-ink-500">
                               {g.sec.id === null ? t.otherSection : nameOf(g.sec)}
                             </h3>
                           )}
@@ -883,8 +883,8 @@ export function BookingWizard({
                                   {on && <Check className="h-4 w-4" strokeWidth={3} />}
                                 </span>
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-[15.5px] font-semibold leading-snug">{nameOf(s)}</div>
-                                  <div className="mt-1 flex items-center gap-1.5 text-[13px] text-ink-500 tabular-nums">
+                                  <div className="text-[0.96875rem] font-semibold leading-snug">{nameOf(s)}</div>
+                                  <div className="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-ink-500 tabular-nums">
                                     <Clock className="h-3.5 w-3.5" />
                                     {s.durationMin} {t.duration}
                                     {price(s)}
@@ -917,8 +917,8 @@ export function BookingWizard({
                           <Users className="h-5 w-5" />
                         </span>
                         <div className="min-w-0 flex-1">
-                          <div className="text-[15.5px] font-semibold">{t.anyDoctor}</div>
-                          <div className="mt-0.5 text-[13px] text-ink-500">{t.anyDoctorHint}</div>
+                          <div className="text-[0.96875rem] font-semibold">{t.anyDoctor}</div>
+                          <div className="mt-0.5 text-[0.8125rem] text-ink-500">{t.anyDoctorHint}</div>
                         </div>
                         <ChevronRight className="h-5 w-5 shrink-0 text-ink-300 rtl:rotate-180" />
                       </button>
@@ -935,8 +935,8 @@ export function BookingWizard({
                       >
                         <DoctorFace bslug={bslug} doctor={d} />
                         <div className="min-w-0 flex-1">
-                          <div className="text-[15.5px] font-semibold">{d.name}</div>
-                          {(d.specialty || d.title) && <div className="mt-0.5 text-[13px] text-ink-500">{d.specialty || d.title}</div>}
+                          <div className="text-[0.96875rem] font-semibold">{d.name}</div>
+                          {(d.specialty || d.title) && <div className="mt-0.5 text-[0.8125rem] text-ink-500">{d.specialty || d.title}</div>}
                         </div>
                         <ChevronRight className="h-5 w-5 shrink-0 text-ink-300 rtl:rotate-180" />
                       </button>
@@ -947,8 +947,8 @@ export function BookingWizard({
                 {/* STEP: time */}
                 {step === "time" && (
                   <section className="animate-fade-up motion-reduce:animate-none">
-                    {crumb && <p className="-mt-1 mb-4 text-[13px] font-medium text-ink-500">{crumb}</p>}
-                    <p className="mb-2 text-[13px] font-semibold text-ink-700" aria-live="polite">
+                    {crumb && <p className="-mt-1 mb-4 text-[0.8125rem] font-medium text-ink-500">{crumb}</p>}
+                    <p className="mb-2 text-[0.8125rem] font-semibold text-ink-700" aria-live="polite">
                       {DateTime.fromISO(date, { zone: clinic.tz }).setLocale(fmtLocale).toFormat("LLLL yyyy")}
                     </p>
                     {/* The date strip. Each chip's day is the one `span.tnum` in it — how qa finds the chips. */}
@@ -978,8 +978,8 @@ export function BookingWizard({
                                 : { borderColor: "var(--color-line)", background: "var(--color-surface)" }
                             }
                           >
-                            <span className="text-[11.5px] font-medium opacity-75">{d.setLocale(fmtLocale).toFormat("ccc")}</span>
-                            <span className="text-[18px] font-bold leading-none tnum">{d.day}</span>
+                            <span className="text-[length:max(11px,0.71875rem)] font-medium opacity-75">{d.setLocale(fmtLocale).toFormat("ccc")}</span>
+                            <span className="text-[1.125rem] font-bold leading-none tnum">{d.day}</span>
                             {open && !active && (
                               <span className="absolute bottom-1.5 h-1 w-1 rounded-full" style={{ background: "var(--bk)" }} aria-hidden />
                             )}
@@ -1048,10 +1048,10 @@ export function BookingWizard({
                         placeholder={t.fullName}
                         aria-label={t.fullName}
                         autoComplete="name"
-                        className="h-12 scroll-mb-28 rounded-xl border border-line-strong bg-surface px-4 text-[16px] outline-none focus:border-[var(--bk-text)]"
+                        className="h-12 scroll-mb-28 rounded-xl border border-line-strong bg-surface px-4 text-[1rem] outline-none focus:border-[var(--bk-text)]"
                       />
                       <div>
-                        <span className="mb-1.5 block text-[13px] font-semibold">{t.phone}</span>
+                        <span className="mb-1.5 block text-[0.8125rem] font-semibold">{t.phone}</span>
                         {/*
                           The country first, the clinic's own by default: a
                           patient with a Palestinian or Saudi number picks it
@@ -1068,7 +1068,7 @@ export function BookingWizard({
                           // `tel`, not `tel-national`: autofill hands over the whole number, and the field reads its code.
                           inputAttrs={{ autoComplete: "tel", "aria-label": t.phone }}
                         />
-                        <span className="mt-1.5 flex items-start gap-1.5 text-[12.5px] leading-5 text-ink-500">
+                        <span className="mt-1.5 flex items-start gap-1.5 text-[0.78125rem] leading-5 text-ink-500">
                           <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                           {verifyByOtp ? t.phoneHint : t.phoneHintNoCode}
                         </span>
@@ -1077,7 +1077,7 @@ export function BookingWizard({
 
                     {activeQuestions.length > 0 && (
                       <>
-                        <h3 className="mb-3 mt-6 border-t border-line pt-5 text-[14px] font-semibold">{t.fewMore}</h3>
+                        <h3 className="mb-3 mt-6 border-t border-line pt-5 text-[0.875rem] font-semibold">{t.fewMore}</h3>
                         <div className="grid gap-4">
                           {activeQuestions.map((q) => (
                             <QuestionField
@@ -1103,7 +1103,7 @@ export function BookingWizard({
                           onChange={(e) => setConsent(e.target.checked)}
                           className="mt-0.5 h-4.5 w-4.5 shrink-0 accent-[var(--bk-text)]"
                         />
-                        <span className="whitespace-pre-line text-[13px] leading-6 text-ink-700">{consentText}</span>
+                        <span className="whitespace-pre-line text-[0.8125rem] leading-6 text-ink-700">{consentText}</span>
                       </label>
                     )}
 
@@ -1121,7 +1121,7 @@ export function BookingWizard({
                     >
                       <MessageCircle className="h-7 w-7" />
                     </span>
-                    <p className="num mb-5 text-[14px] text-ink-500 tabular-nums">{formatPhone(phone) || phone}</p>
+                    <p className="num mb-5 text-[0.875rem] text-ink-500 tabular-nums">{formatPhone(phone) || phone}</p>
                     <input
                       dir="ltr"
                       inputMode="numeric"
@@ -1144,7 +1144,7 @@ export function BookingWizard({
                       type="button"
                       onClick={resend}
                       disabled={resendIn > 0 || busy}
-                      className="mt-4 min-h-10 text-[13px] font-medium text-ink-500 underline underline-offset-4 disabled:no-underline disabled:opacity-60"
+                      className="mt-4 min-h-10 text-[0.8125rem] font-medium text-ink-500 underline underline-offset-4 disabled:no-underline disabled:opacity-60"
                     >
                       {resendIn > 0 ? `${t.resendIn} ${resendIn}` : t.resend}
                     </button>
@@ -1160,8 +1160,8 @@ export function BookingWizard({
                     >
                       <Check className="h-8 w-8" strokeWidth={2.5} />
                     </span>
-                    <h2 className="font-display text-[22px] font-bold">{doneStatus === "confirmed" ? t.booked : t.bookedPending}</h2>
-                    <p className="mx-auto mt-1 max-w-xs text-[14px] leading-6 text-ink-500">
+                    <h2 className="font-display text-[1.375rem] font-bold">{doneStatus === "confirmed" ? t.booked : t.bookedPending}</h2>
+                    <p className="mx-auto mt-1 max-w-xs text-[0.875rem] leading-6 text-ink-500">
                       {doneStatus === "confirmed" ? t.bookedBody : t.bookedPendingBody}
                     </p>
                     <div className="mt-6">
@@ -1174,7 +1174,7 @@ export function BookingWizard({
                       />
                     </div>
                     {successNote && (
-                      <p className="mt-4 whitespace-pre-line rounded-2xl bg-sunken p-4 text-start text-[13.5px] leading-6 text-ink-700">
+                      <p className="mt-4 whitespace-pre-line rounded-2xl bg-sunken p-4 text-start text-[0.84375rem] leading-6 text-ink-700">
                         {successNote}
                       </p>
                     )}
@@ -1188,7 +1188,7 @@ export function BookingWizard({
                         href={joinUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full px-5 text-[15px] font-semibold"
+                        className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full px-5 text-[0.9375rem] font-semibold"
                         style={{ background: "var(--bk)", color: "var(--bk-ink)" }}
                       >
                         <Video className="h-4 w-4" />
@@ -1207,7 +1207,7 @@ export function BookingWizard({
                       {!joinUrl && clinic.phone && (
                         <a
                           href={`tel:${clinic.phone}`}
-                          className="inline-flex h-11 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-[13.5px] font-semibold"
+                          className="inline-flex h-11 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-[0.84375rem] font-semibold"
                         >
                           <Phone className="h-4 w-4" />
                           {t.callClinic}
@@ -1217,7 +1217,7 @@ export function BookingWizard({
                     <button
                       type="button"
                       onClick={reset}
-                      className="mt-6 min-h-10 w-full text-[14px] font-semibold underline underline-offset-4"
+                      className="mt-6 min-h-10 w-full text-[0.875rem] font-semibold underline underline-offset-4"
                       style={{ color: "var(--bk-text)" }}
                     >
                       {t.bookAgain}
@@ -1253,7 +1253,7 @@ export function BookingWizard({
 
 function ErrorLine({ text }: { text: string }) {
   return (
-    <p className="mt-4 rounded-xl bg-danger-soft px-3.5 py-2.5 text-[13.5px] text-danger" role="alert">
+    <p className="mt-4 rounded-xl bg-danger-soft px-3.5 py-2.5 text-[0.84375rem] text-danger" role="alert">
       {text}
     </p>
   );
@@ -1264,7 +1264,7 @@ function BackBtn({ onClick, label }: { onClick: () => void; label: string }) {
     <button
       type="button"
       onClick={onClick}
-      className="h-12 shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-semibold text-ink-500 hover:bg-sunken"
+      className="h-12 shrink-0 touch-manipulation rounded-full px-4 text-[0.9375rem] font-semibold text-ink-500 hover:bg-sunken"
     >
       {label}
     </button>
@@ -1277,7 +1277,7 @@ function PrimaryBtn({ onClick, label, disabled, busy }: { onClick: () => void; l
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex h-12 min-w-[9rem] shrink-0 touch-manipulation items-center justify-center gap-2 rounded-full px-6 text-[15px] font-semibold shadow-card transition-opacity disabled:opacity-40"
+      className="inline-flex h-12 min-w-[9rem] shrink-0 touch-manipulation items-center justify-center gap-2 rounded-full px-6 text-[0.9375rem] font-semibold shadow-card transition-opacity disabled:opacity-40"
       style={{ background: "var(--bk)", color: "var(--bk-ink)" }}
     >
       {busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />}

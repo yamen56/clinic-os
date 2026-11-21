@@ -70,7 +70,7 @@ export function EinvoicingForm({
             />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold">{E.enable}</div>
-              <p className="mt-0.5 text-[13px] text-ink-500">{E.enableHint}</p>
+              <p className="mt-0.5 text-[0.8125rem] text-ink-500">{E.enableHint}</p>
             </div>
           </div>
 
@@ -80,7 +80,7 @@ export function EinvoicingForm({
             quietly stays unreported.
           */}
           {enabled && missing.length > 0 && (
-            <p className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger">
+            <p className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
                 {E.incomplete}{" "}
@@ -89,7 +89,7 @@ export function EinvoicingForm({
             </p>
           )}
           {ready && (
-            <p className="flex items-center gap-2 rounded-md bg-brand-100 px-3 py-2 text-[13px] text-brand-700">
+            <p className="flex items-center gap-2 rounded-md bg-brand-100 px-3 py-2 text-[0.8125rem] text-brand-700">
               <ShieldCheck className="h-4 w-4 shrink-0" />
               {E.ready}
             </p>
@@ -114,7 +114,7 @@ export function EinvoicingForm({
               />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold">{E.fileByDefault}</div>
-                <p className="mt-0.5 text-[13px] text-ink-500">
+                <p className="mt-0.5 text-[0.8125rem] text-ink-500">
                   {fileByDefault ? E.fileByDefaultOnHint : E.fileByDefaultOffHint}
                 </p>
               </div>
@@ -230,7 +230,7 @@ export function EinvoicingForm({
           </span>
         </div>
         {settings.lastError && (
-          <p className="border-t border-line px-5 py-3 text-[13px] text-danger">
+          <p className="border-t border-line px-5 py-3 text-[0.8125rem] text-danger">
             {E.lastError}: {settings.lastError}
           </p>
         )}

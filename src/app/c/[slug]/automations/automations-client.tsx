@@ -201,11 +201,11 @@ export function AutomationsClient({
                 </Badge>
               )}
             </div>
-            <div className="mt-0.5 truncate text-[13px] text-ink-500">
+            <div className="mt-0.5 truncate text-[0.8125rem] text-ink-500">
               {sum.title}
               {sum.detail ? ` · ${sum.detail}` : ""} · {a.step_count === 1 ? f.stepOne : fill(f.stepsN, { n: a.step_count })}
             </div>
-            <div className="mt-0.5 truncate text-[12px] text-ink-400" suppressHydrationWarning>
+            <div className="mt-0.5 truncate text-[0.75rem] text-ink-400" suppressHydrationWarning>
               {stats.length ? `${stats.join(" · ")} · ` : ""}
               {a.last_run ? fill(f.lastRun, { when: fmtRelative(a.last_run, locale) }) : f.neverRan}
             </div>
@@ -225,7 +225,7 @@ export function AutomationsClient({
                 <div className="absolute end-0 top-full z-40 mt-1 grid min-w-44 gap-0.5 rounded-ctl border border-line bg-surface p-1 shadow-pop">
                   <Link
                     href={`/c/${slug}/automations/${a.id}?tab=activity`}
-                    className="flex items-center gap-2 rounded-md px-2.5 py-2 text-[13px] hover:bg-sunken"
+                    className="flex items-center gap-2 rounded-md px-2.5 py-2 text-[0.8125rem] hover:bg-sunken"
                   >
                     <History className="h-4 w-4 text-ink-500" />
                     {t.automations.history}
@@ -241,7 +241,7 @@ export function AutomationsClient({
                         router.push(`/c/${slug}/automations/${r.id}`);
                       });
                     }}
-                    className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[13px] hover:bg-sunken"
+                    className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[0.8125rem] hover:bg-sunken"
                   >
                     <Copy className="h-4 w-4 text-ink-500" />
                     {f.duplicate}
@@ -252,7 +252,7 @@ export function AutomationsClient({
                       setMenu(null);
                       setDeleting(a);
                     }}
-                    className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[13px] text-danger hover:bg-danger-soft"
+                    className="flex items-center gap-2 rounded-md px-2.5 py-2 text-start text-[0.8125rem] text-danger hover:bg-danger-soft"
                   >
                     <Trash2 className="h-4 w-4" />
                     {f.delete}
@@ -328,7 +328,7 @@ export function AutomationsClient({
                         type="button"
                         aria-pressed={cat === c}
                         onClick={() => setCat(c)}
-                        className={`rounded-full border px-3 py-1 text-[12px] font-medium ${
+                        className={`rounded-full border px-3 py-1 text-[0.75rem] font-medium ${
                           cat === c ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:border-line-strong"
                         }`}
                       >
@@ -353,7 +353,7 @@ export function AutomationsClient({
                     className="flex w-full items-center justify-between gap-3 px-5 py-4 text-start"
                     aria-expanded={showOff}
                   >
-                    <span className="text-[15px] font-semibold">
+                    <span className="text-[0.9375rem] font-semibold">
                       {f.offSection} <span className="text-ink-400">· {inactive.length}</span>
                     </span>
                     <ChevronDown className={`h-4.5 w-4.5 text-ink-400 transition-transform ${showOff ? "rotate-180" : ""}`} />
@@ -414,7 +414,7 @@ export function AutomationsClient({
                   : t.automations.optOutCount.replace("{n}", String(mutedPatients))}
               </span>
               {mutedPatients > 0 && (
-                <Link href={`/c/${slug}/patients?optedOut=1`} className="text-[13px] font-medium text-brand-700 hover:underline">
+                <Link href={`/c/${slug}/patients?optedOut=1`} className="text-[0.8125rem] font-medium text-brand-700 hover:underline">
                   {t.automations.optOutSee}
                 </Link>
               )}
@@ -505,7 +505,7 @@ function TemplateGallery({
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-[14px] font-semibold text-ink-900">{(locale === "ar" ? tp.name_ar : tp.name) || tp.name}</span>
+              <span className="text-[0.875rem] font-semibold text-ink-900">{(locale === "ar" ? tp.name_ar : tp.name) || tp.name}</span>
               {tp.added && (
                 <Badge status={tp.added.active ? "ok" : "neutral"}>
                   <Check className="h-3 w-3" />
@@ -515,11 +515,11 @@ function TemplateGallery({
             </span>
             {/* What it is for — the problem it solves and what the patient receives. */}
             {about && (
-              <span className="mt-0.5 line-clamp-2 block text-[12.5px] leading-relaxed text-ink-700" data-template-about>
+              <span className="mt-0.5 line-clamp-2 block text-[0.78125rem] leading-relaxed text-ink-700" data-template-about>
                 {about}
               </span>
             )}
-            <span className="mt-1 block text-[11.5px] text-ink-400">
+            <span className="mt-1 block text-[length:max(11px,0.71875rem)] text-ink-400">
               {sum.title}
               {sum.detail ? ` · ${sum.detail}` : ""} · {tp.steps.length === 1 ? f.stepOne : fill(f.stepsN, { n: tp.steps.length })}
             </span>
@@ -532,7 +532,7 @@ function TemplateGallery({
 
   return (
     <Modal open={open} onClose={onClose} title={f.gallery} wide>
-      <p className="mb-4 text-[13px] text-ink-500">{f.gallerySub}</p>
+      <p className="mb-4 text-[0.8125rem] text-ink-500">{f.gallerySub}</p>
       <Link
         href={`/c/${slug}/automations/new`}
         data-template="scratch"
@@ -543,7 +543,7 @@ function TemplateGallery({
         </span>
         <span>
           <span className="block text-sm font-semibold text-ink-900">{f.scratch}</span>
-          <span className="block text-[12px] text-ink-500">{f.scratchSub}</span>
+          <span className="block text-[0.75rem] text-ink-500">{f.scratchSub}</span>
         </span>
       </Link>
 

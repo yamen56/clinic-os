@@ -94,15 +94,15 @@ export function LabsClient({
     return (
       <li key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3" data-lab-work={w.id} data-overdue={late ? "yes" : "no"}>
         <div className="min-w-[12rem] flex-1">
-          <Link href={`/c/${slug}/patients/${w.patientId}?tab=dental`} className="text-[14px] font-semibold text-ink-900 hover:underline">
+          <Link href={`/c/${slug}/patients/${w.patientId}?tab=dental`} className="text-[0.875rem] font-semibold text-ink-900 hover:underline">
             {w.patientName}
           </Link>
-          <div className="text-[12.5px] text-ink-500">
+          <div className="text-[0.78125rem] text-ink-500">
             <bdi>{w.label}</bdi> · {/^[1-8][1-8]$/.test(w.site) ? L.tooth.replace("{n}", w.site) : w.site} · {lab?.name ?? "—"}
             {lab?.inHouse ? ` · ${L.inHouse}` : ""}
           </div>
         </div>
-        <div className="text-[12.5px] text-ink-500 tnum">
+        <div className="text-[0.78125rem] text-ink-500 tnum">
           {L.sentOn.replace("{date}", fmtDateOnly(w.sentOn, locale))}
           {w.status === "sent" && w.dueOn && (
             <span className={late ? "ms-2 font-semibold text-danger" : "ms-2"}>
@@ -111,7 +111,7 @@ export function LabsClient({
           )}
           {w.status === "received" && w.receivedAt && <span className="ms-2">{L.backOn.replace("{date}", fmtDateOnly(w.receivedAt.slice(0, 10), locale))}</span>}
         </div>
-        <div className="w-24 text-end text-[13px] font-semibold tnum">{money(w.cost)}</div>
+        <div className="w-24 text-end text-[0.8125rem] font-semibold tnum">{money(w.cost)}</div>
         {action}
       </li>
     );
@@ -166,8 +166,8 @@ export function LabsClient({
                 return (
                   <section key={lab.id} className="rounded-card border border-line" data-lab-pay-group={lab.id}>
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
-                      <h3 className="text-[15px] font-semibold">{lab.name}</h3>
-                      <span className="text-[13px] text-ink-500 tnum">{L.owed.replace("{amount}", money(cases.reduce((s, w) => s + w.cost, 0)))}</span>
+                      <h3 className="text-[0.9375rem] font-semibold">{lab.name}</h3>
+                      <span className="text-[0.8125rem] text-ink-500 tnum">{L.owed.replace("{amount}", money(cases.reduce((s, w) => s + w.cost, 0)))}</span>
                     </div>
                     <ul className="divide-y divide-line">
                       {cases.map((w) =>
@@ -194,7 +194,7 @@ export function LabsClient({
                     <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-3">
                       <button
                         type="button"
-                        className="me-auto text-[12.5px] font-semibold text-brand-700 hover:underline"
+                        className="me-auto text-[0.78125rem] font-semibold text-brand-700 hover:underline"
                         onClick={() => setTicked((prev) => new Set([...prev, ...cases.map((w) => w.id)]))}
                       >
                         {L.tickAll}

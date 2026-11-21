@@ -76,14 +76,14 @@ export function SupportVisitList({
                 <bdi>{visit.adminName}</bdi>
               </span>
               {showOrigin && (
-                <span className="text-[13px] text-ink-500" dir="ltr">
+                <span className="text-[0.8125rem] text-ink-500" dir="ltr">
                   {visit.adminEmail}
                 </span>
               )}
               {showClinic && (
                 <Link
                   href={`/admin/clinics/${visit.clinicSlug}`}
-                  className="text-[13px] font-medium text-brand-700 hover:underline"
+                  className="text-[0.8125rem] font-medium text-brand-700 hover:underline"
                 >
                   {(locale === "ar" && visit.clinicNameAr) || visit.clinicName}
                 </Link>
@@ -105,7 +105,7 @@ export function SupportVisitList({
               <bdi>{visit.reason}</bdi>
             </p>
 
-            <p className="text-[13px] text-ink-500">
+            <p className="text-[0.8125rem] text-ink-500">
               <span className="tnum">{fmtDateTime(visit.startedAt, visit.timezone, locale)}</span>
               {" · "}
               <span className="tnum">{duration(visit)}</span>
@@ -123,7 +123,7 @@ export function SupportVisitList({
               )}
             </p>
 
-            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px]">
+            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.8125rem]">
               {activity.length === 0 ? (
                 <span className="text-ink-500">{v.nothing}</span>
               ) : (

@@ -131,7 +131,7 @@ export function RoomsClient({
                     {label(room)}
                     {room.name_ar && locale !== "ar" ? ` · ⁨${room.name_ar}⁩` : ""}
                   </div>
-                  <div className="truncate text-[12px] text-ink-500">{servicesSummary(room)}</div>
+                  <div className="truncate text-[0.75rem] text-ink-500">{servicesSummary(room)}</div>
                 </div>
                 <div className="flex shrink-0 items-center">
                   <Button
@@ -165,7 +165,7 @@ export function RoomsClient({
         )}
 
         {unhosted.length > 0 && (
-          <div className="mx-4 mb-4 flex items-start gap-2 rounded-lg bg-st-pending-soft px-3 py-2.5 text-[13px] text-ink-700 sm:mx-5">
+          <div className="mx-4 mb-4 flex items-start gap-2 rounded-lg bg-st-pending-soft px-3 py-2.5 text-[0.8125rem] text-ink-700 sm:mx-5">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-st-pending" />
             <span>{t.rooms.unhosted.replace("{list}", unhosted.map((s) => serviceLabel(s, locale)).join("، "))}</span>
           </div>
@@ -175,7 +175,7 @@ export function RoomsClient({
       {rooms.length > 0 && unroomed > 0 && (
         <Card className="p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="min-w-0 flex-1 text-[13px] text-ink-700">
+            <p className="min-w-0 flex-1 text-[0.8125rem] text-ink-700">
               {t.rooms.placeSub.replace("{n}", String(unroomed))}
             </p>
             <Button
@@ -266,8 +266,8 @@ export function RoomsClient({
 
             {services.length > 0 && (
               <div>
-                <span className="mb-0.5 block text-[13px] font-medium text-ink-700">{t.rooms.services}</span>
-                <span className="mb-2 block text-[12px] text-ink-500">{t.rooms.servicesHint}</span>
+                <span className="mb-0.5 block text-[0.8125rem] font-medium text-ink-700">{t.rooms.services}</span>
+                <span className="mb-2 block text-[0.75rem] text-ink-500">{t.rooms.servicesHint}</span>
                 <ServiceChips
                   services={services}
                   sections={sections}

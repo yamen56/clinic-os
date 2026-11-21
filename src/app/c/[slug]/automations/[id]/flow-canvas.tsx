@@ -358,7 +358,7 @@ function Inner(props: CanvasProps) {
               </ToolButton>
               <ToolButton label={t.automations.flow.tidy} onClick={tidy} wide>
                 <Network className="h-4 w-4" />
-                <span className="hidden text-[12px] font-medium sm:inline">{t.automations.flow.tidy}</span>
+                <span className="hidden text-[0.75rem] font-medium sm:inline">{t.automations.flow.tidy}</span>
               </ToolButton>
             </div>
           </Panel>
@@ -412,7 +412,7 @@ function AddButton({ label, onClick, big }: { label: string; onClick: () => void
       aria-label={label}
       title={label}
       className={`nodrag nopan flex items-center gap-1.5 rounded-full border border-dashed border-brand-400 bg-surface text-brand-700 shadow-card transition-colors hover:border-solid hover:border-brand-600 hover:bg-brand-50 ${
-        big ? "h-9 px-3.5 text-[13px] font-semibold" : "h-7 w-7 justify-center"
+        big ? "h-9 px-3.5 text-[0.8125rem] font-semibold" : "h-7 w-7 justify-center"
       }`}
     >
       <Plus className={big ? "h-4 w-4" : "h-3.5 w-3.5"} />
@@ -427,7 +427,7 @@ function IssueDot({ issues }: { issues: Issue[] }) {
   if (!issues.length) return null;
   return (
     <span
-      className={`grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1 text-[11px] font-bold text-white ${
+      className={`grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1 text-[length:max(11px,0.6875rem)] font-bold text-white ${
         errors ? "bg-danger" : "bg-warning"
       }`}
     >
@@ -458,11 +458,11 @@ const TriggerNode = memo(function TriggerNode({ selected }: NodeProps) {
           <Icon className="h-4.5 w-4.5" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-semibold tracking-wide text-white/60 uppercase rtl:normal-case">
+          <div className="text-[length:max(11px,0.6875rem)] font-semibold tracking-wide text-white/60 uppercase rtl:normal-case">
             {t.automations.flow.when}
           </div>
           <div className="truncate text-sm font-semibold">{sum ? sum.title : t.automations.flow.chooseTrigger}</div>
-          {sum?.detail && <div className="mt-0.5 line-clamp-2 text-[12px] text-white/70">{sum.detail}</div>}
+          {sum?.detail && <div className="mt-0.5 line-clamp-2 text-[0.75rem] text-white/70">{sum.detail}</div>}
         </div>
         <IssueDot issues={issues} />
       </div>
@@ -511,15 +511,15 @@ const StepNode = memo(function StepNode({ id, data, selected }: NodeProps) {
           <Icon className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold text-ink-900">{node.label || name}</div>
-          <div className="mt-0.5 line-clamp-2 break-words text-[12px] leading-snug text-ink-500">
+          <div className="truncate text-[0.8125rem] font-semibold text-ink-900">{node.label || name}</div>
+          <div className="mt-0.5 line-clamp-2 break-words text-[0.75rem] leading-snug text-ink-500">
             {summary || (node.label ? name : def ? (t.automations.flow.stepHints as Record<string, string>)[node.type] : "")}
           </div>
         </div>
         <IssueDot issues={issues} />
       </div>
       {stats && stats.ok + stats.failed + stats.waiting > 0 && (
-        <div className="flex flex-wrap gap-1 border-t border-line px-3.5 py-1.5 text-[11px] font-medium" title={t.automations.flow.last30}>
+        <div className="flex flex-wrap gap-1 border-t border-line px-3.5 py-1.5 text-[length:max(11px,0.6875rem)] font-medium" title={t.automations.flow.last30}>
           {stats.ok > 0 && (
             <span className="rounded bg-st-confirmed-soft px-1.5 py-0.5 text-st-confirmed">
               {fill(t.automations.flow.statsDone, { n: stats.ok })}
@@ -549,7 +549,7 @@ const StepNode = memo(function StepNode({ id, data, selected }: NodeProps) {
                 dir="ltr"
               >
                 {branching && (
-                  <span className="max-w-[96px] truncate rounded-full border border-line bg-surface px-2 py-0.5 text-[11px] font-semibold text-ink-700 shadow-card" dir={dir}>
+                  <span className="max-w-[96px] truncate rounded-full border border-line bg-surface px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-700 shadow-card" dir={dir}>
                     {handleLabel(t.automations, h, node.config)}
                   </span>
                 )}

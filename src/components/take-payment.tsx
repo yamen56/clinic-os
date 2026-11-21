@@ -110,7 +110,7 @@ export function TakePayment({
     <>
       <span className="inline-flex flex-wrap items-center gap-2" data-take-payment={patientId} data-owed={owed}>
         {showBalance && (
-          <span className="text-[12.5px] font-semibold tnum text-st-pending">{t.invoices.owes.replace("{amount}", fmtMoney(owed, currency, locale))}</span>
+          <span className="text-[0.78125rem] font-semibold tnum text-st-pending">{t.invoices.owes.replace("{amount}", fmtMoney(owed, currency, locale))}</span>
         )}
         <Button
           variant="soft"
@@ -130,12 +130,12 @@ export function TakePayment({
       <Modal open={open} onClose={() => setOpen(false)} title={t.invoices.takePaymentTitle}>
         {receipts ? (
           <div className="grid gap-3" data-take-payment-receipts>
-            <p className="text-[13px] text-ink-700">{t.invoices.settledSendReceipt}</p>
+            <p className="text-[0.8125rem] text-ink-700">{t.invoices.settledSendReceipt}</p>
             {receipts.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
                 <span className="text-sm font-semibold tnum">{r.number}</span>
                 {r.sent ? (
-                  <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-st-confirmed">
+                  <span className="inline-flex items-center gap-1 text-[0.8125rem] font-semibold text-st-confirmed">
                     <Check className="h-4 w-4" />
                     {t.invoices.receiptSent}
                   </span>
@@ -162,7 +162,7 @@ export function TakePayment({
           }}
           data-take-payment-form
         >
-          <p className="text-[13px] text-ink-500">
+          <p className="text-[0.8125rem] text-ink-500">
             {t.invoices.owes.replace("{amount}", fmtMoney(owed, currency, locale))} · {t.invoices.takePaymentHint}
           </p>
           <div className="grid grid-cols-2 gap-4">

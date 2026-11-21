@@ -138,7 +138,7 @@ export function FlowCard({
   const phoneDigits = appt.patient_phone?.replace(/[^\d+]/g, "");
 
   /* One colour for the one next step, whatever it is; the label and icon say which. */
-  const primary = "inline-flex h-9 touch-manipulation items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-[13px] font-semibold text-on-brand shadow-card transition-opacity hover:bg-brand-hover active:opacity-80 disabled:opacity-60";
+  const primary = "inline-flex h-9 touch-manipulation items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-[0.8125rem] font-semibold text-on-brand shadow-card transition-opacity hover:bg-brand-hover active:opacity-80 disabled:opacity-60";
 
   return (
     <div
@@ -152,11 +152,11 @@ export function FlowCard({
         {(() => {
           const who = (
             <>
-              <div className="flex items-baseline gap-1.5 text-[12px] text-ink-500">
-                <span className="text-[13px] font-bold text-ink-900 tnum">{s.toFormat("H:mm")}</span>
+              <div className="flex items-baseline gap-1.5 text-[0.75rem] text-ink-500">
+                <span className="text-[0.8125rem] font-bold text-ink-900 tnum">{s.toFormat("H:mm")}</span>
                 <span className="tnum">– {e.toFormat("H:mm")}</span>
               </div>
-              <div className={`mt-0.5 truncate text-[15px] font-semibold leading-snug ${stage === "no_show" ? "text-ink-400 line-through" : "text-ink-900"}`}>
+              <div className={`mt-0.5 truncate text-[0.9375rem] font-semibold leading-snug ${stage === "no_show" ? "text-ink-400 line-through" : "text-ink-900"}`}>
                 {appt.patient_name}
               </div>
             </>
@@ -173,14 +173,14 @@ export function FlowCard({
           );
         })()}
         {timer && (
-          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold tnum ${toneClass[timer.tone]}`}>
+          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold tnum ${toneClass[timer.tone]}`}>
             <Clock className="h-3 w-3" />
             {timer.text}
           </span>
         )}
       </div>
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ink-500">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.78125rem] text-ink-500">
         {service && (
           <span className="inline-flex min-w-0 items-center gap-1" data-flow-services={1 + (appt.extra_services?.length ?? 0)}>
             <Stethoscope className="h-3.5 w-3.5 shrink-0 text-ink-400" />
@@ -194,7 +194,7 @@ export function FlowCard({
           </span>
         )}
         {room && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-sunken px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-700">
+          <span className="inline-flex items-center gap-1 rounded-md bg-sunken px-1.5 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold text-ink-700">
             <DoorOpen className="h-3 w-3" />
             {room}
           </span>
@@ -209,7 +209,7 @@ export function FlowCard({
       {stage === "finished" &&
         (appt.next_booked_at || (appt.handed_off_at && (appt.next_visit_days || appt.desk_note || appt.next_visit_none))) && (
         <div
-          className={`mt-2 grid gap-0.5 rounded-lg px-2.5 py-1.5 text-[12.5px] text-ink-900 ${appt.next_booked_at ? "bg-st-confirmed-soft" : "bg-brand-50"}`}
+          className={`mt-2 grid gap-0.5 rounded-lg px-2.5 py-1.5 text-[0.78125rem] text-ink-900 ${appt.next_booked_at ? "bg-st-confirmed-soft" : "bg-brand-50"}`}
           data-flow-handoff
         >
           {appt.next_booked_at ? (
@@ -241,13 +241,13 @@ export function FlowCard({
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {tags.map((x) => (
-                <Badge key={x.key} status={x.status} className="!h-5 !px-2 !text-[11px]">
+                <Badge key={x.key} status={x.status} className="!h-5 !px-2 !text-[length:max(11px,0.6875rem)]">
                   {x.text}
                 </Badge>
               ))}
             </div>
           )}
-          {appt.notes && <p className="line-clamp-2 whitespace-pre-line text-[12px] leading-snug text-ink-500">{appt.notes}</p>}
+          {appt.notes && <p className="line-clamp-2 whitespace-pre-line text-[0.75rem] leading-snug text-ink-500">{appt.notes}</p>}
         </div>
       )}
 
@@ -265,7 +265,7 @@ export function FlowCard({
             type="button"
             disabled={busy}
             onClick={onLate}
-            className="inline-flex h-9 shrink-0 touch-manipulation items-center gap-1.5 rounded-full border border-st-late/40 bg-st-late-soft px-3 text-[13px] font-semibold text-st-late transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="inline-flex h-9 shrink-0 touch-manipulation items-center gap-1.5 rounded-full border border-st-late/40 bg-st-late-soft px-3 text-[0.8125rem] font-semibold text-st-late transition-opacity hover:opacity-90 disabled:opacity-60"
             data-flow-late
           >
             <Clock className="h-4 w-4" />
@@ -295,7 +295,7 @@ export function FlowCard({
             >
               {(close) => (
                 <>
-                  <div className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.flow.seatIn}</div>
+                  <div className="px-3 pb-1 pt-1.5 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">{t.flow.seatIn}</div>
                   {[...rooms]
                     .sort((a, b) => (a.id === appt.room_id ? -1 : b.id === appt.room_id ? 1 : 0))
                     .map((r) => {
@@ -340,7 +340,7 @@ export function FlowCard({
             {caps.invoices && appt.invoice && (
               <a
                 href={`/c/${slug}/invoices/${appt.invoice.id}?from=board`}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-st-confirmed-soft px-3 text-[12.5px] font-semibold text-st-confirmed hover:opacity-90"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-st-confirmed-soft px-3 text-[0.78125rem] font-semibold text-st-confirmed hover:opacity-90"
                 data-flow-billed={appt.invoice.paid ? "paid" : "billed"}
               >
                 <Check className="h-3.5 w-3.5" />
@@ -350,7 +350,7 @@ export function FlowCard({
             {caps.invoices && !appt.invoice && (
               <a
                 href={`/c/${slug}/invoices/new?patient=${appt.patient_id}&appointment=${appt.id}&from=board`}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
               >
                 <ReceiptText className="h-3.5 w-3.5" />
                 {t.flow.createInvoice}
@@ -371,7 +371,7 @@ export function FlowCard({
             <button
               type="button"
               onClick={onBookNext}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold ${
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[0.78125rem] font-semibold ${
                 appt.next_visit_days && !appt.next_booked_at
                   ? "bg-brand-600 text-on-brand hover:bg-brand-hover"
                   : "border border-line-strong text-ink-700 hover:bg-sunken"

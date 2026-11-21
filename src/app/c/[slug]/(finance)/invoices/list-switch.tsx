@@ -43,7 +43,7 @@ export function ListSwitch({ slug }: { slug: string }) {
           aria-selected={current === key}
           onClick={() => setPressed(key)}
           scroll={false}
-          className={`flex touch-manipulation items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors duration-140 ease-out ${
+          className={`flex touch-manipulation items-center gap-1.5 rounded-full px-4 py-1.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
             current === key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
           }`}
         >

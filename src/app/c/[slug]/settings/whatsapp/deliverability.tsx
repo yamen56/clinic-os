@@ -71,7 +71,7 @@ export function Deliverability({ stats: s, slug, tz }: { stats: DeliveryStats; s
           <>
             <div className="mb-4 flex items-baseline gap-2">
               <span className="tnum text-3xl font-semibold text-ink-900">{pct}%</span>
-              <span className="text-[13px] text-ink-500">
+              <span className="text-[0.8125rem] text-ink-500">
                 {t.wa.deliveredOf.replace("{n}", String(s.total))}
               </span>
             </div>
@@ -81,7 +81,7 @@ export function Deliverability({ stats: s, slug, tz }: { stats: DeliveryStats; s
             </div>
             <dl className="grid gap-2 sm:grid-cols-2">
               {rows.map((r) => (
-                <div key={r.label} className="flex items-center gap-2 text-[13px]">
+                <div key={r.label} className="flex items-center gap-2 text-[0.8125rem]">
                   {r.icon}
                   <dt className="flex-1 text-ink-700">{r.label}</dt>
                   <dd className="tnum font-medium text-ink-900">{r.n}</dd>
@@ -92,7 +92,7 @@ export function Deliverability({ stats: s, slug, tz }: { stats: DeliveryStats; s
         )}
 
         {s.unreachable > 0 && (
-          <p className="mt-4 rounded-lg bg-sunken p-3 text-[13px] text-ink-700">
+          <p className="mt-4 rounded-lg bg-sunken p-3 text-[0.8125rem] text-ink-700">
             {t.wa.unreachableNote.replace("{n}", String(s.unreachable))}
           </p>
         )}
@@ -100,7 +100,7 @@ export function Deliverability({ stats: s, slug, tz }: { stats: DeliveryStats; s
         {s.problems.length > 0 && (
           <div className="mt-5" data-delivery-problems>
             <h3 className="text-sm font-semibold text-ink-900">{t.wa.problemsTitle}</h3>
-            <p className="mb-2 text-[12px] text-ink-500">{t.wa.problemsSub}</p>
+            <p className="mb-2 text-[0.75rem] text-ink-500">{t.wa.problemsSub}</p>
             <ul className="divide-y divide-line rounded-lg border border-line">
               {s.problems.map((p) => {
                 const note = deliveryNote(p, { connected: true });
@@ -109,19 +109,19 @@ export function Deliverability({ stats: s, slug, tz }: { stats: DeliveryStats; s
                 return (
                   <li key={p.id} className="flex flex-col gap-1 px-3 py-2.5 sm:flex-row sm:items-start sm:gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
+                      <div className="flex flex-wrap items-baseline gap-x-2 text-[0.8125rem]">
                         <span className="font-medium text-ink-900">{who}</span>
-                        <span className="text-[12px] text-ink-400" suppressHydrationWarning>
+                        <span className="text-[0.75rem] text-ink-400" suppressHydrationWarning>
                           {fmtDateTime(p.created_at, tz, locale)}
                         </span>
                         {p.sender_kind !== "staff" && (
-                          <span className="text-[12px] text-ink-400">
+                          <span className="text-[0.75rem] text-ink-400">
                             {(t.conversations.sentBy as Record<string, string>)[p.sender_kind] ?? p.sender_kind}
                           </span>
                         )}
                       </div>
                       <p
-                        className={`text-[12px] leading-snug ${note?.kind === "undelivered" ? "text-warning" : "text-danger"}`}
+                        className={`text-[0.75rem] leading-snug ${note?.kind === "undelivered" ? "text-warning" : "text-danger"}`}
                         suppressHydrationWarning
                       >
                         {deliveryText(note, t.delivery, (at) => fmtDateTime(at, tz, locale))}
@@ -129,7 +129,7 @@ export function Deliverability({ stats: s, slug, tz }: { stats: DeliveryStats; s
                     </div>
                     <Link
                       href={`/c/${slug}/conversations?open=${p.conversation_id}`}
-                      className="shrink-0 text-[13px] font-medium text-brand-700 hover:underline"
+                      className="shrink-0 text-[0.8125rem] font-medium text-brand-700 hover:underline"
                     >
                       {t.wa.openChat}
                     </Link>

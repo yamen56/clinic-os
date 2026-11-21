@@ -58,7 +58,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   t.action!.onClick();
                   setItems((xs) => xs.filter((x) => x.id !== t.id));
                 }}
-                className="ms-1 -me-1 h-8 shrink-0 rounded-ctl px-2.5 text-[13px] font-semibold text-brand-700 hover:bg-sunken"
+                className="ms-1 -me-1 h-8 shrink-0 rounded-ctl px-2.5 text-[0.8125rem] font-semibold text-brand-700 hover:bg-sunken"
                 data-toast-action
               >
                 {t.action.label}

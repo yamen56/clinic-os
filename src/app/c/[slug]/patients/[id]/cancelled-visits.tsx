@@ -48,7 +48,7 @@ export function CancelledVisits({
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className="inline-flex min-h-10 touch-manipulation items-center gap-1.5 text-[13px] font-semibold text-ink-500 hover:text-ink-700"
+          className="inline-flex min-h-10 touch-manipulation items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-500 hover:text-ink-700"
           data-cancelled-visits-toggle
         >
           <ChevronDown className={`h-4 w-4 transition-transform duration-140 ${open ? "rotate-180" : ""}`} />

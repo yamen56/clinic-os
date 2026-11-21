@@ -95,8 +95,8 @@ export function VisitRecordView({
         <dl className="grid gap-2">
           {FIELDS.filter((f) => record![f].trim()).map((f) => (
             <div key={f} data-record-field={f}>
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{T.fields[f]}</dt>
-              <dd className={`whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink-900 ${f === "diagnosis" ? "font-semibold" : ""}`} dir="auto">
+              <dt className="text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">{T.fields[f]}</dt>
+              <dd className={`whitespace-pre-wrap text-[0.84375rem] leading-relaxed text-ink-900 ${f === "diagnosis" ? "font-semibold" : ""}`} dir="auto">
                 {record![f]}
               </dd>
             </div>
@@ -106,16 +106,16 @@ export function VisitRecordView({
 
       {marks.length > 0 && (
         <div data-record-done={marks.length}>
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{T.done}</div>
+          <div className="mb-1 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">{T.done}</div>
           <ul className="grid gap-1">
             {marks.map((m) => (
-              <li key={m.id} className="text-[13.5px] text-ink-900" data-record-mark={m.id}>
+              <li key={m.id} className="text-[0.84375rem] text-ink-900" data-record-mark={m.id}>
                 <span className="font-medium" dir="auto">
                   {(locale === "ar" && m.labelAr) || m.label}
                 </span>
                 {m.performedBy?.name ? <span className="text-ink-500"> · {m.performedBy.name}</span> : null}
                 {m.note.trim() ? (
-                  <span className="block whitespace-pre-wrap text-[12.5px] text-ink-500" dir="auto">
+                  <span className="block whitespace-pre-wrap text-[0.78125rem] text-ink-500" dir="auto">
                     {m.note}
                   </span>
                 ) : null}
@@ -128,7 +128,7 @@ export function VisitRecordView({
       {/* The visit's tooth work, as the chart lists it; a line opens it there. */}
       {appointmentId && !!chart?.dental && (
         <div data-record-dental={chart.dental}>
-          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+          <div className="mb-1 flex items-center gap-1.5 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">
             <Tooth className="h-3.5 w-3.5" />
             {T.toothChart}
           </div>
@@ -138,11 +138,11 @@ export function VisitRecordView({
 
       {(rx.length > 0 || files.length > 0) && store && (
         <div data-record-attached-view={rx.length + files.length}>
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{T.rxAndFiles}</div>
+          <div className="mb-1 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">{T.rxAndFiles}</div>
           <ul className="grid gap-1">
             {rx.map((r) => (
               <li key={r.id}>
-                <button type="button" onClick={() => onTab("prescriptions")} className="flex w-full items-start gap-2 text-start text-[13.5px] text-ink-900 hover:text-brand-700" data-view-rx={r.id}>
+                <button type="button" onClick={() => onTab("prescriptions")} className="flex w-full items-start gap-2 text-start text-[0.84375rem] text-ink-900 hover:text-brand-700" data-view-rx={r.id}>
                   <Pill className="mt-0.5 h-4 w-4 shrink-0 text-ink-500" />
                   <span className="min-w-0">
                     <span className="font-medium">{T.rxNumber.replace("{n}", String(r.number))}</span>
@@ -155,7 +155,7 @@ export function VisitRecordView({
             ))}
             {files.map((f) => (
               <li key={f.id}>
-                <a href={`/api/c/${store.slug}/files/${f.id}`} target="_blank" rel="noopener" className="flex items-center gap-2 text-[13.5px] text-ink-900 hover:text-brand-700" data-view-file={f.id}>
+                <a href={`/api/c/${store.slug}/files/${f.id}`} target="_blank" rel="noopener" className="flex items-center gap-2 text-[0.84375rem] text-ink-900 hover:text-brand-700" data-view-file={f.id}>
                   {f.mime_type.startsWith("image/") ? (
                     <img src={`/api/c/${store.slug}/files/${f.id}?thumb=1`} alt="" loading="lazy" className="h-8 w-8 shrink-0 rounded-md object-cover" />
                   ) : (
@@ -173,7 +173,7 @@ export function VisitRecordView({
 
       {!!chart?.face.length && (
         <div data-record-face={chart.face.length}>
-          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+          <div className="mb-1 flex items-center gap-1.5 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">
             <ScanFace className="h-3.5 w-3.5" />
             {T.faceChart}
           </div>
@@ -185,7 +185,7 @@ export function VisitRecordView({
               );
               return (
                 <li key={m.id}>
-                  <button type="button" onClick={() => onTab("face")} className="text-start text-[13.5px] text-ink-900 hover:text-brand-700">
+                  <button type="button" onClick={() => onTab("face")} className="text-start text-[0.84375rem] text-ink-900 hover:text-brand-700">
                     <span className="font-medium">{(locale === "ar" && m.labelAr) || m.label}</span>
                     {where ? <span className="text-ink-500"> · {where}</span> : null}
                   </button>

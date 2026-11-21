@@ -84,19 +84,19 @@ export function MyHoursClient({
               role="radio"
               aria-checked={own === v}
               onClick={() => setOwn(v)}
-              className={`min-h-10 rounded-full px-3 text-[13.5px] font-semibold transition-colors ${own === v ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"}`}
+              className={`min-h-10 rounded-full px-3 text-[0.84375rem] font-semibold transition-colors ${own === v ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"}`}
               data-hours-choice={v ? "own" : "clinic"}
             >
               {v ? t.myHours.choiceOwn : t.myHours.choiceClinic}
             </button>
           ))}
         </div>
-        <p className="mb-3 mt-2 text-[12.5px] text-ink-500">{own ? t.myHours.ownHint : t.myHours.clinicHint}</p>
+        <p className="mb-3 mt-2 text-[0.78125rem] text-ink-500">{own ? t.myHours.ownHint : t.myHours.clinicHint}</p>
 
         {own && <WeeklyHoursEditor value={hours} onChange={setHours} />}
 
         {(limits.length > 0 || noHours) && (
-          <ul data-hours-limits className="mt-3 grid gap-1 rounded-lg bg-sunken px-3 py-2.5 text-[12px] leading-relaxed text-ink-700">
+          <ul data-hours-limits className="mt-3 grid gap-1 rounded-lg bg-sunken px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-700">
             {noHours && <li>{t.myHours.noHours}</li>}
             {limits.map((line) => (
               <li key={line}>{line}</li>
@@ -110,8 +110,8 @@ export function MyHoursClient({
       </Card>
 
       <Card className="p-5">
-        <div className="mb-2 text-[13px] font-medium">{t.myHours.clinicOpen}</div>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
+        <div className="mb-2 text-[0.8125rem] font-medium">{t.myHours.clinicOpen}</div>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[0.8125rem]">
           {DAY_KEYS.map((d) => (
             <div key={d} className="contents">
               <dt className="text-ink-500">{days[d]}</dt>
@@ -132,7 +132,7 @@ export function MyHoursClient({
         danger={false}
         loading={pending}
       >
-        <ul data-hours-clashes className="grid gap-1 text-[13px]">
+        <ul data-hours-clashes className="grid gap-1 text-[0.8125rem]">
           {clashes?.list.map((c) => (
             <li key={c.id} className="flex flex-wrap justify-between gap-x-3">
               <span className="tnum">{when(c.startsAt, tz, asLocale(locale))}</span>

@@ -125,7 +125,7 @@ export function FinishVisitSheet({
       .toFormat("ccc d LLL · H:mm");
 
   const chip = (on: boolean) =>
-    `h-11 touch-manipulation rounded-full border px-4 text-[14px] font-semibold transition-colors duration-100 ${
+    `h-11 touch-manipulation rounded-full border px-4 text-[0.875rem] font-semibold transition-colors duration-100 ${
       on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line-strong bg-surface text-ink-700 hover:bg-sunken"
     }`;
 
@@ -144,8 +144,8 @@ export function FinishVisitSheet({
       <div className="absolute inset-x-0 bottom-0 flex max-h-[88vh] flex-col rounded-t-2xl bg-surface shadow-pop animate-fade-up md:inset-x-auto md:bottom-auto md:left-1/2 md:top-[10vh] md:w-full md:max-w-lg md:-translate-x-1/2 md:rounded-2xl">
         <div className="flex items-start gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[16px] font-semibold">{F.title}</h2>
-            <p className="truncate text-[13px] text-ink-500">
+            <h2 className="text-[1rem] font-semibold">{F.title}</h2>
+            <p className="truncate text-[0.8125rem] text-ink-500">
               {patientName}
               {serviceName ? ` · ${serviceName}` : ""}
             </p>
@@ -158,7 +158,7 @@ export function FinishVisitSheet({
         <div className="grid gap-5 overflow-y-auto overscroll-contain px-5 py-4">
           {done.length > 0 && (
             <section>
-              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-400">{F.doneToday}</h3>
+              <h3 className="mb-2 text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{F.doneToday}</h3>
               <div className="grid gap-1.5 rounded-lg bg-canvas p-2">
                 {done.map((l) => (
                   <VisitLineView key={l.markId} line={l} />
@@ -168,10 +168,10 @@ export function FinishVisitSheet({
           )}
 
           {recorded && (recorded.done.length > 0 || recorded.plan || recorded.planned.length > 0) && (
-            <section className="grid gap-2 rounded-lg bg-canvas p-3 text-[13.5px]" data-finish-recorded>
+            <section className="grid gap-2 rounded-lg bg-canvas p-3 text-[0.84375rem]" data-finish-recorded>
               {recorded.done.length > 0 && (
                 <div>
-                  <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{F.doneToday}</div>
+                  <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{F.doneToday}</div>
                   <p className="text-ink-900" dir="auto">
                     {recorded.done.join(" · ")}
                   </p>
@@ -179,7 +179,7 @@ export function FinishVisitSheet({
               )}
               {recorded.plan && (
                 <div>
-                  <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t.treatment.fields.plan}</div>
+                  <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{t.treatment.fields.plan}</div>
                   <p className="whitespace-pre-wrap text-ink-900" dir="auto">
                     {recorded.plan}
                   </p>
@@ -187,7 +187,7 @@ export function FinishVisitSheet({
               )}
               {recorded.planned.length > 0 && (
                 <div>
-                  <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">{t.treatment.planned}</div>
+                  <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{t.treatment.planned}</div>
                   <p className="text-ink-900" dir="auto">
                     {recorded.planned.join(" · ")}
                   </p>
@@ -197,7 +197,7 @@ export function FinishVisitSheet({
           )}
 
           <section>
-            <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-400">{F.nextVisit}</h3>
+            <h3 className="mb-2 text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{F.nextVisit}</h3>
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={F.nextVisit}>
               {NEXT_VISIT_CHOICES.map((d) => (
                 <button
@@ -233,7 +233,7 @@ export function FinishVisitSheet({
             {days && (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <label className="block">
-                  <span className="mb-1 block text-[12px] font-semibold text-ink-500">{F.length}</span>
+                  <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{F.length}</span>
                   <select
                     value={minutes}
                     onChange={(e) => setMinutes(Number(e.target.value))}
@@ -249,7 +249,7 @@ export function FinishVisitSheet({
                 </label>
                 {doctors.length > 1 && (
                   <label className="block">
-                    <span className="mb-1 block text-[12px] font-semibold text-ink-500">{F.with}</span>
+                    <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{F.with}</span>
                     <select
                       value={doctorId}
                       onChange={(e) => setDoctorId(e.target.value)}
@@ -271,9 +271,9 @@ export function FinishVisitSheet({
           {/* Book it now, or leave it to the desk: the answer to "in two weeks" is a time, not a note. */}
           {days && (
             <section data-finish-book>
-              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-400">{F.bookNow}</h3>
+              <h3 className="mb-2 text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{F.bookNow}</h3>
               {serviceId && slots === null ? (
-                <p className="text-[13px] text-ink-500">{F.findingTimes}</p>
+                <p className="text-[0.8125rem] text-ink-500">{F.findingTimes}</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {(slots ?? []).map((s) => {
@@ -294,7 +294,7 @@ export function FinishVisitSheet({
                       </button>
                     );
                   })}
-                  {serviceId && slots?.length === 0 && <p className="w-full text-[13px] text-ink-500">{F.noTimes}</p>}
+                  {serviceId && slots?.length === 0 && <p className="w-full text-[0.8125rem] text-ink-500">{F.noTimes}</p>}
                   {onAnotherTime && (
                     <button type="button" onClick={() => onAnotherTime(handoff(null))} disabled={busy} className={chip(false)} data-book-other>
                       {F.anotherTime}
@@ -314,12 +314,12 @@ export function FinishVisitSheet({
                   </button>
                 </div>
               )}
-              {notNow && <p className="mt-2 text-[12.5px] text-ink-500">{F.notNowHint}</p>}
+              {notNow && <p className="mt-2 text-[0.78125rem] text-ink-500">{F.notNowHint}</p>}
             </section>
           )}
 
           <label className="block">
-            <span className="mb-1.5 block text-[12px] font-semibold uppercase tracking-wide text-ink-400">{F.noteForDesk}</span>
+            <span className="mb-1.5 block text-[0.75rem] font-semibold uppercase tracking-wide text-ink-400">{F.noteForDesk}</span>
             <textarea
               dir="auto"
               rows={2}

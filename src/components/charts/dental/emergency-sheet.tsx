@@ -54,7 +54,7 @@ export function EmergencySheet({
     <div className="grid gap-4" data-emergency-sheet>
       <div className="flex items-start gap-3 rounded-card bg-danger-soft px-3 py-2.5">
         <Siren className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
-        <div className="text-[13px] text-ink-900">
+        <div className="text-[0.8125rem] text-ink-900">
           {item ? (
             <>
               <span className="font-semibold">
@@ -71,7 +71,7 @@ export function EmergencySheet({
 
       {!item && (
         <label className="block">
-          <span className="mb-1 block text-[12px] font-semibold text-ink-500">{P.emergencyTooth}</span>
+          <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{P.emergencyTooth}</span>
           <input
             dir="ltr"
             inputMode="numeric"
@@ -85,7 +85,7 @@ export function EmergencySheet({
       )}
 
       <label className="block">
-        <span className="mb-1 block text-[12px] font-semibold text-ink-500">{P.emergencyComplaint}</span>
+        <span className="mb-1 block text-[0.75rem] font-semibold text-ink-500">{P.emergencyComplaint}</span>
         <input
           dir="auto"
           autoFocus
@@ -97,7 +97,7 @@ export function EmergencySheet({
       </label>
 
       <div>
-        <div className="mb-1.5 text-[12px] font-semibold text-ink-500">{P.emergencyDone}</div>
+        <div className="mb-1.5 text-[0.75rem] font-semibold text-ink-500">{P.emergencyDone}</div>
         <div className="flex flex-wrap gap-1.5">
           {EMERGENCY_ACTIONS.map((k) => {
             const on = done.includes(k);
@@ -108,7 +108,7 @@ export function EmergencySheet({
                 aria-pressed={on}
                 data-emergency-action={k}
                 onClick={() => setDone((d) => (on ? d.filter((x) => x !== k) : [...d, k]))}
-                className={`h-9 rounded-full border px-3 text-[13px] font-semibold transition-colors duration-140 ${
+                className={`h-9 rounded-full border px-3 text-[0.8125rem] font-semibold transition-colors duration-140 ${
                   on ? "border-danger bg-danger text-white" : "border-line bg-surface text-ink-700 hover:bg-sunken"
                 }`}
               >
@@ -121,7 +121,7 @@ export function EmergencySheet({
 
       {/* The plan is not touched: the visit already booked stays, and can be moved by hand. */}
       {item && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-card bg-canvas px-3 py-2.5 text-[13px]" data-emergency-next={next?.id ?? ""}>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-card bg-canvas px-3 py-2.5 text-[0.8125rem]" data-emergency-next={next?.id ?? ""}>
           <span className="text-ink-700">{next ? P.emergencyKeeps.replace("{when}", fmtDateTime(next.startsAt, tz, locale)) : P.emergencyNoVisit}</span>
           {next && canBook && (
             <a href={`/c/${slug}/calendar`} className={buttonClass({ variant: "outline", size: "sm" })}>

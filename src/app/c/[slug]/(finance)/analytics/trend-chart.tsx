@@ -53,7 +53,7 @@ export function TrendChart({
         to compare, and on a phone it lands under the finger. Idle, it names the
         best stretch, so the chart says something untouched.
       */}
-      <div className="mb-3 flex h-5 items-baseline gap-2 text-[13px]" aria-live="polite">
+      <div className="mb-3 flex h-5 items-baseline gap-2 text-[0.8125rem]" aria-live="polite">
         {active ? (
           <>
             <span className="font-semibold text-ink-900 tnum">{money(active.value)}</span>
@@ -69,7 +69,7 @@ export function TrendChart({
 
       <div className="flex gap-2">
         {/* The scale. Its labels sit on their lines, so the top one rides half a line above the plot. */}
-        <div className="relative w-9 shrink-0 text-[11px] text-ink-400 tnum" style={{ height }} aria-hidden>
+        <div className="relative w-9 shrink-0 text-[length:max(11px,0.6875rem)] text-ink-400 tnum" style={{ height }} aria-hidden>
           {[1, 0.5, 0].map((f) => (
             <span key={f} className="absolute end-0 -translate-y-1/2 leading-none" style={{ top: `${(1 - f) * 100}%` }}>
               {compact.format(top * f)}
@@ -109,7 +109,7 @@ export function TrendChart({
         </div>
       </div>
 
-      <div className="relative ms-11 mt-2 h-4 text-[11px] text-ink-400" aria-hidden>
+      <div className="relative ms-11 mt-2 h-4 text-[length:max(11px,0.6875rem)] text-ink-400" aria-hidden>
         {marks.map((i, n) => (
           <span
             key={i}

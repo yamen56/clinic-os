@@ -535,13 +535,13 @@ export function PrescriptionComposer({
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
             <div className="min-w-0 space-y-5">
               {!hasPhone && (
-                <p className="rounded-lg border border-st-pending/30 bg-st-pending/10 px-3 py-2 text-[13px] text-ink-700">
+                <p className="rounded-lg border border-st-pending/30 bg-st-pending/10 px-3 py-2 text-[0.8125rem] text-ink-700">
                   {T.noPhone}
                 </p>
               )}
               {/* The sheet covers the file's header, so its allergies come with it. */}
               {allergies.trim() && (
-                <p className="flex items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] font-semibold text-danger" dir="auto" data-rx-allergies>
+                <p className="flex items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-[0.8125rem] font-semibold text-danger" dir="auto" data-rx-allergies>
                   <ShieldAlert className="h-4 w-4 shrink-0" />
                   {T.allergies}: {allergies.trim()}
                 </p>
@@ -551,7 +551,7 @@ export function PrescriptionComposer({
                   settled once and rarely touched, so they get one row, not two. */}
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
                 <label className="block min-w-0">
-                  <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{T.doctor}</span>
+                  <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink-700">{T.doctor}</span>
                   <Select
                     value={doctorId ?? ""}
                     onChange={(e) => setDoctorId(e.target.value)}
@@ -566,7 +566,7 @@ export function PrescriptionComposer({
                   </Select>
                 </label>
                 <div>
-                  <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{T.language}</span>
+                  <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink-700">{T.language}</span>
                   <div role="radiogroup" aria-label={T.language} className="flex h-10 rounded-ctl border border-line p-0.5">
                     {(["ar", "en"] as const).map((l) => (
                       <button
@@ -595,7 +595,7 @@ export function PrescriptionComposer({
               </div>
 
               {doctor && !doctor.has_signature && (
-                <p className="-mt-2 text-[12px] leading-5 text-ink-500">
+                <p className="-mt-2 text-[0.75rem] leading-5 text-ink-500">
                   {T.noSignature.replace("{doctor}", doctor.name)}{" "}
                   {doctor.is_me && (
                     <Link href={`/c/${slug}/signature`} className="font-semibold text-brand-700 underline">
@@ -611,12 +611,12 @@ export function PrescriptionComposer({
                     list" in English may not fit beside the heading on a 320px
                     phone. */}
                 <div className="mb-2 flex flex-wrap items-center gap-x-1 gap-y-0.5">
-                  <span className="me-auto text-[13px] font-medium text-ink-700">{T.templates}</span>
+                  <span className="me-auto text-[0.8125rem] font-medium text-ink-700">{T.templates}</span>
                   <button
                     type="button"
                     onClick={() => setTplOpen(true)}
                     disabled={!clean.length || tplOpen}
-                    className="inline-flex h-8 items-center gap-1 rounded-ctl px-2 text-[12px] font-semibold text-brand-700 hover:bg-brand-50 disabled:text-ink-400 disabled:hover:bg-transparent"
+                    className="inline-flex h-8 items-center gap-1 rounded-ctl px-2 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 disabled:text-ink-400 disabled:hover:bg-transparent"
                   >
                     <BookmarkPlus className="h-3.5 w-3.5" />
                     {T.saveTemplate}
@@ -625,7 +625,7 @@ export function PrescriptionComposer({
                     type="button"
                     onClick={() => setView("manage")}
                     disabled={!data}
-                    className="inline-flex h-8 items-center gap-1 rounded-ctl px-2 text-[12px] font-medium text-ink-500 hover:bg-sunken hover:text-ink-900"
+                    className="inline-flex h-8 items-center gap-1 rounded-ctl px-2 text-[0.75rem] font-medium text-ink-500 hover:bg-sunken hover:text-ink-900"
                   >
                     <Settings2 className="h-3.5 w-3.5" />
                     {T.manage}
@@ -676,7 +676,7 @@ export function PrescriptionComposer({
                           onClick={() => applyTemplate(tpl)}
                           title={tpl.name}
                           aria-pressed={templateId === tpl.id}
-                          className={`flex min-h-11 min-w-0 items-center justify-center rounded-ctl border px-3 py-1.5 text-[13px] font-semibold leading-snug transition-colors duration-140 ${
+                          className={`flex min-h-11 min-w-0 items-center justify-center rounded-ctl border px-3 py-1.5 text-[0.8125rem] font-semibold leading-snug transition-colors duration-140 ${
                             templateId === tpl.id
                               ? "border-brand-600 bg-brand-600 text-on-brand"
                               : "border-line bg-surface text-ink-900 hover:border-brand-300 hover:bg-brand-50"
@@ -690,19 +690,19 @@ export function PrescriptionComposer({
                       <button
                         type="button"
                         onClick={() => setAllTemplates((v) => !v)}
-                        className="mt-2 text-[12px] font-semibold text-brand-700"
+                        className="mt-2 text-[0.75rem] font-semibold text-brand-700"
                       >
                         {allTemplates ? T.fewerTemplates : T.allTemplates.replace("{n}", String(templates.length))}
                       </button>
                     )}
                   </>
                 ) : (
-                  !tplOpen && <p className="text-[12px] leading-5 text-ink-500">{T.noTemplates}</p>
+                  !tplOpen && <p className="text-[0.75rem] leading-5 text-ink-500">{T.noTemplates}</p>
                 )}
               </section>
 
               <label className="block">
-                <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{T.diagnosis}</span>
+                <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink-700">{T.diagnosis}</span>
                 <Input
                   value={diagnosis}
                   onChange={(e) => setDiagnosis(e.target.value)}
@@ -713,7 +713,7 @@ export function PrescriptionComposer({
               </label>
 
               <div>
-                <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{T.medicines}</span>
+                <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink-700">{T.medicines}</span>
                 <div ref={listRef} className="space-y-2.5" onKeyDown={onListKeyDown}>
                   {items.map((it, i) => (
                     <div key={i}>
@@ -730,7 +730,7 @@ export function PrescriptionComposer({
                         onRemove={() => removeRow(i)}
                       />
                       {conflicts[i] && (
-                        <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-danger" data-rx-allergy={i}>
+                        <p className="mt-1 flex items-center gap-1.5 text-[0.78125rem] font-semibold text-danger" data-rx-allergy={i}>
                           <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
                           {T.allergyMatch.replace("{allergy}", conflicts[i]!)}
                         </p>
@@ -739,7 +739,7 @@ export function PrescriptionComposer({
                   ))}
                 </div>
                 {hasConflict && (
-                  <label className="mt-3 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-soft px-3 py-2.5 text-[13px] font-semibold text-danger" data-rx-allergy-ack>
+                  <label className="mt-3 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger-soft px-3 py-2.5 text-[0.8125rem] font-semibold text-danger" data-rx-allergy-ack>
                     <input
                       type="checkbox"
                       className="mt-0.5 h-4 w-4 accent-[var(--color-danger)]"
@@ -760,7 +760,7 @@ export function PrescriptionComposer({
                 <button
                   type="button"
                   onClick={() => setShowPreview((v) => !v)}
-                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-700"
+                  className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-brand-700"
                 >
                   {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   {showPreview ? T.hidePreview : T.showPreview}
@@ -862,7 +862,7 @@ function RxSheet({
             <h2 id="rx-sheet-title" className="truncate font-display text-lg font-semibold leading-7 sm:text-xl">
               {title}
             </h2>
-            <p className="truncate text-[13px] text-ink-500">{sub}</p>
+            <p className="truncate text-[0.8125rem] text-ink-500">{sub}</p>
           </div>
           <button
             type="button"
@@ -920,7 +920,7 @@ function MedicineRow({
   const field = (key: "dose" | "frequency" | "duration" | "instructions", label: string, placeholder?: string) => (
     <div className="min-w-0">
       <label className="block">
-        <span className="mb-1 block text-[12px] font-medium text-ink-500">{label}</span>
+        <span className="mb-1 block text-[0.75rem] font-medium text-ink-500">{label}</span>
         <Input
           data-rx-input
           value={item[key]}
@@ -946,7 +946,7 @@ function MedicineRow({
       <div className="flex items-start gap-2">
         <span
           aria-hidden
-          className="mt-2 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-100 text-[12px] font-bold text-brand-700 tnum"
+          className="mt-2 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-100 text-[0.75rem] font-bold text-brand-700 tnum"
         >
           {index + 1}
         </span>
@@ -1011,7 +1011,7 @@ function Chips({
             aria-pressed={on}
             // A finger needs more than a cursor: taller on any touch screen,
             // phone or iPad, and the mouse keeps the compact size.
-            className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-[12px] font-medium transition-colors duration-140 pointer-coarse:min-h-9 pointer-coarse:px-3.5 pointer-coarse:text-[13px] ${
+            className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-[0.75rem] font-medium transition-colors duration-140 pointer-coarse:min-h-9 pointer-coarse:px-3.5 pointer-coarse:text-[0.8125rem] ${
               on ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:bg-brand-50"
             }`}
           >
@@ -1193,7 +1193,7 @@ function MedicineName({
                   {m.name}
                 </div>
                 {detail && (
-                  <div className="truncate text-[12px] text-ink-500" dir="auto">
+                  <div className="truncate text-[0.75rem] text-ink-500" dir="auto">
                     {detail}
                   </div>
                 )}
@@ -1222,11 +1222,11 @@ function Preview({
 }) {
   return (
     <div>
-      <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{title}</span>
+      <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink-700">{title}</span>
       <div className="rounded-card bg-[#e9e4dc] p-3">
         <div
           dir={locale === "ar" ? "rtl" : "ltr"}
-          className="ms-auto max-w-[95%] rounded-2xl rounded-be-md bg-[#d9fdd3] p-2 text-[13px] text-[#111b21] shadow-sm"
+          className="ms-auto max-w-[95%] rounded-2xl rounded-be-md bg-[#d9fdd3] p-2 text-[0.8125rem] text-[#111b21] shadow-sm"
         >
           <div className="flex items-center gap-2 rounded-lg bg-black/5 px-2.5 py-2">
             <FileText className="h-5 w-5 shrink-0 text-[#d9534f]" />
@@ -1313,16 +1313,16 @@ function ManageList({
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <section className="min-w-0">
-        <h3 className="text-[15px] font-semibold">{T.manageTemplates}</h3>
+        <h3 className="text-[0.9375rem] font-semibold">{T.manageTemplates}</h3>
         {data.templates.length === 0 ? (
-          <p className="mt-2 text-[13px] text-ink-500">{T.noTemplatesYet}</p>
+          <p className="mt-2 text-[0.8125rem] text-ink-500">{T.noTemplatesYet}</p>
         ) : (
           <ul className="mt-2 divide-y divide-line rounded-card border border-line">
             {data.templates.map((tpl) => (
               <li key={tpl.id} className="flex items-center gap-3 px-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{tpl.name}</div>
-                  <div className="truncate text-[12px] text-ink-500" dir="auto">
+                  <div className="truncate text-[0.75rem] text-ink-500" dir="auto">
                     {tpl.items.map((i) => i.name).join(" · ")}
                   </div>
                 </div>
@@ -1342,10 +1342,10 @@ function ManageList({
       </section>
 
       <section className="min-w-0">
-        <h3 className="text-[15px] font-semibold">{T.manageMedicines}</h3>
-        <p className="mt-0.5 text-[12px] text-ink-500">{T.manageMedicinesHint}</p>
+        <h3 className="text-[0.9375rem] font-semibold">{T.manageMedicines}</h3>
+        <p className="mt-0.5 text-[0.75rem] text-ink-500">{T.manageMedicinesHint}</p>
         {data.medications.length === 0 ? (
-          <p className="mt-2 text-[13px] text-ink-500">{T.noMedicines}</p>
+          <p className="mt-2 text-[0.8125rem] text-ink-500">{T.noMedicines}</p>
         ) : (
           <ul className="mt-2 divide-y divide-line rounded-card border border-line lg:max-h-[50dvh] lg:overflow-auto">
             {data.medications.map((m) => (
@@ -1354,7 +1354,7 @@ function ManageList({
                   <div className="truncate text-sm font-semibold" dir="auto">
                     {m.name}
                   </div>
-                  <div className="truncate text-[12px] text-ink-500" dir="auto">
+                  <div className="truncate text-[0.75rem] text-ink-500" dir="auto">
                     {m.hidden ? T.hidden : [itemDetail(m), T.uses.replace("{n}", String(m.use_count))].filter(Boolean).join(" · ")}
                   </div>
                 </div>

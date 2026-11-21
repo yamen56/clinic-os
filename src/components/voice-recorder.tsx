@@ -163,7 +163,7 @@ export function VoiceRecorder({
     `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 
   if (state === "unsupported") {
-    return <span className="text-[12px] text-ink-400">{labels.unsupported}</span>;
+    return <span className="text-[0.75rem] text-ink-400">{labels.unsupported}</span>;
   }
   /*
     A refusal is a state to recover from, not a dead end. This used to render a
@@ -175,7 +175,7 @@ export function VoiceRecorder({
   if (state === "denied" || state === "nomic" || state === "insecure") {
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[12px] text-danger">
+        <span className="text-[0.75rem] text-danger">
           {state === "nomic" ? labels.noMic : state === "insecure" ? labels.insecure : labels.denied}
         </span>
         {state !== "insecure" && (
@@ -185,7 +185,7 @@ export function VoiceRecorder({
               setState("idle");
               void start();
             }}
-            className="text-[12px] font-medium text-brand-700 underline underline-offset-2 hover:text-brand-800"
+            className="text-[0.75rem] font-medium text-brand-700 underline underline-offset-2 hover:text-brand-800"
           >
             {labels.retry}
           </button>
@@ -208,7 +208,7 @@ export function VoiceRecorder({
         <button
           type="button"
           onClick={() => (playing ? audio.current?.pause() : audio.current?.play())}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-brand-50 px-3 text-[13px] font-medium text-brand-700"
+          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-brand-50 px-3 text-[0.8125rem] font-medium text-brand-700"
         >
           {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
           <span className="tnum">{mmss(seconds)}</span>
@@ -230,7 +230,7 @@ export function VoiceRecorder({
       <button
         type="button"
         onClick={stop}
-        className="inline-flex h-8 items-center gap-2 rounded-full bg-danger-soft px-3 text-[13px] font-medium text-danger"
+        className="inline-flex h-8 items-center gap-2 rounded-full bg-danger-soft px-3 text-[0.8125rem] font-medium text-danger"
       >
         <Square className="h-3.5 w-3.5 fill-current" />
         {/* The dot is what makes "recording" read at a glance; the clock is what
@@ -247,7 +247,7 @@ export function VoiceRecorder({
       type="button"
       onClick={start}
       disabled={disabled}
-      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[13px] font-medium text-ink-700 transition-colors hover:border-brand-500 hover:text-brand-700 disabled:opacity-40"
+      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.8125rem] font-medium text-ink-700 transition-colors hover:border-brand-500 hover:text-brand-700 disabled:opacity-40"
     >
       <Mic className="h-3.5 w-3.5" />
       {labels.record}

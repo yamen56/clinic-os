@@ -164,7 +164,7 @@ export function PermissionsPrompt() {
       }
     >
       <div className="grid gap-3" data-permissions-prompt>
-        <p className="text-[13px] leading-relaxed text-ink-500">{P.sub}</p>
+        <p className="text-[0.8125rem] leading-relaxed text-ink-500">{P.sub}</p>
         <ul className="grid gap-2">
           {shown.map(({ k, icon: Icon, label, hint }) => {
             const s = state[k];
@@ -174,11 +174,11 @@ export function PermissionsPrompt() {
                   <Icon className="h-4.5 w-4.5" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-semibold text-ink-900">{label}</span>
-                  <span className="block text-[12.5px] leading-snug text-ink-500">{s === "denied" ? P.blocked : hint}</span>
+                  <span className="block text-[0.875rem] font-semibold text-ink-900">{label}</span>
+                  <span className="block text-[0.78125rem] leading-snug text-ink-500">{s === "denied" ? P.blocked : hint}</span>
                 </span>
                 {s === "granted" ? (
-                  <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-st-confirmed">
+                  <span className="inline-flex items-center gap-1 text-[0.8125rem] font-semibold text-st-confirmed">
                     <Check className="h-4 w-4" />
                     {P.allowed}
                   </span>

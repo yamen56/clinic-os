@@ -46,7 +46,7 @@ export function BarChart({
         the exact comparison somebody is hovering to make — and on a touch
         screen it lands under the finger.
       */}
-      <div className="mb-1.5 flex h-5 items-baseline gap-2 text-[12px]">
+      <div className="mb-1.5 flex h-5 items-baseline gap-2 text-[0.75rem]">
         {active ? (
           <>
             <span className="font-semibold tabular-nums text-ink-900">{format(active.value)}</span>
@@ -95,7 +95,7 @@ export function BarChart({
         })}
       </div>
 
-      <div className="mt-1 flex justify-between text-[11px] text-ink-400">
+      <div className="mt-1 flex justify-between text-[length:max(11px,0.6875rem)] text-ink-400">
         <span>{data[0]?.label}</span>
         <span>{data[data.length - 1]?.label}</span>
       </div>

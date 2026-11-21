@@ -27,7 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <ThemeToggle />
             <LanguageToggle compact />
             <form action={logoutAction}>
-              <button className="rounded-full px-3 py-1.5 text-[13px] text-ink-500 hover:bg-ink-900/5">
+              <button className="rounded-full px-3 py-1.5 text-[0.8125rem] text-ink-500 hover:bg-ink-900/5">
                 {t.auth.signOut}
               </button>
             </form>

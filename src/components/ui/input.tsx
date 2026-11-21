@@ -151,7 +151,7 @@ export function Field({
   */
   return (
     <label className="block">
-      <span className="mb-1.5 flex items-baseline gap-1 text-[13px] font-semibold text-ink-900">
+      <span className="mb-1.5 flex items-baseline gap-1 text-[0.8125rem] font-semibold text-ink-900">
         {label}
         {required && <span className="text-danger">*</span>}
       </span>

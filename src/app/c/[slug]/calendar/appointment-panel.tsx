@@ -181,7 +181,7 @@ export function AppointmentPanel({
   // Said once, on the box's first heading.
   const chartLink =
     state?.mode === "edit" ? (
-      <a href={`/c/${slug}/patients/${state.appt.patient_id}?tab=dental`} className="text-[12px] font-semibold text-brand-700 hover:underline">
+      <a href={`/c/${slug}/patients/${state.appt.patient_id}?tab=dental`} className="text-[0.75rem] font-semibold text-brand-700 hover:underline">
         {t.calendar.openTreatment}
       </a>
     ) : null;
@@ -376,7 +376,7 @@ export function AppointmentPanel({
       <div className="fixed inset-0 z-40 bg-ink-900/20 animate-fade-in md:bg-transparent" onClick={onClose} />
       <aside className="fixed inset-y-0 end-0 z-50 flex w-full max-w-md flex-col border-s border-line bg-surface shadow-pop animate-fade-up md:animate-fade-in">
         <header className="flex items-center justify-between gap-2 border-b border-line px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
-          <h2 className="text-[15px] font-semibold">
+          <h2 className="text-[0.9375rem] font-semibold">
             {state.mode === "create" ? t.calendar.newAppointment : t.calendar.editAppointment}
           </h2>
           <div className="flex items-center gap-2">
@@ -404,7 +404,7 @@ export function AppointmentPanel({
                   {(t.flow.stages as Record<string, string>)[stage]}
                 </Badge>
                 {!!editAppt.late_min && (stage === "expected" || stage === "late" || stage === "waiting") && (
-                  <span className="text-[12.5px] text-ink-500" data-panel-said-late>
+                  <span className="text-[0.78125rem] text-ink-500" data-panel-said-late>
                     {t.flow.saidLate.replace("{n}", String(editAppt.late_min))}
                   </span>
                 )}
@@ -453,7 +453,7 @@ export function AppointmentPanel({
                 {/* What became of the next visit: booked and when, still to book, or not needed — as the board's card says it. */}
                 {(editAppt.next_booked_at ||
                   (editAppt.handed_off_at && (editAppt.next_visit_days || editAppt.desk_note || editAppt.next_visit_none))) && (
-                  <div className="grid gap-0.5 text-[12.5px]" data-panel-next>
+                  <div className="grid gap-0.5 text-[0.78125rem]" data-panel-next>
                     {editAppt.next_booked_at ? (
                       <span className="font-semibold text-st-confirmed" data-panel-next-state="booked">
                         {t.finishVisit.bookedFor.replace(
@@ -478,14 +478,14 @@ export function AppointmentPanel({
                 <div className="flex flex-wrap gap-1.5">
                   {canInvoice &&
                     (editAppt.invoice ? (
-                      <Link href={`/c/${slug}/invoices/${editAppt.invoice.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-st-confirmed-soft px-3 text-[12.5px] font-semibold text-st-confirmed">
+                      <Link href={`/c/${slug}/invoices/${editAppt.invoice.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-st-confirmed-soft px-3 text-[0.78125rem] font-semibold text-st-confirmed">
                         <CheckCheck className="h-3.5 w-3.5" />
                         {(editAppt.invoice.paid ? t.flow.paidInvoice : t.flow.billedInvoice).replace("{number}", editAppt.invoice.number)}
                       </Link>
                     ) : (
                       <Link
                         href={`/c/${slug}/invoices/new?patient=${editAppt.patient_id}&appointment=${editAppt.id}`}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[12.5px] font-semibold text-ink-700 hover:bg-sunken"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
                       >
                         {t.flow.createInvoice}
                       </Link>
@@ -494,7 +494,7 @@ export function AppointmentPanel({
                     <button
                       type="button"
                       onClick={() => onBookNext(editAppt)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-[12.5px] font-semibold text-on-brand hover:bg-brand-hover"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-[0.78125rem] font-semibold text-on-brand hover:bg-brand-hover"
                       data-panel-book-next
                     >
                       {t.flow.bookNext}
@@ -522,7 +522,7 @@ export function AppointmentPanel({
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{patient.name}</span>
                   {editAppt?.first_visit && <Badge status="brand">{t.flow.firstVisit}</Badge>}
                   {state.mode === "edit" && canOpenPatient && (
-                    <Link href={`/c/${slug}/patients/${patient.id}`} className="text-[12px] font-semibold text-brand-700 hover:underline">
+                    <Link href={`/c/${slug}/patients/${patient.id}`} className="text-[0.75rem] font-semibold text-brand-700 hover:underline">
                       {t.flow.patientFile}
                     </Link>
                   )}
@@ -547,7 +547,7 @@ export function AppointmentPanel({
                     placeholder="xxxxxxxxxx"
                     onChange={(v) => setNewPatient((np) => (np ? { ...np, phone: v } : np))}
                   />
-                  <button onClick={() => setNewPatient(null)} className="justify-self-start text-[12px] text-ink-500 underline">
+                  <button onClick={() => setNewPatient(null)} className="justify-self-start text-[0.75rem] text-ink-500 underline">
                     {t.common.cancel}
                   </button>
                 </div>
@@ -561,7 +561,7 @@ export function AppointmentPanel({
                 receptionist or an automation — whichever it was.
               */}
               {bookedLine && (
-                <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-ink-500" data-booked-by={editAppt?.walk_in ? "walk_in" : editAppt?.source}>
+                <p className="mt-1.5 flex items-center gap-1.5 text-[0.75rem] text-ink-500" data-booked-by={editAppt?.walk_in ? "walk_in" : editAppt?.source}>
                   <UserPen className="h-3.5 w-3.5 shrink-0 text-ink-400" />
                   <span className="min-w-0">{bookedLine}</span>
                 </p>
@@ -579,7 +579,7 @@ export function AppointmentPanel({
                 {done.length > 0 && (
                   <div className="grid gap-1.5" data-done-at-visit={done.length}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[12px] font-semibold text-ink-500">{t.calendar.doneAtVisit}</span>
+                      <span className="text-[0.75rem] font-semibold text-ink-500">{t.calendar.doneAtVisit}</span>
                       {chartLink}
                     </div>
                     <ul className="grid gap-1">
@@ -594,13 +594,13 @@ export function AppointmentPanel({
                 {planned.length > 0 && (
                   <div className="grid gap-1.5" data-planned-treatment>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[12px] font-semibold text-ink-500">{t.calendar.plannedTreatment}</span>
+                      <span className="text-[0.75rem] font-semibold text-ink-500">{t.calendar.plannedTreatment}</span>
                       {done.length === 0 && chartLink}
                     </div>
                     <ul className="grid gap-1">
                       {planned.map((i) => (
-                        <li key={i.markId} className="flex items-center gap-2 text-[13px]" data-planned-item={i.markId}>
-                          <span className="grid h-6 min-w-6 place-items-center rounded-md bg-surface px-1.5 text-[12px] font-bold tnum shadow-card" dir="ltr">
+                        <li key={i.markId} className="flex items-center gap-2 text-[0.8125rem]" data-planned-item={i.markId}>
+                          <span className="grid h-6 min-w-6 place-items-center rounded-md bg-surface px-1.5 text-[0.75rem] font-bold tnum shadow-card" dir="ltr">
                             {whereOf(i.site, t)}
                           </span>
                           <span className="min-w-0 flex-1 truncate">
@@ -635,12 +635,12 @@ export function AppointmentPanel({
                     <span
                       key={s.id}
                       data-visit-service={s.id}
-                      className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-line-strong bg-surface ps-2.5 pe-0.5 text-[13px] font-medium text-ink-900"
+                      className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-line-strong bg-surface ps-2.5 pe-0.5 text-[0.8125rem] font-medium text-ink-900"
                     >
                       <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color ?? "var(--color-ink-300)" }} aria-hidden />
                       <span className="truncate">{s.name}</span>
                       {s.minutes > 0 && (
-                        <span className="shrink-0 text-[11.5px] font-normal text-ink-500 tnum">{t.finishVisit.minutes.replace("{n}", String(s.minutes))}</span>
+                        <span className="shrink-0 text-[length:max(11px,0.71875rem)] font-normal text-ink-500 tnum">{t.finishVisit.minutes.replace("{n}", String(s.minutes))}</span>
                       )}
                       <button
                         type="button"
@@ -698,7 +698,7 @@ export function AppointmentPanel({
                       ))}
               </Select>
               {chosen.length > 1 && (
-                <p className="mt-1.5 text-[12px] text-ink-500" data-visit-services-total>
+                <p className="mt-1.5 text-[0.75rem] text-ink-500" data-visit-services-total>
                   {t.calendar.servicesTotal
                     .replace("{n}", String(chosen.length))
                     .replace("{min}", String(chosen.reduce((n, s) => n + s.minutes, 0)))}
@@ -764,7 +764,7 @@ export function AppointmentPanel({
                   onClick={suggest}
                   disabled={!serviceId || suggesting}
                   title={serviceId ? undefined : t.calendar.pickService}
-                  className="flex items-center gap-1.5 justify-self-start text-[12.5px] font-semibold text-brand-700 hover:underline disabled:cursor-default disabled:text-ink-300 disabled:no-underline"
+                  className="flex items-center gap-1.5 justify-self-start text-[0.78125rem] font-semibold text-brand-700 hover:underline disabled:cursor-default disabled:text-ink-300 disabled:no-underline"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
                   {t.calendar.suggestTimes}
@@ -778,7 +778,7 @@ export function AppointmentPanel({
                         press puts them in line for the first cancellation.
                       */
                       <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-[12px] text-ink-500">{t.calendar.noFreeTimes}</span>
+                        <span className="text-[0.75rem] text-ink-500">{t.calendar.noFreeTimes}</span>
                         {patient && (
                           <button
                             type="button"
@@ -794,7 +794,7 @@ export function AppointmentPanel({
                               if (r.error) toast(r.error === "already_waiting" ? t.waitlist.alreadyWaiting : t.common.genericError, "error");
                               else toast(t.waitlist.added);
                             }}
-                            className="rounded-full border border-brand-200 px-2.5 py-1 text-[12px] font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-60"
+                            className="rounded-full border border-brand-200 px-2.5 py-1 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-60"
                             data-panel-waitlist
                           >
                             {t.waitlist.add}
@@ -813,7 +813,7 @@ export function AppointmentPanel({
                               setTime(d.toFormat("HH:mm"));
                               if (!doctorId && s.doctorMemberId) setDoctorId(s.doctorMemberId);
                             }}
-                            className="rounded-full border border-line-strong px-2.5 py-1 text-[12px] font-medium text-ink-700 transition-colors hover:border-brand-400 hover:bg-brand-50"
+                            className="rounded-full border border-line-strong px-2.5 py-1 text-[0.75rem] font-medium text-ink-700 transition-colors hover:border-brand-400 hover:bg-brand-50"
                           >
                             {d.toFormat("ccc d LLL")} · <span className="tnum">{d.toFormat("H:mm")}</span>
                           </button>
@@ -836,15 +836,15 @@ export function AppointmentPanel({
             */}
             {editAppt && editAppt.intake_answers?.length > 0 && (
               <div>
-                <span className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-ink-900">
+                <span className="mb-1.5 flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-900">
                   <ClipboardList className="h-3.5 w-3.5 text-ink-400" />
                   {t.calendar.bookingAnswers}
                 </span>
                 <dl className="divide-y divide-line rounded-lg border border-line bg-sunken/40">
                   {editAppt.intake_answers.map((a) => (
                     <div key={a.id} className="px-3 py-2">
-                      <dt className="text-[12px] text-ink-500">{locale === "ar" ? a.labelAr || a.label : a.label}</dt>
-                      <dd className="whitespace-pre-line text-[13px] font-medium text-ink-900">
+                      <dt className="text-[0.75rem] text-ink-500">{locale === "ar" ? a.labelAr || a.label : a.label}</dt>
+                      <dd className="whitespace-pre-line text-[0.8125rem] font-medium text-ink-900">
                         {a.type === "checkbox" ? (a.value === "yes" ? t.common.yes : t.common.no) : a.value}
                       </dd>
                     </div>
@@ -874,14 +874,14 @@ export function AppointmentPanel({
 
             {editAppt && (
               <div>
-                <span className="mb-1.5 block text-[13px] font-medium text-ink-700">{t.common.status}</span>
+                <span className="mb-1.5 block text-[0.8125rem] font-medium text-ink-700">{t.common.status}</span>
                 <div className="flex flex-wrap gap-1.5">
                   {(["scheduled", "confirmed", "completed", "no_show"] as const).map((s) => (
                     <button
                       key={s}
                       disabled={pending || editAppt.status === s}
                       onClick={() => setStatus(s)}
-                      className={`rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors disabled:cursor-default ${
+                      className={`rounded-full px-3 py-1.5 text-[0.75rem] font-medium transition-colors disabled:cursor-default ${
                         editAppt.status === s ? "ring-2 ring-brand-400" : "hover:opacity-80"
                       }`}
                       style={{

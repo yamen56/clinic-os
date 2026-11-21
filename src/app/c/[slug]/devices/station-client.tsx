@@ -413,12 +413,12 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
           <Radiation className="h-6 w-6 text-brand-700" />
           {T.title}
         </h1>
-        <p className="mt-1.5 text-[14px] leading-relaxed text-ink-700">{T.intro}</p>
+        <p className="mt-1.5 text-[0.875rem] leading-relaxed text-ink-700">{T.intro}</p>
       </div>
 
       {/* A machine's computer gone quiet: said before somebody takes an x-ray that will not arrive. */}
       {devices.filter((d) => bridgeOffline(d, now)).map((d) => (
-        <div key={d.id} className="flex items-start gap-3 rounded-card border border-danger/30 bg-danger-soft px-4 py-3 text-[13.5px] text-ink-900" data-device-offline={d.id}>
+        <div key={d.id} className="flex items-start gap-3 rounded-card border border-danger/30 bg-danger-soft px-4 py-3 text-[0.84375rem] text-ink-900" data-device-offline={d.id}>
           <WifiOff className="mt-0.5 h-4.5 w-4.5 shrink-0 text-danger" />
           <span>
             <b>{d.name}</b> — {T.offline.replace("{host}", d.host || T.theComputer).replace("{t}", fmtRelative(d.last_seen_at!, locale))}
@@ -429,11 +429,11 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
       <Card className="p-4">
         <div className="grid gap-3" data-folder-card>
           <div>
-            <h2 className="text-[15px] font-semibold text-ink-900">{T.folderTitle}</h2>
-            <p className="mt-0.5 text-[13px] leading-relaxed text-ink-500">{T.folderIntro}</p>
+            <h2 className="text-[0.9375rem] font-semibold text-ink-900">{T.folderTitle}</h2>
+            <p className="mt-0.5 text-[0.8125rem] leading-relaxed text-ink-500">{T.folderIntro}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <label className="flex items-center gap-2 text-[13px] text-ink-700">
+            <label className="flex items-center gap-2 text-[0.8125rem] text-ink-700">
               {T.theseAre}
               <Select value={kind} onChange={(e) => setKind(e.target.value)} className="!w-auto" data-folder-kind>
                 {FILE_KINDS.map((k) => (
@@ -476,7 +476,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
             )}
           </div>
           {!supported && (
-            <p className="text-[12.5px] text-ink-500" data-unsupported>
+            <p className="text-[0.78125rem] text-ink-500" data-unsupported>
               {T.unsupported}
             </p>
           )}
@@ -489,7 +489,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
                 <FolderOpen className="h-4.5 w-4.5" />
                 <span className="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-st-confirmed ring-2 ring-surface" />
               </span>
-              <span className="min-w-0 flex-1 text-[14px] font-semibold text-ink-900">{T.watching.replace("{folder}", folder.name)}</span>
+              <span className="min-w-0 flex-1 text-[0.875rem] font-semibold text-ink-900">{T.watching.replace("{folder}", folder.name)}</span>
               <Button size="sm" variant="outline" onClick={choose}>
                 {T.change}
               </Button>
@@ -497,7 +497,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
                 {T.stop}
               </Button>
               {past.length > 0 && (
-                <div className="flex w-full flex-wrap items-center gap-2 border-t border-line pt-2.5 text-[13px] text-ink-700" data-past>
+                <div className="flex w-full flex-wrap items-center gap-2 border-t border-line pt-2.5 text-[0.8125rem] text-ink-700" data-past>
                   <span className="min-w-0 flex-1">{T.past.replace("{n}", String(past.length)).replace("{folder}", folder.name)}</span>
                   <Button
                     size="sm"
@@ -522,14 +522,14 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
       {/* Asking a machine from a patient's file was taken out (2026-11-02); a request still open from before is answered here until it lapses. */}
       {requests.length > 0 && (
       <Card className="p-4">
-        <h2 className="mb-3 text-[15px] font-semibold text-ink-900">{T.waiting}</h2>
+        <h2 className="mb-3 text-[0.9375rem] font-semibold text-ink-900">{T.waiting}</h2>
         {(
           <ul className="grid gap-2" data-requests>
             {requests.map((r, i) => (
               <li key={r.id} className={`flex flex-wrap items-center gap-3 rounded-ctl border px-3 py-2.5 ${i === 0 ? "border-brand-300 bg-brand-50" : "border-line"}`} data-request={r.id}>
                 {r.kind === "xray" ? <Radiation className="h-4.5 w-4.5 shrink-0 text-brand-700" /> : <Cable className="h-4.5 w-4.5 shrink-0 text-brand-700" />}
                 <div className="min-w-0 flex-1">
-                  <div className="text-[14px] font-semibold text-ink-900">
+                  <div className="text-[0.875rem] font-semibold text-ink-900">
                     {r.patient_name}
                     {r.teeth.length ? (
                       <>
@@ -540,7 +540,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
                       ` · ${T.mouth}`
                     ) : null}
                   </div>
-                  <div className="text-[12.5px] text-ink-500" data-request-meta>
+                  <div className="text-[0.78125rem] text-ink-500" data-request-meta>
                     {[
                       r.device_name ?? T.anyMachine,
                       r.note ? `“${r.note}”` : null,
@@ -562,12 +562,12 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
       )}
 
       <Card className="p-4">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink-900">
+        <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink-900">
           <Inbox className="h-4.5 w-4.5 text-brand-700" />
           {T.inboxTitle}
-          {inbox.length > 0 && <span className="rounded-full bg-brand-100 px-2 text-[12px] text-brand-700 tnum">{inbox.length}</span>}
+          {inbox.length > 0 && <span className="rounded-full bg-brand-100 px-2 text-[0.75rem] text-brand-700 tnum">{inbox.length}</span>}
         </h2>
-        <p className="mb-3 mt-0.5 text-[13px] text-ink-500">{inbox.length ? T.inboxIntro : T.inboxEmpty}</p>
+        <p className="mb-3 mt-0.5 text-[0.8125rem] text-ink-500">{inbox.length ? T.inboxIntro : T.inboxEmpty}</p>
         {inbox.length > 0 && (
           <ul className="grid gap-2">
             {inbox.map((item) => (
@@ -589,7 +589,7 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
 
       <Card className="p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-[15px] font-semibold text-ink-900">{T.activity}</h2>
+          <h2 className="text-[0.9375rem] font-semibold text-ink-900">{T.activity}</h2>
           <Button size="sm" variant="outline" onClick={() => handPick.current?.click()} data-send-by-hand>
             <Upload className="h-4 w-4" />
             {T.sendByHand}
@@ -610,27 +610,27 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
           />
         </div>
         {sent.length === 0 ? (
-          <p className="text-[13.5px] text-ink-500">{T.none}</p>
+          <p className="text-[0.84375rem] text-ink-500">{T.none}</p>
         ) : (
           <ul className="grid gap-1.5" data-sent>
             {sent.map((s) => (
-              <li key={s.key} className="flex flex-wrap items-baseline gap-x-2 text-[13.5px]">
+              <li key={s.key} className="flex flex-wrap items-baseline gap-x-2 text-[0.84375rem]">
                 <span className="font-semibold text-ink-900">{s.patient}</span>
                 {s.teeth.length > 0 && <span className="tnum text-ink-700">· {s.teeth.join(" · ")}</span>}
                 <span className="truncate text-ink-500">· {s.name}</span>
-                <span className="ms-auto text-[12px] text-ink-400 tnum">{new Date(s.at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}</span>
+                <span className="ms-auto text-[0.75rem] text-ink-400 tnum">{new Date(s.at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}</span>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-3 text-[12px] text-ink-400">{fmtDateOnly(new Date(), locale)}</p>
+        <p className="mt-3 text-[0.75rem] text-ink-400">{fmtDateOnly(new Date(), locale)}</p>
       </Card>
 
       {/* Card passes no data-* through, so the hook sits on the content. */}
       <Card className="p-4">
         <div data-station-devices>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-[15px] font-semibold text-ink-900">{T.devices}</h2>
+            <h2 className="text-[0.9375rem] font-semibold text-ink-900">{T.devices}</h2>
             {canManageDevices && (
               <Link href={`/c/${slug}/settings/devices`} className={buttonClass({ variant: "outline", size: "sm" })}>
                 {T.manageDevices}
@@ -638,11 +638,11 @@ export function DevicesStation({ slug, devices, canManageDevices }: { slug: stri
             )}
           </div>
           {devices.length === 0 ? (
-            <p className="text-[13.5px] text-ink-500">{T.devicesNone}</p>
+            <p className="text-[0.84375rem] text-ink-500">{T.devicesNone}</p>
           ) : (
             <ul className="grid gap-1.5">
               {devices.map((d) => (
-                <li key={d.id} className="flex items-center gap-2 text-[13.5px]">
+                <li key={d.id} className="flex items-center gap-2 text-[0.84375rem]">
                   <span className={`h-2 w-2 shrink-0 rounded-full ${d.last_seen_at ? "bg-st-confirmed" : "bg-ink-300"}`} />
                   <span className="font-semibold text-ink-900">{d.name}</span>
                   <span className="text-ink-500" suppressHydrationWarning>
@@ -666,7 +666,7 @@ function BulkProgress({ bulk }: { bulk: Bulk }) {
   if (!bulk.finished) {
     return (
       <div className="grid gap-1.5" role="status" data-bulk-progress>
-        <div className="text-[13.5px] font-semibold text-ink-900 tnum">
+        <div className="text-[0.84375rem] font-semibold text-ink-900 tnum">
           {bulk.total
             ? T.uploading.replace("{n}", String(bulk.done)).replace("{total}", String(bulk.total)).replace("{folder}", bulk.folder)
             : T.reading.replace("{folder}", bulk.folder)}
@@ -684,7 +684,7 @@ function BulkProgress({ bulk }: { bulk: Bulk }) {
   ].filter(Boolean);
   return (
     <div
-      className={`rounded-ctl border px-3 py-2.5 text-[13.5px] ${bulk.failed ? "border-danger/30 bg-danger-soft" : "border-line bg-sunken"}`}
+      className={`rounded-ctl border px-3 py-2.5 text-[0.84375rem] ${bulk.failed ? "border-danger/30 bg-danger-soft" : "border-line bg-sunken"}`}
       role="status"
       data-bulk-done={`${bulk.patient}/${bulk.inbox}/${bulk.before}/${bulk.failed}`}
     >
@@ -828,18 +828,18 @@ function InboxRow({
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13.5px] font-semibold text-ink-900">{what}</div>
-          <div className="text-[12.5px] text-ink-500">
+          <div className="truncate text-[0.84375rem] font-semibold text-ink-900">{what}</div>
+          <div className="text-[0.78125rem] text-ink-500">
             {item.device_name ? `${T.fromDevice.replace("{device}", item.device_name)} · ` : ""}
             {new Date(item.received_at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}
           </div>
           {who && (
-            <div className="text-[12.5px] text-ink-700" data-machine-said>
+            <div className="text-[0.78125rem] text-ink-700" data-machine-said>
               {T.machineSaid.replace("{who}", who)}
             </div>
           )}
           {item.hint.folder && (
-            <div className="truncate text-[12.5px] text-ink-700" dir="auto" data-inbox-folder>
+            <div className="truncate text-[0.78125rem] text-ink-700" dir="auto" data-inbox-folder>
               {T.inFolder.replace("{folder}", item.hint.folder)}
             </div>
           )}
@@ -868,14 +868,14 @@ function InboxRow({
       </div>
       {!!item.suggestions?.length && (
         <div className="flex flex-wrap items-center gap-1.5" data-suggestions>
-          <span className="text-[12.5px] font-semibold text-ink-500">{T.likely}</span>
+          <span className="text-[0.78125rem] font-semibold text-ink-500">{T.likely}</span>
           {item.suggestions.map((p) => (
             <button
               key={p.id}
               type="button"
               disabled={busy}
               onClick={() => file(p.id, p.full_name)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 px-3 py-1 text-[13px] font-semibold text-ink-900 hover:bg-brand-100"
+              className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 px-3 py-1 text-[0.8125rem] font-semibold text-ink-900 hover:bg-brand-100"
               data-suggestion={p.id}
             >
               {p.full_name}
@@ -888,7 +888,7 @@ function InboxRow({
         </div>
       )}
       {siblings.length > 0 && item.hint.folder && (
-        <label className="flex items-center gap-2 text-[13px] text-ink-700" data-inbox-together>
+        <label className="flex items-center gap-2 text-[0.8125rem] text-ink-700" data-inbox-together>
           <input
             type="checkbox"
             className="h-4.5 w-4.5 shrink-0 accent-brand-600"
@@ -916,14 +916,14 @@ function InboxRow({
                   type="button"
                   disabled={busy}
                   onClick={() => file(p.id, p.full_name)}
-                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-[13.5px] hover:bg-sunken"
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-[0.84375rem] hover:bg-sunken"
                   data-inbox-patient={p.id}
                 >
                   <span className="font-semibold text-ink-900">
                     {p.full_name}
-                    {p.file_no ? <span className="ms-2 text-[12px] font-normal text-ink-500 tnum">#{p.file_no}</span> : null}
+                    {p.file_no ? <span className="ms-2 text-[0.75rem] font-normal text-ink-500 tnum">#{p.file_no}</span> : null}
                   </span>
-                  <span dir="ltr" className="text-[12px] text-ink-500 tnum">
+                  <span dir="ltr" className="text-[0.75rem] text-ink-500 tnum">
                     {p.phone_e164 ?? ""}
                   </span>
                 </button>

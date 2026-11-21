@@ -83,7 +83,7 @@ export function WaitlistTab({
   return (
     <div className="grid grid-cols-1 gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="min-w-0 flex-1 text-[13px] text-ink-500">{t.waitlist.sub}</p>
+        <p className="min-w-0 flex-1 text-[0.8125rem] text-ink-500">{t.waitlist.sub}</p>
         <Button onClick={() => setAdding(true)}>
           <Plus className="h-4 w-4" />
           {t.waitlist.add}
@@ -96,7 +96,7 @@ export function WaitlistTab({
         cancellation produces silence.
       */}
       {data && !data.hasBookingLink && (
-        <div className="rounded-card border border-st-pending/40 bg-st-pending-soft p-4 text-[13px]">
+        <div className="rounded-card border border-st-pending/40 bg-st-pending-soft p-4 text-[0.8125rem]">
           {t.waitlist.needsBookingLink}{" "}
           <Link href={`/c/${slug}/settings/booking`} className="font-semibold underline">
             {t.settings.bookingLinks}
@@ -135,11 +135,11 @@ export function WaitlistTab({
                 <div className="flex items-start gap-3">
                   <Avatar name={e.full_name} size={36} />
                   <div className="min-w-0 flex-1">
-                    <Link href={`/c/${slug}/patients/${e.patient_id}`} className="block truncate text-[15px] font-semibold text-ink-900 hover:underline">
+                    <Link href={`/c/${slug}/patients/${e.patient_id}`} className="block truncate text-[0.9375rem] font-semibold text-ink-900 hover:underline">
                       {e.full_name}
                     </Link>
                     {e.phone_e164 && (
-                      <span className="num block text-[12px] text-ink-400 tnum">{formatPhone(e.phone_e164)}</span>
+                      <span className="num block text-[0.75rem] text-ink-400 tnum">{formatPhone(e.phone_e164)}</span>
                     )}
                   </div>
                   {e.status === "offered" ? (
@@ -152,7 +152,7 @@ export function WaitlistTab({
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-ink-700">
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[0.78125rem] text-ink-700">
                   <span className="inline-flex items-center gap-1">
                     <Stethoscope className="h-3.5 w-3.5 text-ink-400" />
                     {e.doctor_name ?? t.waitlist.anyDoctor}
@@ -163,8 +163,8 @@ export function WaitlistTab({
                   </span>
                   {window && <span className="font-medium text-ink-900">{window}</span>}
                 </div>
-                {e.note && <p className="whitespace-pre-line text-[12.5px] text-ink-500">{e.note}</p>}
-                <div className="text-[11.5px] text-ink-400">
+                {e.note && <p className="whitespace-pre-line text-[0.78125rem] text-ink-500">{e.note}</p>}
+                <div className="text-[length:max(11px,0.71875rem)] text-ink-400">
                   {t.waitlist.since.replace("{when}", fmtRelative(e.created_at, locale))}
                   {e.offers_sent > 0 && ` · ${t.waitlist.offeredTimes.replace("{n}", String(e.offers_sent))}`}
                 </div>
@@ -172,7 +172,7 @@ export function WaitlistTab({
                 {Array.isArray(found) && (
                   <div className="flex flex-wrap gap-1.5" data-waitlist-slots>
                     {found.length === 0 ? (
-                      <span className="text-[12px] text-ink-500">{t.calendar.noFreeTimes}</span>
+                      <span className="text-[0.75rem] text-ink-500">{t.calendar.noFreeTimes}</span>
                     ) : (
                       found.map((s) => {
                         const d = DateTime.fromISO(s.startISO).setZone(tz).setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB");
@@ -181,7 +181,7 @@ export function WaitlistTab({
                             key={`${s.startISO}${s.doctorMemberId}`}
                             type="button"
                             onClick={() => onBook(e, s)}
-                            className="rounded-full border border-line-strong px-2.5 py-1 text-[12px] font-medium text-ink-700 transition-colors hover:border-brand-400 hover:bg-brand-50"
+                            className="rounded-full border border-line-strong px-2.5 py-1 text-[0.75rem] font-medium text-ink-700 transition-colors hover:border-brand-400 hover:bg-brand-50"
                           >
                             {d.toFormat("ccc d LLL")} · <span className="tnum">{d.toFormat("H:mm")}</span>
                           </button>
@@ -305,7 +305,7 @@ function AddModal(props: {
         {picked ? (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-subtle px-3 py-2">
             <span className="truncate text-sm font-semibold">{picked.full_name}</span>
-            <button className="text-[13px] text-brand-700" onClick={() => setPicked(null)}>
+            <button className="text-[0.8125rem] text-brand-700" onClick={() => setPicked(null)}>
               {t.common.edit}
             </button>
           </div>
@@ -328,7 +328,7 @@ function AddModal(props: {
                       }}
                     >
                       <span className="truncate">{r.full_name}</span>
-                      {r.phone_e164 && <span className="num tnum text-[12px] text-ink-400">{formatPhone(r.phone_e164)}</span>}
+                      {r.phone_e164 && <span className="num tnum text-[0.75rem] text-ink-400">{formatPhone(r.phone_e164)}</span>}
                     </button>
                   </li>
                 ))}
@@ -336,7 +336,7 @@ function AddModal(props: {
             )}
             {searched && results.length === 0 && (
               <div className="mt-2 grid gap-2 rounded-lg border border-dashed border-line p-3">
-                <span className="text-[13px] text-ink-500">{t.waitlist.noMatch}</span>
+                <span className="text-[0.8125rem] text-ink-500">{t.waitlist.noMatch}</span>
                 <Button
                   variant="outline"
                   size="sm"

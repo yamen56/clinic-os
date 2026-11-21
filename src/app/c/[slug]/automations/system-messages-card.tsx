@@ -71,7 +71,7 @@ export function SystemMessagesCard({
             if (!defs.length) return null;
             return (
               <div key={g}>
-                <div className="bg-sunken px-5 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-500">
+                <div className="bg-sunken px-5 py-1.5 text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500">
                   {t.automations.messageGroups[g]}
                 </div>
                 <ul className="divide-y divide-line">
@@ -111,7 +111,7 @@ export function SystemMessagesCard({
                               <Badge status="neutral">{t.automations.alwaysOn}</Badge>
                             )}
                           </div>
-                          <div className="mt-0.5 truncate text-[13px] text-ink-500">
+                          <div className="mt-0.5 truncate text-[0.8125rem] text-ink-500">
                             {t.automations.messageWhen[def.key]}
                           </div>
                         </button>
@@ -200,10 +200,10 @@ function MessageEditor({
         </>
       }
     >
-      <p className="mb-3 text-[13px] text-ink-500">{t.automations.messageWhen[messageKey]}</p>
+      <p className="mb-3 text-[0.8125rem] text-ink-500">{t.automations.messageWhen[messageKey]}</p>
 
       <div className="mb-3 rounded-md bg-sunken px-3 py-2">
-        <div className="mb-1.5 text-[12px] font-semibold text-ink-500">
+        <div className="mb-1.5 text-[0.75rem] font-semibold text-ink-500">
           {t.automations.insertVariable}
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -213,17 +213,17 @@ function MessageEditor({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => insert(v)}
-              className="rounded-md border border-line bg-surface px-2 py-1 text-[12px] text-ink-700 hover:border-brand-600 hover:text-brand-700"
+              className="rounded-md border border-line bg-surface px-2 py-1 text-[0.75rem] text-ink-700 hover:border-brand-600 hover:text-brand-700"
               dir="ltr"
             >
               {`{{${v}}}`}
             </button>
           ))}
         </div>
-        <p className="mt-2 text-[12px] text-ink-500">{t.automations.emptyLineNote}</p>
+        <p className="mt-2 text-[0.75rem] text-ink-500">{t.automations.emptyLineNote}</p>
       </div>
 
-      <label className="mb-1.5 block text-[13px] font-semibold text-ink-900">
+      <label className="mb-1.5 block text-[0.8125rem] font-semibold text-ink-900">
         {t.automations.arabicText}
       </label>
       <Textarea
@@ -235,7 +235,7 @@ function MessageEditor({
         onChange={(e) => setAr(e.target.value)}
       />
 
-      <label className="mb-1.5 mt-4 block text-[13px] font-semibold text-ink-900">
+      <label className="mb-1.5 mt-4 block text-[0.8125rem] font-semibold text-ink-900">
         {t.automations.englishText}
       </label>
       <Textarea
@@ -246,10 +246,10 @@ function MessageEditor({
         onFocus={() => setFocused("en")}
         onChange={(e) => setEn(e.target.value)}
       />
-      <p className="mt-2 text-[12px] text-ink-500">{t.automations.languageHint}</p>
+      <p className="mt-2 text-[0.75rem] text-ink-500">{t.automations.languageHint}</p>
 
       {!def.canDisable && (
-        <p className="mt-3 rounded-md bg-sunken px-3 py-2 text-[13px] text-ink-500">
+        <p className="mt-3 rounded-md bg-sunken px-3 py-2 text-[0.8125rem] text-ink-500">
           {t.automations.alwaysOnHint}
         </p>
       )}

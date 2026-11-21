@@ -145,9 +145,9 @@ export function InsuranceCard({
 
   return (
     <Card className="p-5">
-      <h3 className="mb-3 text-[15px] font-semibold">{T.title}</h3>
+      <h3 className="mb-3 text-[0.9375rem] font-semibold">{T.title}</h3>
 
-      <p className={`mb-4 flex items-start gap-2 rounded-lg px-3 py-2 text-[13px] font-medium ${banner.cls}`}>
+      <p className={`mb-4 flex items-start gap-2 rounded-lg px-3 py-2 text-[0.8125rem] font-medium ${banner.cls}`}>
         <span className="mt-0.5 shrink-0">{banner.icon}</span>
         <span>{banner.text}</span>
       </p>
@@ -179,7 +179,7 @@ export function InsuranceCard({
       </div>
 
       {insurer && (
-        <p className="mt-3 text-[13px] text-ink-500">
+        <p className="mt-3 text-[0.8125rem] text-ink-500">
           {hasRule(rule)
             ? T.terms
                 .replace("{insurer}", insurer.name)
@@ -196,7 +196,7 @@ export function InsuranceCard({
       {insurerId && (
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <h4 className="text-[13px] font-semibold text-ink-500">{T.cardPhotos}</h4>
+            <h4 className="text-[0.8125rem] font-semibold text-ink-500">{T.cardPhotos}</h4>
             <input
               ref={fileInput}
               type="file"
@@ -215,7 +215,7 @@ export function InsuranceCard({
             </Button>
           </div>
           {cardFiles.length === 0 ? (
-            <p className="text-[13px] text-ink-400">{T.noCard}</p>
+            <p className="text-[0.8125rem] text-ink-400">{T.noCard}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {cardFiles.map((f) => (
@@ -231,7 +231,7 @@ export function InsuranceCard({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={`/api/c/${slug}/files/${f.id}`} alt={f.file_name} className="h-full w-full object-cover" />
                   ) : (
-                    <span className="flex h-full w-full items-center justify-center gap-1 text-[12px] text-ink-500">
+                    <span className="flex h-full w-full items-center justify-center gap-1 text-[0.75rem] text-ink-500">
                       <FileText className="h-4 w-4" />
                       PDF
                     </span>
@@ -246,16 +246,16 @@ export function InsuranceCard({
       {claims && claims.length > 0 && (
         <div className="mt-5">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h4 className="text-[13px] font-semibold text-ink-500">{T.claims}</h4>
+            <h4 className="text-[0.8125rem] font-semibold text-ink-500">{T.claims}</h4>
             {owed > 0 && (
-              <span className="text-[13px] text-ink-500">
+              <span className="text-[0.8125rem] text-ink-500">
                 {T.owed} <span className="tnum font-semibold text-ink-900">{fmtMoney(owed, currency, locale)}</span>
               </span>
             )}
           </div>
           <ul className="divide-y divide-line rounded-lg border border-line">
             {claims.slice(0, 8).map((c) => (
-              <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[13px]">
+              <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[0.8125rem]">
                 <Link href={`/c/${slug}/invoices/${c.id}`} className="font-medium hover:text-brand-700" dir="ltr">
                   {c.number}
                 </Link>
