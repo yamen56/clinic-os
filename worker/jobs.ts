@@ -174,6 +174,38 @@ async function runOne(slow: boolean): Promise<boolean> {
         }
       }
 
+      /*
+        A patient moving their own visit (0115) frees the time they left just
+        as a cancellation does, so it is offered the same way. Only theirs: the
+        desk drags and nudges visits all day, and each of those offering a
+        slot would send the waitlist chasing times that were never free.
+      */
+      if (
+        kind === "appointment_rescheduled" &&
+        job.payload?.byPatient === true &&
+        typeof job.payload?.previousStartsAt === "string" &&
+        Date.parse(String(job.payload.previousStartsAt)) > Date.now() &&
+        job.payload?.appointmentId
+      ) {
+        const appt = await withSystem(async (c) =>
+          (
+            await c.query(`select id, service_id from appointments where id = $1 and clinic_id = $2`, [
+              String(job.payload!.appointmentId),
+              job.clinic_id,
+            ])
+          ).rows[0]
+        );
+        if (appt) {
+          await offerFreedSlot({
+            clinicId: job.clinic_id,
+            appointmentId: appt.id as string,
+            doctorMemberId: typeof job.payload.previousDoctorMemberId === "string" ? job.payload.previousDoctorMemberId : null,
+            serviceId: (appt.service_id as string) ?? null,
+            startsAt: new Date(String(job.payload.previousStartsAt)).toISOString(),
+          });
+        }
+      }
+
       // Booking is how a waitlist entry ends. Whether it came from an offer we
       // sent or a phone call, what they were waiting for has happened.
       if (kind === "appointment_created" && job.payload?.appointmentId) {

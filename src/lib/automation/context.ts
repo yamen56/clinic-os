@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import type { PoolClient } from "pg";
 import { appUrl } from "../urls";
+import { manageLinkFor } from "../visit-link";
 import type { TemplateContext } from "./variables";
 
 /**
@@ -122,6 +123,8 @@ export async function loadRunContext(
         service: (isAr ? a.service_name_ar : null) || a.service_name || "",
         doctor: a.doctor_name ?? "",
         status: a.status,
+        // The patient's own link to change or cancel it (0115) — "" while the clinic keeps that off.
+        manage_link: await manageLinkFor(c, ids.appointmentId),
       };
       ctx.doctor = { name: a.doctor_name ?? "" };
     }

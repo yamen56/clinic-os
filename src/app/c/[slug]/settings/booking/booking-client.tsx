@@ -18,6 +18,7 @@ import {
   saveBookingQuestionAction,
   deleteBookingQuestionAction,
   moveBookingQuestionAction,
+  savePatientChangesAction,
 } from "./actions";
 import {
   Plus,
@@ -99,7 +100,10 @@ export function BookingLinksClient({
   sections,
   questions,
   patientFields,
+  patientChanges,
 }: {
+  /** What patients may do with their own visit from its link, and how close to it (0115). */
+  patientChanges: { mode: "off" | "cancel" | "cancel_move"; cutoffHours: number };
   slug: string;
   canEdit: boolean;
   links: LinkRow[];
@@ -334,6 +338,9 @@ export function BookingLinksClient({
           ))}
         </ul>
       </Card>
+
+      {/* ------------------------------------- changes by the patient (0115) */}
+      <PatientChangesCard slug={slug} canEdit={canEdit} initial={patientChanges} />
 
       {/* ------------------------------------------------------- the questions */}
       <Card>
@@ -1038,5 +1045,91 @@ function ToggleRow({
         {hint && <span className="block text-xs text-ink-500">{hint}</span>}
       </span>
     </label>
+  );
+}
+
+/**
+ * What a patient may do with their own visit from its link (0115).
+ *
+ * Saved on the press and held here meanwhile, so the choice moves when it is
+ * tapped; a failed save puts it back.
+ */
+function PatientChangesCard({
+  slug,
+  canEdit,
+  initial,
+}: {
+  slug: string;
+  canEdit: boolean;
+  initial: { mode: "off" | "cancel" | "cancel_move"; cutoffHours: number };
+}) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const tb = t.bookingSettings;
+  const [value, setValue] = useState(initial);
+  const [, start] = useTransition();
+  const save = (next: typeof value) => {
+    const before = value;
+    setValue(next);
+    start(async () => {
+      const r = await savePatientChangesAction(slug, next);
+      if (r.error) {
+        setValue(before);
+        toast(t.common.genericError, "error");
+      } else toast(tb.changesSaved);
+    });
+  };
+  const modes = ["cancel_move", "cancel", "off"] as const;
+  const cutoffs = [2, 6, 12, 24, 48];
+  return (
+    <div data-patient-changes={value.mode}>
+      <Card>
+        <CardHeader title={tb.changesTitle} sub={tb.changesSub} />
+        <div className="grid gap-4 px-5 pb-5">
+          <div className="grid gap-2" role="radiogroup" aria-label={tb.changesTitle}>
+            {modes.map((m) => (
+              <label
+                key={m}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3.5 py-3 transition-colors ${
+                  value.mode === m ? "border-brand-500 bg-brand-50" : "border-line hover:bg-sunken"
+                } ${canEdit ? "" : "pointer-events-none opacity-70"}`}
+              >
+                <input
+                  type="radio"
+                  name="patient-changes"
+                  className="mt-1 accent-brand-600"
+                  checked={value.mode === m}
+                  disabled={!canEdit}
+                  onChange={() => save({ ...value, mode: m })}
+                  data-patient-changes-mode={m}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{tb.changesModes[m]}</span>
+                  <span className="mt-0.5 block text-[0.8125rem] text-ink-500">{tb.changesModeHints[m]}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {value.mode !== "off" && (
+            <Field label={tb.changesCutoff} hint={tb.changesCutoffHint}>
+              <Select
+                value={String(value.cutoffHours)}
+                disabled={!canEdit}
+                onChange={(e) => save({ ...value, cutoffHours: Number(e.target.value) })}
+                data-patient-changes-cutoff
+              >
+                {[...new Set([...cutoffs, value.cutoffHours])]
+                  .sort((a, b) => a - b)
+                  .map((h) => (
+                    <option key={h} value={h}>
+                      {tb.changesCutoffOption.replace("{n}", String(h))}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+          )}
+        </div>
+      </Card>
+    </div>
   );
 }

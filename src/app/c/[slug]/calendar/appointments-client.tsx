@@ -513,6 +513,7 @@ export function AppointmentsClient({
         canSendDocuments={!isDoctor}
         canOpenPatient={caps.patients}
         canInvoice={caps.invoices}
+        patientChanges={meta?.patientChanges ?? "off"}
         // The sheet takes over from the panel, and reads the visit as Today has it — that copy carries who was told.
         onLate={(a) => {
           setPanel(null);

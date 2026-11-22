@@ -259,7 +259,18 @@ async function run(db: Client, recipes: { key: string }[]) {
   await sched.appointmentReminders();
   await drain();
   await reply(pR2, "2");
-  check("2 gives reception a call to make", (await tasks(pR2)).some((t) => t.includes("لتغيير موعده")));
+  // A clinic made today lets patients change their own visits (0115): "2" is their link, not a call.
+  check("2 sends the patient their own link to change or cancel", (await texts(pR2)).some((t) => t.includes("/v/")));
+  check("and gives reception nothing to do", !(await tasks(pR2)).some((t) => t.includes("لتغيير موعده")));
+  await db.query(`update clinics set patient_changes = 'off' where id = $1`, [clinic]);
+  const pR2b = await patient("خالد هاتف");
+  await appointment(pR2b, { at: DateTime.now().plus({ hours: 23, minutes: 59 }) });
+  await sched.appointmentReminders();
+  await drain();
+  await reply(pR2b, "2");
+  check("with patient changes off, 2 gives reception a call to make", (await tasks(pR2b)).some((t) => t.includes("لتغيير موعده")));
+  check("and sends no link", !(await texts(pR2b)).some((t) => t.includes("/v/")));
+  await db.query(`update clinics set patient_changes = 'cancel_move' where id = $1`, [clinic]);
   const pR3 = await patient("منى صامتة");
   const aR3 = await appointment(pR3, { at: DateTime.now().plus({ hours: 23, minutes: 59 }) });
   await sched.appointmentReminders();

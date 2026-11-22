@@ -70,6 +70,11 @@ export type Appt = {
   late_min?: number | null;
   /** When this patient was told the doctor's day is running behind. */
   delay_notice_at?: string | null;
+  /** Who cancelled it, and why when it was the patient (0115). */
+  cancelled_by?: "patient" | "staff" | "automation" | null;
+  cancel_reason?: string | null;
+  /** How many times the patient moved it from their own link. */
+  patient_moves?: number;
 };
 
 /** A treatment on the patient's plan, as a visit carries it. */
@@ -113,6 +118,8 @@ export type CalendarData = {
   unroomed: number;
   /** The clinic's currency, for what a patient owes on the board. */
   currency?: string;
+  /** What patients may do from their own link (0115); not "off" means the panel offers to send it. */
+  patientChanges?: "off" | "cancel" | "cancel_move";
   serverNow: string;
 };
 

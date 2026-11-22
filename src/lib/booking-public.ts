@@ -77,6 +77,8 @@ export type PublicLink = {
     */
     currency: string;
     vocabulary: "medical" | "agency";
+    /** What a patient may do with a visit from its own link (0115): the page offers "Already booked?" unless off. */
+    patient_changes: "off" | "cancel" | "cancel_move";
   };
   services: {
     id: string;
@@ -129,7 +131,7 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       await c.query(
         `select cl.id, cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.address_ar,
                 cl.phone_e164, cl.google_maps_url, cl.timezone, cl.default_locale, cl.working_hours, cl.blocked_dates,
-                cl.currency, cl.vocabulary,
+                cl.currency, cl.vocabulary, cl.patient_changes,
                 coalesce(ws.status = 'connected', false) as wa_connected
          from clinics cl left join whatsapp_sessions ws on ws.clinic_id = cl.id
          where cl.id = $1`,

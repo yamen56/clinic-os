@@ -86,6 +86,8 @@ export const config = {
     "/book/:path*",
     "/inv/:path*",
     "/sign/:path*",
+    // The patient's own appointment page (0115): authorises itself with its token.
+    "/v/:path*",
     "/invite/:path*",
     "/reset/:path*",
     "/login",

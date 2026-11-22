@@ -835,10 +835,25 @@ const psychiatry: Recipe[] = [
             { step_type: "update_appointment", config: { status: "confirmed" } },
             { step_type: "send_whatsapp", config: { message: "تم ✅ بانتظارك." } },
           ],
+          // "2": their own link when it can help (0115), otherwise a call for reception as before.
           "opt:1": [
-            { step_type: "flag_conversation", config: { reason: "يريد تغيير موعده" } },
-            ...callTask("اتصل بـ{{patient.name}} لتغيير موعده", "{{appointment.date}} — {{appointment.time}}"),
-            { step_type: "send_whatsapp", config: { message: "ولا يهمك 🙏 سنتواصل معك لترتيب وقت آخر." } },
+            {
+              step_type: "condition",
+              config: { match: "all", rules: [{ kind: "patient_can_change" }] },
+              children: {
+                yes: [
+                  {
+                    step_type: "send_whatsapp",
+                    config: { message: "ولا يهمك 🙏\nاختر وقتاً آخر أو ألغِ الموعد من هنا:\n{{appointment.manage_link}}" },
+                  },
+                ],
+                no: [
+                  { step_type: "flag_conversation", config: { reason: "يريد تغيير موعده" } },
+                  ...callTask("اتصل بـ{{patient.name}} لتغيير موعده", "{{appointment.date}} — {{appointment.time}}"),
+                  { step_type: "send_whatsapp", config: { message: "ولا يهمك 🙏 سنتواصل معك لترتيب وقت آخر." } },
+                ],
+              },
+            },
           ],
           other: [{ step_type: "flag_conversation", config: { reason: "ردّ على تذكير الموعد" } }],
         },

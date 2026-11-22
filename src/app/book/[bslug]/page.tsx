@@ -279,6 +279,8 @@ export default async function PublicBookingPage({
         route decides, from the link's own row.
       */
       verifyByOtp={data.link.require_otp && data.clinic.wa_connected}
+      /* "Already booked? Change or cancel" — the links go out on WhatsApp, so only when it can deliver (0115). */
+      canFind={data.clinic.patient_changes !== "off" && data.clinic.wa_connected && data.clinic.vocabulary !== "agency"}
     />
     </>
   );

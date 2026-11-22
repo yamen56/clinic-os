@@ -68,6 +68,7 @@ export function BookingWizard({
   allowMultiple,
   brandHeader = true,
   verifyByOtp,
+  canFind = false,
 }: {
   bslug: string;
   clinic: {
@@ -135,6 +136,12 @@ export function BookingWizard({
    * never believed.
    */
   verifyByOtp: boolean;
+  /**
+   * "Already booked? Change or cancel" (0115): the patient types their number
+   * and their visits' links go to its WhatsApp. Only where the clinic lets
+   * patients change visits and its WhatsApp can deliver.
+   */
+  canFind?: boolean;
 }) {
   const [locale, setLocale] = useState<"ar" | "en">(clinic.defaultLocale);
   const t = locale === "en" ? words.en : words.ar;
@@ -142,7 +149,7 @@ export function BookingWizard({
   const isAr = locale === "ar";
   const brand = useMemo(() => brandTokens(clinic.brandColor), [clinic.brandColor]);
 
-  type Step = "section" | "service" | "doctor" | "time" | "details" | "verify" | "done";
+  type Step = "section" | "service" | "doctor" | "time" | "details" | "verify" | "done" | "find";
 
   /*
     Whether this link asks the patient what they are booking.
@@ -200,6 +207,11 @@ export function BookingWizard({
   const [doneStatus, setDoneStatus] = useState<"confirmed" | "pending_approval">("confirmed");
   /** The room, as it was resolved at booking time. Null for anything in person. */
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
+  /** The patient's own link to the visit just booked — change or cancel it (0115). */
+  const [manageUrl, setManageUrl] = useState<string | null>(null);
+  /** "Already booked?": the number typed, and whether its links were sent. */
+  const [findPhone, setFindPhone] = useState("");
+  const [findSent, setFindSent] = useState(false);
 
   const clinicName = isAr ? clinic.nameAr || clinic.name : clinic.name;
   const address = isAr ? clinic.addressAr || clinic.address : clinic.address;
@@ -392,6 +404,7 @@ export function BookingWizard({
         trackSchedule(d.appointmentId, picked.map((s) => s.name).join(" + "));
         setDoneStatus(d.status);
         setJoinUrl(d.meetingUrl ?? null);
+        setManageUrl(d.manageUrl ?? null);
         setStep("done");
       } else {
         setVerificationId(d.verificationId);
@@ -459,7 +472,32 @@ export function BookingWizard({
       setRetiming(false);
       setDoneStatus(d.status);
       setJoinUrl(d.meetingUrl ?? null);
+      setManageUrl(d.manageUrl ?? null);
       setStep("done");
+    } catch {
+      setError(t.genericError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** "Already booked?": the links go to the number's WhatsApp, never to this page. */
+  const find = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/public/book/${bslug}/find`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: findPhone, locale }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(d.error === "invalid_phone" ? t.invalidPhone : d.error === "rate_limited" ? t.tooMany : t.findUnavailable);
+        return;
+      }
+      setFindSent(true);
     } catch {
       setError(t.genericError);
     } finally {
@@ -539,6 +577,8 @@ export function BookingWizard({
     setNewTime(null);
     setError("");
     setBadQuestion("");
+    setManageUrl(null);
+    setFindSent(false);
   };
 
   const toggleService = (s: Service) =>
@@ -563,6 +603,7 @@ export function BookingWizard({
     details: t.yourDetails,
     verify: t.enterCode,
     done: "",
+    find: t.findTitle,
   };
 
   /** What the patient has chosen so far, said once above the times. */
@@ -642,6 +683,27 @@ export function BookingWizard({
           label={t.back}
         />
         <PrimaryBtn disabled={code.length !== 6 || busy} busy={busy} onClick={() => void verify(code, newTime)} label={t.verifyAndBook} />
+      </>
+    );
+  } else if (step === "find") {
+    bar = (
+      <>
+        <BackBtn
+          onClick={() => {
+            setError("");
+            setFindSent(false);
+            setStep(firstStep);
+          }}
+          label={t.back}
+        />
+        {!findSent && (
+          <PrimaryBtn
+            disabled={findPhone.replace(/\D/g, "").length < 9 || busy}
+            busy={busy}
+            onClick={() => void find()}
+            label={t.findSend}
+          />
+        )}
       </>
     );
   }
@@ -769,7 +831,10 @@ export function BookingWizard({
                   </div>
                 )}
 
-                {step !== "done" && (
+                {step === "find" && (
+                  <h2 className="mb-4 font-display text-[1.3125rem] font-bold leading-tight">{title.find}</h2>
+                )}
+                {step !== "done" && step !== "find" && (
                   <>
                     <p className="text-[0.75rem] font-semibold text-ink-500 tabular-nums">
                       {t.stepOf.replace("{n}", String(stepIndex + 1)).replace("{total}", String(totalSteps))}
@@ -1151,6 +1216,42 @@ export function BookingWizard({
                   </section>
                 )}
 
+                {/*
+                  "Already booked?" — the number, then the links go to its
+                  WhatsApp. The page never learns whether there were any.
+                */}
+                {step === "find" && (
+                  <section className="animate-fade-up motion-reduce:animate-none" data-booking-find>
+                    {findSent ? (
+                      <div className="py-4 text-center" data-booking-find-sent>
+                        <span
+                          className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-full"
+                          style={{ background: "var(--bk-soft)", color: "var(--bk-text)" }}
+                        >
+                          <MessageCircle className="h-7 w-7" />
+                        </span>
+                        <p className="font-semibold">{t.findSent}</p>
+                        <p className="mx-auto mt-1 max-w-xs text-[0.875rem] leading-6 text-ink-500">{t.findSentBody}</p>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="mb-4 text-[0.875rem] leading-6 text-ink-500">{t.findBody}</p>
+                        <PhoneInput
+                          value={findPhone}
+                          defaultCountry={homeCountry}
+                          onChange={setFindPhone}
+                          placeholder={homeCountry === "JO" ? "079 000 0000" : undefined}
+                          size="lg"
+                          locale={locale}
+                          countryLabel={isAr ? "الدولة" : "Country"}
+                          inputAttrs={{ autoComplete: "tel", "aria-label": t.phone }}
+                        />
+                      </>
+                    )}
+                    {error && <ErrorLine text={error} />}
+                  </section>
+                )}
+
                 {/* STEP: done */}
                 {step === "done" && slotLocal && (
                   <section className="animate-fade-up pt-2 text-center motion-reduce:animate-none">
@@ -1214,6 +1315,16 @@ export function BookingWizard({
                         </a>
                       )}
                     </div>
+                    {/* Their way back to this visit — the same link the WhatsApp confirmation carries. */}
+                    {manageUrl && (
+                      <a
+                        href={manageUrl}
+                        className="mt-5 inline-flex min-h-10 items-center justify-center text-[0.84375rem] font-medium text-ink-500 underline underline-offset-4"
+                        data-booking-manage
+                      >
+                        {t.manageVisit}
+                      </a>
+                    )}
                     <button
                       type="button"
                       onClick={reset}
@@ -1223,6 +1334,23 @@ export function BookingWizard({
                       {t.bookAgain}
                     </button>
                   </section>
+                )}
+
+                {/* A way back for somebody who already has a booking: change or cancel it themselves. */}
+                {canFind && step === firstStep && !retiming && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError("");
+                      setFindSent(false);
+                      setStep("find");
+                    }}
+                    className="mt-6 flex min-h-11 w-full touch-manipulation items-center justify-center gap-1.5 rounded-xl border border-dashed border-line-strong px-4 text-[0.84375rem] font-medium text-ink-700 hover:bg-sunken"
+                    data-booking-find-open
+                  >
+                    {t.alreadyBooked}
+                    <ChevronRight className="h-4 w-4 shrink-0 text-ink-400 rtl:rotate-180" />
+                  </button>
                 )}
               </>
             )}

@@ -68,7 +68,11 @@ export default async function BookingSettingsPage({
         [access.clinicId]
       )
     ).rows;
-    return { links, doctors, services, sections, questions, patientFields };
+    // What patients may do with their own visit from its link (0115).
+    const changes = (
+      await c.query(`select patient_changes, patient_changes_cutoff_hours from clinics where id = $1`, [access.clinicId])
+    ).rows[0];
+    return { links, doctors, services, sections, questions, patientFields, changes };
   });
 
   return (
@@ -81,6 +85,10 @@ export default async function BookingSettingsPage({
       sections={JSON.parse(JSON.stringify(data.sections))}
       questions={JSON.parse(JSON.stringify(data.questions))}
       patientFields={JSON.parse(JSON.stringify(data.patientFields))}
+      patientChanges={{
+        mode: data.changes?.patient_changes ?? "off",
+        cutoffHours: Number(data.changes?.patient_changes_cutoff_hours ?? 12),
+      }}
     />
   );
 }

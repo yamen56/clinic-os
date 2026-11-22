@@ -36,6 +36,12 @@ export type AvailabilityOpts = {
   minNoticeMin: number;
   granularityMin: number;
   linkDoctorIds: string[]; // link restriction; empty = every doctor
+  /**
+   * A visit to leave out of the busy scan: the one being moved (migration
+   * 0115). Without it a patient moving their 10:00 to 10:30 is told the doctor
+   * is busy, with them.
+   */
+  excludeAppointmentId?: string | null;
 };
 
 /**
@@ -109,8 +115,9 @@ async function loadInputs(
     await c.query(
       `select doctor_member_id, room_id, starts_at, ends_at from appointments
        where clinic_id = $1 and status in ('pending_approval', 'scheduled', 'confirmed')
-         and starts_at < $3 and ends_at > $2`,
-      [clinicId, fromUTC, toUTC]
+         and starts_at < $3 and ends_at > $2
+         and ($4::uuid is null or id <> $4)`,
+      [clinicId, fromUTC, toUTC, opts.excludeAppointmentId ?? null]
     )
   ).rows as Busy[];
 

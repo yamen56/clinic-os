@@ -59,6 +59,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
                   where a2.patient_id = a.patient_id and a2.clinic_id = a.clinic_id and a2.id <> a.id
                     and a2.starts_at > a.starts_at and a2.status in ('pending_approval', 'scheduled', 'confirmed')) as next_booked_at,
                 a.late_min, a.delay_notice_at,
+                -- What the patient did from their own link (0115).
+                a.cancelled_by, a.cancel_reason, a.patient_moves,
                 s.duration_min as service_duration_min,
                 -- The services after the first, and who booked the visit (migration 0106).
                 ${extraServicesSql("a")} as extra_services,
@@ -114,7 +116,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       before the clinic added rooms, which block nothing until they are placed.
     */
     const clinic = await c.query(
-        `select cl.working_hours, cl.blocked_dates, cl.timezone,
+        `select cl.working_hours, cl.blocked_dates, cl.timezone, cl.patient_changes,
                 coalesce((select json_agg(json_build_object(
                            'id', r.id, 'name', r.name, 'name_ar', r.name_ar, 'color', r.color,
                            'serviceIds', coalesce((select json_agg(rs.service_id) from clinic_room_services rs where rs.room_id = r.id), '[]'::json))
@@ -226,6 +228,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       rooms: clinic.rows[0].rooms,
       unroomed: clinic.rows[0].unroomed,
       currency: access.clinic.currency,
+      // Whether a visit offers "Send change/cancel link" (0115).
+      patientChanges: clinic.rows[0].patient_changes,
       /* The board's clock: elapsed and waiting times are measured against the
          server, not a laptop that is four minutes fast. */
       serverNow: new Date().toISOString(),

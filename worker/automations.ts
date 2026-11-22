@@ -5,6 +5,7 @@ import { licensed } from "./features";
 import { createAndSendFromTemplate } from "../src/lib/esign/flow";
 import { notifyUser, staffInRoles } from "../src/lib/notify";
 import { applyAppointmentStatus, lockClinicSchedule } from "../src/lib/appointments";
+import { patientCanChange } from "../src/lib/visit-link";
 import { findOrCreatePatient } from "../src/lib/patients";
 import { consultationService } from "../src/lib/courses";
 import { computeDayCounts, computeSlots, type SlotResult } from "../src/lib/slots";
@@ -1438,6 +1439,9 @@ async function evaluateRule(env: Env, r: Rule, cache: Map<string, unknown>): Pro
       const a = await appointment();
       return Boolean(a && a.doctor_member_id && values.includes(a.doctor_member_id));
     }
+    // The clinic lets patients change visits and this one still can be, from its link (0115).
+    case "patient_can_change":
+      return run.appointment_id ? patientCanChange(c, run.appointment_id) : false;
     case "replied":
       return repliedSince(c, run, run.started_at);
     case "reply_contains": {

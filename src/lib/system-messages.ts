@@ -31,7 +31,10 @@ export type SystemMessageKey =
   | "invoice_sent"
   | "invoice_receipt"
   | "receipt_sent"
-  | "prescription_sent";
+  | "prescription_sent"
+  | "visit_link"
+  | "visit_moved"
+  | "visit_cancelled";
 
 export type SystemMessageGroup = "booking" | "waitlist" | "documents" | "billing" | "patients";
 
@@ -67,7 +70,13 @@ export const SYSTEM_MESSAGES: SystemMessageDef[] = [
       "appointment.doctor",
       "appointment.when",
       "clinic.address",
+      "appointment.manage_link",
     ],
+    /*
+      The last line is the patient's own link to change or cancel (0115). It is
+      empty when the clinic keeps patient changes off, and a line whose value
+      comes back empty is dropped — so those clinics send what they always did.
+    */
     ar: [
       "مرحباً {{patient.first_name}} 👋",
       "تم تأكيد موعدك في {{clinic.name}}:",
@@ -75,6 +84,8 @@ export const SYSTEM_MESSAGES: SystemMessageDef[] = [
       "{{appointment.doctor}}",
       "🗓 {{appointment.when}}",
       "{{clinic.address}}",
+      "",
+      "لتغيير الموعد أو إلغائه: {{appointment.manage_link}}",
     ].join("\n"),
     en: [
       "Hi {{patient.first_name}} 👋",
@@ -83,15 +94,96 @@ export const SYSTEM_MESSAGES: SystemMessageDef[] = [
       "{{appointment.doctor}}",
       "🗓 {{appointment.when}}",
       "{{clinic.address}}",
+      "",
+      "To change or cancel it: {{appointment.manage_link}}",
     ].join("\n"),
   },
   {
     key: "booking_pending",
     group: "booking",
     canDisable: true,
-    vars: ["patient.first_name", "patient.name", "clinic.name", "appointment.when", "appointment.service"],
-    ar: "مرحباً {{patient.first_name}}، استلمنا طلب حجزك في {{clinic.name}} ليوم {{appointment.when}}. سنؤكده لك قريباً.",
-    en: "Hi {{patient.first_name}}, we received your booking request at {{clinic.name}} for {{appointment.when}}. We'll confirm it shortly.",
+    vars: ["patient.first_name", "patient.name", "clinic.name", "appointment.when", "appointment.service", "appointment.manage_link"],
+    ar: [
+      "مرحباً {{patient.first_name}}، استلمنا طلب حجزك في {{clinic.name}} ليوم {{appointment.when}}. سنؤكده لك قريباً.",
+      "لتغيير الموعد أو إلغائه: {{appointment.manage_link}}",
+    ].join("\n"),
+    en: [
+      "Hi {{patient.first_name}}, we received your booking request at {{clinic.name}} for {{appointment.when}}. We'll confirm it shortly.",
+      "To change or cancel it: {{appointment.manage_link}}",
+    ].join("\n"),
+  },
+  /*
+    The patient's own link to one appointment (0115) — sent when reception
+    taps "Send change/cancel link", and when a patient asks for it from the
+    booking page. Always on: without it neither of those does anything.
+  */
+  {
+    key: "visit_link",
+    group: "booking",
+    canDisable: false,
+    vars: ["patient.first_name", "clinic.name", "appointment.service", "appointment.when", "link"],
+    ar: [
+      "مرحباً {{patient.first_name}} 👋",
+      "موعدك في {{clinic.name}}:",
+      "{{appointment.service}}",
+      "🗓 {{appointment.when}}",
+      "",
+      "لتغيير الموعد أو إلغائه:",
+      "{{link}}",
+    ].join("\n"),
+    en: [
+      "Hi {{patient.first_name}} 👋",
+      "Your appointment at {{clinic.name}}:",
+      "{{appointment.service}}",
+      "🗓 {{appointment.when}}",
+      "",
+      "To change or cancel it:",
+      "{{link}}",
+    ].join("\n"),
+  },
+  /*
+    After the patient moved or cancelled from their link. Also the alarm: a
+    link forwarded to somebody else cannot be used without the patient hearing.
+  */
+  {
+    key: "visit_moved",
+    group: "booking",
+    canDisable: true,
+    vars: ["patient.first_name", "clinic.name", "appointment.service", "appointment.doctor", "appointment.when", "link"],
+    ar: [
+      "تم تغيير موعدك في {{clinic.name}} ✅",
+      "{{appointment.service}}",
+      "{{appointment.doctor}}",
+      "🗓 {{appointment.when}}",
+      "",
+      "لتغييره مرة أخرى أو إلغائه: {{link}}",
+      "ما طلبت هذا؟ ردّ على هذه الرسالة.",
+    ].join("\n"),
+    en: [
+      "Your appointment at {{clinic.name}} has been moved ✅",
+      "{{appointment.service}}",
+      "{{appointment.doctor}}",
+      "🗓 {{appointment.when}}",
+      "",
+      "To change or cancel it again: {{link}}",
+      "Didn't ask for this? Reply to this message.",
+    ].join("\n"),
+  },
+  {
+    key: "visit_cancelled",
+    group: "booking",
+    canDisable: true,
+    vars: ["patient.first_name", "clinic.name", "appointment.when", "link"],
+    ar: [
+      "تم إلغاء موعدك في {{clinic.name}} ({{appointment.when}}).",
+      "لحجز موعد جديد: {{link}}",
+      "ما طلبت هذا؟ ردّ على هذه الرسالة.",
+    ].join("\n"),
+    en: [
+      "Your appointment at {{clinic.name}} ({{appointment.when}}) has been cancelled.",
+      "To book another time: {{link}}",
+      "Didn't ask for this? Reply to this message.",
+    ].join("\n"),
   },
   /*
     A patient before this one is running late (2026-11-02), and the desk chose

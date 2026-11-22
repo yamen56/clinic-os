@@ -23,7 +23,8 @@ export const VARIABLE_GROUPS: VariableGroup[] = [
   { group: "patient", needs: "patient", vars: ["first_name", "name", "phone", "file_no", "age"] },
   {
     group: "appointment", needs: "appointment",
-    vars: ["date", "time", "day", "end_time", "service", "doctor"],
+    // manage_link: the patient's own link to change or cancel (0115); empty while the clinic keeps that off.
+    vars: ["date", "time", "day", "end_time", "service", "doctor", "manage_link"],
   },
   { group: "next_appointment", needs: "patient", vars: ["date", "time", "service"] },
   { group: "doctor", needs: "appointment", vars: ["name"] },
@@ -96,6 +97,7 @@ export function sampleContext(locale: "ar" | "en"): TemplateContext {
       end_time: ar ? "5:00 م" : "5:00 PM",
       service: ar ? "تنظيف أسنان" : "Dental cleaning",
       doctor: ar ? "د. سارة" : "Dr. Sara",
+      manage_link: "https://app.clinicti.app/v/…",
     },
     next_appointment: {
       date: ar ? "الأحد 19 تشرين الأول" : "Sunday 19 October",

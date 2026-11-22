@@ -733,7 +733,7 @@ export async function appointmentAlerts(
 
     const a = (
       await c.query(
-        `select a.id, a.starts_at, a.status, a.doctor_member_id,
+        `select a.id, a.starts_at, a.status, a.doctor_member_id, a.cancel_reason,
                 p.full_name as patient, s.name as service, s.name_ar as service_ar,
                 cl.slug, cl.timezone, cl.subscription_status, cl.deleted_at,
                 dm.user_id as doctor_user_id, dm.active as doctor_active, du.full_name as doctor_name
@@ -754,6 +754,8 @@ export async function appointmentAlerts(
 
     const actor = typeof payload.actorUserId === "string" ? payload.actorUserId : null;
     const source = String(payload.source ?? "");
+    // Done by the patient from their own link (0115): the alert says so, so nobody calls to ask.
+    const byPatient = payload.byPatient === true;
 
     // The previous place, for a move.
     let wasAt: string | null = null;
@@ -826,8 +828,9 @@ export async function appointmentAlerts(
         title = r.as === "doctor" ? L.bookedOwn(a.patient) : L.bookedOther(a.patient);
         body = [service, at].filter(Boolean).join(" · ") + (r.as === "team" ? withDoctor : "");
       } else if (kind === "appointment_cancelled") {
-        title = L.cancelledTitle(a.patient);
-        body = at + (r.as === "team" ? withDoctor : "");
+        title = byPatient ? L.cancelledByPatientTitle(a.patient) : L.cancelledTitle(a.patient);
+        const why = byPatient && a.cancel_reason ? L.cancelReasons[a.cancel_reason as string] : "";
+        body = at + (r.as === "team" ? withDoctor : "") + (why ? ` · ${why}` : "");
       } else if (r.as === "away") {
         title = L.awayTitle(a.patient);
         body = L.awayBody(at, newDoctorName ?? L.unassigned);
@@ -835,7 +838,7 @@ export async function appointmentAlerts(
         title = L.bookedOwn(a.patient);
         body = [service, at].filter(Boolean).join(" · ");
       } else {
-        title = L.movedTitle(a.patient);
+        title = byPatient ? L.movedByPatientTitle(a.patient) : L.movedTitle(a.patient);
         body = (wasAt ? L.movedBody(at, when(wasAt, a.timezone, loc)) : at) + (r.as === "team" ? withDoctor : "");
       }
       await notifyUser(c, r.userId, {

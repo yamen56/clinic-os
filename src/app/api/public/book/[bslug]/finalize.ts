@@ -13,6 +13,7 @@ import { applyAnswersToPatient, answersSummary, type IntakeAnswer } from "@/lib/
 import type { PublicLink } from "@/lib/booking-public";
 import { dictFor } from "@/lib/i18n/client-dict";
 import { applyVocabulary } from "@/lib/i18n/vocab";
+import { visitUrl } from "@/lib/visit-link";
 
 export type BookingPayload = {
   serviceId: string;
@@ -56,7 +57,7 @@ export async function finalizeBooking(
   phoneCheck: PhoneCheck
 ): Promise<
   | { error?: string }
-  | { appointmentId: string; startISO: string; status: string; meetingUrl: string | null }
+  | { appointmentId: string; startISO: string; status: string; meetingUrl: string | null; manageUrl: string | null }
 > {
   return withSystem(async (c) => {
     // Before the free/busy scan, so the slot this booking picks cannot be taken
@@ -234,7 +235,12 @@ export async function finalizeBooking(
     const namesIn = (lang: "ar" | "en") => all.map((s) => (lang === "en" ? s.name : s.name_ar || s.name)).join(" + ");
     const serviceName = namesIn(p.locale);
     const doctorName = data.doctors.find((d) => d.id === chosen)?.name;
-
+    /*
+      The patient's own way back to this visit (0115), in the confirmation and
+      on the "Booked" screen. None when the clinic keeps patient changes off:
+      the confirmation's line for it is then dropped, as an empty value is.
+    */
+    const manageUrl = data.clinic.patient_changes === "off" ? null : visitUrl(appointmentId, patient.id);
 
     const confirm = await systemMessage(c, {
       clinicId: data.clinic.id,
@@ -256,6 +262,7 @@ export async function finalizeBooking(
           meeting online sees no change to its confirmation at all.
         */
         "appointment.join_url": meetingUrl ?? "",
+        "appointment.manage_link": manageUrl ?? "",
       },
     });
 
@@ -312,6 +319,6 @@ export async function finalizeBooking(
       source: "booking_link",
     });
 
-    return { appointmentId, startISO: start.toUTC().toISO()!, status, meetingUrl };
+    return { appointmentId, startISO: start.toUTC().toISO()!, status, meetingUrl, manageUrl };
   });
 }

@@ -23,7 +23,8 @@ import { AppointmentNotes } from "@/components/appointment-notes";
 import { PatientPicker } from "@/components/appointments/patient-picker";
 import type { Appt, Doctor, PlannedItem, Room, Section, Service } from "./types";
 import { VisitLineView, whereOf } from "@/components/charts/dental/visit-work";
-import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock, UserPen } from "lucide-react";
+import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock, UserPen, Send, Copy, CalendarClock } from "lucide-react";
+import { sendVisitLinkAction, visitLinkAction } from "./visit-link-actions";
 import { flagAlerts } from "@/lib/medical-history";
 import { MAX_VISIT_SERVICES } from "@/lib/appointment-services";
 import { countryFromClinic } from "@/lib/phone";
@@ -72,7 +73,10 @@ export function AppointmentPanel({
   canInvoice = false,
   onBookNext,
   onLate,
+  patientChanges = "off",
 }: {
+  /** What patients may do from their own link (0115); anything but "off" offers to send it. */
+  patientChanges?: "off" | "cancel" | "cancel_move";
   /** Running late — the same sheet as the board's, for a visit opened from the Schedule. */
   onLate?: (a: Appt) => void;
   /** May raise an invoice — a finished visit offers to bill it. */
@@ -98,6 +102,8 @@ export function AppointmentPanel({
   const { toast } = useToast();
   const [pending, start] = useTransition();
   const [cancelOpen, setCancelOpen] = useState(false);
+  /** "Send change/cancel link" in flight — its own flag, so the rest of the panel stays usable. */
+  const [linkBusy, setLinkBusy] = useState(false);
 
   // form state
   const [patient, setPatient] = useState<{ id: string; name: string } | null>(null);
@@ -363,6 +369,54 @@ export function AppointmentPanel({
             : editAppt.created_by_name
               ? t.calendar.bookedBy.replace("{name}", editAppt.created_by_name)
               : "";
+  /*
+    The patient's own link (0115): offered on a visit still to come, at a clinic
+    that lets patients change visits, for a patient with a number to send it to.
+  */
+  const canSendLink =
+    !!editAppt &&
+    patientChanges !== "off" &&
+    ["pending_approval", "scheduled", "confirmed"].includes(editAppt.status) &&
+    Date.parse(editAppt.starts_at) > nowMs;
+  const sendLink = async () => {
+    if (!editAppt || linkBusy) return;
+    setLinkBusy(true);
+    try {
+      const r = await sendVisitLinkAction(slug, editAppt.id);
+      if (r.ok) toast(t.calendar.visitLinkSent.replace("{name}", editAppt.patient_name));
+      else
+        toast(
+          r.error === "wa_offline" ? t.calendar.visitLinkOffline : r.error === "no_phone" ? t.calendar.visitLinkNoPhone : t.common.genericError,
+          "error"
+        );
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+  const copyLink = async () => {
+    if (!editAppt) return;
+    const r = await visitLinkAction(slug, editAppt.id);
+    if (!r.url) {
+      toast(t.common.genericError, "error");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(r.url);
+      toast(t.calendar.visitLinkCopied);
+    } catch {
+      toast(t.common.genericError, "error");
+    }
+  };
+  /* What the patient did themselves, so nobody calls to ask. */
+  const patientLine =
+    editAppt?.status === "cancelled" && editAppt.cancelled_by === "patient"
+      ? [t.calendar.cancelledByPatient, editAppt.cancel_reason ? (t.calendar.cancelReasons as Record<string, string>)[editAppt.cancel_reason] : ""]
+          .filter(Boolean)
+          .join(" · ")
+      : (editAppt?.patient_moves ?? 0) > 0
+        ? t.calendar.movedByPatient
+        : "";
+
   const bookedLine =
     bookedBy && editAppt?.created_at
       ? `${bookedBy} · ${DateTime.fromISO(editAppt.created_at)
@@ -565,6 +619,27 @@ export function AppointmentPanel({
                   <UserPen className="h-3.5 w-3.5 shrink-0 text-ink-400" />
                   <span className="min-w-0">{bookedLine}</span>
                 </p>
+              )}
+              {patientLine && (
+                <p className="mt-1 flex items-center gap-1.5 text-[0.75rem] font-medium text-ink-700" data-panel-by-patient>
+                  <CalendarClock className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                  <span className="min-w-0">{patientLine}</span>
+                </p>
+              )}
+              {canSendLink && (
+                <div className="mt-2.5 rounded-lg border border-line bg-canvas px-3 py-2.5" data-panel-visit-link>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button size="sm" variant="outline" onClick={() => void sendLink()} loading={linkBusy} data-panel-send-link>
+                      <Send className="h-3.5 w-3.5" />
+                      {t.calendar.sendVisitLink}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => void copyLink()} data-panel-copy-link>
+                      <Copy className="h-3.5 w-3.5" />
+                      {t.calendar.copyVisitLink}
+                    </Button>
+                  </div>
+                  <p className="mt-1.5 text-[0.75rem] text-ink-500">{t.calendar.visitLinkHint}</p>
+                </div>
               )}
             </Field>
 

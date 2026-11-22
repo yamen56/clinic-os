@@ -354,3 +354,38 @@ export async function moveBookingQuestionAction(
     return {};
   });
 }
+
+/**
+ * What a patient may do with their own visit from its link (0115), and how
+ * close to it. One switch and one number, on the clinic: the link works for
+ * every visit, however it was booked, so it is not a booking link's setting.
+ */
+const patientChangesSchema = z.object({
+  mode: z.enum(["off", "cancel", "cancel_move"]),
+  cutoffHours: z.coerce.number().int().min(0).max(168),
+});
+
+export async function savePatientChangesAction(slug: string, data: unknown): Promise<{ ok?: boolean; error?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "settings.booking")) return { error: "forbidden" };
+  const parsed = patientChangesSchema.safeParse(data);
+  if (!parsed.success) return { error: "invalid" };
+  const d = parsed.data;
+  return inClinic(access, async (c) => {
+    await c.query(`update clinics set patient_changes = $2, patient_changes_cutoff_hours = $3 where id = $1`, [
+      access.clinicId,
+      d.mode,
+      d.cutoffHours,
+    ]);
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "clinic.patient_changes",
+      entity: "clinic",
+      entityId: access.clinicId,
+      detail: d,
+    });
+    return { ok: true };
+  });
+}

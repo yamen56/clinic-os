@@ -89,7 +89,8 @@ export const RECIPES: Recipe[] = [
         config: {
           // "Booked", not "confirmed": the day-before reminder is what asks them to confirm.
           message:
-            "مرحباً {{patient.first_name}} 👋\nتم حجز موعدك في {{clinic.name}}:\n📅 {{appointment.date}}\n🕐 {{appointment.time}}\n{{appointment.service}}\n📍 {{clinic.address}}\n\nإذا حاب تغيّر الموعد راسلنا هنا.",
+            // The last line is the patient's own link to change or cancel (0115), dropped while the clinic keeps that off.
+            "مرحباً {{patient.first_name}} 👋\nتم حجز موعدك في {{clinic.name}}:\n📅 {{appointment.date}}\n🕐 {{appointment.time}}\n{{appointment.service}}\n📍 {{clinic.address}}\n\nإذا حاب تغيّر الموعد راسلنا هنا.\nأو غيّره بنفسك من هنا: {{appointment.manage_link}}",
         },
       },
       /*
@@ -119,9 +120,9 @@ export const RECIPES: Recipe[] = [
     name: "Reminder the day before — reply to confirm",
     name_ar: "تذكير قبل يوم — التأكيد بالرد",
     description:
-      "Patients who are reminded and asked to confirm turn up. A day ahead — or within the hour for a booking made later than that: 1 confirms, 2 asks to change and gives reception a task to call; no answer puts 'call to confirm' on the desk's to-do list.",
+      "Patients who are reminded and asked to confirm turn up. A day ahead — or within the hour for a booking made later than that: 1 confirms; 2 sends their link to pick another time or cancel (or, where patients can't change visits online, gives reception a call to make); no answer puts 'call to confirm' on the desk's to-do list.",
     description_ar:
-      "المريض الذي يُذكَّر ويُطلب منه التأكيد يحضر. قبل الموعد بيوم — أو خلال ساعة لحجز تمّ بعد ذلك: الرد بـ1 يؤكد، و2 لطلب التغيير ويعطي الاستقبال مهمة اتصال، وعدم الرد يضع «اتصل للتأكيد» على قائمة مهام الاستقبال.",
+      "المريض الذي يُذكَّر ويُطلب منه التأكيد يحضر. قبل الموعد بيوم — أو خلال ساعة لحجز تمّ بعد ذلك: الرد بـ1 يؤكد، و2 يرسل له رابطاً ليختار وقتاً آخر أو يلغي (أو يعطي الاستقبال مهمة اتصال إن كان التغيير أونلاين غير مفعّل)، وعدم الرد يضع «اتصل للتأكيد» على قائمة مهام الاستقبال.",
     trigger_type: "before_appointment",
     trigger_config: { hours: 24 },
     sort: 3,
@@ -151,30 +152,50 @@ export const RECIPES: Recipe[] = [
               config: { message: "تم تأكيد موعدك ✅\nبانتظارك {{appointment.day}} الساعة {{appointment.time}} 🌷" },
             },
           ],
+          /*
+            "2": the patient's own link when it can help (0115) — they pick
+            another time or cancel, and nobody has to call. Otherwise (the
+            clinic keeps patient changes off, or it is too close to the visit)
+            reception gets the call to make, as before.
+          */
           "opt:1": [
-            { step_type: "flag_conversation", config: { reason: "يريد تغيير موعده" } },
-            // A job on the desk's To do, not only a flag in the inbox: somebody has to call them back.
             {
-              step_type: "create_task",
-              config: {
-                title: "اتصل بـ{{patient.name}} لتغيير موعده",
-                body: "{{appointment.date}} — {{appointment.time}}",
-                due_amount: 0,
-                due_unit: "minutes",
-                assignee: "nobody",
+              step_type: "condition",
+              config: { match: "all", rules: [{ kind: "patient_can_change" }] },
+              children: {
+                yes: [
+                  {
+                    step_type: "send_whatsapp",
+                    config: { message: "ولا يهمك 🙏\nاختر وقتاً جديداً أو ألغِ الموعد من هنا:\n{{appointment.manage_link}}" },
+                  },
+                ],
+                no: [
+                  { step_type: "flag_conversation", config: { reason: "يريد تغيير موعده" } },
+                  // A job on the desk's To do, not only a flag in the inbox: somebody has to call them back.
+                  {
+                    step_type: "create_task",
+                    config: {
+                      title: "اتصل بـ{{patient.name}} لتغيير موعده",
+                      body: "{{appointment.date}} — {{appointment.time}}",
+                      due_amount: 0,
+                      due_unit: "minutes",
+                      assignee: "nobody",
+                    },
+                  },
+                  {
+                    step_type: "notify_staff",
+                    config: {
+                      title: "{{patient.name}} يريد تغيير موعده",
+                      body: "{{appointment.date}} — {{appointment.time}}",
+                      roles: ["receptionist", "owner"],
+                    },
+                  },
+                  {
+                    step_type: "send_whatsapp",
+                    config: { message: "ولا يهمك 🙏 سيتواصل معك فريقنا قريباً لترتيب موعد جديد." },
+                  },
+                ],
               },
-            },
-            {
-              step_type: "notify_staff",
-              config: {
-                title: "{{patient.name}} يريد تغيير موعده",
-                body: "{{appointment.date}} — {{appointment.time}}",
-                roles: ["receptionist", "owner"],
-              },
-            },
-            {
-              step_type: "send_whatsapp",
-              config: { message: "ولا يهمك 🙏 سيتواصل معك فريقنا قريباً لترتيب موعد جديد." },
             },
           ],
           /*

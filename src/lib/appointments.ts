@@ -55,6 +55,13 @@ export async function applyAppointmentStatus(
     onlyFrom?: AppointmentStatus[];
     /** Carried on the event so automations reacting to it know how deep they are. */
     chainDepth?: number;
+    /**
+     * The patient did it, from their own link (migration 0115). Kept on the
+     * visit as `cancelled_by = 'patient'` with the reason they picked, and
+     * carried on the event so the alert can say so.
+     */
+    byPatient?: boolean;
+    cancelReason?: string | null;
   }
 ): Promise<
   | { ok: true; patientId: string; previousStatus: string; changed: boolean }
@@ -73,11 +80,19 @@ export async function applyAppointmentStatus(
   if (args.onlyFrom && cur.status === args.status) {
     return { ok: true, patientId: cur.patient_id, previousStatus: cur.status, changed: false };
   }
+  /*
+    Who cancelled it rides with the status, and goes when the visit is restored:
+    a desk that un-cancels a visit the patient cancelled online must not leave
+    it reading "cancelled by the patient".
+  */
+  const by = args.byPatient ? "patient" : args.actorUserId ? "staff" : "automation";
   await c.query(
     `update appointments set status = $3::text, flow_prev_status = null,
-            finished_at = case when $3::text = 'completed' then coalesce(finished_at, now()) else null end
+            finished_at = case when $3::text = 'completed' then coalesce(finished_at, now()) else null end,
+            cancelled_by = case when $3::text = 'cancelled' then $4::text else null end,
+            cancel_reason = case when $3::text = 'cancelled' then $5::text else null end
       where id = $1 and clinic_id = $2`,
-    [args.appointmentId, args.clinicId, args.status]
+    [args.appointmentId, args.clinicId, args.status, by, args.cancelReason ? args.cancelReason.slice(0, 200) : null]
   );
   if (args.status === "completed") {
     await c.query(
@@ -93,6 +108,7 @@ export async function applyAppointmentStatus(
     previousStatus: cur.status,
     actorUserId: args.actorUserId,
     ...(args.chainDepth ? { chainDepth: args.chainDepth } : {}),
+    ...(args.byPatient ? { byPatient: true } : {}),
   });
   return { ok: true, patientId: cur.patient_id, previousStatus: cur.status, changed: true };
 }

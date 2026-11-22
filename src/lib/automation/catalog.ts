@@ -217,7 +217,7 @@ export function parseTriggerConfig(key: string, raw: unknown) {
 export const RULE_KINDS = [
   "has_tag", "gender", "age_between", "patient_source", "patient_status", "custom_field",
   "has_upcoming_appointment", "visits_at_least", "first_visit",
-  "appointment_status", "appointment_service", "appointment_doctor",
+  "appointment_status", "appointment_service", "appointment_doctor", "patient_can_change",
   "replied", "reply_contains",
   "invoice_paid", "invoice_balance_above",
   "document_status",
@@ -239,6 +239,7 @@ export const RULE_NEEDS: Partial<Record<RuleKind, Ctx>> = {
   appointment_status: "appointment",
   appointment_service: "appointment",
   appointment_doctor: "appointment",
+  patient_can_change: "appointment",
   invoice_paid: "invoice",
   invoice_balance_above: "invoice",
   document_status: "document",
@@ -247,7 +248,7 @@ export const RULE_NEEDS: Partial<Record<RuleKind, Ctx>> = {
 export const RULE_GROUPS: { group: string; kinds: RuleKind[] }[] = [
   { group: "patient", kinds: ["has_tag", "gender", "age_between", "patient_status", "patient_source", "custom_field"] },
   { group: "visits", kinds: ["has_upcoming_appointment", "visits_at_least", "first_visit"] },
-  { group: "appointment", kinds: ["appointment_status", "appointment_service", "appointment_doctor"] },
+  { group: "appointment", kinds: ["appointment_status", "appointment_service", "appointment_doctor", "patient_can_change"] },
   { group: "messages", kinds: ["replied", "reply_contains"] },
   { group: "billing", kinds: ["invoice_paid", "invoice_balance_above"] },
   { group: "documents", kinds: ["document_status"] },

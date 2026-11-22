@@ -764,6 +764,55 @@ Losing the patient is worse than an unverified number.
 Branding: the booking page carries the **clinic's** logo and brand colour; the staff
 workspace keeps the platform accent so agency support isn't relearning a skin per clinic.
 
+### Changing or cancelling a booked visit (patient self-service, `0115`, 2026-11-22)
+
+Every appointment — booked online, by reception, by the AI or by an automation — has the
+patient's own link, `/v/<token>`, so a change no longer needs reception.
+
+- **The token** is the appointment id plus an HMAC (`INTERNAL_API_SECRET`) of the appointment
+  and its patient (`src/lib/visit-link.ts`). Nothing is stored: any message can print it at
+  any time, and giving the visit to another patient kills the old link. Rotating the secret
+  kills every link; the page then says to ask the booking page for a new one.
+- **The page** shows the visit in the clinic's colours with **Change the time** (the
+  booking engine's days and times: the same services, the same doctor, the visit itself left
+  out of the busy scan) and **Cancel** (an optional reason chip). A GET changes nothing —
+  WhatsApp fetches links for previews.
+- **The clinic's rules** (Settings → Online booking → *Changes by the patient*):
+  `clinics.patient_changes` = `cancel_move` · `cancel` · `off`, and
+  `patient_changes_cutoff_hours` (default 12, so every reply in the day-before reminder's
+  12-hour window still reaches the link). New clinics start on `cancel_move`; every clinic that
+  existed on 2026-11-22 started `off`. Built-in, not settings: only upcoming
+  scheduled/confirmed/pending visits; **two moves** per visit (`appointments.patient_moves`),
+  then "contact the clinic"; a visit with a service not bookable online can be cancelled but
+  not moved; times follow the visit's own booking link (else the clinic's first) for notice,
+  days ahead and grid. Inside the cutoff the page offers Call and WhatsApp.
+- **Move** (`moveVisit`, `src/lib/patient-visit.ts`): schedule lock → the slot engine →
+  the doctor checked over the visit's real length → a room (kept if free) → update, `audit`,
+  the desk's own `appointment_rescheduled` with `byPatient: true` (reminders re-arm, the
+  doctor's alert reads "Moved online by the patient"), and the `visit_moved` WhatsApp. The
+  time it left is offered to the waitlist (`worker/jobs.ts`; patient moves only — desk drags
+  are not).
+- **Cancel** (`cancelVisit`): `applyAppointmentStatus` with `byPatient` — waitlist offer,
+  doctor alert ("Cancelled online by the patient · reason"), automations — then the
+  `visit_cancelled` WhatsApp with the booking page to book again.
+  `appointments.cancelled_by` (`patient` · `staff` · `automation`) and `cancel_reason` ride
+  with the status and are cleared when a visit is restored; the panel says "Cancelled by the
+  patient online · reason" or "Moved by the patient online".
+- **Where the link goes out**: the `booking_confirmed` / `booking_pending` system messages
+  (`{{appointment.manage_link}}`, a line dropped when empty); the booking page's "Booked"
+  screen; reception's **Send change/cancel link** and **Copy link** on the appointment panel
+  (`visit_link` system message, always on); **"Already booked? Change or cancel"** on the
+  booking page, which sends the links of the number's next three visits to its WhatsApp and
+  answers the same whether it has any (`/api/public/book/{slug}/find`); and the reminders.
+  `{{appointment.manage_link}}` is an automation variable, and **"They can change it online"**
+  (`patient_can_change`) a condition. The day-before reminders (`reminder_24h`,
+  `psych_discreet_reminder`) branch on it after "2"; 0115 rewired each clinic's copy whose
+  "2" branch was still the template's, and appended the link line to the stock wording of the
+  older one-message reminder and of `confirm_on_booking`. With the feature off all of these
+  behave exactly as before.
+- Rate limits: move 10/10 min per caller and 6 per link, cancel 10 per caller, find 5 per
+  caller per link and 2 per number (`rateLimitShared`). QA: `scripts/qa-visit-link.ts`.
+
 ---
 
 ## 10. WhatsApp inbox & messaging
@@ -1277,7 +1326,8 @@ one flow keep their order (`created_at = clock_timestamp()`; they shared one tim
 out either way round).
 
 Notable general templates: a day-before reminder where "1" confirms the appointment and "2"
-gives reception a call to make; the doctor's follow-up, booked by a reply; a post-visit 1–5
+sends the patient their own change/cancel link (§9, *Changing or cancelling a booked visit*) — or,
+where the clinic keeps that off or it is inside the cutoff, gives reception a call to make; the doctor's follow-up, booked by a reply; a post-visit 1–5
 rating that sends happy patients to Google and unhappy ones to the owner; no-show and
 cancellation rebooking by a reply, skipped if they have already rebooked; results ready, booked
 by a reply; a check-in three days after a
@@ -1345,6 +1395,8 @@ files that a clinic could read nowhere and change nowhere.
 |---|---|---|
 | Booking | `booking_confirmed` · `booking_pending` | yes |
 | Booking | `booking_otp` | **no** |
+| Booking | `visit_moved` · `visit_cancelled` (the patient changed their own visit, 0115) | yes |
+| Booking | `visit_link` (reception's "Send change/cancel link", the booking page's "Already booked?") | **no** |
 | Waitlist | `waitlist_offer` | yes |
 | Documents | `document_reminder` · `document_signed_copy` | yes |
 | Documents | `document_sign_request` · `document_bundle` · `signing_otp` | **no** |
