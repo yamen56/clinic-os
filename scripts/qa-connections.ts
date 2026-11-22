@@ -268,10 +268,10 @@ async function main() {
     check("the row opens the file", doc.url().includes(`/patients/${patient}`));
 
     await doc.goto(`${base}/calendar`);
-    await doc.waitForSelector(`[data-flow-card="${waiting}"] [data-flow-file]`, { timeout: 90_000 });
-    await doc.click(`[data-flow-card="${waiting}"] [data-flow-file]`);
-    await doc.waitForURL(`**/patients/${patient}`, { timeout: 30_000 });
-    check("on the board, a doctor's tap on the patient opens the file", doc.url().includes(`/patients/${patient}`));
+    // Since 2026-11-22 a tap on the card opens the visit for a doctor too; the file is in the card's menu.
+    await doc.waitForSelector(`[data-flow-card="${waiting}"] [data-flow-open]`, { timeout: 90_000 });
+    await doc.click(`[data-flow-card="${waiting}"] [data-flow-open]`);
+    check("on the board, a doctor's tap on the patient opens the visit", await doc.waitForSelector("[data-panel-flow]", { timeout: 30_000 }).then(() => true, () => false));
 
     /* ============================================================ 1b: one truth */
     console.log("\n[unpaid means the same everywhere]");

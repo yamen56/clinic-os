@@ -105,7 +105,11 @@ export default async function CalendarPage({
         [access.clinicId]
       )
     ).rows[0].n as number;
-    return { initialPatient, initialPlan, initialOpen, waitlist };
+    // The booking links, for the header's "Booking link" (2026-11-22): the clinic's main one first.
+    const bookingLinks = (
+      await c.query(`select name, slug from booking_links where clinic_id = $1 and active order by created_at`, [access.clinicId])
+    ).rows as { name: string; slug: string }[];
+    return { initialPatient, initialPlan, initialOpen, waitlist, bookingLinks };
   });
 
   /*
@@ -140,6 +144,8 @@ export default async function CalendarPage({
       unconfirmedOnly={sp.show === "unconfirmed"}
       initialDate={/^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date : null}
       initialWaitlist={data.waitlist}
+      bookingLinks={data.bookingLinks}
+      canManageBooking={can(access, "settings.booking")}
       caps={{
         patients: can(access, "patients"),
         invoices: can(access, "invoices"),

@@ -8,8 +8,8 @@ import type { Appt, Room } from "../types";
 import { DoorOpen, DoorClosed } from "lucide-react";
 
 /**
- * Every room at a glance: free, or who is in it, with whom, for how long —
- * red once the visit has run past its time — and who is booked in next.
+ * Every room at a glance: free, or who is in it, with whom, for how long, and
+ * who is booked in next.
  *
  * A clinic without rooms sees a line saying what rooms would give it, linked
  * to where they are set up, rather than an empty strip.
@@ -58,16 +58,18 @@ export function RoomsStrip({
               Date.parse(a.ends_at) > nowMs
           )
           .sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
-        const over = inside ? nowMs - Date.parse(inside.ends_at) > 60_000 : false;
         const name = (locale === "ar" && r.name_ar) || r.name;
+        /*
+          No red once the visit runs past its booked time (Yamen, 2026-11-22:
+          "no need for it"): the tile says how long they have been in, and
+          that is all the desk needs to know.
+        */
         return (
           <div
             key={r.id}
             data-room-tile={r.name}
             data-room-busy={inside ? "1" : "0"}
-            className={`relative min-w-[11rem] flex-1 overflow-hidden rounded-card border bg-surface px-3 py-2.5 shadow-card ${
-              over ? "border-danger/40" : "border-line"
-            }`}
+            className="relative min-w-[11rem] flex-1 overflow-hidden rounded-card border border-line bg-surface px-3 py-2.5 shadow-card"
           >
             <div className="flex items-center gap-2">
               {inside ? (
@@ -78,14 +80,10 @@ export function RoomsStrip({
               <span className="truncate text-[0.8125rem] font-semibold text-ink-900">{name}</span>
               <span
                 className={`ms-auto shrink-0 rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold ${
-                  inside ? (over ? "bg-danger-soft text-danger" : "bg-sunken text-ink-700") : "bg-st-confirmed-soft text-st-confirmed"
+                  inside ? "bg-sunken text-ink-700" : "bg-st-confirmed-soft text-st-confirmed"
                 }`}
               >
-                {inside
-                  ? over
-                    ? t.flow.overBy.replace("{n}", String(Math.floor((nowMs - Date.parse(inside.ends_at)) / 60_000)))
-                    : t.flow.inFor.replace("{n}", String(minutesBetween(inside.seated_at!, nowMs)))
-                  : t.flow.roomFree}
+                {inside ? t.flow.inFor.replace("{n}", String(minutesBetween(inside.seated_at!, nowMs))) : t.flow.roomFree}
               </span>
             </div>
             {inside ? (

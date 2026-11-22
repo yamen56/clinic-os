@@ -428,7 +428,10 @@ export function AppointmentPanel({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-ink-900/20 animate-fade-in md:bg-transparent" onClick={onClose} />
-      <aside className="fixed inset-y-0 end-0 z-50 flex w-full max-w-md flex-col border-s border-line bg-surface shadow-pop animate-fade-up md:animate-fade-in">
+      <aside
+        className="fixed inset-y-0 end-0 z-50 flex w-full max-w-md flex-col border-s border-line bg-surface shadow-pop animate-fade-up md:animate-fade-in"
+        data-appointment-panel={editAppt?.id ?? "new"}
+      >
         <header className="flex items-center justify-between gap-2 border-b border-line px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
           <h2 className="text-[0.9375rem] font-semibold">
             {state.mode === "create" ? t.calendar.newAppointment : t.calendar.editAppointment}

@@ -16,7 +16,8 @@ import { TimeGrid, type GridColumn, type MoveChange } from "./time-grid";
 import { MonthGrid } from "./month-grid";
 import { AgendaList } from "./agenda-list";
 import { UNCONFIRMED, type Appt, type CalendarData, type ScheduleState, type ScheduleView as View } from "../types";
-import { ChevronLeft, ChevronRight, DoorOpen } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, DoorOpen } from "lucide-react";
+import { DatePickButton } from "@/components/ui/date-pick-button";
 
 /**
  * The Schedule tab: the clinic's diary by day, week or month, or — the phone's
@@ -210,7 +211,18 @@ export function ScheduleView({
             {t.common.today}
           </Button>
         </div>
-        <h2 className="min-w-40 font-display text-[0.9375rem] font-semibold tnum">{title}</h2>
+        {/*
+          The date is the way to any other day (2026-11-22): tapping it opens
+          the device's own date picker, and the view stays what it was — a day,
+          the week round it, or its month.
+        */}
+        <DatePickButton value={anchor} onPick={(d) => setState({ anchor: d })} label={t.calendar.goToDate} className="min-w-40">
+          <h2 className="pointer-events-none inline-flex items-center gap-1.5 rounded-ctl px-1.5 py-1 font-display text-[0.9375rem] font-semibold tnum hover:bg-sunken" data-schedule-date>
+            <CalendarDays className="h-4 w-4 shrink-0 text-ink-400" />
+            {title}
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+          </h2>
+        </DatePickButton>
         {/*
           On a phone the controls are one row that scrolls sideways. Wrapped,
           they stacked four rows deep above a calendar that is sized to the

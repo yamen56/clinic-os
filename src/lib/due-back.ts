@@ -7,7 +7,7 @@ import type { PoolClient } from "pg";
  * Read from the visit with the hand-off, newest per patient, and dropped as
  * soon as any later visit is booked for them — a visit they came to, or one
  * still to come. A no-show or a cancellation does not count: they are due
- * again. Due now, overdue, or within the coming week, the most overdue first,
+ * again. Due now, overdue, or within the coming month (0116: it was a week, so the desk could not plan calls ahead), the most overdue first,
  * so reception calls the ones who have waited longest.
  *
  * This is the recall list the clinic never had to build by hand: the doctor
@@ -38,6 +38,7 @@ const DUE_SQL = `
     select distinct on (a.patient_id)
            a.id, a.patient_id, a.starts_at, a.finished_at, a.next_visit_days, a.next_visit_min,
            coalesce(a.next_visit_member_id, a.doctor_member_id) as doctor_id, a.service_id, a.desk_note,
+           a.next_visit_dismissed_at,
            coalesce(a.finished_at, a.starts_at) + make_interval(days => a.next_visit_days) as due_at
       from appointments a
      where a.clinic_id = $1 and a.status = 'completed' and a.next_visit_days is not null
@@ -50,12 +51,31 @@ const DUE_SQL = `
     left join users u on u.id = m.user_id
     left join services s on s.id = l.service_id
    where l.due_at < now() + make_interval(days => $2)
+     and l.next_visit_dismissed_at is null
      and not exists (
        select 1 from appointments b
         where b.clinic_id = $1 and b.patient_id = l.patient_id and b.starts_at > l.starts_at
           and b.status not in ('cancelled', 'no_show'))`;
 
-export async function dueBackList(c: PoolClient, clinicId: string, aheadDays = 7, limit = 100): Promise<DueBack[]> {
+/** A patient the desk took off the list stays off (0116) until somebody presses Undo. */
+export async function dismissDueBack(
+  c: PoolClient,
+  clinicId: string,
+  appointmentId: string,
+  userId: string,
+  undo = false
+): Promise<boolean> {
+  const r = await c.query(
+    `update appointments
+        set next_visit_dismissed_at = case when $4 then null else now() end,
+            next_visit_dismissed_by = case when $4 then null else $3::uuid end
+      where id = $1 and clinic_id = $2 and next_visit_days is not null`,
+    [appointmentId, clinicId, userId, undo]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function dueBackList(c: PoolClient, clinicId: string, aheadDays = 30, limit = 200): Promise<DueBack[]> {
   const r = await c.query(`${DUE_SQL} order by l.due_at limit $3`, [clinicId, aheadDays, limit]);
   const now = Date.now();
   return r.rows.map((x) => ({

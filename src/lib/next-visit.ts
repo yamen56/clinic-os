@@ -30,6 +30,22 @@ export function nextVisitOf(
 }
 
 /**
+ * A suggested start that has already gone, moved to the next time the same
+ * hour comes round: today if it is still ahead, otherwise tomorrow. Due back's
+ * overdue patients used to open the booking on the day they were due — a day
+ * in the past, for the desk to notice and change.
+ */
+export function notInThePast(startISO: string | undefined, tz: string, nowMs = Date.now()): string | undefined {
+  if (!startISO) return startISO;
+  const start = DateTime.fromISO(startISO).setZone(tz);
+  const now = DateTime.fromMillis(nowMs).setZone(tz);
+  if (start > now) return startISO;
+  let day = now.set({ hour: start.hour, minute: start.minute, second: 0, millisecond: 0 });
+  if (day <= now) day = day.plus({ days: 1 });
+  return day.toISO() ?? undefined;
+}
+
+/**
  * The calendar's booking, opened for the next visit a finished one asked for —
  * for the screens that have no booking panel of their own (the dashboard's
  * Today list, the visit banner on a patient's file).

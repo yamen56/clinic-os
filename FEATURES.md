@@ -510,8 +510,20 @@ confirmation or consent form to somebody already in the waiting room.
   (collapsed). Phone: one column at a time behind a switcher with counts. Tablet: two
   by two, the waiting room and the doctor on top. Desk: four side by side.
 - Summary: expected, waiting (average wait), in rooms x/y, finished, didn't come, late.
-- Rooms strip: free, or who is in each room, with whom, for how long (red once over
-  its time), and who is next.
+- Rooms strip: free, or who is in each room, with whom, for how long, and who is next.
+  A visit running past its booked end is **not** marked (2026-11-22: the red border and
+  "N min over" went, on the tile and the card): the card says "N min in", in ink.
+- **A tap anywhere on a card opens the visit** (2026-11-22) — the appointment panel, for
+  doctors too (they used to be sent to the patient file, which is now in the card's menu
+  and on the panel). The card's own buttons, links and menus keep their jobs; a click
+  from a sheet the card opened (portalled) is ignored, and a drag's drop is swallowed.
+- **Pick a day** on the board opens the device's date picker, then the Schedule on that
+  day (its list on a phone, the day's columns elsewhere). On the Schedule the date in the
+  toolbar is the same picker (`components/ui/date-pick-button.tsx`: an invisible native
+  `<input type="date">` over the label, `showPicker()` on a click).
+- **Booking link** in the Appointments header, on every tab and on phones
+  (`calendar/booking-link-menu.tsx`): each active link's Copy, Share (the phone's share
+  sheet, into WhatsApp) and Open, and Manage booking links for whoever may.
 - One action per card: **Arrived → Call in ▾** (the room menu names who is in an
   occupied room) **→ Finish**. More: Didn't come, Undo, open, patient file, WhatsApp,
   call, create invoice, book next visit.
@@ -565,6 +577,21 @@ scan.
 ---
 
 ## 7. Waitlist
+
+### Due back (above the waitlist)
+
+The patients whose doctor set "Come back in…" on Finish (`next_visit_days`, 0088) and
+who have nothing booked since (`src/lib/due-back.ts`). A call list since 2026-11-22:
+
+- **Overdue and due now first** (most overdue first), then **Coming up in the next 30
+  days** under its own heading (it was a week, so calls could not be planned).
+- Each row: the number, **Call** (`tel:`), **WhatsApp** (the thread), **Book** — the
+  doctor and service, on the day asked for or, once that has gone, the next time the
+  same hour comes round (`notInThePast`, `lib/next-visit.ts`; it used to open on the
+  overdue day itself) — and **✕** to take them off (`next_visit_dismissed_at` / `_by`,
+  0116; Undo clears it; the doctor's hand-off is left as written).
+- Always drawn: empty, it says how patients get onto it. The Waitlist tab's badge counts
+  the waitlist plus who is due now. Booking anything later takes a patient off, live.
 
 *"A cancellation is a slot the clinic already sold. The waitlist is how it gets sold twice."*
 

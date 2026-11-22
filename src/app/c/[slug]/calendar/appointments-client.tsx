@@ -12,7 +12,8 @@ import { setFlowAction, type FlowStep, type Handoff } from "./flow-actions";
 import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
 import { RunningLateSheet } from "@/components/appointments/running-late-sheet";
 import { markLateAction } from "./late-actions";
-import { nextVisitOf } from "@/lib/next-visit";
+import { nextVisitOf, notInThePast } from "@/lib/next-visit";
+import { BookingLinkMenu } from "./booking-link-menu";
 import { DueBackList } from "./waitlist/due-back";
 import { TreatmentsList } from "./waitlist/treatments";
 import { FlowBoard } from "./flow/flow-board";
@@ -60,7 +61,13 @@ export function AppointmentsClient({
   initialDoctorId = null,
   initialServiceId = null,
   initialStart = null,
+  bookingLinks = [],
+  canManageBooking = false,
 }: {
+  /** The clinic's active booking links, for the header's "Booking link". */
+  bookingLinks?: { name: string; slug: string }[];
+  /** May edit them in Settings → Online booking. */
+  canManageBooking?: boolean;
   /** With initialPatient: the doctor and service a booking starts with. */
   initialDoctorId?: string | null;
   initialServiceId?: string | null;
@@ -132,6 +139,18 @@ export function AppointmentsClient({
   const [version, setVersion] = useState(0);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [waitlistCount, setWaitlistCount] = useState(initialWaitlist);
+  /* Due back's patients due now or overdue — on the tab's badge with the waitlist, once the tab has read them. */
+  const [dueCount, setDueCount] = useState(0);
+
+  /*
+    A day picked from Today (2026-11-22: "choose a certain day so I can see
+    what appointments it has"): the Schedule on that day — its list on a
+    phone, the day's columns elsewhere.
+  */
+  const openDay = (dateISO: string) => {
+    setSchedule((s) => ({ ...s, anchor: dateISO, view: initialView === "list" ? "list" : "day" }));
+    setTab("schedule");
+  };
 
   /* The board's clock, set from the server's so a fast laptop does not make everyone late. */
   const offset = useRef(0);
@@ -348,7 +367,7 @@ export function AppointmentsClient({
       ? [{ key: "today" as const, label: t.calendar.tabs.today, short: t.calendar.tabs.todayShort, icon: <Armchair className="h-4 w-4" />, count: waitingCount }]
       : []),
     { key: "schedule", label: t.calendar.tabs.schedule, short: t.calendar.tabs.scheduleShort, icon: <CalendarDays className="h-4 w-4" /> },
-    { key: "waitlist", label: t.nav.waitlist, short: t.calendar.tabs.waitlistShort, icon: <Hourglass className="h-4 w-4" />, count: waitlistCount },
+    { key: "waitlist", label: t.nav.waitlist, short: t.calendar.tabs.waitlistShort, icon: <Hourglass className="h-4 w-4" />, count: waitlistCount + dueCount },
   ];
 
   const newAppointment = () => setPanel({ mode: "create", doctorId: isDoctor ? selfMemberId ?? undefined : undefined });
@@ -381,14 +400,16 @@ export function AppointmentsClient({
             </button>
           ))}
         </div>
-        <div className="mb-1.5 hidden shrink-0 items-center gap-2 sm:flex">
+        <div className="mb-1 flex shrink-0 items-center gap-2 sm:mb-1.5">
+          {/* The online booking link, a tap away on every tab and every screen (2026-11-22). */}
+          <BookingLinkMenu slug={slug} links={bookingLinks} canManage={canManageBooking} />
           {showBoard && tab === "today" && (
-            <Button variant="outline" size="sm" onClick={() => setWalkIn(true)} aria-label={t.calendar.walkIn} title={t.calendar.walkIn}>
+            <Button variant="outline" size="sm" className="max-sm:hidden" onClick={() => setWalkIn(true)} aria-label={t.calendar.walkIn} title={t.calendar.walkIn}>
               <Footprints className="h-4 w-4" />
               <span className="max-lg:hidden">{t.calendar.walkIn}</span>
             </Button>
           )}
-          <Button size="sm" onClick={newAppointment}>
+          <Button size="sm" className="max-sm:hidden" onClick={newAppointment}>
             <Plus className="h-4 w-4" />
             {t.calendar.newAppointment}
           </Button>
@@ -434,6 +455,7 @@ export function AppointmentsClient({
             onOpen={(a) => setPanel({ mode: "edit", appt: a })}
             onBookNext={(a) => bookFrom({ id: a.patient_id, name: a.patient_name }, nextVisitOf(a, tz))}
             onLate={setLate}
+            onPickDay={openDay}
           />
         </div>
       )}
@@ -471,12 +493,16 @@ export function AppointmentsClient({
               slug={slug}
               tz={tz}
               canMessage={caps.patients && caps.conversations}
-              onBook={(d) =>
-                bookFrom(
-                  { id: d.patientId, name: d.patientName },
-                  nextVisitOf({ starts_at: d.startsAt, finished_at: d.finishedAt, doctor_member_id: d.doctorId, service_id: d.serviceId, next_visit_days: d.nextVisitDays }, tz)
-                )
-              }
+              canOpenPatient={caps.patients}
+              onCount={setDueCount}
+              onBook={(d) => {
+                // The day the doctor asked for, or — once that has gone — the next time that hour comes round.
+                const n = nextVisitOf(
+                  { starts_at: d.startsAt, finished_at: d.finishedAt, doctor_member_id: d.doctorId, service_id: d.serviceId, next_visit_days: d.nextVisitDays },
+                  tz
+                );
+                bookFrom({ id: d.patientId, name: d.patientName }, { ...n, start: notInThePast(n.start, tz, nowMs) });
+              }}
             />
           )}
           <WaitlistTab

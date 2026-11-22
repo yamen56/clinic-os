@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { DateTime } from "luxon";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtMoney } from "@/lib/dates";
@@ -59,13 +58,10 @@ export function FlowCard({
   onOpen,
   onBookNext,
   onLate,
-  nameOpensFile = false,
 }: {
   slug: string;
   /** Reception notes the patient is running late, and may tell the next ones (2026-11-02). */
   onLate?: () => void;
-  /** Tapping the patient opens their file rather than the visit — a doctor's board. */
-  nameOpensFile?: boolean;
   appt: Appt;
   stage: FlowStage;
   nowMs: number;
@@ -93,24 +89,25 @@ export function FlowCard({
   const roomName = (r: Room) => (locale === "ar" && r.name_ar) || r.name;
 
   /* The clock that matters at this stage. */
-  let timer: { text: string; tone: "late" | "waiting" | "in_room" | "over" } | null = null;
+  let timer: { text: string; tone: "late" | "waiting" | "in_room" } | null = null;
   if (stage === "late") timer = { text: t.flow.lateBy.replace("{n}", String(minutesBetween(appt.starts_at, nowMs))), tone: "late" };
   else if (stage === "waiting" && appt.arrived_at) {
     const n = minutesBetween(appt.arrived_at, nowMs);
     timer = { text: t.flow.waitingFor.replace("{n}", String(n)), tone: n >= 20 ? "late" : "waiting" };
   } else if (stage === "in_room" && appt.seated_at) {
-    const over = nowMs - Date.parse(appt.ends_at);
-    timer =
-      over > 60_000
-        ? { text: t.flow.overBy.replace("{n}", String(Math.floor(over / 60_000))), tone: "over" }
-        : { text: t.flow.inFor.replace("{n}", String(minutesBetween(appt.seated_at, nowMs))), tone: "in_room" };
+    /*
+      How long they have been in, and nothing more. It used to turn red and
+      say "N min over" once the booked time had passed (Yamen, 2026-11-22: "no
+      need for it"): the doctor is with the patient and knows, and a visit
+      that runs long is the work, not a fault.
+    */
+    timer = { text: t.flow.inFor.replace("{n}", String(minutesBetween(appt.seated_at, nowMs))), tone: "in_room" };
   }
-  /* Ink while all is well; orange or red only when the clock is a problem. */
+  /* Ink while all is well; orange only when somebody is late or has waited long. */
   const toneClass = {
     late: "bg-st-late-soft text-st-late",
     waiting: "bg-sunken text-ink-700",
     in_room: "bg-sunken text-ink-700",
-    over: "bg-danger-soft text-danger",
   };
 
   const tags: { key: string; text: string; status: "brand" | "pending" | "neutral" | "waiting" | "danger" }[] = [];
@@ -140,38 +137,42 @@ export function FlowCard({
   /* One colour for the one next step, whatever it is; the label and icon say which. */
   const primary = "inline-flex h-9 touch-manipulation items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-[0.8125rem] font-semibold text-on-brand shadow-card transition-opacity hover:bg-brand-hover active:opacity-80 disabled:opacity-60";
 
+  /*
+    A tap anywhere on the card opens the visit (Yamen, 2026-11-22: "click on
+    the appointment then it gives me the details") — for doctors too, who
+    used to be sent to the patient's file instead; the file is in the menu
+    and on the visit. Only the card's own buttons, links and menus keep their
+    jobs. A drag that ends on the card is swallowed by the board's drag, so
+    dropping a card never opens it.
+  */
+  const openFromCard = (ev: React.MouseEvent<HTMLDivElement>) => {
+    const el = ev.target as HTMLElement;
+    // A sheet or a menu the card opened is portalled out of it, but its clicks still bubble here through React.
+    if (!ev.currentTarget.contains(el)) return;
+    if (el.closest("button, a, input, select, textarea, [role='menu'], [role='menuitem'], [data-no-open]")) return;
+    onOpen();
+  };
+
   return (
     <div
       data-flow-card={appt.id}
       data-stage={stage}
-      className={`rounded-xl border bg-surface p-3 shadow-card transition-colors ${
+      onClick={openFromCard}
+      className={`cursor-pointer rounded-xl border bg-surface p-3 shadow-card transition-colors hover:border-line-strong ${
         stage === "late" ? "border-st-late/40" : "border-line"
       } ${busy ? "opacity-70" : ""}`}
     >
       <div className="flex items-start gap-2">
-        {(() => {
-          const who = (
-            <>
-              <div className="flex items-baseline gap-1.5 text-[0.75rem] text-ink-500">
-                <span className="text-[0.8125rem] font-bold text-ink-900 tnum">{s.toFormat("H:mm")}</span>
-                <span className="tnum">– {e.toFormat("H:mm")}</span>
-              </div>
-              <div className={`mt-0.5 truncate text-[0.9375rem] font-semibold leading-snug ${stage === "no_show" ? "text-ink-400 line-through" : "text-ink-900"}`}>
-                {appt.patient_name}
-              </div>
-            </>
-          );
-          /* A doctor tapping a patient wants the patient: the file. The visit stays in the menu. */
-          return nameOpensFile ? (
-            <Link href={`/c/${slug}/patients/${appt.patient_id}`} className="min-w-0 flex-1 text-start" data-flow-file>
-              {who}
-            </Link>
-          ) : (
-            <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-start">
-              {who}
-            </button>
-          );
-        })()}
+        {/* The time and the name are a button too, for the keyboard and the screen reader. */}
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-start" data-flow-open>
+          <div className="flex items-baseline gap-1.5 text-[0.75rem] text-ink-500">
+            <span className="text-[0.8125rem] font-bold text-ink-900 tnum">{s.toFormat("H:mm")}</span>
+            <span className="tnum">– {e.toFormat("H:mm")}</span>
+          </div>
+          <div className={`mt-0.5 truncate text-[0.9375rem] font-semibold leading-snug ${stage === "no_show" ? "text-ink-400 line-through" : "text-ink-900"}`}>
+            {appt.patient_name}
+          </div>
+        </button>
         {timer && (
           <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold tnum ${toneClass[timer.tone]}`}>
             <Clock className="h-3 w-3" />

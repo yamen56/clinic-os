@@ -11,7 +11,8 @@ import type { Appt, CalendarData, PageCaps } from "../types";
 import { FlowCard } from "./flow-card";
 import { RoomsStrip } from "./rooms-strip";
 import { useBoardDrag } from "./use-board-drag";
-import { CalendarCheck, ChevronDown, CalendarClock, Armchair, DoorOpen, CheckCheck, UserX, Clock } from "lucide-react";
+import { CalendarCheck, ChevronDown, CalendarClock, Armchair, DoorOpen, CheckCheck, UserX, Clock, CalendarSearch } from "lucide-react";
+import { DatePickButton } from "@/components/ui/date-pick-button";
 
 type Column = "coming" | "waiting" | "in_room" | "finished";
 const COLUMNS: Column[] = ["coming", "waiting", "in_room", "finished"];
@@ -53,7 +54,8 @@ function stepFor(a: Appt, from: Column, to: Column): FlowStep | null {
 /*
   Each stage is named and drawn, never colour-coded: a row of coloured dots
   was a legend nobody had been given. Colour is kept for what needs
-  somebody's attention — late, a long wait, a visit over its time.
+  somebody's attention — late, or a long wait. A visit running past its
+  time is not one (2026-11-22): the doctor knows, and red said nothing new.
 */
 const iconOf: Record<Column, typeof Clock> = {
   coming: CalendarClock,
@@ -89,7 +91,10 @@ export function FlowBoard({
   onOpen,
   onBookNext,
   onLate,
+  onPickDay,
 }: {
+  /** Another day's appointments, picked from the board's date button — opens the Schedule on it. */
+  onPickDay?: (dateISO: string) => void;
   slug: string;
   tz: string;
   data: CalendarData | null;
@@ -203,25 +208,38 @@ export function FlowBoard({
         chips; a doctor's own is Mine, first after Everyone, rather than their
         name among the others.
       */}
-      {doctors.length > 1 || (isDoctor && selfMemberId) ? (
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
-          <button type="button" aria-pressed={!doctorFilter} className={chip(!doctorFilter)} onClick={() => setDoctorFilter("")}>
-            {t.calendar.everyone}
-          </button>
-          {isDoctor && selfMemberId && (
-            <button type="button" aria-pressed={doctorFilter === selfMemberId} className={chip(doctorFilter === selfMemberId)} onClick={() => setDoctorFilter(selfMemberId)}>
-              {t.calendar.mine}
+      <div className="flex items-center gap-2">
+        {doctors.length > 1 || (isDoctor && selfMemberId) ? (
+          <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+            <button type="button" aria-pressed={!doctorFilter} className={chip(!doctorFilter)} onClick={() => setDoctorFilter("")}>
+              {t.calendar.everyone}
             </button>
-          )}
-          {doctors
-            .filter((d) => !(isDoctor && d.id === selfMemberId))
-            .map((d) => (
-              <button key={d.id} type="button" aria-pressed={doctorFilter === d.id} className={chip(doctorFilter === d.id)} onClick={() => setDoctorFilter(d.id)}>
-                {d.name}
+            {isDoctor && selfMemberId && (
+              <button type="button" aria-pressed={doctorFilter === selfMemberId} className={chip(doctorFilter === selfMemberId)} onClick={() => setDoctorFilter(selfMemberId)}>
+                {t.calendar.mine}
               </button>
-            ))}
-        </div>
-      ) : null}
+            )}
+            {doctors
+              .filter((d) => !(isDoctor && d.id === selfMemberId))
+              .map((d) => (
+                <button key={d.id} type="button" aria-pressed={doctorFilter === d.id} className={chip(doctorFilter === d.id)} onClick={() => setDoctorFilter(d.id)}>
+                  {d.name}
+                </button>
+              ))}
+          </div>
+        ) : (
+          <span className="flex-1" />
+        )}
+        {/* Another day: the device's own date picker, then that day's appointments on the Schedule. */}
+        {onPickDay && (
+          <DatePickButton value={DateTime.fromMillis(nowMs).setZone(tz).toISODate()!} onPick={onPickDay} label={t.flow.pickDay} className="shrink-0">
+            <span className={`${chip(false)} pointer-events-none`} data-flow-pick-day>
+              <CalendarSearch className="h-4 w-4" />
+              {t.flow.pickDay}
+            </span>
+          </DatePickButton>
+        )}
+      </div>
 
       {/* The day in six numbers. */}
       <div className="grid grid-cols-3 gap-2 lg:grid-cols-6" data-flow-summary>
@@ -316,7 +334,6 @@ export function FlowBoard({
                         onOpen={() => onOpen(a)}
                         onBookNext={() => onBookNext(a)}
                         onLate={() => onLate(a)}
-                        nameOpensFile={isDoctor && caps.patients}
                       />
                       </div>
                     ))
@@ -357,7 +374,6 @@ export function FlowBoard({
                       onStep={(step, roomId) => onStep(a, step, roomId)}
                       onOpen={() => onOpen(a)}
                       onBookNext={() => onBookNext(a)}
-                      nameOpensFile={isDoctor && caps.patients}
                     />
                   ))}
                 </div>
