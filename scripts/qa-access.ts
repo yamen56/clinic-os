@@ -82,6 +82,8 @@ const IDENTITY_AUTHORISED = [
   "saveMySignatureAction",
   "setKioskPinAction",
   "verifyKioskUnlockAction",
+  // The member's own "sign for me automatically": writes only their own member row, never while impersonated.
+  "setMyAutoSignAction",
   "saveNotificationPrefsAction",
   "deleteMyAccountAction",
   "updateMyNameAction",

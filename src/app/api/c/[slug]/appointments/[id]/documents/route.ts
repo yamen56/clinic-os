@@ -74,6 +74,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       signerConfig: template.signer_config ?? {},
       patient: patient ?? null,
       appointmentId: id,
+      creatorUserId: access.session.user.id,
     });
 
     const documentId = await createDocument(c, {
@@ -85,7 +86,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       language,
       source: template.source,
       sourcePdfPath: template.source_pdf_path,
-      signingMode: (template.signer_config?.mode ?? "sequential") as "sequential" | "parallel",
+      signingMode: "parallel",
       appointmentId: id,
       serviceId: appt.service_id,
       signers,

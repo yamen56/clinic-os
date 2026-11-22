@@ -18,13 +18,14 @@ import { countryFromClinic } from "@/lib/phone";
 import { useToast } from "@/components/ui/toast";
 import { DocumentBody } from "@/components/esign/document-body";
 import { SignaturePad, type SignaturePadHandle } from "@/components/esign/signature-pad";
-import { DOC_STATUS_BADGE, SIGNER_STATUS_BADGE } from "@/components/esign/status";
+import { DOC_STATUS_BADGE } from "@/components/esign/status";
 import { DownloadSignedPdf } from "@/components/esign/download-signed";
+import { Menu, MenuItem } from "@/components/ui/menu";
+import { buttonClass } from "@/components/ui/button-class";
+import { SignersPanel, type StaffOption } from "./signers-panel";
 import {
   clearFieldValueAction,
-  copyLinkAction,
   declineAsStaffAction,
-  revokeLinkAction,
   sendDocumentAction,
   setFieldValueAction,
   setSignersAction,
@@ -46,12 +47,10 @@ import {
   Plus,
   Trash2,
   PenTool,
-  Copy,
   Check,
-  Clock,
   FileWarning,
   FileUp,
-  Users,
+  MoreHorizontal,
 } from "lucide-react";
 
 type Signer = {
@@ -72,6 +71,7 @@ type Signer = {
   signed_at: string | null;
   decline_reason: string | null;
   signed_in_person: boolean;
+  signed_automatically?: boolean;
 };
 
 type Detail = {
@@ -146,6 +146,7 @@ export function DocumentDetailClient({
   canVoid,
   userId,
   hasSavedSignature,
+  staff,
   autoOpenSignerId,
   detail,
 }: {
@@ -155,6 +156,7 @@ export function DocumentDetailClient({
   canVoid: boolean;
   userId: string;
   hasSavedSignature: boolean;
+  staff: StaffOption[];
   autoOpenSignerId: string | null;
   detail: Detail;
 }) {
@@ -164,7 +166,7 @@ export function DocumentDetailClient({
   const [pending, start] = useTransition();
   const { doc } = detail;
 
-  const [tab, setTab] = useState<"document" | "signers" | "values" | "audit">("document");
+  const [tab, setTab] = useState<"document" | "values" | "audit">("document");
   const [overrideKey, setOverrideKey] = useState<string | null>(null);
   const [overrideValue, setOverrideValue] = useState("");
   const [oneOff, setOneOff] = useState<{ label: string; value: string } | null>(null);
@@ -175,7 +177,6 @@ export function DocumentDetailClient({
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [sendResult, setSendResult] = useState<SendActionResult | null>(null);
-  const [linkShown, setLinkShown] = useState<string | null>(null);
   const [editSigners, setEditSigners] = useState<Signer[] | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [drawing, setDrawing] = useState(!hasSavedSignature);
@@ -192,13 +193,15 @@ export function DocumentDetailClient({
     return s.role_label || fallback || s.role_key;
   };
 
-  /** The signer row that is me, and whose turn it is. */
+  /** The signer row that is me, once the document is out and it is mine to sign. */
   const mySigner = useMemo(
     () =>
-      detail.signers.find(
-        (s) => s.user_id === userId && s.status !== "signed" && detail.dueSignerIds.includes(s.id)
-      ) ?? null,
-    [detail.signers, detail.dueSignerIds, userId]
+      isDraft
+        ? null
+        : (detail.signers.find(
+            (s) => s.user_id === userId && s.status !== "signed" && detail.dueSignerIds.includes(s.id)
+          ) ?? null),
+    [detail.signers, detail.dueSignerIds, userId, isDraft]
   );
 
   useEffect(() => {
@@ -335,6 +338,11 @@ export function DocumentDetailClient({
           </span>
         }
         action={
+          /*
+            One button for the next step, everything else under More. It was up
+            to six buttons in a row — sign, sign on this device, send, upload,
+            download, void — and the one that mattered was never obvious.
+          */
           <>
             {mySigner && (
               <Button onClick={() => setSignOpen(true)}>
@@ -342,22 +350,20 @@ export function DocumentDetailClient({
                 {t.docs.countersign}
               </Button>
             )}
-            {canSend && (
-              <>
-                <Button variant="outline" onClick={startInPerson} loading={pending}>
-                  <Tablet className="h-4 w-4" />
-                  {t.docs.signOnThisDevice}
-                </Button>
-                <Button onClick={() => send(doc.status !== "draft")} loading={pending}>
-                  <Send className="h-4 w-4" />
-                  {doc.status === "draft" ? t.docs.sendForSignature : t.docs.sendAgain}
-                </Button>
-              </>
+            {canSend && isDraft && (
+              <Button onClick={() => send(false)} loading={pending} data-send-document>
+                <Send className="h-4 w-4" />
+                {t.docs.sendForSignature}
+              </Button>
             )}
-            {canManage && doc.status !== "voided" && (
-              <Button variant="outline" onClick={() => setUploadOpen(true)}>
-                <FileUp className="h-4 w-4" />
-                {t.docs.uploadSigned}
+            {/*
+              The other way to get it signed, so it stays in sight: a patient
+              at the desk is handed the tablet in four taps from their file.
+            */}
+            {canSend && (
+              <Button variant="outline" onClick={startInPerson} loading={pending}>
+                <Tablet className="h-4 w-4" />
+                {t.docs.signOnThisDevice}
               </Button>
             )}
             {/*
@@ -371,11 +377,56 @@ export function DocumentDetailClient({
             {(isCompleted || doc.final_pdf_path) && (
               <DownloadSignedPdf slug={slug} documentId={doc.id} title={doc.title} />
             )}
-            {canVoid && doc.status !== "voided" && (
-              <Button variant="ghost" className="!text-danger" onClick={() => setVoidOpen(true)}>
-                <Ban className="h-4 w-4" />
-                {t.docs.voidDocument}
-              </Button>
+            {((canSend && !isDraft) || (canManage && doc.status !== "voided") || (canVoid && doc.status !== "voided")) && (
+              <Menu
+                label={t.docs.more}
+                buttonClassName={buttonClass({ variant: "outline" })}
+                trigger={() => (
+                  <>
+                    <MoreHorizontal className="h-4 w-4" />
+                    {t.docs.more}
+                  </>
+                )}
+              >
+                {(close) => (
+                  <>
+                    {canSend && !isDraft && (
+                      <MenuItem
+                        icon={<Send />}
+                        onClick={() => {
+                          close();
+                          send(true);
+                        }}
+                      >
+                        {t.docs.sendAgainAll}
+                      </MenuItem>
+                    )}
+                    {canManage && doc.status !== "voided" && (
+                      <MenuItem
+                        icon={<FileUp />}
+                        onClick={() => {
+                          close();
+                          setUploadOpen(true);
+                        }}
+                      >
+                        {t.docs.uploadSigned}
+                      </MenuItem>
+                    )}
+                    {canVoid && doc.status !== "voided" && (
+                      <MenuItem
+                        icon={<Ban />}
+                        danger
+                        onClick={() => {
+                          close();
+                          setVoidOpen(true);
+                        }}
+                      >
+                        {t.docs.voidDocument}
+                      </MenuItem>
+                    )}
+                  </>
+                )}
+              </Menu>
             )}
           </>
         }
@@ -483,12 +534,26 @@ export function DocumentDetailClient({
         />
       )}
 
+      <SignersPanel
+        slug={slug}
+        documentId={doc.id}
+        documentTitle={doc.title}
+        status={doc.status}
+        signers={detail.signers}
+        staff={staff}
+        userId={userId}
+        canManage={canManage}
+        roleName={roleName}
+        onSignMine={() => setSignOpen(true)}
+        onEditSigners={isDraft && canManage ? () => setEditSigners(detail.signers) : undefined}
+        tz={tz}
+      />
+
       <Tabs
         tabs={[
           { key: "document", label: t.docs.preview },
-          { key: "signers", label: t.docs.signers, count: detail.signers.length },
           { key: "values", label: t.docs.mergedValues },
-          { key: "audit", label: t.docs.auditTrail, count: detail.events.length },
+          { key: "audit", label: t.docs.history, count: detail.events.length },
         ]}
         active={tab}
         onChange={(k) => setTab(k as typeof tab)}
@@ -535,135 +600,6 @@ export function DocumentDetailClient({
             )}
           </div>
         </Card>
-      )}
-
-      {tab === "signers" && (
-        <div className="grid gap-3">
-          {detail.signers.map((s, i) => {
-            const isDue = detail.dueSignerIds.includes(s.id);
-            return (
-              <Card key={s.id} className="p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {doc.signing_mode === "sequential" && (
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 tnum">
-                          {i + 1}
-                        </span>
-                      )}
-                      <span className="text-sm font-semibold">
-                        {s.display_name || roleName(s)}
-                      </span>
-                      <Badge status="brand">{roleName(s)}</Badge>
-                      <Badge status={(SIGNER_STATUS_BADGE[s.status] ?? "neutral") as StatusKey}>
-                        {(t.docs.signerStatuses as Record<string, string>)[s.status] ?? s.status}
-                      </Badge>
-                      {!s.is_required && (
-                        <span className="text-[length:max(11px,0.6875rem)] text-ink-400">{t.docs.optionalSigner}</span>
-                      )}
-                      {isDue && !isTerminal && s.status !== "signed" && (
-                        <Badge status="pending">
-                          <Clock className="h-3 w-3" />
-                          {t.docs.yourTurn}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.75rem] text-ink-500">
-                      {s.phone_e164 && (
-                        <span dir="ltr" className="tnum">
-                          {formatPhone(s.phone_e164)}
-                        </span>
-                      )}
-                      {s.relationship && <span>{s.relationship}</span>}
-                      {s.link_opened_at && (
-                        <span>
-                          {(t.docs.events as Record<string, string>).link_opened}:{" "}
-                          {fmtDateTime(s.link_opened_at, tz, locale)}
-                        </span>
-                      )}
-                      {s.signed_at && (
-                        <span className="text-ok">
-                          {(t.docs.events as Record<string, string>).signed}:{" "}
-                          {fmtDateTime(s.signed_at, tz, locale)} ·{" "}
-                          {s.signed_in_person
-                            ? t.docs.methods.in_clinic
-                            : s.user_id
-                              ? t.docs.methods.staff
-                              : t.docs.methods.remote}
-                        </span>
-                      )}
-                      {s.decline_reason && (
-                        <span className="text-danger">
-                          {t.sign.declineReason}: {s.decline_reason}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {!isTerminal && s.status !== "signed" && canManage && (
-                    <div className="flex shrink-0 flex-wrap gap-1.5">
-                      {!s.user_id && s.phone_e164 && (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            loading={pending}
-                            onClick={() =>
-                              start(async () => {
-                                const r = await copyLinkAction(slug, doc.id, s.id);
-                                if (r.url) {
-                                  await navigator.clipboard.writeText(r.url).catch(() => {});
-                                  setLinkShown(r.url);
-                                  toast(t.common.copied);
-                                } else {
-                                  toast(t.common.genericError, "error");
-                                }
-                              })
-                            }
-                          >
-                            <Copy className="h-4 w-4" />
-                            {t.docs.copyLink}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            loading={pending}
-                            onClick={() =>
-                              start(async () => {
-                                const r = await revokeLinkAction(slug, doc.id, s.id);
-                                toast(r.error ? t.common.genericError : t.docs.revoked, r.error ? "error" : "success");
-                              })
-                            }
-                          >
-                            <Link2 className="h-4 w-4" />
-                            {t.docs.revokeLink}
-                          </Button>
-                        </>
-                      )}
-                      {s.user_id === userId && (
-                        <Button variant="soft" size="sm" onClick={() => setSignOpen(true)}>
-                          <PenTool className="h-4 w-4" />
-                          {t.docs.countersign}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-
-          {isDraft && canManage && (
-            <Button
-              variant="outline"
-              className="justify-self-start"
-              onClick={() => setEditSigners(detail.signers)}
-            >
-              <Users className="h-4 w-4" />
-              {t.docs.signers}
-            </Button>
-          )}
-        </div>
       )}
 
       {tab === "values" && (
@@ -817,11 +753,6 @@ export function DocumentDetailClient({
       )}
 
       {/* ----------------------------------------------------------- modals */}
-
-      <Modal open={!!linkShown} onClose={() => setLinkShown(null)} title={t.docs.copyLink}>
-        <p className="mb-2 text-[0.8125rem] text-ink-500">{t.docs.waOfflineBody}</p>
-        <Input readOnly dir="ltr" value={linkShown ?? ""} onFocus={(e) => e.currentTarget.select()} />
-      </Modal>
 
       <Modal open={signOpen} onClose={() => setSignOpen(false)} title={t.docs.countersign} wide>
         <div className="grid gap-4">
@@ -1006,7 +937,7 @@ export function DocumentDetailClient({
       <SignerEditor
         slug={slug}
         documentId={doc.id}
-        mode={doc.signing_mode}
+        staff={staff}
         roles={detail.roles}
         signers={editSigners}
         tz={tz}
@@ -1206,7 +1137,7 @@ function UploadSignedCopy({
 function SignerEditor({
   slug,
   documentId,
-  mode,
+  staff,
   roles,
   signers,
   tz,
@@ -1216,7 +1147,8 @@ function SignerEditor({
   documentId: string;
   /** The clinic's timezone — and so its country, for a signer's number typed without a code. */
   tz: string;
-  mode: "sequential" | "parallel";
+  /** Who a staff line can name. It used to take a typed name, which nobody could ever sign as. */
+  staff: StaffOption[];
   roles: { key: string; label: string; label_ar: string | null; is_staff: boolean }[];
   signers: Signer[] | null;
   onClose: () => void;
@@ -1225,7 +1157,6 @@ function SignerEditor({
   const { toast } = useToast();
   const [pending, start] = useTransition();
   const [rows, setRows] = useState<Signer[]>(signers ?? []);
-  const [signMode, setSignMode] = useState(mode);
 
   useEffect(() => {
     if (signers) setRows(signers);
@@ -1241,12 +1172,7 @@ function SignerEditor({
   return (
     <Modal open={!!signers} onClose={onClose} title={t.docs.signers} wide>
       <div className="grid gap-4">
-        <Field label={t.docs.signingOrder}>
-          <Select value={signMode} onChange={(e) => setSignMode(e.target.value as typeof signMode)}>
-            <option value="sequential">{t.docs.sequential}</option>
-            <option value="parallel">{t.docs.parallel}</option>
-          </Select>
-        </Field>
+        <p className="text-[0.8125rem] text-ink-500">{t.docs.allAtOnce}</p>
 
         {rows.map((s, i) => {
           const isStaffRole = roles.find((r) => r.key === s.role_key)?.is_staff;
@@ -1255,9 +1181,18 @@ function SignerEditor({
               <Field label={t.docs.signerRole}>
                 <Select
                   value={s.role_key}
-                  onChange={(e) =>
-                    setRows(rows.map((x, idx) => (idx === i ? { ...x, role_key: e.target.value } : x)))
-                  }
+                  onChange={(e) => {
+                    const toStaff = !!roles.find((r) => r.key === e.target.value)?.is_staff;
+                    setRows(
+                      rows.map((x, idx) =>
+                        idx === i
+                          ? toStaff
+                            ? { ...x, role_key: e.target.value, phone_e164: null, ...(isStaffRole ? {} : { display_name: "", user_id: null }) }
+                            : { ...x, role_key: e.target.value, ...(isStaffRole ? { user_id: null, display_name: "" } : {}) }
+                          : x
+                      )
+                    );
+                  }}
                 >
                   {roles.map((r) => (
                     <option key={r.key} value={r.key}>
@@ -1266,15 +1201,37 @@ function SignerEditor({
                   ))}
                 </Select>
               </Field>
-              <Field label={t.docs.signerName}>
-                <Input
-                  value={s.display_name}
-                  disabled={!!s.user_id}
-                  onChange={(e) =>
-                    setRows(rows.map((x, idx) => (idx === i ? { ...x, display_name: e.target.value } : x)))
-                  }
-                />
-              </Field>
+              {isStaffRole ? (
+                <Field label={t.docs.signerName}>
+                  <Select
+                    value={s.user_id ?? ""}
+                    onChange={(e) => {
+                      const m = staff.find((x) => x.user_id === e.target.value);
+                      setRows(
+                        rows.map((x, idx) =>
+                          idx === i ? { ...x, user_id: m?.user_id ?? null, display_name: m?.full_name ?? "", phone_e164: null } : x
+                        )
+                      );
+                    }}
+                  >
+                    <option value="">{t.docs.chooseSigner}</option>
+                    {staff.map((m) => (
+                      <option key={m.user_id} value={m.user_id}>
+                        {m.full_name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              ) : (
+                <Field label={t.docs.signerName}>
+                  <Input
+                    value={s.display_name}
+                    onChange={(e) =>
+                      setRows(rows.map((x, idx) => (idx === i ? { ...x, display_name: e.target.value } : x)))
+                    }
+                  />
+                </Field>
+              )}
               {!isStaffRole && (
                 <Field label={t.docs.signerPhone}>
                   <PhoneInput
@@ -1354,7 +1311,6 @@ function SignerEditor({
               start(async () => {
                 const r = await setSignersAction(slug, {
                   documentId,
-                  mode: signMode,
                   signers: rows.map((s, i) => ({
                     roleKey: s.role_key,
                     order: i,

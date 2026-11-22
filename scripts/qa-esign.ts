@@ -39,7 +39,7 @@ import {
 } from "../src/lib/esign/documents";
 import { buildMergeTable } from "../src/lib/esign/documents";
 import { sendDocument } from "../src/lib/esign/flow";
-import { recordSignature, declineDocument, markViewed } from "../src/lib/esign/signing";
+import { recordSignature, declineDocument, markViewed, saveStaffSignature } from "../src/lib/esign/signing";
 import { issueSigningToken, lookupToken, consumeToken, hashToken } from "../src/lib/esign/tokens";
 import { documentHash, sanitizeHtml, renderTokens } from "../src/lib/esign/render";
 import { loadDocumentDetail, loadAppointmentDocuments } from "../src/lib/esign/queries";
@@ -457,6 +457,97 @@ async function testTokenLifecycle(f: Fixture, documentId: string) {
   return issued.signerId;
 }
 
+/**
+ * 2026-11-21: everyone signs at once, and a doctor may be signed for by their
+ * own standing instruction. Leaves the doctor's instruction off afterwards, so
+ * the tests that follow see a doctor who is asked.
+ */
+async function testParallelAndAutoSign(f: Fixture) {
+  const config = {
+    signers: [
+      { role_key: "patient", required: true, order: 0 },
+      { role_key: "doctor", required: true, order: 1 },
+    ],
+  };
+  const patient = { id: f.patientId, full_name: "أحمد محمد العلي", phone_e164: "+962790000002", birth_date: "1990-04-11" };
+  const makeAndSend = (title: string) =>
+    sys(async (c) => {
+      const signers = await buildDefaultSigners(c, { clinicId: f.clinicId, signerConfig: config, patient, appointmentId: f.appointmentId });
+      const id = await createDocument(c, {
+        clinicId: f.clinicId, userId: f.ownerId, patientId: f.patientId, templateId: f.templateId,
+        title, language: "ar", appointmentId: f.appointmentId, serviceId: f.serviceId, signers,
+      });
+      const before = await loadSigners(c, id, f.clinicId);
+      const mode = (await c.query(`select signing_mode from documents where id = $1`, [id])).rows[0].signing_mode;
+      const sent = await sendDocument(c, { clinicId: f.clinicId, documentId: id, userId: f.ownerId });
+      const after = await loadSigners(c, id, f.clinicId);
+      const status = (await c.query(`select status from documents where id = $1`, [id])).rows[0].status;
+      const ev = await c.query(
+        `select metadata from document_events where document_id = $1 and event_type = 'signed'`,
+        [id]
+      );
+      return { id, before, mode, sent, after, status, events: ev.rows.map((r) => r.metadata) };
+    });
+
+  // Parallel by default, and the doctor is asked — not signed for — until they say otherwise.
+  const plain = await makeAndSend("موافقة متزامنة");
+  check(plain.mode === "parallel", "a new document is signed by everyone at once", plain.mode);
+  const dueNow = signersDueNow(plain.before, "parallel").map((s) => s.role_key).sort().join(",");
+  check(dueNow === "doctor,patient", "the patient and the doctor are both due straight away", dueNow);
+  const plainDoctor = plain.after.find((s) => s.role_key === "doctor");
+  check(plainDoctor?.status !== "signed", "a doctor who did not ask for it is not signed for");
+  check(plain.sent.ok && plain.sent.staffNotified === 1, "and is notified in the app instead", plain.sent.ok ? plain.sent.staffNotified : plain.sent.error);
+
+  // The doctor saves a signature and turns on automatic signing for this clinic.
+  await sys(async (c) => {
+    await saveStaffSignature(c, { clinicId: f.clinicId, userId: f.doctorUserId, pngDataUrl: PNG_1PX });
+    await c.query(`update clinic_members set auto_sign_documents = true where id = $1`, [f.doctorMemberId]);
+  });
+  const auto = await makeAndSend("موافقة بتوقيع تلقائي");
+  const autoDoctor = auto.after.find((s) => s.role_key === "doctor");
+  check(autoDoctor?.status === "signed", "an opted-in doctor is signed for the moment it is sent", autoDoctor?.status);
+  check(autoDoctor?.signed_automatically === true, "and the signature is marked as automatic");
+  check(
+    auto.events.some((m) => (m as { method?: string })?.method === "automatic"),
+    "the audit trail records the method as automatic",
+    JSON.stringify(auto.events)
+  );
+  check(auto.status === "partially_signed", "the patient still has to sign", auto.status);
+  check(auto.sent.ok && auto.sent.staffNotified === 0, "and the doctor is not notified for a signature already given");
+
+  const finished = await sys(async (c) => {
+    const p = auto.after.find((s) => s.role_key === "patient")!;
+    return recordSignature(c, {
+      clinicId: f.clinicId, documentId: auto.id, signerId: p.id,
+      input: { pngDataUrl: PNG_1PX, consentConfirmed: true },
+    });
+  });
+  check(finished.ok && finished.completed, "the patient's signature then completes it", finished.ok ? "" : finished.error);
+
+  // Without a saved signature the switch does nothing: the doctor is asked.
+  await sys((c) => c.query(`update users set signature_png_path = null where id = $1`, [f.doctorUserId]));
+  const noSaved = await makeAndSend("موافقة بلا توقيع محفوظ");
+  check(
+    noSaved.after.find((s) => s.role_key === "doctor")?.status !== "signed",
+    "with no saved signature to apply, nobody is signed for"
+  );
+
+  // A document raised without a visit names the clinic's only doctor; a "clinic representative" is whoever raised it.
+  const lines = await sys((c) =>
+    buildDefaultSigners(c, {
+      clinicId: f.clinicId,
+      signerConfig: { signers: [{ role_key: "doctor" }, { role_key: "clinic_representative" }] },
+      patient,
+      appointmentId: null,
+      creatorUserId: f.ownerId,
+    })
+  );
+  check(lines.find((s) => s.roleKey === "doctor")?.userId === f.doctorUserId, "with no visit, the clinic's only doctor is named");
+  check(lines.find((s) => s.roleKey === "clinic_representative")?.userId === f.ownerId, "the clinic representative is the person raising it");
+
+  await sys((c) => c.query(`update clinic_members set auto_sign_documents = false where id = $1`, [f.doctorMemberId]));
+}
+
 async function testSequentialSigning(f: Fixture) {
   const built = await sys(async (c) => {
     const signers = await buildDefaultSigners(c, {
@@ -483,6 +574,9 @@ async function testSequentialSigning(f: Fixture) {
       templateId: f.templateId,
       title: "موافقة تسلسلية",
       language: "ar",
+      // New documents are parallel since 2026-11-21; a document sent before
+      // then keeps its order, and that path still has to hold.
+      signingMode: "sequential",
       appointmentId: f.appointmentId,
       serviceId: f.serviceId,
       signers,
@@ -1576,6 +1670,7 @@ async function main() {
   const firstDoc = await testMergeAndFreeze(f);
   await testTokenLifecycle(f, firstDoc);
   const completed = await testSequentialSigning(f);
+  await testParallelAndAutoSign(f);
   await testHashMismatchRefusal(f);
   await testAppendOnlyAudit(f);
   await testGuardianAndEdgeCases(f);

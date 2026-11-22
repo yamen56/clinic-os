@@ -151,7 +151,7 @@ function Certificate({ doc }: { doc: PrintDocument }) {
   const L = CERT_LABELS[doc.language];
   const isAr = doc.language === "ar";
   const methodLabel = (m: PrintSigner["method"]) =>
-    m === "in_clinic" ? L.inClinic : m === "staff" ? L.staff : L.remote;
+    m === "in_clinic" ? L.inClinic : m === "staff" ? L.staff : m === "automatic" ? L.automatic : L.remote;
 
   return (
     <section className="sheet cert">

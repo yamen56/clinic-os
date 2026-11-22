@@ -30,8 +30,11 @@ export function PatientPicker({
 }: {
   slug: string;
   onPick: (p: { id: string; name: string }) => void;
-  /** Handed what was typed, split into a name or a number — nobody types it twice. */
-  onCreateNew: (typed: { fullName: string; phone: string }) => void;
+  /**
+   * Handed what was typed, split into a name or a number — nobody types it twice.
+   * Left out where only an existing patient makes sense (a new document).
+   */
+  onCreateNew?: (typed: { fullName: string; phone: string }) => void;
   autoFocus?: boolean;
 }) {
   const { t } = useI18n();
@@ -71,14 +74,16 @@ export function PatientPicker({
           )}
         </button>
       ))}
-      <button
-        type="button"
-        onClick={() => onCreateNew(splitTyped(q))}
-        className="flex items-center gap-2 rounded-lg border border-dashed border-line-strong px-3 py-2 text-start text-sm text-brand-700 hover:border-brand-400 hover:bg-brand-50/40"
-      >
-        <UserPlus className="h-4 w-4" />
-        {q.trim().length >= 2 ? t.calendar.createNamed.replace("{q}", q.trim()) : t.calendar.createNew}
-      </button>
+      {onCreateNew && (
+        <button
+          type="button"
+          onClick={() => onCreateNew(splitTyped(q))}
+          className="flex items-center gap-2 rounded-lg border border-dashed border-line-strong px-3 py-2 text-start text-sm text-brand-700 hover:border-brand-400 hover:bg-brand-50/40"
+        >
+          <UserPlus className="h-4 w-4" />
+          {q.trim().length >= 2 ? t.calendar.createNamed.replace("{q}", q.trim()) : t.calendar.createNew}
+        </button>
+      )}
     </div>
   );
 }

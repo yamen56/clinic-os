@@ -21,6 +21,7 @@ import { queueWhatsAppMessage } from "../outbound";
 import { enqueueFinalize, scheduleReminders, emitDocumentTrigger } from "./jobs";
 import { logDocEvent } from "./events";
 import { refreshDocumentStatus } from "./documents";
+import { autoSignStaff } from "./auto-sign";
 
 /**
  * One way to put a template into a patient's hands.
@@ -99,6 +100,7 @@ export async function createAndSendFromTemplate(
       signerConfig: template.signer_config ?? {},
       patient: patient ?? null,
       appointmentId,
+      creatorUserId: args.userId,
     }));
 
   const title = (language === "ar" ? template.name_ar : null) || template.name;
@@ -112,7 +114,8 @@ export async function createAndSendFromTemplate(
     language,
     source: template.source,
     sourcePdfPath: template.source_pdf_path,
-    signingMode: (template.signer_config?.mode ?? "sequential") as "sequential" | "parallel",
+    // Everyone at once (2026-11-21), whatever an older template says.
+    signingMode: "parallel",
     appointmentId,
     serviceId: args.serviceId ?? null,
     signers,
@@ -161,15 +164,26 @@ export async function sendDocument(
   const signers = await loadSigners(c, args.documentId, args.clinicId);
   const due = signersDueNow(signers, doc.signing_mode);
 
-  const result = args.suppressDelivery
-    ? (await markSent(c, args.clinicId, args.documentId, clinic.esign_link_days),
-      { delivered: 0, staff: 0, noPhone: [], waOffline: false })
-    : await dispatchDueSigners(c, {
-        clinic,
-        doc,
-        due,
-        senderUserId: args.userId ?? null,
-      });
+  /*
+    Sent first, so a signature applied automatically lands on a document that
+    is out for signature; then any staff signer who asked to be signed for
+    automatically is, and only the rest are asked (see auto-sign.ts).
+  */
+  await markSent(c, args.clinicId, args.documentId, clinic.esign_link_days);
+  const auto = await autoSignStaff(c, { clinicId: args.clinicId, doc, due });
+  const toAsk = due.filter((s) => !auto.signed.has(s.id));
+
+  /*
+    With delivery suppressed (a link copied by hand, the one-message bundle)
+    nobody outside is messaged — but staff signers are still told in the app.
+    A document that went out by copied link used to leave its doctor unaware.
+  */
+  const result = await dispatchDueSigners(c, {
+    clinic,
+    doc,
+    due: args.suppressDelivery ? toAsk.filter((s) => !!s.user_id) : toAsk,
+    senderUserId: args.userId ?? null,
+  });
 
   if (args.isResend) {
     await logDocEvent(c, {
@@ -183,7 +197,11 @@ export async function sendDocument(
 
   // A document whose only signers are staff has nothing to wait for on the
   // patient's side; the doctor's push has already gone out.
-  await refreshDocumentStatus(c, args.clinicId, args.documentId);
+  const status = await refreshDocumentStatus(c, args.clinicId, args.documentId);
+  // Signed in full by automatic signatures alone: render it like any other.
+  if (auto.completed) {
+    await afterSignature(c, { clinicId: args.clinicId, documentId: args.documentId, patientId: doc.patient_id, completed: true });
+  }
 
   if (result.delivered > 0) {
     await scheduleReminders(c, args.clinicId, args.documentId, 24);
@@ -200,7 +218,7 @@ export async function sendDocument(
     staffNotified: result.staff,
     noPhone: result.noPhone.map((s) => ({ id: s.id, name: s.display_name, role: s.role_key })),
     waOffline: result.waOffline,
-    completed: false,
+    completed: status === "completed",
   };
 }
 

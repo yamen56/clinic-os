@@ -154,13 +154,15 @@ async function main() {
   /* ------------------------------------------- 2. uploading a signed copy */
   await page.goto(`${BASE}/c/${slug}/documents/${pendingDoc}`);
   await page.waitForLoadState("networkidle");
+  // Since 2026-11-21 the header has one primary button and the rest under More.
+  await page.getByRole("button", { name: "More" }).first().click();
   check(
     "the upload button is offered",
-    (await page.locator("button:has-text('Upload signed copy')").count()) > 0
+    (await page.locator("[role=menuitem]:has-text('Upload signed copy')").count()) > 0
   );
 
   const signedPdf = await makePdf(["Signed on paper", "Layla Odeh"]);
-  await page.click("button:has-text('Upload signed copy')");
+  await page.click("[role=menuitem]:has-text('Upload signed copy')");
   await page.waitForSelector("input[type=file]", { timeout: 10000 });
   await page.setInputFiles("input[type=file]", {
     name: "signed.pdf",

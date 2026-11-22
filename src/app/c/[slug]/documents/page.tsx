@@ -37,6 +37,7 @@ export default async function DocumentsPage({ params }: { params: Promise<{ slug
       slug={slug}
       tz={access.clinic.timezone}
       canManage={can(access, "documents.manage")}
+      canTemplates={can(access, "settings")}
       rows={JSON.parse(JSON.stringify(data.rows))}
       templates={JSON.parse(JSON.stringify(data.templates))}
     />

@@ -12,7 +12,8 @@ import { deleteFile } from "@/lib/storage";
 /** Templates, signer roles and the clinic's signing settings. */
 
 const signerConfigSchema = z.object({
-  mode: z.enum(["sequential", "parallel"]).default("sequential"),
+  // Everyone signs at once (2026-11-21): whatever an old editor sends, it is stored as parallel.
+  mode: z.enum(["sequential", "parallel"]).default("parallel").transform(() => "parallel" as const),
   signers: z
     .array(
       z.object({
@@ -323,7 +324,7 @@ export async function copyLibraryTemplateAction(
         lt.category,
         lt.body,
         lt.body_ar,
-        JSON.stringify(lt.signer_config ?? {}),
+        JSON.stringify({ ...(lt.signer_config ?? {}), mode: "parallel" }),
         JSON.stringify(lt.fields_schema ?? []),
         lt.key,
         access.session.user.id,

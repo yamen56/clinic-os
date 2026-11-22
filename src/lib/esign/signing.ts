@@ -56,6 +56,7 @@ export type SignResult =
       error:
         | "not_found"
         | "terminal"
+        | "draft"
         | "not_your_turn"
         | "already_signed"
         | "consent_required"
@@ -116,6 +117,12 @@ export async function recordSignature(
     witnessUserId?: string | null;
     /** Staff signing from the workspace; recorded as the actor on the event. */
     actorUserId?: string | null;
+    /**
+     * The staff member's saved signature, applied by their own standing
+     * instruction (clinic_members.auto_sign_documents) when the document went
+     * out — not by a tap. Recorded as such on the event and the signer.
+     */
+    automatic?: boolean;
   }
 ): Promise<SignResult> {
   const doc = (
@@ -126,6 +133,13 @@ export async function recordSignature(
   ).rows[0] as DocumentRow | undefined;
   if (!doc) return { ok: false, error: "not_found" };
   if (isTerminal(doc)) return { ok: false, error: "terminal", detail: doc.status };
+  /*
+    A draft has no frozen content and so no fingerprint. Signing one used to
+    fall through to the integrity check, fail it, and email the clinic admin
+    that a document had been tampered with — for a doctor pressing Sign on a
+    form nobody had sent yet.
+  */
+  if (doc.status === "draft" && !doc.content_hash) return { ok: false, error: "draft" };
 
   const signers = await loadSigners(c, args.documentId, args.clinicId);
   const signer = signers.find((s) => s.id === args.signerId);
@@ -187,7 +201,8 @@ export async function recordSignature(
         set status = 'signed', signed_at = now(),
             signature_png_path = $3, signature_svg_path = $4, typed_name = $5,
             consent_confirmed = true, ip_address = $6, user_agent = $7,
-            signed_in_person = $8, witnessed_by_user_id = $9, field_answers = $10
+            signed_in_person = $8, witnessed_by_user_id = $9, field_answers = $10,
+            signed_automatically = $11
       where id = $1 and clinic_id = $2`,
     [
       args.signerId,
@@ -200,6 +215,7 @@ export async function recordSignature(
       !!args.inPerson,
       args.witnessUserId ?? null,
       JSON.stringify(answers),
+      !!args.automatic,
     ]
   );
 
@@ -214,7 +230,7 @@ export async function recordSignature(
     userAgent: args.userAgent,
     metadata: {
       role: signer.role_key,
-      method: args.inPerson ? "in_clinic" : "remote",
+      method: args.automatic ? "automatic" : args.inPerson ? "in_clinic" : "remote",
       typed: !!args.input.typedName,
     },
   });

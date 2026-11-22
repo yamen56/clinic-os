@@ -17,7 +17,7 @@ import { RichText, insertTokenAtCaret } from "@/components/esign/rich-text";
 import { ServiceChips } from "@/components/ui/service-picker";
 import type { SectionRow, ServiceRow } from "@/lib/services";
 import { saveTemplateAction } from "../actions";
-import { Plus, Trash2, Eye, Braces, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Eye, Braces } from "lucide-react";
 
 type Def = {
   key: string;
@@ -111,9 +111,8 @@ export function TemplateEditor({
     (template?.serviceIds as string[]) ?? []
   );
   const [autoSend, setAutoSend] = useState(template ? !!template.autoSend : true);
-  const [mode, setMode] = useState<"sequential" | "parallel">(
-    ((template?.signer_config as { mode?: string })?.mode as "sequential" | "parallel") ?? "sequential"
-  );
+  // Everyone signs at once (2026-11-21); there is no order to choose.
+  const mode = "parallel" as const;
   const [signers, setSigners] = useState<SignerCfg[]>(
     ((template?.signer_config as { signers?: SignerCfg[] })?.signers ?? [
       { role_key: "patient", required: true, order: 0 },
@@ -216,14 +215,6 @@ export function TemplateEditor({
         router.replace(`/c/${slug}/settings/documents/${r.id}`);
       }
     });
-
-  const moveSigner = (i: number, dir: -1 | 1) => {
-    const next = [...signers];
-    const j = i + dir;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    setSigners(next.map((s, idx) => ({ ...s, order: idx })));
-  };
 
   return (
     <div className="grid gap-4">
@@ -410,12 +401,7 @@ export function TemplateEditor({
           <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docTemplates.signerSetupSub}</p>
         </div>
         <div className="grid gap-3 p-5">
-          <Field label={t.docs.signingOrder} hint={mode === "sequential" ? t.docs.sequentialHint : t.docs.parallelHint}>
-            <Select value={mode} onChange={(e) => setMode(e.target.value as "sequential" | "parallel")}>
-              <option value="sequential">{t.docs.sequential}</option>
-              <option value="parallel">{t.docs.parallel}</option>
-            </Select>
-          </Field>
+          <p className="text-[0.8125rem] text-ink-500">{t.docTemplates.signersAtOnce}</p>
 
           <div className="grid gap-2">
             {signers.map((s, i) => (
@@ -423,11 +409,6 @@ export function TemplateEditor({
                 key={i}
                 className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2"
               >
-                {mode === "sequential" && (
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[length:max(11px,0.6875rem)] font-semibold text-brand-700 tnum">
-                    {i + 1}
-                  </span>
-                )}
                 <Select
                   className="!w-auto min-w-40 flex-1"
                   value={s.role_key}
@@ -453,28 +434,6 @@ export function TemplateEditor({
                   />
                   {s.required ? t.docs.requiredSigner : t.docs.optionalSigner}
                 </label>
-                {mode === "sequential" && (
-                  <div className="flex flex-col">
-                    <button
-                      type="button"
-                      disabled={i === 0}
-                      onClick={() => moveSigner(i, -1)}
-                      aria-label={t.fields.moveUp}
-                      className="text-ink-300 hover:text-ink-700 disabled:opacity-30"
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={i === signers.length - 1}
-                      onClick={() => moveSigner(i, 1)}
-                      aria-label={t.fields.moveDown}
-                      className="text-ink-300 hover:text-ink-700 disabled:opacity-30"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
                 <Button
                   variant="ghost"
                   size="icon"

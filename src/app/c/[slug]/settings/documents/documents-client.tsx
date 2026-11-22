@@ -28,6 +28,7 @@ import {
   Upload,
   Users,
   ShieldCheck,
+  ChevronDown,
 } from "lucide-react";
 
 type Template = {
@@ -102,11 +103,12 @@ export function DocumentSettingsClient({
     <div className="grid gap-4">
       {/* -------------------------------------------------------- templates */}
       <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
-          <div>
-            <h2 className="text-[0.9375rem] font-semibold">{t.docTemplates.title}</h2>
-            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docTemplates.sub}</p>
-          </div>
+        {/* The settings frame already titles this page; the card only needs its buttons. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3">
+          <span className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-500">
+            {t.docs.templates}
+            <span className="rounded-full bg-ink-900/5 px-2 py-0.5 text-[0.75rem] font-semibold tnum">{templates.length}</span>
+          </span>
           <div className="flex flex-wrap gap-2">
             {library.length > 0 && (
               <Button variant="outline" size="sm" onClick={() => setLibraryOpen(true)}>
@@ -186,22 +188,28 @@ export function DocumentSettingsClient({
       </Card>
 
       {/* ------------------------------------------------------ signer roles */}
+      {/*
+        Folded: who can be asked to sign is set once and rarely touched, and
+        open it pushed the clinic's own e-sign settings below a list of six
+        built-in roles with their internal keys in a code face.
+      */}
       <Card>
-        <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
-          <div>
-            <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold">
-              <Users className="h-4 w-4 text-ink-400" />
-              {t.signerRoles.title}
-            </h2>
-            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.signerRoles.sub}</p>
+        <details className="group" data-signer-roles>
+          <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-5 py-3 [&::-webkit-details-marker]:hidden">
+            <Users className="h-4 w-4 text-ink-400" />
+            <span className="text-[0.9375rem] font-semibold">{t.signerRoles.title}</span>
+            <span className="rounded-full bg-ink-900/5 px-2 py-0.5 text-[0.75rem] font-semibold text-ink-500 tnum">{roles.length}</span>
+            <ChevronDown className="ms-auto h-4 w-4 text-ink-300 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-y border-line px-5 py-3">
+            <p className="text-[0.8125rem] text-ink-500">{t.signerRoles.sub}</p>
+            {isOwner && (
+              <Button size="sm" variant="outline" onClick={() => setRoleEdit({ is_staff: false })}>
+                <Plus className="h-4 w-4" />
+                {t.signerRoles.addRole}
+              </Button>
+            )}
           </div>
-          {isOwner && (
-            <Button size="sm" variant="outline" onClick={() => setRoleEdit({ is_staff: false })}>
-              <Plus className="h-4 w-4" />
-              {t.signerRoles.addRole}
-            </Button>
-          )}
-        </div>
         <ul className="divide-y divide-line">
           {roles.map((r) => (
             <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5">
@@ -213,11 +221,6 @@ export function DocumentSettingsClient({
                   {r.is_system && <Badge status="neutral">{t.signerRoles.builtIn}</Badge>}
                   {r.is_staff && <Badge status="brand">{t.signerRoles.isStaff}</Badge>}
                 </div>
-                {/* Breakable: `clinic_representative` is 189px in a mono face
-                   and this column is 150px on the narrowest phone. */}
-                <code className="mono block break-all text-[0.75rem] text-ink-400" dir="ltr">
-                  {r.key}
-                </code>
               </div>
               {isOwner && (
                 <>
@@ -244,6 +247,7 @@ export function DocumentSettingsClient({
             </li>
           ))}
         </ul>
+        </details>
       </Card>
 
       {/* ---------------------------------------------------------- settings */}

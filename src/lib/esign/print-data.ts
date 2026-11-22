@@ -19,7 +19,7 @@ export type PrintSigner = {
   phone: string | null;
   relationship: string | null;
   status: string;
-  method: "in_clinic" | "remote" | "staff";
+  method: "in_clinic" | "remote" | "staff" | "automatic";
   signedAtUtc: string | null;
   signedAtLocal: string | null;
   openedAt: string | null;
@@ -150,7 +150,7 @@ export async function loadPrintDocument(documentId: string): Promise<PrintDocume
       phone: s.phone_e164,
       relationship: s.relationship,
       status: s.status,
-      method: s.signed_in_person ? "in_clinic" : s.user_id ? "staff" : "remote",
+      method: s.signed_automatically ? "automatic" : s.signed_in_person ? "in_clinic" : s.user_id ? "staff" : "remote",
       signedAtUtc: s.signed_at
         ? DateTime.fromJSDate(new Date(s.signed_at)).toUTC().toFormat("yyyy-LL-dd HH:mm:ss 'UTC'")
         : null,
@@ -237,6 +237,7 @@ export const CERT_LABELS = {
     inClinic: "في العيادة",
     remote: "عن بُعد",
     staff: "من داخل النظام",
+    automatic: "تلقائي — توقيعه المحفوظ، بتفويض منه",
     opened: "فتح الرابط",
     signedAt: "وقت التوقيع",
     ip: "عنوان IP",
@@ -269,6 +270,7 @@ export const CERT_LABELS = {
     inClinic: "In clinic",
     remote: "Remote link",
     staff: "In workspace",
+    automatic: "Automatic — their saved signature, by their standing instruction",
     opened: "Link opened",
     signedAt: "Signed at",
     ip: "IP address",

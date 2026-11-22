@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import type { PoolClient } from "pg";
 import { z } from "zod";
 import { requireClinic, can } from "@/lib/auth";
 import { inClinic } from "@/lib/clinic-api";
@@ -12,6 +13,7 @@ import {
   buildDefaultSigners,
   createDocument,
   isEditable,
+  isStaffRole,
   isTerminal,
   loadSigners,
   releaseLock,
@@ -25,9 +27,11 @@ import { sendDocument, afterSignature, sendAllPendingForPatient } from "@/lib/es
 import { recordSignature, declineDocument, saveStaffSignature } from "@/lib/esign/signing";
 import { revokeSignerTokens, issueSigningToken } from "@/lib/esign/tokens";
 import {
+  deliverToSigner,
   loadClinicDelivery,
   notifyStaffOfSignerAction,
 } from "@/lib/esign/delivery";
+import { autoSignStaff } from "@/lib/esign/auto-sign";
 import { logDocEvent } from "@/lib/esign/events";
 import { emitDocumentTrigger } from "@/lib/esign/jobs";
 
@@ -134,8 +138,17 @@ export async function createDocumentAction(
             signerConfig: template.signer_config ?? {},
             patient: patient ?? null,
             appointmentId,
+            creatorUserId: access.session.user.id,
           });
     if (!signers.length) return bad("no_signers");
+    if (d.signers?.some((s) => s.userId)) {
+      const members = new Set(
+        (await c.query(`select user_id from clinic_members where clinic_id = $1 and active`, [access.clinicId])).rows.map(
+          (r) => r.user_id as string
+        )
+      );
+      if (d.signers.some((s) => s.userId && !members.has(s.userId))) return bad("invalid");
+    }
 
     const id = await createDocument(c, {
       clinicId: access.clinicId,
@@ -146,7 +159,8 @@ export async function createDocumentAction(
       language,
       source: template.source,
       sourcePdfPath: template.source_pdf_path,
-      signingMode: (template.signer_config?.mode ?? "sequential") as "sequential" | "parallel",
+      // Everyone signs at once (2026-11-21), whatever an older template says.
+      signingMode: "parallel",
       appointmentId,
       serviceId: d.serviceId ?? null,
       signers,
@@ -259,7 +273,8 @@ export async function clearFieldValueAction(
 
 const signersSchema = z.object({
   documentId: z.string().uuid(),
-  mode: z.enum(["sequential", "parallel"]),
+  /** Ignored: a draft always goes out to everyone at once (2026-11-21). */
+  mode: z.enum(["sequential", "parallel"]).optional(),
   signers: z.array(signerInputSchema).min(1).max(10),
 });
 
@@ -280,11 +295,17 @@ export async function setSignersAction(slug: string, input: unknown): Promise<{ 
     if (!doc) return bad("not_found");
     if (!isEditable(doc)) return bad("terminal");
 
-    await c.query(`update documents set signing_mode = $3 where id = $1 and clinic_id = $2`, [
+    await c.query(`update documents set signing_mode = 'parallel' where id = $1 and clinic_id = $2`, [
       d.documentId,
       access.clinicId,
-      d.mode,
     ]);
+    // A staff line names a real member of this clinic, or nobody.
+    const memberIds = new Set(
+      (
+        await c.query(`select user_id from clinic_members where clinic_id = $1 and active`, [access.clinicId])
+      ).rows.map((r) => r.user_id as string)
+    );
+    if (d.signers.some((s) => s.userId && !memberIds.has(s.userId))) return bad("invalid");
     await replaceSigners(
       c,
       access.clinicId,
@@ -397,6 +418,12 @@ export async function revokeLinkAction(
   const access = await requireClinic(slug);
   if (!can(access, "documents.manage")) return bad("forbidden");
   return inClinic(access, async (c) => {
+    // The signer has to be on this document, or the event below would name the wrong one.
+    const on = await c.query(
+      `select 1 from document_signers where id = $1 and document_id = $2 and clinic_id = $3`,
+      [signerId, documentId, access.clinicId]
+    );
+    if (!on.rowCount) return bad("not_found");
     const n = await revokeSignerTokens(c, signerId);
     if (!n) return bad("not_found");
     await logDocEvent(c, {
@@ -412,24 +439,55 @@ export async function revokeLinkAction(
   });
 }
 
-/** Mints a fresh link and hands it back, for a clinic sending it another way. */
+/**
+ * Puts a draft into circulation without messaging anyone, so a link can be
+ * handed out by hand. A link to a draft used to be minted as it stood: the
+ * signer opened a document that had never been frozen and could not sign it.
+ */
+async function ensureSent(
+  c: PoolClient,
+  clinicId: string,
+  documentId: string,
+  userId: string
+): Promise<{ error?: string; missing?: string[] }> {
+  const doc = (
+    await c.query(`select status from documents where id = $1 and clinic_id = $2`, [documentId, clinicId])
+  ).rows[0];
+  if (!doc) return { error: "not_found" };
+  if (isTerminal(doc)) return { error: "terminal" };
+  if (doc.status !== "draft") return {};
+  const r = await sendDocument(c, { clinicId, documentId, userId, suppressDelivery: true });
+  return r.ok ? {} : { error: r.error, missing: r.missing };
+}
+
+/**
+ * Mints a fresh link for one person and hands it back, so the clinic can send
+ * it however it likes — the patient's WhatsApp, a guardian with no number on
+ * file, a witness standing at the desk. Any outside signer may have one; staff
+ * sign in the workspace. Minting revokes the person's earlier link.
+ */
 export async function copyLinkAction(
   slug: string,
   documentId: string,
   signerId: string
-): Promise<{ url?: string; error?: string }> {
+): Promise<{ url?: string; error?: string; missing?: string[] }> {
   const access = await requireClinic(slug);
   if (!can(access, "documents.manage")) return bad("forbidden");
-  return inClinic(access, async (c) => {
+  const result = await inClinic(access, async (c) => {
     const clinic = await loadClinicDelivery(c, access.clinicId);
     const signer = (
       await c.query(
-        `select id, status from document_signers where id = $1 and document_id = $2 and clinic_id = $3`,
+        `select id, status, user_id from document_signers where id = $1 and document_id = $2 and clinic_id = $3`,
         [signerId, documentId, access.clinicId]
       )
     ).rows[0];
     if (!signer) return bad("not_found");
     if (signer.status === "signed") return bad("already_signed");
+    if (signer.status === "declined") return bad("terminal");
+    if (signer.user_id) return bad("staff_signer");
+
+    const sent = await ensureSent(c, access.clinicId, documentId, access.session.user.id);
+    if (sent.error) return { error: sent.error, missing: sent.missing };
 
     const { url } = await issueSigningToken(c, {
       clinicId: access.clinicId,
@@ -447,6 +505,153 @@ export async function copyLinkAction(
       metadata: { method: "copied_link" },
     });
     return { url };
+  });
+  revalidatePath(`/c/${slug}/documents`);
+  revalidatePath(`/c/${slug}/documents/${documentId}`);
+  return result;
+}
+
+/**
+ * Asks one person to sign now: an outside signer gets their link on WhatsApp,
+ * a staff signer gets a notification (or, if they asked for it, their saved
+ * signature). The per-person version of "send", so a guardian added late or a
+ * doctor who missed the first notification can be chased on their own.
+ */
+export async function sendToSignerAction(
+  slug: string,
+  documentId: string,
+  signerId: string
+): Promise<{ error?: string; missing?: string[]; via?: "whatsapp" | "app" | "automatic"; url?: string }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "documents.manage")) return bad("forbidden");
+  const result = await inClinic(access, async (c) => {
+    const sent = await ensureSent(c, access.clinicId, documentId, access.session.user.id);
+    if (sent.error) return { error: sent.error, missing: sent.missing };
+
+    const doc = (await c.query(`select * from documents where id = $1 and clinic_id = $2`, [documentId, access.clinicId])).rows[0];
+    const signer = (await loadSigners(c, documentId, access.clinicId)).find((s) => s.id === signerId);
+    if (!doc || !signer) return bad("not_found");
+    if (signer.status === "signed") return bad("already_signed");
+    if (signer.status === "declined") return bad("terminal");
+    if (isTerminal(doc)) return bad("terminal");
+
+    if (signer.user_id) {
+      const auto = await autoSignStaff(c, { clinicId: access.clinicId, doc, due: [signer] });
+      if (auto.signed.size) {
+        if (auto.completed) await afterSignature(c, { clinicId: access.clinicId, documentId, patientId: doc.patient_id, completed: true });
+        return { via: "automatic" as const };
+      }
+    }
+    const clinic = await loadClinicDelivery(c, access.clinicId);
+    const r = await deliverToSigner(c, { clinic, doc, signer, senderUserId: access.session.user.id });
+    if (r.sent) return { via: "whatsapp" as const };
+    if (r.reason === "staff") return signer.user_id ? { via: "app" as const } : bad("no_signer_chosen");
+    if (r.reason === "no_phone") return bad("no_phone");
+    if (r.reason === "wa_offline") return { error: "wa_disconnected", url: r.url };
+    return bad("not_sent");
+  });
+  revalidatePath(`/c/${slug}/documents`);
+  revalidatePath(`/c/${slug}/documents/${documentId}`);
+  return result;
+}
+
+/**
+ * Puts a member on a staff line that has nobody on it — the doctor of a
+ * document raised without a visit, in a clinic with more than one doctor — or
+ * swaps who it is before they have signed. Once the document is out, the
+ * person chosen is asked straight away (or signed for, if they asked to be).
+ */
+export async function assignStaffSignerAction(
+  slug: string,
+  documentId: string,
+  signerId: string,
+  userId: string
+): Promise<{ error?: string; via?: "app" | "automatic" }> {
+  const access = await requireClinic(slug);
+  if (!can(access, "documents.manage")) return bad("forbidden");
+  if (!z.string().uuid().safeParse(userId).success) return bad("invalid");
+  const result = await inClinic(access, async (c) => {
+    const doc = (await c.query(`select * from documents where id = $1 and clinic_id = $2`, [documentId, access.clinicId])).rows[0];
+    if (!doc) return bad("not_found");
+    if (isTerminal(doc)) return bad("terminal");
+    const signer = (await loadSigners(c, documentId, access.clinicId)).find((s) => s.id === signerId);
+    if (!signer) return bad("not_found");
+    if (signer.status === "signed" || signer.status === "declined") return bad("already_signed");
+    const role = (
+      await c.query(`select is_staff from signer_roles where clinic_id = $1 and key = $2`, [access.clinicId, signer.role_key])
+    ).rows[0];
+    if (!(role?.is_staff ?? isStaffRole(signer.role_key))) return bad("invalid");
+    const member = (
+      await c.query(
+        `select u.id, u.full_name from clinic_members cm join users u on u.id = cm.user_id
+          where cm.clinic_id = $1 and cm.user_id = $2 and cm.active`,
+        [access.clinicId, userId]
+      )
+    ).rows[0];
+    if (!member) return bad("invalid");
+
+    await c.query(
+      `update document_signers set user_id = $3, display_name = $4, phone_e164 = null
+        where id = $1 and clinic_id = $2`,
+      [signerId, access.clinicId, member.id, member.full_name]
+    );
+    await revokeSignerTokens(c, signerId);
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: "document.signer_assigned",
+      entity: "document",
+      entityId: documentId,
+      detail: { signerId, assignedUserId: member.id, role: signer.role_key },
+    });
+    if (doc.status === "draft") return {};
+
+    const fresh = (await loadSigners(c, documentId, access.clinicId)).find((s) => s.id === signerId)!;
+    const auto = await autoSignStaff(c, { clinicId: access.clinicId, doc, due: [fresh] });
+    if (auto.signed.size) {
+      if (auto.completed) await afterSignature(c, { clinicId: access.clinicId, documentId, patientId: doc.patient_id, completed: true });
+      return { via: "automatic" as const };
+    }
+    const clinic = await loadClinicDelivery(c, access.clinicId);
+    await deliverToSigner(c, { clinic, doc, signer: fresh, senderUserId: access.session.user.id });
+    return { via: "app" as const };
+  });
+  revalidatePath(`/c/${slug}/documents`);
+  revalidatePath(`/c/${slug}/documents/${documentId}`);
+  return result;
+}
+
+/**
+ * "Sign documents for me automatically" — the member's own switch, for this
+ * clinic only. Never another member's: RLS lets any member write any member
+ * row of the clinic, so the row is pinned to the caller here.
+ */
+export async function setMyAutoSignAction(slug: string, on: boolean): Promise<{ error?: string }> {
+  const access = await requireClinic(slug);
+  if (!access.memberId) return bad("forbidden");
+  // Somebody else's standing instruction to sign is not something a visitor sets.
+  if (access.session.impersonatedBy) return bad("forbidden");
+  return inClinic(access, async (c) => {
+    if (on) {
+      const saved = (await c.query(`select signature_png_path from users where id = $1`, [access.session.user.id])).rows[0];
+      if (!saved?.signature_png_path) return bad("no_saved_signature");
+    }
+    const r = await c.query(
+      `update clinic_members set auto_sign_documents = $3 where id = $1 and user_id = $2 and clinic_id = $4`,
+      [access.memberId, access.session.user.id, !!on, access.clinicId]
+    );
+    if (!r.rowCount) return bad("not_found");
+    await audit(c, {
+      clinicId: access.clinicId,
+      userId: access.session.user.id,
+      impersonatedBy: access.session.impersonatedBy,
+      action: on ? "signature.auto_on" : "signature.auto_off",
+      entity: "clinic_member",
+      entityId: access.memberId ?? undefined,
+    });
+    revalidatePath(`/c/${slug}/signature`);
+    return {};
   });
 }
 
@@ -525,7 +730,8 @@ export async function supersedeDocumentAction(
       language: old.language,
       source: old.source,
       sourcePdfPath: old.source_pdf_path,
-      signingMode: old.signing_mode,
+      // A replacement is a new document, so it goes out to everyone at once.
+      signingMode: "parallel",
       appointmentId: old.appointment_id,
       serviceId: old.service_id,
       supersedesDocumentId: documentId,
@@ -664,8 +870,9 @@ export async function declineAsStaffAction(
   const result = await inClinic(access, async (c) => {
     const signer = (
       await c.query(
-        `select user_id, display_name from document_signers
-         where id = $1 and document_id = $2 and clinic_id = $3`,
+        `select s.user_id, s.display_name, d.title from document_signers s
+           join documents d on d.id = s.document_id
+         where s.id = $1 and s.document_id = $2 and s.clinic_id = $3`,
         [signerId, documentId, access.clinicId]
       )
     ).rows[0];
@@ -686,7 +893,7 @@ export async function declineAsStaffAction(
     await notifyStaffOfSignerAction(c, {
       clinicId: access.clinicId,
       clinicSlug: slug,
-      doc: { id: documentId, title: "" },
+      doc: { id: documentId, title: signer.title ?? "" },
       signerName: signer.display_name,
       action: "declined",
       reason,
@@ -771,7 +978,9 @@ export async function saveMySignatureAction(
       svg,
     });
     if (!r.ok) return bad(r.error ?? "bad_signature");
-    revalidatePath(`/c/${slug}/settings/signature`);
+    // The page lives at /signature, not under settings: revalidating the old
+    // path left a first-time signer looking at "no signature yet" after saving.
+    revalidatePath(`/c/${slug}/signature`);
     return {};
   });
 }
@@ -786,7 +995,7 @@ export async function setKioskPinAction(slug: string, pin: string): Promise<{ er
       hashPassword(pin),
     ])
   );
-  revalidatePath(`/c/${slug}/settings/signature`);
+  revalidatePath(`/c/${slug}/signature`);
   return {};
 }
 

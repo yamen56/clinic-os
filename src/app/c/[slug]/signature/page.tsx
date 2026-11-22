@@ -25,13 +25,21 @@ export default async function SignatureSettingsPage({
 
   const me = await inClinic(access, async (c) => {
     const r = await c.query(
-      `select signature_png_path, kiosk_pin_hash, avatar_path from users where id = $1`,
-      [access.session.user.id]
+      `select u.signature_png_path, u.kiosk_pin_hash, u.avatar_path,
+              coalesce(cm.auto_sign_documents, false) as auto_sign,
+              (select count(*)::int from document_signers s join documents d on d.id = s.document_id
+                where s.clinic_id = $2 and s.user_id = u.id and s.status in ('pending', 'viewed')
+                  and d.status in ('sent', 'partially_signed')) as waiting
+         from users u left join clinic_members cm on cm.user_id = u.id and cm.clinic_id = $2
+        where u.id = $1`,
+      [access.session.user.id, access.clinicId]
     );
     return r.rows[0] as {
       signature_png_path: string | null;
       kiosk_pin_hash: string | null;
       avatar_path: string | null;
+      auto_sign: boolean;
+      waiting: number;
     };
   });
 
@@ -73,6 +81,9 @@ export default async function SignatureSettingsPage({
         currentSignature={current}
         hasPin={!!me?.kiosk_pin_hash}
         myName={access.session.user.fullName}
+        autoSign={!!me?.auto_sign}
+        canAutoSign={!!access.memberId && !access.session.impersonatedBy}
+        waitingForMe={me?.waiting ?? 0}
       />
     </>
   );

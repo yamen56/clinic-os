@@ -81,6 +81,8 @@ export type SignerRow = {
   signed_in_person: boolean;
   witnessed_by_user_id: string | null;
   field_answers: Record<string, unknown>;
+  /** Applied by the staff member's own standing instruction (0113), not by a tap. */
+  signed_automatically: boolean;
 };
 
 export type SignerInput = {
@@ -137,6 +139,10 @@ export function isMinor(birthDate: string | Date | null | undefined): boolean {
  * And staff roles are pre-resolved to a real person — the doctor on the
  * appointment, the clinic's owner — so the common case needs no picking at all.
  */
+function configuredHasRole(config: { signers?: { role_key: string }[] } | undefined, role: string): boolean {
+  return !!config?.signers?.some((s) => s.role_key === role);
+}
+
 export async function buildDefaultSigners(
   c: PoolClient,
   args: {
@@ -144,6 +150,13 @@ export async function buildDefaultSigners(
     signerConfig: { mode?: string; signers?: { role_key: string; required?: boolean; order?: number }[] };
     patient: { id: string; full_name: string; phone_e164: string | null; birth_date: string | null } | null;
     appointmentId?: string | null;
+    /**
+     * Who is raising the document. A "clinic representative" line is the
+     * clinic speaking, and the person putting the agreement in front of the
+     * patient is the representative unless somebody says otherwise. The line
+     * used to be left with nobody on it, so the document could never complete.
+     */
+    creatorUserId?: string | null;
   }
 ): Promise<SignerInput[]> {
   const configured = args.signerConfig?.signers?.length
@@ -172,6 +185,32 @@ export async function buildDefaultSigners(
       )
     ).rows[0];
   }
+  /*
+    No visit to name the doctor: a clinic with one doctor has only one answer.
+    Before this the doctor's line was left with nobody on it — no one was told
+    and the document could never complete. With several doctors the line stays
+    open and the document page asks who signs.
+  */
+  if (!apptDoctor && configuredHasRole(args.signerConfig, "doctor")) {
+    const only = await c.query(
+      `select cm.user_id, u.full_name, u.phone_e164 from clinic_members cm
+         join users u on u.id = cm.user_id
+        where cm.clinic_id = $1 and cm.active and cm.role = 'doctor'
+        limit 2`,
+      [args.clinicId]
+    );
+    if (only.rowCount === 1) apptDoctor = only.rows[0];
+  }
+  const representative =
+    args.creatorUserId && configuredHasRole(args.signerConfig, "clinic_representative")
+      ? ((
+          await c.query(
+            `select cm.user_id, u.full_name from clinic_members cm join users u on u.id = cm.user_id
+              where cm.clinic_id = $1 and cm.user_id = $2 and cm.active`,
+            [args.clinicId, args.creatorUserId]
+          )
+        ).rows[0] as { user_id: string; full_name: string } | undefined)
+      : undefined;
 
   const out: SignerInput[] = [];
   configured
@@ -197,6 +236,10 @@ export async function buildDefaultSigners(
       }
       if (s.role_key === "clinic_owner" && owner) {
         out.push({ ...base, displayName: owner.full_name, userId: owner.user_id });
+        return;
+      }
+      if (s.role_key === "clinic_representative" && representative) {
+        out.push({ ...base, displayName: representative.full_name, userId: representative.user_id });
         return;
       }
       out.push(base);
@@ -344,7 +387,9 @@ export async function createDocument(
       args.source ?? "template",
       args.title.slice(0, 200),
       args.language,
-      args.signingMode ?? "sequential",
+      // Everyone signs at once (2026-11-21). "sequential" survives only for
+      // documents sent before then, and for a caller that asks for it by name.
+      args.signingMode ?? "parallel",
       args.appointmentId ?? null,
       args.serviceId ?? null,
       args.userId ?? null,

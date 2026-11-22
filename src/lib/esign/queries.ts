@@ -28,6 +28,8 @@ export type DocumentListRow = {
   signed_count: number;
   waiting_on: string | null;
   template_name: string | null;
+  /** Each signer and where they are, so a row says who is done and who is not. */
+  signers: { name: string; role: string; status: string; auto: boolean }[];
 };
 
 const LIST_COLUMNS = `
@@ -47,7 +49,11 @@ const LIST_COLUMNS = `
     where s.document_id = d.id and s.status <> 'signed' and s.is_required
     order by case when d.signing_mode = 'sequential' then s.signing_order else 0 end,
              s.created_at
-    limit 1) as waiting_on`;
+    limit 1) as waiting_on,
+  (select coalesce(json_agg(json_build_object(
+            'name', s.display_name, 'role', s.role_key, 'status', s.status, 'auto', s.signed_automatically)
+          order by s.signing_order, s.created_at), '[]'::json)
+     from document_signers s where s.document_id = d.id) as signers`;
 
 export async function loadDocumentList(
   c: PoolClient,

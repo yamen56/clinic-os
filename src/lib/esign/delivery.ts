@@ -231,15 +231,29 @@ export async function notifyStaffOfSignerAction(
     reason?: string | null;
   }
 ): Promise<void> {
-  const titles: Record<typeof args.action, string> = {
-    signed: `${args.signerName} signed "${args.doc.title}"`,
-    declined: `${args.signerName} declined "${args.doc.title}"`,
-    completed: `"${args.doc.title}" is fully signed`,
-  };
+  /*
+    In the clinic's language. These were English-only, so an Arabic clinic's
+    bell read `Layla signed ""` — the empty quotes from a decline that never
+    passed its title.
+  */
+  const ar =
+    (await c.query(`select default_locale from clinics where id = $1`, [args.clinicId])).rows[0]?.default_locale !== "en";
+  const title = args.doc.title ? (ar ? `«${args.doc.title}»` : `"${args.doc.title}"`) : ar ? "المستند" : "the document";
+  const titles: Record<typeof args.action, string> = ar
+    ? {
+        signed: `${args.signerName} وقّع ${title}`,
+        declined: `${args.signerName} رفض توقيع ${title}`,
+        completed: `اكتمل توقيع ${title}`,
+      }
+    : {
+        signed: `${args.signerName} signed ${title}`,
+        declined: `${args.signerName} declined ${title}`,
+        completed: `${title} is fully signed`,
+      };
   await notifyClinicStaff(c, args.clinicId, {
     kind: `document_${args.action}`,
     title: titles[args.action],
-    body: args.reason ? `Reason: ${args.reason}` : "",
+    body: args.reason ? `${ar ? "السبب" : "Reason"}: ${args.reason}` : "",
     url: `/c/${args.clinicSlug}/documents/${args.doc.id}`,
     roles: ["owner", "receptionist"],
   });
