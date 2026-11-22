@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { loadFieldDefinitions } from "./fields";
-import { buildMergeTable, BODY_OVERRIDE_KEY, signersDueNow, type SignerRow } from "./documents";
+import { buildMergeTable, BODY_OVERRIDE_KEY, documentQuestions, signersDueNow, type SignerRow } from "./documents";
+import { answersSectionHtml, fillerSignerId, fillSnapshot, isPatientFillable, mergedAnswers, type PatientFill } from "./questions";
 import { loadDocEvents, type DocEvent } from "./events";
 import { renderTokens, sanitizeHtml, type MergeValue } from "./render";
 
@@ -142,7 +143,8 @@ export type DocumentDetail = {
     fixHint: string | null;
     used: boolean;
   }[];
-  missing: { key: string; label: string; fixHint: string | null }[];
+  /** Empty values. `byPatient` ones do not block: the patient fills them when signing (0114). */
+  missing: { key: string; label: string; fixHint: string | null; byPatient: boolean }[];
   events: DocEvent[];
   roles: { key: string; label: string; label_ar: string | null; is_staff: boolean }[];
   extraQuestions: {
@@ -225,8 +227,15 @@ export async function loadDocumentDetail(
     freezing. A draft is rendered live, with overrides marked, so staff can see
     at a glance which values they changed for this document only.
   */
+  const questions = documentQuestions(doc, doc.fields_schema);
+  const fills = (Array.isArray(doc.patient_fills) ? doc.patient_fills : []) as PatientFill[];
   const previewHtml = doc.content_snapshot
-    ? doc.content_snapshot
+    ? fillSnapshot(doc.content_snapshot, fills, mergedAnswers(signers), doc.language) +
+      answersSectionHtml(
+        questions,
+        signers.map((s) => ({ name: s.display_name, role_key: s.role_key, field_answers: s.field_answers })),
+        doc.language
+      )
     : renderTokens(
         sanitizeHtml(bodySource),
         new Map<string, MergeValue>(
@@ -259,10 +268,11 @@ export async function loadDocumentDetail(
       key: m.key,
       label: doc.language === "ar" ? m.labelAr : m.label,
       fixHint: m.fixHint,
+      byPatient: !!doc.patient_id && !!fillerSignerId(signers) && isPatientFillable(m.key, m.scope),
     })),
     events,
     roles: roles.rows,
-    extraQuestions: (doc.fields_schema ?? []) as DocumentDetail["extraQuestions"],
+    extraQuestions: questions as DocumentDetail["extraQuestions"],
   };
 }
 

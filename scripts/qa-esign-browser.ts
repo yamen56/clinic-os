@@ -564,8 +564,13 @@ async function journeyRemote(browser: Browser, f: Fixture, locale: "ar" | "en") 
       and it stopped paying on a loaded machine. Watching for the response
       makes this test measure the feature instead of the hardware.
     */
+    // The ping carrying the strokes, specifically: the save made on entering
+    // step 3 (no strokes yet) can still be in flight and would answer first.
     const pinged = pp.waitForResponse(
-      (r) => r.url().includes("/progress") && r.request().method() === "POST",
+      (r) =>
+        r.url().includes("/progress") &&
+        r.request().method() === "POST" &&
+        (r.request().postData() ?? "").includes('"strokes":[['),
       { timeout: 20000 }
     );
     await drawSignature(pp);

@@ -45,6 +45,7 @@ import { documentHash, sanitizeHtml, renderTokens } from "../src/lib/esign/rende
 import { loadDocumentDetail, loadAppointmentDocuments } from "../src/lib/esign/queries";
 import { saveSigningSession, resolveIn } from "../src/lib/esign/public";
 import { generateFinalPdf } from "../src/lib/esign/pdf";
+import { applyPatientFills } from "../src/lib/esign/patient-fill";
 
 const SUPER = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
 const APP = `postgres://clinicos_app:clinicos_app@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -271,14 +272,21 @@ async function setup(): Promise<Fixture> {
 /* ------------------------------------------------------------------ suites */
 
 async function testMergeAndFreeze(f: Fixture) {
-  // A document whose patient is missing a value must not be sendable.
+  /*
+    A document missing the clinic's side — no visit, so no service, price or
+    doctor — must not be sendable. A missing *patient* detail no longer blocks
+    (2026-11-22): the patient fills it on the signing page (testPatientFills).
+  */
   const blocked = await sys(async (c) => {
     await c.query(`update patients set custom_fields = '{}'::jsonb where id = $1`, [f.patientId]);
+    // Without this the patient's booked visit would supply the service and
+    // doctor (resolveContextAppointment), and nothing clinic-side is missing.
+    await c.query(`update appointments set status = 'cancelled' where id = $1`, [f.appointmentId]);
     const signers = await buildDefaultSigners(c, {
       clinicId: f.clinicId,
       signerConfig: { mode: "sequential", signers: [{ role_key: "patient", required: true, order: 0 }] },
       patient: { id: f.patientId, full_name: "أحمد محمد العلي", phone_e164: "+962790000002", birth_date: "1990-04-11" },
-      appointmentId: f.appointmentId,
+      appointmentId: null,
     });
     const id = await createDocument(c, {
       clinicId: f.clinicId,
@@ -287,30 +295,39 @@ async function testMergeAndFreeze(f: Fixture) {
       templateId: f.templateId,
       title: "موافقة الاختبار",
       language: "ar",
-      appointmentId: f.appointmentId,
-      serviceId: f.serviceId,
+      appointmentId: null,
+      serviceId: null,
       signers,
     });
     const r = await sendDocument(c, { clinicId: f.clinicId, documentId: id, userId: f.ownerId });
+    await c.query(`update appointments set status = 'scheduled' where id = $1`, [f.appointmentId]);
     return { id, r };
   });
   check(
     !blocked.r.ok && blocked.r.error === "missing_fields",
-    "a missing merge value blocks sending",
+    "a missing clinic-side value blocks sending",
     blocked.r.ok ? "it sent anyway" : blocked.r.error
   );
   check(
-    !blocked.r.ok && (blocked.r.missing ?? []).includes("patient.national_id"),
+    !blocked.r.ok && (blocked.r.missing ?? []).includes("service.name"),
     "the blocked send names the empty field",
     JSON.stringify(blocked.r.ok ? [] : blocked.r.missing)
   );
+  check(
+    !blocked.r.ok && !(blocked.r.missing ?? []).includes("patient.national_id"),
+    "a missing patient detail is not among the blocks — the patient fills it",
+    JSON.stringify(blocked.r.ok ? [] : blocked.r.missing)
+  );
 
-  // An override on the document unblocks it without touching the patient record.
+  // Overrides on the document unblock it without touching the patient record.
   const unblocked = await sys(async (c) => {
     await c.query(
       `insert into document_field_values
          (clinic_id, document_id, field_key, label, label_ar, value, is_override, sort)
-       values ($1, $2, 'patient.national_id', 'National ID', 'الرقم الوطني', '9901234567', true, 1)`,
+       values ($1, $2, 'patient.national_id', 'National ID', 'الرقم الوطني', '9901234567', true, 1),
+              ($1, $2, 'service.name', 'Service', 'الخدمة', 'خلع ضرس', true, 2),
+              ($1, $2, 'service.price', 'Service price', 'سعر الخدمة', '50 JOD', true, 3),
+              ($1, $2, 'doctor.name', 'Doctor name', 'اسم الطبيب', 'د. اختبار', true, 4)`,
       [f.clinicId, blocked.id]
     );
     const r = await sendDocument(c, {
@@ -546,6 +563,103 @@ async function testParallelAndAutoSign(f: Fixture) {
   check(lines.find((s) => s.roleKey === "clinic_representative")?.userId === f.ownerId, "the clinic representative is the person raising it");
 
   await sys((c) => c.query(`update clinic_members set auto_sign_documents = false where id = $1`, [f.doctorMemberId]));
+}
+
+/**
+ * 2026-11-22: the patient fills what their file is missing and answers the
+ * template's questions on the signing page. Restores the patient and the
+ * template afterwards.
+ */
+async function testPatientFills(f: Fixture) {
+  const patient = { id: f.patientId, full_name: "أحمد محمد العلي", phone_e164: "+962790000002", birth_date: "1990-04-11" };
+  const s = await sys(async (c) => {
+    const keep = (await c.query(`select custom_fields from patients where id = $1`, [f.patientId])).rows[0].custom_fields;
+    const schema = (await c.query(`select fields_schema from document_templates where id = $1`, [f.templateId])).rows[0].fields_schema;
+    await c.query(`update patients set custom_fields = custom_fields - 'national_id' where id = $1`, [f.patientId]);
+    await c.query(`update document_templates set fields_schema = $2 where id = $1`, [
+      f.templateId,
+      JSON.stringify([{ key: "q1", label: "Are you allergic to any medicines?", label_ar: "هل لديك حساسية؟", type: "yes_no", required: true, options: [], roles: ["patient"] }]),
+    ]);
+    // Asked on the same page as the text; the document keeps that even if the template changes.
+    await c.query(`update document_templates set questions_at = 'with' where id = $1`, [f.templateId]);
+    const signers = await buildDefaultSigners(c, {
+      clinicId: f.clinicId,
+      signerConfig: { signers: [{ role_key: "patient" }, { role_key: "doctor" }] },
+      patient,
+      appointmentId: f.appointmentId,
+    });
+    const id = await createDocument(c, {
+      clinicId: f.clinicId, userId: f.ownerId, patientId: f.patientId, templateId: f.templateId,
+      title: "موافقة بأسئلة", language: "ar", appointmentId: f.appointmentId, serviceId: f.serviceId, signers,
+    });
+    const sent = await sendDocument(c, { clinicId: f.clinicId, documentId: id, userId: f.ownerId });
+    await c.query(`update document_templates set questions_at = 'after' where id = $1`, [f.templateId]);
+    const doc = (await c.query(`select patient_fills, questions, questions_at, content_snapshot, content_hash from documents where id = $1`, [id])).rows[0];
+    const rows = await loadSigners(c, id, f.clinicId);
+    return { keep, schema, id, sent, doc, rows };
+  });
+  check(s.sent.ok, "a patient detail missing from the file no longer blocks sending", s.sent.ok ? "" : s.sent.error);
+  check(
+    (s.doc.patient_fills ?? []).some((x: { key: string }) => x.key === "patient.national_id"),
+    "it is left for the patient to fill",
+    JSON.stringify(s.doc.patient_fills)
+  );
+  check(String(s.doc.content_snapshot).includes('data-fill="patient.national_id"'), "the frozen text carries a marked blank");
+  check(documentHash(s.doc.content_snapshot) === s.doc.content_hash, "and the fingerprint covers the text with its blank");
+  check(
+    Array.isArray(s.doc.questions) && s.doc.questions.length === 1 && s.doc.questions[0].roles[0] === "patient",
+    "the questions are frozen with the document"
+  );
+  check(s.doc.questions_at === "with", "so is when they are asked", String(s.doc.questions_at));
+
+  const doctor = s.rows.find((r) => r.role_key === "doctor")!;
+  const pat = s.rows.find((r) => r.role_key === "patient")!;
+  const docSign = await sys((c) =>
+    recordSignature(c, {
+      clinicId: f.clinicId, documentId: s.id, signerId: doctor.id,
+      input: { pngDataUrl: PNG_1PX, consentConfirmed: true }, actorUserId: f.doctorUserId,
+    })
+  );
+  check(docSign.ok, "the doctor is not asked the patient's question", docSign.ok ? "" : docSign.error);
+
+  const noAnswers = await sys((c) =>
+    recordSignature(c, { clinicId: f.clinicId, documentId: s.id, signerId: pat.id, input: { pngDataUrl: PNG_1PX, consentConfirmed: true } })
+  );
+  check(
+    !noAnswers.ok && noAnswers.error === "missing_fields" && /q1/.test(noAnswers.detail ?? "") && /patient\.national_id/.test(noAnswers.detail ?? ""),
+    "the patient cannot sign without answering and filling in",
+    noAnswers.ok ? "it signed" : `${noAnswers.error} ${noAnswers.detail}`
+  );
+
+  const answered = await sys(async (c) => {
+    const r = await recordSignature(c, {
+      clinicId: f.clinicId, documentId: s.id, signerId: pat.id,
+      input: { pngDataUrl: PNG_1PX, consentConfirmed: true, fieldAnswers: { q1: "yes", q1__details: "Penicillin", "patient.national_id": "9812345678" } },
+    });
+    const file = (await c.query(`select custom_fields->>'national_id' as nid from patients where id = $1`, [f.patientId])).rows[0];
+    // Gaps only: a value staff entered is never replaced by what the patient typed.
+    await c.query(`update patients set custom_fields = custom_fields || '{"national_id":"1111111111"}'::jsonb where id = $1`, [f.patientId]);
+    await applyPatientFills(c, {
+      clinicId: f.clinicId, patientId: f.patientId,
+      fills: [{ key: "patient.national_id", label: "National ID", label_ar: "الرقم الوطني", type: "text", options: [] }],
+      answers: { "patient.national_id": "2222222222" },
+    });
+    const kept = (await c.query(`select custom_fields->>'national_id' as nid from patients where id = $1`, [f.patientId])).rows[0];
+    const detail = await loadDocumentDetail(c, f.clinicId, s.id);
+    return { r, file, kept, detail };
+  });
+  check(answered.r.ok && answered.r.completed, "answered and filled in, the patient's signature completes it", answered.r.ok ? "" : answered.r.error);
+  check(answered.file?.nid === "9812345678", "the patient's file gains the detail they filled in", answered.file?.nid);
+  check(answered.kept?.nid === "1111111111", "a value already on file is never overwritten", answered.kept?.nid);
+  check(
+    !!answered.detail?.previewHtml.includes("9812345678") && !!answered.detail?.previewHtml.includes("Penicillin"),
+    "the document shows the filled blank and the answer as asked"
+  );
+
+  await sys(async (c) => {
+    await c.query(`update patients set custom_fields = $2 where id = $1`, [f.patientId, JSON.stringify(s.keep ?? {})]);
+    await c.query(`update document_templates set fields_schema = $2 where id = $1`, [f.templateId, JSON.stringify(s.schema ?? [])]);
+  });
 }
 
 async function testSequentialSigning(f: Fixture) {
@@ -1671,6 +1785,7 @@ async function main() {
   await testTokenLifecycle(f, firstDoc);
   const completed = await testSequentialSigning(f);
   await testParallelAndAutoSign(f);
+  await testPatientFills(f);
   await testHashMismatchRefusal(f);
   await testAppendOnlyAudit(f);
   await testGuardianAndEdgeCases(f);

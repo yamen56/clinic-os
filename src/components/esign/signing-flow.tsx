@@ -8,6 +8,8 @@ import { DocumentBody } from "@/components/esign/document-body";
 import { SignaturePad, type SignaturePadHandle, type Stroke } from "@/components/esign/signature-pad";
 import { SigningChrome, StepIndicator } from "@/components/esign/signing-chrome";
 import type { PublicSigningView } from "@/lib/esign/public";
+import { QuestionInput } from "@/components/esign/question-input";
+import { answerText, unanswered } from "@/lib/esign/questions";
 import { Check, ChevronDown, WifiOff, CircleCheck, X } from "lucide-react";
 
 /**
@@ -26,6 +28,9 @@ import { Check, ChevronDown, WifiOff, CircleCheck, X } from "lucide-react";
  *  - A submit that fails while offline never discards the signature. It retries
  *    on its own when the connection returns, and says so in the meantime.
  */
+
+/** The journey's screens; "ask" exists only when the template asks before the text. */
+type Screen = "ask" | "read" | "confirm" | "sign";
 
 export type SubmitPayload = {
   png: string;
@@ -58,7 +63,22 @@ export function SigningFlow({
   const t = useSignWords();
   const resume = view.session;
 
-  const [step, setStep] = useState(resume?.lastStep ?? 1);
+  /*
+    Where the questions and the patient's own details go (0114), as the template
+    chose: on their own screen before the text, on the reading page under the
+    text, or with the consent tick after it (the default). Nothing to ask, and
+    the journey is the plain three steps.
+  */
+  const hasAsk = view.fills.length > 0 || view.extraQuestions.length > 0;
+  const at = hasAsk ? view.questionsAt : "after";
+  const screens: Screen[] = at === "before" ? ["ask", "read", "confirm", "sign"] : ["read", "confirm", "sign"];
+  const stepOf = (s: Screen) => screens.indexOf(s) + 1;
+  const stepLabels = screens.map((s) =>
+    s === "ask" ? t.sign.stepAnswer : s === "read" ? t.sign.stepRead : s === "confirm" ? t.sign.stepConfirm : t.sign.stepSign
+  );
+
+  const [step, setStep] = useState(Math.min(Math.max(resume?.lastStep ?? 1, 1), screens.length));
+  const screen = screens[step - 1] ?? "read";
   const [scrolledToEnd, setScrolledToEnd] = useState(resume?.scrolledToEnd ?? false);
   const [consent, setConsent] = useState(resume?.consentConfirmed ?? false);
   const [answers, setAnswers] = useState<Record<string, unknown>>(resume?.fieldAnswers ?? {});
@@ -114,7 +134,7 @@ export function SigningFlow({
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el || step !== 1) return;
+    if (!el || screen !== "read") return;
 
     const check = () => {
       // 24px of slack: on a phone the last line often sits a hair above the
@@ -128,7 +148,7 @@ export function SigningFlow({
     check();
     el.addEventListener("scroll", check, { passive: true });
     return () => el.removeEventListener("scroll", check);
-  }, [step, scrolledToEnd, saveProgress]);
+  }, [screen, scrolledToEnd, saveProgress]);
 
   /* --------------------------------------------------- offline resubmission */
 
@@ -220,12 +240,71 @@ export function SigningFlow({
     saveProgress({ step: n, strokes: [] });
   };
 
-  const requiredMissing = view.extraQuestions
-    .filter((q) => q.required)
-    .some((q) => {
-      const v = answers[q.key];
-      return v === undefined || v === null || String(v).trim() === "";
+  const requiredMissing = unanswered(view.extraQuestions, view.fills, answers).length > 0;
+
+  /*
+    The patient's missing details and the template's questions — the same block
+    wherever the template put it. `bare` drops the card frames when it sits
+    inside the reading box, under the text.
+  */
+  const askBlock = (bare: boolean) => {
+    const frame = bare ? "grid" : "mt-4 grid rounded-card border border-line bg-surface p-4";
+    return (
+      <>
+        {/* The details the clinic did not have yet — the patient's own, in their own hand. */}
+        {view.fills.length > 0 && (
+          <section className={`${frame} gap-3`} data-your-details>
+            <div>
+              <h2 className="text-[0.9375rem] font-semibold">{t.sign.yourDetails}</h2>
+              <p className="mt-0.5 text-[0.75rem] leading-relaxed text-ink-500">{t.sign.yourDetailsSub}</p>
+            </div>
+            {view.fills.map((f) => (
+              <div key={f.key}>
+                <span className="mb-1.5 flex items-baseline gap-1 text-[0.8125rem] font-semibold">
+                  {locale === "ar" ? f.label_ar || f.label : f.label || f.label_ar}
+                  <span className="text-danger">*</span>
+                </span>
+                <QuestionInput qkey={f.key} type={f.type} options={f.options} answers={answers} onChange={setAnswers} words={t.sign} />
+              </div>
+            ))}
+          </section>
+        )}
+
+        {view.extraQuestions.length > 0 && (
+          <section className={`${frame} gap-4`} data-sign-questions>
+            <h2 className="text-[0.9375rem] font-semibold">{t.sign.extraQuestions}</h2>
+            {view.extraQuestions.map((q) => (
+              <div key={q.key}>
+                <span className="mb-1.5 flex items-baseline gap-1 text-[0.875rem] font-semibold leading-snug">
+                  {locale === "ar" ? q.label_ar || q.label : q.label || q.label_ar}
+                  {q.required && <span className="text-danger">*</span>}
+                </span>
+                <QuestionInput qkey={q.key} type={q.type} options={q.options} answers={answers} onChange={setAnswers} words={t.sign} />
+              </div>
+            ))}
+          </section>
+        )}
+      </>
+    );
+  };
+
+  /*
+    Back on the document, the blanks show what the patient has typed so far —
+    the frozen text keeps its marked blanks; this only paints them.
+  */
+  useEffect(() => {
+    if (screen !== "read" || !view.fills.length) return;
+    const lang = view.document?.language === "en" ? "en" : "ar";
+    scrollRef.current?.querySelectorAll<HTMLElement>("[data-fill]").forEach((el) => {
+      const key = el.dataset.fill ?? "";
+      const fill = view.fills.find((f) => f.key === key);
+      if (!fill) return;
+      if (!el.dataset.label) el.dataset.label = el.textContent ?? "";
+      const text = answerText(fill.type, answers[key], lang, undefined, key);
+      el.textContent = text || el.dataset.label;
+      el.classList.toggle("doc-filled", !!text);
     });
+  }, [screen, answers, view.fills, view.document?.language]);
 
   /* -------------------------------------------------------- terminal screens */
 
@@ -289,7 +368,7 @@ export function SigningFlow({
 
   return (
     <SigningChrome clinic={view.clinic} locale={locale} footer={kioskFooter} credit={mode === "remote" ? "link" : "text"}>
-      <StepIndicator step={step} locale={locale} />
+      <StepIndicator step={step} locale={locale} labels={stepLabels} />
 
       {resume && resume.lastStep > 1 && step === resume.lastStep && (
         <p className="mb-3 rounded-ctl bg-brand-50 px-3 py-2 text-[0.75rem] font-medium text-brand-800">
@@ -297,10 +376,30 @@ export function SigningFlow({
         </p>
       )}
 
-      {step === 1 && (
+      {/* Questions first, when the clinic wants the answers before the patient reads. */}
+      {screen === "ask" && (
         <>
           <h1 className="font-display text-xl font-bold">{view.document?.title}</h1>
           <p className="mt-1 text-[0.8125rem] leading-relaxed text-ink-500">{greeting}</p>
+          {askBlock(false)}
+          <div className="mt-5 grid gap-2">
+            <Button size="lg" className="h-12 w-full" disabled={requiredMissing} onClick={() => goTo(stepOf("read"))}>
+              {t.sign.continue}
+            </Button>
+            {requiredMissing && <p className="text-center text-[0.75rem] text-ink-500">{t.sign.answerAll}</p>}
+            <div className="flex justify-end">
+              <button onClick={() => setDeclineOpen(true)} className="text-[0.8125rem] font-medium text-danger underline">
+                {t.sign.decline}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {screen === "read" && (
+        <>
+          <h1 className="font-display text-xl font-bold">{view.document?.title}</h1>
+          {at !== "before" && <p className="mt-1 text-[0.8125rem] leading-relaxed text-ink-500">{greeting}</p>}
 
           <div
             ref={scrollRef}
@@ -310,6 +409,12 @@ export function SigningFlow({
               <PdfPreview src={`/api/public/sign/${token}/pdf`} onEnd={() => setScrolledToEnd(true)} />
             ) : (
               <DocumentBody html={view.document?.snapshot ?? ""} />
+            )}
+            {/* On the same page as the text: read it, then answer under it, in one scroll. */}
+            {at === "with" && (
+              <div className="mt-6 grid gap-5 border-t border-line pt-5 leading-normal" data-ask-with-text>
+                {askBlock(true)}
+              </div>
             )}
           </div>
 
@@ -328,17 +433,33 @@ export function SigningFlow({
                 {t.sign.scrollToEnd}
               </button>
             ) : (
-              <Button size="lg" className="h-12 w-full" onClick={() => goTo(2)}>
+              <Button
+                size="lg"
+                className="h-12 w-full"
+                disabled={at === "with" && requiredMissing}
+                onClick={() => goTo(stepOf("confirm"))}
+              >
                 {t.sign.continue}
               </Button>
+            )}
+            {scrolledToEnd && at === "with" && requiredMissing && (
+              <p className="mt-1.5 text-center text-[0.75rem] text-ink-500">{t.sign.answerAll}</p>
+            )}
+            {at === "before" && (
+              <button onClick={() => goTo(stepOf("ask"))} className="mt-2 text-[0.8125rem] font-medium text-ink-500 underline">
+                {t.sign.back}
+              </button>
             )}
           </div>
         </>
       )}
 
-      {step === 2 && (
+      {screen === "confirm" && (
         <>
           <h1 className="font-display text-lg font-bold">{t.sign.consentTitle}</h1>
+
+          {at === "after" && askBlock(false)}
+
           <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-card border-2 border-line bg-surface p-4 transition-colors has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50/50">
             <input
               type="checkbox"
@@ -352,68 +473,22 @@ export function SigningFlow({
             <span className="text-[0.875rem] leading-relaxed">{t.sign.consentLabel}</span>
           </label>
 
-          {view.extraQuestions.length > 0 && (
-            <div className="mt-4 grid gap-3">
-              <h2 className="text-[0.8125rem] font-semibold text-ink-700">{t.sign.extraQuestions}</h2>
-              {view.extraQuestions.map((q) => (
-                <label key={q.key} className="block">
-                  <span className="mb-1.5 flex items-baseline gap-1 text-[0.8125rem] font-semibold">
-                    {locale === "ar" ? q.label_ar || q.label : q.label || q.label_ar}
-                    {q.required && <span className="text-danger">*</span>}
-                  </span>
-                  {q.type === "select" ? (
-                    <select
-                      value={String(answers[q.key] ?? "")}
-                      onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                      className="h-11 w-full rounded-ctl border border-line bg-surface px-3 text-[0.9375rem]"
-                    >
-                      <option value="">—</option>
-                      {q.options.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </select>
-                  ) : q.type === "checkbox" ? (
-                    <input
-                      type="checkbox"
-                      checked={!!answers[q.key]}
-                      onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.checked })}
-                      className="h-5 w-5 accent-brand-600"
-                    />
-                  ) : q.type === "longtext" ? (
-                    <textarea
-                      value={String(answers[q.key] ?? "")}
-                      onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                      className="min-h-20 w-full rounded-ctl border border-line bg-surface px-3 py-2 text-[0.9375rem]"
-                    />
-                  ) : (
-                    <input
-                      type={q.type === "number" ? "number" : q.type === "date" ? "date" : "text"}
-                      value={String(answers[q.key] ?? "")}
-                      onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                      className="h-11 w-full rounded-ctl border border-line bg-surface px-3 text-[0.9375rem]"
-                    />
-                  )}
-                </label>
-              ))}
-            </div>
-          )}
-
           <div className="mt-5 grid gap-2">
             <Button
               size="lg"
               className="h-12 w-full"
               disabled={!consent || requiredMissing}
-              onClick={() => goTo(3)}
+              onClick={() => goTo(stepOf("sign"))}
             >
               {t.sign.continue}
             </Button>
-            {!consent && (
-              <p className="text-center text-[0.75rem] text-ink-500">{t.sign.consentRequired}</p>
+            {requiredMissing ? (
+              <p className="text-center text-[0.75rem] text-ink-500">{t.sign.answerAll}</p>
+            ) : (
+              !consent && <p className="text-center text-[0.75rem] text-ink-500">{t.sign.consentRequired}</p>
             )}
             <div className="flex items-center justify-between">
-              <button onClick={() => goTo(1)} className="text-[0.8125rem] font-medium text-ink-500 underline">
+              <button onClick={() => goTo(stepOf("read"))} className="text-[0.8125rem] font-medium text-ink-500 underline">
                 {t.sign.back}
               </button>
               <button
@@ -427,7 +502,7 @@ export function SigningFlow({
         </>
       )}
 
-      {step === 3 && (
+      {screen === "sign" && (
         <>
           <h1 className="font-display text-lg font-bold">{t.sign.signTitle}</h1>
           <div className="mt-3">
@@ -442,7 +517,7 @@ export function SigningFlow({
                 // the pen back where it was, not show a picture of it. Called at
                 // the end of every stroke, so what is stored is what was drawn.
                 const strokes = padRef.current?.strokes();
-                if (strokes?.length) saveProgress({ step: 3, strokes });
+                if (strokes?.length) saveProgress({ step: stepOf("sign"), strokes });
               }}
             />
           </div>
@@ -480,7 +555,7 @@ export function SigningFlow({
               {submitting ? t.sign.submitting : t.sign.finish}
             </Button>
             <div className="flex items-center justify-between">
-              <button onClick={() => goTo(2)} className="text-[0.8125rem] font-medium text-ink-500 underline">
+              <button onClick={() => goTo(stepOf("confirm"))} className="text-[0.8125rem] font-medium text-ink-500 underline">
                 {t.sign.back}
               </button>
               <button

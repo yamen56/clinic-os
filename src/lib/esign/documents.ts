@@ -16,6 +16,37 @@ import {
   type ResolvedField,
 } from "./fields";
 import { AGE_OF_MAJORITY, STAFF_ROLE_KEYS, TERMINAL_STATUSES, type DocumentStatus } from "./constants";
+import {
+  fillerSignerId,
+  isPatientFillable,
+  normalizeQuestionsAt,
+  type PatientFill,
+  type QuestionsAt,
+  type SignerQuestion,
+} from "./questions";
+
+/**
+ * A template's questions as a document freezes them. Older templates were
+ * saved before questions said who answers them; those keep "everyone".
+ */
+export function normalizeQuestions(raw: unknown): SignerQuestion[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((q) => q && typeof q === "object" && typeof (q as { key?: unknown }).key === "string")
+    .map((q) => {
+      const x = q as Partial<SignerQuestion>;
+      return {
+        key: String(x.key),
+        label: String(x.label ?? ""),
+        label_ar: String(x.label_ar ?? ""),
+        type: String(x.type ?? "text"),
+        required: !!x.required,
+        options: Array.isArray(x.options) ? x.options.map(String).filter(Boolean) : [],
+        roles: Array.isArray(x.roles) ? x.roles.map(String) : [],
+      };
+    })
+    .filter((q) => q.label || q.label_ar);
+}
 
 /**
  * The document lifecycle.
@@ -52,7 +83,18 @@ export type DocumentRow = {
   locked_by: string | null;
   locked_at: string | null;
   created_at: string;
+  /** Frozen with the content (0114); null on documents sent before then — read the template's. */
+  questions: SignerQuestion[] | null;
+  /** Patient details left for the patient to fill on the signing page (0114). */
+  patient_fills: PatientFill[];
+  /** When the signing page asks: frozen with the questions (0114); null reads as "after". */
+  questions_at: QuestionsAt | null;
 };
+
+/** What this document asks: its frozen copy, or the template's for one sent before 0114. */
+export function documentQuestions(doc: { questions?: unknown }, templateSchema?: unknown): SignerQuestion[] {
+  return normalizeQuestions(Array.isArray(doc.questions) ? doc.questions : templateSchema);
+}
 
 export type SignerRow = {
   id: string;
@@ -503,19 +545,28 @@ export async function freezeDocument(
     return { snapshot: doc.content_snapshot, hash: doc.content_hash };
   }
 
+  const template = doc.template_id
+    ? (
+        await c.query(`select body, body_ar, fields_schema, questions_at from document_templates where id = $1`, [doc.template_id])
+      ).rows[0]
+    : null;
+  // The questions go out with the document: editing the template tomorrow must
+  // not change what this one asked, or what its signed copy says it asked.
+  const questions = normalizeQuestions(template?.fields_schema);
+  const questionsAt = normalizeQuestionsAt(template?.questions_at);
+
   // Uploaded documents are frozen as the file itself; there is nothing to render.
   if (doc.source === "upload") {
     if (!doc.source_pdf_path) return { error: "no_source_pdf" };
     const hash = documentHash(`upload:${doc.source_pdf_path}:${doc.id}`);
-    await c.query(`update documents set content_hash = $2 where id = $1`, [documentId, hash]);
+    await c.query(`update documents set content_hash = $2, questions = $3, questions_at = $4 where id = $1`, [
+      documentId,
+      hash,
+      JSON.stringify(questions),
+      questionsAt,
+    ]);
     return { snapshot: "", hash };
   }
-
-  const template = doc.template_id
-    ? (
-        await c.query(`select body, body_ar from document_templates where id = $1`, [doc.template_id])
-      ).rows[0]
-    : null;
 
   // Staff may rewrite the copy for one instance. That override, when present,
   // replaces the template body entirely — it is what they previewed and what
@@ -543,13 +594,37 @@ export async function freezeDocument(
     appointmentId: doc.appointment_id,
     serviceId: doc.service_id,
   });
-  if (table.missing.length) {
-    return { error: "missing_fields", missing: table.missing.map((m) => m.key) };
+  /*
+    A patient detail the file lacks no longer stops the document (2026-11-22):
+    the patient fills it in on the signing page. Reception used to type
+    something — anything — to get past this block; a signed consent in the
+    wild read "date of birth 8765". Only when there is a patient to ask;
+    clinic, doctor, service and visit details still have to be right first.
+  */
+  const canAsk = !!doc.patient_id && !!fillerSignerId(await loadSigners(c, documentId, clinicId));
+  const askable = canAsk ? table.missing.filter((m) => isPatientFillable(m.key, m.scope)) : [];
+  const blocking = table.missing.filter((m) => !askable.includes(m));
+  if (blocking.length) {
+    return { error: "missing_fields", missing: blocking.map((m) => m.key) };
   }
+  const defs = askable.length ? await loadFieldDefinitions(c, clinicId) : [];
+  const fills: PatientFill[] = askable.map((m) => {
+    const d = defs.find((x) => x.key === m.key);
+    return {
+      key: m.key,
+      label: m.label,
+      label_ar: m.labelAr,
+      type: d?.field_type ?? "text",
+      options: Array.isArray(d?.options) ? d!.options.map(String) : [],
+    };
+  });
 
   const values = new Map<string, MergeValue>(
     table.fields.map((f) => [f.key, { value: f.value, isOverride: f.isOverride }])
   );
+  for (const f of fills) {
+    values.set(f.key, { value: "", fill: doc.language === "ar" ? f.label_ar || f.label : f.label || f.label_ar });
+  }
 
   // Persist every value the body used, so the document carries its own copy and
   // a field renamed tomorrow keeps the label it was signed under.
@@ -591,11 +666,11 @@ export async function freezeDocument(
   });
   const hash = documentHash(snapshot);
 
-  await c.query(`update documents set content_snapshot = $2, content_hash = $3 where id = $1`, [
-    documentId,
-    snapshot,
-    hash,
-  ]);
+  await c.query(
+    `update documents set content_snapshot = $2, content_hash = $3, questions = $4, patient_fills = $5, questions_at = $6
+      where id = $1`,
+    [documentId, snapshot, hash, JSON.stringify(questions), JSON.stringify(fills), questionsAt]
+  );
   return { snapshot, hash };
 }
 

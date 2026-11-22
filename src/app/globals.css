@@ -831,6 +831,24 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
 }
 
 /*
+  The patient's own blanks (0114): a detail the file lacked, left for them to
+  fill on the signing page. Dashed and labelled while empty, so it reads as
+  "yours to fill" rather than an error; solid once filled. And the answers
+  section, as it appears under the document on screen and on paper.
+*/
+@layer components {
+  .doc-fill {
+    display: inline-block; min-width: 4.5rem; padding: 0 0.4rem; text-align: center;
+    border: 1px dashed var(--color-brand-400); border-radius: 4px;
+    color: var(--color-ink-500); font-size: 0.85em;
+  }
+  .doc-fill.doc-filled { border-style: solid; color: var(--color-ink-900); font-size: 1em; font-weight: 600; }
+  .doc-filled { font-weight: 600; }
+  .doc-body-wrap .doc-answers { margin-top: 1rem; }
+  .doc-body-wrap .doc-answers th { width: 52%; font-weight: 600; background: var(--color-subtle); }
+}
+
+/*
   A typed signature has to read as a signature rather than as a label, so it
   keeps its script face at a size no other text uses. Arabic is never skewed or
   letter-spaced here either — Ruqʿah already carries the slant.

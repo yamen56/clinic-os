@@ -3,6 +3,7 @@ import { saveFile } from "../storage";
 import { notifyClinicStaff, notifyUser } from "../notify";
 import { logDocEvent } from "./events";
 import {
+  documentQuestions,
   isSignerDue,
   isTerminal,
   loadSigners,
@@ -11,6 +12,8 @@ import {
   type DocumentRow,
   type SignerRow,
 } from "./documents";
+import { fillerSignerId, questionsForRole, unanswered } from "./questions";
+import { applyPatientFills } from "./patient-fill";
 
 /**
  * Recording a signature.
@@ -158,25 +161,22 @@ export async function recordSignature(
   const png = decodeSignaturePng(args.input.pngDataUrl);
   if (!png) return { ok: false, error: "bad_signature" };
 
-  // Required inputs the template asks each signer for.
-  const template = doc.template_id
-    ? (await c.query(`select fields_schema from document_templates where id = $1`, [doc.template_id]))
-        .rows[0]
-    : null;
-  const schema = (template?.fields_schema ?? []) as {
-    key: string;
-    required?: boolean;
-    roles?: string[];
-  }[];
+  /*
+    What this signer has to answer: the document's own frozen questions (the
+    template's, for a document sent before 0114), and — for the patient — the
+    details the file was missing when it went out.
+  */
+  const template =
+    doc.template_id && !Array.isArray(doc.questions)
+      ? (await c.query(`select fields_schema from document_templates where id = $1`, [doc.template_id])).rows[0]
+      : null;
+  const questions = questionsForRole(documentQuestions(doc, template?.fields_schema), signer.role_key);
+  const isFiller = fillerSignerId(signers) === signer.id;
+  const fills = isFiller && Array.isArray(doc.patient_fills) ? doc.patient_fills : [];
   const answers = args.input.fieldAnswers ?? {};
-  const missing = schema
-    .filter((f) => f.required && (!f.roles?.length || f.roles.includes(signer.role_key)))
-    .filter((f) => {
-      const v = answers[f.key];
-      return v === undefined || v === null || String(v).trim() === "";
-    });
+  const missing = unanswered(questions, fills, answers);
   if (missing.length) {
-    return { ok: false, error: "missing_fields", detail: missing.map((m) => m.key).join(",") };
+    return { ok: false, error: "missing_fields", detail: missing.join(",") };
   }
 
   const saved = await saveFile(
@@ -248,6 +248,11 @@ export async function recordSignature(
   }
 
   await c.query(`delete from signing_sessions where signer_id = $1`, [args.signerId]);
+
+  // The patient's own details go into their file — the gaps only.
+  if (fills.length && doc.patient_id) {
+    await applyPatientFills(c, { clinicId: args.clinicId, patientId: doc.patient_id, fills, answers });
+  }
 
   const status = await refreshDocumentStatus(c, args.clinicId, args.documentId);
   return { ok: true, documentStatus: status, completed: status === "completed" };

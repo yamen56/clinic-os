@@ -23,6 +23,7 @@ import { DownloadSignedPdf } from "@/components/esign/download-signed";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { buttonClass } from "@/components/ui/button-class";
 import { SignersPanel, type StaffOption } from "./signers-panel";
+import { QuestionInput } from "@/components/esign/question-input";
 import {
   clearFieldValueAction,
   declineAsStaffAction,
@@ -51,6 +52,7 @@ import {
   FileWarning,
   FileUp,
   MoreHorizontal,
+  UserPen,
 } from "lucide-react";
 
 type Signer = {
@@ -118,7 +120,7 @@ type Detail = {
     fixHint: string | null;
     used: boolean;
   }[];
-  missing: { key: string; label: string; fixHint: string | null }[];
+  missing: { key: string; label: string; fixHint: string | null; byPatient: boolean }[];
   events: {
     id: string;
     event_type: string;
@@ -183,6 +185,8 @@ export function DocumentDetailClient({
   const padRef = useRef<SignaturePadHandle>(null);
 
   const isDraft = doc.status === "draft";
+  const patientFills = detail.missing.filter((m) => m.byPatient);
+  const blockingMissing = detail.missing.filter((m) => !m.byPatient);
   const isTerminal = ["completed", "declined", "expired", "voided"].includes(doc.status);
   /** Everyone required has signed — there is a final version to hand over. */
   const isCompleted = doc.status === "completed";
@@ -458,15 +462,28 @@ export function DocumentDetailClient({
           body={t.docs.lockedBody.replace("{name}", doc.locked_by_name ?? "")}
         />
       )}
-      {detail.missing.length > 0 && !isTerminal && (
+      {/*
+        Only on a draft: once sent, the text is frozen and nothing here can
+        change it. Patient details the file lacks are not a block any more —
+        the patient fills them when signing — so they get their own, calm line.
+      */}
+      {isDraft && patientFills.length > 0 && (
+        <Banner
+          tone="brand"
+          icon={<UserPen className="h-4 w-4" />}
+          title={t.docs.patientFillsTitle}
+          body={`${patientFills.map((m) => m.label).join(locale === "ar" ? "، " : ", ")} — ${t.docs.patientFillsBody}`}
+        />
+      )}
+      {isDraft && blockingMissing.length > 0 && (
         <Banner
           tone="warning"
           icon={<FileWarning className="h-4 w-4" />}
-          title={t.docs.missingTitle.replace("{n}", String(detail.missing.length))}
+          title={t.docs.missingTitle.replace("{n}", String(blockingMissing.length))}
           body={t.docs.missingBody}
           action={
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {detail.missing.map((m) => (
+              {blockingMissing.map((m) => (
                 <button
                   key={m.key}
                   onClick={() => {
@@ -479,7 +496,7 @@ export function DocumentDetailClient({
                   {m.label}
                 </button>
               ))}
-              {doc.patient_id && (
+              {doc.patient_id && blockingMissing.some((m) => m.fixHint === "patient") && (
                 <Link
                   href={`/c/${slug}/patients/${doc.patient_id}`}
                   className="rounded-full bg-st-pending px-2.5 py-1 text-[0.75rem] font-semibold text-surface"
@@ -767,35 +784,8 @@ export function DocumentDetailClient({
           {detail.extraQuestions
             .filter((q) => !q.roles?.length || (mySigner && q.roles.includes(mySigner.role_key)))
             .map((q) => (
-              <Field
-                key={q.key}
-                label={locale === "ar" ? q.label_ar || q.label : q.label || q.label_ar}
-                required={q.required}
-              >
-                {q.type === "select" ? (
-                  <Select
-                    value={String(answers[q.key] ?? "")}
-                    onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                  >
-                    <option value="">—</option>
-                    {q.options.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </Select>
-                ) : q.type === "longtext" ? (
-                  <Textarea
-                    value={String(answers[q.key] ?? "")}
-                    onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                  />
-                ) : (
-                  <Input
-                    type={q.type === "number" ? "number" : q.type === "date" ? "date" : "text"}
-                    value={String(answers[q.key] ?? "")}
-                    onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                  />
-                )}
+              <Field key={q.key} label={locale === "ar" ? q.label_ar || q.label : q.label || q.label_ar} required={q.required}>
+                <QuestionInput qkey={q.key} type={q.type} options={q.options} answers={answers} onChange={setAnswers} words={t.sign} />
               </Field>
             ))}
 

@@ -87,24 +87,26 @@ export function SigningChrome({
 }
 
 /** "Step 2 of 3" plus a rail, always visible. */
-export function StepIndicator({ step, locale }: { step: number; locale: Locale }) {
+export function StepIndicator({ step, labels: given }: { step: number; locale: Locale; labels?: string[] }) {
   const t = useSignWords();
-  const labels = [t.sign.stepRead, t.sign.stepConfirm, t.sign.stepSign];
+  // Four steps when the questions come before the text (0114), three otherwise.
+  const labels = given ?? [t.sign.stepRead, t.sign.stepConfirm, t.sign.stepSign];
+  const total = labels.length;
   return (
     <div className="mb-4">
       <div className="mb-1.5 flex items-baseline justify-between gap-2">
         <span className="text-[0.8125rem] font-semibold text-ink-700">
-          {t.sign.stepOf.replace("{n}", String(step)).replace("{total}", "3")}
+          {t.sign.stepOf.replace("{n}", String(step)).replace("{total}", String(total))}
         </span>
         <span className="text-[0.8125rem] text-ink-500">{labels[step - 1]}</span>
       </div>
       {/*
-        Three separate bars rather than one filling bar: on a 3-step flow the
+        Separate bars rather than one filling bar: on a 3-step flow the
         segments read as "how many are left", which is the question the patient
         is actually asking.
       */}
-      <div className="flex gap-1.5" role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={3}>
-        {[1, 2, 3].map((n) => (
+      <div className="flex gap-1.5" role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={total}>
+        {labels.map((_, i) => i + 1).map((n) => (
           <span
             key={n}
             className={`h-1 flex-1 rounded-full transition-colors duration-220 ${

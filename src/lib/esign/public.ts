@@ -1,7 +1,8 @@
 import type { PoolClient } from "pg";
 import { withSystem } from "../db";
 import { lookupToken, type TokenRow } from "./tokens";
-import { isSignerDue, loadSigners, isTerminal, type DocumentRow, type SignerRow } from "./documents";
+import { documentQuestions, isSignerDue, loadSigners, isTerminal, type DocumentRow, type SignerRow } from "./documents";
+import { fillerSignerId, normalizeQuestionsAt, questionsForRole, type PatientFill, type QuestionsAt } from "./questions";
 
 /**
  * The public signing page's view of the world.
@@ -78,6 +79,10 @@ export type PublicSigningView = {
     options: string[];
     roles: string[];
   }[];
+  /** Patient details the file was missing, for this signer to fill before signing (0114). */
+  fills: PatientFill[];
+  /** Where the questions and details go in the journey (0114). */
+  questionsAt: QuestionsAt;
   /** Named when someone else has to sign first, so the page can say so. */
   waitingOn: string | null;
   /** The next signer, for the confirmation screen. */
@@ -92,6 +97,8 @@ const EMPTY: PublicSigningView = {
   signer: null,
   session: null,
   extraQuestions: [],
+  fills: [],
+  questionsAt: "after",
   waitingOn: null,
   nextSignerName: null,
   tokenId: null,
@@ -272,9 +279,9 @@ async function loadContextFor(
             fieldAnswers: (session.field_answers ?? {}) as Record<string, unknown>,
           }
         : null,
-      extraQuestions: ((doc.fields_schema ?? []) as PublicSigningView["extraQuestions"]).filter(
-        (q) => !q.roles?.length || q.roles.includes(signer.role_key)
-      ),
+      extraQuestions: questionsForRole(documentQuestions(doc, doc.fields_schema), signer.role_key),
+      fills: fillerSignerId(signers) === signer.id && Array.isArray(doc.patient_fills) ? doc.patient_fills : [],
+      questionsAt: normalizeQuestionsAt(doc.questions_at),
       waitingOn: outstandingBefore?.display_name ?? null,
       nextSignerName: nextAfterMe?.display_name ?? null,
       tokenId: row.id,

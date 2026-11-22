@@ -8,7 +8,7 @@ import { fmtDateTime } from "@/lib/dates";
 import { Card, PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
-import { Field, Input, Select, Toggle } from "@/components/ui/input";
+import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
@@ -18,6 +18,7 @@ import { ServiceChips } from "@/components/ui/service-picker";
 import type { SectionRow, ServiceRow } from "@/lib/services";
 import { saveTemplateAction } from "../actions";
 import { Plus, Trash2, Eye, Braces } from "lucide-react";
+import { QUESTION_KINDS, QUESTIONS_AT, READY_QUESTIONS, normalizeQuestionsAt } from "@/lib/esign/questions";
 
 type Def = {
   key: string;
@@ -130,6 +131,8 @@ export function TemplateEditor({
       roles: f.roles ?? [],
     }))
   );
+  // When the patient answers: before reading, with the text, or after it.
+  const [questionsAt, setQuestionsAt] = useState(normalizeQuestionsAt(template?.questions_at));
   const [tab, setTab] = useState<"ar" | "en">(language === "en" ? "en" : "ar");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
@@ -186,6 +189,14 @@ export function TemplateEditor({
         toast(t.docTemplates.errors.fieldLabelRequired.replace("{n}", String(blank + 1)), "error");
         return;
       }
+      // A "choose" question with nothing to choose from would reach the patient as an empty list.
+      const noChoices = extras.findIndex(
+        (f) => (f.type === "select" || f.type === "choices") && !f.options.some((o) => o.trim())
+      );
+      if (noChoices >= 0) {
+        toast(t.docTemplates.errors.choicesRequired.replace("{n}", String(noChoices + 1)), "error");
+        return;
+      }
       const r = await saveTemplateAction(slug, {
         id: (template?.id as string) ?? undefined,
         name: name.trim(),
@@ -196,6 +207,7 @@ export function TemplateEditor({
         bodyAr,
         signerConfig: { mode, signers },
         fieldsSchema: extras,
+        questionsAt,
         isActive,
         serviceIds,
         autoSend,
@@ -469,90 +481,150 @@ export function TemplateEditor({
       </Card>
 
       {/* ---------------------------------------------------- extra questions */}
+      {/*
+        Questions at signing (2026-11-22), modelled on a clinic's paper intake
+        form: pick a ready question in one tap or write your own; four kinds
+        only; asked of the patient unless you say otherwise. They used to be
+        asked of every signer (a doctor got "are you allergic?"), and a
+        "choose" question had nowhere to type its choices.
+      */}
       <Card>
-        <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
-          <div>
-            <h2 className="text-[0.9375rem] font-semibold">{t.docTemplates.extraFields}</h2>
-            <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docTemplates.extraFieldsSub}</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setExtras([
-                ...extras,
-                {
-                  key: nextQuestionKey(extras),
-                  label: "",
-                  label_ar: "",
-                  type: "text",
-                  required: false,
-                  options: [],
-                  roles: [],
-                },
-              ])
-            }
-          >
-            <Plus className="h-4 w-4" />
-            {t.docTemplates.addExtraField}
-          </Button>
+        <div className="border-b border-line px-5 py-4">
+          <h2 className="text-[0.9375rem] font-semibold">{t.docTemplates.extraFields}</h2>
+          <p className="mt-0.5 text-[0.8125rem] text-ink-500">{t.docTemplates.extraFieldsSub}</p>
         </div>
-        {extras.length > 0 && (
-          <div className="grid gap-3 p-5">
-            {extras.map((f, i) => (
-              <div key={i} className="grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-[1fr_1fr_9rem_auto]">
-                <Field label={t.docTemplates.extraLabel}>
-                  <Input
-                    value={f.label}
-                    onChange={(e) =>
-                      setExtras(extras.map((x, idx) => (idx === i ? { ...x, label: e.target.value } : x)))
-                    }
-                  />
-                </Field>
-                <Field label={t.docTemplates.extraLabel + " (AR)"}>
-                  <Input
-                    dir="rtl"
-                    value={f.label_ar}
-                    onChange={(e) =>
-                      setExtras(extras.map((x, idx) => (idx === i ? { ...x, label_ar: e.target.value } : x)))
-                    }
-                  />
-                </Field>
-                <Field label={t.fields.type}>
-                  <Select
-                    value={f.type}
-                    onChange={(e) =>
-                      setExtras(extras.map((x, idx) => (idx === i ? { ...x, type: e.target.value } : x)))
-                    }
+        <div className="grid gap-3 p-5">
+          {/* Some clinics ask before the patient reads, some beside the text; most after it. */}
+          {extras.length > 0 && (
+            <div className="grid gap-1.5">
+              <span className="text-[0.75rem] font-semibold text-ink-500">{t.docTemplates.questionsAt}</span>
+              <div
+                role="radiogroup"
+                aria-label={t.docTemplates.questionsAt}
+                className="grid grid-cols-3 gap-0.5 rounded-ctl bg-ink-900/5 p-0.5 sm:max-w-md"
+                data-questions-at={questionsAt}
+              >
+                {QUESTIONS_AT.map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={questionsAt === k}
+                    onClick={() => setQuestionsAt(k)}
+                    data-at={k}
+                    className={`min-h-10 touch-manipulation rounded-md px-2 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
+                      questionsAt === k ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+                    }`}
                   >
-                    {(["text", "longtext", "number", "date", "select", "checkbox"] as const).map((k) => (
-                      <option key={k} value={k}>
-                        {(t.fields.types as Record<string, string>)[k]}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <div className="flex items-end gap-2 pb-1">
-                  <Toggle
-                    checked={f.required}
-                    label={t.docs.requiredSigner}
-                    onChange={(v) =>
-                      setExtras(extras.map((x, idx) => (idx === i ? { ...x, required: v } : x)))
-                    }
-                  />
+                    {t.docTemplates.questionsAtKinds[k]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {READY_QUESTIONS.some((r) => !extras.some((x) => x.label === r.label || x.label_ar === r.label_ar)) && (
+            <div className="flex flex-wrap items-center gap-1.5" data-ready-questions>
+              <span className="me-1 text-[0.75rem] font-semibold text-ink-500">{t.docTemplates.readyQuestions}</span>
+              {READY_QUESTIONS.filter((r) => !extras.some((x) => x.label === r.label || x.label_ar === r.label_ar)).map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() =>
+                    setExtras([
+                      ...extras,
+                      { key: nextQuestionKey(extras), label: r.label, label_ar: r.label_ar, type: r.type, required: true, options: [], roles: ["patient"] },
+                    ])
+                  }
+                  className="inline-flex min-h-9 items-center gap-1 rounded-full border border-line bg-surface px-3 text-[0.75rem] font-medium text-ink-700 transition-colors hover:border-brand-400 hover:bg-brand-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {locale === "ar" ? r.label_ar : r.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {extras.map((f, i) => {
+            const set = (patch: Partial<ExtraField>) => setExtras(extras.map((x, idx) => (idx === i ? { ...x, ...patch } : x)));
+            const kinds: string[] = (QUESTION_KINDS as readonly string[]).includes(f.type) ? [...QUESTION_KINDS] : [...QUESTION_KINDS, f.type];
+            return (
+              <div key={f.key} className="grid gap-3 rounded-lg border border-line p-3" data-question-row>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label={t.docTemplates.extraLabel + " (AR)"}>
+                    <Input dir="rtl" value={f.label_ar} onChange={(e) => set({ label_ar: e.target.value })} />
+                  </Field>
+                  <Field label={t.docTemplates.extraLabel + " (EN)"}>
+                    <Input dir="ltr" value={f.label} onChange={(e) => set({ label: e.target.value })} />
+                  </Field>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field label={t.fields.type}>
+                    <Select className="!w-auto min-w-40" value={f.type} onChange={(e) => set({ type: e.target.value })}>
+                      {kinds.map((k) => (
+                        <option key={k} value={k}>
+                          {(t.docTemplates.kinds as Record<string, string>)[k] ?? (t.fields.types as Record<string, string>)[k] ?? k}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t.docTemplates.askedOf}>
+                    <Select
+                      className="!w-auto min-w-36"
+                      value={f.roles[0] ?? ""}
+                      onChange={(e) => set({ roles: e.target.value ? [e.target.value] : [] })}
+                    >
+                      <option value="">{t.docTemplates.everyone}</option>
+                      {roles.map((r) => (
+                        <option key={r.key} value={r.key}>
+                          {roleLabel(r.key)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <label className="flex min-h-10 items-center gap-2 text-[0.8125rem]">
+                    <Toggle checked={f.required} label={t.docTemplates.mustAnswer} onChange={(v) => set({ required: v })} />
+                    {t.docTemplates.mustAnswer}
+                  </label>
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="ms-auto"
                     aria-label={t.common.delete}
                     onClick={() => setExtras(extras.filter((_, idx) => idx !== i))}
                   >
                     <Trash2 className="h-4 w-4 text-danger" />
                   </Button>
                 </div>
+                {(f.type === "select" || f.type === "choices") && (
+                  <Field label={t.docTemplates.choicesLabel}>
+                    <Textarea
+                      rows={3}
+                      value={f.options.join("\n")}
+                      onChange={(e) => set({ options: e.target.value.split("\n").map((o) => o.trimStart()) })}
+                      onBlur={() => set({ options: f.options.map((o) => o.trim()).filter(Boolean) })}
+                    />
+                  </Field>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="justify-self-start"
+            onClick={() =>
+              setExtras([
+                ...extras,
+                { key: nextQuestionKey(extras), label: "", label_ar: "", type: "yes_no", required: true, options: [], roles: ["patient"] },
+              ])
+            }
+          >
+            <Plus className="h-4 w-4" />
+            {t.docTemplates.writeOwn}
+          </Button>
+        </div>
       </Card>
 
       {/* -------------------------------------------------- attached services */}

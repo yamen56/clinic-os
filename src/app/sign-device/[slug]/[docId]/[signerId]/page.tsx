@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { guardClinic } from "@/lib/guard";
 import { isUuid } from "@/lib/uuid";
 import { inClinic } from "@/lib/clinic-api";
-import { isSignerDue, isTerminal, loadSigners } from "@/lib/esign/documents";
+import { documentQuestions, isSignerDue, isTerminal, loadSigners } from "@/lib/esign/documents";
+import { fillerSignerId, normalizeQuestionsAt } from "@/lib/esign/questions";
 import type { PublicSigningView } from "@/lib/esign/public";
 import { SignWordsProvider } from "@/components/esign/sign-words";
 import { signWordsFor } from "@/lib/esign/sign-words";
@@ -108,7 +109,9 @@ export default async function SignDevicePage({
             fieldAnswers: (session.field_answers ?? {}) as Record<string, unknown>,
           }
         : null,
-      extraQuestions: ((doc.fields_schema ?? []) as PublicSigningView["extraQuestions"]).filter(
+      fills: fillerSignerId(signers) === signerId && Array.isArray(doc.patient_fills) ? doc.patient_fills : [],
+      questionsAt: normalizeQuestionsAt(doc.questions_at),
+      extraQuestions: ((documentQuestions(doc, doc.fields_schema) ?? []) as PublicSigningView["extraQuestions"]).filter(
         (q) => !q.roles?.length || q.roles.includes(signer.role_key)
       ),
       waitingOn:

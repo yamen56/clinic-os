@@ -3,6 +3,8 @@ import { withSystem } from "../db";
 import { readFileBuffer } from "../storage";
 import { describeDevice } from "./events";
 import { shortHash } from "./render";
+import { documentQuestions } from "./documents";
+import { answerText, answersSectionHtml, DETAILS_SUFFIX, fillSnapshot, mergedAnswers, questionsForRole, type PatientFill } from "./questions";
 
 /**
  * Everything the printed PDF shows, assembled in one place so the on-screen
@@ -30,7 +32,8 @@ export type PrintSigner = {
   /** Inlined so the print page needs no second authenticated request. */
   signatureDataUrl: string | null;
   declineReason: string | null;
-  answers: Record<string, unknown>;
+  /** What this signer filled in and answered, as asked — for the certificate. */
+  answers: { label: string; value: string }[];
 };
 
 export type PrintDocument = {
@@ -98,10 +101,11 @@ export async function loadPrintDocument(documentId: string): Promise<PrintDocume
       await c.query(
         `select d.*, cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address,
                 cl.address_ar, cl.phone_e164 as clinic_phone, cl.timezone, cl.invoice_footer,
-                p.full_name as patient_name
+                p.full_name as patient_name, t.fields_schema as template_fields_schema
          from documents d
          join clinics cl on cl.id = d.clinic_id
          left join patients p on p.id = d.patient_id
+         left join document_templates t on t.id = d.template_id
          where d.id = $1`,
         [documentId]
       )
@@ -139,6 +143,20 @@ export async function loadPrintDocument(documentId: string): Promise<PrintDocume
 
   const locale = doc.language as "ar" | "en";
   const tz = doc.timezone as string;
+  const questions = documentQuestions(doc, doc.template_fields_schema);
+  const fills = (Array.isArray(doc.patient_fills) ? doc.patient_fills : []) as PatientFill[];
+  const labelOf = (x: { label: string; label_ar: string; key: string }) =>
+    (locale === "ar" ? x.label_ar || x.label : x.label || x.label_ar) || x.key;
+  const answerRows = (s: { role_key: string; field_answers?: Record<string, unknown> | null }) => {
+    const a = (s.field_answers ?? {}) as Record<string, unknown>;
+    return [
+      ...fills.map((f) => ({ label: labelOf(f), value: answerText(f.type, a[f.key], locale, undefined, f.key) })),
+      ...questionsForRole(questions, s.role_key).map((q) => ({
+        label: labelOf(q),
+        value: answerText(q.type, a[q.key], locale, a[q.key + DETAILS_SUFFIX], q.key),
+      })),
+    ].filter((r) => r.value);
+  };
 
   const printSigners: PrintSigner[] = await Promise.all(
     signers.map(async (s) => ({
@@ -162,7 +180,7 @@ export async function loadPrintDocument(documentId: string): Promise<PrintDocume
       typedName: s.typed_name,
       signatureDataUrl: await inlineSignature(s.signature_png_path),
       declineReason: s.decline_reason,
-      answers: (s.field_answers ?? {}) as Record<string, unknown>,
+      answers: answerRows(s),
     }))
   );
 
@@ -195,7 +213,18 @@ export async function loadPrintDocument(documentId: string): Promise<PrintDocume
     language: locale,
     status: doc.status,
     source: doc.source,
-    snapshot: doc.content_snapshot ?? "",
+    /*
+      The frozen text with the patient's own details in its blanks, then their
+      answers as asked. The stored snapshot and its fingerprint are untouched;
+      what went into the blanks is each signer's recorded answer.
+    */
+    snapshot:
+      fillSnapshot(doc.content_snapshot ?? "", fills, mergedAnswers(signers), locale) +
+      answersSectionHtml(
+        questions,
+        signers.map((s) => ({ name: s.display_name, role_key: s.role_key, field_answers: s.field_answers })),
+        locale
+      ),
     hash: doc.content_hash ?? "",
     hashShort: doc.content_hash ? shortHash(doc.content_hash) : "—",
     voidReason: doc.void_reason,

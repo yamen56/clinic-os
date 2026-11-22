@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { fillPlaceholder } from "./questions";
 
 /**
  * Turning a template into the exact thing somebody signs.
@@ -141,7 +142,12 @@ export function sanitizeHtml(input: string): string {
   });
 }
 
-export type MergeValue = { value: string; isOverride?: boolean };
+export type MergeValue = {
+  value: string;
+  isOverride?: boolean;
+  /** Left for the patient to fill on the signing page; the label shows in the blank. */
+  fill?: string;
+};
 
 /**
  * Replaces `{{token}}` with the frozen value.
@@ -157,6 +163,7 @@ export function renderTokens(
 ): string {
   return body.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key: string) => {
     const entry = values.get(key);
+    if (entry?.fill !== undefined && !entry.value) return fillPlaceholder(key, entry.fill);
     if (!entry || !entry.value) {
       return `<span class="doc-missing" data-key="${escapeHtml(key)}">…</span>`;
     }

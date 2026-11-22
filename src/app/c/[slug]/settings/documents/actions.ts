@@ -39,9 +39,14 @@ const extraFieldSchema = z.object({
   */
   label: z.string().trim().max(120).default(""),
   label_ar: z.string().trim().max(120).default(""),
-  type: z.enum(["text", "number", "date", "select", "checkbox", "longtext"]).default("text"),
+  // yes_no and choices since 2026-11-22; the others stay for templates saved before.
+  type: z.enum(["yes_no", "text", "select", "choices", "number", "date", "checkbox", "longtext"]).default("text"),
   required: z.boolean().default(false),
-  options: z.array(z.string().trim().min(1).max(80)).max(40).default([]),
+  // Typed one per line: blank lines are dropped rather than failing the save.
+  options: z
+    .array(z.string().max(80))
+    .default([])
+    .transform((a) => a.map((o) => o.trim()).filter(Boolean).slice(0, 40)),
   roles: z.array(z.string().trim().max(40)).max(10).default([]),
 });
 
@@ -74,6 +79,8 @@ const templateSchema = z.object({
   bodyAr: z.string().max(80_000).default(""),
   signerConfig: signerConfigSchema,
   fieldsSchema: z.array(extraFieldSchema).max(30).default([]),
+  // When the signing page asks them: before the text, beside it, or after it.
+  questionsAt: z.enum(["before", "with", "after"]).default("after"),
   isActive: z.boolean().default(true),
   serviceIds: z.array(z.string().uuid()).max(60).default([]),
   autoSend: z.boolean().default(true),
@@ -134,7 +141,7 @@ export async function saveTemplateAction(
         `update document_templates
             set name = $2, name_ar = $3, category = $4, language = $5, body = $6, body_ar = $7,
                 signer_config = $8, fields_schema = $9, is_active = $10, version = $11,
-                source = $13, source_pdf_path = coalesce($14, source_pdf_path)
+                source = $13, source_pdf_path = coalesce($14, source_pdf_path), questions_at = $15
           where id = $1 and clinic_id = $12`,
         [
           templateId,
@@ -151,6 +158,7 @@ export async function saveTemplateAction(
           access.clinicId,
           d.source,
           d.sourcePdfPath,
+          d.questionsAt,
         ]
       );
       await c.query(
@@ -174,8 +182,8 @@ export async function saveTemplateAction(
       const r = await c.query(
         `insert into document_templates
            (clinic_id, name, name_ar, category, language, body, body_ar, signer_config,
-            fields_schema, is_active, created_by, source, source_pdf_path)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            fields_schema, is_active, created_by, source, source_pdf_path, questions_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          returning id`,
         [
           access.clinicId,
@@ -191,6 +199,7 @@ export async function saveTemplateAction(
           access.session.user.id,
           d.source,
           d.sourcePdfPath,
+          d.questionsAt,
         ]
       );
       templateId = r.rows[0].id as string;

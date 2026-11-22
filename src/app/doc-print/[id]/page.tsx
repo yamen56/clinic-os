@@ -265,10 +265,10 @@ function Certificate({ doc }: { doc: PrintDocument }) {
                       <td>{s.witnessName}</td>
                     </tr>
                   )}
-                  {Object.entries(s.answers).map(([k, v]) => (
-                    <tr key={k}>
-                      <th>{k}</th>
-                      <td>{String(v)}</td>
+                  {s.answers.map((a, i) => (
+                    <tr key={i}>
+                      <th>{a.label}</th>
+                      <td>{a.value}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -366,7 +366,14 @@ html, body { margin: 0; padding: 0; background: #fff; }
 
 .doc-title { font-family: var(--font-display), sans-serif; font-size: 20px; font-weight: 700;
              margin: 0 0 14px; }
-.doc-head { margin-bottom: 4px; }
+/* The sheet's own letterhead already carries the clinic; the snapshot's small one would print it twice. */
+.doc-head { display: none; }
+.doc-filled { font-weight: 600; }
+.doc-answers { margin-top: 14px; page-break-inside: avoid; }
+.doc-answers h2 { font-family: var(--font-display), sans-serif; font-size: 14px; font-weight: 700; margin: 14px 0 7px; }
+.doc-answers table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.doc-answers th, .doc-answers td { border: 1px solid #e3e6eb; padding: 6px 8px; text-align: start; vertical-align: top; }
+.doc-answers th { width: 52%; font-weight: 600; background: #f7f8fa; }
 .doc-clinic { font-weight: 700; font-size: 14px; }
 .doc-clinic-meta { font-size: 11px; color: #7a828c; }
 .doc-body p { margin: 0 0 9px; }
