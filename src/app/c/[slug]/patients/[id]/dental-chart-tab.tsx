@@ -22,7 +22,9 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
 import { BORROWABLE_LOOKS, BUILT_IN, BUILT_IN_BY_KEY, PROCEDURE_CATEGORIES, findTreatment, type Category, type Look, type Scope, type Treatment } from "@/lib/charts/dental/catalog";
-import { groupLeads, implantSitesOf, inChartOrder, isFullArch, leadOf, onImplants, prosthesisSites } from "@/lib/charts/dental/full-arch";
+import { groupLeads, implantPlacesOf, implantSitesOf, isFullArch, leadOf, onImplants } from "@/lib/charts/dental/full-arch";
+import { inOrder, placeDetail, sitesFor as implantSites, whereText } from "@/lib/charts/dental/implant-place";
+import { isBridge, type BridgeTooth } from "@/lib/charts/dental/bridge";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Arch, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
 import { endOfDay, eventDays, finishedPlan, isPlannedWork, isToothSite, paintAt, toothStates, type Mark, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
 import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
@@ -35,6 +37,7 @@ import { EmergencySheet } from "@/components/charts/dental/emergency-sheet";
 import { EMERGENCY_STEP, progressOf, protocolFor, type EmergencyAction } from "@/lib/charts/dental/protocols";
 import { nextVisitOf } from "@/lib/charts/dental/treatment";
 import { resolutions } from "@/lib/charts/dental/resolve";
+import { archKind, prostheses, stagesOf } from "@/lib/charts/dental/prosthesis";
 import { redoCandidates, redoKey } from "@/lib/charts/dental/redo";
 import { RedoSheet } from "@/components/charts/dental/redo-sheet";
 import { priceFrom } from "@/lib/charts/dental/pricing";
@@ -49,7 +52,8 @@ import { DockSheet, SHEET_SHARE } from "@/components/charts/dental/dock-sheet";
 import { iconFor } from "@/components/charts/dental/icons";
 import { ToothPanel, type PanelActions, type PanelSize } from "@/components/charts/dental/tooth-panel";
 import { createPortal } from "react-dom";
-import { FullArchSheet } from "@/components/charts/dental/full-arch-sheet";
+import { FullArchStudio, type ArchResult } from "@/components/charts/dental/full-arch-studio";
+import { BridgeSheet } from "@/components/charts/dental/bridge-sheet";
 import { TreatmentGlyph, TreatmentPicker } from "@/components/charts/dental/treatment-picker";
 import { EntryRow, EventList } from "@/components/charts/dental/history";
 import { siteLabel } from "@/components/charts/dental/labels";
@@ -283,7 +287,9 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const [mouthOpen, setMouthOpen] = useState(false);
   const [scoped, setScoped] = useState<Treatment | null>(null);
   /** A full arch being set up: which treatment, and the arch when a tooth already said it. */
-  const [fullArch, setFullArch] = useState<{ tr: Treatment; arch: Arch | null } | null>(null);
+  const [fullArch, setFullArch] = useState<{ tr: Treatment; arch: Arch | null; parent?: string } | null>(null);
+  /** A bridge being set up, from the teeth in hand when it was picked. */
+  const [bridging, setBridging] = useState<{ seed: string[] } | null>(null);
   const [voiding, setVoiding] = useState<Mark | null>(null);
   // Doing work again: on a tooth (pick which), or one treatment from its card.
   const [redo, setRedo] = useState<{ site: string | null; markId: string | null } | null>(null);
@@ -478,7 +484,11 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const shown = useMemo(() => (showPlan ? finishedPlan(marks) : marks), [showPlan, marks]);
   // Findings later work answered — caries under a filling — are drawn no more (resolve.ts).
   const resolved = useMemo(() => resolutions(shown, at), [shown, at]);
-  const states = useMemo(() => toothStates(shown, at, resolved), [shown, at, resolved]);
+  // How far the steps have brought each: a tooth prepared, a temporary in place. Once the plan is done, there is no such thing.
+  const stages = useMemo(() => (showPlan ? new Map() : stagesOf(shown, steps, at)), [showPlan, shown, steps, at]);
+  const states = useMemo(() => toothStates(shown, at, resolved, stages), [shown, at, resolved, stages]);
+  // Bridges, dentures and full arches, each drawn as the one piece it is.
+  const work = useMemo(() => prostheses(shown, at, stages), [shown, at, stages]);
   const visible = useCallback((p: Paint) => show[p], [show]);
   const catalog = useMemo(() => [...BUILT_IN, ...custom], [custom]);
   const categoryOf = useCallback((key: string) => findTreatment(key, custom)?.category, [custom]);
@@ -500,14 +510,14 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     (m: Mark) => {
       const n = implantSitesOf(m, marks).length || Number(m.detail.implants) || 0;
       if (!n) return locale === "ar" ? m.labelAr : m.label;
-      return n >= 4 ? `All-on-${n}` : T.overdenture.replace("{n}", String(n));
+      return archKind(m, n) === "fixed" ? `All-on-${n}` : T.overdenture.replace("{n}", String(n));
     },
     [marks, locale, T]
   );
   /** The line under a full arch's name: how many implants and where, and the extractions it includes. */
   const groupExtra = (m: Mark) => {
     if (!isFullArch(m.treatmentKey) || !m.groupId) return undefined;
-    const sites = implantSitesOf(m, marks);
+    const sites = implantPlacesOf(m, marks);
     const out = marks.filter((x) => x.groupId === m.groupId && x.id !== m.id && !x.voidedAt && x.look === "extraction").length;
     const parts = [
       sites.length ? T.implantsAt.replace("{n}", String(sites.length)).replace("{list}", sites.join(" · ")) : "",
@@ -755,16 +765,21 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     return teeth.map((f) => ({ site: f, surfaces: tr.needsSurfaces ? picked : [] }));
   };
 
-  /** A bridge: the teeth already gone are the ones it replaces, the rest hold it. */
+  /** Work across several teeth that is not a bridge: a splint, a partial denture, a Hollywood smile. */
   const recordSpan = (tr: Treatment, teeth: string[]) => {
     const ordered = [...teeth].sort((a, b) => siteOrder(a) - siteOrder(b));
-    const bridge = tr.look === "crown";
-    record(
-      tr,
-      ordered.map((f) => ({ site: f, surfaces: [], role: bridge ? (states.get(f)?.gone ? ("pontic" as const) : ("abutment" as const)) : undefined })),
-      newId()
-    );
+    record(tr, ordered.map((f) => ({ site: f, surfaces: [] })), newId());
     endSpan();
+  };
+
+  /** A bridge, as it was set up (bridge-sheet.tsx): on teeth, or on implants, one group across its teeth. */
+  const recordBridge = (key: "bridge" | "implant_bridge", teeth: BridgeTooth[], material: string) => {
+    const tr = BUILT_IN_BY_KEY.get(key)!;
+    const ordered = [...teeth].sort((a, b) => siteOrder(a.site) - siteOrder(b.site));
+    setBridging(null);
+    // Its steps open with it: a bridge is put down tooth by tooth no more.
+    record(tr, ordered.map((x) => ({ site: x.site, surfaces: [], role: x.role, detail: { material } })), newId());
+    setPicked([]);
   };
 
   /*
@@ -775,18 +790,23 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     is done every part of it is: the extractions are that same surgery, not a
     page of separate rows to tick off one by one.
   */
-  const recordFullArch = (tr: Treatment, arch: Arch, implants: string[], extract: string[]) => {
+  const recordFullArch = (tr: Treatment, plan: ArchResult) => {
+    const { arch, extract } = plan;
     const implantTr = BUILT_IN_BY_KEY.get("implant")!;
     const extractionTr = BUILT_IN_BY_KEY.get("extraction")!;
     const implanted = onImplants(tr.key);
+    // Each implant where the doctor put it; its tooth is the nearest one no other has.
+    const places = inOrder(plan.implants);
+    const at = implantSites(arch, places);
+    const own: Record<string, string> = { implants: String(places.length), kind: plan.kind, cuts: plan.cuts, ...(plan.material ? { material: plan.material } : {}) };
     const sites: Site[] = [
-      { site: arch, surfaces: [], detail: implanted ? { implants: String(implants.length) } : defaultsFor(tr, arch) },
-      ...implants.map((f) => ({ site: f, surfaces: [] as Surface[], role: "abutment" as const, tr: implantTr, detail: {} })),
-      ...prosthesisSites(tr.key, arch, implants.length).map((f) => ({ site: f, surfaces: [] as Surface[], role: "pontic" as const, detail: {} })),
+      { site: arch, surfaces: [], detail: implanted ? own : defaultsFor(tr, arch) },
+      ...places.map((p, i) => ({ site: at[i], surfaces: [] as Surface[], role: "abutment" as const, tr: implantTr, detail: placeDetail(p) })),
+      ...plan.teeth.map((f) => ({ site: f, surfaces: [] as Surface[], role: "pontic" as const, detail: {} })),
       ...extract.map((f) => ({ site: f, surfaces: [] as Surface[], tr: extractionTr, detail: {} })),
     ];
     const where = implanted
-      ? `${siteLabel(arch, T)} · ${T.implantsAt.replace("{n}", String(implants.length)).replace("{list}", inChartOrder(implants).join(" · "))}`
+      ? `${siteLabel(arch, T)} · ${T.implantsAt.replace("{n}", String(places.length)).replace("{list}", places.map((p) => whereText(arch, p.pos)).join(" · "))}`
       : siteLabel(arch, T);
     // Every part of a full arch shares one state: tapped as done, it is under way, its steps to follow.
     const st: Status = status === "done" && protocolFor(tr.key) ? "planned" : status;
@@ -802,6 +822,10 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     if (locked || selected.length === 0) return;
     if (isFullArch(tr.key)) {
       setFullArch({ tr, arch: toothOf(selected[0]).arch });
+      return;
+    }
+    if (isBridge(tr.key)) {
+      setBridging({ seed: selected });
       return;
     }
     if (tr.needsSurfaces && picked.length === 0) {
@@ -1017,6 +1041,12 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const planFollowUp = (key: string, site: string) => {
     const tr = BUILT_IN_BY_KEY.get(key);
     if (!tr) return;
+    // A bridge is more than this tooth: it is set up, then planned.
+    if (isBridge(key)) {
+      setStatus("planned");
+      setBridging({ seed: [site] });
+      return;
+    }
     const [fresh] = record(tr, [{ site, surfaces: [] }], undefined, undefined, { status: "planned", open: false });
     if (fresh) setOpenItem(fresh.id);
   };
@@ -1072,6 +1102,11 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
     return !historyDoctor || m.performedBy?.id === historyDoctor;
   });
 
+  /** A full arch's implants moved to where they really are. */
+  const adjustArch = (m: Mark) => {
+    const tr = BUILT_IN_BY_KEY.get(m.treatmentKey);
+    if (tr && m.groupId && onImplants(m.treatmentKey)) setFullArch({ tr, arch: m.site as Arch, parent: m.id });
+  };
   const openMark = openItem ? (marks.find((m) => m.id === openItem) ?? null) : null;
   const card = openMark && (
     <ProcedureCard
@@ -1087,6 +1122,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       onDetail={actions.onDetail}
       onPlan={planFollowUp}
       onRedo={canWrite && !past ? (m) => setRedo({ site: isToothSite(m.site) ? m.site : null, markId: m.id }) : undefined}
+      onAdjust={canWrite && !past ? adjustArch : undefined}
       extra={groupExtra(openMark)}
       onExpand={
         !bigPanel && isToothSite(openMark.site)
@@ -1283,6 +1319,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
             <Odontogram
               dentition={dentition}
               states={states}
+              work={work}
               visible={visible}
               selected={mode === "tooth" ? selected : []}
               half={phone ? half : null}
@@ -1664,18 +1701,39 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
         )}
       </Modal>
 
-      <Modal open={!!fullArch} onClose={() => setFullArch(null)} title={fullArch ? (locale === "ar" ? fullArch.tr.ar : fullArch.tr.en) : ""}>
+      {/* A window the size of the screen: implants are placed by hand, and that needs room. */}
+      <Modal open={!!fullArch} onClose={() => setFullArch(null)} full>
         {fullArch && (
-          <FullArchSheet
-            key={fullArch.tr.key + (fullArch.arch ?? "")}
+          <FullArchStudio
+            key={fullArch.tr.key + (fullArch.arch ?? "") + (fullArch.parent ?? "")}
             tr={fullArch.tr}
             initialArch={fullArch.arch}
+            parent={fullArch.parent ? find(fullArch.parent) : undefined}
             states={states}
             marks={marks}
             status={status}
             onStatus={setStatus}
-            onRecord={(arch, implants, extract) => recordFullArch(fullArch.tr, arch, implants, extract)}
+            onSave={(plan) => {
+              const parent = fullArch.parent ? find(fullArch.parent) : undefined;
+              if (!parent) return recordFullArch(fullArch.tr, plan);
+              setFullArch(null);
+              void w.saveArch(parent, plan);
+            }}
             onCancel={() => setFullArch(null)}
+          />
+        )}
+      </Modal>
+
+      <Modal open={!!bridging} onClose={() => setBridging(null)} title={T.bridge.title} wide>
+        {bridging && (
+          <BridgeSheet
+            key={bridging.seed.join("-")}
+            seed={bridging.seed}
+            states={states}
+            status={status}
+            onStatus={setStatus}
+            onRecord={recordBridge}
+            onCancel={() => setBridging(null)}
           />
         )}
       </Modal>

@@ -42,8 +42,9 @@ export type StepField =
   | { kind: "canals"; columns: ("length" | "ref" | "file")[] }
   /** One row per implant: where, which, how big, how tight. */
   | { kind: "implants" }
-  | { kind: "choice"; key: string; en: string; options: Choice[]; multi?: boolean }
-  | { kind: "text"; key: string; en: string; placeholder?: string }
+  /** `retired`: asked elsewhere now — kept, and shown, on the steps that recorded it here. */
+  | { kind: "choice"; key: string; en: string; options: Choice[]; multi?: boolean; retired?: boolean }
+  | { kind: "text"; key: string; en: string; placeholder?: string; retired?: boolean }
   /**
    * The treatment's own detail, chosen at this step: a crown's type at its
    * preparation. Its options are the treatment's (catalog.ts), and choosing
@@ -71,7 +72,18 @@ export type StepDef = {
    * that surgery if not before); delivering the bridge finishes the bridge.
    */
   finishes?: ("implants" | "extractions" | "bridge")[];
+  /**
+   * Done already, as part of another step: a bridge's impression used to be
+   * recorded with its preparation, and one that was is not asked for again.
+   */
+  impliedBy?: { step: string; field: string };
 };
+
+/** Was this step done as part of another one? */
+export function isImplied(def: StepDef, records: { step: string; data: StepData; voidedAt?: string | null }[]): boolean {
+  const by = def.impliedBy;
+  return !!by && records.some((r) => r.step === by.step && !r.voidedAt && !!r.data?.[by.field]);
+}
 
 const IMPRESSION: StepField = {
   kind: "choice",
@@ -275,6 +287,254 @@ const indirectSteps = (typeLabel: string): StepDef[] => [
     ],
   },
 ];
+/*
+  A bridge, in full (a dentist, 2026-11-25: "with the full steps for the
+  bridge and with compliance with the dental labs"). Between its visits it goes
+  to the lab and back — for the framework, for the porcelain, to be finished
+  (labs.ts LAB_TRIPS) — and each thing that comes back is tried in before the
+  next is made. What a clinic does not do is optional: a zirconia bridge has no
+  framework to try, and goes from the impression to the finished piece.
+*/
+const BITE: StepField = {
+  kind: "choice",
+  key: "bite",
+  en: "Bite registration",
+  options: [
+    { key: "wax", en: "Wax" },
+    { key: "silicone", en: "Silicone" },
+    { key: "scan", en: "Scanned" },
+  ],
+};
+const SHADE: StepField = { kind: "text", key: "shade", en: "Shade", placeholder: "A2" };
+const PORCELAIN_TRYIN: StepDef = {
+  key: "tryin",
+  en: "Porcelain try-in",
+  optional: true,
+  fields: [
+    {
+      kind: "choice",
+      key: "checked",
+      en: "Checked",
+      multi: true,
+      options: [
+        { key: "contacts", en: "Contacts" },
+        { key: "bite", en: "Bite" },
+        { key: "shade", en: "Shade" },
+        { key: "shape", en: "Shape" },
+        { key: "gum", en: "Gum contact" },
+      ],
+    },
+    {
+      kind: "choice",
+      key: "result",
+      en: "Result",
+      options: [
+        { key: "accepted", en: "Accepted" },
+        { key: "adjust", en: "Back for changes" },
+      ],
+    },
+  ],
+};
+const BRIDGE_REVIEW: StepDef = { key: "review", en: "Review & bite check", optional: true, repeatable: true };
+const BRIDGE_STEPS: StepDef[] = [
+  {
+    key: "assess",
+    en: "Assessment & study models",
+    optional: true,
+    fields: [
+      {
+        kind: "choice",
+        key: "records",
+        en: "Taken",
+        multi: true,
+        options: [
+          { key: "xray", en: "X-ray of the supports" },
+          { key: "models", en: "Study models" },
+          { key: "waxup", en: "Wax-up" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "prep",
+    en: "Support preparation",
+    fields: [
+      { kind: "detail", key: "material", en: "Bridge type" },
+      {
+        kind: "choice",
+        key: "margin",
+        en: "Finish line",
+        options: [
+          { key: "chamfer", en: "Chamfer" },
+          { key: "shoulder", en: "Shoulder" },
+          { key: "knife", en: "Knife edge" },
+        ],
+      },
+      // Recorded here until the impression became a step of its own.
+      { ...IMPRESSION, retired: true } as StepField,
+      { ...SHADE, retired: true } as StepField,
+    ],
+  },
+  { key: "impression", en: "Final impression / scan", impliedBy: { step: "prep", field: "impression" }, fields: [IMPRESSION, BITE, SHADE] },
+  {
+    key: "temp",
+    en: "Temporary bridge",
+    optional: true,
+    fields: [
+      {
+        kind: "choice",
+        key: "temp",
+        en: "Made of",
+        options: [
+          { key: "acrylic", en: "Acrylic" },
+          { key: "bisacryl", en: "Bis-acryl" },
+          { key: "pmma", en: "Milled PMMA" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "framework",
+    en: "Framework try-in",
+    optional: true,
+    fields: [
+      {
+        kind: "choice",
+        key: "fit",
+        en: "Fit",
+        options: [
+          { key: "passive", en: "Passive" },
+          { key: "adjusted", en: "Adjusted" },
+          { key: "remake", en: "To be remade" },
+        ],
+      },
+      {
+        kind: "choice",
+        key: "checked",
+        en: "Checked",
+        multi: true,
+        options: [
+          { key: "margins", en: "Margins" },
+          { key: "room", en: "Room for porcelain" },
+          { key: "bite", en: "Bite" },
+        ],
+      },
+    ],
+  },
+  PORCELAIN_TRYIN,
+  {
+    key: "cement",
+    en: "Cementation",
+    fields: [
+      {
+        kind: "choice",
+        key: "cement",
+        en: "Cement",
+        options: [
+          { key: "resin", en: "Resin" },
+          { key: "gic", en: "Glass ionomer" },
+          { key: "zinc", en: "Zinc phosphate" },
+          { key: "temporary", en: "Temporary cement" },
+        ],
+      },
+    ],
+  },
+  BRIDGE_REVIEW,
+];
+const IMPLANT_BRIDGE_STEPS: StepDef[] = [
+  {
+    key: "impression",
+    en: "Implant impression / scan",
+    fields: [
+      { kind: "detail", key: "material", en: "Bridge type" },
+      {
+        kind: "choice",
+        key: "impression",
+        en: "Impression",
+        options: [
+          { key: "digital", en: "Scan bodies" },
+          { key: "open", en: "Open tray" },
+          { key: "closed", en: "Closed tray" },
+        ],
+      },
+      {
+        kind: "choice",
+        key: "level",
+        en: "Level",
+        options: [
+          { key: "implant", en: "Implant" },
+          { key: "abutment", en: "Abutment" },
+        ],
+      },
+      BITE,
+      SHADE,
+    ],
+  },
+  {
+    key: "abutment",
+    en: "Abutments",
+    optional: true,
+    fields: [
+      {
+        kind: "choice",
+        key: "abutment",
+        en: "Abutment",
+        options: [
+          { key: "tibase", en: "Ti-base" },
+          { key: "multiunit", en: "Multi-unit" },
+          { key: "custom", en: "Custom" },
+          { key: "stock", en: "Stock" },
+        ],
+      },
+      { kind: "text", key: "torque", en: "Torque (Ncm)", placeholder: "35" },
+    ],
+  },
+  {
+    key: "framework",
+    en: "Framework try-in (passive fit)",
+    optional: true,
+    fields: [
+      {
+        kind: "choice",
+        key: "fit",
+        en: "Fit",
+        options: [
+          { key: "passive", en: "Passive" },
+          { key: "adjusted", en: "Adjusted" },
+          { key: "sectioned", en: "Sectioned & re-joined" },
+          { key: "remake", en: "To be remade" },
+        ],
+      },
+    ],
+  },
+  PORCELAIN_TRYIN,
+  {
+    key: "delivery",
+    en: "Bridge delivery",
+    fields: [
+      {
+        kind: "choice",
+        key: "retention",
+        en: "Retention",
+        options: [
+          { key: "screw", en: "Screw-retained" },
+          { key: "cement", en: "Cement-retained" },
+        ],
+      },
+      { kind: "text", key: "torque", en: "Torque (Ncm)", placeholder: "15" },
+      {
+        kind: "choice",
+        key: "access",
+        en: "Access closed with",
+        options: [
+          { key: "composite", en: "PTFE & composite" },
+          { key: "temporary", en: "Temporary" },
+        ],
+      },
+    ],
+  },
+  BRIDGE_REVIEW,
+];
 const CROWN_STEPS = indirectSteps("Crown type");
 const VENEER_STEPS = indirectSteps("Veneer type");
 const INLAY_STEPS = indirectSteps("Material");
@@ -446,31 +706,58 @@ export const PROTOCOLS: Record<string, StepDef[]> = {
     { key: "placement", en: "Implants placed", fields: PLACEMENT_FIELDS.filter((f) => f.kind !== "choice" || f.key !== "stage"), finishes: ["extractions", "implants"] },
     { key: "temporary", en: "Immediate temporary bridge", optional: true },
     { key: "healing", en: "Healing review", optional: true, repeatable: true },
-    { key: "impression", en: "Final impression & bite", fields: [IMPRESSION] },
-    { key: "tryin", en: "Try-in", optional: true },
+    { key: "impression", en: "Final impression & bite", fields: [IMPRESSION, BITE, SHADE] },
     {
-      key: "delivery",
-      en: "Final bridge delivery",
-      finishes: ["bridge"],
+      key: "jig",
+      en: "Verification jig",
+      optional: true,
       fields: [
         {
           kind: "choice",
-          key: "material",
-          en: "Bridge",
+          key: "fit",
+          en: "Fit",
           options: [
-            { key: "zirconia", en: "Zirconia" },
-            { key: "acrylic", en: "Acrylic on titanium" },
-            { key: "pmma", en: "PMMA" },
-            { key: "peek", en: "PEEK" },
+            { key: "passive", en: "Passive" },
+            { key: "sectioned", en: "Sectioned & re-joined" },
           ],
         },
       ],
     },
+    {
+      key: "framework",
+      en: "Bar / framework try-in",
+      optional: true,
+      fields: [
+        {
+          kind: "choice",
+          key: "fit",
+          en: "Fit",
+          options: [
+            { key: "passive", en: "Passive" },
+            { key: "adjusted", en: "Adjusted" },
+            { key: "remake", en: "To be remade" },
+          ],
+        },
+      ],
+    },
+    { key: "tryin", en: "Teeth try-in", optional: true },
+    {
+      key: "delivery",
+      en: "Final bridge delivery",
+      finishes: ["bridge"],
+      // The arch's own material, so the drawing and the lab's order follow what was delivered.
+      fields: [
+        { kind: "detail", key: "material", en: "Bridge" },
+        { kind: "text", key: "torque", en: "Torque (Ncm)", placeholder: "15" },
+      ],
+    },
+    BRIDGE_REVIEW,
   ],
   denture_complete: DENTURE_STEPS,
   denture_partial: DENTURE_STEPS.map((s) => ({ ...s, finishes: undefined })),
   crown: CROWN_STEPS,
-  bridge: CROWN_STEPS,
+  bridge: BRIDGE_STEPS,
+  implant_bridge: IMPLANT_BRIDGE_STEPS,
   veneer: VENEER_STEPS,
   hollywood_smile: VENEER_STEPS,
   inlay: INLAY_STEPS,
@@ -725,6 +1012,8 @@ export type Progress = {
   next: StepDef | null;
   /** Every required step is recorded. */
   complete: boolean;
+  /** Steps done as part of another one: no record of their own. */
+  implied: Set<string>;
   /** When the first step was recorded: the treatment is under way from then. */
   startedAt: string | null;
   emergencies: number;
@@ -738,14 +1027,13 @@ export function progressOf(treatmentKey: string, records: StepRecord[]): Progres
   for (const r of live) done.set(r.step, [...(done.get(r.step) ?? []), r]);
   // A retired step shows only where it was recorded.
   const steps = all.filter((s) => !s.retired || done.has(s.key));
+  const implied = new Set(steps.filter((s) => !done.has(s.key) && isImplied(s, live)).map((s) => s.key));
+  const has = (s: StepDef) => done.has(s.key) || implied.has(s.key);
   const required = steps.filter((s) => !s.optional);
-  const requiredDone = required.filter((s) => done.has(s.key)).length;
+  const requiredDone = required.filter(has).length;
   // Forward from the furthest step recorded; a repeatable step is never "next" on its own account.
-  const last = steps.reduce((i, s, idx) => (done.has(s.key) && !s.repeatable ? idx : i), -1);
-  const next =
-    steps.find((s, idx) => idx > last && !done.has(s.key) && !s.repeatable) ??
-    required.find((s) => !done.has(s.key)) ??
-    null;
+  const last = steps.reduce((i, s, idx) => (has(s) && !s.repeatable ? idx : i), -1);
+  const next = steps.find((s, idx) => idx > last && !has(s) && !s.repeatable) ?? required.find((s) => !has(s)) ?? null;
   return {
     steps,
     done,
@@ -753,6 +1041,7 @@ export function progressOf(treatmentKey: string, records: StepRecord[]): Progres
     requiredDone,
     next,
     complete: requiredDone === required.length,
+    implied,
     startedAt: live.find((r) => r.step !== EMERGENCY_STEP)?.doneAt ?? null,
     emergencies: live.filter((r) => r.step === EMERGENCY_STEP).length,
   };
@@ -840,7 +1129,8 @@ export const FOLLOW_UPS: Record<string, string[]> = {
   incision_drainage: ["rct", "extraction"],
   pulpotomy: ["ssc"],
   pulpectomy: ["ssc"],
-  implant: ["implant_crown"],
+  // A crown on it, or a bridge it carries with the others (2026-11-25).
+  implant: ["implant_crown", "implant_bridge"],
   bone_graft: ["implant"],
   sinus_lift: ["implant"],
   extraction: ["implant", "bridge"],

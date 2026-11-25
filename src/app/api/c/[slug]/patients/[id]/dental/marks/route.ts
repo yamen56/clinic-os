@@ -6,6 +6,8 @@ import { audit } from "@/lib/audit";
 import { MARK_SELECT, resolveTreatment, toEvent, toMark } from "@/lib/charts/dental/db";
 import { todaysVisit } from "@/lib/charts/dental/server";
 import { priceFor } from "@/lib/charts/dental/billing-server";
+import { cleanArchDetail } from "@/lib/charts/dental/arch-server";
+import { placeDetail, placeIn } from "@/lib/charts/dental/implant-place";
 import { variantOf } from "@/lib/charts/dental/pricing";
 
 /*
@@ -38,8 +40,8 @@ const markSchema = z.object({
   /** The earlier work on this patient it does again: a crown remade, a root canal re-treated. */
   redoOf: z.string().uuid().nullish(),
 });
-// A full arch is the most one tap records: the arch, six implants, fourteen
-// bridge teeth and the teeth to take out first.
+// A full arch is the most one tap records: the arch, up to ten implants,
+// fourteen bridge teeth and the teeth to take out first.
 const bodySchema = z.object({ marks: z.array(markSchema).min(1).max(48) });
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string; id: string }> }) {
@@ -99,6 +101,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     */
     const archGroups = new Set(parsed.data.marks.filter((m) => m.groupId && !/^[1-8][1-8]$/.test(m.site)).map((m) => m.groupId));
     const ids: string[] = [];
+    /*
+      A full arch says where each implant stands and what goes on them; both
+      are kept on the entry, so both are read here as numbers within a jaw and
+      known words, whatever was sent.
+    */
+    const detailOf = (m: z.infer<typeof markSchema>, key: string): Record<string, string> => {
+      if (!m.groupId || !archGroups.has(m.groupId)) return m.detail;
+      if (key === "implant_denture" && !/^[1-8][1-8]$/.test(m.site)) return cleanArchDetail(m.detail);
+      if (key === "implant") {
+        const place = placeIn(m.detail);
+        return place ? placeDetail(place) : {};
+      }
+      return m.detail;
+    };
     for (const { m, tr } of resolved) {
       // A finding is what was found: it has no plan and no completion.
       const status = tr.kind === "finding" ? "existing" : m.status;
@@ -122,7 +138,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
           tr.abbr ?? null,
           tr.look,
           tr.kind,
-          JSON.stringify(m.detail),
+          JSON.stringify(detailOf(m, tr.key)),
           status,
           m.groupId ?? null,
           m.role ?? null,

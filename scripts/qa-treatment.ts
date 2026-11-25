@@ -256,7 +256,8 @@ async function main() {
     await addIn(doc, "implant_denture", "all on 4");
     const sheet = doc.locator("[data-full-arch='implant_denture']");
     await sheet.waitFor({ timeout: 10000 });
-    const pressed = await sheet.locator("[data-implant-site][aria-pressed='true']").evaluateAll((els) => els.map((e) => e.getAttribute("data-implant-site")).sort());
+    // Placed by hand since 2026-11-25 (qa-dental-prosthetics): they open in the usual places.
+    const pressed = await sheet.locator("[data-implant-chip]").evaluateAll((els) => els.map((e) => e.getAttribute("data-implant-chip")).sort());
     check(
       (await sheet.locator("[data-arch='upper'][aria-pressed='true']").count()) === 1 && pressed.join(",") === "12,15,22,25",
       "All-on-4 from tooth 11 opens on the upper arch with implants at 12, 22, 15 and 25",
@@ -1138,15 +1139,12 @@ async function main() {
     await openFile(doc, fileUrl(p4.id));
     await tapTooth(doc, "15");
     check(await until(() => fullViewOf(doc).isVisible(), 5000), "the next visit to the chart opens a tooth in full again");
-    // A bridge from the full view: it steps aside so the bridge's teeth can be tapped on the chart.
+    // A bridge is set up in a window of its own since 2026-11-25, over the tooth it was picked on.
     await addIn(doc, "bridge", "bridge", "Planned");
-    check(
-      await until(async () => (await fullViewOf(doc).count()) === 0 && (await doc.locator("[data-panel-size='compact'] [data-span-record]").count()) === 1),
-      "a bridge picked in full steps aside to the chart, to tap its teeth"
-    );
-    await chart(doc).locator("[data-tooth='14']").first().click();
-    await chart(doc).locator("[data-tooth='16']").first().click();
-    await doc.locator("[data-span-record]").click();
+    const bridgeSheet = doc.locator("[data-bridge-sheet='bridge']");
+    check(await until(async () => (await bridgeSheet.count()) === 1), "a bridge picked in full opens to be set up");
+    for (const f of ["14", "16"]) if ((await bridgeSheet.locator(`[data-bridge-tooth='${f}']`).getAttribute("aria-pressed")) !== "true") await bridgeSheet.locator(`[data-bridge-tooth='${f}']`).click();
+    await bridgeSheet.locator("[data-record-bridge]").click();
     await settle(doc);
     const bridgeRows = await q(`select site, group_id from chart_marks where patient_id = $1 and treatment_key = 'bridge' and voided_at is null`, [p4.id]);
     check(

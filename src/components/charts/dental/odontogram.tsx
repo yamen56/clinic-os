@@ -26,11 +26,18 @@ import { Image as ImageIcon, Plus, type LucideIcon } from "lucide-react";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, tooth, toothName, type Arch, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
 import { stateOf, type Paint, type ToothState } from "@/lib/charts/dental/state";
 import type { Category } from "@/lib/charts/dental/catalog";
+import { drawnByPieces, type ArchImplant, type Piece, type Prostheses } from "@/lib/charts/dental/prosthesis";
 import { CW, INK, OCC, SIDE_H, SOFT, ToothSide, ToothTop } from "./tooth-art";
+import { ImplantArt, ImplantTopArt, PieceSide, PieceTop } from "./prosthesis-art";
 import { iconFor } from "./icons";
 import { MouthGlyph, type MouthRegion } from "./mouth-art";
 
-const MG = 12; // the gap at the midline
+/*
+  No gap at the midline (2026-11-25): a full arch's bridge, its gum and its
+  base run across it, as they do in the mouth. The dashed line still says where
+  it is.
+*/
+const MG = 0;
 const NUM = 18; // the row the tooth numbers sit in
 export const CHART_W = 16 * CW + MG;
 
@@ -205,14 +212,13 @@ function regionBox(region: MouthRegion, placed: Placed[]): { x: number; y: numbe
   return { x, y: top, w, h: bottom - top };
 }
 
-/** Where two neighbouring teeth are joined: a bridge, a splint, or a wire through brackets. */
-function joins(a: ToothState, b: ToothState, visible: (p: Paint) => boolean): { paint: Paint; kind: "bar" | "wire" | "splint" }[] {
-  const out: { paint: Paint; kind: "bar" | "wire" | "splint" }[] = [];
+/** Where two neighbouring teeth are joined: a splint, or a wire through brackets. (A bridge is one drawing: see Pieces.) */
+function joins(a: ToothState, b: ToothState, visible: (p: Paint) => boolean): { paint: Paint; kind: "wire" | "splint" }[] {
+  const out: { paint: Paint; kind: "wire" | "splint" }[] = [];
   for (const la of a.layers) {
     if (!visible(la.paint)) continue;
     if (la.groupId) {
-      const lb = b.layers.find((x) => x.groupId === la.groupId);
-      if (lb) out.push({ paint: la.paint, kind: la.look === "splint" ? "splint" : "bar" });
+      if (la.look === "splint" && b.layers.some((x) => x.groupId === la.groupId)) out.push({ paint: la.paint, kind: "splint" });
     } else if (la.look === "bracket" && b.layers.some((x) => x.look === "bracket" && visible(x.paint))) {
       out.push({ paint: la.paint, kind: "wire" });
     }
@@ -261,10 +267,18 @@ const ToothCell = memo(function ToothCell({
   locale,
   imagesLabel,
   handlers,
+  drawn,
+  leftGone,
+  rightGone,
 }: {
   p: Placed;
   st: ToothState;
   isSel: boolean;
+  /** Entries drawn over the teeth as part of a piece. */
+  drawn: Set<string>;
+  /** The teeth either side, gone or standing: how healed gum meets the next. */
+  leftGone: boolean;
+  rightGone: boolean;
   /** How many x-rays and photos are pinned to this tooth. */
   images: number;
   visible: (p: Paint) => boolean;
@@ -310,7 +324,7 @@ const ToothCell = memo(function ToothCell({
         strokeWidth={1.2}
       />
       <g transform={`translate(${p.x + shift} ${p.sideY}) scale(${p.s})`}>
-        <ToothSide t={t} st={st} uid="ch" visible={visible} />
+        <ToothSide t={t} st={st} uid="ch" visible={visible} drawn={drawn} gone={leftGone || rightGone ? { left: leftGone, right: rightGone } : undefined} />
       </g>
       <g transform={`translate(${p.x + shift} ${p.occY}) scale(${p.s})`}>
         <ToothTop
@@ -318,6 +332,7 @@ const ToothCell = memo(function ToothCell({
           st={st}
           uid="ch"
           visible={visible}
+          drawn={drawn}
           onSurface={(s, e) => {
             e.stopPropagation();
             handlers.current.onSurface(p.fdi, s, e.shiftKey || e.metaKey || e.ctrlKey);
@@ -420,9 +435,71 @@ function RegionPill({ pill, onRegion, onHover }: { pill: Pill; onRegion: (id: st
   );
 }
 
+/*
+  The pieces — bridges, full arches, dentures — and a full arch's implants,
+  each drawn once over the teeth it stands in for. Nothing here takes a tap:
+  the tooth under it does.
+*/
+const Pieces = memo(function Pieces({ work, placed, visible }: { work: Prostheses; placed: Placed[]; visible: (p: Paint) => boolean }) {
+  // An arch's own row: where its teeth stand on this chart.
+  const at = (arch: Arch) => placed.find((p) => p.arch === arch && p.s === 1 && Number(p.fdi[0]) <= 4) ?? null;
+  const flip = (arch: Arch) => (arch === "lower" ? `matrix(1 0 0 -1 0 ${SIDE_H})` : undefined);
+  const pieces = work.pieces.filter((x) => visible(x.paint) && at(x.arch));
+  const implants = work.implants.filter((x) => visible(x.paint) && at(x.arch));
+  const unitsOf = (x: Piece) => x.units.map((u) => ({ t: tooth(u.fdi), x: u.col * CW }));
+  /** In the mouth: done, there before, or standing in as a temporary. */
+  const worn = (x: Piece) => x.paint === "done" || x.paint === "existing" || x.stage === "temp";
+  // Under a bridge or a denture that is in, an implant shows only where it is not: from the side, past its base.
+  const bridged = (i: ArchImplant) =>
+    pieces.some(
+      (x) =>
+        x.groupId === i.groupId &&
+        worn(x) &&
+        i.place.pos >= x.units[0].col - 0.5 &&
+        i.place.pos <= x.units[x.units.length - 1].col + 0.5
+    );
+  return (
+    <g pointerEvents="none" data-pieces={pieces.length || undefined}>
+      {implants.map((i) => {
+        const row = at(i.arch)!;
+        return (
+          <g key={i.id} transform={`translate(0 ${row.sideY})`} data-arch-implant={i.site}>
+            <g transform={flip(i.arch)}>
+              <ImplantArt arch x={i.place.pos * CW + CW / 2} place={i.place} paint={i.paint} top={bridged(i) ? "none" : i.top} />
+            </g>
+          </g>
+        );
+      })}
+      {pieces.map((x) => {
+        const row = at(x.arch)!;
+        return (
+          <g key={x.id} data-piece={x.kind} data-piece-teeth={x.units.map((u) => u.fdi).join(",")} data-piece-paint={x.paint} data-piece-stage={x.stage ?? undefined}>
+            <g transform={`translate(0 ${row.sideY})`}>
+              <g transform={flip(x.arch)}>
+                <PieceSide units={unitsOf(x)} arch={x.arch} base={x.base} material={x.material} paint={x.paint} stage={x.stage} seams={x.seams} uid={`pc-${x.id}`} />
+              </g>
+            </g>
+            <g transform={`translate(0 ${row.occY})`}>
+              <PieceTop units={unitsOf(x)} base={x.base} material={x.material} paint={x.paint} stage={x.stage} holes={x.kind === "arch" && worn(x) ? x.implants.map((p) => p.pos * CW + CW / 2) : undefined} />
+            </g>
+          </g>
+        );
+      })}
+      {implants
+        .filter((i) => !bridged(i))
+        .map((i) => (
+          <g key={`t${i.id}`} transform={`translate(0 ${at(i.arch)!.occY})`}>
+            <ImplantTopArt x={i.place.pos * CW + CW / 2} paint={i.paint} top={i.top} dia={i.place.dia} />
+          </g>
+        ))}
+    </g>
+  );
+});
+
 export function Odontogram({
   dentition,
   states,
+  work,
   visible,
   selected,
   half,
@@ -442,6 +519,8 @@ export function Odontogram({
 }: {
   dentition: Dentition;
   states: Map<string, ToothState>;
+  /** The bridges, dentures and full arches of the day shown. */
+  work: Prostheses;
   visible: (p: Paint) => boolean;
   selected: string[];
   /** On a phone: which half of the mouth to show. */
@@ -476,6 +555,9 @@ export function Odontogram({
   const handlers = useRef<Handlers>({ onTooth, onSurface, onImages, categoryOf });
   handlers.current = { onTooth, onSurface, onImages, categoryOf };
   const midX = 8 * CW + MG / 2;
+  const drawn = useMemo(() => drawnByPieces(work), [work]);
+  // Whether the tooth beside is gone — past the end of the arch counts as gone: the gum just ends.
+  const goneAt = (row: Placed[], i: number) => (row[i] ? stateOf(states, row[i].fdi).gone : true);
 
   // Arch and quadrant work tints its teeth; the whole mouth's is labelled, not tinted.
   const tints = regions.filter((m) => m.site !== "mouth");
@@ -521,21 +603,31 @@ export function Odontogram({
       <line x1={midX} y1={0} x2={midX} y2={height} style={{ stroke: "var(--color-line-strong)", strokeWidth: 1 }} strokeDasharray="3 4" />
       <line x1={0} y1={plane} x2={CHART_W} y2={plane} style={{ stroke: "var(--color-line-strong)", strokeWidth: 1 }} strokeDasharray="3 4" />
 
-      {placed.map((p) => (
-        <ToothCell
-          key={p.fdi}
-          p={p}
-          st={stateOf(states, p.fdi)}
-          isSel={selected.includes(p.fdi)}
-          images={imageCounts[p.fdi] ?? 0}
-          visible={visible}
-          locale={locale}
-          imagesLabel={imagesLabel}
-          handlers={handlers}
-        />
-      ))}
+      {rows.map((row) =>
+        row.map((p, i) => {
+          const st = stateOf(states, p.fdi);
+          return (
+            <ToothCell
+              key={p.fdi}
+              p={p}
+              st={st}
+              isSel={selected.includes(p.fdi)}
+              images={imageCounts[p.fdi] ?? 0}
+              visible={visible}
+              locale={locale}
+              imagesLabel={imagesLabel}
+              handlers={handlers}
+              drawn={drawn}
+              leftGone={st.gone && goneAt(row, i - 1)}
+              rightGone={st.gone && goneAt(row, i + 1)}
+            />
+          );
+        })
+      )}
 
-      {/* Bridges, splints and wires, drawn after the teeth so they cross the gaps between them. */}
+      <Pieces work={work} placed={placed} visible={visible} />
+
+      {/* Splints and wires, drawn after the teeth so they cross the gaps between them. */}
       {rows.map((row) =>
         row.slice(0, -1).map((a, i) => {
           const b = row[i + 1];
@@ -547,31 +639,6 @@ export function Odontogram({
           return js.map((j, k) => {
             const ink = INK[j.paint];
             const dash = j.paint === "planned" ? "3 2" : undefined;
-            if (j.kind === "bar") {
-              /*
-                A bridge as it is made: crowns joined at their contact, a small
-                ceramic connector between each pair — and under it a fine line
-                in the status' ink, so the span still reads as one piece of work.
-              */
-              // Halfway between the two crowns — across the midline gap too.
-              const joint = (a.x + CW + b.x) / 2;
-              const yc = local(80);
-              const yl = local(76);
-              return (
-                <g key={`${a.fdi}-${k}`} className="tooth-pop">
-                  <line x1={xa} y1={yl} x2={xb} y2={yl} style={{ stroke: ink, strokeWidth: 1.1, opacity: 0.7 }} strokeDasharray={dash} strokeLinecap="round" />
-                  <rect
-                    x={joint - 4.2}
-                    y={yc - 5}
-                    width={8.4}
-                    height={10}
-                    rx={3.5}
-                    style={{ fill: "url(#dental-defs-ceramic)", fillOpacity: j.paint === "planned" ? 0.55 : 1, stroke: ink, strokeWidth: 0.9 }}
-                    strokeDasharray={dash}
-                  />
-                </g>
-              );
-            }
             const y = local(j.kind === "wire" ? 85 : 93);
             return (
               <line

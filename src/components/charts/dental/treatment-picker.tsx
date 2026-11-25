@@ -30,6 +30,7 @@ import {
 import { tooth as toothOf, type Tooth } from "@/lib/charts/dental/teeth";
 import type { Paint, Person } from "@/lib/charts/dental/state";
 import { LookGlyph } from "./tooth-art";
+import { ArchGlyph, BridgeGlyph } from "./prosthesis-art";
 import { iconFor } from "./icons";
 
 export type Favorite = { key: string; addedBy: Person; addedAt: string };
@@ -59,6 +60,9 @@ export const TreatmentGlyph = memo(function TreatmentGlyph({ tr, paint, context,
       </span>
     );
   }
+  // A bridge and a full arch look like what they are: one piece across teeth, not a crown.
+  if (tr.key === "bridge" || tr.key === "implant_bridge") return <BridgeGlyph paint={paint} size={size} implants={tr.key === "implant_bridge"} />;
+  if (tr.key === "implant_denture" || tr.key === "denture_complete") return <ArchGlyph paint={paint} size={size * 1.15} implants={tr.key === "implant_denture"} />;
   return <LookGlyph look={tr.look} paint={paint} t={glyphTooth(tr, context)} uid={`g-${tr.key}`} size={size} />;
 });
 

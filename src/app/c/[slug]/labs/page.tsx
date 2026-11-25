@@ -4,6 +4,7 @@ import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { can } from "@/lib/auth";
 import { toLab, toLabCase } from "@/lib/charts/dental/labs";
+import { inChartOrder } from "@/lib/charts/dental/full-arch";
 import { LabsClient, type LabWork } from "./labs-client";
 
 /*
@@ -31,7 +32,11 @@ export default async function LabsPage({
     const labs = (await c.query(`select * from dental_labs where clinic_id = $1 order by active desc, sort, name`, [access.clinicId])).rows.map(toLab);
     const rows = (
       await c.query(
-        `select lc.*, p.full_name as patient_name, m.label, m.site, m.treatment_key
+        `select lc.*, p.full_name as patient_name, m.label, m.site, m.treatment_key,
+                -- A bridge's teeth, for an order sent before it kept them.
+                (select array_agg(x.site)
+                   from chart_marks x
+                  where x.group_id = m.group_id and x.clinic_id = m.clinic_id and x.voided_at is null and m.site ~ '^[1-8][1-8]$') as mates
            from lab_cases lc
            join dental_labs l on l.id = lc.lab_id
            join patients p on p.id = lc.patient_id and p.merged_into is null
@@ -54,6 +59,8 @@ export default async function LabsPage({
           patientName: r.patient_name as string,
           label: r.label as string,
           site: r.site as string,
+          treatmentKey: r.treatment_key as string,
+          teeth: inChartOrder(((toLabCase(r).spec.teeth ?? []).map((x) => x.site).length ? toLabCase(r).spec.teeth!.map((x) => x.site) : ((r.mates as string[] | null) ?? [])).filter((s) => /^[1-8][1-8]$/.test(s))),
         })
       ),
     };

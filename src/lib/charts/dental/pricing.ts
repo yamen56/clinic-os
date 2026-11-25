@@ -23,6 +23,7 @@ export const PRICE_BY: Record<string, "material" | "canals" | "type" | "implants
   veneer: "material",
   hollywood_smile: "material",
   implant_crown: "material",
+  implant_bridge: "material",
   inlay: "material",
   onlay: "material",
   rct: "canals",

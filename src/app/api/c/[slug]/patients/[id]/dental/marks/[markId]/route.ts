@@ -5,9 +5,11 @@ import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { audit } from "@/lib/audit";
 import { MARK_SELECT, resolveTreatment, toEvent, toMark } from "@/lib/charts/dental/db";
 import { protocolFor } from "@/lib/charts/dental/protocols";
-import { applyToMembers, followersOf, todaysVisit } from "@/lib/charts/dental/server";
+import { applyToMembers, followersOf, shareDetail, todaysVisit } from "@/lib/charts/dental/server";
 import { setDetail } from "@/lib/charts/dental/billing-server";
 import { redateMarks } from "@/lib/charts/redate";
+import { saveArch } from "@/lib/charts/dental/arch-server";
+import { MAX_IMPLANTS } from "@/lib/charts/dental/implant-place";
 
 /*
   Changing an entry on the chart. Every change a reader would care about —
@@ -28,6 +30,29 @@ const bodySchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("surfaces"), surfaces: z.array(z.enum(["M", "D", "O", "B", "L"])).min(1).max(5) }),
   /** Done on another day than it was recorded (2026-11-20): see redateMarks. */
   z.object({ op: z.literal("date"), eventId: z.string().uuid(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+  /** A full arch as it was placed: its implants where they are, and what goes on them (arch-server.ts). */
+  z.object({
+    op: z.literal("arch"),
+    eventId: z.string().uuid(),
+    implants: z
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          eventId: z.string().uuid(),
+          pos: z.number().finite(),
+          tilt: z.number().finite(),
+          depth: z.number().finite(),
+          len: z.number().finite(),
+          dia: z.number().finite(),
+        })
+      )
+      .min(1)
+      .max(MAX_IMPLANTS),
+    teeth: z.array(z.string().regex(/^[1-4][1-8]$/)).min(2).max(16),
+    kind: z.enum(["fixed", "removable"]),
+    material: z.string().max(24).nullable(),
+    cuts: z.string().regex(/^[0-9a-f]{1,4}$/),
+  }),
 ]);
 
 type Params = { params: Promise<{ slug: string; id: string; markId: string }> };
@@ -50,8 +75,34 @@ export async function PATCH(req: Request, ctx: Params) {
     if (!cur) return { error: "not_found" as const };
     if (cur.voided_at) return { error: "voided" as const };
 
+    // A full arch's change is many rows and their own lines: its own path, answered with every row it touched.
+    if (b.op === "arch") {
+      const r = await saveArch(c, { clinicId: access.clinicId, patientId: id, userId: me, eventId: b.eventId }, cur, b);
+      if ("error" in r) return { error: r.error };
+      await audit(c, {
+        clinicId: access.clinicId,
+        userId: me,
+        impersonatedBy: access.session.impersonatedBy,
+        action: "dental.mark.arch",
+        entity: "patient",
+        entityId: id,
+        detail: { mark: markId, site: cur.site, treatment: cur.treatment_key, implants: b.implants.length, teeth: b.teeth.length, changed: r.changed.length },
+      });
+      const rows = (await c.query(`${MARK_SELECT} where m.id = any($1::uuid[])`, [[...new Set([markId, ...r.changed])]])).rows.map(toMark);
+      const lines = (
+        await c.query(
+          `select e.*, u.full_name as by_name from chart_mark_events e left join users u on u.id = e.by_user
+            where e.mark_id = any($1::uuid[]) and e.at = now()`,
+          [[...new Set([markId, ...r.changed])]]
+        )
+      ).rows.map(toEvent);
+      const own = rows.find((x) => x.id === markId)!;
+      return { mark: own, event: null, also: rows.filter((x) => x.id !== markId), alsoEvents: lines };
+    }
+
     let event: { id: string; action: string; reason?: string } | null = null;
     let redated: string[] = [];
+    let shared: string[] = [];
     switch (b.op) {
       case "done": {
         if (cur.status !== "planned") return { error: "not_planned" as const };
@@ -83,6 +134,8 @@ export async function PATCH(req: Request, ctx: Params) {
         if (!field || !field.options.some((o) => o.key === b.value)) return { error: "invalid_detail" as const };
         // The price follows the detail, unless it was set by hand (billing-server.ts).
         await setDetail(c, access.clinicId, cur, b.key, b.value);
+        // A bridge is made of one thing: its other teeth take it with their lead.
+        shared = await shareDetail(c, access.clinicId, cur, b.key, b.value);
         break;
       }
       case "surfaces": {
@@ -123,7 +176,7 @@ export async function PATCH(req: Request, ctx: Params) {
       teeth done, and either voided is all of them voided — each with its own
       line in its tooth's history.
     */
-    let kids: string[] = redated;
+    let kids: string[] = [...redated, ...shared];
     if (b.op === "done" || b.op === "void") {
       const members = await followersOf(c, access.clinicId, cur);
       kids = await applyToMembers(c, access.clinicId, members.map((x) => x.id), b.op, me, b.op === "void" ? b.reason || null : null);

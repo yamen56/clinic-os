@@ -26,37 +26,45 @@
 import { surfaceAt, type Surface, type Tooth } from "@/lib/charts/dental/teeth";
 import type { Layer, Paint, ToothState } from "@/lib/charts/dental/state";
 import type { Look } from "@/lib/charts/dental/catalog";
+import { colOf, placeIn } from "@/lib/charts/dental/implant-place";
+import {
+  C,
+  CW,
+  DEFS,
+  GUM_PAD,
+  GUM_TOP,
+  INK,
+  LINE,
+  OCC,
+  PAP,
+  SIDE_H,
+  SOFT,
+  TINTS,
+  Y0,
+  YB,
+  YE,
+  ZEN,
+  edge,
+  festoon,
+  fillOf,
+  gumArt,
+  gumMargin,
+  gumPath,
+  materialOf,
+  presence,
+  ridgeArt,
+  sideArt,
+  sideArtKey,
+  tintOf,
+  topArt,
+  topArtKey,
+  topHalf,
+  topOutline,
+  url,
+  type Material,
+} from "./art-base";
+import { ImplantArt, ImplantTopArt, PieceSide, type ImplantTop } from "./prosthesis-art";
 import { TOOTH_PHOTOS } from "./tooth-photos";
-
-export const CW = 44;
-export const SIDE_H = 104;
-export const OCC = 44;
-
-const C = 22;
-const Y0 = 62; // the neck: where enamel meets root, and where the gum sits
-const YB = 74; // the widest point of the crown
-const YE = 100; // the biting edge
-
-/** Gradient ids live once per page, in `<DentalDefs />`. */
-export const DEFS = "dental-defs";
-
-export const INK: Record<Paint, string> = {
-  planned: "var(--color-dental-planned)",
-  done: "var(--color-dental-done)",
-  existing: "var(--color-dental-existing)",
-  finding: "var(--color-dental-finding)",
-  progress: "var(--color-dental-progress)",
-};
-export const SOFT: Record<Paint, string> = {
-  planned: "var(--color-dental-planned-soft)",
-  done: "var(--color-dental-done-soft)",
-  existing: "var(--color-dental-existing-soft)",
-  finding: "var(--color-dental-finding-soft)",
-  progress: "var(--color-dental-progress-soft)",
-};
-
-const LINE = "var(--color-tooth-line)";
-const url = (id: string) => `url(#${DEFS}-${id})`;
 
 type Shape = { nw: number; mw: number; cusp: "incisal" | "canine" | "premolar" | "molar"; apex: number; roots: 1 | 2 | 3 };
 
@@ -91,33 +99,6 @@ export function drawnShape(t: Tooth): Shape {
   const w = p === 6 ? { nw: 14.5, mw: 21 } : p === 7 ? { nw: 14, mw: 20.5 } : { nw: 13, mw: 19 };
   return { ...w, cusp: "molar", apex: p === 6 ? 15 : p === 7 ? 18 : 23, roots: upper ? 3 : 2 };
 }
-
-/*
-  The baked art (scripts/render-tooth-art.tsx → public/charts/teeth): one
-  picture per drawing, named by what decides its shape. A baby tooth's incisors
-  and canines share the grown-up drawing, as `shapeOf` does; its molars do not.
-*/
-export function sideArtKey(t: Tooth): string {
-  const a = t.arch === "upper" ? "u" : "l";
-  if (t.kind === "incisor") return `${a}-i${t.position === 1 ? 1 : 2}`;
-  if (t.kind === "canine") return `${a}-c`;
-  if (t.kind === "premolar") return `${a}-p`;
-  return t.primary ? `${a}-d${t.position === 4 ? 4 : 5}` : `${a}-m${t.position}`;
-}
-export function topArtKey(t: Tooth): string {
-  const a = t.arch === "upper" ? "u" : "l";
-  if (t.kind === "incisor") return a === "u" ? `u-i${t.position === 1 ? 1 : 2}` : "l-i";
-  if (t.kind === "canine") return `${a}-c`;
-  if (t.kind === "premolar") return `${a}-p`;
-  return t.primary ? `${a}-d` : `${a}-m${t.position}`;
-}
-/** Bump when the art is baked again, so a browser never paints yesterday's picture. */
-export const ART_VERSION = 2;
-/** How far each column's gum reaches into its neighbours', so the joint never shows (the renderer explains). */
-export const GUM_PAD = 0.6;
-export const sideArt = (t: Tooth) => `/charts/teeth/side-${sideArtKey(t)}.webp?v=${ART_VERSION}`;
-export const topArt = (t: Tooth) => `/charts/teeth/top-${topArtKey(t)}.webp?v=${ART_VERSION}`;
-export const gumArt = (t: Tooth) => `/charts/teeth/gum-${t.arch === "upper" ? "u" : "l"}.webp?v=${ART_VERSION}`;
 
 function crownPath(s: Shape): string {
   const { nw, mw } = s;
@@ -204,74 +185,7 @@ function canalPath([x1, y1, x2, y2]: [number, number, number, number], top = 1.7
   return `M ${p(x1, y1, top, 1)} L ${p(x2, y2, tip, 1)} Q ${x2 + (dx / len) * 1.2} ${y2 + (dy / len) * 1.2} ${p(x2, y2, tip, -1)} L ${p(x1, y1, top, -1)} Z`;
 }
 
-/*
-  The gingiva: coral tissue over the neck, a papilla rising between each pair
-  of teeth and a lighter rim at the margin, fading up the root so what is done
-  in the roots stays visible. Drawn per tooth, so it tiles across the arch.
-*/
-const GUM_TOP = Y0 - 34;
-const PAP = Y0 + 11; // the papilla's tip, between two crowns
-const ZEN = Y0 + 1; // the margin's highest point, over the middle of the tooth
-/*
-  The papilla's tips sit level at the column's edges, so the halves drawn by
-  two neighbours meet in one smooth round. Exactly its column wide: tissue
-  drawn half-transparent shows a darker line wherever two pieces overlap.
-*/
-function gumPath(): string {
-  return festoon(GUM_TOP);
-}
-/** Tissue from `top` down to the gingival margin, festooned round the neck — the gum, or a denture's acrylic. */
-function festoon(top: number): string {
-  return (
-    `M 0 ${top} L ${CW} ${top} L ${CW} ${PAP} ` +
-    `C ${CW - 2.2} ${PAP} ${CW - 4.2} ${PAP - 1.6} ${CW - 6} ${PAP - 4} C ${CW - 9} ${ZEN + 3} ${C + 8} ${ZEN} ${C} ${ZEN} ` +
-    `C ${C - 8} ${ZEN} 9 ${ZEN + 3} 6 ${PAP - 4} C 4.2 ${PAP - 1.6} 2.2 ${PAP} 0 ${PAP} Z`
-  );
-}
-function gumMargin(): string {
-  return `M 0 ${PAP} C 2.2 ${PAP} 4.2 ${PAP - 1.6} 6 ${PAP - 4} C 9 ${ZEN + 3} ${C - 8} ${ZEN} ${C} ${ZEN} C ${C + 8} ${ZEN} ${CW - 9} ${ZEN + 3} ${CW - 6} ${PAP - 4} C ${CW - 4.2} ${PAP - 1.6} ${CW - 2.2} ${PAP} ${CW} ${PAP}`;
-}
-
 /* ── Materials ───────────────────────────────────────────────────────────── */
-
-type Material = "ceramic" | "metal" | "gold" | "composite" | "amalgam" | "gic" | "temp" | "titanium" | "gutta" | "mta" | "acrylic";
-
-/** What a piece of work is made of: from the material chosen, else from the treatment. */
-function materialOf(l: Layer): Material {
-  const m = l.detail.material;
-  if (m === "metal") return "metal";
-  if (m === "gold") return "gold";
-  if (m === "temporary") return "temp";
-  if (m === "amalgam") return "amalgam";
-  if (m === "gic") return "gic";
-  if (m === "composite") return l.look === "filling" ? "composite" : "ceramic";
-  if (m === "zirconia" || m === "emax" || m === "ceramic" || m === "porcelain" || m === "pfm") return "ceramic";
-  const k = l.treatmentKey ?? "";
-  if (k === "filling_amalgam") return "amalgam";
-  if (k === "filling_gic") return "gic";
-  if (k === "filling_temp") return "temp";
-  if (k === "ssc" || k === "post_core") return "metal";
-  if (k === "bonding") return "composite";
-  if (l.look === "filling" || l.look === "core") return "composite";
-  if (l.look === "sealant") return "composite";
-  return "ceramic";
-}
-
-/** Planned work is a ghost of what it will be; done and existing work is the thing itself. */
-function presence(p: Paint): number {
-  return p === "planned" ? 0.5 : p === "progress" ? 0.8 : 1;
-}
-
-/** The status, as an edge round the work: dashed red planned, dashed violet under way, a fine blue line done. */
-function edge(p: Paint, w = 1.1): React.CSSProperties & { strokeDasharray?: string } {
-  const loud = p === "planned" || p === "progress";
-  return {
-    stroke: INK[p],
-    strokeWidth: loud ? w + 0.35 : w * 0.8,
-    strokeDasharray: p === "planned" ? "3 2" : p === "progress" ? "4 1.6" : undefined,
-    strokeLinejoin: "round",
-  };
-}
 
 /** The one copy of the gradients every tooth on the page paints with. */
 export function DentalDefs() {
@@ -331,6 +245,21 @@ export function DentalDefs() {
           {stop(0, "var(--color-gum-deep)")}
           {stop(1, "var(--color-gum)")}
         </linearGradient>
+        {/* A bridge's connector, the plug in a screw's access hole, and the bar under an acrylic arch. */}
+        <linearGradient id={`${DEFS}-joint`} x1="0" y1="0" x2="1" y2="0">
+          {stop(0, "var(--color-mat-porcelain)")}
+          {stop(0.5, "var(--color-mat-porcelain-shade)")}
+          {stop(1, "var(--color-mat-porcelain)")}
+        </linearGradient>
+        <radialGradient id={`${DEFS}-plug`} cx="0.42" cy="0.4" r="0.6">
+          {stop(0, "var(--color-mat-composite)")}
+          {stop(1, "var(--color-mat-composite-shade)")}
+        </radialGradient>
+        <linearGradient id={`${DEFS}-bar`} gradientUnits="userSpaceOnUse" x1="0" y1="51" x2="0" y2="54">
+          {stop(0, "var(--color-mat-metal-light)")}
+          {stop(0.45, "var(--color-mat-titanium)")}
+          {stop(1, "var(--color-mat-titanium-shade)")}
+        </linearGradient>
         {/* Findings. */}
         <radialGradient id={`${DEFS}-decay`} cx="0.5" cy="0.5" r="0.5">
           {stop(0, "var(--color-dental-caries)")}
@@ -371,29 +300,6 @@ export function DentalDefs() {
     </svg>
   );
 }
-
-/** A material's fill. */
-const fillOf = (m: Material) => (m === "mta" ? url("mta") : url(m));
-
-/*
-  Each material as a colour matrix over the enamel's picture, from its
-  luminance: ceramic a cool porcelain white, composite a touch brighter and
-  less yellow than enamel (it reads by its edge, as it does in the mouth),
-  metal and amalgam grey with more contrast, gold gold, glass ionomer a matte
-  grey-white, a temporary the tan of acrylic.
-*/
-const lum = (k: number, add: number) => `${(0.2126 * k).toFixed(4)} ${(0.7152 * k).toFixed(4)} ${(0.0722 * k).toFixed(4)} 0 ${add}`;
-const TINTS: Partial<Record<Material, string>> = {
-  ceramic: `${lum(0.92, 0.1)} ${lum(0.92, 0.1)} ${lum(0.94, 0.12)} 0 0 0 1 0`,
-  composite: `0.9 0.08 0.02 0 0.03 0.04 0.92 0.04 0 0.03 0.04 0.1 0.86 0 0.07 0 0 0 1 0`,
-  metal: `${lum(1.12, -0.3)} ${lum(1.12, -0.29)} ${lum(1.12, -0.25)} 0 0 0 1 0`,
-  gold: `${lum(1.05, 0.02)} ${lum(0.88, -0.04)} ${lum(0.55, -0.1)} 0 0 0 1 0`,
-  amalgam: `${lum(1.05, -0.42)} ${lum(1.05, -0.41)} ${lum(1.05, -0.38)} 0 0 0 1 0`,
-  gic: `${lum(0.75, 0.19)} ${lum(0.75, 0.2)} ${lum(0.75, 0.17)} 0 0 0 1 0`,
-  temp: `${lum(0.94, 0.04)} ${lum(0.84, 0.02)} ${lum(0.65, 0)} 0 0 0 1 0`,
-};
-/** The tooth's picture in a material: the one filter for it, or none for what has no tint. */
-const tintOf = (m: Material) => (TINTS[m] ? url(`tint-${m}`) : url("tint-ceramic"));
 
 /** Where a surface is on the side view, for a spot of caries or a small filling. */
 function sideSpot(t: Tooth, s: Shape, sf: Surface): [number, number] {
@@ -444,7 +350,7 @@ function blob(x: number, y: number, r: number, seed: number): string {
   return `M ${pts[0]} ${pts.slice(1).map((p) => `L ${p}`).join(" ")} Z`;
 }
 
-function SideLayer({ l, t, s, crown, roots, clip, uid }: { l: Layer; t: Tooth; s: Shape; crown: string; roots: Roots; clip: string; uid: string }) {
+function SideLayer({ l, t, s, crown, roots, clip, uid, crowned }: { l: Layer; t: Tooth; s: Shape; crown: string; roots: Roots; clip: string; uid: string; crowned: boolean }) {
   const mat = materialOf(l);
   const on = presence(l.paint);
   switch (l.look) {
@@ -539,33 +445,44 @@ function SideLayer({ l, t, s, crown, roots, clip, uid }: { l: Layer; t: Tooth; s
       );
     case "crown":
     case "denture": {
+      // A tooth of a bridge, or of a denture, is a slice of it: the same drawing the chart makes of the whole.
+      if (l.look === "denture" || (l.role && l.groupId)) {
+        return <PieceSide units={[{ t, x: 0 }]} arch={t.arch} base={l.look === "denture"} material={l.detail.material ?? null} paint={l.paint} stage={l.stage} uid={uid} open />;
+      }
       const metalCollar = l.detail.material === "pfm";
       // A crown sits over the prepared tooth, a touch fuller than it.
       const over = `translate(${C} ${YE}) scale(1.035 1.02) translate(${-C} ${-YE})`;
+      const loud = l.paint === "planned" || l.paint === "progress";
       return (
         <g className="tooth-pop">
-          {l.look === "denture" && (
-            // The pink acrylic base, festooned like gum and the column wide, so a full arch reads as one piece.
-            <>
-              <clipPath id={`${uid}-base`}>
-                <path d={festoon(Y0 - 16)} />
-              </clipPath>
-              <g clipPath={`url(#${uid}-base)`} opacity={on}>
-                <image href={gumArt(t)} x={-GUM_PAD} y={0} width={CW + 2 * GUM_PAD} height={SIDE_H} />
-                <path d={festoon(Y0 - 16)} style={{ fill: "var(--color-gum-deep)" }} opacity={0.18} />
-              </g>
-              <path d={gumMargin()} style={{ fill: "none", ...edge(l.paint, 0.9) }} />
-            </>
-          )}
-          {/* The crown is the tooth's own shape and light, made in its material. */}
+          {/* The crown is the tooth's own shape and light, made in its material; its edge behind it, as round a bridge. */}
           <g transform={over}>
-            <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={`url(#${clip})`} filter={tintOf(l.look === "denture" ? "composite" : mat)} opacity={on} />
-            <path d={crown} style={{ fill: "none", ...edge(l.paint, 1.3) }} />
+            <path
+              d={crown}
+              style={{ fill: "none", stroke: INK[l.paint], strokeWidth: loud ? 2.4 : 1.4, strokeOpacity: loud ? 1 : 0.85, strokeLinejoin: "round" }}
+              strokeDasharray={l.paint === "planned" ? "4 2.6" : l.paint === "progress" ? "5 2" : undefined}
+            />
+            <image
+              href={sideArt(t)}
+              x={0}
+              y={0}
+              width={CW}
+              height={SIDE_H}
+              clipPath={`url(#${clip})`}
+              filter={tintOf(l.stage === "temp" ? "temp" : mat)}
+              opacity={l.stage === "temp" ? 1 : l.stage === "prep" ? 0.42 : on}
+            />
           </g>
+          {/* And the gum's edge again, over its neck. */}
+          <clipPath id={`${uid}-neck`}>
+            <rect x={-GUM_PAD} y={Y0 - 4.5} width={CW + 2 * GUM_PAD} height={SIDE_H} />
+          </clipPath>
+          <image href={gumArt(t)} x={-GUM_PAD} y={0} width={CW + 2 * GUM_PAD} height={SIDE_H} clipPath={`url(#${uid}-neck)`} />
           {metalCollar && (
             <path
-              d={`M ${C - s.nw - 0.5} ${Y0 + 0.5} Q ${C} ${Y0 - 4} ${C + s.nw + 0.5} ${Y0 + 0.5} L ${C + s.nw + 1.6} ${Y0 + 4.2} Q ${C} ${Y0} ${C - s.nw - 1.6} ${Y0 + 4.2} Z`}
-              style={{ fill: url("metal"), fillOpacity: on }}
+              d={`M ${C - s.nw - 1} ${Y0 + 5.4} C ${C - s.nw + 2} ${Y0 + 3} ${C - 6} ${Y0 + 2.3} ${C} ${Y0 + 2.3} C ${C + 6} ${Y0 + 2.3} ${C + s.nw - 2} ${Y0 + 3} ${C + s.nw + 1} ${Y0 + 5.4}`}
+              style={{ fill: "none", stroke: "var(--color-mat-titanium)", strokeWidth: 1.7, strokeOpacity: on }}
+              strokeLinecap="round"
             />
           )}
         </g>
@@ -582,26 +499,15 @@ function SideLayer({ l, t, s, crown, roots, clip, uid }: { l: Layer; t: Tooth; s
         </g>
       );
     case "implant": {
-      const top = Y0 - 1;
-      const bot = s.apex + 6;
-      const threads: number[] = [];
-      for (let y = top - 5; y > bot + 3; y -= 4.2) threads.push(y);
-      const w = (y: number) => 5.4 - ((top - y) / (top - bot)) * 1.5;
-      return (
-        <g className="tooth-pop" opacity={on}>
-          <path d={`M ${C - 5.4} ${top} L ${C + 5.4} ${top} L ${C + 3.9} ${bot + 4} Q ${C} ${bot - 1.5} ${C - 3.9} ${bot + 4} Z`} style={{ fill: url("titanium"), ...edge(l.paint, 1) }} />
-          {threads.map((y) => (
-            <path key={y} d={`M ${C - w(y) - 1.1} ${y + 1} L ${C + w(y) + 1.1} ${y - 1.4}`} style={{ stroke: "var(--color-mat-titanium-shade)", strokeWidth: 1.15 }} strokeLinecap="round" />
-          ))}
-          {threads.map((y) => (
-            <path key={`h${y}`} d={`M ${C - w(y) + 0.5} ${y - 0.3} L ${C + w(y) - 0.5} ${y - 2.4}`} style={{ stroke: "var(--color-mat-metal-light)", strokeWidth: 0.55 }} opacity={0.8} />
-          ))}
-          {/* The abutment (or a healing cap), through the gum. */}
-          <path d={`M ${C - 4} ${top} L ${C - 3.2} ${Y0 + 7} L ${C + 3.2} ${Y0 + 7} L ${C + 4} ${top} Z`} style={{ fill: url("titanium"), ...edge(l.paint, 0.8) }} />
-        </g>
-      );
+      // In a full arch it stands where it was placed, not in the middle of its tooth.
+      const place = placeIn(l.detail);
+      const x = C + (place ? (place.pos - Math.max(0, colOf(t.fdi))) * CW : 0);
+      const top: ImplantTop = l.arch ? "multi" : crowned ? "post" : "heal";
+      return <ImplantArt x={x} place={place ?? undefined} paint={l.paint} top={top} arch={!!l.arch} />;
     }
     case "extraction":
+      // Taken out for a full arch: the tooth is drawn leaving (see ToothSide), not crossed — sixteen crosses hide the arch they are for.
+      if (l.arch) return null;
       // Planned: the tooth wears a cross until it is out. (Once out, it is drawn gone.)
       return (
         <g className="tooth-pop" strokeLinecap="round">
@@ -857,7 +763,26 @@ function Mobility({ t, mob }: { t: Tooth; mob: Layer }) {
  * The tooth from the side. `uid` keeps clip-path ids unique when the same tooth
  * is drawn twice on one page — in the chart and in the panel beside it.
  */
-export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: ToothState; uid: string; visible?: (p: Paint) => boolean }) {
+export function ToothSide({
+  t,
+  st,
+  uid,
+  visible = () => true,
+  drawn,
+  gone: goneBeside,
+  bare = false,
+}: {
+  t: Tooth;
+  st: ToothState;
+  uid: string;
+  visible?: (p: Paint) => boolean;
+  /** The tooth alone, without its gum: laid faintly over gum already drawn. */
+  bare?: boolean;
+  /** Entries drawn over the teeth as part of a bridge, a denture or a full arch: not drawn again here. */
+  drawn?: Set<string>;
+  /** Whether the teeth either side are gone, so healed gum meets healed gum level. */
+  gone?: { left: boolean; right: boolean };
+}) {
   const s = shapeOf(t);
   // The photograph's own outline and roots, so what is drawn on the tooth follows the tooth in the picture.
   const photo = TOOTH_PHOTOS[sideArtKey(t)];
@@ -867,7 +792,18 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
   const rootClip = `${uid}-r${t.fdi}`;
   const stumpClip = `${uid}-s${t.fdi}`;
   const layers = st.layers.filter((l) => visible(l.paint) && l.look !== "mobility");
+  const own = drawn ? layers.filter((l) => !drawn.has(l.markId)) : layers;
   const rootOnly = layers.some((l) => l.look === "root");
+  // A crown, a bridge tooth or a denture tooth over this place — whatever its status, the outline of a missing tooth under it only confuses.
+  const covered = layers.some((l) => l.look === "crown" || l.look === "denture");
+  // One already in the mouth: the gum is shaped to it. Otherwise a missing tooth's gum has healed over.
+  const emerges = layers.some((l) => l.look === "crown" && (l.paint === "done" || l.paint === "existing" || l.stage === "temp"));
+  // Under a bridge that is in: the crown it was made over is cut down, and never peeps out beside it.
+  const capped = !st.gone && !rootOnly && layers.some((l) => l.look === "crown" && !!l.role && !!l.groupId && (l.paint === "done" || l.paint === "existing" || l.stage === "temp"));
+  // Planned out for a full arch: a shadow of itself under the arch that replaces it.
+  const leaving = layers.some((l) => l.look === "extraction" && l.arch);
+  // Cut down for a crown or a bridge: the stump stands where the crown was, until the new one is on it.
+  const prepped = !st.gone && !rootOnly && layers.some((l) => l.look === "crown" && l.role !== "pontic" && !!l.stage && (l.paint === "planned" || l.paint === "progress"));
   // A root tip taken off (an apicectomy done): the roots end short of where they did.
   const cut = layers.some((l) => l.look === "apico" && l.paint !== "planned" && l.paint !== "progress");
   const buried = st.buried && visible(st.buried.paint) ? st.buried : null;
@@ -883,10 +819,16 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
   */
   const natural = (
     <g clipPath={buried ? `url(#${uid}-k${t.fdi})` : undefined}>
-    <g transform={move} opacity={buried ? 0.9 : 1}>
+    <g transform={move} opacity={leaving ? 0.34 : buried ? 0.9 : 1}>
       <g clipPath={cut ? `url(#${rootClip})` : undefined}>
-        <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={rootOnly ? `url(#${stumpClip})` : undefined} />
+        <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={rootOnly ? `url(#${stumpClip})` : prepped || capped ? `url(#${uid}-n${t.fdi})` : undefined} />
       </g>
+      {prepped && !capped && (
+        // The prepared tooth: the crown's own shape, cut back all round and tapered, dentin showing.
+        <g transform={`translate(${C} ${Y0 - 1}) scale(0.7 0.66) translate(${-C} ${-Y0})`}>
+          <image href={sideArt(t)} x={0} y={0} width={CW} height={SIDE_H} clipPath={`url(#${clip})`} filter={url("tint-dentin")} />
+        </g>
+      )}
       {rootOnly && (
         <polyline
           points={`${C - s.nw - 1},${Y0 + 6} ${C - s.nw / 2},${Y0 + 9} ${C - 2},${Y0 + 5} ${C + 2},${Y0 + 10} ${C + s.nw / 2},${Y0 + 6} ${C + s.nw + 1},${Y0 + 8}`}
@@ -914,6 +856,11 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
               <rect x={-2} y={0} width={CW + 4} height={SIDE_H} />
             </clipPath>
           )}
+          {(prepped || capped) && (
+            <clipPath id={`${uid}-n${t.fdi}`}>
+              <rect x={-2} y={-2} width={CW + 4} height={Y0 + 3} />
+            </clipPath>
+          )}
           {rootOnly && (
             <clipPath id={stumpClip}>
               {roots.back && <path d={roots.back} />}
@@ -928,18 +875,18 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
           front of the contact between two crowns.
         */}
         {st.gone ? (
-          <g style={{ fill: "none", stroke: "var(--color-ink-300)", strokeWidth: 0.9 }} strokeDasharray="2.5 2" opacity={0.8}>
-            <path d={roots.body} />
-            <path d={crown} />
-          </g>
+          // A missing tooth: its crown as a faint outline over healed gum, its roots gone with it.
+          !covered && (
+            <path d={crown} style={{ fill: "none", stroke: "var(--color-ink-300)", strokeWidth: 0.9 }} strokeDasharray="2.5 2" opacity={0.75} />
+          )
         ) : (
           natural
         )}
         {/* The gum, rendered too: wet, stippled, rolled over the neck, and clearer up the root so work there shows. */}
-        <image href={gumArt(t)} x={-GUM_PAD} y={0} width={CW + 2 * GUM_PAD} height={SIDE_H} />
+        {!bare && <image href={st.gone && !emerges ? ridgeArt(t, goneBeside?.left ?? false, goneBeside?.right ?? false) : gumArt(t)} x={-GUM_PAD} y={0} width={CW + 2 * GUM_PAD} height={SIDE_H} />}
         {buried && <path d={gumPath()} style={{ fill: "var(--color-gum)" }} opacity={0.55} />}
-        {layers.map((l) => (
-          <SideLayer key={l.markId + l.surfaces.join("")} l={l} t={t} s={s} crown={crown} roots={roots} clip={clip} uid={`${clip}-${l.markId}`} />
+        {own.map((l) => (
+          <SideLayer key={l.markId + l.surfaces.join("")} l={l} t={t} s={s} crown={crown} roots={roots} clip={clip} uid={`${clip}-${l.markId}`} crowned={covered} />
         ))}
       </g>
       <SideText t={t} st={st} visible={visible} />
@@ -948,30 +895,6 @@ export function ToothSide({ t, st, uid, visible = () => true }: { t: Tooth; st: 
 }
 
 /* ── From above ──────────────────────────────────────────────────────────── */
-
-function ellipse(cx: number, cy: number, rx: number, ry: number): string {
-  return `M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy} Z`;
-}
-
-function roundRect(x: number, y: number, w: number, h: number, r: number): string {
-  return `M ${x + r} ${y} H ${x + w - r} Q ${x + w} ${y} ${x + w} ${y + r} V ${y + h - r} Q ${x + w} ${y + h} ${x + w - r} ${y + h} H ${x + r} Q ${x} ${y + h} ${x} ${y + h - r} V ${y + r} Q ${x} ${y} ${x + r} ${y} Z`;
-}
-
-/** The chewing surface's half-width and half-height, from above. */
-function topHalf(t: Tooth): [number, number] {
-  if (t.kind === "molar") return [(t.primary ? 32 : t.position === 8 ? 34 : t.position === 7 ? 36 : 38) / 2, (t.arch === "upper" ? 35 : 33) / 2];
-  if (t.kind === "premolar") return [14.5, 17];
-  if (t.kind === "canine") return [14.5, 15.5];
-  if (t.arch === "upper") return t.position === 1 ? [17.5, 11.5] : [15, 10.5];
-  return [12.5, 10];
-}
-
-export function topOutline(t: Tooth): string {
-  const c = OCC / 2;
-  const [rx, ry] = topHalf(t);
-  if (t.kind === "molar") return roundRect(c - rx, c - ry, rx * 2, ry * 2, 11);
-  return ellipse(c, c, rx, ry);
-}
 
 /**
  * The middle of a surface's area on this tooth, for a spot of decay: halfway
@@ -1113,19 +1036,12 @@ function TopLayer({ l, t, outline, clip }: { l: Layer; t: Tooth; outline: string
     case "pulp":
       return <circle className="tooth-pop" cx={22} cy={22} r={3.6} style={{ fill: url("mta"), fillOpacity: on, ...edge(l.paint, 1) }} />;
     case "implant": {
-      const hex = Array.from({ length: 6 }, (_, i) => {
-        const a = (Math.PI / 3) * i;
-        return `${22 + 3.2 * Math.cos(a)},${22 + 3.2 * Math.sin(a)}`;
-      }).join(" ");
-      return (
-        <g className="tooth-pop" opacity={on}>
-          <circle cx={22} cy={22} r={8} style={{ fill: url("titanium"), ...edge(l.paint, 1.2) }} />
-          <circle cx={22} cy={22} r={5.6} style={{ fill: "none", stroke: "var(--color-mat-titanium-shade)", strokeWidth: 0.8 }} />
-          <polygon points={hex} style={{ fill: "var(--color-mat-titanium-shade)", stroke: "var(--color-mat-metal-light)", strokeWidth: 0.6 }} />
-        </g>
-      );
+      const place = placeIn(l.detail);
+      const x = OCC / 2 + (place ? (place.pos - Math.max(0, colOf(t.fdi))) * CW : 0);
+      return <ImplantTopArt x={x} paint={l.paint} top={l.arch ? "multi" : "heal"} dia={place?.dia} />;
     }
     case "extraction":
+      if (l.arch) return null;
       return (
         <g className="tooth-pop" strokeLinecap="round">
           <g style={{ stroke: "white", strokeWidth: 4.4 }} opacity={0.8}>
@@ -1183,6 +1099,7 @@ export function ToothTop({
   visible = () => true,
   picked,
   onSurface,
+  drawn,
 }: {
   t: Tooth;
   st: ToothState;
@@ -1190,6 +1107,8 @@ export function ToothTop({
   visible?: (p: Paint) => boolean;
   picked?: Surface[];
   onSurface?: (s: Surface, e: React.MouseEvent) => void;
+  /** Entries drawn over the teeth as part of a piece (see ToothSide). */
+  drawn?: Set<string>;
 }) {
   const outline = topOutline(t);
   const clip = `${uid}-t${t.fdi}`;
@@ -1197,6 +1116,7 @@ export function ToothTop({
   const buried = st.buried && visible(st.buried.paint);
   const gone = st.gone;
   const covered = layers.some((l) => l.look === "crown" || l.look === "denture");
+  const own = drawn ? layers.filter((l) => !drawn.has(l.markId)) : layers;
 
   return (
     <g>
@@ -1220,11 +1140,11 @@ export function ToothTop({
         </mask>
       </defs>
       {gone || buried ? (
-        <path d={outline} style={{ fill: buried ? `url(#${DEFS}-hatch)` : "none", stroke: "var(--color-ink-300)", strokeWidth: 1 }} strokeDasharray="2.5 2" />
+        !(gone && covered) && <path d={outline} style={{ fill: buried ? `url(#${DEFS}-hatch)` : "none", stroke: "var(--color-ink-300)", strokeWidth: 1 }} strokeDasharray="2.5 2" />
       ) : (
         <>
           {/* The chewing surface, rendered: cusps catching the light, the fissures between them. */}
-          <image href={topArt(t)} x={0} y={0} width={OCC} height={OCC} />
+          <image href={topArt(t)} x={0} y={0} width={OCC} height={OCC} opacity={layers.some((l) => l.look === "extraction" && l.arch) ? 0.34 : undefined} />
           {/* The five surfaces, faintly: where a tap lands. */}
           {!covered && (
             <>
@@ -1237,7 +1157,7 @@ export function ToothTop({
           )}
         </>
       )}
-      {layers.map((l) => (
+      {own.map((l) => (
         <TopLayer key={l.markId + l.surfaces.join("")} l={l} t={t} outline={outline} clip={clip} />
       ))}
       {picked && picked.length > 0 && (
@@ -1307,6 +1227,7 @@ export function PaintSwatch({ paint, size = 16 }: { paint: Paint; size?: number 
   );
 }
 
-export { crownPath, rootGeom, festoon, gumMargin };
+export { ART_VERSION, CW, GUM_PAD, INK, OCC, SIDE_H, SOFT, festoon, gumArt, gumMargin, sideArt, sideArtKey, topArt, topArtKey, topOutline } from "./art-base";
+export { crownPath, rootGeom };
 /** The drawing's landmarks, for the script that bakes the art (scripts/render-tooth-art.tsx). */
 export const GEOM = { C, Y0, YB, YE, GUM_TOP, PAP, ZEN };

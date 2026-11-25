@@ -167,6 +167,17 @@ const IMPLANT_COUNT: DetailField = {
     { key: "8", en: "8 implants", ar: "8 زرعات" },
   ],
 };
+/** What a full arch's bridge is made of — chosen when it is planned, confirmed when it is delivered. */
+const MATERIAL_ARCH: DetailField = {
+  key: "material",
+  options: [
+    { key: "zirconia", en: "Zirconia", ar: "زركون" },
+    { key: "acrylic", en: "Acrylic on titanium", ar: "أكريل على تيتانيوم" },
+    { key: "pfm", en: "Porcelain-fused-to-metal (PFM)", ar: "خزف على معدن" },
+    { key: "pmma", en: "PMMA", ar: "PMMA" },
+    { key: "peek", en: "PEEK", ar: "PEEK" },
+  ],
+};
 const MOBILITY_GRADE: DetailField = {
   key: "grade",
   options: [
@@ -279,11 +290,13 @@ export const BUILT_IN: Treatment[] = [
   { key: "implant", kind: "procedure", category: "implant", en: "Implant placement", ar: "زرع غرسة (زراعة)", abbr: "IMP", scope: "tooth", look: "implant", aliases: ["implant", "زراعة", "زرعة", "غرسة"] },
   { key: "implant_abutment", kind: "procedure", category: "implant", en: "Implant abutment", ar: "دعامة الزرعة", scope: "tooth", look: "implant", aliases: ["abutment", "دعامة"] },
   { key: "implant_crown", kind: "procedure", category: "implant", en: "Implant crown", ar: "تاج على زرعة", scope: "tooth", look: "crown", details: [MATERIAL_CROWN], aliases: ["تلبيسة زراعة"] },
+  // After the implants, a bridge as well as a crown (2026-11-25): its supports are implants, its teeth one piece.
+  { key: "implant_bridge", kind: "procedure", category: "implant", en: "Implant bridge", ar: "جسر على زرعات", scope: "span", look: "crown", details: [MATERIAL_CROWN], aliases: ["bridge on implants", "implant supported bridge", "جسر زراعة", "جسر على زراعة"] },
   { key: "bone_graft", kind: "procedure", category: "implant", en: "Bone graft", ar: "طعم عظمي", scope: "tooth", look: "graft", aliases: ["graft", "طعم"] },
   { key: "sinus_lift", kind: "procedure", category: "implant", en: "Sinus lift", ar: "رفع الجيب الأنفي", scope: "tooth", look: "graft", fits: { arch: "upper", kinds: BACK_TEETH }, aliases: ["رفع جيب"] },
   {
     key: "implant_denture", kind: "procedure", category: "implant", en: "Full arch on implants (All-on-4 / 6)", ar: "فك كامل على زرعات (All-on-4)", abbr: "All-on-X",
-    scope: "arch", look: "denture", details: [IMPLANT_COUNT],
+    scope: "arch", look: "denture", details: [IMPLANT_COUNT, MATERIAL_ARCH],
     aliases: ["all on 4", "all-on-4", "all on 6", "all-on-6", "all on x", "overdenture", "hybrid", "طقم على زرعات", "جسر على زرعات", "اول اون فور"],
   },
 

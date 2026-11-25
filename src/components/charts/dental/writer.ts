@@ -14,11 +14,14 @@ import { useCallback } from "react";
 import { useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import type { Mark, MarkEvent, Person } from "@/lib/charts/dental/state";
+import { BUILT_IN_BY_KEY } from "@/lib/charts/dental/catalog";
 import { leadIdOf } from "@/lib/charts/dental/full-arch";
+import { clampPlace, inOrder, placeDetail, sitesFor, type Place } from "@/lib/charts/dental/implant-place";
+import type { Arch } from "@/lib/charts/dental/teeth";
 import { EMERGENCY_STEP, type StepData, type StepRecord } from "@/lib/charts/dental/protocols";
 import type { MedicalHistory } from "@/lib/medical-history";
 import { priceFrom } from "@/lib/charts/dental/pricing";
-import type { LabCase } from "@/lib/charts/dental/labs";
+import { tripsOf, type LabCase, type LabStage } from "@/lib/charts/dental/labs";
 import { useDentalStore } from "./store";
 
 export const newId = () =>
@@ -40,14 +43,25 @@ export async function call<T = Record<string, unknown>>(url: string, method: str
 
 export type FreshMark = Mark & { eventId: string };
 
+/** A full arch as the studio leaves it: its implants, the teeth it replaces, and what it is. */
+export type ArchDraft = {
+  implants: (Place & { id: string })[];
+  teeth: string[];
+  kind: "fixed" | "removable";
+  material: string | null;
+  cuts: string;
+};
+
 type StepAnswer = { marks: Mark[]; steps: StepRecord[]; events: MarkEvent[]; completed?: boolean };
+
+const patientBase = (slug: string, patientId: string) => `/api/c/${slug}/patients/${patientId}`;
 
 export function useChartWriter() {
   const s = useDentalStore();
   const { t } = useI18n();
   const { toast } = useToast();
   const { slug, patientId, me, marks, setMarks, setEvents, setSteps, setMedical, write } = s;
-  const base = `/api/c/${slug}/patients/${patientId}`;
+  const base = patientBase(slug, patientId);
   const failed = useCallback(() => toast(t.dental.saveFailed, "error"), [toast, t.dental.saveFailed]);
 
   const removeLocal = useCallback(
@@ -299,10 +313,10 @@ export function useChartWriter() {
     what is drawn is the row that is stored; taken off again if refused.
   */
   const sendToLab = useCallback(
-    async (m: Mark, d: { labId: string; cost: number; dueOn: string | null; shade: string; note: string }): Promise<boolean> => {
+    async (m: Mark, d: { labId: string; cost: number; dueOn: string | null; shade: string; note: string; stage: LabStage }): Promise<boolean> => {
       const id = newId();
       const today = new Date().toISOString();
-      const draft: LabCase = { id, markId: m.id, labId: d.labId, cost: d.cost, status: "sent", sentOn: today.slice(0, 10), dueOn: d.dueOn, receivedAt: null, shade: d.shade, note: d.note, paid: false, createdAt: today };
+      const draft: LabCase = { id, markId: m.id, labId: d.labId, cost: d.cost, status: "sent", sentOn: today.slice(0, 10), dueOn: d.dueOn, receivedAt: null, shade: d.shade, note: d.note, paid: false, createdAt: today, stage: d.stage, units: null, spec: {}, trips: [] };
       s.setLabCases((prev) => [...prev, draft]);
       try {
         const r = await write([id, m.id], call<{ labCase: LabCase; event: MarkEvent }>(`${base}/dental/marks/${m.id}/lab`, "POST", { id, ...d }));
@@ -320,9 +334,14 @@ export function useChartWriter() {
 
   /** A lab case as it goes: back, called off, re-costed. Shown at once, put back if refused (a paid case keeps its cost). */
   const labCaseOp = useCallback(
-    async (c: LabCase, op: { op: "received" | "sent" | "cancel" } | { op: "cost"; cost: number }): Promise<boolean> => {
+    async (
+      c: LabCase,
+      op: { op: "received" | "sent" | "cancel" } | { op: "cost"; cost: number } | { op: "resend"; stage: LabStage; dueOn: string | null }
+    ): Promise<boolean> => {
       const next: LabCase =
-        op.op === "cost"
+        op.op === "resend"
+          ? { ...c, status: "sent", stage: op.stage, sentOn: new Date().toISOString().slice(0, 10), dueOn: op.dueOn, receivedAt: null, trips: tripsOf(c) }
+          : op.op === "cost"
           ? { ...c, cost: op.cost }
           : op.op === "received"
             ? { ...c, status: "received", receivedAt: new Date().toISOString() }
@@ -344,7 +363,105 @@ export function useChartWriter() {
     [s, base, write, settle, toast, t.dental]
   );
 
-  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical, setFee, sendToLab, labCaseOp };
+  /*
+    A full arch changed: every implant where it now is, drawn at once and put
+    back as it was if refused. The teeth its bridge gained are drawn under ids
+    of their own until the server's rows take their place.
+  */
+  const saveArch = useCallback(
+    async (parent: Mark, d: ArchDraft): Promise<boolean> => {
+      const arch = parent.site as Arch;
+      const before = marks.filter((m) => m.groupId === parent.groupId);
+      const now = new Date().toISOString();
+      const places = inOrder(d.implants.map((i) => ({ ...clampPlace(i), id: i.id })));
+      const sites = sitesFor(arch, places);
+      const live = before.filter((m) => !m.voidedAt && m.id !== parent.id);
+      const like = (rows: Mark[]) => rows[0] ?? parent;
+      const part = (key: string, from: Mark): Mark => {
+        const tr = BUILT_IN_BY_KEY.get(key)!;
+        return {
+          ...from,
+          treatmentKey: tr.key,
+          label: tr.en,
+          labelAr: tr.ar,
+          abbr: tr.abbr,
+          look: tr.look,
+          kind: tr.kind,
+          groupId: parent.groupId,
+          performedBy: parent.performedBy,
+          recordedBy: me,
+          createdAt: now,
+          doneAt: from.status === "done" ? from.doneAt : null,
+          note: "",
+          fee: null,
+          feeManual: false,
+          serviceId: null,
+          redoOf: null,
+          startedAt: null,
+        };
+      };
+      const voided = (m: Mark): Mark => ({ ...m, voidedAt: now, voidedBy: me, voidReason: null });
+      const oldImplants = live.filter((m) => m.look === "implant");
+      const oldTeeth = live.filter((m) => m.role === "pontic");
+      const own: Record<string, string> = { kind: d.kind, cuts: d.cuts, implants: String(places.length), ...(d.material ? { material: d.material } : {}) };
+      const fresh: Mark[] = [];
+      const drawn = new Set<string>();
+      for (const [n, p] of places.entries()) {
+        if (oldImplants.some((m) => m.id === p.id)) continue;
+        fresh.push({ ...part("implant", like(oldImplants)), id: p.id, site: sites[n], role: "abutment", detail: placeDetail(p) });
+      }
+      for (const f of d.teeth) {
+        if (oldTeeth.some((m) => m.site === f)) continue;
+        const id = newId();
+        drawn.add(id);
+        fresh.push({ ...part("implant_denture", like(oldTeeth)), id, site: f, role: "pontic", detail: {} });
+      }
+      setMarks((prev) => [
+        ...prev.map((m) => {
+          if (m.groupId !== parent.groupId || m.voidedAt) return m;
+          if (m.id === parent.id) return { ...m, detail: { ...m.detail, ...own } };
+          if (m.look === "implant") {
+            const n = places.findIndex((p) => p.id === m.id);
+            return n < 0 ? voided(m) : { ...m, site: sites[n], detail: { ...m.detail, ...placeDetail(places[n]) } };
+          }
+          return m.role === "pontic" && !d.teeth.includes(m.site) ? voided(m) : m;
+        }),
+        ...fresh,
+      ]);
+      try {
+        const r = await write(
+          [...before.map((m) => m.id), ...fresh.map((m) => m.id)],
+          call<{ mark: Mark; also: Mark[]; alsoEvents: MarkEvent[] }>(`${base}/dental/marks/${parent.id}`, "PATCH", {
+            op: "arch",
+            eventId: newId(),
+            implants: places.map((p) => ({ id: p.id, eventId: newId(), pos: p.pos, tilt: p.tilt, depth: p.depth, len: p.len, dia: p.dia })),
+            teeth: d.teeth,
+            kind: d.kind,
+            material: d.material,
+            cuts: d.cuts,
+          })
+        );
+        const rows = new Map([r.mark, ...r.also].map((m) => [m.id, m]));
+        setMarks((prev) => {
+          const kept = prev.filter((m) => !drawn.has(m.id)).map((m) => rows.get(m.id) ?? m);
+          const have = new Set(kept.map((m) => m.id));
+          return [...kept, ...[...rows.values()].filter((m) => !have.has(m.id))];
+        });
+        const ids = new Set(r.alsoEvents.map((e) => e.id));
+        setEvents((prev) => [...prev.filter((e) => !ids.has(e.id)), ...r.alsoEvents]);
+        return true;
+      } catch {
+        const was = new Map(before.map((m) => [m.id, m]));
+        const added = new Set(fresh.map((m) => m.id));
+        setMarks((prev) => prev.filter((m) => !added.has(m.id)).map((m) => was.get(m.id) ?? m));
+        failed();
+        return false;
+      }
+    },
+    [base, marks, me, setMarks, setEvents, write, failed]
+  );
+
+  return { postMarks, change, unrecord, settle, removeLocal, recordStep, withdrawStep, editStep, saveMedical, setFee, sendToLab, labCaseOp, saveArch };
 }
 
 /** The members a group's lead carries, found the same way the server finds them. */

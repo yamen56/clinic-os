@@ -11,7 +11,7 @@
 */
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, Banknote, Repeat, FlaskConical, CalendarDays, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Ban, Plus, Pencil, UserRound, ListChecks, Undo2, FolderInput, RotateCcw, Siren, Banknote, Repeat, FlaskConical, CalendarDays, Move, type LucideIcon } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { fmtDate, fmtDateOnly, fmtDateTime } from "@/lib/dates";
 import { DoneDateField } from "@/components/charts/done-date";
@@ -261,6 +261,7 @@ const EVENT_ICON: Record<MarkEvent["action"], LucideIcon> = {
   cost: Banknote,
   lab: FlaskConical,
   date: CalendarDays,
+  placed: Move,
 };
 
 /** The ink of one line in the history: what the entry was at that moment. */

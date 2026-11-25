@@ -19,7 +19,7 @@ import { Field, Input, Toggle } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/misc";
 import { BUILT_IN, type Treatment } from "@/lib/charts/dental/catalog";
 import { PRICE_BY } from "@/lib/charts/dental/pricing";
-import { LAB_TREATMENTS, type LabPrice, type LabRow } from "@/lib/charts/dental/labs";
+import { LAB_TREATMENTS, PER_TOOTH, type LabPrice, type LabRow } from "@/lib/charts/dental/labs";
 import { PriceBox } from "../prices/dental-prices";
 import { archiveLabAction, saveLabAction, saveLabPriceAction } from "./actions";
 
@@ -194,6 +194,11 @@ export function DentalLabs({
                           <span className="ms-2 text-[0.75rem] font-normal text-ink-500" dir="auto">
                             {tr.ar}
                           </span>
+                          {PER_TOOTH.has(tr.key) && (
+                            <span className="ms-2 rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold text-ink-500" data-per-tooth={tr.key}>
+                              {S.perTooth}
+                            </span>
+                          )}
                         </div>
                         <span className="flex items-center gap-1.5">
                           <PriceBox value={base} label={`${lab.name} · ${tr.en}`} hook={`${lab.id}:${tr.key}`} onSave={(v) => savePrice(lab.id, tr.key, null, v)} />

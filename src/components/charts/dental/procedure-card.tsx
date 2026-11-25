@@ -15,8 +15,8 @@
   comes next is offered: a crown after a root canal, the crown on an implant.
 */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronDown, Maximize2, Pencil, Plus, Repeat, Siren, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Check, ChevronDown, Maximize2, Move, Pencil, Plus, Repeat, Siren, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
@@ -24,7 +24,7 @@ import { ConfirmDialog } from "@/components/ui/modal";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { BUILT_IN_BY_KEY, findTreatment } from "@/lib/charts/dental/catalog";
 import { isToothSite, paintAt, type Mark, type Person } from "@/lib/charts/dental/state";
-import { tooth as toothOf, type Tooth } from "@/lib/charts/dental/teeth";
+import { tooth as toothOf, type Arch, type Tooth } from "@/lib/charts/dental/teeth";
 import {
   EMERGENCY_STEP,
   FILE_SIZES,
@@ -42,7 +42,9 @@ import {
   type StepField,
   type StepRecord,
 } from "@/lib/charts/dental/protocols";
-import { implantSitesOf } from "@/lib/charts/dental/full-arch";
+import { implantsOf } from "@/lib/charts/dental/full-arch";
+import { placeOf, whereText } from "@/lib/charts/dental/implant-place";
+import { LAB_TRIPS } from "@/lib/charts/dental/labs";
 import { nextVisitOf, sessionKey, sessionsOf } from "@/lib/charts/dental/treatment";
 import { useDentalStore } from "./store";
 import { useChartWriter } from "./writer";
@@ -51,10 +53,13 @@ import { siteLabel } from "./labels";
 import { TreatmentGlyph } from "./treatment-picker";
 import { INK, SOFT } from "./tooth-art";
 import { PriceLine } from "./price-line";
-import { LabLine } from "./lab-line";
+import { LabLine, LabStop } from "./lab-line";
 import { attemptOf, redoable, redoneBy } from "@/lib/charts/dental/redo";
 
 const UNDO_MS = 120_000;
+
+/** An implant a step places: its tooth, where it is said to be, and the size it was planned at. */
+type PlacedHere = { site: string; label: string; len?: number; dia?: number };
 
 /** A number typed the way people type it: "20.5", "21", or nothing yet. */
 function Decimal({ value, onChange, label, className = "" }: { value: number | null | undefined; onChange: (v: number | null) => void; label: string; className?: string }) {
@@ -84,7 +89,8 @@ function StepForm({
   mark,
   tooth,
   previous,
-  implantSites,
+  implants,
+  onAdjust,
   canWrite,
   initial,
   submitLabel,
@@ -97,7 +103,10 @@ function StepForm({
   tooth: Tooth | null;
   /** The canals as an earlier step left them: their names, and the lengths when measured. */
   previous: CanalRow[] | null;
-  implantSites: string[];
+  /** The implants the step places: each one's tooth, how it is called, and the size it was planned at. */
+  implants: PlacedHere[];
+  /** Move them to where they were really placed — a full arch's. */
+  onAdjust?: () => void;
   canWrite: boolean;
   /** A step already recorded, being corrected: what it holds. */
   initial?: StepData;
@@ -127,7 +136,8 @@ function StepForm({
         ...(canalField.columns.includes("file") ? { file: "" } : {}),
       }));
     }
-    if (def.fields?.some((f) => f.kind === "implants")) d.implants = implantSites.map((site) => ({ site }));
+    if (def.fields?.some((f) => f.kind === "implants"))
+      d.implants = implants.map((x) => ({ site: x.site, ...(x.len ? { length: x.len } : {}), ...(x.dia ? { diameter: x.dia } : {}) }));
     return d;
   });
   const [busy, setBusy] = useState(false);
@@ -208,10 +218,21 @@ function StepForm({
         if (f.kind === "implants") {
           return (
             <div key={fi} className="grid gap-2">
+              {onAdjust && (
+                <button
+                  type="button"
+                  onClick={onAdjust}
+                  className="inline-flex h-10 items-center gap-1.5 justify-self-start rounded-ctl border border-line-strong bg-surface px-3 text-[0.8125rem] font-semibold text-ink-900 hover:bg-sunken"
+                  data-adjust-implants="step"
+                >
+                  <Move className="h-4 w-4" />
+                  {t.dental.fullArch.adjust}
+                </button>
+              )}
               {(data.implants ?? []).map((im, i) => (
                 <div key={im.site} className="grid gap-1.5 rounded-ctl border border-line p-2" data-implant-row={im.site}>
                   <div className="text-[0.78125rem] font-bold text-ink-900 tnum">
-                    {P.implantSite} {im.site}
+                    {P.implantSite} {implants.find((x) => x.site === im.site)?.label ?? im.site}
                   </div>
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                     <input value={im.system ?? ""} onChange={(e) => setImplant(i, { system: e.target.value.slice(0, 40) })} placeholder={P.implantSystem} aria-label={P.implantSystem} className={field} />
@@ -262,6 +283,8 @@ function StepForm({
             </div>
           );
         }
+        // Asked elsewhere now: shown only on a step that recorded it here, being corrected.
+        if ((f.kind === "choice" || f.kind === "text") && f.retired && !initial?.[f.key]) return null;
         if (f.kind === "choice") {
           const v = data[f.key];
           const chosen = new Set(Array.isArray(v) ? (v as string[]) : typeof v === "string" ? [v] : []);
@@ -339,6 +362,7 @@ export function ProcedureCard({
   onDetail,
   onPlan,
   onRedo,
+  onAdjust,
   extra,
   onExpand,
 }: {
@@ -356,6 +380,8 @@ export function ProcedureCard({
   onPlan: (treatmentKey: string, site: string) => void;
   /** Do this work again: the patient is back with a problem in it. */
   onRedo?: (m: Mark) => void;
+  /** Move a full arch's implants to where they really are. */
+  onAdjust?: (m: Mark) => void;
   extra?: string;
   /** Open its tooth in full, the steps in place — given where the card stands on its own. */
   onExpand?: () => void;
@@ -403,7 +429,18 @@ export function ProcedureCard({
     if (!visitNo.has(k)) visitNo.set(k, visitNo.size + 1);
   }
   const next = nextVisitOf(m.id, store.bookings, store.visits);
-  const implantSites = m.treatmentKey === "implant_denture" ? implantSitesOf(m, store.marks) : isToothSite(m.site) ? [m.site] : [];
+  const arch = m.treatmentKey === "implant_denture" && !!m.groupId;
+  const implants: PlacedHere[] = arch
+    ? implantsOf(m, store.marks).map((x) => {
+        const p = placeOf(x);
+        return { site: x.site, label: whereText(m.site as Arch, p.pos), ...(x.detail.pos ? { len: p.len, dia: p.dia } : {}) };
+      })
+    : isToothSite(m.site)
+      ? [{ site: m.site, label: m.site }]
+      : [];
+  const adjust = arch && onAdjust && editable ? () => onAdjust(m) : undefined;
+  // Work that goes to the lab more than once shows each trip among its steps; the rest keeps one line above them.
+  const labStops = new Set((LAB_TRIPS[m.treatmentKey] ?? []).map((x) => x.after));
   const lastCanals = (beforeKey: string): CanalRow[] | null => {
     const idx = prog?.steps.findIndex((s) => s.key === beforeKey) ?? -1;
     for (let i = idx - 1; i >= 0; i--) {
@@ -412,7 +449,7 @@ export function ProcedureCard({
     }
     return null;
   };
-  const missing = prog ? prog.steps.filter((s) => !s.optional && !prog.done.has(s.key)) : [];
+  const missing = prog ? prog.steps.filter((s) => !s.optional && !prog.done.has(s.key) && !prog.implied.has(s.key)) : [];
   const urgent = live.filter((s) => s.step === EMERGENCY_STEP);
   const followUps = (FOLLOW_UPS[m.treatmentKey] ?? [])
     .map((k) => BUILT_IN_BY_KEY.get(k))
@@ -536,7 +573,18 @@ export function ProcedureCard({
 
       {/* Its price, from the list, and what its materials cost; then its work at a lab, when it goes to one. */}
       <PriceLine m={m} tz={tz} />
-      <LabLine m={m} tz={tz} />
+      {labStops.size === 0 && <LabLine m={m} tz={tz} />}
+      {adjust && (
+        <button
+          type="button"
+          onClick={adjust}
+          className="inline-flex h-10 items-center gap-1.5 justify-self-start rounded-ctl border border-line-strong bg-surface px-3 text-[0.8125rem] font-semibold text-ink-900 hover:bg-sunken"
+          data-adjust-implants="card"
+        >
+          <Move className="h-4 w-4" />
+          {T.fullArch.adjust}
+        </button>
+      )}
 
       {prog && (
         <div>
@@ -544,7 +592,7 @@ export function ProcedureCard({
             {prog.steps
               .filter((s) => !s.optional)
               .map((s) => (
-                <span key={s.key} className="h-1.5 flex-1 rounded-full" style={{ background: prog.done.has(s.key) ? INK[m.status === "done" ? "done" : "progress"] : "var(--color-line)" }} />
+                <span key={s.key} className="h-1.5 flex-1 rounded-full" style={{ background: prog.done.has(s.key) || prog.implied.has(s.key) ? INK[m.status === "done" ? "done" : "progress"] : "var(--color-line)" }} />
               ))}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[0.78125rem] text-ink-500" data-progress={`${prog.requiredDone}/${prog.required}`}>
@@ -564,12 +612,13 @@ export function ProcedureCard({
         <ol className="grid gap-1.5">
           {prog.steps.map((def, i) => {
             const recs = prog.done.get(def.key) ?? [];
-            const isDone = recs.length > 0;
+            const implied = prog.implied.has(def.key);
+            const isDone = recs.length > 0 || implied;
             const isNext = planned && prog.next?.key === def.key;
             const isOpen = expanded === def.key;
             return (
+              <Fragment key={def.key}>
               <li
-                key={def.key}
                 className={`rounded-card border ${isOpen ? "border-brand-200 bg-brand-50/40" : "border-line bg-surface"} px-3 py-2.5`}
                 data-step={def.key}
                 data-step-state={isDone ? "done" : isNext ? "next" : "todo"}
@@ -599,6 +648,11 @@ export function ProcedureCard({
                       {def.repeatable && recs.length > 1 && <span className="text-[0.75rem] font-semibold text-ink-500">{P.times.replace("{n}", String(recs.length))}</span>}
                       {isNext && <span className="rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold" style={{ background: SOFT.progress, color: INK.progress }}>{P.nextBadge}</span>}
                     </span>
+                    {implied && (
+                      <span className="mt-0.5 block text-[0.75rem] text-ink-500" data-step-implied={def.key}>
+                        {P.impliedBy.replace("{step}", prog.steps.find((s) => s.key === def.impliedBy?.step)?.en ?? "")}
+                      </span>
+                    )}
                     {recs.map((r) => (
                       <span key={r.id} className="mt-0.5 block text-[0.75rem] text-ink-500">
                         {[
@@ -662,7 +716,7 @@ export function ProcedureCard({
                         mark={m}
                         tooth={tt}
                         previous={lastCanals(def.key)}
-                        implantSites={implantSites}
+                        implants={implants}
                         canWrite={editable}
                         initial={r.data}
                         submitLabel={P.saveChanges}
@@ -677,18 +731,23 @@ export function ProcedureCard({
                 {isOpen && editable && !editing && (
                   <StepForm
                     // A new canal count is a new set of canals to fill in.
-                    key={`${def.key}-${recs.length}-${m.detail.canals ?? ""}`}
+                    // — as is a new set of implants.
+                    key={`${def.key}-${recs.length}-${m.detail.canals ?? ""}-${implants.map((x) => `${x.label}/${x.len ?? ""}/${x.dia ?? ""}`).join(",")}`}
                     def={def}
                     mark={m}
                     tooth={tt}
                     previous={lastCanals(def.key)}
-                    implantSites={implantSites}
+                    implants={implants}
+                    onAdjust={adjust}
                     canWrite={editable}
                     onDetail={(key, value) => onDetail(m.id, key, value)}
                     onDone={done(def)}
                   />
                 )}
               </li>
+              {/* Between this visit and the next: the lab. */}
+              {labStops.has(def.key) && <LabStop m={m} tz={tz} after={def.key} />}
+              </Fragment>
             );
           })}
         </ol>

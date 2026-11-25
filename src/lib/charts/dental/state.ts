@@ -9,6 +9,7 @@
 
 import { DateTime } from "luxon";
 import type { EntryKind, Look } from "./catalog";
+import type { Stage } from "./prosthesis";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, type Surface } from "./teeth";
 
 export type Status = "planned" | "done" | "existing";
@@ -66,7 +67,24 @@ export type Mark = {
 export type MarkEvent = {
   id: string;
   markId: string;
-  action: "created" | "done" | "void" | "note" | "performer" | "step" | "step_void" | "case" | "reopened" | "fee" | "redone" | "step_edit" | "cost" | "lab" | "date";
+  action:
+    | "created"
+    | "done"
+    | "void"
+    | "note"
+    | "performer"
+    | "step"
+    | "step_void"
+    | "case"
+    | "reopened"
+    | "fee"
+    | "redone"
+    | "step_edit"
+    | "cost"
+    | "lab"
+    | "date"
+    /** A full arch's implants moved, tilted, added or taken off. */
+    | "placed";
   at: string;
   by: Person;
   reason?: string;
@@ -121,6 +139,10 @@ export type Layer = {
   detail: Record<string, string>;
   role?: Mark["role"];
   groupId?: string;
+  /** Under way, and as far as this: the tooth prepared, or a temporary on it. */
+  stage?: Stage;
+  /** Part of a full arch: an implant stands where it was placed. */
+  arch?: boolean;
 };
 
 export type ToothState = {
@@ -141,8 +163,15 @@ const EMPTY: ToothState = { gone: false, buried: null, layers: [], badges: [] };
  * Order matters only for drawing: layers come out in the order they were
  * recorded, so a crown recorded after a filling sits on top of it.
  */
-export function toothStates(marks: Mark[], at: number | null, resolved?: Map<string, { left: Surface[] }>): Map<string, ToothState> {
+export function toothStates(
+  marks: Mark[],
+  at: number | null,
+  resolved?: Map<string, { left: Surface[] }>,
+  /** How far each treatment's steps have brought it (prosthesis.ts stagesOf). */
+  stages?: Map<string, Stage>
+): Map<string, ToothState> {
   const out = new Map<string, ToothState>();
+  const arches = new Set(marks.filter((m) => m.groupId && !isToothSite(m.site)).map((m) => m.groupId));
   const sorted = [...marks].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   for (const entry of sorted) {
     if (!isToothSite(entry.site)) {
@@ -179,7 +208,18 @@ export function toothStates(marks: Mark[], at: number | null, resolved?: Map<str
     if (m.role === "pontic" || m.look === "implant" || m.look === "denture") {
       if (paint !== "planned") s.gone = true;
     }
-    s.layers.push({ markId: m.id, treatmentKey: m.treatmentKey, look: m.look, paint, surfaces: m.surfaces, detail: m.detail, role: m.role, groupId: m.groupId });
+    s.layers.push({
+      markId: m.id,
+      treatmentKey: m.treatmentKey,
+      look: m.look,
+      paint,
+      surfaces: m.surfaces,
+      detail: m.detail,
+      role: m.role,
+      groupId: m.groupId,
+      stage: stages?.get(m.id),
+      arch: (m.groupId && arches.has(m.groupId)) || undefined,
+    });
   }
   return out;
 }

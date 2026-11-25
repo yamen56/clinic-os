@@ -6,7 +6,7 @@
 
 import type { PoolClient } from "pg";
 import { leadIdOf } from "./full-arch";
-import { EMERGENCY_STEP, protocolFor, type StepData, type StepDef } from "./protocols";
+import { EMERGENCY_STEP, isImplied, protocolFor, type StepData, type StepDef } from "./protocols";
 import { setDetail, type DetailRow } from "./billing-server";
 
 /**
@@ -111,12 +111,12 @@ function finishedBy(def: StepDef, followers: Row[]): string[] {
 export async function missingSteps(c: PoolClient, markId: string, treatmentKey: string): Promise<string[]> {
   const steps = protocolFor(treatmentKey);
   if (!steps) return [];
-  const done = new Set(
-    (await c.query(`select distinct step from chart_mark_steps where mark_id = $1 and voided_at is null and step <> $2`, [markId, EMERGENCY_STEP])).rows.map(
-      (r) => r.step as string
-    )
-  );
-  return steps.filter((s) => !s.optional && !done.has(s.key)).map((s) => s.key);
+  const rows = (await c.query(`select step, data from chart_mark_steps where mark_id = $1 and voided_at is null and step <> $2`, [markId, EMERGENCY_STEP])).rows as {
+    step: string;
+    data: StepData;
+  }[];
+  const done = new Set(rows.map((r) => r.step));
+  return steps.filter((s) => !s.optional && !done.has(s.key) && !isImplied(s, rows)).map((s) => s.key);
 }
 
 /**
@@ -178,14 +178,28 @@ export async function carryDetails(c: PoolClient, clinicId: string, m: DetailRow
   for (const f of def?.fields ?? []) {
     if (f.kind !== "detail") continue;
     const v = data[f.key];
-    if (typeof v !== "string" || (m.detail ?? {})[f.key] === v) continue;
-    await setDetail(c, clinicId, m, f.key, v);
-    if (!m.group_id) continue;
-    const mates = await c.query(
-      `select id, treatment_key, detail, fee_manual, kind, status, service_id from chart_marks
-        where group_id = $1 and clinic_id = $2 and id <> $3 and voided_at is null and treatment_key = $4`,
-      [m.group_id, clinicId, m.id, m.treatment_key]
-    );
-    for (const x of mates.rows as DetailRow[]) await setDetail(c, clinicId, x, f.key, v);
+    if (typeof v !== "string") continue;
+    if ((m.detail ?? {})[f.key] !== v) await setDetail(c, clinicId, m, f.key, v);
+    // Its mates too, even when the card set the lead's at the tap, before the step was recorded.
+    await shareDetail(c, clinicId, m, f.key, v);
   }
+}
+
+/**
+ * A detail of a bridge is the bridge's, not one tooth's: what it is made of.
+ * Set on every tooth of it that does not have it yet, each priced by it.
+ * Returns the teeth it changed.
+ */
+export async function shareDetail(c: PoolClient, clinicId: string, m: { id: string; group_id?: string | null; treatment_key: string }, key: string, value: string): Promise<string[]> {
+  if (!m.group_id) return [];
+  const mates = await c.query(
+    `select id, treatment_key, detail, fee_manual, kind, status, service_id from chart_marks
+      where group_id = $1 and clinic_id = $2 and id <> $3 and voided_at is null and treatment_key = $4
+        and (detail ->> $5) is distinct from $6
+        -- A full arch is one prosthesis at one price, on the arch: its teeth carry none of it.
+        and not exists (select 1 from chart_marks p where p.group_id = $1 and p.clinic_id = $2 and p.site !~ '^[1-8][1-8]$')`,
+    [m.group_id, clinicId, m.id, m.treatment_key, key, value]
+  );
+  for (const x of mates.rows as DetailRow[]) await setDetail(c, clinicId, x, key, value);
+  return mates.rows.map((x) => x.id as string);
 }

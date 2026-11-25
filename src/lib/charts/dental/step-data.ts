@@ -45,6 +45,7 @@ export function parseStepData(def: StepDef | null, raw: unknown, treatmentKey = 
     if (f.kind === "canals") shape.canals = z.array(canal).max(6).optional();
     else if (f.kind === "implants") shape.implants = z.array(implant).max(10).optional();
     else if (f.kind === "choice") {
+      // A retired field is never asked, but a step that has it keeps it when it is corrected.
       const keys = f.options.map((o) => o.key) as [string, ...string[]];
       shape[f.key] = f.multi ? z.array(z.enum(keys)).max(keys.length).optional() : z.enum(keys).optional();
     } else if (f.kind === "detail") {

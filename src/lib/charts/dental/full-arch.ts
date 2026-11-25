@@ -10,10 +10,17 @@
  * stands in for; and the extractions of the teeth standing in the arch when it
  * is still to come. The drawing already knew how to draw all three on a
  * tooth, so the mouth finally shows the work.
+ *
+ * Since 2026-11-25 the implants are not pinned to those teeth: each has a
+ * place of its own along the jaw (implant-place.ts), and its tooth is the
+ * nearest one. What goes on them — a bridge screwed to them, in one piece or
+ * split, or a denture the patient takes out — is chosen, not told from how
+ * many there are.
  */
 
 import type { Arch } from "./teeth";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER } from "./teeth";
+import { colOf, placeOf, sitesFor, defaultPlaces, whereText } from "./implant-place";
 import { isToothSite, type Mark, type ToothState } from "./state";
 
 /** Treatments recorded as a whole-arch group. */
@@ -31,18 +38,13 @@ export function onImplants(key: string): boolean {
 /** The counts offered first; any other is reached by tapping teeth. */
 export const IMPLANT_COUNTS = [2, 4, 6] as const;
 
-/**
- * Where the implants usually go, so the common case is one tap.
- *
- * Two: the canines, under an overdenture. Four (All-on-4): two straight at the
- * lateral incisors and two tilted at the second premolars. Six: lateral
- * incisors, first premolars and first molars.
- */
+/** Where the implants usually go, as teeth (implant-place.ts defaultPlaces has them as places). */
 export function defaultImplantSites(arch: Arch, count: number): string[] {
-  const [right, left] = arch === "upper" ? ["1", "2"] : ["4", "3"];
-  const positions = count === 2 ? [3] : count === 6 ? [2, 4, 6] : [2, 5];
-  return positions.flatMap((p) => [`${right}${p}`, `${left}${p}`]);
+  return sitesFor(arch, defaultPlaces(arch, count));
 }
+
+/** The last tooth a full arch's bridge may reach to: the second premolars, the first molars, the second molars. */
+export const LAST_TEETH = [5, 6, 7] as const;
 
 /** The arch's permanent teeth, as the chart draws them from the patient's right. */
 export function archTeeth(arch: Arch): string[] {
@@ -50,14 +52,14 @@ export function archTeeth(arch: Arch): string[] {
 }
 
 /**
- * The teeth the prosthesis stands in for. A fixed bridge on four or more
- * implants runs from first molar to first molar; a denture, or an overdenture
- * on two implants, carries the second molars too.
+ * The teeth the prosthesis stands in for. A fixed bridge usually runs from
+ * first molar to first molar; a denture, on implants or not, carries the
+ * second molars too. `last` is the doctor's own choice.
  */
-export function prosthesisSites(key: string, arch: Arch, implants: number): string[] {
+export function prosthesisSites(key: string, arch: Arch, implants: number, last?: number): string[] {
   const fixed = onImplants(key) && implants >= 4;
-  const last = fixed ? 6 : 7;
-  return archTeeth(arch).filter((f) => Number(f[1]) <= last);
+  const to = last ?? (fixed ? 6 : 7);
+  return archTeeth(arch).filter((f) => Number(f[1]) <= to);
 }
 
 /**
@@ -118,9 +120,19 @@ export function inChartOrder(sites: string[]): string[] {
   return [...sites].sort((a, b) => CHART_ORDER.indexOf(a) - CHART_ORDER.indexOf(b));
 }
 
-/** "15 · 12 · 22 · 25": the teeth carrying implants in a group, in chart order. */
+/** A full arch's implants, along the jaw from the patient's right. */
+export function implantsOf(parent: Mark, marks: Mark[]): Mark[] {
+  return marks
+    .filter((m) => m.groupId === parent.groupId && m.id !== parent.id && !m.voidedAt && m.look === "implant")
+    .sort((a, b) => placeOf(a).pos - placeOf(b).pos || colOf(a.site) - colOf(b.site));
+}
+
+/** "15", "12", "22", "25": the teeth a full arch's implants are nearest to, in chart order. */
 export function implantSitesOf(parent: Mark, marks: Mark[]): string[] {
-  return inChartOrder(
-    marks.filter((m) => m.groupId === parent.groupId && m.id !== parent.id && !m.voidedAt && m.look === "implant").map((m) => m.site)
-  );
+  return inChartOrder(implantsOf(parent, marks).map((m) => m.site));
+}
+
+/** The same, as a dentist would say it: "15 · 12 · 22–23 · 26", an implant between two teeth named by both. */
+export function implantPlacesOf(parent: Mark, marks: Mark[]): string[] {
+  return implantsOf(parent, marks).map((m) => whereText(parent.site as Arch, placeOf(m).pos));
 }

@@ -21,359 +21,29 @@
  * Run it again after changing a shape in tooth-art.tsx, and bump ART_VERSION.
  */
 import "./lib-react-global";
-import { createCanvas, Path2D } from "@napi-rs/canvas";
 import sharp from "sharp";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tooth, PERMANENT_UPPER, PERMANENT_LOWER, PRIMARY_UPPER, PRIMARY_LOWER, type Tooth } from "../src/lib/charts/dental/teeth";
 import { CW, SIDE_H, OCC, GEOM, GUM_PAD, festoon, topOutline, topArtKey } from "../src/components/charts/dental/tooth-art";
+import { bevel, clamp, coverage, distance, gauss, hex, mix, noise, normalAt, saveArt, shade, smooth, soften, type Layer, type RGB } from "./lib-art";
+import { renderGum } from "./lib-gum";
 
 const OUT = join(process.cwd(), "public", "charts", "teeth");
 const SHOTS = join(process.cwd(), "scripts", "qa-shots", "tooth-art");
 mkdirSync(OUT, { recursive: true });
 mkdirSync(SHOTS, { recursive: true });
 
-const { C, Y0, YB, YE, GUM_TOP, PAP } = GEOM;
+const { GUM_TOP } = GEOM;
 const SIDE_S = 5; // pixels per drawing unit: the tooth's full view is ~3.4 px/unit on a 2x phone
 const TOP_S = 6;
+const save = (name: string, w: number, h: number, layers: Layer[]) => saveArt(OUT, name, w, h, layers);
 
-type V3 = [number, number, number];
-type RGB = [number, number, number];
-const hex = (h: string): RGB => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
-const mix = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
-const smooth = (e0: number, e1: number, x: number) => {
-  const t = clamp((x - e0) / (e1 - e0));
-  return t * t * (3 - 2 * t);
-};
-const norm = (v: V3): V3 => {
-  const l = Math.hypot(v[0], v[1], v[2]) || 1;
-  return [v[0] / l, v[1] / l, v[2] / l];
-};
-const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const gauss = (d: number, w: number) => Math.exp(-(d * d) / (w * w));
-
-/* ── Noise: value noise, optionally periodic across x (the gum tiles) ───── */
-function hash(x: number, y: number, seed: number): number {
-  let h = (x * 374761393 + y * 668265263 + seed * 2147483647) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
-}
-function noise(x: number, y: number, seed = 1, period = 0): number {
-  const xi = Math.floor(x);
-  const yi = Math.floor(y);
-  const fx = x - xi;
-  const fy = y - yi;
-  const wrap = (v: number) => (period ? ((v % period) + period) % period : v);
-  const a = hash(wrap(xi), yi, seed);
-  const b = hash(wrap(xi + 1), yi, seed);
-  const c = hash(wrap(xi), yi + 1, seed);
-  const d = hash(wrap(xi + 1), yi + 1, seed);
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
-}
-
-/* ── Masks and distance ──────────────────────────────────────────────────── */
-function coverage(paths: string[], w: number, h: number, S: number, dx = 0, dy = 0): Float32Array {
-  const cv = createCanvas(w, h);
-  const g = cv.getContext("2d");
-  g.setTransform(S, 0, 0, S, dx * S, dy * S);
-  g.fillStyle = "#000";
-  for (const d of paths) g.fill(new Path2D(d));
-  const data = g.getImageData(0, 0, w, h).data;
-  const a = new Float32Array(w * h);
-  for (let i = 0; i < a.length; i++) a[i] = data[i * 4 + 3] / 255;
-  return a;
-}
-
-/** Distance (px) from each inside pixel to the nearest outside one — Felzenszwalb's exact transform. */
-function distance(cov: Float32Array, w: number, h: number): Float32Array {
-  const INF = 1e12;
-  const f = new Float64Array(Math.max(w, h));
-  const d = new Float64Array(Math.max(w, h));
-  const v = new Int32Array(Math.max(w, h));
-  const z = new Float64Array(Math.max(w, h) + 1);
-  const grid = new Float64Array(w * h);
-  for (let i = 0; i < grid.length; i++) grid[i] = cov[i] >= 0.5 ? INF : 0;
-  const pass = (n: number) => {
-    let k = 0;
-    v[0] = 0;
-    z[0] = -INF;
-    z[1] = INF;
-    for (let q = 1; q < n; q++) {
-      let s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
-      while (s <= z[k]) {
-        k--;
-        s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
-      }
-      k++;
-      v[k] = q;
-      z[k] = s;
-      z[k + 1] = INF;
-    }
-    k = 0;
-    for (let q = 0; q < n; q++) {
-      while (z[k + 1] < q) k++;
-      d[q] = (q - v[k]) * (q - v[k]) + f[v[k]];
-    }
-  };
-  for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) f[y] = grid[y * w + x];
-    pass(h);
-    for (let y = 0; y < h; y++) grid[y * w + x] = d[y];
-  }
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) f[x] = grid[y * w + x];
-    pass(w);
-    for (let x = 0; x < w; x++) grid[y * w + x] = d[x];
-  }
-  const out = new Float32Array(w * h);
-  for (let i = 0; i < out.length; i++) out[i] = Math.sqrt(Math.min(grid[i], 1e8));
-  return out;
-}
-
-/**
- * Blurs a height field inside its own outline (normalised by the blurred
- * coverage, so the edge does not sag). The distance transform leaves creases
- * along the middle of a shape — where the nearest edge switches sides — and a
- * real tooth has none: this is what rounds them away.
- */
-function soften(hf: Float32Array, cov: Float32Array, w: number, h: number, sigma: number): Float32Array {
-  const r = Math.ceil(sigma * 2.5);
-  const k: number[] = [];
-  for (let i = -r; i <= r; i++) k.push(Math.exp(-(i * i) / (2 * sigma * sigma)));
-  const run = (src: Float32Array, horizontal: boolean) => {
-    const out = new Float32Array(w * h);
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) {
-        let s = 0;
-        for (let i = -r; i <= r; i++) {
-          const xx = horizontal ? x + i : x;
-          const yy = horizontal ? y : y + i;
-          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
-          s += src[yy * w + xx] * k[i + r];
-        }
-        out[y * w + x] = s;
-      }
-    return out;
-  };
-  const weighted = new Float32Array(w * h);
-  const inside = new Float32Array(w * h);
-  for (let i = 0; i < weighted.length; i++) {
-    inside[i] = cov[i] > 0 ? 1 : 0;
-    weighted[i] = hf[i] * inside[i];
-  }
-  const num = run(run(weighted, true), false);
-  const den = run(run(inside, true), false);
-  const out = new Float32Array(w * h);
-  for (let i = 0; i < out.length; i++) out[i] = inside[i] ? num[i] / Math.max(den[i], 1e-4) : 0;
-  return out;
-}
-
-/** A rounded edge: rises like a quarter circle of radius R, then holds. */
-const bevel = (d: number, R: number) => {
-  const t = 1 - Math.min(d / R, 1);
-  return R * Math.sqrt(1 - t * t);
-};
-
-/* ── Lighting ────────────────────────────────────────────────────────────── */
-type Surface = {
-  albedo: RGB;
-  /** 0 matte … 1 glass */
-  gloss: number;
-  /** Light that wraps round the edge, for things light passes into (enamel, gum). */
-  wrap: number;
-  ao: number;
-};
-
-/**
- * One pixel, lit. The key light is high on the left and in front, as in a
- * studio product shot; a weak fill from the right keeps the shadow side
- * readable. `flipY` lights a lower tooth from below, because the chart turns it
- * upside down to draw it, and after the turn the light is above it again.
- */
-function shade(n: V3, s: Surface, flipY: boolean): RGB {
-  const key = norm([-0.48, flipY ? 0.58 : -0.58, 0.66]);
-  const fill = norm([0.7, flipY ? -0.15 : 0.15, 0.7]);
-  const view: V3 = [0, 0, 1];
-  const ndl = dot(n, key);
-  const diffuse = clamp((ndl + s.wrap) / (1 + s.wrap));
-  const fillD = clamp(dot(n, fill));
-  const half = norm([key[0] + view[0], key[1] + view[1], key[2] + view[2]]);
-  const ndh = clamp(dot(n, half));
-  const sharp = Math.pow(ndh, 18 + 110 * s.gloss) * (0.15 + 0.75 * s.gloss);
-  const broad = Math.pow(ndh, 6) * 0.1 * s.gloss;
-  const fresnel = Math.pow(1 - clamp(n[2]), 3);
-  // Light that went in comes out warmer on the shadow side, as it does through enamel and gum.
-  const warm: RGB = [1, 0.95 - 0.04 * s.wrap, 0.9 - 0.08 * s.wrap];
-  const lit = 0.36 + 0.62 * diffuse + 0.16 * fillD;
-  const tint = mix(warm, [1, 1, 1], diffuse);
-  const out: RGB = [0, 0, 0];
-  for (let i = 0; i < 3; i++) {
-    out[i] = s.albedo[i] * tint[i] * lit * s.ao * (1 - 0.1 * fresnel) + sharp + broad + 0.05 * fresnel * s.gloss;
-  }
-  return out;
-}
-
-/* ── Picture assembly ────────────────────────────────────────────────────── */
-type Layer = { cov: Float32Array; color: (x: number, y: number) => RGB | null };
-
-async function save(name: string, w: number, h: number, layers: Layer[]) {
-  const px = Buffer.alloc(w * h * 4);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
-      for (const L of layers) {
-        const c = L.cov[i];
-        if (c <= 0) continue;
-        const col = L.color(x, y);
-        if (!col) continue;
-        // "over", in premultiplied terms
-        r = col[0] * c + r * (1 - c);
-        g = col[1] * c + g * (1 - c);
-        b = col[2] * c + b * (1 - c);
-        a = c + a * (1 - c);
-      }
-      if (a > 0) {
-        px[i * 4] = Math.round(clamp(r / a) * 255);
-        px[i * 4 + 1] = Math.round(clamp(g / a) * 255);
-        px[i * 4 + 2] = Math.round(clamp(b / a) * 255);
-        px[i * 4 + 3] = Math.round(clamp(a) * 255);
-      }
-    }
-  }
-  const file = join(OUT, `${name}.webp`);
-  await sharp(px, { raw: { width: w, height: h, channels: 4 } }).webp({ quality: 88, alphaQuality: 92, effort: 6 }).toFile(file);
-  return px;
-}
-
-/** Normal of a height field at (x, y), central differences. */
-function normalAt(hf: Float32Array, w: number, h: number, x: number, y: number, k = 1): V3 {
-  const at = (xx: number, yy: number) => hf[clamp(yy, 0, h - 1) * w + clamp(xx, 0, w - 1)];
-  const dx = (at(x + 1, y) - at(x - 1, y)) / 2;
-  const dy = (at(x, y + 1) - at(x, y - 1)) / 2;
-  return norm([-dx * k, -dy * k, 1]);
-}
 
 /* ── Colours (the side view is photographs now: bake-tooth-photos.tsx) ──── */
 const ENAMEL = hex("#f4f2ed"); // the photographs' enamel: white with a cool cast
 const ENAMEL_NECK = hex("#e6dccb");
 const PRIMARY_ENAMEL = hex("#f9f6ee");
-
-/* ── The gum, one column wide, tiling ────────────────────────────────────── */
-const GUM_MARGIN = hex("#f4b3ad");
-const GUM = hex("#ea9496");
-const MUCOSA = hex("#c4505f");
-const SHADOW = hex("#6e2f35");
-
-async function gum(arch: "upper" | "lower") {
-  const S = SIDE_S;
-  const w = CW * S;
-  const h = SIDE_H * S;
-  const flipY = arch === "lower";
-  /*
-    One column of gum, and a sliver of each neighbour's (GUM_PAD a side), so
-    two tiles overlap instead of meeting edge to edge: tiles that only meet
-    leave a hairline of white where the browser blends their edges. In the
-    overlap each tile is drawn at the opacity that, laid over its neighbour's,
-    adds up to the gum's own — so the joint is neither lighter nor darker.
-  */
-  const P = Math.round(GUM_PAD * S);
-  const wo = w + 2 * P;
-  // Three columns side by side, so the distance to the margin is right at the papillae; the middle one is kept.
-  const W3 = w * 3;
-  const tissue = festoon(GUM_TOP - 40); // reaching well above the picture, so its top is not an edge
-  const cv = createCanvas(W3, h);
-  const g = cv.getContext("2d");
-  g.fillStyle = "#000";
-  for (let k = 0; k < 3; k++) {
-    g.setTransform(S, 0, 0, S, k * w, 0);
-    g.fill(new Path2D(tissue));
-  }
-  const data = g.getImageData(0, 0, W3, h).data;
-  const cov3 = new Float32Array(W3 * h);
-  for (let i = 0; i < cov3.length; i++) cov3[i] = data[i * 4 + 3] / 255;
-  const d3 = distance(cov3, W3, h);
-  // And from outside it: how far below the margin a point on the tooth is, for the shadow the gum casts.
-  const out3 = new Float32Array(W3 * h);
-  for (let i = 0; i < out3.length; i++) out3[i] = 1 - cov3[i];
-  const dOut3 = distance(out3, W3, h);
-
-  const R = 5.5 * S;
-  const hf = new Float32Array(wo * h);
-  const cov = new Float32Array(wo * h);
-  const dist = new Float32Array(wo * h);
-  const below = new Float32Array(wo * h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < wo; x++) {
-      const j = y * W3 + (x + w - P);
-      const i = y * wo + x;
-      cov[i] = cov3[j];
-      dist[i] = d3[j];
-      below[i] = dOut3[j];
-      if (cov3[j] <= 0) continue;
-      const ux = (x - P) / S;
-      const uy = y / S;
-      // The free margin rolls over the tooth; above it the attached gum is firm and stippled.
-      let v = bevel(d3[j], R);
-      // Each noise fits a whole number of cells across one column (75, 194), or every tile edge is a seam.
-      v += 1.1 * (noise((ux * 75) / CW, uy * 1.7, 21, 75) - 0.5) * smooth(Y0 - 30, Y0 - 4, uy);
-      v += 0.5 * (noise((ux * 194) / CW, uy * 4.4, 23, 194) - 0.5);
-      // Each tooth's root shows as a gentle swelling under the gum (the juga), between soft hollows.
-      v += 1.6 * S * 0.4 * Math.cos(((ux - C) / CW) * Math.PI * 2) * smooth(2, Y0 - 10, uy) * (1 - smooth(Y0 - 6, Y0 + 2, uy));
-      hf[i] = v;
-    }
-  }
-  const color = (x: number, y: number): RGB | null => {
-    const i = y * wo + x;
-    const uy = y / S;
-    // Mucosa high up, coral attached gum, a paler rim at the margin.
-    let a = mix(MUCOSA, GUM, smooth(Y0 - 34, Y0 - 14, uy));
-    a = mix(a, GUM_MARGIN, 1 - smooth(0, 2.2 * S, dist[i]));
-    const m = (noise((((x - P) / S) * 22) / CW, uy * 0.5, 31, 22) - 0.5) * 0.06;
-    const n = normalAt(hf, wo, h, x, y, 1);
-    const c = shade(n, { albedo: [a[0] + m, a[1] + m * 0.6, a[2] + m * 0.6], gloss: 0.55, wrap: 0.6, ao: 1 }, flipY);
-    // The sulcus: a fine darker line where the gum meets the tooth.
-    const sulcus = 1 - 0.32 * (1 - smooth(0, 0.9 * S, dist[i]));
-    return [c[0] * sulcus, c[1] * sulcus * 0.96, c[2] * sulcus * 0.96];
-  };
-  /*
-    The gum covers the whole root now, the way it does in the mouth: the root
-    shows through it, tinted, more toward the top where the tissue is thin,
-    and an implant, a root canal or a graft drawn on the root is drawn over it
-    and stays plain to see. Nothing sticks out into white space any more.
-  */
-  const opacityAt = (uy: number) => {
-    const t = clamp(uy / PAP);
-    const thin = smooth(0, 16, uy);
-    return thin * (t < 0.55 ? 0.5 + (t / 0.55) * 0.2 : t < 0.82 ? 0.7 + ((t - 0.55) / 0.27) * 0.26 : 0.96 + ((t - 0.82) / 0.18) * 0.04);
-  };
-  // Where two tiles overlap, the opacity two layers of which make `a`: 1 − (1 − b)² = a.
-  const share = (x: number, a: number) => (x < 2 * P || x >= w ? 1 - Math.sqrt(Math.max(0, 1 - a)) : a);
-  const fade = new Float32Array(wo * h);
-  const shadow = new Float32Array(wo * h);
-  for (let y = 0; y < h; y++) {
-    const uy = y / S;
-    for (let x = 0; x < wo; x++) {
-      const i = y * wo + x;
-      fade[i] = share(x, cov[i] * opacityAt(uy));
-      // Just below the margin, on the tooth, the soft shadow of the gum over it.
-      if (cov[i] < 1 && uy > Y0 - 4) shadow[i] = share(x, (1 - cov[i]) * 0.26 * (1 - smooth(0, 2.6 * S, below[i])));
-    }
-  }
-  return {
-    w: wo,
-    px: await save(`gum-${arch === "upper" ? "u" : "l"}`, wo, h, [
-      { cov: shadow, color: () => SHADOW },
-      { cov: fade, color },
-    ]),
-  };
-}
 
 /* ── The tooth from above ────────────────────────────────────────────────── */
 type Bump = [number, number, number, number]; // x, y, radius, height share
@@ -559,7 +229,7 @@ async function main() {
   const sheet: { name: string; w: number; h: number; px: Buffer }[] = [];
   for (const [k, t] of tops) sheet.push({ name: `top-${k}`, w: OCC * TOP_S, h: OCC * TOP_S, px: await top(t) });
   for (const a of ["upper", "lower"] as const) {
-    const g = await gum(a);
+    const g = await renderGum(OUT, `gum-${a === "upper" ? "u" : "l"}`, a, [festoon(GUM_TOP - 40), festoon(GUM_TOP - 40), festoon(GUM_TOP - 40)]);
     sheet.push({ name: `gum-${a}`, w: g.w, h: SIDE_H * SIDE_S, px: g.px });
   }
   console.log(`baked ${sheet.length} pictures into public/charts/teeth`);

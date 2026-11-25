@@ -20,10 +20,18 @@ import { PageHeader, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { EmptyState, Tabs } from "@/components/ui/misc";
-import { isOverdue, type LabCase, type LabRow } from "@/lib/charts/dental/labs";
+import { LAB_TRIPS, isOverdue, type LabCase, type LabRow } from "@/lib/charts/dental/labs";
 import { markLabCasesPaidAction } from "./actions";
 
-export type LabWork = LabCase & { patientId: string; patientName: string; label: string; site: string };
+export type LabWork = LabCase & {
+  patientId: string;
+  patientName: string;
+  label: string;
+  site: string;
+  treatmentKey: string;
+  /** A bridge's teeth, in chart order; empty for work on one tooth or an arch. */
+  teeth: string[];
+};
 
 type Tab = "out" | "back" | "pay";
 
@@ -88,6 +96,12 @@ export function LabsClient({
       toast(L.paidSaved.replace("{amount}", money(r.amount ?? 0)));
     });
 
+  /** Where in the mouth: a bridge by all its teeth, an arch by its name, anything else by its tooth. */
+  const where = (w: LabWork) => {
+    const words = t.invoices.chartLine;
+    if (/^[1-8][1-8]$/.test(w.site)) return w.teeth.length > 1 ? words.teeth.replace("{list}", w.teeth.join(" · ")) : L.tooth.replace("{n}", w.site);
+    return (words.sites as Record<string, string>)[w.site] ?? w.site;
+  };
   const row = (w: LabWork, action?: React.ReactNode) => {
     const late = isOverdue(w, today);
     const lab = labOf.get(w.labId);
@@ -98,9 +112,22 @@ export function LabsClient({
             {w.patientName}
           </Link>
           <div className="text-[0.78125rem] text-ink-500">
-            <bdi>{w.label}</bdi> · {/^[1-8][1-8]$/.test(w.site) ? L.tooth.replace("{n}", w.site) : w.site} · {lab?.name ?? "—"}
+            <bdi>{w.label}</bdi> · <bdi>{where(w)}</bdi>
+            {w.units && w.units > 1 ? ` · ${L.units.replace("{n}", String(w.units))}` : ""} · {lab?.name ?? "—"}
             {lab?.inHouse ? ` · ${L.inHouse}` : ""}
+            {w.shade ? (
+              <>
+                {" "}
+                · <bdi>{w.shade}</bdi>
+              </>
+            ) : null}
           </div>
+          {/* Work that goes more than once says what it is there for, or came back as. */}
+          {LAB_TRIPS[w.treatmentKey] && (
+            <span className="mt-1 inline-flex rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold text-ink-700" data-lab-work-stage={w.stage}>
+              {L.stages[w.stage]}
+            </span>
+          )}
         </div>
         <div className="text-[0.78125rem] text-ink-500 tnum">
           {L.sentOn.replace("{date}", fmtDateOnly(w.sentOn, locale))}
