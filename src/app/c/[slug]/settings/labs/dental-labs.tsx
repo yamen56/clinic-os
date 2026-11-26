@@ -123,7 +123,7 @@ export function DentalLabs({
               <Field label={S.name} required>
                 <Input value={draft.name} maxLength={80} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus data-lab-name />
               </Field>
-              <Field label={S.phone} hint={t.common.optional}>
+              <Field label={S.phone} hint={S.phoneHint}>
                 <Input value={draft.phone} maxLength={40} dir="ltr" onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
               </Field>
             </div>

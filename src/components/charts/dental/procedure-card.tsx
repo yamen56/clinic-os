@@ -16,7 +16,7 @@
 */
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronDown, Maximize2, Move, Pencil, Plus, Repeat, Siren, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Info, Maximize2, Move, Pencil, Plus, Repeat, Siren, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { buttonClass } from "@/components/ui/button-class";
@@ -584,6 +584,26 @@ export function ProcedureCard({
           <Move className="h-4 w-4" />
           {T.fullArch.adjust}
         </button>
+      )}
+
+      {/*
+        Not started: how a treatment in steps is recorded, said once, where it
+        is done (2026-11-26). A root canal tapped as done arrives here at "0 of
+        4 steps", which read as if the tap had not worked.
+      */}
+      {prog && planned && editable && prog.requiredDone === 0 && (
+        <div className="flex gap-2.5 rounded-card border border-brand-200 bg-brand-50/50 px-3 py-2.5 text-[0.8125rem] text-ink-700" data-steps-howto>
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" />
+          <div className="grid gap-1">
+            <p>
+              {P.howSteps
+                .replace("{name}", locale === "ar" ? m.labelAr : m.label)
+                .replace("{n}", String(prog.required))
+                .replace("{last}", prog.steps.filter((s) => !s.optional).at(-1)?.en ?? "")}
+            </p>
+            {labStops.size > 0 && <p>{P.howLab}</p>}
+          </div>
+        </div>
       )}
 
       {prog && (

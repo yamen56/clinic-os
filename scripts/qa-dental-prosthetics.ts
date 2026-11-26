@@ -36,6 +36,18 @@ import { LAB_TRIPS, labCostFor, nextAnchor, stagesFor, tripAnchors, tripsOf, typ
 import { suggestSpan, bridgeKey } from "../src/lib/charts/dental/bridge";
 import { toothStates, type Mark } from "../src/lib/charts/dental/state";
 import { BUILT_IN_BY_KEY } from "../src/lib/charts/dental/catalog";
+import { printKeyFor } from "../src/lib/print-token";
+import { readFileSync } from "node:fs";
+
+/*
+  The dev server's secret, so a key minted here opens its print page — read
+  from the local .env alone. (Loading every env file the way Next does also
+  read the production one, and pointed this script at the live site.)
+*/
+if (!process.env.INTERNAL_API_SECRET) {
+  const line = readFileSync(join(process.cwd(), ".env"), "utf8").split(/\r?\n/).find((l) => l.startsWith("INTERNAL_API_SECRET="));
+  if (line) process.env.INTERNAL_API_SECRET = line.slice("INTERNAL_API_SECRET=".length).replace(/^["']|["']$/g, "");
+}
 
 const BASE = process.env.APP_URL || "http://localhost:3000";
 const PG = `postgres://postgres:postgres@127.0.0.1:${process.env.PG_PORT || 5544}/clinicos`;
@@ -220,7 +232,8 @@ async function main() {
   await svc("bridge", 200);
   await svc("implant_bridge", 350);
   await svc("implant_denture", 4000);
-  const [lab] = await q(`insert into dental_labs (clinic_id, name) values ($1, 'Smile Lab') returning id`, [clinic.id]);
+  // Its WhatsApp number written as a clinic writes it.
+  const [lab] = await q(`insert into dental_labs (clinic_id, name, phone) values ($1, 'Smile Lab', '079 123 4567') returning id`, [clinic.id]);
   await q(`insert into dental_lab_prices (clinic_id, lab_id, chart_key, cost) values ($1, $2, 'bridge', 45), ($1, $2, 'implant_bridge', 80), ($1, $2, 'implant_denture', 900)`, [clinic.id, lab.id]);
   const fileUrl = (id: string) => `${BASE}/c/${slug}/patients/${id}?tab=dental`;
   const put = async (pid: string, site: string, key: string, status: string, extra: { group?: string; role?: string; detail?: Record<string, string>; id?: string } = {}) => {
@@ -578,12 +591,51 @@ async function main() {
       );
       check(await until(async () => (await stop.locator("[data-lab-trip='framework'][data-lab-trip-state='sent']").count()) === 1 && /due/.test(await stop.innerText())), "it stands in the steps: at the lab, due", await stop.innerText());
 
+      console.log("The order, out to the lab");
+      const wa = stop.locator(`[data-lab-whatsapp='${lc.id}']`);
+      check(await until(async () => (await wa.count()) === 1), "the order goes on WhatsApp from the trip it is on");
+      check((await wa.getAttribute("data-lab-whatsapp-to")) === "+962791234567", "to the lab's number, read as the clinic wrote it", (await wa.getAttribute("data-lab-whatsapp-to")) ?? "");
+      const href = (await wa.getAttribute("href")) ?? "";
+      const said = decodeURIComponent(href.split("?text=")[1] ?? "");
+      const [pp] = await q(`select phone_e164 from patients where id = $1`, [p2]);
+      check(
+        href.startsWith("https://wa.me/962791234567?text=") && said.includes("Bridge Patient") && said.includes("16 · 15 · 14") && said.includes("Supports: 16 · 14") && said.includes("Replaced: 15") && said.includes("Zirconia") && said.includes("Shade: A2") && said.includes("Framework, for try-in") && /Due back: \d/.test(said) && /Order \(PDF\): http\S+\/lab-order\//.test(said),
+        "written out: the patient, the teeth and what each is, the material, the shade, what is to come back, when, and the PDF",
+        said
+      );
+      check(!said.includes(String(pp.phone_e164).slice(4)) && !/allerg|medical|price|cost|135/i.test(said), "and nothing else of the patient, nor the price", said);
+      const pdfUrl = (await stop.locator(`[data-lab-print='${lc.id}']`).getAttribute("href")) ?? "";
+      check(!!pdfUrl && pdfUrl === said.match(/Order \(PDF\): (\S+)/)?.[1], "Print opens the same order", pdfUrl);
+      const pdfRes = await fetch(pdfUrl);
+      const pdfBody = Buffer.from(await pdfRes.arrayBuffer());
+      check(pdfRes.status === 200 && pdfRes.headers.get("content-type") === "application/pdf" && pdfBody.subarray(0, 5).toString("latin1") === "%PDF-" && pdfBody.length > 5000, "the lab opens it with no account: a PDF", `${pdfRes.status} ${pdfRes.headers.get("content-type")} ${pdfBody.length}`);
+      check((await fetch(pdfUrl.replace(/sig=[^&]+/, "sig=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"))).status === 404, "a forged key opens nothing");
+      const long = new URL(pdfUrl);
+      check((await fetch(`${BASE}/lab-print/${lc.id}?kind=lab-order&exp=${long.searchParams.get("exp")}&sig=${long.searchParams.get("sig")}`)).status === 404, "and the lab's key does not open the renderer's page");
+      {
+        const k = printKeyFor(lc.id, "lab-print");
+        const sheet = await page.context().newPage();
+        await sheet.goto(`${BASE}/lab-print/${lc.id}?kind=lab-print&exp=${k.exp}&sig=${k.sig}`, { timeout: 120000 });
+        const sheetText = await sheet.locator("main").innerText();
+        const role = async (s: string) => sheet.locator(`[data-sheet-tooth='${s}']`).getAttribute("data-sheet-role");
+        check(
+          /Bridge Patient/.test(sheetText) && /Smile Lab/.test(sheetText) && /Dr\. Sami Haddad/.test(sheetText) && /Zirconia/.test(sheetText) && /A2/.test(sheetText) && /Framework, for try-in/.test(sheetText),
+          "the printed order: the lab, the patient, the doctor, the work",
+          sheetText.slice(0, 400)
+        );
+        check((await role("16")) === "abutment" && (await role("15")) === "pontic" && (await role("14")) === "abutment" && (await role("13")) === "", "on a chart of the mouth with its teeth marked");
+        check(!sheetText.includes(String(pp.phone_e164).slice(4)) && !/allerg|medical history|135/i.test(sheetText), "with nothing else of the patient, nor the price");
+        await sheet.screenshot({ path: join(SHOTS, "lab-order-sheet.png"), fullPage: true });
+        await sheet.close();
+      }
+
       // Lab work, across the clinic.
       await page.goto(`${BASE}/c/${slug}/labs`, { timeout: 120000 });
       await page.waitForSelector("[data-lab-out]", { timeout: 60000 });
       const out = await page.locator(`[data-lab-work='${lc.id}']`).innerText();
       check(/teeth 16 · 15 · 14/.test(out) && /3 units/.test(out) && /framework/.test(out) && /A2/.test(out), "Lab work names every tooth, the units, the shade and what is being made", out);
       await page.screenshot({ path: join(SHOTS, "lab-work.png") });
+      check((await page.locator(`[data-lab-work='${lc.id}'] [data-lab-whatsapp]`).count()) === 1 && (await page.locator(`[data-lab-work='${lc.id}'] [data-lab-print]`).count()) === 1, "Lab work sends the order again, on WhatsApp or printed");
       await page.locator(`[data-lab-received='${lc.id}']`).click();
       check(await until(async () => (await caseOf()).status === "received"), "received from there");
 
@@ -599,6 +651,10 @@ async function main() {
       await again.locator("[data-lab-due='3']").click();
       await again.locator("[data-lab-resend-save]").click();
       check(await until(async () => (await caseOf()).stage === "bisque"), "sent back for its porcelain");
+      check(
+        await until(async () => decodeURIComponent(((await again.locator("[data-lab-whatsapp]").getAttribute("href").catch(() => "")) ?? "").split("?text=")[1] ?? "").includes("Porcelain (bisque), for try-in")),
+        "and the order sent now asks for the porcelain"
+      );
       lc = await caseOf();
       const n = await q(`select count(*)::int as n, sum(cost)::float as cost from lab_cases where mark_id = $1`, [lead]);
       check(n[0].n === 1 && n[0].cost === 135 && lc.trips.length === 1 && lc.trips[0].stage === "framework" && !!lc.trips[0].receivedAt && lc.status === "sent", "the same order at the same price, the framework's trip kept", JSON.stringify({ n: n[0], trips: lc.trips }));
@@ -619,6 +675,10 @@ async function main() {
       await page.screenshot({ path: join(SHOTS, "bridge-card.png") });
       await doneStep("cement");
       check(await until(async () => (await marksOf(p2)).filter((r) => r.treatment_key === "bridge").every((r) => r.status === "done")), "cementing it finishes the bridge");
+      // An order the clinic calls off stops opening.
+      await q(`update lab_cases set status = 'cancelled' where id = $1`, [lc.id]);
+      check((await fetch(pdfUrl)).status === 410, "a cancelled order's link stops opening");
+      await q(`update lab_cases set status = 'received' where id = $1`, [lc.id]);
       await putDown(page);
       await page.waitForTimeout(400);
       check((await chart(page).locator("[data-piece='bridge']").getAttribute("data-piece-paint")) === "done", "and the chart shows it done");
@@ -794,6 +854,89 @@ async function main() {
       await phone.waitForTimeout(800);
       await phone.screenshot({ path: join(SHOTS, "phone-bridge-card.png") });
       await phone.context().close();
+    }
+
+    /* ── Recording, made obvious (2026-11-26) ────────────────────────────── */
+    if (run("record")) {
+      console.log("Recording, on a phone");
+      const p6 = await patient("Record Patient");
+      const ph = await pageOf({ phone: true });
+      await openFile(ph, fileUrl(p6));
+      const wide = async () => (await ph.evaluate(`document.documentElement.scrollWidth`)) as number;
+      check(await ph.locator("[data-chart-empty-hint]").isVisible(), "an empty chart says to tap a tooth to start", await ph.locator("[data-chart-empty-hint]").innerText().catch(() => ""));
+      check((await ph.locator("[data-legend]").innerText()).startsWith("Show"), "its colours say they are a filter: Show");
+      await ph.locator("[data-record-guide]").click();
+      const guide = ph.getByRole("dialog");
+      await guide.locator("[data-record-guide-body]").waitFor({ timeout: 10000 });
+      const gt = await guide.innerText();
+      check(/Tap the tooth/.test(gt) && /Say what you are recording/.test(gt) && /Pick it from the list/.test(gt) && /Record its steps/.test(gt) && /Brush/.test(gt) && /Date done/.test(gt), "How to record says it in four steps, and the rest", gt.slice(0, 200));
+      check((await wide()) === 390, "and fits the phone");
+      await ph.screenshot({ path: join(SHOTS, "record-guide.png") });
+      await putDown(ph);
+
+      await chart(ph).locator("[data-tooth='46']").first().tap();
+      await panelOf(ph).waitFor({ timeout: 10000 });
+      const intents = panelOf(ph).locator("[data-record-intents]");
+      check(await until(() => intents.isVisible()), "the tooth asks what is being recorded");
+      check((await intents.innerText()).includes("What are you recording on 46?"), "on that tooth", await intents.innerText());
+      const sizes = await intents.locator("[data-record-intent]").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+      check(sizes.length === 4 && sizes.every((h) => h >= 56), "four choices, each big enough for a thumb", sizes.join(","));
+      check((await wide()) === 390, "nothing wider than the phone");
+      await ph.screenshot({ path: join(SHOTS, "record-intents.png") });
+
+      // Planned, by its own button: the pane says so, and the switch is on Planned.
+      await intents.locator("[data-add-plan]").click();
+      const pane = panelOf(ph).locator("[data-tooth-pane='add']");
+      check((await pane.locator("[data-recording]").getAttribute("data-recording")) === "planned" && (await pane.getByRole("radio", { name: "Planned" }).getAttribute("aria-checked")) === "true", "Plan treatment opens the list set to Planned, and says so");
+      check(/Recorded as planned/.test(await pane.locator("[data-record-as]").innerText()), "what a tap records is said in words under the switch", await pane.locator("[data-record-as]").innerText());
+      // A filling without its surfaces asks for them.
+      await pane.locator("input[type='search']").first().fill("composite");
+      await pane.locator("[data-treatment='filling_composite']").first().click();
+      const sheet = ph.locator("[data-surface-sheet='46']");
+      check(await until(() => sheet.isVisible(), 10000), "a filling picked without surfaces asks which");
+      check(await sheet.locator("[data-record-surfaces]").isDisabled(), "and records nothing until one is chosen");
+      await sheet.locator("[data-surface-chip='O']").click();
+      await sheet.locator("[data-surface-chip='M']").click();
+      check((await sheet.locator("[data-surface-summary]").innerText()).includes("46"), "it says what will be recorded", await sheet.locator("[data-surface-summary]").innerText());
+      check((await sheet.locator("[data-record-surfaces]").innerText()).trim() === "Add to the plan", "in the words of what is being recorded", await sheet.locator("[data-record-surfaces]").innerText());
+      check((await wide()) === 390, "the surface sheet fits the phone");
+      await ph.screenshot({ path: join(SHOTS, "record-surfaces.png") });
+      await sheet.locator("[data-record-surfaces]").click();
+      check(
+        await until(async () => {
+          const r = (await marksOf(p6)).find((x) => x.treatment_key === "filling_composite");
+          return !!r && r.status === "planned" && [...r.surfaces].sort().join("") === "MO";
+        }),
+        "recorded on the plan with its two surfaces"
+      );
+      await putDown(ph);
+
+      // Done today on a root canal: its card explains the steps.
+      await chart(ph).locator("[data-tooth='47']").first().tap();
+      await panelOf(ph).waitFor({ timeout: 10000 });
+      await panelOf(ph).locator("[data-add-treatment]").click();
+      const paneRct = panelOf(ph).locator("[data-tooth-pane='add']");
+      check((await paneRct.locator("[data-recording]").getAttribute("data-recording")) === "done" && /done today, by/.test(await paneRct.locator("[data-record-as]").innerText()), "Done today records as done today, by the doctor at the chair", await paneRct.locator("[data-record-as]").innerText());
+      await paneRct.locator("input[type='search']").first().fill("root canal");
+      await paneRct.locator("[data-treatment='rct']").first().click();
+      const how = ph.locator("[data-procedure] [data-steps-howto]");
+      check(await until(() => how.isVisible(), 15000), "a root canal opens on how its steps are recorded");
+      check(/steps/.test(await how.innerText()) && /Done today/.test(await how.innerText()), "in words", await how.innerText());
+      await ph.screenshot({ path: join(SHOTS, "record-rct.png") });
+      await putDown(ph);
+
+      // Already there: the switch on Existing.
+      await chart(ph).locator("[data-tooth='16']").first().tap();
+      await panelOf(ph).waitFor({ timeout: 10000 });
+      await panelOf(ph).locator("[data-add-other='existing']").click();
+      const paneOld = panelOf(ph).locator("[data-tooth-pane='add']");
+      check((await paneOld.locator("[data-recording]").getAttribute("data-recording")) === "existing" && (await paneOld.getByRole("radio", { name: "Existing" }).getAttribute("aria-checked")) === "true", "Already there records as existing");
+      await paneOld.locator("input[type='search']").first().fill("crown");
+      await paneOld.locator("[data-treatment='crown']").first().click();
+      check(await until(async () => (await marksOf(p6)).some((x) => x.site === "16" && x.treatment_key === "crown" && x.status === "existing")), "a crown already there is recorded as existing");
+      await putDown(ph);
+      check(!(await ph.locator("[data-chart-empty-hint]").count()), "with work on it, the chart no longer says where to start");
+      await ph.context().close();
     }
 
     check(errors.length === 0, "no page errors", errors.join(" | "));

@@ -134,7 +134,18 @@ export type LabCase = {
   spec: LabSpec;
   /** The trips before this one, oldest first. */
   trips: LabTrip[];
+  /**
+   * The order as the lab opens it — a PDF behind a signed link (lab-order.ts),
+   * minted by the server each time the case is read. Absent on a case drawn
+   * before the server answered.
+   */
+  orderUrl?: string;
 };
+
+/** A short reference for the order, for the lab to quote back: from the case's id. */
+export function orderRef(id: string): string {
+  return id.replace(/-/g, "").slice(0, 6).toUpperCase();
+}
 
 const day = (v: unknown): string | null => {
   if (v == null) return null;

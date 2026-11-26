@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { toEvent } from "@/lib/charts/dental/db";
 import { LAB_STAGES, LAB_TRIPS, toLabCase, tripsOf } from "@/lib/charts/dental/labs";
 import { labSpec } from "@/lib/charts/dental/lab-server";
+import { withOrderUrl } from "@/lib/charts/dental/lab-order";
 
 /*
   A lab case, as it goes: back from the lab, called off, its cost or due date
@@ -132,7 +133,7 @@ export async function PATCH(req: Request, ctx: Params) {
     });
     const event = (await c.query(`select e.*, u.full_name as by_name from chart_mark_events e left join users u on u.id = e.by_user where e.id = $1`, [ev.id]))
       .rows[0];
-    return { labCase: toLabCase(row), event: toEvent(event) };
+    return { labCase: withOrderUrl(toLabCase(row)), event: toEvent(event) };
   });
 
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.error === "not_found" ? 404 : 409 });

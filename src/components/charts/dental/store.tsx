@@ -37,6 +37,7 @@ import type { MedicalHistory } from "@/lib/medical-history";
 import type { PriceRow } from "@/lib/charts/dental/pricing";
 import type { Billed } from "@/lib/charts/dental/billing-server";
 import type { LabCase, LabPrice, LabRow } from "@/lib/charts/dental/labs";
+import type { CountryCode } from "@/lib/phone";
 
 /** A file of the patient's, as the chart reads it: x-rays and photos, and the teeth each shows. */
 export type ChartFile = {
@@ -72,6 +73,9 @@ export type DentalTabData = {
   currency: string;
   chart: DentalChartData;
   clinicName: string;
+  /** Whose chart it is, and the clinic's country: for the order sent to a lab. */
+  patientName?: string;
+  country?: CountryCode;
   /** May this member send the patient a picture on WhatsApp, and has the patient a number? */
   canMessage: boolean;
 };
@@ -81,6 +85,10 @@ type Setter<T> = React.Dispatch<React.SetStateAction<T>>;
 export type DentalStore = {
   slug: string;
   patientId: string;
+  /** For the order sent to a lab. */
+  patientName: string;
+  clinicName: string;
+  country: CountryCode;
   me: Person;
   myMemberId: string | null;
   doctors: Person[];
@@ -284,6 +292,9 @@ export function DentalProvider({
       canBill: data.canBill,
       canDeleteInvoices: !!data.canDeleteInvoices,
       canPrice: !!data.canPrice,
+      patientName: data.patientName ?? "",
+      clinicName: data.clinicName,
+      country: data.country ?? "JO",
       currency: data.currency,
       marks,
       setMarks,

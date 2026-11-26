@@ -24,8 +24,13 @@ function sign(subject: string, kind: string, exp: number): string {
   return createHmac("sha256", internalSecret()).update(`${subject}:${kind}:${exp}`).digest("base64url");
 }
 
-export function printKeyFor(subject: string, kind: string): { exp: number; sig: string } {
-  const exp = Date.now() + TTL_MS;
+/**
+ * `ttlMs` is for the one key that is handed to a person rather than to the
+ * renderer: the lab order a clinic sends its lab (lab-order.ts), which the lab
+ * opens from WhatsApp over the weeks the work takes.
+ */
+export function printKeyFor(subject: string, kind: string, ttlMs: number = TTL_MS): { exp: number; sig: string } {
+  const exp = Date.now() + ttlMs;
   return { exp, sig: sign(subject, kind, exp) };
 }
 

@@ -1057,8 +1057,10 @@ async function main() {
       "what is to be done on it comes first, and the header says how much"
     );
     check(
-      (await full.locator("[data-tooth-done='0'] [data-add-other='existing']").count()) === 1 && (await full.locator("[data-tooth-findings='0'] [data-add-other='finding']").count()) === 1,
-      "what is already there and what was found are in view even when empty, each with its own Add"
+      (await full.locator("[data-record-intents] [data-record-intent]").evaluateAll((els) => els.map((e) => e.getAttribute("data-record-intent")).join(","))) === "done,planned,finding,existing" &&
+        (await full.locator("[data-tooth-done='0']").count()) === 1 &&
+        (await full.locator("[data-tooth-findings='0']").count()) === 1,
+      "the tooth asks what is being recorded — done today, planned, found, already there — and what is there and what was found are in view even when empty"
     );
     check((await full.locator("[data-tooth-emergency]").count()) === 1, "an emergency on the tooth is one button away");
     // A finding, straight from Add finding: the list opens on the findings, with no "planned or done" to choose.

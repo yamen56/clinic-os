@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { toEvent } from "@/lib/charts/dental/db";
 import { LAB_STAGES, PER_TOOTH, stagesFor, toLabCase } from "@/lib/charts/dental/labs";
 import { labSpec } from "@/lib/charts/dental/lab-server";
+import { withOrderUrl } from "@/lib/charts/dental/lab-order";
 
 /*
   A treatment's work, sent to a lab.
@@ -90,7 +91,7 @@ export async function POST(req: Request, ctx: Params) {
     });
     const event = (await c.query(`select e.*, u.full_name as by_name from chart_mark_events e left join users u on u.id = e.by_user where e.id = $1`, [ev.id]))
       .rows[0];
-    return { labCase: toLabCase(row), event: toEvent(event) };
+    return { labCase: withOrderUrl(toLabCase(row)), event: toEvent(event) };
   });
 
   if ("error" in result) {

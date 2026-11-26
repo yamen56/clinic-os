@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { EmptyState, Tabs } from "@/components/ui/misc";
 import { LAB_TRIPS, isOverdue, type LabCase, type LabRow } from "@/lib/charts/dental/labs";
+import type { CountryCode } from "@/lib/phone";
+import { LabOrderButtons } from "@/components/charts/dental/lab-order-buttons";
 import { markLabCasesPaidAction } from "./actions";
 
 export type LabWork = LabCase & {
@@ -31,6 +33,8 @@ export type LabWork = LabCase & {
   treatmentKey: string;
   /** A bridge's teeth, in chart order; empty for work on one tooth or an arch. */
   teeth: string[];
+  /** The material on the chart, for an order sent before it kept one. */
+  material: string | null;
 };
 
 type Tab = "out" | "back" | "pay";
@@ -42,6 +46,8 @@ export function LabsClient({
   labs,
   work: initial,
   canPay,
+  country,
+  clinicName,
   tab: initialTab,
 }: {
   slug: string;
@@ -50,6 +56,9 @@ export function LabsClient({
   labs: LabRow[];
   work: LabWork[];
   canPay: boolean;
+  /** For the order sent to a lab: how its number is read, and whose clinic it is from. */
+  country: CountryCode;
+  clinicName: string;
   /** Opened on a tab — `?tab=pay` from what Expenses says is owed to the labs. */
   tab?: Tab;
 }) {
@@ -165,10 +174,22 @@ export function LabsClient({
               {out.map((w) =>
                 row(
                   w,
-                  <Button size="sm" variant="soft" onClick={() => void received(w)} data-lab-received={w.id}>
-                    <Check className="h-4 w-4" />
-                    {L.received}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {/* The order, to the lab again: on WhatsApp, or printed. */}
+                    <LabOrderButtons
+                      c={w}
+                      lab={labOf.get(w.labId)}
+                      order={{ work: w.label, site: w.site, treatmentKey: w.treatmentKey, material: w.material }}
+                      clinic={clinicName}
+                      patient={w.patientName}
+                      country={country}
+                      labels={{ whatsapp: L.whatsapp, print: L.print }}
+                    />
+                    <Button size="sm" variant="soft" onClick={() => void received(w)} data-lab-received={w.id}>
+                      <Check className="h-4 w-4" />
+                      {L.received}
+                    </Button>
+                  </div>
                 )
               )}
             </ul>

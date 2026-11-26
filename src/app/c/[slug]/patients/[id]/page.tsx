@@ -380,6 +380,9 @@ export default async function PatientProfilePage({
                 currency: access.clinic.currency,
                 chart: d.dentalChart,
                 clinicName: access.clinic.name,
+                // For the order sent to a lab: whose work it is, and how the lab's number is read.
+                patientName: d.patient.full_name,
+                country: countryFromClinic(access.clinic),
                 // Pictures to the patient go through the inbox: its switch, and a number to send to.
                 canMessage: can(access, "conversations") && !!d.patient.phone_e164,
               })

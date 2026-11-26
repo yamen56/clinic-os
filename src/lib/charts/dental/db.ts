@@ -15,6 +15,7 @@ import { readHistory, type MedicalHistory } from "@/lib/medical-history";
 import type { PriceRow } from "./pricing";
 import type { Billed } from "./billing-server";
 import { toLab, toLabCase, type LabCase, type LabPrice, type LabRow } from "./labs";
+import { withOrderUrl } from "./lab-order";
 
 const iso = (v: unknown): string | null => (v ? new Date(v as string).toISOString() : null);
 
@@ -281,7 +282,7 @@ export async function loadDentalChart(
     billingSince: iso(r.billing_since),
     labs: r.labs.map(toLab),
     labPrices: r.lab_prices.map((p) => ({ labId: p.labId, chartKey: p.chartKey, variant: p.variant ?? null, cost: Number(p.cost) })),
-    labCases: r.lab_cases.map(toLabCase),
+    labCases: r.lab_cases.map((x) => withOrderUrl(toLabCase(x))),
   };
 }
 

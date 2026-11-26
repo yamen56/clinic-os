@@ -24,7 +24,7 @@
 */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Image as ImageIcon, Maximize2, Minimize2, Plus, Repeat, Siren, X } from "lucide-react";
+import { ArrowLeft, CalendarPlus, Check, ChevronLeft, ChevronRight, History, Image as ImageIcon, Maximize2, Minimize2, Repeat, ScanSearch, Siren, X, type LucideIcon } from "lucide-react";
 import type { Resolution } from "@/lib/charts/dental/resolve";
 import { useI18n } from "@/lib/i18n/client";
 import type { ChartImage } from "./image-viewer";
@@ -68,6 +68,20 @@ export type PanelActions = {
 
 export type PanelSize = "compact" | "big";
 
+/** What a doctor is recording on a tooth: the four answers to "what happened here?". */
+type Intent = "done" | "planned" | "finding" | "existing";
+/*
+  In the order they are asked: what was done is the commonest, then what to
+  do, then what was seen. The first carries the hook the QA suites have always
+  opened the list with.
+*/
+const INTENTS: { as: Intent; icon: LucideIcon; hook: Record<string, string | boolean> }[] = [
+  { as: "done", icon: Check, hook: { "data-add-treatment": true, "data-record-intent": "done" } },
+  { as: "planned", icon: CalendarPlus, hook: { "data-add-plan": true, "data-record-intent": "planned" } },
+  { as: "finding", icon: ScanSearch, hook: { "data-add-other": "finding", "data-record-intent": "finding" } },
+  { as: "existing", icon: History, hook: { "data-add-other": "existing", "data-record-intent": "existing" } },
+];
+
 const STATUSES: Status[] = ["planned", "done", "existing"];
 
 function useMinWidth(px: number): boolean {
@@ -105,7 +119,7 @@ function BigTooth({ fdi, st, picked, flash, onToggle }: { fdi: string; st: Tooth
 }
 
 /** The surfaces as chips: the letter, and the word too where there is room for it. */
-function SurfaceChips({ fdi, picked, short, onToggle }: { fdi: string; picked: Surface[]; short?: boolean; onToggle: (s: Surface) => void }) {
+export function SurfaceChips({ fdi, picked, short, onToggle }: { fdi: string; picked: Surface[]; short?: boolean; onToggle: (s: Surface) => void }) {
   const { locale } = useI18n();
   const tt = toothOf(fdi);
   return (
@@ -304,18 +318,23 @@ export function ToothPanel({
   const voided = here.filter((m) => !!m.voidedAt);
 
   /*
-    The full view opens on the tooth; adding is a pane of its own — for a
-    treatment, for work already there (done before, elsewhere), or for a
-    finding, each opened from its own section of the tooth.
+    The full view opens on the tooth, and asks first what is being recorded
+    (2026-11-26, "make it obvious for the doctor how to record everything"):
+    work done today, work to plan, something found, or work that was already
+    there. The answer is the record's status — chosen by meaning, in words,
+    rather than by a small switch above the list that was easy to miss and
+    started on Done. Adding is then a pane of its own, which says what it is
+    recording at its top and still lets it be changed.
   */
   const [pane, setPane] = useState<"tooth" | "add">("tooth");
-  const [addAs, setAddAs] = useState<"treatment" | "existing" | "finding">("treatment");
-  const openAdd = (as: "treatment" | "existing" | "finding") => {
-    if (as === "existing") a.onStatus("existing");
-    else if (as === "treatment" && status === "existing") a.onStatus("planned");
+  const [addAs, setAddAs] = useState<Intent>("done");
+  const openAdd = (as: Intent) => {
+    if (as !== "finding") a.onStatus(as);
     setAddAs(as);
     setPane("add");
   };
+  // What the pane records now: the intent, or the status it was switched to since.
+  const recording: Intent = addAs === "finding" ? "finding" : status;
   const toothKey = teeth.join(",");
   const count = here.length;
   const lastCount = useRef(count);
@@ -445,12 +464,19 @@ export function ToothPanel({
       ))}
     </div>
   );
+  const doctorName = doctors.find((d) => d.id === performer)?.name ?? "";
   const controlsFor = (withStatus: boolean) =>
     locked ? (
       <p className="rounded-ctl bg-sunken px-3 py-2 text-[0.8125rem] text-ink-700" data-read-only>{afterPlan ? T.readOnlyPlan : past ? T.readOnlyPast : T.readOnly}</p>
     ) : (
     <div className="flex flex-wrap items-center gap-2">
       {withStatus && statusGroup}
+      {/* What a tap on a treatment will record, said in words: the switch alone was easy to miss. */}
+      {withStatus && (
+        <p className="w-full text-[0.78125rem] text-ink-500" data-record-as={status}>
+          {T.record.as[status].replace("{name}", doctorName)}
+        </p>
+      )}
       <label className="flex min-w-[11rem] flex-1 items-center gap-2">
         <span className="shrink-0 text-[0.75rem] font-semibold text-ink-500">{T.performedBy}</span>
         <select
@@ -731,30 +757,34 @@ export function ToothPanel({
     .map((k) => byKey.get(k))
     .filter((tr): tr is Treatment => !!tr)
     .slice(0, 8);
-  const addButton = !locked && (
-    <button
-      type="button"
-      onClick={() => openAdd("treatment")}
-      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-ctl bg-brand-600 px-3 text-[0.8125rem] font-semibold text-on-brand hover:bg-brand-hover"
-      data-add-treatment
-    >
-      <Plus className="h-4 w-4" />
-      {T.addTreatment}
-    </button>
+  // What is being recorded on the tooth: four ways in, each saying what it is for.
+  const intents = !locked && (
+    <section data-record-intents>
+      <h4 className="mb-2 text-[0.875rem] font-semibold text-ink-900">{T.record.question.replace("{n}", single ?? "")}</h4>
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {INTENTS.map(({ as, icon: Icon, hook }) => {
+
+          return (
+            <button
+              key={as}
+              type="button"
+              onClick={() => openAdd(as)}
+              {...hook}
+              className="flex min-h-[4.5rem] items-start gap-2.5 rounded-card border border-line bg-surface p-3 text-start transition-colors duration-140 hover:border-line-strong hover:bg-sunken active:translate-y-px"
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: SOFT[as], color: INK[as] }}>
+                <Icon className="h-4.5 w-4.5" strokeWidth={2.4} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[0.875rem] font-semibold leading-tight text-ink-900">{T.record.titles[as]}</span>
+                <span className="mt-0.5 block text-[0.75rem] leading-snug text-ink-500">{T.record.hints[as]}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
-  // What is already on the tooth, and what was found on it: each with its own way in.
-  const addOther = (as: "existing" | "finding", label: string) =>
-    !locked && (
-      <button
-        type="button"
-        onClick={() => openAdd(as)}
-        className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl border border-line bg-surface px-2.5 text-[0.78125rem] font-semibold text-ink-700 hover:bg-sunken"
-        data-add-other={as}
-      >
-        <Plus className="h-3.5 w-3.5" />
-        {label}
-      </button>
-    );
   const empty = (text: string) => <p className="rounded-ctl border border-dashed border-line-strong px-3 py-3 text-center text-[0.8125rem] text-ink-500">{text}</p>;
   const quickRow = !locked && quick.length > 0 && (
     <section data-quick-add>
@@ -791,15 +821,20 @@ export function ToothPanel({
         </button>
       )}
       {spanBox}
+      {single && !span && !locked && (
+        <div data-recording={recording}>
+          <p className="text-[0.9375rem] font-semibold text-ink-900">{T.record.titles[recording]}</p>
+          <p className="text-[0.78125rem] text-ink-500">{T.record.paneHints[recording]}</p>
+        </div>
+      )}
       {controlsFor(addAs !== "finding")}
       {pickerOf(addAs === "finding" ? "finding" : "procedure")}
     </div>
   ) : (
     <div className="grid gap-5" data-tooth-pane="tooth">
+      {intents}
       <section data-tooth-todo={todo.length}>
-        <Heading title={T.todoTitle} count={todo.length}>
-          {addButton}
-        </Heading>
+        <Heading title={T.todoTitle} count={todo.length} />
         {todo.length ? list(todo) : <p className="rounded-ctl border border-dashed border-line-strong px-3 py-4 text-center text-[0.8125rem] text-ink-500">{T.nothingToDo}</p>}
       </section>
       {quickRow && (
@@ -808,17 +843,13 @@ export function ToothPanel({
           {quickRow}
         </div>
       )}
-      {/* Always shown in full: what is already there and what was found — each with its own Add. */}
+      {/* Always shown in full: what is already there and what was found. */}
       <section data-tooth-done={doneList.length}>
-        <Heading title={T.doneTitle} count={doneList.length}>
-          {addOther("existing", T.addExisting)}
-        </Heading>
+        <Heading title={T.doneTitle} count={doneList.length} />
         {doneList.length ? list(doneList) : empty(T.nothingDone)}
       </section>
       <section data-tooth-findings={findings.length}>
-        <Heading title={T.findingsTitle} count={findings.length}>
-          {addOther("finding", T.addFinding)}
-        </Heading>
+        <Heading title={T.findingsTitle} count={findings.length} />
         {findings.length ? list(findings) : empty(T.noFindings)}
       </section>
       {resolvedSection}

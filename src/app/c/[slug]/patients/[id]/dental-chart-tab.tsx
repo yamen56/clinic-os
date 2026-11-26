@@ -14,7 +14,7 @@
 */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MousePointer2, Paintbrush, History as HistoryIcon, Undo2, ChevronDown, X, Sparkles } from "lucide-react";
+import { MousePointer2, Paintbrush, History as HistoryIcon, Undo2, ChevronDown, X, Sparkles, CircleHelp, Hand } from "lucide-react";
 import { I18nProvider, useI18n } from "@/lib/i18n/client";
 import { useToast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
@@ -26,7 +26,7 @@ import { groupLeads, implantPlacesOf, implantSitesOf, isFullArch, leadOf, onImpl
 import { inOrder, placeDetail, sitesFor as implantSites, whereText } from "@/lib/charts/dental/implant-place";
 import { isBridge, type BridgeTooth } from "@/lib/charts/dental/bridge";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Arch, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
-import { endOfDay, eventDays, finishedPlan, isPlannedWork, isToothSite, paintAt, toothStates, type Mark, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
+import { endOfDay, eventDays, finishedPlan, isPlannedWork, isToothSite, paintAt, stateOf, toothStates, type Mark, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
 import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
 import { useDentalStore, type ChartFile, type DentalTabData } from "@/components/charts/dental/store";
 import { call, newId, useChartWriter, type FreshMark } from "@/components/charts/dental/writer";
@@ -51,6 +51,8 @@ import { MouthGlyph, type MouthRegion } from "@/components/charts/dental/mouth-a
 import { DockSheet, SHEET_SHARE } from "@/components/charts/dental/dock-sheet";
 import { iconFor } from "@/components/charts/dental/icons";
 import { ToothPanel, type PanelActions, type PanelSize } from "@/components/charts/dental/tooth-panel";
+import { SurfaceSheet } from "@/components/charts/dental/surface-sheet";
+import { RecordGuide } from "@/components/charts/dental/record-guide";
 import { createPortal } from "react-dom";
 import { FullArchStudio, type ArchResult } from "@/components/charts/dental/full-arch-studio";
 import { BridgeSheet } from "@/components/charts/dental/bridge-sheet";
@@ -290,6 +292,9 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
   const [fullArch, setFullArch] = useState<{ tr: Treatment; arch: Arch | null; parent?: string } | null>(null);
   /** A bridge being set up, from the teeth in hand when it was picked. */
   const [bridging, setBridging] = useState<{ seed: string[] } | null>(null);
+  // A filling picked before its surfaces: asked for them on a tooth drawn large.
+  const [surfacing, setSurfacing] = useState<{ tr: Treatment; fdi: string } | null>(null);
+  const [guide, setGuide] = useState(false);
   const [voiding, setVoiding] = useState<Mark | null>(null);
   // Doing work again: on a tooth (pick which), or one treatment from its card.
   const [redo, setRedo] = useState<{ site: string | null; markId: string | null } | null>(null);
@@ -829,6 +834,11 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
       return;
     }
     if (tr.needsSurfaces && picked.length === 0) {
+      // One tooth: ask which surfaces, there and then. Several: they are chosen on the tooth first, as before.
+      if (selected.length === 1) {
+        setSurfacing({ tr, fdi: selected[0] });
+        return;
+      }
       setFlash(true);
       setTimeout(() => setFlash(false), 1200);
       toast(T.needSurfaces, "error");
@@ -1268,6 +1278,17 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                 <ChevronDown className="h-3.5 w-3.5 text-ink-400" />
               </button>
             )}
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => setGuide(true)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-ctl border border-line bg-surface px-2.5 text-[0.8125rem] font-semibold text-ink-700 hover:bg-sunken"
+                data-record-guide
+              >
+                <CircleHelp className="h-4 w-4 text-brand-700" />
+                {T.guide.open}
+              </button>
+            )}
             <div className="ms-auto">
               <Segmented
                 value={dentition}
@@ -1279,7 +1300,8 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
           {!canWrite && <p className="mt-2 text-[0.78125rem] text-ink-500" data-read-only>{T.readOnly}</p>}
 
           {/* Legend: each ink can be hidden, to read one layer of the mouth at a time. */}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <div className="mt-3 flex flex-wrap items-center gap-1.5" data-legend>
+            <span className="me-0.5 text-[0.75rem] font-semibold text-ink-500">{T.guide.show}</span>
             {PAINTS.map((p) => (
               <button
                 key={p}
@@ -1308,6 +1330,13 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
               </div>
             )}
           </div>
+
+          {canWrite && !locked && mode === "tooth" && selected.length === 0 && !marks.some((m) => !m.voidedAt) && (
+            <p className="mt-3 flex items-center gap-2 rounded-ctl bg-brand-50 px-3 py-2 text-[0.8125rem] font-semibold text-brand-700" data-chart-empty-hint>
+              <Hand className="h-4 w-4 shrink-0" />
+              {T.guide.empty}
+            </p>
+          )}
 
           {/* The mouth */}
           <div className="mt-3" dir="ltr" onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
@@ -1720,6 +1749,29 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
               void w.saveArch(parent, plan);
             }}
             onCancel={() => setFullArch(null)}
+          />
+        )}
+      </Modal>
+
+      <Modal open={guide} onClose={() => setGuide(false)} title={T.guide.title}>
+        {guide && <RecordGuide />}
+      </Modal>
+
+      <Modal open={!!surfacing} onClose={() => setSurfacing(null)} title={T.record.surfacesTitle}>
+        {surfacing && (
+          <SurfaceSheet
+            key={`${surfacing.tr.key}-${surfacing.fdi}`}
+            tr={surfacing.tr}
+            fdi={surfacing.fdi}
+            st={stateOf(states, surfacing.fdi)}
+            status={status}
+            onRecord={(surfaces) => {
+              const { tr, fdi } = surfacing;
+              setSurfacing(null);
+              record(tr, [{ site: fdi, surfaces }]);
+              setPicked([]);
+            }}
+            onCancel={() => setSurfacing(null)}
           />
         )}
       </Modal>

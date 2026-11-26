@@ -48,6 +48,26 @@ import { isToothSite } from "@/lib/charts/dental/state";
 import { useDentalStore } from "./store";
 import { useChartWriter } from "./writer";
 import { priceable } from "./price-line";
+import { LabOrderButtons } from "./lab-order-buttons";
+
+/** The order out to the lab, from the chart: on WhatsApp, or printed. */
+function OrderOut({ c, m, indent }: { c: LabCase; m: Mark; indent: string }) {
+  const store = useDentalStore();
+  if (c.status !== "sent") return null;
+  return (
+    <div className={indent}>
+    <LabOrderButtons
+      c={c}
+      lab={store.labs.find((l) => l.id === c.labId)}
+      order={{ work: m.label, site: m.site, treatmentKey: m.treatmentKey, material: m.detail?.material ?? null }}
+      clinic={store.clinicName}
+      patient={store.patientName}
+      country={store.country}
+      hint
+    />
+    </div>
+  );
+}
 
 /** Is this step of the treatment recorded — or done as part of another one? */
 function useStepDone(m: Mark): (step: string) => boolean {
@@ -104,7 +124,10 @@ export function LabLine({ m, tz }: { m: Mark; tz: string }) {
   return (
     <div className="grid gap-1.5" data-lab-line={m.id}>
       {cases.map((c) => (
-        <CaseRow key={c.id} c={c} m={m} name={nameOf(c.labId)} today={today} fmt={fmt} mayEdit={mayEdit} onOp={(op) => w.labCaseOp(c, op)} />
+        <div key={c.id} className="grid gap-1.5">
+          <CaseRow c={c} m={m} name={nameOf(c.labId)} today={today} fmt={fmt} mayEdit={mayEdit} onOp={(op) => w.labCaseOp(c, op)} />
+          {mayEdit && <OrderOut c={c} m={m} indent="ps-2.5" />}
+        </div>
       ))}
       {mayEdit && !open && (isLabWork || cases.length > 0) && (
         <div className="flex flex-wrap items-center gap-2 text-[0.78125rem]">
@@ -226,6 +249,7 @@ export function LabStop({ m, tz, after }: { m: Mark; tz: string; after: string }
                     </span>
                   )}
                 </div>
+                {i === current && mayEdit && <OrderOut c={live} m={m} indent="ps-8" />}
                 {i === 0 && <CaseMore c={live} m={m} mayEdit={mayEdit} onOp={(op) => w.labCaseOp(live, op)} onRemake={active.length ? () => setSending(true) : undefined} />}
               </div>
             );

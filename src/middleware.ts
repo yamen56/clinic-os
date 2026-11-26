@@ -88,6 +88,8 @@ export const config = {
     "/sign/:path*",
     // The patient's own appointment page (0115): authorises itself with its token.
     "/v/:path*",
+    // The order a clinic sends its lab: authorises itself with its key, and each open draws a PDF.
+    "/lab-order/:path*",
     "/invite/:path*",
     "/reset/:path*",
     "/login",
