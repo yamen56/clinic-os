@@ -48,7 +48,7 @@ function finding(
   title = "test condition",
   severity: Finding["severity"] = "urgent"
 ): Finding {
-  return { key, title, detail: "raised by qa-ops-alert", severity };
+  return { key, title, detail: "raised by qa-ops-alert", severity, impact: "nobody — a test", steps: ["nothing"] };
 }
 
 async function main() {
@@ -345,6 +345,15 @@ async function main() {
     findings.every((f) => f.key && f.title.length > 8 && f.detail.length > 8),
     findings.map((f) => f.key).join(", ")
   );
+  // And who it affects and what to do (2026-11-27): the two lines that decide whether to act.
+  check(
+    "every finding says who is affected and what to do",
+    findings.every((f) => f.impact.length > 12 && f.steps.length > 0 && f.steps.every((s) => s.length > 8)),
+    findings.filter((f) => !(f.impact?.length > 12 && f.steps?.length)).map((f) => f.key).join(", ")
+  );
+  // A clinic's WhatsApp alert names the clinic and points at its page.
+  const wa = findings.find((f) => f.key.startsWith("whatsapp_down:"));
+  if (wa) check("a WhatsApp alert names its clinic and links to it", !!wa.clinic && wa.link === `/admin/clinics/${wa.clinic?.slug}`);
 
   /* ================================================= the heartbeat */
   console.log("\n[silence has to mean something]");

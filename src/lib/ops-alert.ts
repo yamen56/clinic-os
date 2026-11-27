@@ -61,8 +61,25 @@ export type Severity = "urgent" | "notice";
 export type Finding = {
   /** Stable per condition, not per occurrence. Reusing it is what dedupes. */
   key: string;
+  /** What is wrong, in a sentence somebody half awake can act on. */
   title: string;
+  /**
+   * The technical detail — what the check saw, the variable to change. Shown
+   * last and small: it is for whoever fixes it, not for deciding to.
+   */
   detail: string;
+  /**
+   * Who or what is affected, in plain words: "reminders are not reaching
+   * this clinic's patients". Required since 2026-11-27 (Yamen: alerts must
+   * "address the problem clearly"), for the same reason as `severity`.
+   */
+  impact: string;
+  /** What to do, in order. One to three steps a person can take now. */
+  steps: string[];
+  /** The clinic it is about, when it is about one: named in the subject, its owner to call. */
+  clinic?: { name: string; slug: string; owner?: string | null; phone?: string | null };
+  /** The page that fixes it, under the app. Defaults to /admin/monitoring. */
+  link?: string;
   /**
    * Required, and required on purpose.
    *
@@ -143,8 +160,10 @@ export async function collectFindings(): Promise<Finding[]> {
         // nothing, so the condition it covers is now unmonitored rather than
         // absent, and that is indistinguishable from healthy until it is not.
         severity: "urgent",
-        title: `The "${check.name}" health check is itself failing`,
+        title: `A health check stopped working: ${check.name}`,
         detail: (e as Error).message.slice(0, 300),
+        impact: "While it is broken, the problem it watches for would not be reported to you.",
+        steps: ["Open Monitoring and read the error below.", "Fix the check or what it reads; this clears on the next pass."],
       });
     }
   }
@@ -171,11 +190,13 @@ function vaultChecks(): Finding[] {
       {
         key: "backup_same_bucket",
         severity: "notice" as const,
-        title: "The database archives are in the same bucket as the patient files",
+        title: "Backups are kept in the same storage bucket as the patient files",
         detail:
           "A deleted bucket or a leaked key would take the uploads and every archive that could " +
           "restore them at the same time. Set BACKUP_S3_BUCKET to keep them apart — see " +
           "DEPLOY.md, Backups.",
+        impact: "Nothing is broken today. If that bucket were deleted or its key leaked, the files and the backups would be lost together.",
+        steps: ["Create a separate bucket for backups and set BACKUP_S3_BUCKET on the worker (DEPLOY.md, Backups)."],
       },
     ];
   }
@@ -184,11 +205,13 @@ function vaultChecks(): Finding[] {
       {
         key: "backup_shared_credentials",
         severity: "notice" as const,
-        title: "The archive bucket is separate, but uses the app's own credentials",
+        title: "The backup bucket uses the app's own storage key",
         detail:
           "That survives somebody emptying the wrong bucket. It does not survive the key itself " +
           "walking out of the running app. Give the vault its own key with " +
           "BACKUP_S3_ACCESS_KEY_ID and BACKUP_S3_SECRET_ACCESS_KEY.",
+        impact: "Nothing is broken today. A leaked app key could reach the backups as well as the files.",
+        steps: ["Give the backup bucket its own key: set BACKUP_S3_ACCESS_KEY_ID and BACKUP_S3_SECRET_ACCESS_KEY on the worker."],
       },
     ];
   }
@@ -203,11 +226,16 @@ async function backupChecks(): Promise<Finding[]> {
     out.push({
       key: "backup_engine",
       severity: "urgent",
-      title: "The backup engine will not load in this process",
+      title: "Backups have stopped: the backup engine cannot load",
       detail:
         "backupEngineReady() is false, so the nightly job throws on every tick and no archive " +
         "is being written. This is how backups were lost for five weeks: a runtime import " +
         "failing inside a worker image that installs with --omit=dev.",
+      impact: "No nightly backup is being written. If the database were lost now, everything since the last backup would be gone.",
+      steps: [
+        "Open the worker's logs on Railway and find the import error at start-up.",
+        "Fix it and redeploy, then check Monitoring → Database backups shows a new archive.",
+      ],
     });
   }
   const age = await backupAgeHours();
@@ -215,13 +243,17 @@ async function backupChecks(): Promise<Finding[]> {
     out.push({
       key: "backup_stale",
       severity: "urgent",
-      title:
+      title: age === Infinity ? "This database has never been backed up" : `No backup for ${Math.floor(age)} hours`,
+      detail: "A nightly archive should never be older than about 24 hours.",
+      impact:
         age === Infinity
-          ? "This database has never been backed up"
-          : `The newest backup is ${Math.floor(age)} hours old`,
-      detail:
-        "A nightly archive should never be older than about 24 hours. Check the worker is " +
-        "running and that object storage is reachable, then run `npm run backup:list`.",
+          ? "If the database were lost now, every clinic's records would be gone."
+          : `If the database were lost now, the last ${Math.floor(age)} hours of patient records, appointments and invoices would be gone.`,
+      steps: [
+        "Check the worker is running (Monitoring → Workers).",
+        "Check object storage is reachable, then run `npm run backup:list` to see the newest archive.",
+        "This clears by itself once a new backup is written.",
+      ],
     });
   }
   // Where the archives are kept, as opposed to whether they are being written.
@@ -246,9 +278,9 @@ async function jobChecks(): Promise<Finding[]> {
       key: "jobs_failing",
       severity: "urgent",
       title: `${row.failed} background jobs failed in the last hour`,
-      detail:
-        "AI replies, PDF renders and document filing all run through this queue. " +
-        "See the failed-jobs table on /admin/monitoring for the errors.",
+      detail: "AI replies, PDF renders and document filing all run through this queue.",
+      impact: "Signed PDFs, AI replies and document filing may not be happening for clinics.",
+      steps: ["Open Monitoring → Failed jobs and read the errors.", "Fix the cause, then watch that new jobs succeed."],
     });
   }
   /*
@@ -263,7 +295,12 @@ async function jobChecks(): Promise<Finding[]> {
       title: `${row.stale} jobs have been waiting more than 15 minutes`,
       detail:
         "The queue is not draining. Either the worker is not processing, or the slow lane is " +
-        "saturated — raising WORKER_SLOW_LANES is the immediate lever.",
+        "saturated.",
+      impact: "Reminders, PDFs and AI replies are running late for every clinic.",
+      steps: [
+        "Check the worker is running and not stuck (Monitoring → Workers).",
+        "If it is running but slow, raise WORKER_SLOW_LANES on the worker and redeploy.",
+      ],
     });
   }
   return out;
@@ -341,21 +378,23 @@ async function workerCapacityChecks(): Promise<Finding[]> {
           rescan a QR code. That is worth an email at 80%.
         */
         severity: "urgent",
-        title: `Worker ${id} is at ${w.rss_mb} MB of ${memLimit} MB`,
-        detail:
-          `It is holding ${w.sessions} WhatsApp session(s). If it is killed they all drop and ` +
-          "each clinic needs a QR rescan. Raise the container's memory, or set " +
-          "WA_MAX_SESSIONS_PER_WORKER and add a replica — see DEPLOY.md, running more than one worker.",
+        title: `The worker is nearly out of memory (${w.rss_mb} of ${memLimit} MB)`,
+        detail: `Worker ${id}, holding ${w.sessions} WhatsApp session(s).`,
+        impact: `If it is killed, the ${w.sessions} clinic(s) on it lose WhatsApp until each one scans a new code.`,
+        steps: [
+          "Raise the worker's memory on Railway,",
+          "or set WA_MAX_SESSIONS_PER_WORKER and add a second worker (DEPLOY.md, running more than one worker).",
+        ],
       });
     }
     if (sessionLimit && Number(w.sessions) >= sessionLimit * 0.9) {
       out.push({
         key: `worker_sessions:${w.worker_id}`,
         severity: "notice" as const,
-        title: `Worker ${id} is carrying ${w.sessions} of ${sessionLimit} sessions`,
-        detail:
-          "New clinics will have nowhere to connect once it is full. Another worker replica " +
-          "picks up the excess within WA_LEASE_TTL_SECONDS.",
+        title: `The worker is nearly full (${w.sessions} of ${sessionLimit} WhatsApp numbers)`,
+        detail: `Worker ${id}. Another replica picks up the excess within WA_LEASE_TTL_SECONDS.`,
+        impact: "A new clinic connecting WhatsApp will have nowhere to go once it is full.",
+        steps: ["Add a second worker replica before onboarding more clinics."],
       });
     }
   }
@@ -385,9 +424,9 @@ async function appErrorChecks(): Promise<Finding[]> {
       Number(r.count) >= APP_ERROR_VOLUME
         ? `An error has fired ${r.count}× — ${String(r.message).slice(0, 80)}`
         : `A new error appeared — ${String(r.message).slice(0, 80)}`,
-    detail:
-      (r.route ? `At ${r.route}. ` : "") +
-      "Full fault and stack on /admin/monitoring; mark it resolved there once it is dealt with.",
+    detail: (r.route ? `At ${r.route}. ` : "") + String(r.message).slice(0, 300),
+    impact: r.route ? `Somebody using ${r.route} may be seeing an error.` : "Somebody may be seeing an error page.",
+    steps: ["Open Monitoring → App errors for the full fault and stack.", "Fix it, then mark it resolved there."],
   }));
 }
 
@@ -412,6 +451,17 @@ async function outboxChecks(): Promise<Finding[]> {
     )
   );
   if (failed < 10) return [];
+  // Which clinics, so the email says whose patients are not being reached.
+  const worst = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select coalesce(nullif(cl.name_ar, ''), cl.name) as name, cl.slug, count(*)::int as n
+           from messages m join clinics cl on cl.id = m.clinic_id
+          where m.status = 'failed' and m.created_at > now() - interval '1 hour'
+          group by cl.id order by n desc limit 3`
+      )
+    ).rows as { name: string; slug: string; n: number }[]
+  );
   return [
     {
       key: "outbox_failing",
@@ -419,9 +469,15 @@ async function outboxChecks(): Promise<Finding[]> {
       // window in which anything can be done about that is short.
       severity: "urgent",
       title: `${failed} WhatsApp messages failed to send in the last hour`,
-      detail:
-        "Reminders and confirmations are not reaching patients. Check the affected clinic's " +
-        "session on /admin/monitoring — repeated failures also auto-pause sending.",
+      detail: "Repeated failures also auto-pause a clinic's sending.",
+      impact: worst.length
+        ? `Reminders and confirmations are not reaching patients at ${worst.map((w) => `${w.name} (${w.n})`).join(", ")}.`
+        : "Reminders and confirmations are not reaching patients.",
+      steps: [
+        "Open Monitoring → WhatsApp sessions and check the clinic(s) named above.",
+        "If a number is logged out or restricted, call the clinic.",
+      ],
+      ...(worst.length === 1 ? { clinic: { name: worst[0].name, slug: worst[0].slug }, link: `/admin/clinics/${worst[0].slug}` } : {}),
     },
   ];
 }
@@ -487,10 +543,16 @@ export async function whatsappChecks(): Promise<Finding[]> {
   const rows = await withSystem(async (c) =>
     (
       await c.query(
-        `select ws.clinic_id, ws.status, cl.name, cl.slug,
-                extract(epoch from (now() - ws.connected_at)) / 3600 as hours
+        `select ws.clinic_id, ws.status, coalesce(nullif(cl.name_ar, ''), cl.name) as name, cl.slug,
+                extract(epoch from (now() - ws.connected_at)) / 3600 as hours, ws.connected_at,
+                coalesce(cl.phone_e164, ou.phone_e164) as phone, ou.full_name as owner
            from whatsapp_sessions ws
            join clinics cl on cl.id = ws.clinic_id
+           -- Who to call: the owner, and the clinic's own number before theirs.
+           left join lateral (
+             select u.full_name, u.phone_e164 from clinic_members m join users u on u.id = m.user_id
+              where m.clinic_id = cl.id and m.is_owner and m.active order by m.created_at limit 1
+           ) ou on true
           where ws.desired
             and ws.status <> 'connected'
             -- Never connected is an onboarding state, not an outage: the clinic
@@ -513,15 +575,27 @@ export async function whatsappChecks(): Promise<Finding[]> {
       key: `whatsapp_down:${r.clinic_id}`,
       severity: stuck || hours >= WA_ESCALATE_HOURS ? "urgent" : "notice",
       title: stuck
-        ? `${r.name} is logged out of WhatsApp and needs the code rescanned`
-        : `${r.name} has been disconnected from WhatsApp for ${Math.floor(hours)} hours`,
+        ? `${r.name}: WhatsApp is logged out`
+        : `${r.name}: WhatsApp disconnected for ${Math.floor(hours)} hours`,
       detail: stuck
-        ? `Session status is "${r.status}". This will not recover on its own — somebody at the ` +
-          `clinic has to open the WhatsApp settings for /c/${r.slug} and scan the code. Until ` +
-          `they do, the clinic is neither sending nor receiving.`
-        : `Session status is "${r.status}". Baileys drops and reconnects by itself several times ` +
-          `a day, so this is recorded rather than sent; it becomes an email at ` +
-          `${WA_ESCALATE_HOURS} hours, by which point it is not reconnecting.`,
+        ? `Session status is "${r.status}". It will not recover on its own.`
+        : `Session status is "${r.status}". Drops that reconnect by themselves are recorded, not sent; ` +
+          `this becomes an email at ${WA_ESCALATE_HOURS} hours, by which point it is not reconnecting.`,
+      impact:
+        `Since ${fmtWhen(r.connected_at)}, ${r.name} is neither sending nor receiving WhatsApp: ` +
+        "reminders, confirmations and patients' messages have stopped.",
+      steps: stuck
+        ? [
+            r.phone ? `Call ${r.owner ?? "the clinic"} on ${r.phone}.` : `Contact ${r.owner ?? "the clinic"}.`,
+            "Ask them to open Settings → WhatsApp in Clinicti and scan the code with the clinic's phone.",
+            "This clears by itself once it reconnects.",
+          ]
+        : [
+            r.phone ? `Call ${r.owner ?? "the clinic"} on ${r.phone}.` : `Contact ${r.owner ?? "the clinic"}.`,
+            "Ask them to check the clinic's phone has internet and WhatsApp open; if it still does not connect, scan the code again from Settings → WhatsApp.",
+          ],
+      clinic: { name: r.name, slug: r.slug, owner: r.owner, phone: r.phone },
+      link: `/admin/clinics/${r.slug}`,
     });
   }
   return out;
@@ -549,11 +623,11 @@ async function silenceChecks(): Promise<Finding[]> {
     // conversation on a Tuesday. Nothing about it is improved by arriving at 3am.
     severity: "notice" as const,
     title: `${r.name} is messaging people who never reply (${Math.round(r.ratio * 100)}%)`,
-    detail:
-      `${r.cold} of ${r.out} outbound messages in the last 30 days went into conversations the ` +
-      `patient has never written in. That is the population that reports a number, and reports ` +
-      `are what get it banned. Check whether a campaign or an import is sending to people who ` +
-      `never contacted the clinic.`,
+    detail: `${r.cold} of ${r.out} outbound messages in the last 30 days went into conversations the patient has never written in.`,
+    impact: "Those are the people who report a number, and reports are what get it banned.",
+    steps: ["Check whether a campaign or an import is sending to people who never contacted the clinic, and talk to the clinic about it."],
+    clinic: { name: r.name, slug: r.slug },
+    link: `/admin/clinics/${r.slug}`,
   }));
 }
 
@@ -593,9 +667,9 @@ async function storageChecks(): Promise<Finding[]> {
     // a threshold it took months to reach is the definition of not urgent.
     severity: "notice" as const,
     title: `The ${r.name} table has reached ${(Number(r.bytes) / 1_073_741_824).toFixed(1)} GB`,
-    detail:
-      "Every nightly backup copies it, so this shows up as a slower dump long before it shows " +
-      "up as anything else. Check what is accumulating and whether any of it can be retired.",
+    detail: "Every nightly backup copies it.",
+    impact: "Nothing is broken. Backups get slower as it grows.",
+    steps: ["Check what is accumulating in it and whether any of it can be retired."],
   }));
 }
 
@@ -607,6 +681,11 @@ async function storageChecks(): Promise<Finding[]> {
  * tell you. What nothing here can report is the worker being down itself; see
  * the note in DEPLOY.md about the external uptime check that closes that loop.
  */
+const WEB_STEPS = [
+  "Open app.clinicti.app to confirm.",
+  "Check the web service's status and logs on Railway; if a deploy broke it, redeploy the last good commit.",
+];
+
 async function webChecks(): Promise<Finding[]> {
   const base = appUrl();
   if (!base) return [];
@@ -622,8 +701,10 @@ async function webChecks(): Promise<Finding[]> {
         {
           key: "web_unhealthy",
           severity: "urgent",
-          title: "The web app is answering but reports itself unhealthy",
+          title: "Clinicti is up but reports itself unhealthy",
           detail: `GET ${base}/api/health returned ${JSON.stringify(body).slice(0, 200)}`,
+          impact: "Clinics may be unable to open patients, book or take payments.",
+          steps: WEB_STEPS,
         },
       ];
     }
@@ -631,8 +712,10 @@ async function webChecks(): Promise<Finding[]> {
       {
         key: "web_unhealthy",
         severity: "urgent",
-        title: `The web app returned HTTP ${res.status}`,
-        detail: `GET ${base}/api/health — patients and staff cannot use the product.`,
+        title: `Clinicti is down (HTTP ${res.status})`,
+        detail: `GET ${base}/api/health returned ${res.status}.`,
+        impact: "Patients and staff cannot use Clinicti.",
+        steps: WEB_STEPS,
       },
     ];
   } catch (e) {
@@ -640,8 +723,10 @@ async function webChecks(): Promise<Finding[]> {
       {
         key: "web_unhealthy",
         severity: "urgent",
-        title: "The web app is unreachable from the worker",
-        detail: `GET ${base}/api/health failed: ${(e as Error).message.slice(0, 200)}`,
+        title: "Clinicti cannot be reached",
+        detail: `GET ${base}/api/health failed from the worker: ${(e as Error).message.slice(0, 200)}`,
+        impact: "Patients and staff probably cannot use Clinicti.",
+        steps: WEB_STEPS,
       },
     ];
   }
@@ -649,28 +734,96 @@ async function webChecks(): Promise<Finding[]> {
 
 /* ------------------------------------------------------- state and delivery */
 
-function plain(lines: string[]): string {
-  return lines.join("\n");
+/** When, as the agency reads it: Amman time, the day and the hour. */
+function fmtWhen(v: unknown): string {
+  const d = v instanceof Date ? v : new Date(String(v ?? ""));
+  if (Number.isNaN(d.getTime())) return "a while ago";
+  return (
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Amman",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(d) + " Amman time"
+  );
 }
 
-function html(title: string, blocks: string[]): string {
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * One problem, laid out so the first three lines decide what to do (2026-11-27):
+ * what is wrong, who it affects, the steps, the page that fixes it — and the
+ * technical detail last and small, for whoever does the fixing.
+ */
+function findingHtml(f: Finding): string {
+  const href = `${appUrl() || ""}${f.link ?? "/admin/monitoring"}`;
+  return [
+    `<h2 style="margin:0 0 8px;font-size:18px;color:#16181C">${esc(f.title)}</h2>`,
+    `<p style="margin:0 0 12px;font-size:14px;line-height:1.55;color:#333"><strong>Who is affected:</strong> ${esc(f.impact)}</p>`,
+    `<p style="margin:0 0 4px;font-size:14px;color:#333"><strong>What to do:</strong></p>`,
+    `<ol style="margin:0 0 14px;padding-inline-start:20px;font-size:14px;line-height:1.55;color:#333">${f.steps
+      .map((s) => `<li>${esc(s)}</li>`)
+      .join("")}</ol>`,
+    `<p style="margin:0 0 14px"><a href="${esc(href)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#0B1220;color:#fff;text-decoration:none;font-size:14px;font-weight:600">${
+      f.clinic ? `Open ${esc(f.clinic.name)}` : "Open Monitoring"
+    }</a></p>`,
+    `<p style="margin:0 0 20px;font-size:12px;line-height:1.5;color:#888">Technical detail: ${esc(f.detail)}</p>`,
+  ].join("");
+}
+
+function findingText(f: Finding): string {
+  return [
+    f.title,
+    `Who is affected: ${f.impact}`,
+    "What to do:",
+    ...f.steps.map((s, i) => `  ${i + 1}. ${s}`),
+    `Open: ${appUrl() || ""}${f.link ?? "/admin/monitoring"}`,
+    `Technical detail: ${f.detail}`,
+  ].join("\n");
+}
+
+function wrap(lead: string | null, inner: string): string {
   return [
     `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px">`,
-    `<h2 style="margin:0 0 12px;font-size:18px">${esc(title)}</h2>`,
-    ...blocks.map(
-      (b) =>
-        `<p style="margin:0 0 12px;font-size:14px;line-height:1.5;color:#333">${esc(b)}</p>`
-    ),
-    `<p style="margin:18px 0 0;font-size:12px;color:#888">Clinicti platform monitoring — ${esc(
-      appUrl() || ""
-    )}/admin/monitoring</p>`,
+    lead ? `<p style="margin:0 0 16px;font-size:14px;color:#555">${esc(lead)}</p>` : "",
+    inner,
+    `<p style="margin:18px 0 0;font-size:12px;color:#888">Clinicti platform monitoring — ${esc(appUrl() || "")}/admin/monitoring</p>`,
     `</div>`,
   ].join("");
 }
 
+/** The subject names the clinic and the problem, so the inbox line alone says what is wrong. */
+function subjectFor(prefix: string, list: Finding[]): string {
+  const first = list[0];
+  const more = list.length > 1 ? ` (+${list.length - 1} more)` : "";
+  return `${prefix}: ${first.title}${more}`;
+}
+
+/** What an alert email for these findings looks like, without sending it — for QA and for reading. */
+export function previewAlertEmail(list: Finding[]): { subject: string; html: string; text: string } {
+  return {
+    subject: subjectFor("Urgent", list),
+    html: wrap(list.length > 1 ? `${list.length} things need attention now.` : null, list.map(findingHtml).join("<hr>")),
+    text: list.map(findingText).join("\n\n"),
+  };
+}
+
+async function deliverFindings(subject: string, lead: string | null, list: Finding[]): Promise<void> {
+  await send(subject, wrap(lead, list.map(findingHtml).join("<hr style=\"border:0;border-top:1px solid #eee;margin:4px 0 20px\">")), [lead ?? "", ...list.map(findingText)].filter(Boolean).join("\n\n"));
+}
+
+/** Plain paragraphs: the clearances, the all-clear, the database that cannot be reached. */
 async function deliver(subject: string, title: string, blocks: string[]): Promise<void> {
+  await send(
+    subject,
+    wrap(null, [`<h2 style="margin:0 0 12px;font-size:18px">${esc(title)}</h2>`, ...blocks.map((b) => `<p style="margin:0 0 12px;font-size:14px;line-height:1.5;color:#333">${esc(b)}</p>`)].join("")),
+    [title, "", ...blocks].join("\n")
+  );
+}
+
+async function send(subject: string, htmlBody: string, text: string): Promise<void> {
   if (!emailConfigured()) {
     console.warn(`[ops] ${subject} (not sent: RESEND_API_KEY is unset)`);
     return;
@@ -684,8 +837,8 @@ async function deliver(subject: string, title: string, blocks: string[]): Promis
     const res = await sendEmail({
       to: address,
       subject,
-      html: html(title, blocks),
-      text: plain([title, "", ...blocks]),
+      html: htmlBody,
+      text,
     });
     if (!res.ok && !res.skipped) console.error(`[ops] send to ${address} failed: ${res.error}`);
   }
@@ -720,7 +873,7 @@ export async function reconcile(
   emailed: string[];
 }> {
   const open = await withSystem(async (c) =>
-    (await c.query(`select key, title, severity, last_notified, notifications from ops_alerts`))
+    (await c.query(`select key, title, severity, last_notified, notifications, opened_at from ops_alerts`))
       .rows
   );
   const openByKey = new Map(open.map((r) => [r.key as string, r]));
@@ -821,19 +974,19 @@ export async function reconcile(
     pointless.
   */
   if (announce.length) {
-    await deliver(
-      announce.length === 1
-        ? `Clinicti: ${announce[0].title}`
-        : `Clinicti: ${announce.length} problems`,
-      announce.length === 1 ? announce[0].title : `${announce.length} things need attention`,
-      announce.flatMap((f) => (announce.length === 1 ? [f.detail] : [`${f.title} — ${f.detail}`]))
+    await deliverFindings(
+      subjectFor("Urgent", announce),
+      announce.length > 1 ? `${announce.length} things need attention now.` : null,
+      announce
     );
   }
   if (persisting.length) {
-    await deliver(
-      `Clinicti: still unresolved (${persisting.length})`,
-      "These were reported earlier and are still true",
-      persisting.map((f) => `${f.title} — ${f.detail}`)
+    await deliverFindings(
+      subjectFor("Still unresolved", persisting),
+      `Reported earlier and still true. ${persisting.length === 1 ? "It" : "Each"} was first seen ${persisting
+        .map((f) => fmtWhen(openByKey.get(f.key)?.opened_at))
+        .join(", ")}.`,
+      persisting
     );
   }
   /*
@@ -847,12 +1000,15 @@ export async function reconcile(
   const cleared = resolved.filter((k) => openByKey.get(k)?.severity === "urgent");
   if (cleared.length) {
     const titles = cleared.map((k) => openByKey.get(k)?.title ?? k);
+    const lasted = (k: string) => {
+      const at = openByKey.get(k)?.opened_at;
+      const h = at ? (Date.now() - new Date(at).getTime()) / 3_600_000 : NaN;
+      return Number.isFinite(h) ? (h < 1 ? `${Math.max(1, Math.round(h * 60))} min` : `${h.toFixed(h < 10 ? 1 : 0)} h`) : "";
+    };
     await deliver(
-      cleared.length === 1
-        ? `Clinicti: resolved — ${titles[0]}`
-        : `Clinicti: ${cleared.length} resolved`,
-      "Cleared",
-      titles.map((t) => `No longer true: ${t}`)
+      cleared.length === 1 ? `Resolved: ${titles[0]}` : `Resolved: ${titles[0]} (+${cleared.length - 1} more)`,
+      cleared.length === 1 ? "Fixed — nothing more to do" : `${cleared.length} problems fixed — nothing more to do`,
+      cleared.map((k, i) => `${titles[i]}${lasted(k) ? ` — lasted ${lasted(k)}` : ""}.`)
     );
   }
 
@@ -897,10 +1053,10 @@ export async function heartbeat(openCount: number): Promise<boolean> {
 
   await deliver(
     "Clinicti: weekly all-clear",
-    "Nothing needs attention",
+    openCount ? `${openCount} open item(s), none urgent` : "Nothing needs attention",
     [
-      `Open alerts: ${openCount}.`,
       `Backups: ${backupLine}.`,
+      `Open items on Monitoring: ${openCount}${openCount ? " — notices only; anything urgent would have been emailed" : ""}.`,
       "This message exists so that silence from this address means the monitoring is alive, " +
         "rather than that it stopped running.",
     ]
@@ -957,12 +1113,12 @@ export async function watchdogPass(): Promise<Finding[]> {
     {
       key: WORKER_KEY,
       severity: "urgent",
-      title: `The worker has been silent for ${Math.round(idleMs / 60_000)} minutes`,
+      title: `The worker has stopped (silent for ${Math.round(idleMs / 60_000)} minutes)`,
       detail:
-        "It rewrites its heartbeat every 60 seconds whether or not it has work, so this means " +
-        "the process is not running. WhatsApp is down for every clinic, reminders are not going " +
-        "out and nothing is being rendered. Check `npm run logs` — a crash loop leaves no trace " +
-        "in the deploy status.",
+        "It rewrites its heartbeat every 60 seconds whether or not it has work, so the process is " +
+        "not running. A crash loop leaves no trace in the deploy status.",
+      impact: "WhatsApp is down for every clinic: no reminders, no replies to patients, no signed PDFs.",
+      steps: ["Open the worker's logs (`npm run logs`) and find why it stopped.", "Restart or redeploy it; this clears once its heartbeat returns."],
     },
   ];
 }
@@ -1018,8 +1174,8 @@ export async function opsWatch(): Promise<void> {
     await heartbeat(findings.length);
     if (dbDownSince) {
       dbDownSince = 0;
-      await deliver("Clinicti: resolved — database reachable again", "Cleared", [
-        "The database is answering again.",
+      await deliver("Resolved: the database is reachable again", "Fixed — nothing more to do", [
+        "The monitor reached the database again and finished a full pass.",
       ]);
     }
   } catch (e) {
@@ -1029,9 +1185,10 @@ export async function opsWatch(): Promise<void> {
     // — which is exactly what is not working.
     if (Date.now() - dbDownSince < RENOTIFY_MS) return;
     dbDownSince = Date.now();
-    await deliver("Clinicti: the platform monitor cannot reach the database", "Database", [
-      `The worker could not complete a health pass: ${msg.slice(0, 300)}`,
-      "If the web app is also failing, this is an outage rather than a blip.",
+    await deliver("Urgent: the database cannot be reached", "The database cannot be reached", [
+      "Who is affected: if the web app is failing too, every clinic is down — nobody can open patients, book or take payments.",
+      "What to do: 1. Open app.clinicti.app to see whether clinics are affected. 2. Check Postgres-EU on Railway (memory, restarts, connections) and the pooler.",
+      `Technical detail: the worker could not complete a health pass — ${msg.slice(0, 300)}`,
     ]).catch(() => {});
   }
 }

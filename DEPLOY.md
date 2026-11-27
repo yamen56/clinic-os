@@ -527,9 +527,21 @@ The worker checks every five minutes and emails when any of these is true:
 | Background jobs failing | 5 in an hour |
 | Queue not draining | 20 jobs waiting over 15 minutes |
 | WhatsApp sends failing | 10 in an hour |
-| A clinic off WhatsApp | 30 minutes, alerted **per clinic** |
+| A clinic logged out of WhatsApp (needs a code scanned) | 1 hour, alerted **per clinic** |
+| A clinic disconnected but still reconnecting | recorded at 6 hours, emailed at 24 |
+| Worker near its memory limit | 80% of `WORKER_MEMORY_LIMIT_MB` |
+| Worker silent (checked from the web app) | 5 minutes |
 | Web app unreachable or unhealthy | immediately |
 | A health check itself throwing | immediately |
+
+Each email names the clinic when it is about one, says **who is affected** and
+**what to do** in numbered steps (for a WhatsApp logout: the owner's name and
+number to call), links to the exact page that fixes it, and puts the technical
+detail last. Trends and anything that heals itself — a new app error, a big
+table, a number messaging people who never reply — are recorded on Monitoring
+and never emailed. Billing items (trials ending, payments due) are on the admin
+Overview's "Needs you" list, not in this inbox. Preview what the emails say
+with `npx tsx scripts/preview-alerts.ts out.html`.
 
 **Not being ignorable is the design goal.** An alerter that mails on every tick
 is filtered within a day, and a filtered alerter is worse than none — it looks
