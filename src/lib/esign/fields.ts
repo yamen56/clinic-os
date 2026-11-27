@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { DateTime } from "luxon";
 import type { FieldType } from "./constants";
+import { isAllergyField } from "../medical-history";
 
 /**
  * Merge variables.
@@ -272,6 +273,15 @@ function resolveOne(
     return { value: String(raw), fixHint: "patient" };
   }
 
+  /*
+    An allergy field merges what the medical history says: that is where the
+    doctor records allergies, and a form must not print an older answer
+    (lib/medical-history, migration 0122).
+  */
+  if (isAllergyField(def)) {
+    const h = (p.medical_history ?? {}) as { allergies?: unknown };
+    if (typeof h.allergies === "string" && h.allergies.trim()) return { value: h.allergies.trim(), fixHint: "patient" };
+  }
   const custom = (p.custom_fields ?? {}) as Record<string, unknown>;
   const storageKey = def.storage_key ?? def.key.replace(/^patient\./, "");
   const raw = custom[storageKey];

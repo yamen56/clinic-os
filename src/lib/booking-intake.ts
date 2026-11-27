@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { addAllergyText, isAllergyField } from "./medical-history";
 
 /**
  * The questions a clinic asks on its booking page, and what happens to the
@@ -249,11 +250,11 @@ export async function applyAnswersToPatient(
 
   const defs = (
     await c.query(
-      `select key, source_column, storage_key from patient_field_definitions
+      `select key, source_column, storage_key, label, label_ar from patient_field_definitions
        where clinic_id = $1 and key = any($2::text[])`,
       [clinicId, mapped.map((q) => q.patient_field_key)]
     )
-  ).rows as { key: string; source_column: string | null; storage_key: string | null }[];
+  ).rows as { key: string; source_column: string | null; storage_key: string | null; label: string | null; label_ar: string | null }[];
   const defByKey = new Map(defs.map((d) => [d.key, d]));
 
   // The only columns a public form is allowed to fill. Phone is the patient
@@ -262,6 +263,8 @@ export async function applyAnswersToPatient(
   const WRITABLE = new Set(["birth_date", "gender", "secondary_phone_e164"]);
 
   const custom: Record<string, string> = {};
+  // An answer about allergies is a medical fact: it goes where the doctor and the prescription look (lib/medical-history).
+  let allergies = "";
   for (const q of mapped) {
     const a = byId.get(q.id);
     if (!a || !a.value) continue;
@@ -293,7 +296,21 @@ export async function applyAnswersToPatient(
       }
       continue;
     }
+    if (isAllergyField(def)) allergies = addAllergyText(allergies, a.value);
     custom[def.storage_key ?? def.key.replace(/^patient\./, "")] = a.value;
+  }
+
+  if (allergies) {
+    const cur = (await c.query(`select medical_history from patients where id = $1 and clinic_id = $2 for update`, [patientId, clinicId])).rows[0];
+    const h = (cur?.medical_history ?? {}) as Record<string, unknown>;
+    const next = addAllergyText(typeof h.allergies === "string" ? h.allergies : "", allergies);
+    if (next !== h.allergies) {
+      await c.query(`update patients set medical_history = $3::jsonb where id = $1 and clinic_id = $2`, [
+        patientId,
+        clinicId,
+        JSON.stringify({ ...h, allergies: next }),
+      ]);
+    }
   }
 
   if (Object.keys(custom).length) {

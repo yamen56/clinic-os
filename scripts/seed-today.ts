@@ -90,7 +90,7 @@ async function main() {
     const day = now.startOf("day");
     const anchor = DateTime.max(day.set({ hour: 12 }), DateTime.min(now, day.set({ hour: 20, minute: 30 })));
     type Plan = { at: DateTime; status: string; stage?: "seated" | "waiting"; source?: string; pay?: "full" | "part" | "none" };
-    const plan: Plan[] = [
+    const plan: Plan[] = ([
       { at: anchor.minus({ hours: 3, minutes: 30 }), status: "completed", pay: "full" },
       { at: anchor.minus({ hours: 3 }), status: "completed", pay: "full" },
       { at: anchor.minus({ hours: 2, minutes: 15 }), status: "completed", pay: "part" },
@@ -100,7 +100,7 @@ async function main() {
       { at: anchor.minus({ minutes: 5 }), status: "confirmed", stage: "waiting" },
       { at: anchor.plus({ minutes: 45 }), status: "confirmed" },
       { at: anchor.plus({ hours: 1, minutes: 30 }), status: "scheduled", source: "booking_link" },
-    ].map((p) => ({ ...p, at: p.at.startOf("hour").plus({ minutes: Math.round(p.at.minute / 15) * 15 }) }));
+    ] as Plan[]).map((p) => ({ ...p, at: p.at.startOf("hour").plus({ minutes: Math.round(p.at.minute / 15) * 15 }) }));
 
     if (DRY) {
       console.log(`services: ${services.length || "none — 3 will be created"}; doctors: ${doctors.length}`);

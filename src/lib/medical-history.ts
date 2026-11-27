@@ -179,3 +179,31 @@ export function allergyFor(allergies: string, medicine: string): string | null {
 export function hasHistory(h: MedicalHistory): boolean {
   return h.conditions.length > 0 || !!h.allergies.trim() || !!h.medications.trim() || !!h.notes.trim();
 }
+
+/*
+  Allergies have one home: the medical history (2026-11-28).
+
+  Clinics had also made an "Allergies" / «الحساسية» custom field — some demo
+  clinics were seeded with one — and a booking question could fill it. Its
+  value never reached the medical history card or the prescription's allergy
+  alert, so a file could say "Allergy: penicillin" in one card and "no
+  allergies" in the next. Migration 0122 copied those values into the medical
+  history and took the field off the profile form; these keep it that way.
+*/
+
+/** A patient custom field that is really an allergy list, by its key or its name in either language. */
+export function isAllergyField(def: { key?: string | null; storage_key?: string | null; label?: string | null; label_ar?: string | null }): boolean {
+  return (
+    /allerg/i.test(`${def.key ?? ""} ${def.storage_key ?? ""} ${def.label ?? ""}`) || /حساسي/.test(def.label_ar ?? "")
+  );
+}
+
+/** `existing` with `incoming` added, unless it already says it. Kept within the 300 the history allows. */
+export function addAllergyText(existing: string, incoming: string): string {
+  const a = existing.trim();
+  const b = incoming.trim();
+  if (!b) return a;
+  if (!a) return b.slice(0, 300);
+  if (a.toLowerCase().includes(b.toLowerCase())) return a;
+  return `${a}، ${b}`.slice(0, 300);
+}
