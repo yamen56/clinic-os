@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { deleteClinicAction, restoreClinicAction, purgeClinicAction } from "../../actions";
+import { deleteClinicAction, restoreClinicAction, purgeClinicAction, updateSubscriptionAction } from "../../actions";
+import { ConfirmDialog } from "@/components/ui/modal";
 import { useI18n } from "@/lib/i18n/client";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { Modal } from "@/components/ui/modal";
 import { Field, Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { RESTORE_WINDOW_DAYS, daysUntilPurge } from "@/lib/clinic-lifecycle";
-import { Trash2, RotateCcw, AlertTriangle } from "lucide-react";
+import { Trash2, RotateCcw, AlertTriangle, PauseCircle, PlayCircle } from "lucide-react";
 
 type Mode = "delete" | "purge";
 
@@ -25,8 +26,15 @@ type Mode = "delete" | "purge";
  */
 export function DangerZone({
   clinic,
+  canSuspend = false,
+  canDelete = true,
 }: {
-  clinic: { id: string; slug: string; deletedAt: string | null };
+  /** `status`: the subscription status, for Stop access / Give access back. */
+  clinic: { id: string; slug: string; deletedAt: string | null; status?: string };
+  /** clinics.edit: stopping access is a billing change, not a deletion. */
+  canSuspend?: boolean;
+  /** clinics.delete. */
+  canDelete?: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -36,6 +44,16 @@ export function DangerZone({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [restorePending, startRestore] = useTransition();
+  /*
+    Stopping a clinic's access without deleting anything (2026-11-28, Yamen:
+    "stop them from using Clinicti"): the subscription goes to suspended —
+    nobody at the clinic can sign in, its booking page and AI stop, its owners
+    are emailed — and everything is still there when access is given back.
+  */
+  const [status, setStatus] = useState(clinic.status ?? "active");
+  const [suspendOpen, setSuspendOpen] = useState(false);
+  const [suspendPending, startSuspend] = useTransition();
+  const suspended = status === "suspended";
 
   const close = () => {
     setMode(null);
@@ -125,21 +143,54 @@ export function DangerZone({
   }
 
   return (
-    <>
+    // Card drops data-* (memory: the UI kit swallows props), so the marker is on a wrapper.
+    <div data-danger-zone>
       <Card className="mt-4 border-danger/20">
         <CardHeader title={<span className="text-danger">{t.admin.dangerZone}</span>} />
+        {canSuspend && (
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line px-5 py-4">
+            <p className="max-w-lg text-[0.8125rem] leading-relaxed text-ink-500">
+              {suspended ? t.admin.resumeBody : t.admin.suspendBody}
+            </p>
+            <Button variant={suspended ? "primary" : "outline"} onClick={() => setSuspendOpen(true)} data-suspend-clinic={suspended ? "resume" : "stop"}>
+              {suspended ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
+              {suspended ? t.admin.resumeAccess : t.admin.stopAccess}
+            </Button>
+          </div>
+        )}
+        {canDelete && (
         <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
           <p className="max-w-lg text-[0.8125rem] leading-relaxed text-ink-500">
             {t.admin.deleteClinicBody.replace("{days}", String(RESTORE_WINDOW_DAYS))}
           </p>
-          <Button variant="danger" onClick={() => setMode("delete")}>
+          <Button variant="danger" onClick={() => setMode("delete")} data-delete-clinic>
             <Trash2 className="h-4 w-4" />
             {t.admin.deleteClinic}
           </Button>
         </div>
+        )}
       </Card>
       {confirmModal("delete")}
-    </>
+      <ConfirmDialog
+        open={suspendOpen}
+        onClose={() => setSuspendOpen(false)}
+        title={suspended ? t.admin.resumeAccess : t.admin.stopAccess}
+        body={suspended ? t.admin.resumeBody : t.admin.suspendBody}
+        confirmLabel={suspended ? t.admin.resumeAccess : t.admin.stopAccess}
+        cancelLabel={t.common.cancel}
+        danger={!suspended}
+        loading={suspendPending}
+        onConfirm={() =>
+          startSuspend(async () => {
+            const next = suspended ? "active" : "suspended";
+            await updateSubscriptionAction(clinic.id, { status: next });
+            setStatus(next);
+            setSuspendOpen(false);
+            toast(next === "suspended" ? t.admin.accessStopped : t.admin.accessResumed);
+          })
+        }
+      />
+    </div>
   );
 
   function confirmModal(m: Mode) {

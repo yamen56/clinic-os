@@ -271,8 +271,16 @@ export default async function AdminClinicDetail({
               </ul>
             </Card>
           </div>
+          {/* At the foot of the clinic's first tab, where the agency looks for it: stop access, or delete. */}
           {deleted && s.adminCaps["clinics.delete"] && (
             <DangerZone clinic={{ id: clinic.id, slug: clinic.slug, deletedAt: new Date(clinic.deleted_at).toISOString() }} />
+          )}
+          {!deleted && (s.adminCaps["clinics.delete"] || s.adminCaps["clinics.edit"]) && (
+            <DangerZone
+              clinic={{ id: clinic.id, slug: clinic.slug, deletedAt: null, status: clinic.subscription_status }}
+              canSuspend={s.adminCaps["clinics.edit"]}
+              canDelete={s.adminCaps["clinics.delete"]}
+            />
           )}
         </div>
       )}
@@ -296,7 +304,6 @@ export default async function AdminClinicDetail({
               dailyCap: Number(clinic.daily_outbound_cap ?? 200),
             }}
           />
-          {s.adminCaps["clinics.delete"] && <DangerZone clinic={{ id: clinic.id, slug: clinic.slug, deletedAt: null }} />}
         </div>
       )}
 

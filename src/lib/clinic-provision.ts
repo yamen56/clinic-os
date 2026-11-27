@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import { RECIPES_ON_BY_DEFAULT } from "./esign/constants";
 import { seedStaffAlerts } from "./staff-alerts";
-import { toFeatureSetting, type FeatureMap } from "./features";
+import { featureSql, toFeatureSetting, type FeatureMap } from "./features";
 import { PLAN_PROFILES, planFeatures, type Plan } from "./plans";
 import { clinicSpecialties, type Specialty } from "./specialties";
 import { randomUUID } from "node:crypto";
@@ -118,6 +118,9 @@ export async function pendingDefaultRecipes(
         -- A psychiatry clinic gets the discreet reminder instead of the one that names it.
         and not (key = 'reminder_24h' and $1 = 'psychiatry')
         and key not in (select recipe_key from automations where clinic_id = $2 and recipe_key is not null)
+        -- A clinic without consent forms (the Doctor plan) gets no document alerts.
+        and (trigger_type not like 'document%'
+             or exists (select 1 from clinics cl where cl.id = $2 and ${featureSql("documents")}))
         /*
           Nor beside a flow of the clinic's own that already does the same
           job — a reminder it built by hand, on the same trigger at the same

@@ -71,7 +71,8 @@ export function settingsItems(
     { href: `${base}/einvoicing`, label: t.einvoicing.title, icon: FileCheck2, group: "services", show: has.einvoicing && caps["settings.clinic"] },
     { href: `${base}/fields`, label: t.fields.title, icon: ListPlus, group: "patients", show: caps["settings.clinic"] },
     { href: `${base}/tags`, label: t.tags.title, icon: Tags, group: "patients", show: caps["settings.tags"] },
-    { href: `${base}/documents`, label: t.settings.documentTemplates, icon: FileSignature, group: "patients" },
+    // Consent-form templates belong to the documents module (not on the Doctor plan, lib/plans).
+    { href: `${base}/documents`, label: t.settings.documentTemplates, icon: FileSignature, group: "patients", show: caps.documents },
     { href: `${base}/whatsapp`, label: t.settings.whatsapp, icon: MessageCircle, group: "messaging", show: caps["settings.whatsapp"] },
     { href: `${base}/booking`, label: t.settings.bookingLinks, icon: Link2, group: "messaging", show: caps["settings.booking"] },
     { href: `/c/${slug}/automations`, label: t.settings.groups.autoMessages, icon: Workflow, group: "messaging", show: caps.automations },

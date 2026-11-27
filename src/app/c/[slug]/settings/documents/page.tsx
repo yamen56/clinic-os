@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { inOrder } from "@/lib/db";
@@ -11,6 +12,8 @@ export default async function DocumentSettingsPage({
 }) {
   const { slug } = await params;
   const access = await guardCap(slug, "settings");
+  // The templates of a module the clinic's plan does not include (lib/plans).
+  if (!access.clinic.features.documents) redirect(`/c/${slug}/settings`);
 
   const data = await inClinic(access, async (c) => {
     const [templates, roles, library, clinic] = await inOrder([

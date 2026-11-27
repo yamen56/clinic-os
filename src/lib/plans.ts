@@ -4,8 +4,8 @@ import { FEATURES, type Feature, type FeatureMap } from "./features";
  * What Clinicti sells (Yamen, 2026-11-27).
  *
  *   doctor       — one doctor and their receptionist: patient files, finance,
- *                  appointments, the WhatsApp inbox, basic automations, and
- *                  consent forms signed in the clinic.
+ *                  appointments, the WhatsApp inbox and basic automations.
+ *                  No consent forms (2026-11-28).
  *   clinic_plus  — any number of staff in any roles, branches, and the online
  *                  parts: signing links, advanced automations, bulk messages,
  *                  the booking link and the machines.
@@ -53,8 +53,9 @@ export const PLAN_MODULES: readonly Feature[] = [
   "branding",
 ];
 
-const DOCTOR: Feature[] = ["conversations", "calendar", "patients", "documents", "invoices", "automations"];
-const CLINIC_PLUS: Feature[] = [...DOCTOR, "esign_remote", "automations_advanced", "campaigns", "booking", "devices", "branches"];
+// No consent forms on the Doctor plan, not even signed in the clinic (Yamen, 2026-11-28).
+const DOCTOR: Feature[] = ["conversations", "calendar", "patients", "invoices", "automations"];
+const CLINIC_PLUS: Feature[] = [...DOCTOR, "documents", "esign_remote", "automations_advanced", "campaigns", "booking", "devices", "branches"];
 const CLINIC_PRO: Feature[] = [...CLINIC_PLUS, "ai", "branding"];
 
 export type PlanProfile = {

@@ -69,6 +69,7 @@ async function main() {
   const dentalPlus = { ...planFeatures("clinic_plus"), dental: true };
   const asDoctor = applyPlan(dentalPlus, "doctor");
   check(!asDoctor.esign_remote && !asDoctor.booking && !asDoctor.campaigns && !asDoctor.devices, "the Doctor plan switches off links, booking, campaigns and devices");
+  check(!asDoctor.documents && applyPlan(asDoctor, "clinic_plus").documents, "…and consent forms, which start at Clinic+");
   check(asDoctor.dental && asDoctor.patients && asDoctor.invoices && asDoctor.automations, "…and keeps the dental chart, patients, finance and automations");
   check(applyPlan(asDoctor, "clinic_pro").ai && applyPlan(asDoctor, "clinic_pro").branding, "Clinic Pro adds the AI receptionist and branding");
   const noInvoices = maskByFeatures(allCapabilities(), { ...resolveFeatures({}), invoices: false });
@@ -199,6 +200,11 @@ async function main() {
     const menu = await page.locator("[data-settings-menu]").innerText();
     check(!menu.includes("Booking links"), "no Booking links in a Doctor-plan clinic's settings", menu.slice(0, 200));
     check((await page.locator(`a[href="/c/${doc.slug}/settings/devices"]`).count()) === 0, "no Devices either");
+    check((await page.locator(`a[href="/c/${doc.slug}/settings/documents"]`).count()) === 0, "nor consent-form templates");
+    await page.goto(`${BASE}/c/${doc.slug}/documents`, { timeout: 180000 });
+    // The guard redirects after the shell flushes (memory: guards-redirect-after-the-shell-flushes).
+    const left = await page.waitForURL((u) => u.pathname !== `/c/${doc.slug}/documents`, { timeout: 30000 }).then(() => true).catch(() => false);
+    check(left, "the Documents page is closed to a Doctor-plan clinic", page.url());
     await page.goto(`${BASE}/c/${doc.slug}/settings/plan`, { timeout: 180000 });
     await page.waitForSelector("[data-your-plan]", { timeout: 60000 });
     check((await page.locator("[data-your-plan]").getAttribute("data-your-plan")) === "doctor", "Your plan names the Doctor plan");

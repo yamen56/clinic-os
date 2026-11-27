@@ -211,7 +211,7 @@ async function main() {
     ok("the monitoring page shows the backup age and the archives themselves");
 
     // Deletion is not in their set, so the danger zone must not be rendered.
-    await lp.goto(`${BASE}/admin/clinics/${demo.slug}?tab=details`);
+    await lp.goto(`${BASE}/admin/clinics/${demo.slug}`);
     await lp.waitForLoadState("networkidle");
     if ((await seen(lp)).includes("Danger zone"))
       fail("limited admin without clinics.delete was shown the danger zone");
@@ -243,8 +243,8 @@ async function main() {
       fail("new clinic stored no explicit feature map");
     ok("the new clinic recorded an explicit module licence");
 
-    // The danger zone is at the foot of the Details tab.
-    await page.goto(`${BASE}/admin/clinics/${TEST_SLUG}?tab=details`);
+    // The danger zone is at the foot of the clinic's Overview tab.
+    await page.goto(`${BASE}/admin/clinics/${TEST_SLUG}`);
     await page.waitForSelector("text=Danger zone", { timeout: 20000 });
     await page.click("button:has-text('Delete clinic')");
     await page.waitForSelector('input[placeholder="' + TEST_SLUG + '"]', { timeout: 10000 });
@@ -312,7 +312,7 @@ async function main() {
 
     // Delete once more, then destroy for real — which must refuse to run on a
     // clinic that has not been deleted first.
-    await page.goto(`${BASE}/admin/clinics/${TEST_SLUG}?tab=details`);
+    await page.goto(`${BASE}/admin/clinics/${TEST_SLUG}`);
     await page.waitForSelector("button:has-text('Delete clinic')", { timeout: 20000 });
     await page.click("button:has-text('Delete clinic')");
     await page.fill(`input[placeholder="${TEST_SLUG}"]`, TEST_SLUG);

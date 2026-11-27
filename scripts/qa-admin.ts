@@ -148,7 +148,22 @@ async function main() {
       await until(async () => (await one(`select address from clinics where slug = $1`, [newSlug]))?.address === "Sweifieh, Amman"),
       "Details saves the address"
     );
-    check((await page.locator("text=Danger zone").count()) > 0, "the danger zone is at the foot of Details");
+    // Stopping a clinic, and deleting one, are at the foot of its Overview.
+    await page.goto(`${BASE}/admin/clinics/${newSlug}`, { timeout: 180000 });
+    await page.waitForSelector("[data-danger-zone]", { timeout: 90000 });
+    check((await page.locator("[data-delete-clinic]").count()) === 1, "Overview has the Delete button");
+    await page.click('[data-suspend-clinic="stop"]');
+    await page.getByRole("dialog").getByRole("button", { name: "Stop access" }).click();
+    check(
+      await until(async () => (await one(`select subscription_status from clinics where slug = $1`, [newSlug]))?.subscription_status === "suspended"),
+      "Stop access suspends the clinic"
+    );
+    await page.click('[data-suspend-clinic="resume"]');
+    await page.getByRole("dialog").getByRole("button", { name: "Give access back" }).click();
+    check(
+      await until(async () => (await one(`select subscription_status from clinics where slug = $1`, [newSlug]))?.subscription_status === "active"),
+      "…and Give access back restores it"
+    );
 
     await page.goto(`${BASE}/admin/clinics/${newSlug}?tab=plan`, { timeout: 180000 });
     await page.waitForSelector("[data-plan-billing]", { timeout: 90000 });
