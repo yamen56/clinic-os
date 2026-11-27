@@ -119,6 +119,8 @@ export function Shell({
     logoPath: string | null;
     /** The clinic's timezone — a found patient's next visit is in the clinic's time. */
     tz: string;
+    /** Clinic Pro's own branding (lib/white-label): the clinic's mark where Clinicti's was. */
+    whiteLabel?: boolean;
   };
   role: MemberRole;
   /** The desktop sidebar as this person left it, from the cookie (see lib/theme). */
@@ -491,12 +493,18 @@ export function Shell({
         className="fixed inset-y-0 start-0 z-40 hidden w-(--sb) flex-col border-e border-white/6 bg-night transition-[width] duration-200 ease-out md:flex"
       >
         <div className="flex h-[88px] shrink-0 items-center justify-center overflow-hidden border-b border-white/6">
-          <span className="sb-mini:hidden">
-            <BrandLockup />
-          </span>
-          <span className="hidden sb-mini:block">
-            <BrandMark size={34} />
-          </span>
+          {clinic.whiteLabel ? (
+            <Avatar name={clinic.name} size={44} color={clinic.brandColor} src={logoSrc} fit="contain" />
+          ) : (
+            <>
+              <span className="sb-mini:hidden">
+                <BrandLockup />
+              </span>
+              <span className="hidden sb-mini:block">
+                <BrandMark size={34} />
+              </span>
+            </>
+          )}
         </div>
         {/*
           The fold. On the panel's edge, where the eye goes looking for the
@@ -536,7 +544,7 @@ export function Shell({
             <div className="truncate text-[0.8125rem] font-semibold leading-tight text-white">
               {clinicDisplay}
             </div>
-            <div className="text-[length:max(11px,0.6875rem)] text-white/45">Clinicti</div>
+            {!clinic.whiteLabel && <div className="text-[length:max(11px,0.6875rem)] text-white/45">Clinicti</div>}
           </div>
           <span className="sb-mini:hidden">
             <ClinicSwitcher slug={clinic.slug} others={otherClinics} tone="night" />

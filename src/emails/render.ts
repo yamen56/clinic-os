@@ -67,6 +67,11 @@ export type RenderOptions = {
   email?: string;
   /** The colleague a member-joined email is about. */
   member?: { name: string; email: string };
+  /**
+   * The header logo. A Clinic Pro clinic's own (lib/white-label), absolute;
+   * omitted, Clinicti's mark.
+   */
+  logoUrl?: string | null;
 };
 
 const SUBJECTS: Record<EmailType, Record<EmailLocale, (o: RenderOptions) => string>> = {
@@ -239,7 +244,7 @@ export function renderEmail(opts: RenderOptions): { subject: string; html: strin
     .replaceAll("{{url}}", escapeUrl(opts.url))
     .replaceAll("{{app_url}}", escapeUrl(app))
     .replaceAll("{{app_host}}", escapeHtml(new URL(app).host))
-    .replaceAll("{{logo_url}}", logoUrl());
+    .replaceAll("{{logo_url}}", opts.logoUrl ? escapeUrl(opts.logoUrl) : logoUrl());
 
   return {
     subject: SUBJECTS[opts.type][opts.locale](opts),

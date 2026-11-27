@@ -61,8 +61,10 @@ export async function generateMetadata({
       ? `احجز موعدك في ${name}${where ? ` — ${where}` : ""} أونلاين خلال دقيقة، بدون اتصال أو انتظار.`.slice(0, 155)
       : `Book your appointment at ${name}${where ? ` — ${where}` : ""} online in under a minute. No phone call, no waiting.`.slice(0, 155);
 
+  const white = data.clinic.white_label;
   return {
-    title,
+    // A white-label clinic's page is its own: no " · Clinicti" from the root title template.
+    title: white ? { absolute: title } : title,
     description,
     alternates: { canonical: `/book/${bslug}` },
     robots: { index: true, follow: true },
@@ -70,7 +72,7 @@ export async function generateMetadata({
       title,
       description,
       url: `/book/${bslug}`,
-      siteName: "Clinicti",
+      siteName: white ? name : "Clinicti",
       type: "website",
       locale: ar ? "ar_JO" : "en_US",
     },
@@ -211,6 +213,7 @@ export default async function PublicBookingPage({
         tz: data.clinic.timezone,
         defaultLocale: data.clinic.default_locale,
         currency: data.clinic.currency,
+        whiteLabel: data.clinic.white_label,
       }}
       words={words}
       services={data.services.map((s) => ({

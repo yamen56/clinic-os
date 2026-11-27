@@ -55,7 +55,7 @@ export default async function DocumentPrintPage({
           </div>
           <footer className="sheet-foot">
             {doc.clinic.invoiceFooter && <div className="foot-clinic">{doc.clinic.invoiceFooter}</div>}
-            <PoweredBy label={CERT_LABELS[doc.language].poweredBy} showUrl />
+            <PoweredBy label={CERT_LABELS[doc.language].poweredBy} showUrl hidden={doc.clinic.whiteLabel} />
           </footer>
         </section>
       )}
@@ -281,7 +281,7 @@ function Certificate({ doc }: { doc: PrintDocument }) {
           {L.footer} {L.tzNote} {doc.timezone}.
         </p>
         <div className="cert-credit">
-          <PoweredBy label={L.poweredBy} showUrl />
+          <PoweredBy label={L.poweredBy} showUrl hidden={doc.clinic.whiteLabel} />
         </div>
       </div>
     </section>

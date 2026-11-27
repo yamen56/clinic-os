@@ -33,7 +33,9 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   if (!d) return { title: "Clinicti", robots };
   const isAr = d.v.clinic.default_locale !== "en";
   const name = (isAr ? d.v.clinic.name_ar : null) || d.v.clinic.name;
-  return { title: isAr ? `موعدك — ${name}` : `Your appointment — ${name}`, robots, referrer: "no-referrer" };
+  const title = isAr ? `موعدك — ${name}` : `Your appointment — ${name}`;
+  // A white-label clinic's page carries no " · Clinicti" from the root template.
+  return { title: d.v.clinic.white_label ? { absolute: title } : title, robots, referrer: "no-referrer" };
 }
 
 export default async function VisitPage({ params }: { params: Promise<{ token: string }> }) {
@@ -72,6 +74,7 @@ export default async function VisitPage({ params }: { params: Promise<{ token: s
         waNumber: v.clinic.wa_number,
         tz: v.clinic.timezone,
         defaultLocale: v.clinic.default_locale === "en" ? "en" : "ar",
+        whiteLabel: !!v.clinic.white_label,
       }}
       visit={{
         status: v.status,

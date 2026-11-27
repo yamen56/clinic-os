@@ -84,6 +84,8 @@ export function BookingWizard({
     tz: string;
     defaultLocale: "ar" | "en";
     currency: string;
+    /** Clinic Pro's own branding: no Clinicti credit at the foot of the page. */
+    whiteLabel?: boolean;
   };
   services: Service[];
   /** The sections this link offers, already narrowed to what it can book. */
@@ -1371,7 +1373,7 @@ export function BookingWizard({
         </div>
 
         <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 py-8 text-center">
-          <PoweredBy label={t.poweredBy} />
+          <PoweredBy label={t.poweredBy} hidden={clinic.whiteLabel} />
           <PrivacyLink label={t.privacy} />
         </footer>
       </div>

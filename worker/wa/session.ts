@@ -6,6 +6,7 @@ import makeWASocket, {
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import { withSystem } from "../db";
+import { hasFeature } from "../features";
 import { useDbAuthState } from "./auth-state";
 import { handleUpsert } from "./inbound";
 import { handleChatsRead, handleReceipts } from "./receipts";
@@ -71,12 +72,26 @@ export class WASession {
       const { state, saveCreds, clear } = await useDbAuthState(this.clinicId);
       this.clearAuth = clear;
       const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined as unknown as [number, number, number] }));
+      /*
+        The name the clinic's phone lists under Linked devices: the clinic's
+        own on Clinic Pro (lib/white-label), Clinicti otherwise. Read when the
+        link is made; an existing link keeps the name it was made with.
+      */
+      const deviceName = await withSystem(async (c) =>
+        (
+          await c.query(
+            `select case when ${hasFeature("branding")} then left(coalesce(nullif(cl.name_ar, ''), cl.name), 40) else 'Clinicti' end as n
+               from clinics cl where cl.id = $1`,
+            [this.clinicId]
+          )
+        ).rows[0]?.n as string | undefined
+      ).catch(() => undefined);
 
       const sock = makeWASocket({
         version,
         auth: state,
         logger,
-        browser: ["Clinicti", "Chrome", "1.0.0"],
+        browser: [deviceName || "Clinicti", "Chrome", "1.0.0"],
         markOnlineOnConnect: false,
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,

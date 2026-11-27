@@ -1,4 +1,5 @@
 import { withSystem } from "../db";
+import { featureSql } from "../features";
 import { renderUrlToPdf, renderOverlays } from "../pdf";
 import { readFileBuffer, saveFile } from "../storage";
 import { appUrl } from "../urls";
@@ -27,8 +28,10 @@ export type PdfResult = { path: string; bytes: number } | { error: string };
 export async function generateFinalPdf(documentId: string): Promise<PdfResult> {
   const doc = await withSystem(async (c) => {
     const r = await c.query(
-      `select id, clinic_id, source, title, status, source_pdf_path, content_hash
-       from documents where id = $1`,
+      `select d.id, d.clinic_id, d.source, d.title, d.status, d.source_pdf_path, d.content_hash,
+              -- Who made it, as the PDF's metadata says: the clinic itself on Clinic Pro (lib/white-label).
+              case when ${featureSql("branding")} then coalesce(nullif(cl.name_ar, ''), cl.name) else 'Clinicti' end as producer
+       from documents d join clinics cl on cl.id = d.clinic_id where d.id = $1`,
       [documentId]
     );
     return r.rows[0] as
@@ -40,6 +43,7 @@ export async function generateFinalPdf(documentId: string): Promise<PdfResult> {
           status: string;
           source_pdf_path: string | null;
           content_hash: string | null;
+          producer: string;
         }
       | undefined;
   });
@@ -96,15 +100,15 @@ export async function generateFinalPdf(documentId: string): Promise<PdfResult> {
  */
 async function tagMetadata(
   pdf: Buffer,
-  doc: { id: string; title: string; content_hash: string | null }
+  doc: { id: string; title: string; content_hash: string | null; producer?: string }
 ): Promise<Buffer> {
   const { PDFDocument } = await import("pdf-lib");
   const d = await PDFDocument.load(pdf, { ignoreEncryption: true });
   d.setTitle(doc.title);
   d.setSubject(`Signed document ${doc.id}`);
   d.setKeywords([doc.id, doc.content_hash ?? ""].filter(Boolean));
-  d.setProducer("Clinicti");
-  d.setCreator("Clinicti");
+  d.setProducer(doc.producer || "Clinicti");
+  d.setCreator(doc.producer || "Clinicti");
   return Buffer.from(await d.save());
 }
 

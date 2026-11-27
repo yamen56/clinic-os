@@ -20,6 +20,7 @@ import {
 } from "@/lib/permissions";
 import { applyPay, payFitsRole, paySchema, syncSalaryBill, type Pay } from "./pay";
 import { memberHistorySql } from "@/lib/member-history";
+import { whiteLabelSql } from "@/lib/white-label";
 import { isMemberLimitError, seatState } from "@/lib/plan-change";
 
 const addStaffSchema = z.object({
@@ -283,6 +284,7 @@ async function emailMemberAccess(
         name: u.full_name,
         clinic: clinic.name,
         url: inviteUrl,
+        logoUrl: clinic.logoUrl,
       }),
     });
     if (!sent.ok && !sent.skipped) console.error("[invite email]", sent.error);
@@ -298,6 +300,7 @@ async function emailMemberAccess(
       clinic: clinic.name,
       url: `${appUrl()}/c/${slug}`,
       email: u.email,
+      logoUrl: clinic.logoUrl,
     }),
   });
   if (!sent.ok && !sent.skipped) console.error("[added email]", sent.error);
@@ -312,14 +315,18 @@ async function emailMemberAccess(
 async function clinicEmailContext(
   c: PoolClient,
   clinicId: string
-): Promise<{ name: string; locale: "en" | "ar" }> {
+): Promise<{ name: string; locale: "en" | "ar"; logoUrl: string | null }> {
   const r = await c.query(
-    `select coalesce(name_ar, name) as n, default_locale from clinics where id = $1`,
+    `select coalesce(name_ar, name) as n, default_locale, slug, logo_path, ${whiteLabelSql("clinics")} as white_label
+       from clinics where id = $1`,
     [clinicId]
   );
+  const row = r.rows[0];
   return {
-    name: (r.rows[0]?.n as string) ?? "Clinicti",
-    locale: r.rows[0]?.default_locale === "en" ? "en" : "ar",
+    name: (row?.n as string) ?? "Clinicti",
+    locale: row?.default_locale === "en" ? "en" : "ar",
+    // Clinic Pro's invitations carry the clinic's own logo (lib/white-label).
+    logoUrl: row?.white_label && row?.logo_path ? `${appUrl()}/api/public/clinic-logo/${row.slug}` : null,
   };
 }
 

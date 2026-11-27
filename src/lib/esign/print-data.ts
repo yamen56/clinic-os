@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { withSystem } from "../db";
+import { featureSql } from "../features";
 import { readFileBuffer } from "../storage";
 import { describeDevice } from "./events";
 import { shortHash } from "./render";
@@ -60,6 +61,8 @@ export type PrintDocument = {
     addressAr: string | null;
     phone: string | null;
     invoiceFooter: string;
+    /** Clinic Pro's own branding (lib/white-label): no Clinicti credit on the print. */
+    whiteLabel: boolean;
   };
   patientName: string | null;
   signers: PrintSigner[];
@@ -101,6 +104,7 @@ export async function loadPrintDocument(documentId: string): Promise<PrintDocume
       await c.query(
         `select d.*, cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address,
                 cl.address_ar, cl.phone_e164 as clinic_phone, cl.timezone, cl.invoice_footer,
+                ${featureSql("branding")} as white_label,
                 p.full_name as patient_name, t.fields_schema as template_fields_schema
          from documents d
          join clinics cl on cl.id = d.clinic_id
@@ -241,6 +245,7 @@ export async function loadPrintDocument(documentId: string): Promise<PrintDocume
       addressAr: doc.address_ar,
       phone: doc.clinic_phone,
       invoiceFooter: doc.invoice_footer ?? "",
+      whiteLabel: !!doc.white_label,
     },
     patientName: doc.patient_name ?? null,
     signers: printSigners,

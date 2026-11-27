@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { withSystem } from "./db";
 import { featureSql, patientChangesSql } from "./features";
+import { whiteLabelSql } from "./white-label";
 import {
   loadBookingQuestions,
   toPublicQuestion,
@@ -80,6 +81,8 @@ export type PublicLink = {
     vocabulary: "medical" | "agency";
     /** What a patient may do with a visit from its own link (0115): the page offers "Already booked?" unless off. */
     patient_changes: "off" | "cancel" | "cancel_move";
+    /** Clinic Pro's own branding (lib/white-label): no Clinicti credit or title. */
+    white_label: boolean;
   };
   services: {
     id: string;
@@ -134,7 +137,7 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       await c.query(
         `select cl.id, cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.address_ar,
                 cl.phone_e164, cl.google_maps_url, cl.timezone, cl.default_locale, cl.working_hours, cl.blocked_dates,
-                cl.currency, cl.vocabulary, ${patientChangesSql()} as patient_changes,
+                cl.currency, cl.vocabulary, ${patientChangesSql()} as patient_changes, ${whiteLabelSql()} as white_label,
                 coalesce(ws.status = 'connected', false) as wa_connected
          from clinics cl left join whatsapp_sessions ws on ws.clinic_id = cl.id
          where cl.id = $1`,

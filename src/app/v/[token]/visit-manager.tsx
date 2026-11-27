@@ -46,6 +46,8 @@ export function VisitManager({
     waNumber: string | null;
     tz: string;
     defaultLocale: "ar" | "en";
+    /** Clinic Pro's own branding: no Clinicti credit. */
+    whiteLabel?: boolean;
   };
   visit: {
     status: string;
@@ -622,7 +624,7 @@ export function VisitManager({
         </div>
 
         <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 py-8 text-center">
-          <PoweredBy label={tb.poweredBy} />
+          <PoweredBy label={tb.poweredBy} hidden={clinic.whiteLabel} />
           <PrivacyLink label={tb.privacy} />
         </footer>
       </div>

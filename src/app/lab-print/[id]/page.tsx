@@ -10,6 +10,7 @@ import { orderRows } from "@/lib/charts/dental/lab-message";
 import { PRINT_KIND } from "@/lib/charts/dental/lab-order";
 import { PERMANENT_UPPER, PERMANENT_LOWER } from "@/lib/charts/dental/teeth";
 import { PoweredBy } from "@/components/powered-by";
+import { whiteLabelSql } from "@/lib/white-label";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -44,7 +45,8 @@ export default async function LabPrintPage({
               p.full_name as patient_name,
               m.label, m.site, m.treatment_key, m.detail,
               coalesce(du.full_name, cu.full_name) as doctor_name, coalesce(dm.title, '') as doctor_title,
-              cl.name as clinic_name, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.phone_e164 as clinic_phone
+              cl.name as clinic_name, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.phone_e164 as clinic_phone,
+              ${whiteLabelSql()} as white_label
          from lab_cases lc
          join dental_labs l on l.id = lc.lab_id
          join patients p on p.id = lc.patient_id
@@ -234,7 +236,7 @@ export default async function LabPrintPage({
           </div>
 
           <div className="mt-8 flex justify-center border-t border-line pt-4">
-            <PoweredBy label={S.poweredBy} showUrl />
+            <PoweredBy label={S.poweredBy} showUrl hidden={!!r.white_label} />
           </div>
         </div>
       </div>

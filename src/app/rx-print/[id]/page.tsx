@@ -8,6 +8,7 @@ import { formatPhone } from "@/lib/phone";
 import { dictFor } from "@/lib/i18n/client-dict";
 import { itemDetail, rxNumber, type RxItem } from "@/lib/prescriptions";
 import { PoweredBy } from "@/components/powered-by";
+import { whiteLabelSql } from "@/lib/white-label";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -48,6 +49,7 @@ export default async function PrescriptionPrintPage({
               p.full_name as patient_name,
               u.signature_png_path,
               cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.address_ar,
+              ${whiteLabelSql()} as white_label,
               cl.phone_e164 as clinic_phone, cl.timezone, cl.moh_license_no
          from prescriptions rx
          join patients p on p.id = rx.patient_id
@@ -223,7 +225,7 @@ export default async function PrescriptionPrintPage({
           </div>
 
           <div className="mt-8 flex justify-center border-t border-line pt-4">
-            <PoweredBy label={L.poweredBy} showUrl />
+            <PoweredBy label={L.poweredBy} showUrl hidden={!!rx.white_label} />
           </div>
         </div>
       </div>

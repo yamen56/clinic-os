@@ -45,6 +45,8 @@ export type PublicSigningView = {
       that until now never reached it.
     */
     vocabulary: "medical" | "agency";
+    /** Clinic Pro's own branding (lib/white-label): no Clinicti credit on the page. */
+    whiteLabel?: boolean;
   } | null;
   document: {
     id: string;
@@ -185,7 +187,7 @@ async function loadContextFor(
     await c.query(
       `select d.*, cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color,
               cl.vocabulary, cl.phone_e164 as clinic_phone, t.fields_schema,
-              ${featureSql("esign_remote")} as remote_ok
+              ${featureSql("esign_remote")} as remote_ok, ${featureSql("branding")} as white_label
        from documents d
        join clinics cl on cl.id = d.clinic_id
        left join document_templates t on t.id = d.template_id
@@ -259,6 +261,7 @@ async function loadContextFor(
         brandColor: doc.brand_color,
         vocabulary: doc.vocabulary === "agency" ? "agency" : "medical",
         phone: doc.clinic_phone,
+        whiteLabel: !!doc.white_label,
       },
       document: {
         id: doc.id,

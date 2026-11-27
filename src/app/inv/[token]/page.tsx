@@ -5,6 +5,7 @@ import { fmtDate, fmtDateOnly, fmtMoney } from "@/lib/dates";
 import { asTaxCategory, taxBreakdown } from "@/lib/invoices";
 import QRCode from "qrcode";
 import { PoweredBy, PrivacyLink } from "@/components/powered-by";
+import { whiteLabelSql } from "@/lib/white-label";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -14,6 +15,7 @@ async function loadInvoice(token: string) {
       await c.query(
         `select i.*, p.full_name as patient_name, p.phone_e164 as patient_phone,
                 cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.address_ar,
+                ${whiteLabelSql()} as white_label,
                 cl.phone_e164 as clinic_phone, cl.default_locale, cl.timezone,
                 cl.invoice_footer, cl.payment_instructions, cl.invoice_tax_label,
                 es.tax_number as seller_tax_number, es.registered_name as seller_registered_name,
@@ -355,7 +357,7 @@ export default async function PublicInvoicePage({
             one — two rules stacked at the foot of an invoice look like a mistake.
           */}
           <div className={`flex justify-center ${inv.invoice_footer ? "mt-3" : "mt-8 border-t border-line pt-4"}`}>
-            <PoweredBy label={L.poweredBy} showUrl={!!print} />
+            <PoweredBy label={L.poweredBy} showUrl={!!print} hidden={!!inv.white_label} />
             {!print && <PrivacyLink label={L.privacy} className="ms-3" />}
           </div>
         </div>

@@ -29,6 +29,8 @@ export function SigningChrome({
     slug: string;
     logoPath: string | null;
     brandColor: string;
+    /** Clinic Pro's own branding: the Clinicti credit is left off; the privacy notice stays. */
+    whiteLabel?: boolean;
   } | null;
   locale: Locale;
   children: React.ReactNode;
@@ -75,7 +77,7 @@ export function SigningChrome({
       {footer}
 
       <footer className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-2 px-4 pb-4 pt-2 text-center">
-        {credit === "link" ? (
+        {clinic?.whiteLabel ? null : credit === "link" ? (
           <PoweredBy label={t.sign.poweredBy} />
         ) : (
           <span className="text-[length:max(11px,0.6875rem)] text-ink-400">{t.sign.poweredBy}</span>

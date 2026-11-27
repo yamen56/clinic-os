@@ -13,6 +13,38 @@ import { clinicLogoUrl } from "@/lib/clinic-logo";
 import { cookies } from "next/headers";
 import { SIDEBAR_COOKIE, parseSidebarPref } from "@/lib/theme";
 import { needsRestockSql } from "@/lib/charts/face/stock";
+import type { Metadata } from "next";
+import { withSystem } from "@/lib/db";
+import { whiteLabelSql } from "@/lib/white-label";
+
+/**
+ * A Clinic Pro workspace is the clinic's own app (lib/white-label): its name
+ * in the browser tab and on the installed icon, and its own manifest. Every
+ * other workspace keeps the root layout's Clinicti metadata.
+ */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const cl = await withSystem(async (c) =>
+    (
+      await c.query(
+        `select coalesce(nullif(cl.name_ar, ''), cl.name) as name, cl.name as name_en, cl.default_locale, cl.logo_path,
+                ${whiteLabelSql()} as white_label
+           from clinics cl where cl.slug = $1`,
+        [slug]
+      )
+    ).rows[0]
+  ).catch(() => null);
+  if (!cl?.white_label) return {};
+  const name = (cl.default_locale === "en" ? cl.name_en : cl.name) as string;
+  return {
+    // `absolute`, not `default`: a layout's own title still goes through its parent's " · Clinicti" template.
+    title: { absolute: name, template: `%s · ${name}` },
+    applicationName: name,
+    manifest: `/api/public/manifest/${slug}`,
+    appleWebApp: { capable: true, title: name, statusBarStyle: "default" },
+    ...(cl.logo_path ? { icons: { icon: `/api/public/clinic-logo/${slug}`, apple: `/api/public/clinic-logo/${slug}` } } : {}),
+  };
+}
 
 export default async function ClinicLayout({
   children,
@@ -167,6 +199,7 @@ export default async function ClinicLayout({
         brandColor: clinic.brandColor,
         logoPath: clinic.logoPath,
         tz: clinic.timezone,
+        whiteLabel: clinic.features.branding,
       }}
       role={access.role}
       sidebar={sidebar}

@@ -83,6 +83,8 @@ export default async function SignDevicePage({
         brandColor: doc.brand_color,
         phone: doc.clinic_phone,
         vocabulary: access.clinic.vocabulary,
+        // Clinic Pro's own branding: the tablet shows no Clinicti credit either.
+        whiteLabel: access.clinic.features.branding,
       },
       document: {
         id: doc.id,

@@ -68,8 +68,11 @@ export function PoweredBy({
   label,
   showUrl = false,
   className = "",
+  hidden = false,
 }: {
   label: string;
+  /** A white-label clinic (Clinic Pro, `branding`): its patients never see Clinicti's credit. */
+  hidden?: boolean;
   /**
    * Print surfaces spell the domain out. A link annotation survives into the
    * PDF and stays clickable on screen, but a printed sheet has no hover and no
@@ -78,6 +81,7 @@ export function PoweredBy({
   showUrl?: boolean;
   className?: string;
 }) {
+  if (hidden) return null;
   return (
     <a
       href={CLINICTI_URL}

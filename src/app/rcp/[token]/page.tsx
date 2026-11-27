@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { withSystem } from "@/lib/db";
 import { fmtDate, fmtDateOnly, fmtMoney } from "@/lib/dates";
 import { PoweredBy, PrivacyLink } from "@/components/powered-by";
+import { whiteLabelSql } from "@/lib/white-label";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
@@ -29,7 +30,7 @@ async function loadReceipt(token: string) {
         `select i.id, i.number, i.receipt_number, i.receipt_issued_at, i.currency,
                 i.total, i.amount_paid, i.status, i.issue_date, i.created_at,
                 p.full_name as patient_name, p.phone_e164 as patient_phone,
-                cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color,
+                cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, ${whiteLabelSql()} as white_label,
                 cl.address, cl.address_ar, cl.phone_e164 as clinic_phone,
                 cl.default_locale, cl.timezone, cl.invoice_footer,
                 es.tax_number as seller_tax_number
@@ -253,7 +254,7 @@ export default async function PublicReceiptPage({
           )}
 
           <div className={`flex justify-center ${inv.invoice_footer ? "mt-3" : "mt-8 border-t border-line pt-4"}`}>
-            <PoweredBy label={L.poweredBy} showUrl={!!print} />
+            <PoweredBy label={L.poweredBy} showUrl={!!print} hidden={!!inv.white_label} />
             {!print && <PrivacyLink label={L.privacy} className="ms-3" />}
           </div>
         </div>
