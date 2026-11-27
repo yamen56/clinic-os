@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withSystem } from "@/lib/db";
 import { whiteLabelSql } from "@/lib/white-label";
+import { appUrl } from "@/lib/urls";
 
 /**
  * The installed app's manifest for one clinic (2026-11-27).
@@ -24,7 +25,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }
       )
     ).rows[0]
   ).catch(() => null);
-  if (!cl || !cl.white_label) return NextResponse.redirect(new URL("/manifest.webmanifest", _req.url), 302);
+  // The public address, not the request's: behind the proxy that is an internal host.
+  if (!cl || !cl.white_label) return NextResponse.redirect(new URL("/manifest.webmanifest", appUrl() || _req.url), 302);
 
   const name = cl.default_locale === "en" ? cl.name_en : cl.name;
   const logo = cl.logo_path ? `/api/public/clinic-logo/${cl.slug}` : null;
