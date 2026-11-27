@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import type { PoolClient } from "pg";
 import { appUrl } from "../urls";
+import { featureSql } from "../features";
 import { manageLinkFor } from "../visit-link";
 import type { TemplateContext } from "./variables";
 
@@ -30,8 +31,10 @@ export async function loadRunContext(
     await c.query(
       `select cl.name, cl.name_ar, cl.address, cl.address_ar, cl.phone_e164, cl.timezone, cl.default_locale,
               cl.google_maps_url, cl.google_review_url,
-              (select b.slug from booking_links b where b.clinic_id = cl.id and b.active
-                order by b.created_at limit 1) as booking_slug
+              -- Empty without the booking module, so {{booking_link}} never prints a page that is closed.
+              case when ${featureSql("booking")} then
+                (select b.slug from booking_links b where b.clinic_id = cl.id and b.active
+                  order by b.created_at limit 1) end as booking_slug
          from clinics cl where cl.id = $1`,
       [ids.clinicId]
     )

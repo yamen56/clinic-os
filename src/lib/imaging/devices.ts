@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
 import type { PoolClient } from "pg";
 import { withCtx, withSystem } from "@/lib/db";
+import { featureSql } from "@/lib/features";
 import { rateLimitShared } from "@/lib/rate-limit-shared";
 
 /**
@@ -123,7 +124,8 @@ export async function deviceAuth(
   const row = await withSystem(async (c) => {
     const r = await c.query(
       `select d.id, d.clinic_id, d.name, d.kind, d.match_by, d.revoked_at,
-              cl.name as clinic_name, cl.slug, cl.timezone, cl.deleted_at, cl.subscription_status
+              cl.name as clinic_name, cl.slug, cl.timezone, cl.deleted_at, cl.subscription_status,
+              ${featureSql("devices")} as licensed
          from clinic_devices d join clinics cl on cl.id = d.clinic_id
         where d.key_hash = $1`,
       [hashDeviceKey(key)]
@@ -138,6 +140,8 @@ export async function deviceAuth(
   if (!row || row.revoked_at) return { ok: false, res: deny(401, "device_key_invalid") };
   if (row.deleted_at) return { ok: false, res: deny(403, "deleted") };
   if (row.subscription_status === "suspended") return { ok: false, res: deny(402, "suspended") };
+  // Devices are a plan module (lib/plans): the bridge is told its clinic's plan does not include it.
+  if (!row.licensed) return { ok: false, res: deny(402, "not_licensed") };
   if (!(await rateLimitShared(`device:${row.id}`, PER_MINUTE, 60_000))) {
     return { ok: false, res: NextResponse.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": "60" } }) };
   }

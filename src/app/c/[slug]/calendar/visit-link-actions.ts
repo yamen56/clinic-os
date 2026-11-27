@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { isUuid } from "@/lib/uuid";
 import { sendVisitLink } from "@/lib/patient-visit";
 import { visitUrl } from "@/lib/visit-link";
+import { patientChangesSql } from "@/lib/features";
 
 /**
  * Reception hands the patient their own link to change or cancel the visit
@@ -47,7 +48,7 @@ export async function visitLinkAction(
   return inClinic(access, async (c) => {
     const r = (
       await c.query(
-        `select a.id, a.patient_id, cl.patient_changes from appointments a join clinics cl on cl.id = a.clinic_id
+        `select a.id, a.patient_id, ${patientChangesSql()} as patient_changes from appointments a join clinics cl on cl.id = a.clinic_id
           where a.id = $1 and a.clinic_id = $2`,
         [appointmentId, access.clinicId]
       )

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { guardClinic } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
+import { seatState } from "@/lib/plan-change";
 import { withSystem } from "@/lib/db";
 import { StaffClient } from "./staff-client";
 import { can } from "@/lib/auth";
@@ -62,9 +63,13 @@ export default async function StaffSettingsPage({ params }: { params: Promise<{ 
     shared_account: shared.has(user_id as string),
   }));
 
+  // The plan's user limit (lib/plans), for the line above the list and the Add button.
+  const seats = await inClinic(access, (c) => seatState(c, access.clinicId));
+
   return (
     <StaffClient
       slug={slug}
+      seats={seats}
       members={JSON.parse(JSON.stringify(rows))}
       selfId={access.memberId}
       viewerIsOwner={access.isOwner}

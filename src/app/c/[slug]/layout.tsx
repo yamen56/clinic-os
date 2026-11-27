@@ -189,7 +189,12 @@ export default async function ClinicLayout({
       pendingDocuments={chrome.pending_documents}
       hasEarnings={!!chrome.has_earnings}
       hasInsurers={!!chrome.has_insurers}
-      devices={{ connected: !!chrome.has_devices, waiting: chrome.devices_waiting }}
+      // Devices are a plan module (lib/plans): without it the entry never shows, whatever is plugged in.
+      devices={
+        clinic.features.devices
+          ? { connected: !!chrome.has_devices, waiting: chrome.devices_waiting }
+          : { connected: false, waiting: 0 }
+      }
       labs={{ kept: !!chrome.has_labs && clinic.features.dental, late: chrome.labs_late }}
       stock={{ kept: !!clinic.features.aesthetic, low: chrome.stock_low }}
       fullControl={hasFullControl(access)}

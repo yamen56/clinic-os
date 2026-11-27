@@ -351,6 +351,7 @@ export default async function PatientProfilePage({
       initialTab={tab}
       renderedAt={Date.now()}
       canSendDocuments={can(access, "documents.manage")}
+      canSendDocLinks={access.clinic.features.esign_remote}
       caps={caps}
       country={countryFromClinic(access.clinic)}
       filesHub={d.filesHub ? JSON.parse(JSON.stringify({ ...d.filesHub, canMessage: can(access, "conversations") && !!d.patient.phone_e164, canManageDevices: can(access, "settings.clinic"), clinicName: access.clinic.name })) : null}

@@ -278,7 +278,7 @@ async function main() {
                             payment_instructions, invoice_footer, subscription_status, plan, plan_price, specialty,
                             created_at)
        values ($2, $3, $1, $4, $5, $6, $7, $8, $9, $10, 'ضريبة المبيعات', $11, $12,
-               'active', 'standard', 149, $13,
+               'active', 'clinic_plus', 149, $13,
                -- Dated to just before its own history, so "customer since" and
                -- the admin list agree with the visits inside the workspace.
                now() - ($14::text || ' days')::interval)

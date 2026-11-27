@@ -232,6 +232,15 @@ function enforceRequires<T extends Partial<Record<Capability, boolean>>>(caps: T
   return caps;
 }
 
+/**
+ * The same rule for a map built somewhere else — the licence mask in
+ * lib/features, which denies a module's parents and must take their children
+ * with them. Returns a copy.
+ */
+export function closeRequirements(caps: CapabilityMap): CapabilityMap {
+  return enforceRequires({ ...caps });
+}
+
 /** The starting point when an owner switches a member to custom access. */
 export const ROLE_DEFAULTS: Record<MemberRole, Capability[]> = {
   // A doctor on a revenue share can see what they have earned, and nothing else

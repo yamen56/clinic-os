@@ -344,6 +344,8 @@ export async function sendDocumentAction(
 ): Promise<SendActionResult> {
   const access = await requireClinic(slug);
   if (!can(access, "documents.manage")) return bad("forbidden");
+  // A plan that signs in the clinic only (lib/plans): the tablet, never a link.
+  if (!access.clinic.features.esign_remote) return bad("not_licensed");
 
   const result = await inClinic(access, async (c) => {
     const doc = (
@@ -396,6 +398,7 @@ export async function sendAllPendingAction(
 ): Promise<{ error?: string; sent?: number }> {
   const access = await requireClinic(slug);
   if (!can(access, "documents.manage")) return bad("forbidden");
+  if (!access.clinic.features.esign_remote) return bad("not_licensed");
 
   const result = await inClinic(access, (c) =>
     sendAllPendingForPatient(c, {
@@ -473,6 +476,7 @@ export async function copyLinkAction(
 ): Promise<{ url?: string; error?: string; missing?: string[] }> {
   const access = await requireClinic(slug);
   if (!can(access, "documents.manage")) return bad("forbidden");
+  if (!access.clinic.features.esign_remote) return bad("not_licensed");
   const result = await inClinic(access, async (c) => {
     const clinic = await loadClinicDelivery(c, access.clinicId);
     const signer = (
@@ -548,6 +552,7 @@ export async function sendToSignerAction(
     if (r.reason === "staff") return signer.user_id ? { via: "app" as const } : bad("no_signer_chosen");
     if (r.reason === "no_phone") return bad("no_phone");
     if (r.reason === "wa_offline") return { error: "wa_disconnected", url: r.url };
+    if (!clinic.remote_ok) return bad("not_licensed");
     return bad("not_sent");
   });
   revalidatePath(`/c/${slug}/documents`);

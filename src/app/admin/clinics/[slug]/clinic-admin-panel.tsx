@@ -6,7 +6,10 @@ import {
   updateSubscriptionAction,
   updateClinicFeaturesAction,
   setClinicSpecialtyAction,
+  setClinicPlanAction,
 } from "../../actions";
+import { PlanPicker } from "../../plan-picker";
+import { PLAN_PROFILES, applyPlan, asPlan, type Plan } from "@/lib/plans";
 import { SPECIALTIES, type Specialty } from "@/lib/specialties";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
@@ -33,6 +36,8 @@ export function ClinicAdminPanel({
     subscriptionStatus: string;
     plan: string;
     planPrice: number;
+    /** The stored limit; null is none. */
+    memberLimit: number | null;
     features: FeatureMap;
     specialty: Specialty;
     /** A medical centre's other departments. */
@@ -51,7 +56,15 @@ export function ClinicAdminPanel({
   // What the server holds now — the hint below compares against this, not the
   // page's first render, so it does not reappear after the change is saved.
   const [savedStatus, setSavedStatus] = useState(clinic.subscriptionStatus);
-  const [plan, setPlan] = useState(clinic.plan);
+  const [plan, setPlan] = useState<Plan>(asPlan(clinic.plan));
+  const [savedPlan, setSavedPlan] = useState<Plan>(asPlan(clinic.plan));
+  /*
+    Empty means "the plan's own limit". Shown filled only when the stored limit
+    is an exception to the plan, so changing the plan moves an untouched limit
+    with it rather than carrying the old plan's number across.
+  */
+  const limitIsOwn = clinic.memberLimit !== PLAN_PROFILES[asPlan(clinic.plan)].memberLimit;
+  const [limit, setLimit] = useState(limitIsOwn && clinic.memberLimit !== null ? String(clinic.memberLimit) : "");
   const [price, setPrice] = useState(String(clinic.planPrice));
   const [features, setFeatures] = useState(clinic.features);
   const [specialtyOpen, setSpecialtyOpen] = useState(false);
@@ -173,9 +186,21 @@ export function ClinicAdminPanel({
               <option value="suspended">{t.admin.suspended}</option>
             </Select>
           </Field>
+          <Field label={t.admin.plan}>
+            <PlanPicker value={plan} onChange={setPlan} disabled={pending} />
+          </Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label={t.admin.plan}>
-              <Input value={plan} onChange={(e) => setPlan(e.target.value)} />
+            <Field label={t.plans.memberLimit} hint={t.plans.memberLimitHint}>
+              <Input
+                dir="ltr"
+                type="number"
+                min={1}
+                step={1}
+                value={limit}
+                placeholder={String(PLAN_PROFILES[plan].memberLimit ?? "∞")}
+                onChange={(e) => setLimit(e.target.value)}
+                data-member-limit
+              />
             </Field>
             <Field label={t.admin.planPrice}>
               <Input
@@ -198,11 +223,34 @@ export function ClinicAdminPanel({
                 start(async () => {
                   await updateSubscriptionAction(clinic.id, {
                     status,
-                    plan,
                     planPrice: Number(price) || 0,
                   });
                   setSavedStatus(status);
-                  toast(t.common.saved);
+                  /*
+                    The plan last, and only when something about it changed:
+                    re-applying an unchanged plan would wipe the agency's
+                    hand-made module exceptions for nothing.
+                  */
+                  const ownLimit = limit.trim() === "" ? undefined : Math.max(1, Math.round(Number(limit) || 1));
+                  const limitChanged = (ownLimit ?? PLAN_PROFILES[plan].memberLimit) !== clinic.memberLimit;
+                  if (caps["clinics.features"] && (plan !== savedPlan || limitChanged)) {
+                    const r = await setClinicPlanAction(clinic.id, plan, { memberLimit: ownLimit });
+                    if (r.error) {
+                      toast(t.common.genericError, "error");
+                      return;
+                    }
+                    setSavedPlan(plan);
+                    // The modules modal reads local state; the page re-renders from the action.
+                    setFeatures((f) => applyPlan(f, plan));
+                    if (r.paused?.length) toast(t.plans.paused.replace("{names}", r.paused.join("، ")), "error");
+                    else toast(t.admin.planSaved);
+                    if (r.memberLimit !== null && r.memberLimit !== undefined && (r.members ?? 0) > r.memberLimit) {
+                      toast(
+                        t.plans.overLimit.replace("{n}", String(r.members)).replace("{limit}", String(r.memberLimit)),
+                        "error"
+                      );
+                    }
+                  } else toast(t.common.saved);
                   setOpen(false);
                 })
               }
@@ -271,7 +319,7 @@ export function ClinicAdminPanel({
       <Modal open={featuresOpen} onClose={() => setFeaturesOpen(false)} title={t.admin.features}>
         <div className="grid gap-4">
           <p className="text-[0.8125rem] text-ink-500">{t.admin.featuresSub}</p>
-          <FeaturePicker value={features} onChange={setFeatures} disabled={featPending} />
+          <FeaturePicker value={features} onChange={setFeatures} disabled={featPending} plan={savedPlan} />
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
@@ -289,8 +337,9 @@ export function ClinicAdminPanel({
               loading={featPending}
               onClick={() =>
                 startFeat(async () => {
-                  await updateClinicFeaturesAction(clinic.id, toFeatureSetting(features));
-                  toast(t.admin.featuresSaved);
+                  const r = await updateClinicFeaturesAction(clinic.id, toFeatureSetting(features));
+                  if (r.paused?.length) toast(t.plans.paused.replace("{names}", r.paused.join("، ")), "error");
+                  else toast(t.admin.featuresSaved);
                   setFeaturesOpen(false);
                 })
               }

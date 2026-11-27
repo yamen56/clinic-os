@@ -79,6 +79,7 @@ export function SignersPanel({
   staff,
   userId,
   canManage,
+  canSendLink = true,
   roleName,
   onSignMine,
   onEditSigners,
@@ -92,6 +93,8 @@ export function SignersPanel({
   staff: StaffOption[];
   userId: string;
   canManage: boolean;
+  /** The plan sends signing links (lib/plans `esign_remote`); without it a patient signs on the clinic's tablet. */
+  canSendLink?: boolean;
   roleName: (s: PanelSigner) => string;
   onSignMine: () => void;
   onEditSigners?: () => void;
@@ -281,7 +284,7 @@ export function SignersPanel({
                         ))}
                       </Select>
                     )}
-                    {canManage && !staffLine && (
+                    {canManage && canSendLink && !staffLine && (
                       <>
                         <Button variant="outline" size="sm" loading={pending && busy === s.id} onClick={() => copy(s)} data-copy-link>
                           <Copy className="h-4 w-4" />

@@ -106,9 +106,12 @@ export default async function CalendarPage({
       )
     ).rows[0].n as number;
     // The booking links, for the header's "Booking link" (2026-11-22): the clinic's main one first.
-    const bookingLinks = (
-      await c.query(`select name, slug from booking_links where clinic_id = $1 and active order by created_at`, [access.clinicId])
-    ).rows as { name: string; slug: string }[];
+    // None without the booking module (lib/plans), which hides the header's menu.
+    const bookingLinks = access.clinic.features.booking
+      ? ((
+          await c.query(`select name, slug from booking_links where clinic_id = $1 and active order by created_at`, [access.clinicId])
+        ).rows as { name: string; slug: string }[])
+      : [];
     return { initialPatient, initialPlan, initialOpen, waitlist, bookingLinks };
   });
 

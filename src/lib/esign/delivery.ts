@@ -5,6 +5,7 @@ import { notifyClinicStaff, notifyUser } from "../notify";
 import { logDocEvent } from "./events";
 import { issueSigningToken } from "./tokens";
 import { isStaffRole, markSent, type DocumentRow, type SignerRow } from "./documents";
+import { featureSql } from "../features";
 
 /**
  * Getting the document to whoever has to sign it next.
@@ -67,6 +68,8 @@ export type ClinicDelivery = {
   default_locale: Lang;
   esign_link_days: number;
   wa_connected: boolean;
+  /** The plan includes signing links to a phone (lib/plans `esign_remote`). Without it, only the clinic's own tablet. */
+  remote_ok: boolean;
 };
 
 export async function loadClinicDelivery(
@@ -75,7 +78,8 @@ export async function loadClinicDelivery(
 ): Promise<ClinicDelivery> {
   const r = await c.query(
     `select cl.id, cl.name, cl.name_ar, cl.default_locale, cl.esign_link_days,
-            coalesce(ws.status = 'connected', false) as wa_connected
+            coalesce(ws.status = 'connected', false) as wa_connected,
+            ${featureSql("esign_remote")} as remote_ok
      from clinics cl left join whatsapp_sessions ws on ws.clinic_id = cl.id
      where cl.id = $1`,
     [clinicId]
@@ -124,6 +128,8 @@ export async function deliverToSigner(
     return { sent: false, reason: "staff" };
   }
 
+  // A plan that signs only in the clinic sends no link — the patient signs on the clinic's tablet.
+  if (!clinic.remote_ok) return { sent: false, reason: "off" };
   if (!signer.phone_e164) return { sent: false, reason: "no_phone" };
 
   const { url } = await issueSigningToken(c, {

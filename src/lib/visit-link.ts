@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { PoolClient } from "pg";
 import { internalSecret } from "./internal-secret";
 import { appUrl } from "./urls";
+import { patientChangesSql } from "./features";
 
 /**
  * The patient's own link to one appointment: see it, move it, cancel it.
@@ -116,7 +117,7 @@ export function visitRights(v: {
 export async function manageLinkFor(c: PoolClient, appointmentId: string): Promise<string> {
   const r = (
     await c.query(
-      `select a.id, a.patient_id, a.status, a.starts_at, cl.patient_changes
+      `select a.id, a.patient_id, a.status, a.starts_at, ${patientChangesSql()} as patient_changes
          from appointments a join clinics cl on cl.id = a.clinic_id where a.id = $1`,
       [appointmentId]
     )
@@ -137,7 +138,7 @@ export async function patientCanChange(c: PoolClient, appointmentId: string): Pr
   const r = (
     await c.query(
       `select a.status, a.starts_at, a.patient_moves, ${VISIT_BOOKABLE_SQL("a")} as bookable,
-              cl.patient_changes, cl.patient_changes_cutoff_hours
+              ${patientChangesSql()} as patient_changes, cl.patient_changes_cutoff_hours
          from appointments a join clinics cl on cl.id = a.clinic_id where a.id = $1`,
       [appointmentId]
     )

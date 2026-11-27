@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { withSystem } from "@/lib/db";
+import { featureSql } from "@/lib/features";
 import { appUrl } from "@/lib/urls";
 
 /*
@@ -40,6 +41,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
          join clinics cl on cl.id = b.clinic_id
         where b.active
           and cl.subscription_status <> 'suspended'
+          and ${featureSql("booking")}
         order by touched desc
         limit 5000`
     );

@@ -6,6 +6,7 @@ import { leadIdOf } from "@/lib/charts/dental/full-arch";
 import { visitLines } from "@/lib/charts/dental/treatment";
 import { medicalFlags } from "@/lib/medical-history";
 import { extraServicesSql } from "@/lib/appointment-services";
+import { patientChangesSql } from "@/lib/features";
 
 type WorkRow = { markId: string; site: string; label: string; labelAr: string | null; treatmentKey: string; groupId: string | null; step: string | null; at: string };
 type Member = { id: string; site: string; label: string; labelAr: string | null; treatmentKey: string; groupId: string };
@@ -116,7 +117,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       before the clinic added rooms, which block nothing until they are placed.
     */
     const clinic = await c.query(
-        `select cl.working_hours, cl.blocked_dates, cl.timezone, cl.patient_changes,
+        `select cl.working_hours, cl.blocked_dates, cl.timezone, ${patientChangesSql()} as patient_changes,
                 coalesce((select json_agg(json_build_object(
                            'id', r.id, 'name', r.name, 'name_ar', r.name_ar, 'color', r.color,
                            'serviceIds', coalesce((select json_agg(rs.service_id) from clinic_room_services rs where rs.room_id = r.id), '[]'::json))

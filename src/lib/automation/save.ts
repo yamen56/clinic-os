@@ -8,6 +8,7 @@ import { isUuid } from "@/lib/uuid";
 import { isStepKey, isTriggerKey, normalizeSettings, normalizeStepConfig, parseStepConfig, parseTriggerConfig } from "./catalog";
 import { blocking, validateFlow, type FlowEdge, type FlowNode, type Issue } from "./graph";
 import { writeFlowGraph } from "./store";
+import { basicFlowProblem } from "./basic";
 
 /*
   Saving a flow, for the builder's autosave (the route beside the builder) and
@@ -69,7 +70,9 @@ export type SaveError =
   | "not_found"
   | "conflict"
   | "bad_media"
-  | "bad_target";
+  | "bad_target"
+  /** The plan runs ready-made flows only (lib/automation/basic). */
+  | "not_licensed";
 
 export type SaveFlowResult = {
   id?: string;
@@ -145,6 +148,11 @@ export async function saveFlow(access: ClinicAccess, slug: string, data: unknown
   if (d.active && blocking(issues)) return { error: "invalid_flow", issues };
 
   const result = await inClinic(access, async (c): Promise<SaveFlowResult> => {
+    // A plan without advanced automations edits a template's words and timing, never its shape (lib/automation/basic).
+    if (!access.clinic.features.automations_advanced) {
+      const problem = await basicFlowProblem(c, access.clinicId, d, nodes, edges, settings);
+      if (problem) return { error: problem };
+    }
     if (!(await checkTargets(c, access.clinicId, d.id, nodes))) return { error: "bad_target" };
 
     // A step id already used by another flow is not this flow's to overwrite.

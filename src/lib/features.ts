@@ -1,4 +1,4 @@
-import { CAPABILITIES, type Capability, type CapabilityMap } from "./permissions";
+import { CAPABILITIES, closeRequirements, type Capability, type CapabilityMap } from "./permissions";
 
 /**
  * What a clinic is licensed for.
@@ -52,6 +52,30 @@ export const FEATURES = [
     measured (see lib/courses.ts).
   */
   "coordinator",
+  /*
+    The plan modules (2026-11-27, lib/plans.ts). Each is something one plan
+    sells and a cheaper one does not, carved out of a module every plan has.
+  */
+  /*
+    Sending a signing link to a phone. `documents` itself — the forms, the
+    print, the clinic's own tablet — is in every plan; this is the link that
+    leaves the building.
+  */
+  "esign_remote",
+  /* The public booking links, and the patient's own change-or-cancel link (/v). */
+  "booking",
+  /* The clinic's machines: the bridge, the devices station, the imaging inbox. */
+  "devices",
+  /*
+    Building a flow: starting from scratch, adding and rewiring steps, the
+    flow's own settings and test runs. Without it a clinic still runs the
+    gallery's flows and edits their wording and timing.
+  */
+  "automations_advanced",
+  /* More than one workspace under one owner (Phase 4 of the 11-27 plan). */
+  "branches",
+  /* The clinic's brand instead of Clinicti's on every page a patient sees. */
+  "branding",
 ] as const;
 
 export type Feature = (typeof FEATURES)[number];
@@ -82,6 +106,14 @@ export const OPT_IN_FEATURES = new Set<Feature>([
   "aesthetic",
   // A test: nobody gets it until the agency switches it on for that clinic.
   "coordinator",
+  /*
+    Both new in 2026-11-27 and sold only above the Doctor plan, and neither
+    existed before — a clinic whose row says nothing about them was never sold
+    them. (The other plan modules split something every clinic already had, so
+    for them silence keeps meaning "on", like every older module.)
+  */
+  "branches",
+  "branding",
 ]);
 
 /**
@@ -122,7 +154,11 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
     denies what is named here, so a clinic whose invoicing was switched off kept
     the revenue tiles on its dashboard. Every capability the module owns goes in.
   */
-  invoices: ["invoices", "invoices.analytics", "earnings", "expenses"],
+  /*
+    Insurance too: it is top-level, so the REQUIRES sweep in maskByFeatures
+    does not catch it, and a clinic without invoicing kept a Claims tab.
+  */
+  invoices: ["invoices", "invoices.analytics", "earnings", "expenses", "insurance"],
   campaigns: ["campaigns"],
   automations: ["automations"],
   ai: ["ai"],
@@ -137,6 +173,14 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
   aesthetic: ["stock"],
   // Not a screen of its own: it acts through automations and the Treatments list.
   coordinator: [],
+  // The rest gate their own screens and sends on the feature directly, because
+  // each is part of a screen whose capability every plan keeps.
+  esign_remote: [],
+  booking: ["settings.booking"],
+  devices: [],
+  automations_advanced: [],
+  branches: [],
+  branding: [],
 };
 
 /** What the new-clinic form starts from: everything except the opt-ins. */
@@ -163,6 +207,26 @@ export function resolveFeatures(raw: Record<string, unknown> | null | undefined)
   ) as FeatureMap;
 }
 
+/**
+ * `resolveFeatures` as a SQL predicate, for the queries that have no session —
+ * the public booking page, a patient's visit link, a signing link. Expects the
+ * clinics row aliased `alias`. The worker has the same in worker/features.ts.
+ */
+export function featureSql(feature: Feature, alias = "cl"): string {
+  return OPT_IN_FEATURES.has(feature)
+    ? `coalesce((${alias}.features->>'${feature}')::boolean, false)`
+    : `coalesce((${alias}.features->>'${feature}')::boolean, true)`;
+}
+
+/**
+ * What the clinic's patient-changes setting (0115) means once its licence is
+ * counted: "off" without the booking module, whatever the setting says. Read
+ * in place of `cl.patient_changes` wherever a link is offered or honoured.
+ */
+export function patientChangesSql(alias = "cl"): string {
+  return `(case when ${featureSql("booking", alias)} then ${alias}.patient_changes else 'off' end)`;
+}
+
 /** Serialises the admin editor's state back into the column. */
 export function toFeatureSetting(map: FeatureMap): Record<Feature, boolean> {
   return Object.fromEntries(FEATURES.map((f) => [f, map[f] === true])) as Record<Feature, boolean>;
@@ -184,6 +248,11 @@ export function maskByFeatures(caps: CapabilityMap, features: FeatureMap): Capab
   if (denied.size === 0) return caps;
   const out = { ...caps };
   for (const cap of CAPABILITIES) if (denied.has(cap)) out[cap] = false;
-  return out;
+  /*
+    And everything that needs what was just denied. Without this a module's
+    dotted capabilities outlived it — `invoices.void` and `insurance.claims`
+    with invoicing switched off — because FEATURE_CAPS names only the parents.
+  */
+  return closeRequirements(out);
 }
 

@@ -40,7 +40,7 @@ export async function toggleAutomationAction(
   slug: string,
   id: string,
   active: boolean
-): Promise<{ error?: "forbidden" | "not_found" | "invalid_flow" }> {
+): Promise<{ error?: "forbidden" | "not_found" | "invalid_flow" | "not_licensed" }> {
   const access = await requireClinic(slug);
   if (!canEdit(access)) return { error: "forbidden" };
   if (!isUuid(id)) return { error: "not_found" };
@@ -48,6 +48,8 @@ export async function toggleAutomationAction(
     if (active) {
       const flow = await loadFlow(c, access.clinicId, id);
       if (!flow) return { error: "not_found" as const };
+      // A flow built by hand, paused when the plan stopped including advanced automations (lib/plan-change).
+      if (!access.clinic.features.automations_advanced && !flow.recipeKey) return { error: "not_licensed" as const };
       const issues = validateFlow({ ...flow, triggerConfig: flow.triggerConfig });
       if (blocking(issues)) return { error: "invalid_flow" as const };
     }
@@ -105,6 +107,8 @@ export async function duplicateAutomationAction(
 ): Promise<{ id?: string; error?: string }> {
   const access = await requireClinic(slug);
   if (!canEdit(access)) return { error: "forbidden" };
+  // A copy is a flow of the clinic's own making — an advanced automation (lib/plans).
+  if (!access.clinic.features.automations_advanced) return { error: "not_licensed" };
   if (!isUuid(id)) return { error: "not_found" };
   return inClinic(access, async (c) => {
     const flow = await loadFlow(c, access.clinicId, id);
@@ -153,6 +157,7 @@ export async function testRunAction(
 ): Promise<{ error?: string }> {
   const access = await requireClinic(slug);
   if (!canEdit(access)) return { error: "forbidden" };
+  if (!access.clinic.features.automations_advanced) return { error: "not_licensed" };
   if (!isUuid(automationId) || !isUuid(patientId)) return { error: "not_found" };
   return inClinic(access, async (c) => {
     const auto = (

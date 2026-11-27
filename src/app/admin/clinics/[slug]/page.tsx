@@ -9,6 +9,7 @@ import { ClinicAdminPanel } from "./clinic-admin-panel";
 import { OwnerInvite } from "./owner-invite";
 import { DangerZone } from "./danger-zone";
 import { FEATURES, resolveFeatures } from "@/lib/features";
+import { asPlan } from "@/lib/plans";
 import type { MemberRole } from "@/lib/permissions";
 import { asSpecialty, clinicSpecialties, isSpecialty } from "@/lib/specialties";
 import { setupChecklist } from "@/lib/setup-checklist";
@@ -56,7 +57,7 @@ export default async function AdminClinicDetail({
       await c.query(
         // password_hash is null exactly while an invitation is outstanding —
         // the account exists but cannot be signed into yet.
-        `select cm.role, cm.is_owner, u.full_name, u.email,
+        `select cm.role, cm.is_owner, cm.active, u.full_name, u.email,
                 (u.password_hash is null) as invite_pending
            from clinic_members cm
            join users u on u.id = cm.user_id where cm.clinic_id = $1 order by cm.created_at`,
@@ -137,6 +138,7 @@ export default async function AdminClinicDetail({
               subscriptionStatus: clinic.subscription_status,
               plan: clinic.plan,
               planPrice: Number(clinic.plan_price),
+              memberLimit: clinic.member_limit === null ? null : Number(clinic.member_limit),
               features,
               specialty: asSpecialty(clinic.specialty),
               departments: ((clinic.specialties ?? []) as string[]).filter(isSpecialty).filter((s) => s !== clinic.specialty),
@@ -167,7 +169,17 @@ export default async function AdminClinicDetail({
             </div>
             <div className="flex justify-between">
               <span className="text-ink-500">{t.admin.plan}</span>
-              <span>{clinic.plan}</span>
+              <span data-clinic-plan={asPlan(clinic.plan)}>{t.plans.names[asPlan(clinic.plan)]}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-ink-500">{t.plans.users}</span>
+              <span className="tnum">
+                {clinic.member_limit === null
+                  ? `${members.filter((m) => m.active !== false).length} · ${t.plans.unlimited}`
+                  : t.plans.usersOf
+                      .replace("{n}", String(members.filter((m) => m.active !== false).length))
+                      .replace("{limit}", String(clinic.member_limit))}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-ink-500">{t.admin.planPrice}</span>

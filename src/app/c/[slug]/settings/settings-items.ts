@@ -22,6 +22,7 @@ import {
   Tags,
   Users,
   Workflow,
+  BadgeCheck,
 } from "lucide-react";
 import { Tooth } from "@/components/ui/tooth-icon";
 import type { CapabilityMap } from "@/lib/permissions";
@@ -45,14 +46,16 @@ export function settingsItems(
   slug: string,
   t: Dict,
   caps: CapabilityMap,
-  has: { einvoicing: boolean; dental: boolean; face: boolean }
+  has: { einvoicing: boolean; dental: boolean; face: boolean; devices: boolean }
 ): SettingsItem[] {
   const base = `/c/${slug}/settings`;
   const all: (SettingsItem & { show?: boolean })[] = [
     { href: `${base}/profile`, label: t.settings.profile, icon: Building2, group: "clinic" },
     { href: `${base}/hours`, label: t.settings.workingHours, icon: Clock, group: "clinic" },
     { href: `${base}/rooms`, label: t.rooms.title, icon: DoorOpen, group: "clinic", show: caps["settings.services"] },
-    { href: `${base}/devices`, label: t.devices.tab, icon: MonitorSmartphone, group: "clinic", show: caps["settings.clinic"] },
+    { href: `${base}/devices`, label: t.devices.tab, icon: MonitorSmartphone, group: "clinic", show: has.devices && caps["settings.clinic"] },
+    // What the clinic's subscription includes (lib/plans) — read-only, for anyone in Settings.
+    { href: `${base}/plan`, label: t.plans.yourPlan, icon: BadgeCheck, group: "clinic" },
     { href: `${base}/support-visits`, label: t.supportVisits.tab, icon: LifeBuoy, group: "clinic", show: caps["settings.support_visits"] },
     { href: `${base}/staff`, label: t.settings.staff, icon: Users, group: "team", show: caps["settings.staff"] },
     { href: `${base}/services`, label: t.settings.services, icon: Stethoscope, group: "services", show: caps["settings.services"] },

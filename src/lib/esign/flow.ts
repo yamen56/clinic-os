@@ -248,6 +248,7 @@ export async function sendAllPendingForPatient(
     )
   ).rows[0];
   if (!patient) return { ok: false, error: "not_found" };
+  if (!clinic.remote_ok) return { ok: false, error: "not_licensed" };
   if (!patient.phone_e164) return { ok: false, error: "no_phone" };
   if (!clinic.wa_connected) return { ok: false, error: "wa_disconnected" };
 

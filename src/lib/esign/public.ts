@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { withSystem } from "../db";
+import { featureSql } from "../features";
 import { lookupToken, type TokenRow } from "./tokens";
 import { documentQuestions, isSignerDue, loadSigners, isTerminal, type DocumentRow, type SignerRow } from "./documents";
 import { fillerSignerId, normalizeQuestionsAt, questionsForRole, type PatientFill, type QuestionsAt } from "./questions";
@@ -183,7 +184,8 @@ async function loadContextFor(
   const doc = (
     await c.query(
       `select d.*, cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color,
-              cl.vocabulary, cl.phone_e164 as clinic_phone, t.fields_schema
+              cl.vocabulary, cl.phone_e164 as clinic_phone, t.fields_schema,
+              ${featureSql("esign_remote")} as remote_ok
        from documents d
        join clinics cl on cl.id = d.clinic_id
        left join document_templates t on t.id = d.template_id
@@ -229,6 +231,12 @@ async function loadContextFor(
   else if (doc.status === "expired") state = "expired";
   else if (isTerminal(doc)) state = "already_signed";
   else if (!due) state = "not_your_turn";
+  /*
+    A link sent before the clinic's plan stopped including links stops working
+    with it. Only one still waiting to be used — a patient checking a form they
+    already signed is still told so.
+  */
+  if (!doc.remote_ok && (state === "ready" || state === "not_your_turn")) state = "revoked";
 
   const clinicRow = (
     await c.query(`select esign_require_code from clinics where id = $1`, [doc.clinic_id])

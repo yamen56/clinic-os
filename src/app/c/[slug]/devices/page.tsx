@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { can } from "@/lib/auth";
@@ -15,6 +16,7 @@ import { DevicesStation, type StationDevice } from "./station-client";
 export default async function ImagingStationPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const access = await guardCap(slug, "patients");
+  if (!access.clinic.features.devices) redirect(`/c/${slug}`);
   const devices = await inClinic(access, async (c) =>
     (
       await c.query(

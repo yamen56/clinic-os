@@ -1,7 +1,8 @@
 import type { PoolClient } from "pg";
 import { RECIPES_ON_BY_DEFAULT } from "./esign/constants";
 import { seedStaffAlerts } from "./staff-alerts";
-import { toFeatureSetting, allFeatures, type FeatureMap } from "./features";
+import { toFeatureSetting, type FeatureMap } from "./features";
+import { PLAN_PROFILES, planFeatures, type Plan } from "./plans";
 import { clinicSpecialties, type Specialty } from "./specialties";
 import { randomUUID } from "node:crypto";
 import { defaultSettingsFor, normalizeTriggerConfig } from "./automation/catalog";
@@ -138,8 +139,19 @@ export type ProvisionInput = {
   nameAr?: string | null;
   slug: string;
   phoneE164?: string | null;
-  plan?: string;
+  /** One of lib/plans; decides the member limit, and the features when none are passed. */
+  plan?: Plan;
   planPrice?: number;
+  /** Overrides the plan's own member limit; null is unlimited. */
+  memberLimit?: number | null;
+  /** trial (the column default) or active. */
+  subscriptionStatus?: "trial" | "active";
+  /** A clinic on trial: when it ends. */
+  trialEndsAt?: Date | null;
+  /** A clinic that has paid: until when (yyyy-mm-dd). */
+  paidUntil?: string | null;
+  /** The owner's job. A Doctor-plan clinic's owner is usually its doctor. */
+  ownerRole?: "doctor" | "receptionist" | "other";
   features?: FeatureMap;
   specialty: Specialty;
   /** A medical centre's other fields: the departments beside the primary specialty. */
@@ -178,16 +190,20 @@ export async function provisionClinic(
   const dup = await c.query("select 1 from clinics where slug = $1", [input.slug]);
   if (dup.rowCount) throw new Error("slug_taken");
 
-  const features = input.features ?? allFeatures();
+  const plan: Plan = input.plan ?? "clinic_plus";
+  const features = input.features ?? planFeatures(plan);
+  const memberLimit = input.memberLimit !== undefined ? input.memberLimit : PLAN_PROFILES[plan].memberLimit;
 
   const clinic = await c.query(
     `insert into clinics (name, name_ar, slug, phone_e164, plan, plan_price, features, specialty,
-                          vocabulary, default_locale, currency, timezone)
+                          vocabulary, default_locale, currency, timezone,
+                          member_limit, subscription_status, trial_ends_at, paid_until)
      values ($1, $2, $3, $4, $5, $6, $7, $8,
              coalesce($9, 'medical'),
              coalesce($10, 'ar'),
              coalesce($11, 'JOD'),
-             coalesce($12, 'Asia/Amman'))
+             coalesce($12, 'Asia/Amman'),
+             $13, coalesce($14, 'trial'), $15, $16)
      returning id, slug`,
     // Features written out in full rather than as "only the exceptions", so the
     // row records what was actually sold on the day it was sold. A feature added
@@ -199,7 +215,7 @@ export async function provisionClinic(
       input.nameAr || null,
       input.slug,
       input.phoneE164 ?? null,
-      input.plan ?? "standard",
+      plan,
       input.planPrice ?? 0,
       JSON.stringify(toFeatureSetting(features)),
       input.specialty,
@@ -207,6 +223,10 @@ export async function provisionClinic(
       input.defaultLocale ?? null,
       input.currency ?? null,
       input.timezone ?? null,
+      memberLimit,
+      input.subscriptionStatus ?? null,
+      input.trialEndsAt ?? null,
+      input.paidUntil ?? null,
     ]
   );
   const clinicId = clinic.rows[0].id as string;
@@ -247,8 +267,8 @@ export async function provisionClinic(
   // is a guess the clinic corrects in staff settings; ownership is not.
   await c.query(
     `insert into clinic_members (clinic_id, user_id, role, is_owner, permissions)
-     values ($1, $2, 'other', true, '{"level":"full"}')`,
-    [clinicId, ownerId]
+     values ($1, $2, $3, true, '{"level":"full"}')`,
+    [clinicId, ownerId, input.ownerRole ?? "other"]
   );
 
   // Baseline per-clinic rows

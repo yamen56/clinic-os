@@ -6,7 +6,8 @@ import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Input, Field, Select } from "@/components/ui/input";
 import { FeaturePicker } from "../../feature-picker";
-import { allFeatures } from "@/lib/features";
+import { PlanPicker } from "../../plan-picker";
+import { applyPlan, planFeatures, type Plan } from "@/lib/plans";
 import { SPECIALTIES, type Specialty } from "@/lib/specialties";
 import { DepartmentPicker } from "../../department-picker";
 import { SPECIALTY_MODULES, modulesFor } from "@/lib/specialty-profile";
@@ -32,7 +33,12 @@ export function NewClinicForm() {
     product — eight clicks of ceremony, and would make a forgotten switch look
     exactly like a deliberate one.
   */
-  const [features, setFeatures] = useState(allFeatures());
+  const [plan, setPlan] = useState<Plan>("clinic_plus");
+  const [features, setFeatures] = useState(() => planFeatures("clinic_plus"));
+  const pickPlan = (p: Plan) => {
+    setPlan(p);
+    setFeatures((f) => applyPlan(f, p));
+  };
   const [specialty, setSpecialty] = useState<Specialty>("general");
   const [departments, setDepartments] = useState<Specialty[]>([]);
   /*
@@ -136,9 +142,13 @@ export function NewClinicForm() {
       <SpecialtyAdds specialties={[specialty, ...departments.filter((d) => d !== specialty)]} />
       <div className="my-1 border-t border-line" />
       <div>
+        <div className="mb-2 text-sm font-medium text-ink-900">{t.admin.plan}</div>
+        <PlanPicker value={plan} onChange={pickPlan} disabled={pending} name="plan" />
+      </div>
+      <div>
         <div className="mb-1 text-sm font-medium text-ink-900">{t.admin.features}</div>
         <p className="mb-2.5 text-[0.8125rem] text-ink-500">{t.admin.featuresSub}</p>
-        <FeaturePicker value={features} onChange={setFeatures} disabled={pending} />
+        <FeaturePicker value={features} onChange={setFeatures} disabled={pending} plan={plan} />
       </div>
       <div className="my-1 border-t border-line" />
       <div className="grid gap-4 sm:grid-cols-2">

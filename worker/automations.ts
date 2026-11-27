@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 import type { PoolClient } from "pg";
 import { withSystem } from "./db";
-import { licensed } from "./features";
+import { hasFeature, licensed } from "./features";
 import { createAndSendFromTemplate } from "../src/lib/esign/flow";
 import { notifyUser, staffInRoles } from "../src/lib/notify";
 import { applyAppointmentStatus, lockClinicSchedule } from "../src/lib/appointments";
@@ -503,6 +503,9 @@ async function runStep(env: Env, step: Step): Promise<StepResult> {
     case "send_document": {
       const templateId = str("template_id");
       if (!templateId || !run.patient_id) return next("skipped", { reason: !templateId ? "no_template" : "no_patient" });
+      // A signing link is a plan module (lib/plans); a plan without it signs in the clinic.
+      const remote = await c.query(`select ${hasFeature("esign_remote")} as ok from clinics cl where cl.id = $1`, [run.clinic_id]);
+      if (remote.rows[0]?.ok !== true) return next("skipped", { reason: "module_off" });
       // The automation is the sender, so the document is created by whoever
       // owns the clinic — a document must always name a real person as its
       // creator, and an automation is not one.

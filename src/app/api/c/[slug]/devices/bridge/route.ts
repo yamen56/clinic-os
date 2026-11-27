@@ -11,7 +11,7 @@ import { BRIDGE_STORAGE_PATH, BRIDGE_VERSION } from "@/lib/imaging/bridge-versio
 */
 export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const g = await apiClinic(slug, "settings.clinic");
+  const g = await apiClinic(slug, "settings.clinic", { module: "devices" });
   if (!g.ok) return g.res;
   const f = await openFileStream(BRIDGE_STORAGE_PATH);
   if (!f) return NextResponse.json({ error: "bridge_not_published" }, { status: 404 });

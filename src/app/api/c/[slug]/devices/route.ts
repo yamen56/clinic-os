@@ -29,7 +29,7 @@ const MAX_DEVICES = 30;
 
 export async function POST(req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params;
-  const g = await apiClinic(slug, "settings.clinic");
+  const g = await apiClinic(slug, "settings.clinic", { module: "devices" });
   if (!g.ok) return g.res;
   const access = g.access;
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

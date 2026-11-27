@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { PoolClient } from "pg";
 import { appUrl } from "../urls";
+import { featureSql } from "../features";
 
 /**
  * Signing links.
@@ -40,6 +41,13 @@ export async function issueSigningToken(
   c: PoolClient,
   args: { clinicId: string; documentId: string; signerId: string; days: number }
 ): Promise<{ token: string; url: string; expiresAt: string }> {
+  /*
+    The backstop for every path that mints a link. A plan that signs only in
+    the clinic (lib/plans, `esign_remote` off) never has one — the callers
+    check first and say so; this is what holds if one forgets.
+  */
+  const licensed = await c.query(`select ${featureSql("esign_remote")} as ok from clinics cl where cl.id = $1`, [args.clinicId]);
+  if (licensed.rows[0]?.ok !== true) throw new Error("esign_remote_off");
   await c.query(
     `update signing_tokens set revoked_at = now()
      where signer_id = $1 and revoked_at is null and used_at is null`,

@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { featureSql } from "./features";
 
 export type WaitlistEntry = {
   id: string;
@@ -47,6 +48,10 @@ export async function loadWaitlist(
       [clinicId]
     )
   ).rows as WaitlistEntry[];
-  const link = await c.query(`select 1 from booking_links where clinic_id = $1 and active limit 1`, [clinicId]);
+  const link = await c.query(
+    `select 1 from booking_links b join clinics cl on cl.id = b.clinic_id
+      where b.clinic_id = $1 and b.active and ${featureSql("booking")} limit 1`,
+    [clinicId]
+  );
   return { entries: JSON.parse(JSON.stringify(entries)), hasBookingLink: !!link.rowCount };
 }

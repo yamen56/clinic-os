@@ -15,7 +15,7 @@ type Params = { params: Promise<{ slug: string; deviceId: string }> };
 export async function GET(_req: Request, ctx: Params) {
   const { slug, deviceId } = await ctx.params;
   if (!isUuid(deviceId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const g = await apiClinic(slug, "settings.clinic");
+  const g = await apiClinic(slug, "settings.clinic", { module: "devices" });
   if (!g.ok) return g.res;
   const out = await inClinic(g.access, async (c) => {
     const d = await c.query(
@@ -57,7 +57,7 @@ const bodySchema = z.discriminatedUnion("op", [
 export async function PATCH(req: Request, ctx: Params) {
   const { slug, deviceId } = await ctx.params;
   if (!isUuid(deviceId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const g = await apiClinic(slug, "settings.clinic");
+  const g = await apiClinic(slug, "settings.clinic", { module: "devices" });
   if (!g.ok) return g.res;
   const access = g.access;
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

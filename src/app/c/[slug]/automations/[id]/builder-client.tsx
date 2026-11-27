@@ -245,7 +245,14 @@ export function BuilderClient({
     bump((n) => n + 1);
   }, []);
 
-  const [tab, setTab] = useState(initialTab);
+  /*
+    A plan with basic automations (lib/plans): the flow is a template's, and
+    only its words and timing change. No adding, removing or rewiring steps,
+    no other trigger, no flow settings, no test run — the server holds the
+    same line (lib/automation/basic).
+  */
+  const basic = !modules.automations_advanced;
+  const [tab, setTab] = useState(basic && initialTab === "settings" ? "flow" : initialTab);
   const [selected, setSelected] = useState<string | null>(null);
   const selectedRef = useRef<string | null>(null);
   const [focusNonce, setFocusNonce] = useState(0);
@@ -332,6 +339,8 @@ export function BuilderClient({
             ? f.badMedia
             : r.error === "bad_target"
               ? f.badTarget
+              : r.error === "not_licensed"
+                ? t.plans.basicFlow
               : r.error === "invalid" && r.nodeId
                 ? f.invalidStep
                 : t.common.genericError;
@@ -682,7 +691,7 @@ export function BuilderClient({
         trigger={state.trigger}
         config={state.triggerConfig}
         onChange={(triggerConfig) => setState((s) => ({ ...s, triggerConfig }))}
-        onChangeTrigger={() => setTriggerPicker(true)}
+        onChangeTrigger={basic ? undefined : () => setTriggerPicker(true)}
         lookups={lookups}
         issues={issues.filter((i) => i.nodeId === null && i.code !== "empty" && i.code !== "no_start")}
       />
@@ -700,8 +709,8 @@ export function BuilderClient({
         onConfig={(config) => updateNode(selectedNode.id, { config })}
         onReplyOptions={(options, removed) => updateReplyOptions(selectedNode.id, options, removed)}
         onLabel={(label) => updateNode(selectedNode.id, { label })}
-        onDelete={() => removeNodes([selectedNode.id])}
-        onDuplicate={() => duplicateNode(selectedNode.id)}
+        onDelete={basic ? undefined : () => removeNodes([selectedNode.id])}
+        onDuplicate={basic ? undefined : () => duplicateNode(selectedNode.id)}
       />
     ) : null;
 
@@ -784,7 +793,7 @@ export function BuilderClient({
                 }}
               />
               <span className="text-[0.8125rem] font-medium">{state.active ? f.on : f.off}</span>
-            </label>            {id && (
+            </label>            {id && !basic && (
               <Button variant="outline" size="sm" className="max-sm:hidden" onClick={() => setTestOpen(true)}>
                 <Play className="h-4 w-4" />
                 {t.automations.testRun}
@@ -799,6 +808,7 @@ export function BuilderClient({
                   <>
                     <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
                     <div className="absolute end-0 top-full z-40 mt-1 grid min-w-44 gap-0.5 rounded-ctl border border-line bg-surface p-1 shadow-pop">
+                      {!basic && (
                       <button
                         type="button"
                         onClick={() => {
@@ -810,6 +820,8 @@ export function BuilderClient({
                         <Play className="h-4 w-4 text-ink-500" />
                         {t.automations.testRun}
                       </button>
+                      )}
+                      {!basic && (
                       <button
                         type="button"
                         onClick={() => {
@@ -828,6 +840,7 @@ export function BuilderClient({
                         <Copy className="h-4 w-4 text-ink-500" />
                         {f.duplicate}
                       </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
@@ -857,7 +870,7 @@ export function BuilderClient({
           tabs={[
             { key: "flow", label: f.tabCanvas },
             ...(id ? [{ key: "activity", label: f.tabActivity, count: runs.length }] : []),
-            { key: "settings", label: f.tabSettings },
+            ...(basic ? [] : [{ key: "settings", label: f.tabSettings }]),
           ]}
           active={tab}
           onChange={(k) => setTab(k as typeof tab)}
@@ -894,6 +907,7 @@ export function BuilderClient({
               onAddFrom={(from, handle, at) => setStepPicker({ from, handle, at })}
               onInsertOnEdge={(edge, at) => setStepPicker({ from: edge.from, handle: edge.handle, at, insertOn: edge })}
               canConnect={canConnect}
+              locked={basic}
             />
             {/*
               Opposite the toolbar, which the canvas keeps on the physical right

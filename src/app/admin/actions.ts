@@ -27,6 +27,9 @@ import { SPECIALTIES, asSpecialty, clinicSpecialties, isSpecialty, type Specialt
 import { provisionClinic, installRecipes, isReservedSlug } from "@/lib/clinic-provision";
 import { setCoordinator } from "@/lib/coordinator";
 import { SPECIALTY_MODULES, modulesFor } from "@/lib/specialty-profile";
+import { PLANS, isPlan, planFeatures, type Plan } from "@/lib/plans";
+import { setClinicPlan, settleFeatureChange, type PlanChangeResult } from "@/lib/plan-change";
+import { resolveFeatures } from "@/lib/features";
 import { z } from "zod";
 
 /**
@@ -55,10 +58,26 @@ const createClinicSchema = z.object({
     .max(48)
     .regex(/^[a-z0-9][a-z0-9-]*$/),
   phone: z.string().optional().default(""),
-  plan: z.string().default("standard"),
+  address: z.string().max(200).optional().default(""),
+  addressAr: z.string().max(200).optional().default(""),
+  plan: z.enum(PLANS).catch("clinic_plus" as Plan),
   planPrice: z.coerce.number().min(0).default(0),
+  // Empty is the plan's own limit.
+  memberLimit: z
+    .string()
+    .optional()
+    .default("")
+    .transform((v) => (v.trim() === "" ? undefined : Math.max(1, Math.min(500, Math.round(Number(v) || 1))))),
+  status: z.enum(["trial", "active"]).catch("trial" as const),
+  trialDays: z.coerce.number().int().min(0).max(365).default(14),
+  paidUntil: z
+    .string()
+    .optional()
+    .default("")
+    .transform((v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null)),
   ownerName: z.string().min(2).max(80),
   ownerEmail: z.string().email(),
+  ownerRole: z.enum(["doctor", "receptionist", "other"]).catch("other" as const),
   features: featureListSchema,
   // Unknown values fall back to 'general' rather than rejecting the form: a
   // clinic is not worth failing to create over which pack of disabled recipes
@@ -182,6 +201,20 @@ export async function createClinicAction(
   */
   if (isReservedSlug(d.slug)) return { fieldErrors: { slug: "reserved" } };
 
+  /*
+    The form sends the plan's preset with the agency's changes already applied.
+    A caller that sends no module list at all gets the plan as sold, plus the
+    charts its specialty brings — never "everything off", which is what an
+    empty list would otherwise mean.
+  */
+  const features: FeatureMap = formData.has("features")
+    ? d.features
+    : (() => {
+        const f = planFeatures(d.plan);
+        for (const m of modulesFor(clinicSpecialties(d.specialty, d.departments))) f[m] = true;
+        return f;
+      })();
+
   try {
     slug = await withSystem(async (c) => {
       const p = await provisionClinic(c, {
@@ -191,15 +224,27 @@ export async function createClinicAction(
         phoneE164: phone,
         plan: d.plan,
         planPrice: d.planPrice,
-        features: d.features,
+        memberLimit: d.memberLimit,
+        subscriptionStatus: d.status,
+        trialEndsAt: d.status === "trial" && d.trialDays > 0 ? new Date(Date.now() + d.trialDays * 86_400_000) : null,
+        paidUntil: d.status === "active" ? d.paidUntil : null,
+        features,
         specialty: d.specialty,
         departments: d.departments,
         ownerEmail: d.ownerEmail,
         ownerName: d.ownerName,
+        ownerRole: d.ownerRole,
       });
       clinicId = p.clinicId;
       ownerId = p.ownerId;
-      if (d.features.coordinator) await setCoordinator(c, clinicId, true);
+      if (d.address || d.addressAr) {
+        await c.query(`update clinics set address = nullif($2, ''), address_ar = nullif($3, '') where id = $1`, [
+          clinicId,
+          d.address,
+          d.addressAr,
+        ]);
+      }
+      if (features.coordinator) await setCoordinator(c, clinicId, true);
 
       await audit(c, {
         clinicId,
@@ -207,7 +252,7 @@ export async function createClinicAction(
         action: "admin.clinic.create",
         entity: "clinic",
         entityId: clinicId,
-        detail: { name: d.name, slug: d.slug, features: toFeatureSetting(d.features) },
+        detail: { name: d.name, slug: d.slug, plan: d.plan, status: d.status, features: toFeatureSetting(features) },
       });
       return p.slug;
     });
@@ -358,24 +403,52 @@ export async function resendOwnerInviteAction(
   return { emailed, url };
 }
 
+/**
+ * The billing side of a clinic: its status, price and dates, and the agency's
+ * own note. The plan itself is `setClinicPlanAction`, because changing it
+ * changes what the clinic can do and has consequences to report back.
+ *
+ * Dates: `undefined` leaves one as it is, `null` clears it.
+ */
 export async function updateSubscriptionAction(
   clinicId: string,
-  data: { status?: string; plan?: string; planPrice?: number }
+  data: {
+    status?: string;
+    planPrice?: number;
+    trialEndsAt?: string | null;
+    paidUntil?: string | null;
+    adminNotes?: string;
+  }
 ) {
   const s = await requireAdminCap("clinics.edit");
   const status = data.status;
   if (status && !["trial", "active", "past_due", "suspended"].includes(status)) return;
+  const date = (v: string | null | undefined) =>
+    v === undefined ? undefined : v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  const trialEndsAt = date(data.trialEndsAt);
+  const paidUntil = date(data.paidUntil);
   const was = await withSystem(async (c) => {
     // `old` is read under the row lock, so `was` is the status this save replaced.
     const r = await c.query(
       `update clinics cl set
          subscription_status = coalesce($2, cl.subscription_status),
-         plan = coalesce($3, cl.plan),
-         plan_price = coalesce($4, cl.plan_price)
+         plan_price = coalesce($3, cl.plan_price),
+         trial_ends_at = case when $4::boolean then $5::date::timestamptz else cl.trial_ends_at end,
+         paid_until = case when $6::boolean then $7::date else cl.paid_until end,
+         admin_notes = coalesce($8, cl.admin_notes)
        from (select subscription_status from clinics where id = $1 for update) old
        where cl.id = $1
        returning old.subscription_status as was`,
-      [clinicId, status ?? null, data.plan ?? null, data.planPrice ?? null]
+      [
+        clinicId,
+        status ?? null,
+        data.planPrice ?? null,
+        trialEndsAt !== undefined,
+        trialEndsAt ?? null,
+        paidUntil !== undefined,
+        paidUntil ?? null,
+        data.adminNotes === undefined ? null : data.adminNotes.slice(0, 4000),
+      ]
     );
     await audit(c, {
       clinicId,
@@ -397,6 +470,43 @@ export async function updateSubscriptionAction(
   if ((status === "past_due" || status === "suspended") && was && was !== status) {
     after(() => emailOwnersAboutStatus(clinicId, status));
   }
+}
+
+/**
+ * Moves a clinic to a plan: its modules become the plan's (lib/plans), the
+ * member limit the plan's or the one given, and what it can no longer run is
+ * switched off and named in the answer. Modules outside the plans — the charts,
+ * e-invoicing, the coordinator — are left exactly as they were.
+ */
+export async function setClinicPlanAction(
+  clinicId: string,
+  plan: string,
+  opts: { memberLimit?: number | null } = {}
+): Promise<{ error?: string } & Partial<PlanChangeResult>> {
+  const s = await requireAdminCap("clinics.features");
+  if (!isPlan(plan)) return { error: "invalid" };
+  const memberLimit =
+    opts.memberLimit === undefined || opts.memberLimit === null
+      ? opts.memberLimit
+      : Math.max(1, Math.min(500, Math.round(opts.memberLimit)));
+  const r = await withSystem(async (c) => {
+    const before = (await c.query(`select plan, member_limit from clinics where id = $1`, [clinicId])).rows[0];
+    const out = await setClinicPlan(c, clinicId, plan, { memberLimit });
+    if (!out) return null;
+    await audit(c, {
+      clinicId,
+      userId: s.user.id,
+      action: "admin.clinic.plan",
+      entity: "clinic",
+      entityId: clinicId,
+      detail: { from: before?.plan, to: plan, memberLimit: out.memberLimit, paused: out.paused },
+    });
+    return out;
+  });
+  if (!r) return { error: "not_found" };
+  // The whole admin: the list's plan chip and this clinic's page both change.
+  revalidatePath("/admin", "layout");
+  return r;
 }
 
 /**
@@ -468,8 +578,9 @@ async function emailOwnersAboutStatus(
 export async function updateClinicFeaturesAction(
   clinicId: string,
   features: Record<string, boolean>
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; paused?: string[] }> {
   const s = await requireAdminCap("clinics.features");
+  let paused: string[] = [];
 
   // Whatever the client sent, only known keys are stored and every one of them
   // is written explicitly — a partial map would leave old keys behind and make
@@ -489,18 +600,20 @@ export async function updateClinicFeaturesAction(
     if (!r.rowCount) return;
     // The treatment coordinator brings its flows with it, and takes them away again.
     if ((before?.features?.coordinator === true) !== clean.coordinator) await setCoordinator(c, clinicId, clean.coordinator);
+    // A clinic that can no longer build flows stops running the ones it built.
+    paused = await settleFeatureChange(c, clinicId, resolveFeatures(before?.features), clean);
     await audit(c, {
       clinicId,
       userId: s.user.id,
       action: "admin.clinic.features",
       entity: "clinic",
       entityId: clinicId,
-      detail: clean,
+      detail: { ...clean, paused },
     });
   });
 
-  revalidatePath("/admin");
-  return {};
+  revalidatePath("/admin", "layout");
+  return { paused };
 }
 
 /* --------------------------------------------------------- clinic deletion */

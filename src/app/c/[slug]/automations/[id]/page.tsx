@@ -23,6 +23,8 @@ export default async function AutomationBuilderPage({
 
   const isNew = id === "new";
   if (!isNew && !isUuid(id)) notFound();
+  // Building from nothing is an advanced automation (lib/plans); a basic plan starts from the gallery.
+  if (isNew && !sp.template && !access.clinic.features.automations_advanced) redirect(`/c/${slug}/automations`);
   const locale = access.clinic.defaultLocale;
 
   const data = await inClinic(access, async (c) => {

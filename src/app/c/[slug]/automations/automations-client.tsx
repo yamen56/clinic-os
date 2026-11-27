@@ -182,6 +182,7 @@ export function AutomationsClient({
                   toast(f.invalidFlow, "error");
                   return;
                 }
+                if (r.error === "not_licensed") return toast(t.plans.basicFlow, "error");
                 if (r.error) return toast(t.common.genericError, "error");
                 toast(v ? t.automations.enabled : t.automations.disabled);
               })
@@ -235,6 +236,7 @@ export function AutomationsClient({
                     <History className="h-4 w-4 text-ink-500" />
                     {t.automations.history}
                   </Link>
+                  {modules.automations_advanced && (
                   <button
                     type="button"
                     onClick={() => {
@@ -251,6 +253,7 @@ export function AutomationsClient({
                     <Copy className="h-4 w-4 text-ink-500" />
                     {f.duplicate}
                   </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -538,6 +541,12 @@ function TemplateGallery({
   return (
     <Modal open={open} onClose={onClose} title={f.gallery} wide>
       <p className="mb-4 text-[0.8125rem] text-ink-500">{f.gallerySub}</p>
+      {/* A plan with basic automations runs the gallery's flows; building one is Clinic+ (lib/plans). */}
+      {!modules.automations_advanced ? (
+        <p className="mb-5 rounded-lg bg-sunken px-3 py-2.5 text-[0.8125rem] text-ink-700" data-basic-automations>
+          {t.plans.basicFlow}
+        </p>
+      ) : (
       <Link
         href={`/c/${slug}/automations/new`}
         data-template="scratch"
@@ -551,6 +560,7 @@ function TemplateGallery({
           <span className="block text-[0.75rem] text-ink-500">{f.scratchSub}</span>
         </span>
       </Link>
+      )}
 
       <div className="grid gap-5">
         {TEMPLATE_GROUPS.map((g) => {

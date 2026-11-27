@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { guardCap } from "@/lib/guard";
 import { inClinic } from "@/lib/clinic-api";
 import { appUrl } from "@/lib/urls";
@@ -14,6 +15,8 @@ import { DevicesClient, type DeviceRow } from "./devices-client";
 export default async function DevicesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const access = await guardCap(slug, "settings.clinic");
+  // The clinic's machines are a plan module (lib/plans).
+  if (!access.clinic.features.devices) redirect(`/c/${slug}/settings`);
   const { rows, practises } = await inClinic(access, async (c) => {
     const cl = (await c.query(`select specialty, specialties from clinics where id = $1`, [access.clinicId])).rows[0];
     const list = (

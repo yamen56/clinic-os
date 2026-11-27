@@ -20,6 +20,7 @@ import {
 } from "@/lib/permissions";
 import { applyPay, payFitsRole, paySchema, syncSalaryBill, type Pay } from "./pay";
 import { memberHistorySql } from "@/lib/member-history";
+import { isMemberLimitError, seatState } from "@/lib/plan-change";
 
 const addStaffSchema = z.object({
   fullName: z.string().min(2).max(80),
@@ -88,6 +89,25 @@ export async function addStaffAction(
   );
 
   /*
+    The plan's user limit (lib/plans): a clinic at it cannot gain a member,
+    though editing somebody already here is still an edit. Asked before any
+    account is made, so a refused invitation leaves nothing behind; the
+    trigger in 0118 holds the same line against a race.
+  */
+  const seats = await inClinic(access, async (c) => {
+    const s = await seatState(c, access.clinicId);
+    if (!s.full) return s;
+    const here = await c.query(
+      `select 1 from clinic_members m join users u on u.id = m.user_id
+        where m.clinic_id = $1 and m.active and lower(u.email) = $2`,
+      [access.clinicId, d.email.toLowerCase()]
+    );
+    return { ...s, full: !here.rowCount };
+  });
+  if (seats.full) return { error: "member_limit" };
+
+  try {
+  /*
     Finding or creating the account runs in the system context: a user is not
     owned by one clinic (the same person can work at two), and the RLS policy on
     `users` deliberately lets a clinic read only its own members. Authorisation
@@ -125,7 +145,7 @@ export async function addStaffAction(
     return { userId: u.rows[0].id as string, wasExisting: false, needsInvite: true };
   });
 
-  return inClinic(access, async (c) => {
+  return await inClinic(access, async (c) => {
     const dup = await c.query(
       `select id, active from clinic_members where clinic_id = $1 and user_id = $2`,
       [access.clinicId, userId]
@@ -211,6 +231,11 @@ export async function addStaffAction(
       inviteUrl: emailed ? undefined : inviteUrl,
     };
   });
+  } catch (e) {
+    // Two invitations at once into the last seat: the 0118 trigger refused the second.
+    if (isMemberLimitError(e)) return { error: "member_limit" };
+    throw e;
+  }
 }
 
 /**

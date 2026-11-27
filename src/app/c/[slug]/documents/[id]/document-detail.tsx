@@ -145,6 +145,7 @@ export function DocumentDetailClient({
   slug,
   tz,
   canManage,
+  canSendLink = true,
   canVoid,
   userId,
   hasSavedSignature,
@@ -155,6 +156,8 @@ export function DocumentDetailClient({
   slug: string;
   tz: string;
   canManage: boolean;
+  /** Signing links to a phone are in the plan (lib/plans `esign_remote`). */
+  canSendLink?: boolean;
   canVoid: boolean;
   userId: string;
   hasSavedSignature: boolean;
@@ -354,7 +357,7 @@ export function DocumentDetailClient({
                 {t.docs.countersign}
               </Button>
             )}
-            {canSend && isDraft && (
+            {canSend && canSendLink && isDraft && (
               <Button onClick={() => send(false)} loading={pending} data-send-document>
                 <Send className="h-4 w-4" />
                 {t.docs.sendForSignature}
@@ -381,7 +384,7 @@ export function DocumentDetailClient({
             {(isCompleted || doc.final_pdf_path) && (
               <DownloadSignedPdf slug={slug} documentId={doc.id} title={doc.title} />
             )}
-            {((canSend && !isDraft) || (canManage && doc.status !== "voided") || (canVoid && doc.status !== "voided")) && (
+            {((canSend && canSendLink && !isDraft) || (canManage && doc.status !== "voided") || (canVoid && doc.status !== "voided")) && (
               <Menu
                 label={t.docs.more}
                 buttonClassName={buttonClass({ variant: "outline" })}
@@ -394,7 +397,7 @@ export function DocumentDetailClient({
               >
                 {(close) => (
                   <>
-                    {canSend && !isDraft && (
+                    {canSend && canSendLink && !isDraft && (
                       <MenuItem
                         icon={<Send />}
                         onClick={() => {
@@ -560,6 +563,7 @@ export function DocumentDetailClient({
         staff={staff}
         userId={userId}
         canManage={canManage}
+        canSendLink={canSendLink}
         roleName={roleName}
         onSignMine={() => setSignOpen(true)}
         onEditSigners={isDraft && canManage ? () => setEditSigners(detail.signers) : undefined}

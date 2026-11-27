@@ -68,6 +68,11 @@ export type CanvasProps = {
   onAddFrom: (from: string | null, handle: string, at: XY | null) => void;
   onInsertOnEdge: (edge: FlowEdge, at: XY) => void;
   canConnect: (from: string | null, to: string) => boolean;
+  /**
+   * The flow's shape is fixed: no step added, removed or rewired, only moved
+   * and edited — a plan with basic automations (lib/automation/basic).
+   */
+  locked?: boolean;
 };
 
 const edgeKey = (e: FlowEdge) => `${e.from ?? "trigger"}|${e.handle}`;
@@ -312,8 +317,9 @@ function Inner(props: CanvasProps) {
           edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onConnectEnd={onConnectEnd}
+          onConnect={props.locked ? undefined : onConnect}
+          onConnectEnd={props.locked ? undefined : onConnectEnd}
+          nodesConnectable={!props.locked}
           isValidConnection={isValidConnection}
           onNodeClick={(_, n) => {
             setSelectedEdge(null);
@@ -327,7 +333,7 @@ function Inner(props: CanvasProps) {
             props.onMove({ [n.id]: { x: Math.round(n.position.x), y: Math.round(n.position.y) } }, { history: true });
           }}
           onNodesDelete={(deleted) => props.onRemoveNodes(deleted.map((n) => n.id).filter((id) => id !== "trigger"))}
-          deleteKeyCode={["Delete", "Backspace"]}
+          deleteKeyCode={props.locked ? null : ["Delete", "Backspace"]}
           nodesDraggable={!coarse}
           selectionOnDrag={false}
           selectionKeyCode={null}
@@ -467,7 +473,7 @@ const TriggerNode = memo(function TriggerNode({ selected }: NodeProps) {
         <IssueDot issues={issues} />
       </div>
       <Handle type="source" position={Position.Bottom} id="next" />
-      {props.trigger && !hasStart && (
+      {props.trigger && !hasStart && !props.locked && (
         <div className="absolute start-1/2 top-full mt-5 -translate-x-1/2 rtl:translate-x-1/2">
           <AddButton big label={t.automations.flow.addFirstStep} onClick={() => props.onAddFrom(null, "next", null)} />
         </div>
@@ -553,7 +559,7 @@ const StepNode = memo(function StepNode({ id, data, selected }: NodeProps) {
                     {handleLabel(t.automations, h, node.config)}
                   </span>
                 )}
-                {!used.has(h) && (
+                {!used.has(h) && !props.locked && (
                   <span className="pointer-events-auto">
                     <AddButton label={t.automations.flow.addStep} onClick={() => props.onAddFrom(id, h, null)} />
                   </span>
@@ -600,7 +606,7 @@ function FlowEdgeView({
   return (
     <>
       <BaseEdge id={id} path={path} markerEnd={markerEnd} interactionWidth={24} />
-      {edge && (
+      {edge && !props.locked && (
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan pointer-events-auto absolute flex items-center gap-1"

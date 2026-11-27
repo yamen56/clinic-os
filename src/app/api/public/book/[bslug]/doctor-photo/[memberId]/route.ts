@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/uuid";
 import { withSystem } from "@/lib/db";
+import { featureSql } from "@/lib/features";
 import { openFile } from "@/lib/storage";
 import { rateLimit, clientIp } from "@/lib/booking-public";
 import { rateLimited } from "@/lib/public-guard";
@@ -77,6 +78,7 @@ export async function GET(
          join clinic_members cm on cm.clinic_id = bl.clinic_id
          join users u on u.id = cm.user_id
         where bl.slug = $1 and bl.active and cl.subscription_status <> 'suspended'
+          and ${featureSql("booking")}
           and cm.id = $2 and cm.role = 'doctor' and cm.active
           and (cardinality(bl.doctor_member_ids) = 0 or cm.id = any(bl.doctor_member_ids))`,
       [bslug, memberId]

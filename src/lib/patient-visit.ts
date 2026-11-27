@@ -9,6 +9,7 @@ import { systemMessage } from "./system-messages";
 import { emitTrigger } from "./triggers";
 import { audit } from "./audit";
 import { appUrl } from "./urls";
+import { patientChangesSql } from "./features";
 import {
   VISIT_BOOKABLE_SQL,
   verifyVisitToken,
@@ -101,7 +102,7 @@ async function loadRow(c: PoolClient, appointmentId: string, lock = false): Prom
                 'phone_e164', cl.phone_e164, 'wa_number', ws.phone_number, 'google_maps_url', cl.google_maps_url,
                 'timezone', cl.timezone, 'default_locale', cl.default_locale,
                 'working_hours', cl.working_hours, 'blocked_dates', cl.blocked_dates,
-                'patient_changes', cl.patient_changes, 'patient_changes_cutoff_hours', cl.patient_changes_cutoff_hours,
+                'patient_changes', ${patientChangesSql()}, 'patient_changes_cutoff_hours', cl.patient_changes_cutoff_hours,
                 'wa_connected', coalesce(ws.status = 'connected', false),
                 'suspended', cl.subscription_status = 'suspended' or cl.deleted_at is not null
               ) as clinic

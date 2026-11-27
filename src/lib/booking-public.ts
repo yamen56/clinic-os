@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { withSystem } from "./db";
+import { featureSql, patientChangesSql } from "./features";
 import {
   loadBookingQuestions,
   toPublicQuestion,
@@ -121,7 +122,9 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       await c.query(
         `select bl.*, cl.id as clinic_id from booking_links bl
          join clinics cl on cl.id = bl.clinic_id
-         where bl.slug = $1 and bl.active and cl.subscription_status <> 'suspended'`,
+         where bl.slug = $1 and bl.active and cl.subscription_status <> 'suspended'
+           -- The booking link is a plan module (lib/plans): off, the page says the link is not active.
+           and ${featureSql("booking")}`,
         [bslug]
       )
     ).rows[0];
@@ -131,7 +134,7 @@ export async function loadPublicLink(bslug: string): Promise<PublicLink | null> 
       await c.query(
         `select cl.id, cl.name, cl.name_ar, cl.slug, cl.logo_path, cl.brand_color, cl.address, cl.address_ar,
                 cl.phone_e164, cl.google_maps_url, cl.timezone, cl.default_locale, cl.working_hours, cl.blocked_dates,
-                cl.currency, cl.vocabulary, cl.patient_changes,
+                cl.currency, cl.vocabulary, ${patientChangesSql()} as patient_changes,
                 coalesce(ws.status = 'connected', false) as wa_connected
          from clinics cl left join whatsapp_sessions ws on ws.clinic_id = cl.id
          where cl.id = $1`,

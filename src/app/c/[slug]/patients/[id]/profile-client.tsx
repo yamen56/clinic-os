@@ -387,6 +387,8 @@ export function PatientProfile(props: {
   documents: DocumentListRow[];
   docTemplates: PickableTemplate[];
   canSendDocuments: boolean;
+  /** The plan sends signing links (lib/plans `esign_remote`). */
+  canSendDocLinks?: boolean;
   /*
     The sections this member may open, so the file offers no way into one they
     cannot. A tab, a button or a figure that leads somewhere forbidden is worse
@@ -1321,6 +1323,7 @@ export function PatientProfile(props: {
             documents={props.documents}
             templates={props.docTemplates}
             canSend={props.canSendDocuments}
+            canSendLinks={props.canSendDocLinks !== false}
           />
         )}
         {tab === "invoices" && <ReadyToBill tz={tz} />}
@@ -2407,6 +2410,7 @@ function DocumentsTab({
   documents,
   templates,
   canSend,
+  canSendLinks,
 }: {
   slug: string;
   patientId: string;
@@ -2414,6 +2418,7 @@ function DocumentsTab({
   documents: DocumentListRow[];
   templates: PickableTemplate[];
   canSend: boolean;
+  canSendLinks: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -2432,7 +2437,7 @@ function DocumentsTab({
             <FileSignature className="h-4 w-4" />
             {t.docs.newDocument}
           </Button>
-          {pendingCount > 1 && (
+          {canSendLinks && pendingCount > 1 && (
             <Button
               variant="outline"
               loading={pending}

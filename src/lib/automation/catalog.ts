@@ -18,7 +18,7 @@ import { isUuid } from "../uuid";
 export type Ctx = "patient" | "appointment" | "invoice" | "document" | "conversation" | "treatment";
 
 /** Modules a trigger or step belongs to, named as in lib/features. */
-type Module = "calendar" | "conversations" | "invoices" | "documents" | "patients" | "dental" | "coordinator";
+type Module = "calendar" | "conversations" | "invoices" | "documents" | "patients" | "dental" | "coordinator" | "esign_remote";
 
 const uuid = z.string().refine(isUuid, "uuid");
 const uuids = z.array(uuid).max(100).default([]);
@@ -441,7 +441,8 @@ export type StepDef = {
 
 export const STEPS: StepDef[] = [
   { key: "send_whatsapp", category: "messages", needs: [], module: "conversations" },
-  { key: "send_document", category: "messages", needs: ["patient"], module: "documents" },
+  // It sends the patient a signing link, which a plan that signs in the clinic only does not (lib/plans).
+  { key: "send_document", category: "messages", needs: ["patient"], module: "esign_remote" },
   { key: "wait", category: "timing", needs: [] },
   { key: "wait_for_reply", category: "timing", needs: [], module: "conversations" },
   { key: "condition", category: "logic", needs: [] },

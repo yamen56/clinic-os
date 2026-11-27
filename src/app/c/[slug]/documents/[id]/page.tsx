@@ -59,6 +59,7 @@ export default async function DocumentPage({
       slug={slug}
       tz={access.clinic.timezone}
       canManage={can(access, "documents.manage")}
+      canSendLink={access.clinic.features.esign_remote}
       canVoid={can(access, "documents.void")}
       userId={access.session.user.id}
       hasSavedSignature={data.hasSavedSignature}

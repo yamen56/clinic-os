@@ -93,6 +93,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     });
 
     if (!body.send) return { documentId, status: 200 };
+    // A plan that signs in the clinic only: the document is made, and opened for the tablet.
+    if (!access.clinic.features.esign_remote) return { documentId, error: "not_licensed", status: 200 };
 
     const sent = await sendDocument(c, {
       clinicId: access.clinicId,

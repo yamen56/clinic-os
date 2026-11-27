@@ -22,6 +22,7 @@ export default async function SettingsLayout({
         einvoicing: access.clinic.features.einvoicing,
         dental: !!access.clinic.features.dental,
         face: !!access.clinic.features.aesthetic,
+        devices: access.clinic.features.devices,
       }}
     >
       {children}

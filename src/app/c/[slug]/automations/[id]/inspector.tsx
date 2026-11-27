@@ -64,7 +64,8 @@ export function TriggerInspector({
   trigger: string;
   config: Record<string, unknown>;
   onChange: (c: Record<string, unknown>) => void;
-  onChangeTrigger: () => void;
+  /** Absent when the flow's trigger is fixed (a basic plan). */
+  onChangeTrigger?: () => void;
   lookups: Lookups;
   issues: Issue[];
 }) {
@@ -107,10 +108,12 @@ export function TriggerInspector({
           <p className="mt-0.5 text-[0.75rem] text-ink-500">{(f.triggerHints as Record<string, string>)[trigger]}</p>
         </div>
       </div>
-      <Button variant="outline" size="sm" onClick={onChangeTrigger}>
-        <RefreshCw className="h-4 w-4" />
-        {f.changeTrigger}
-      </Button>
+      {onChangeTrigger && (
+        <Button variant="outline" size="sm" onClick={onChangeTrigger}>
+          <RefreshCw className="h-4 w-4" />
+          {f.changeTrigger}
+        </Button>
+      )}
       <IssueList issues={issues} />
 
       {trigger === "appointment_status_changed" && (
@@ -282,8 +285,9 @@ export function StepInspector({
   /** Answers change the step's outputs, so the edges have to move with them. */
   onReplyOptions: (options: ReplyOption[], removed: number | null) => void;
   onLabel: (label: string) => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
+  /** Both absent when the flow's shape is fixed (a basic plan). */
+  onDelete?: () => void;
+  onDuplicate?: () => void;
 }) {
   const { t, locale } = useI18n();
   const f = t.automations.flow;
@@ -304,14 +308,20 @@ export function StepInspector({
           <div className="text-[0.9375rem] font-semibold">{(t.automations.steps as Record<string, string>)[node.type]}</div>
           <p className="mt-0.5 text-[0.75rem] text-ink-500">{(f.stepHints as Record<string, string>)[node.type]}</p>
         </div>
+        {(onDuplicate || onDelete) && (
         <div className="flex shrink-0 gap-1">
+          {onDuplicate && (
           <button type="button" title={f.duplicate} aria-label={f.duplicate} onClick={onDuplicate} className="grid h-8 w-8 place-items-center rounded-md text-ink-500 hover:bg-sunken">
             <Copy className="h-4 w-4" />
           </button>
+          )}
+          {onDelete && (
           <button type="button" title={f.delete} aria-label={f.delete} onClick={onDelete} className="grid h-8 w-8 place-items-center rounded-md text-ink-500 hover:bg-danger-soft hover:text-danger">
             <Trash2 className="h-4 w-4" />
           </button>
+          )}
         </div>
+        )}
       </div>
       <IssueList issues={issues} />
 

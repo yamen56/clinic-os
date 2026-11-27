@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { featureSql } from "./features";
 
 /**
  * What a clinic has to set up before the platform works for it, read from what
@@ -38,6 +39,8 @@ export async function setupChecklist(c: PoolClient, clinicId: string): Promise<S
          exists (select 1 from clinic_members m where m.clinic_id = cl.id and m.active and m.role = 'doctor') as team,
          coalesce((select ws.status = 'connected' from whatsapp_sessions ws where ws.clinic_id = cl.id), false) as whatsapp,
          exists (select 1 from booking_links b where b.clinic_id = cl.id and b.active) as booking,
+         -- A plan without the booking link has nothing to set up there (lib/plans).
+         ${featureSql("booking")} as booking_licensed,
          -- The day-before reminder, or a flow of the clinic's own before appointments.
          exists (select 1 from automations a where a.clinic_id = cl.id and a.active and a.trigger_type = 'before_appointment') as reminders,
          exists (select 1 from patients p where p.clinic_id = cl.id and p.merged_into is null) as patients
@@ -45,5 +48,9 @@ export async function setupChecklist(c: PoolClient, clinicId: string): Promise<S
       [clinicId]
     )
   ).rows[0];
-  return SETUP_KEYS.map((key) => ({ key, done: !!r?.[key], path: PATHS[key] }));
+  return SETUP_KEYS.filter((key) => key !== "booking" || r?.booking_licensed !== false).map((key) => ({
+    key,
+    done: !!r?.[key],
+    path: PATHS[key],
+  }));
 }

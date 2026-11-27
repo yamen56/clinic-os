@@ -113,12 +113,15 @@ const SECTION_ICONS: Partial<Record<Capability, React.ComponentType<{ className?
 
 export function StaffClient({
   slug,
+  seats,
   members,
   selfId,
   viewerIsOwner,
   currency,
 }: {
   slug: string;
+  /** The plan's user limit (lib/plans); `limit` null is none. */
+  seats?: { used: number; limit: number | null; full: boolean };
   members: Member[];
   selfId: string | null;
   viewerIsOwner: boolean;
@@ -215,14 +218,23 @@ export function StaffClient({
       <Card>
         <CardHeader
           title={t.staff.title}
-          sub={t.staff.sub}
+          sub={
+            seats?.limit != null
+              ? `${t.staff.sub} · ${t.plans.seatsLine.replace("{n}", String(seats.used)).replace("{limit}", String(seats.limit))}`
+              : t.staff.sub
+          }
           action={
-            <Button size="sm" onClick={() => setAddOpen(true)}>
+            <Button size="sm" onClick={() => setAddOpen(true)} disabled={seats?.full} data-add-staff>
               <UserPlus className="h-4 w-4" />
               {t.staff.addStaff}
             </Button>
           }
         />
+        {seats?.full && seats.limit != null && (
+          <p className="mx-5 mb-3 rounded-lg bg-sunken px-3 py-2 text-[0.8125rem] text-ink-700" data-seats-full>
+            {t.plans.seatsFull.replace("{limit}", String(seats.limit))}
+          </p>
+        )}
         <ul className="divide-y divide-line">
           {current.map((m) => (
             <li key={m.id} className={`flex items-center gap-3 px-5 py-3 ${m.active ? "" : "opacity-50"}`}>
@@ -474,7 +486,12 @@ export function StaffClient({
                     pay: addPay ?? undefined,
                   });
                   if (r.error) {
-                    toast(t.common.genericError, "error");
+                    toast(
+                      r.error === "member_limit" && seats?.limit != null
+                        ? t.plans.seatsFull.replace("{limit}", String(seats.limit))
+                        : t.common.genericError,
+                      "error"
+                    );
                     return;
                   }
                   if (r.inviteUrl) {
