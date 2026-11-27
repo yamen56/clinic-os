@@ -201,7 +201,7 @@ function Inbox({ slug, tz, onUnread }: { slug: string; tz: string; onUnread: (n:
       type="button"
       onClick={() => setFilter(key)}
       aria-pressed={filter === key}
-      className={`rounded-full border px-3 py-1 text-[0.8125rem] font-medium transition-colors duration-140 ${
+      className={`touch-manipulation rounded-full border px-3 py-1 text-[0.8125rem] max-md:py-2 font-medium transition-colors duration-140 ${
         filter === key
           ? "border-brand-600 bg-brand-100 text-brand-700"
           : "border-line bg-surface text-ink-700 hover:border-line-strong"

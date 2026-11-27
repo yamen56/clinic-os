@@ -342,7 +342,8 @@ export function PatientsList({
           onChange={(e) => apply({ ...f, q: e.target.value })}
         />
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-full bg-ink-900/5 p-1" role="group" data-patient-presets>
+          {/* On a 320px phone the three names ran 17px past the screen: tighter there, and never wider than it. */}
+          <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full bg-ink-900/5 p-1 [scrollbar-width:none]" role="group" data-patient-presets>
             {presets.map((p) => (
               <button
                 key={p.key}
@@ -350,8 +351,8 @@ export function PatientsList({
                 onClick={() => apply(p.next)}
                 aria-pressed={preset === p.key}
                 data-preset={p.key}
-                className={`h-8 touch-manipulation whitespace-nowrap rounded-full px-3 text-[0.8125rem] font-medium transition-colors duration-140 ease-out max-md:h-10 ${
-                  preset === p.key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
+                className={`h-8 shrink-0 touch-manipulation whitespace-nowrap rounded-full px-3 text-[0.8125rem] font-medium transition-colors duration-140 ease-out max-md:h-10 max-[360px]:px-2 ${
+                  preset === p.key ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
                 }`}
               >
                 {p.label}
@@ -428,7 +429,7 @@ export function PatientsList({
                 >
                   {/* Who: the face of the row, and on a phone everything but one chip. */}
                   <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <Avatar name={p.fullName} size={34} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
+                    <Avatar name={p.fullName} size={34} color={p.status === "lead" ? "var(--color-st-pending-soft)" : undefined} ink={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate text-sm font-medium text-ink-900">{p.fullName}</span>

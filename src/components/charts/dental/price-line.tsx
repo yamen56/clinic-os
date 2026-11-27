@@ -23,7 +23,7 @@ import { pickPrice, variantOf } from "@/lib/charts/dental/pricing";
 import { useDentalStore, type DentalStore } from "./store";
 import { useChartWriter } from "./writer";
 import { moneyOf, type Money } from "./money";
-import { INK, SOFT } from "./tooth-art";
+import { INK, SOFT, TEXT } from "./tooth-art";
 
 /** A treatment that carries a price: work done to the patient, not what they came with — and not a tooth of a full arch, priced as the arch. */
 export function priceable(m: Mark, marks: Mark[]): boolean {
@@ -109,7 +109,7 @@ export function PriceLine({ m, tz }: { m: Mark; tz: string }) {
         {store.canBill && text && (
           <span
             className="ms-auto rounded-full px-2 py-0.5 text-[length:max(11px,0.71875rem)] font-semibold"
-            style={cash.billed ? { background: SOFT.done, color: INK.done } : { background: "var(--color-sunken)", color: "var(--color-ink-500)" }}
+            style={cash.billed ? { background: SOFT.done, color: TEXT.done } : { background: "var(--color-sunken)", color: "var(--color-ink-500)" }}
             data-billed={cash.billed ? "yes" : "no"}
           >
             {cash.billed ? `${P.billed} · ${cash.invoices.map((i) => i.number).join(", ")}` : P.notBilled}

@@ -21,7 +21,7 @@ import { tooth as toothOf } from "@/lib/charts/dental/teeth";
 import { EMERGENCY_STEP, protocolFor, stepOf } from "@/lib/charts/dental/protocols";
 import { TreatmentGlyph } from "./treatment-picker";
 import { detailLabels, markLabel, siteLabel } from "./labels";
-import { INK, SOFT } from "./tooth-art";
+import { INK, SOFT, TEXT } from "./tooth-art";
 import { PriceLine, useEntryMoney } from "./price-line";
 import { LabLine } from "./lab-line";
 
@@ -37,7 +37,7 @@ export function PaintPill({ m }: { m: Mark }) {
     return <span className="rounded-full bg-sunken px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold text-ink-500">{t.dental.voided}</span>;
   }
   return (
-    <span className="rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold" style={{ background: SOFT[paint], color: INK[paint] }}>
+    <span className="rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold" style={{ background: SOFT[paint], color: TEXT[paint] }}>
       {t.dental.status[paint]}
     </span>
   );
@@ -144,7 +144,7 @@ export function EntryRow({
             type="button"
             onClick={onOpen}
             className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl px-2.5 text-[0.78125rem] font-semibold"
-            style={{ background: SOFT.progress, color: INK.progress }}
+            style={{ background: SOFT.progress, color: TEXT.progress }}
             data-open-item={m.id}
           >
             <span className="max-[420px]:sr-only">{T.treatment.open}</span>
@@ -156,7 +156,7 @@ export function EntryRow({
             type="button"
             onClick={() => onMarkDone(m.id)}
             className="inline-flex h-8 shrink-0 items-center gap-1 rounded-ctl px-2.5 text-[0.78125rem] font-semibold"
-            style={{ background: SOFT.done, color: INK.done }}
+            style={{ background: SOFT.done, color: TEXT.done }}
           >
             <Check className="h-3.5 w-3.5" />
             <span className="max-[420px]:sr-only">{T.markDone}</span>
@@ -295,7 +295,7 @@ export function EventList({ events, marks, tz, showSite }: { events: MarkEvent[]
           <li key={e.id} className="relative py-1.5" data-event={e.action}>
             <span
               className="absolute -start-[34px] top-1.5 grid h-5 w-5 place-items-center rounded-md ring-2 ring-surface"
-              style={{ background: paint ? SOFT[paint] : "var(--color-sunken)", color: paint ? INK[paint] : "var(--color-ink-500)" }}
+              style={{ background: paint ? SOFT[paint] : "var(--color-sunken)", color: paint ? TEXT[paint] : "var(--color-ink-500)" }}
             >
               <Icon className="h-3 w-3" strokeWidth={2.6} />
             </span>

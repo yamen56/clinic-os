@@ -84,7 +84,7 @@ export function MyHoursClient({
               role="radio"
               aria-checked={own === v}
               onClick={() => setOwn(v)}
-              className={`min-h-10 rounded-full px-3 text-[0.84375rem] font-semibold transition-colors ${own === v ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"}`}
+              className={`min-h-10 rounded-full px-3 text-[0.84375rem] font-semibold transition-colors ${own === v ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"}`}
               data-hours-choice={v ? "own" : "clinic"}
             >
               {v ? t.myHours.choiceOwn : t.myHours.choiceClinic}

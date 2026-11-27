@@ -20,7 +20,7 @@ import { archTeeth } from "@/lib/charts/dental/full-arch";
 import { colOf } from "@/lib/charts/dental/implant-place";
 import { tooth } from "@/lib/charts/dental/teeth";
 import { stateOf, type Status, type ToothState } from "@/lib/charts/dental/state";
-import { CW, INK, OCC, PaintSwatch, SIDE_H, SOFT, ToothSide, ToothTop } from "./tooth-art";
+import { CW, INK, OCC, PaintSwatch, SIDE_H, SOFT, TEXT, ToothSide, ToothTop } from "./tooth-art";
 import { PieceSide, PieceTop } from "./prosthesis-art";
 
 const STATUSES: Status[] = ["planned", "done", "existing"];
@@ -240,7 +240,7 @@ export function BridgeSheet({
               title={T.statusHint[s]}
               onClick={() => onStatus(s)}
               className="inline-flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold"
-              style={status === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
+              style={status === s ? { background: SOFT[s], color: TEXT[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
             >
               <PaintSwatch paint={s} size={14} />
               {T.status[s]}

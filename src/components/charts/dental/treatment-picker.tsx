@@ -218,7 +218,7 @@ export function TreatmentPicker({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={T.search}
-          className="h-10 w-full rounded-ctl border border-line bg-surface ps-9 pe-3 text-base text-ink-900 placeholder:text-ink-500 transition-[border-color,box-shadow] duration-140 hover:border-line-strong focus:border-brand-600 focus:shadow-[0_0_0_3px_rgb(105_137_166/0.30)] focus:outline-none md:text-sm"
+          className="h-10 w-full rounded-ctl border border-line bg-surface ps-9 pe-3 text-base text-ink-900 placeholder:text-ink-400 transition-[border-color,box-shadow] duration-140 hover:border-line-strong focus:border-brand-600 focus:shadow-[0_0_0_3px_rgb(105_137_166/0.30)] focus:outline-none md:text-sm"
         />
       </div>
 
@@ -258,7 +258,7 @@ export function TreatmentPicker({
                   aria-selected={kind === k}
                   onClick={() => setKind(k)}
                   className={`h-8 rounded-[6px] px-3 text-[0.8125rem] font-semibold transition-colors duration-140 ${
-                    kind === k ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+                    kind === k ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
                   }`}
                 >
                   {k === "procedure" ? T.treatments : T.findings}

@@ -617,7 +617,7 @@ function AccessEditor({
               aria-checked={level === lv}
               onClick={() => onLevel(lv)}
               className={`touch-manipulation rounded-full px-3.5 py-1.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
-                level === lv ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+                level === lv ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
               }`}
             >
               {lv === "full" ? t.staff.fullAccess : t.staff.partialAccessLabel}

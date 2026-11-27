@@ -12,7 +12,7 @@ import { HintToggle, useFoldedHints } from "./hints";
   what lets the viewport allow pinch-zoom again instead of banning it outright.
 */
 const base =
-  "w-full rounded-ctl border border-line bg-surface px-3 text-base text-ink-900 placeholder:text-ink-500 transition-[border-color,box-shadow] duration-140 ease-out hover:border-line-strong focus:border-brand-600 focus:shadow-[0_0_0_3px_rgb(105_137_166/0.30)] focus:outline-none disabled:bg-subtle disabled:text-ink-500 md:text-sm";
+  "w-full rounded-ctl border border-line bg-surface px-3 text-base text-ink-900 placeholder:text-ink-400 transition-[border-color,box-shadow] duration-140 ease-out hover:border-line-strong focus:border-brand-600 focus:shadow-[0_0_0_3px_rgb(105_137_166/0.30)] focus:outline-none disabled:bg-subtle disabled:text-ink-500 md:text-sm";
 
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className = "", ...rest }, ref) {

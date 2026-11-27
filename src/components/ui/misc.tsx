@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { inkOn } from "@/lib/contrast";
+import { useEdgeFade } from "@/lib/use-edge-fade";
 
 export function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-md bg-ink-900/6 ${className}`} />;
@@ -55,10 +56,17 @@ export function Avatar({
   color,
   src,
   fit = "cover",
+  ink,
 }: {
   name: string;
   size?: number;
   color?: string;
+  /**
+   * The initials' colour, for a `color` given as a token (`var(--…)`), which
+   * `inkOn` cannot measure — it fell back to white, and a lead's white
+   * initials on amber were 2.1:1. Pass a chip's pair: soft fill, solid ink.
+   */
+  ink?: string;
   /** A photo. Initials are drawn underneath and show through if it fails. */
   src?: string | null;
   /**
@@ -85,7 +93,7 @@ export function Avatar({
         background: color || "var(--color-brand-100)",
         // Initials sit on a colour the clinic chose, so white is not a safe
         // assumption — a pale brand colour made them invisible.
-        color: color ? inkOn(color) : "var(--color-brand-700)",
+        color: ink ?? (color ? inkOn(color) : "var(--color-brand-700)"),
       }}
     >
       {initials}
@@ -124,8 +132,9 @@ export function Tabs({
   active: string;
   onChange: (key: string) => void;
 }) {
+  const fade = useEdgeFade<HTMLDivElement>({ selected: '[aria-selected="true"]', key: active });
   return (
-    <div className="flex gap-1 overflow-x-auto border-b border-line" role="tablist">
+    <div ref={fade.ref} style={fade.style} className="flex gap-1 overflow-x-auto border-b border-line" role="tablist">
       {tabs.map((t) => (
         <button
           key={t.key}
@@ -169,10 +178,14 @@ export function LinkTabs({
   /** Fired on press, before navigation — for an optimistic highlight. */
   onSelect?: (key: string) => void;
 }) {
+  const fade = useEdgeFade<HTMLDivElement>({
+    selected: '[aria-selected="true"]',
+    key: tabs.find((t) => t.active)?.key,
+  });
   // One tab is not a choice, and a strip you cannot leave is furniture.
   if (tabs.length < 2) return null;
   return (
-    <div className="mb-4 flex gap-1 overflow-x-auto border-b border-line" role="tablist">
+    <div ref={fade.ref} style={fade.style} className="mb-4 flex gap-1 overflow-x-auto border-b border-line" role="tablist">
       {tabs.map((t) => (
         <Link
           key={t.key}

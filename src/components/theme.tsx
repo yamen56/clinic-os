@@ -166,7 +166,7 @@ export function ThemePicker() {
               aria-checked={on}
               onClick={() => setThemePref(key)}
               className={`flex h-9 flex-1 touch-manipulation items-center justify-center gap-1.5 rounded-[6px] text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
-                on ? "bg-surface text-ink-900 shadow-card ring-1 ring-line" : "text-ink-500 hover:text-ink-900"
+                on ? "bg-segment text-ink-900 shadow-card ring-1 ring-line" : "text-ink-500 hover:text-ink-900"
               }`}
             >
               <Icon className="h-4 w-4" strokeWidth={1.75} />

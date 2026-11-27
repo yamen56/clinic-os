@@ -392,7 +392,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
     store.goTab(key);
   };
 
-  const area = "w-full rounded-ctl border bg-surface px-3 py-2 text-base text-ink-900 placeholder:text-ink-500 focus:border-brand-600 focus:outline-none md:text-sm";
+  const area = "w-full rounded-ctl border bg-surface px-3 py-2 text-base text-ink-900 placeholder:text-ink-400 focus:border-brand-600 focus:outline-none md:text-sm";
   const field = (f: Field, rows: number) => {
     const hearingHere = talk.listening && target === f;
     return (

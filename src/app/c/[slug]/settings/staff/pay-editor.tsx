@@ -140,7 +140,7 @@ export function PayEditor({
               data-pay-kind={k}
               onClick={() => set({ kind: k })}
               className={`flex h-9 min-w-0 flex-1 touch-manipulation items-center justify-center rounded-[6px] px-1.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
-                on ? "bg-surface text-ink-900 shadow-card ring-1 ring-line" : "text-ink-500 hover:text-ink-900"
+                on ? "bg-segment text-ink-900 shadow-card ring-1 ring-line" : "text-ink-500 hover:text-ink-900"
               }`}
             >
               <span className="truncate">{S.payKinds[k]}</span>

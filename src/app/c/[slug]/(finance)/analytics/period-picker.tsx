@@ -45,7 +45,7 @@ export function PeriodPicker({ slug, current, menu }: { slug: string; current: s
             onClick={() => setPressed(key)}
             scroll={false}
             className={`touch-manipulation whitespace-nowrap rounded-full px-3.5 py-1.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
-              on === key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+              on === key ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
             }`}
           >
             {F.presets[key]}

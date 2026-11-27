@@ -35,6 +35,19 @@ export const SOFT: Record<Paint, string> = {
   finding: "var(--color-dental-finding-soft)",
   progress: "var(--color-dental-progress-soft)",
 };
+/*
+  The same ink as *words* on its SOFT chip ("Planned", "Done"). The inks are
+  tuned to read on a tooth, and as text on their own pale chips they were
+  3.7–4.5:1 (2026-11-27); a step toward black takes every one past 5.3 and
+  keeps the hue a dentist reads. Not for drawing: the tooth keeps INK.
+*/
+export const TEXT: Record<Paint, string> = {
+  planned: "color-mix(in oklab, var(--color-dental-planned) 85%, black)",
+  done: "color-mix(in oklab, var(--color-dental-done) 85%, black)",
+  existing: "color-mix(in oklab, var(--color-dental-existing) 85%, black)",
+  finding: "color-mix(in oklab, var(--color-dental-finding) 85%, black)",
+  progress: "color-mix(in oklab, var(--color-dental-progress) 85%, black)",
+};
 
 export const LINE = "var(--color-tooth-line)";
 export const url = (id: string) => `url(#${DEFS}-${id})`;

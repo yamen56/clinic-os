@@ -47,7 +47,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {items.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-card border border-line border-s-4 bg-surface/85 px-4 backdrop-blur-xl backdrop-saturate-150 py-2.5 text-sm font-medium text-ink-900 shadow-pop animate-fade-up ${barColor[t.kind]}`}
+            className={`pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-card border border-line border-s-4 bg-surface/95 px-4 backdrop-blur-xl backdrop-saturate-150 py-2.5 text-sm font-medium text-ink-900 shadow-pop animate-fade-up ${barColor[t.kind]}`}
           >
             {icons[t.kind]}
             <span>{t.text}</span>

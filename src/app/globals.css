@@ -70,14 +70,19 @@
   /*
     Ink, measured against white. 500 is the secondary text of the whole product
     — dates, hints, the second line of every row — and at #7a828c it was 3.9:1,
-    under the 4.5 floor for text that size. It is 5.7:1 now, and 700 moved with
-    it so the step between them still reads. 400 is for icons and metadata
-    that sits beside a label, never for a sentence on its own.
+    under the 4.5 floor for text that size; 700 moved with it so the step
+    between them still reads.
+
+    400 was meant for icons only, but a phone walk-through (2026-11-27) found it
+    on a hundred sentences — "no bookings yet", file numbers, "2 months ago",
+    the setup checklist — at 3.2:1, washed out on a phone in daylight. So 400
+    is text-grade now: 4.6:1 on the darkest a frosted card gets over the glow,
+    and 500 stepped down to 6.8:1 to stay a visible step above it.
   */
   --color-ink-900: #141821;
   --color-ink-700: #3f4753;
-  --color-ink-500: #5d6775;
-  --color-ink-400: #868f9c;
+  --color-ink-500: #535c6a;
+  --color-ink-400: #646d79;
   --color-ink-300: #c3cad4;
   --color-line: #e2e6ec;
   --color-line-strong: #c6cdd7;
@@ -142,34 +147,55 @@
   --color-warm: #e4946b;
   --color-deep-blue: #1e3a6b;
 
-  /* Semantic */
-  --color-ok: #2f9e6a;
-  --color-warning: #c98a2b;
-  --color-danger: #c24a4a;
-  --color-danger-hover: #a93f3f;
-  --color-danger-soft: #f7ecec;
+  /*
+    Semantic, and the status chips — tinted fill, solid ink.
 
-  /* Status chips — tinted fill, solid ink */
-  --color-st-scheduled: #4a6b8a;
+    Every ink here is read as text on its own soft fill ("Paid", "Pending",
+    an amount owed), and most of them also as a fill under white ("4" on a
+    badge, a green Done button). Until 2026-11-27 the green measured 3.0:1 on
+    its chip and the amber 2.6:1 — "Paid" and "Lead" were the faintest words
+    on a phone. Each is now the same hue taken just dark enough to pass 4.5:1
+    on its chip, on a white card and on the canvas, and under white text. The
+    soft fills did not move, so a chip is the colour it was, only legible.
+  */
+  --color-ok: #18794e;
+  --color-warning: #966000;
+  --color-danger: #b63f40;
+  --color-danger-hover: #9e3536;
+  --color-danger-soft: #f7ecec;
+  /* A danger fill under white text. The same as the ink in light; at night
+     the ink is lifted to read on navy and the fill is not (see below). */
+  --color-danger-fill: #b63f40;
+
+  --color-st-scheduled: #44647f;
   --color-st-scheduled-soft: #dce5ee;
-  --color-st-confirmed: #2f9e6a;
+  --color-st-confirmed: #18794e;
   --color-st-confirmed-soft: #e7f4ee;
   --color-st-completed: #2a2d33;
   --color-st-completed-soft: #eceded;
-  --color-st-noshow: #c98a2b;
+  --color-st-noshow: #966000;
   --color-st-noshow-soft: #f9f0e2;
-  --color-st-cancelled: #c24a4a;
+  --color-st-cancelled: #b63f40;
   --color-st-cancelled-soft: #f7ecec;
-  --color-st-pending: #c98a2b;
+  --color-st-pending: #966000;
   --color-st-pending-soft: #f9f0e2;
   /* The patient's day (patient-flow.ts): in the waiting room, with the
      doctor, and past their time without having arrived. */
-  --color-st-waiting: #2b7fb8;
+  --color-st-waiting: #1a6fa5;
   --color-st-waiting-soft: #e3f0f8;
   --color-st-inroom: #7056a8;
   --color-st-inroom-soft: #efeaf7;
-  --color-st-late: #c2593a;
+  --color-st-late: #b04a2c;
   --color-st-late-soft: #fbece6;
+
+  /*
+    The chosen option of a segmented switch (Invoices | Payments, All |
+    Owes | …), raised out of its tray. White in light, like the card. At
+    night the card's navy was the tray's navy too, so the chosen option sat
+    *into* the tray and only its text said which it was; there it is a lifted
+    navy step instead.
+  */
+  --color-segment: #ffffff;
 
   /*
     The dental chart. Teeth, gums and the work in them are drawn as they look
@@ -384,7 +410,9 @@
     --color-ink-900: #e9edf3;
     --color-ink-700: #c0c8d4;
     --color-ink-500: #94a0b0;
-    --color-ink-400: #6f7b8c;
+    /* Text-grade, as in light: 5.4:1 on a card, 4.7 on the sunken step.
+       #6f7b8c was 4.1 and carried the same hundred sentences. */
+    --color-ink-400: #8390a1;
     --color-ink-300: #465163;
     --color-line: #1f2e47;
     --color-line-strong: #2f405d;
@@ -415,9 +443,20 @@
 
     --color-ok: #4cc38a;
     --color-warning: #e0a84e;
-    --color-danger: #d4524f;
-    --color-danger-hover: #bf4542;
+    /*
+      Red splits in two at night. As text — an amount owed, "Sign out", a
+      warning — it has to be light to read on navy: #d4524f was 3.9:1 on its
+      own chip. As a fill under white — a badge's count, Delete — it has to
+      stay deep: lifted, white on it would fall under 4:1. So the ink is
+      lifted and `bg-danger` reads `--color-danger-fill` instead (utilities,
+      end of file); 5.0:1 under white.
+    */
+    --color-danger: #f07470;
+    --color-danger-fill: #c4413f;
+    --color-danger-hover: #b23a38;
     --color-danger-soft: #331b1d;
+
+    --color-segment: #243552;
 
     --color-st-scheduled: #8fb0d4;
     --color-st-scheduled-soft: #1c2a3b;
@@ -467,11 +506,12 @@
     --color-sunken: #f0f3f7;
     --color-ink-900: #141821;
     --color-ink-700: #3f4753;
-    --color-ink-500: #5d6775;
-    --color-ink-400: #868f9c;
+    --color-ink-500: #535c6a;
+    --color-ink-400: #646d79;
     --color-ink-300: #c3cad4;
     --color-line: #e2e6ec;
     --color-line-strong: #c6cdd7;
+    --color-segment: #ffffff;
     --color-brand-50: #f3f5f8;
     --color-brand-100: #e2e7ee;
     --color-brand-200: #c7d0dc;
@@ -483,7 +523,10 @@
     --color-brand-hover: #222b3b;
     --color-on-brand: #ffffff;
     --color-night: #0b1220;
-    --color-danger: #c24a4a;
+    --color-danger: #b63f40;
+    --color-danger-fill: #b63f40;
+    --color-danger-hover: #9e3536;
+    --color-danger-soft: #f7ecec;
     --color-st-noshow-soft: #f9f0e2;
     color: var(--color-ink-900);
   }
@@ -985,6 +1028,11 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
   specificity.
 */
 @layer utilities {
+  /* A red fill stays deep at night while red text is lifted (see the dark theme). */
+  :root[data-theme="dark"] .bg-danger,
+  :root[data-theme="dark"] .hover\:bg-danger:hover {
+    background-color: var(--color-danger-fill);
+  }
   :root[data-theme="dark"] .bg-ink-900\/4 { background-color: rgb(26 41 66 / 0.5); }
   :root[data-theme="dark"] .bg-ink-900\/5 { background-color: rgb(26 41 66 / 0.6); }
   :root[data-theme="dark"] .bg-ink-900\/6 { background-color: rgb(26 41 66 / 0.7); }

@@ -204,7 +204,7 @@ export function EarningsClient({
             <button
               aria-label={t.earnings.previousMonth}
               onClick={() => router.push(`/c/${slug}/earnings?m=${offset - 1}`)}
-              className="rounded-lg border border-line p-1.5 text-ink-500 hover:border-brand-400"
+              className="rounded-lg border border-line p-1.5 text-ink-500 max-md:p-2.5 hover:border-brand-400"
             >
               <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </button>
@@ -215,7 +215,7 @@ export function EarningsClient({
               aria-label={t.earnings.nextMonth}
               disabled={offset >= 0}
               onClick={() => router.push(`/c/${slug}/earnings?m=${offset + 1}`)}
-              className="rounded-lg border border-line p-1.5 text-ink-500 hover:border-brand-400 disabled:opacity-40"
+              className="rounded-lg border border-line p-1.5 text-ink-500 max-md:p-2.5 hover:border-brand-400 disabled:opacity-40"
             >
               <ChevronRight className="h-4 w-4 rtl:rotate-180" />
             </button>

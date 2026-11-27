@@ -680,7 +680,7 @@ export function PatientProfile(props: {
     >
       {/* Header */}
       <div className="relative mb-5 flex flex-wrap items-start gap-4">
-        <Avatar name={p.full_name} size={52} color={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
+        <Avatar name={p.full_name} size={52} color={p.status === "lead" ? "var(--color-st-pending-soft)" : undefined} ink={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
         {/*
           At least 12rem before anything shares its line. With a basis of
           zero, the row of actions took all the width it wanted and an iPad in
@@ -1598,7 +1598,7 @@ function TagsRow({
               moment ago has not been read back yet, so it keeps the brand pill
               until the next load rather than flashing an arbitrary colour.
             */
-            className={`group inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            className={`group inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium max-md:gap-1.5 max-md:py-1 ${
               color ? "text-white" : "bg-brand-50 text-brand-700"
             }`}
             style={color ? { background: color } : undefined}
@@ -1610,7 +1610,9 @@ function TagsRow({
                 onChange(tags.filter((x) => x !== tag));
                 await removeTagAction(slug, patientId, tag);
               }}
-              className="opacity-40 transition-opacity hover:opacity-100"
+              /* A wider hit area than the 12px cross, and visible without a hover: a
+                 phone has none, and at 40% it was all but invisible there. */
+              className="relative opacity-40 transition-opacity before:absolute before:-inset-2 before:content-[''] hover:opacity-100 max-md:opacity-75"
             >
               <X className="h-3 w-3" />
             </button>
@@ -1622,7 +1624,7 @@ function TagsRow({
           <input
             autoFocus
             list={`tags-${patientId}`}
-            className="h-6 w-28 rounded-full border border-brand-300 px-2.5 text-xs outline-none"
+            className="h-6 w-28 rounded-full border border-brand-300 bg-surface px-2.5 text-xs text-ink-900 outline-none max-md:h-8 max-md:w-40 max-md:text-base"
             value={val}
             onChange={(e) => setVal(e.target.value)}
             onBlur={commit}
@@ -1647,7 +1649,7 @@ function TagsRow({
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-1 rounded-full border border-dashed border-line-strong px-2.5 py-0.5 text-xs text-ink-400 transition-colors hover:border-brand-400 hover:text-brand-700"
+          className="inline-flex touch-manipulation items-center gap-1 rounded-full border border-dashed border-line-strong px-2.5 py-0.5 text-xs text-ink-400 transition-colors hover:border-brand-400 hover:text-brand-700 max-md:py-1.5"
         >
           <Plus className="h-3 w-3" />
           {t.patients.addTag}
@@ -1898,7 +1900,7 @@ function NotesTab({
                 key={c.id}
                 onClick={() => setCategoryId(c.id)}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  categoryId === c.id ? "bg-surface shadow-card" : "text-ink-500"
+                  categoryId === c.id ? "bg-segment shadow-card" : "text-ink-500"
                 }`}
                 style={categoryId === c.id ? { color: c.color } : undefined}
               >

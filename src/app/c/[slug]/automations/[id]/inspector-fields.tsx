@@ -85,7 +85,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={`min-w-0 rounded-md px-2 py-1.5 text-[0.75rem] font-medium leading-tight transition-colors ${
-            value === o.value ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
+            value === o.value ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
           }`}
         >
           {o.label}

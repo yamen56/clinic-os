@@ -27,7 +27,7 @@ import { inOrder, placeDetail, sitesFor as implantSites, whereText } from "@/lib
 import { isBridge, type BridgeTooth } from "@/lib/charts/dental/bridge";
 import { PERMANENT_LOWER, PERMANENT_UPPER, PRIMARY_LOWER, PRIMARY_UPPER, dentitionForAge, tooth as toothOf, type Arch, type Dentition, type Surface } from "@/lib/charts/dental/teeth";
 import { endOfDay, eventDays, finishedPlan, isPlannedWork, isToothSite, paintAt, stateOf, toothStates, type Mark, type Paint, type Person, type Status } from "@/lib/charts/dental/state";
-import { DentalDefs, INK, PaintSwatch, SOFT } from "@/components/charts/dental/tooth-art";
+import { DentalDefs, INK, PaintSwatch, SOFT, TEXT } from "@/components/charts/dental/tooth-art";
 import { useDentalStore, type ChartFile, type DentalTabData } from "@/components/charts/dental/store";
 import { call, newId, useChartWriter, type FreshMark } from "@/components/charts/dental/writer";
 import { ProcedureCard } from "@/components/charts/dental/procedure-card";
@@ -80,7 +80,7 @@ function Segmented<T extends string>({ value, options, onChange, label }: { valu
           aria-checked={value === o.key}
           onClick={() => onChange(o.key)}
           className={`inline-flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold transition-colors duration-140 ${
-            value === o.key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+            value === o.key ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
           }`}
         >
           {o.label}
@@ -103,7 +103,7 @@ function StatusPicker({ value, onChange }: { value: Status; onChange: (s: Status
           title={t.dental.statusHint[s]}
           onClick={() => onChange(s)}
           className="inline-flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold transition-colors duration-140"
-          style={value === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
+          style={value === s ? { background: SOFT[s], color: TEXT[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
         >
           <PaintSwatch paint={s} size={14} />
           {t.dental.status[s]}
@@ -1271,7 +1271,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                 {brush ? <TreatmentGlyph tr={brush} paint={brush.kind === "finding" ? "finding" : status} context={null} size={26} /> : <Paintbrush className="ms-1 h-4 w-4 text-ink-400" />}
                 <span className="truncate">{brush ? (locale === "ar" ? brush.ar : brush.en) : T.brushPick}</span>
                 {brush && brush.kind !== "finding" && (
-                  <span className="rounded-full px-1.5 py-0.5 text-[length:max(11px,0.6875rem)]" style={{ background: SOFT[status], color: INK[status] }}>
+                  <span className="rounded-full px-1.5 py-0.5 text-[length:max(11px,0.6875rem)]" style={{ background: SOFT[status], color: TEXT[status] }}>
                     {T.status[status]}
                   </span>
                 )}
@@ -1310,7 +1310,7 @@ export function DentalChart({ slug, patientId, tz, birthDate, data, caption }: T
                 onClick={() => setShow((s) => ({ ...s, [p]: !s[p] }))}
                 title={T.statusHint[p]}
                 className={`inline-flex h-8 items-center gap-1.5 rounded-full border ps-1.5 pe-2.5 text-[0.75rem] font-semibold transition-opacity duration-140 ${show[p] ? "" : "opacity-40"}`}
-                style={{ borderColor: SOFT[p], background: show[p] ? SOFT[p] : "transparent", color: INK[p] }}
+                style={{ borderColor: SOFT[p], background: show[p] ? SOFT[p] : "transparent", color: TEXT[p] }}
               >
                 <PaintSwatch paint={p} size={18} />
                 {T.status[p]}

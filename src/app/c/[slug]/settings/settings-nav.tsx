@@ -72,7 +72,7 @@ export function SettingsFrame({
                       onClick={() => setPressed(i.href)}
                       aria-current={active ? "page" : undefined}
                       className={`flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[0.8125rem] font-medium transition-colors duration-140 ease-out ${
-                        active ? "bg-surface text-ink-900 shadow-card" : "text-ink-700 hover:bg-ink-900/4"
+                        active ? "bg-segment text-ink-900 shadow-card" : "text-ink-700 hover:bg-ink-900/4"
                       }`}
                     >
                       <Icon className={`h-4 w-4 shrink-0 ${active ? "text-ink-900" : "text-ink-400"}`} strokeWidth={1.75} />

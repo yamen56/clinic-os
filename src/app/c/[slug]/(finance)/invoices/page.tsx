@@ -288,7 +288,7 @@ export default async function InvoicesPage({
               <Link
                 key={key || "all"}
                 href={listHref({ status: key || undefined })}
-                className={`rounded-full px-3 py-1 text-[0.75rem] font-medium transition-colors duration-140 ease-out ${
+                className={`touch-manipulation rounded-full px-3 py-1 text-[0.75rem] font-medium max-md:py-2 transition-colors duration-140 ease-out ${
                   on ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8 hover:text-ink-700"
                 }`}
               >

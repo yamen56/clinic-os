@@ -28,6 +28,7 @@ import { Badge, type StatusKey } from "@/components/ui/badge";
 import { fmtTime } from "@/lib/dates";
 import { flowStage, type FlowStage } from "@/lib/patient-flow";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
+import { useEdgeFade } from "@/lib/use-edge-fade";
 import { setFlowAction, type FlowStep, type Handoff } from "./calendar/flow-actions";
 import { FinishVisitSheet } from "@/components/appointments/finish-visit-sheet";
 import { nextVisitHref } from "@/lib/next-visit";
@@ -89,6 +90,7 @@ export function TodayList({
   const [moved, setMoved] = useState<Record<string, Partial<TodayRow>>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [group, setGroup] = useState<Group>("all");
+  const groupsFade = useEdgeFade<HTMLDivElement>({ selected: '[aria-pressed="true"]', key: group });
   useRealtimeRefresh(slug, ["appointments"], () => {
     setMoved({});
     router.refresh();
@@ -155,7 +157,7 @@ export function TodayList({
   return (
     <div data-today-list>
       {/* Who is where, at a glance — and a tap shows only them. */}
-      <div className="flex gap-1.5 overflow-x-auto border-b border-line px-4 py-2.5 sm:px-5" data-today-groups>
+      <div ref={groupsFade.ref} style={groupsFade.style} className="flex gap-1.5 overflow-x-auto border-b border-line px-4 py-2.5 sm:px-5" data-today-groups>
         {(["all", "waiting", "in_room", "coming", "done"] as const)
           .filter((g) => g === "all" || counts[g] > 0 || group === g)
           .map((g) => (

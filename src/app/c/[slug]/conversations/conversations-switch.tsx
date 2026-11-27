@@ -15,7 +15,7 @@ export function ConversationsSwitch({ slug, active }: { slug: string; active: "p
       href={href}
       aria-current={active === key ? "page" : undefined}
       className={`flex min-h-9 flex-1 items-center justify-center rounded-full px-3 text-[0.8125rem] font-semibold transition-colors ${
-        active === key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
+        active === key ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
       }`}
       data-conversations-tab={key}
     >

@@ -13,6 +13,7 @@ import { RoomsStrip } from "./rooms-strip";
 import { useBoardDrag } from "./use-board-drag";
 import { CalendarCheck, ChevronDown, CalendarClock, Armchair, DoorOpen, CheckCheck, UserX, Clock, CalendarSearch } from "lucide-react";
 import { DatePickButton } from "@/components/ui/date-pick-button";
+import { useEdgeFade } from "@/lib/use-edge-fade";
 
 type Column = "coming" | "waiting" | "in_room" | "finished";
 const COLUMNS: Column[] = ["coming", "waiting", "in_room", "finished"];
@@ -189,6 +190,9 @@ export function FlowBoard({
     return drag.over === c ? "ring-2 ring-brand-600 bg-brand-50" : "outline-dashed outline-2 -outline-offset-2 outline-brand-600/50";
   };
 
+  // The doctor chips run past a phone's edge with three doctors; the cut side fades.
+  const chipsFade = useEdgeFade<HTMLDivElement>({ selected: '[aria-pressed="true"]', key: doctorFilter });
+
   // The board's outline while the day comes, as the calendar's loading screen drew it: one shape, not a bar.
   if (!data) return <BoardOutline />;
 
@@ -210,7 +214,7 @@ export function FlowBoard({
       */}
       <div className="flex items-center gap-2">
         {doctors.length > 1 || (isDoctor && selfMemberId) ? (
-          <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+          <div ref={chipsFade.ref} style={chipsFade.style} className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
             <button type="button" aria-pressed={!doctorFilter} className={chip(!doctorFilter)} onClick={() => setDoctorFilter("")}>
               {t.calendar.everyone}
             </button>
@@ -278,7 +282,7 @@ export function FlowBoard({
                 // A phone shows one column, so its tabs take a drop too.
                 data-drop-col={c}
                 className={`flex min-w-0 touch-manipulation flex-col items-center rounded-full px-1 py-1 text-[length:max(11px,0.6875rem)] font-medium leading-tight transition-colors ${
-                  activeCol === c ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"
+                  activeCol === c ? "bg-segment text-ink-900 shadow-card" : "text-ink-500"
                 } ${dropClass(c)}`}
               >
                 <span className="text-[0.9375rem] font-bold tnum">

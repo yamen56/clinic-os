@@ -700,7 +700,7 @@ export function Shell({
           the page runs behind the status bar and the first line of every
           screen would otherwise sit under the clock.
         */}
-        <div className="sticky top-0 z-30 pt-[env(safe-area-inset-top)] max-md:bg-surface/85 max-md:backdrop-blur-2xl max-md:backdrop-saturate-150 md:pt-0">
+        <div className="sticky top-0 z-30 pt-[env(safe-area-inset-top)] max-md:bg-surface/95 max-md:backdrop-blur-2xl max-md:backdrop-saturate-150 md:pt-0">
           {isImpersonating && (
             <div className="flex items-center justify-center gap-2 bg-danger px-4 py-2 text-center text-[0.8125rem] font-medium text-white">
               <ShieldAlert className="h-4 w-4 shrink-0" />
@@ -874,7 +874,7 @@ export function Shell({
           fit.
         */}
         {moreOpen && (
-          <div className="max-h-[72dvh] overflow-y-auto rounded-t-[22px] border-t border-line bg-surface/85 px-3 pb-2 pt-2 shadow-modal backdrop-blur-2xl backdrop-saturate-150 animate-fade-up">
+          <div className="max-h-[72dvh] overflow-y-auto rounded-t-[22px] border-t border-line bg-surface/95 px-3 pb-2 pt-2 shadow-modal backdrop-blur-2xl backdrop-saturate-150 animate-fade-up">
             <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-ink-300" aria-hidden />
             {mobileMore.length > 0 && (
               <div className="mb-2 grid grid-cols-3 gap-1 min-[360px]:grid-cols-4">
@@ -952,7 +952,7 @@ export function Shell({
           and in sunlight at a front desk the two were the same colour.
         */}
         <div
-          className="grid auto-cols-fr grid-flow-col border-t border-line bg-surface/85 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur-2xl backdrop-saturate-150"
+          className="grid auto-cols-fr grid-flow-col border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur-2xl backdrop-saturate-150"
           data-mobile-tabbar
         >
           {mobileMain.map(({ key, href, badge }) => {

@@ -18,6 +18,7 @@ import { AgendaList } from "./agenda-list";
 import { UNCONFIRMED, type Appt, type CalendarData, type ScheduleState, type ScheduleView as View } from "../types";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, DoorOpen } from "lucide-react";
 import { DatePickButton } from "@/components/ui/date-pick-button";
+import { useEdgeFade } from "@/lib/use-edge-fade";
 
 /**
  * The Schedule tab: the clinic's diary by day, week or month, or — the phone's
@@ -57,6 +58,8 @@ export function ScheduleView({
   const { t, locale } = useI18n();
   const { toast } = useToast();
   const [data, setData] = useState<CalendarData | null>(null);
+  // On a phone the controls scroll sideways; the side with more fades.
+  const controlsFade = useEdgeFade<HTMLDivElement>();
   const { view, anchor, doctorFilter, serviceFilter, sectionFilter, colorBy, groupBy, unconfirmedOnly } = state;
   const anchorDt = useMemo(() => DateTime.fromISO(anchor, { zone: tz }), [anchor, tz]);
 
@@ -228,15 +231,15 @@ export function ScheduleView({
           they stacked four rows deep above a calendar that is sized to the
           screen — every row of filters was a row of appointments nobody saw.
         */}
-        <div className="ms-auto flex flex-wrap items-center gap-2 max-sm:w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&>*]:shrink-0">
+        <div ref={controlsFade.ref} style={controlsFade.style} className="ms-auto flex flex-wrap items-center gap-2 max-sm:w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&>*]:shrink-0">
           <div className="flex rounded-full bg-ink-900/5 p-0.5">
             {viewNames.map((v) => (
               <button
                 key={v}
                 onClick={() => setState({ view: v })}
                 aria-pressed={view === v}
-                className={`rounded-full px-3 py-1 text-[0.8125rem] font-medium transition-colors ${
-                  view === v ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"
+                className={`rounded-full px-3 py-1 text-[0.8125rem] font-medium transition-colors max-md:py-2 ${
+                  view === v ? "bg-segment text-ink-900 shadow-card" : "text-ink-500"
                 }`}
               >
                 {v === "list" ? t.calendar.list : t.calendar[v]}
@@ -250,8 +253,8 @@ export function ScheduleView({
                   key={g}
                   onClick={() => setState({ groupBy: g })}
                   aria-pressed={groupBy === g}
-                  className={`rounded-full px-3 py-1 text-[0.8125rem] font-medium transition-colors ${
-                    groupBy === g ? "bg-surface text-ink-900 shadow-card" : "text-ink-500"
+                  className={`rounded-full px-3 py-1 text-[0.8125rem] font-medium transition-colors max-md:py-2 ${
+                    groupBy === g ? "bg-segment text-ink-900 shadow-card" : "text-ink-500"
                   }`}
                 >
                   {g === "room" ? t.calendar.byRoom : t.calendar.byDoctor}
@@ -260,7 +263,7 @@ export function ScheduleView({
             </div>
           )}
           {!isDoctor && data && data.doctors.length > 0 && (
-            <Select value={doctorFilter} onChange={(e) => setState({ doctorFilter: e.target.value })} className="!h-8 !w-auto text-[0.8125rem]">
+            <Select value={doctorFilter} onChange={(e) => setState({ doctorFilter: e.target.value })} className="!h-8 !w-auto text-[0.8125rem] max-md:!h-9 max-md:!text-base">
               <option value="">{t.calendar.allDoctors}</option>
               {data.doctors.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -274,7 +277,7 @@ export function ScheduleView({
               value={sectionFilter}
               // The service it named may not be in the new section.
               onChange={(e) => setState({ sectionFilter: e.target.value, serviceFilter: "" })}
-              className="!h-8 !w-auto text-[0.8125rem]"
+              className="!h-8 !w-auto text-[0.8125rem] max-md:!h-9 max-md:!text-base"
             >
               <option value="">{t.calendar.allSections}</option>
               {data.sections.map((sec) => (
@@ -285,7 +288,7 @@ export function ScheduleView({
             </Select>
           )}
           {data && data.services.length > 0 && (
-            <Select value={serviceFilter} onChange={(e) => setState({ serviceFilter: e.target.value })} className="!h-8 !w-auto text-[0.8125rem]">
+            <Select value={serviceFilter} onChange={(e) => setState({ serviceFilter: e.target.value })} className="!h-8 !w-auto text-[0.8125rem] max-md:!h-9 max-md:!text-base">
               <option value="">{t.calendar.allServices}</option>
               {filterServices.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -298,7 +301,7 @@ export function ScheduleView({
             type="button"
             aria-pressed={unconfirmedOnly}
             onClick={() => setState({ unconfirmedOnly: !unconfirmedOnly })}
-            className={`rounded-full border px-3 py-1 text-[0.75rem] font-medium transition-colors ${
+            className={`rounded-full border px-3 py-1 text-[0.75rem] font-medium transition-colors max-md:py-2 ${
               unconfirmedOnly ? "border-brand-600 bg-brand-50 text-brand-700" : "border-line-strong text-ink-500 hover:bg-sunken"
             }`}
             data-unconfirmed-only
@@ -307,7 +310,7 @@ export function ScheduleView({
           </button>
           <button
             onClick={() => setState({ colorBy: colorBy === "service" ? "doctor" : "service" })}
-            className="rounded-full border border-line-strong px-3 py-1 text-[0.75rem] font-medium text-ink-500 hover:bg-sunken"
+            className="rounded-full border border-line-strong px-3 py-1 text-[0.75rem] font-medium text-ink-500 hover:bg-sunken max-md:py-2"
           >
             {t.calendar.colorBy}: {colorBy === "service" ? t.calendar.byService : t.calendar.byDoctor}
           </button>

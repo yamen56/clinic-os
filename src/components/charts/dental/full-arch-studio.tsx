@@ -47,7 +47,7 @@ import {
   type Place,
 } from "@/lib/charts/dental/implant-place";
 import { archKind, cutsDetail, cutsOf } from "@/lib/charts/dental/prosthesis";
-import { CW, INK, PaintSwatch, SIDE_H, SOFT, ToothSide } from "./tooth-art";
+import { CW, INK, PaintSwatch, SIDE_H, SOFT, TEXT, ToothSide } from "./tooth-art";
 import { ARCH_PLATFORM, ImplantArt, PieceSide, implantOutline, type ImplantTop } from "./prosthesis-art";
 import { MM } from "./prosthesis-shape";
 import { newId, type ArchDraft } from "./writer";
@@ -185,7 +185,7 @@ export function FullArchStudio({
     });
   };
 
-  const seg = (on: boolean) => `h-10 min-w-10 rounded-[6px] px-3 text-[0.8125rem] font-semibold transition-colors duration-140 ${on ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"}`;
+  const seg = (on: boolean) => `h-10 min-w-10 rounded-[6px] px-3 text-[0.8125rem] font-semibold transition-colors duration-140 ${on ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"}`;
   const ordered = inOrder(items);
 
   return (
@@ -418,7 +418,7 @@ export function FullArchStudio({
                 title={T.statusHint[s]}
                 onClick={() => onStatus(s)}
                 className="inline-flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold"
-                style={status === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
+                style={status === s ? { background: SOFT[s], color: TEXT[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
               >
                 <PaintSwatch paint={s} size={14} />
                 {T.status[s]}

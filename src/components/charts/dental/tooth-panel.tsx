@@ -32,7 +32,7 @@ import { AddImageButtons, ImageThumb } from "./image-strip";
 import { findTreatment, type EntryKind, type Treatment } from "@/lib/charts/dental/catalog";
 import { SURFACES, surfaceAt, surfaceLabel, tooth as toothOf, toothName, type Surface } from "@/lib/charts/dental/teeth";
 import { paintAt, stateOf, type Mark, type MarkEvent, type Paint, type Person, type Status, type ToothState } from "@/lib/charts/dental/state";
-import { OCC, SIDE_H, ToothSide, ToothTop, INK, SOFT, PaintSwatch } from "./tooth-art";
+import { OCC, SIDE_H, ToothSide, ToothTop, INK, SOFT, TEXT, PaintSwatch } from "./tooth-art";
 import { TreatmentGlyph, TreatmentPicker, type Favorite } from "./treatment-picker";
 import { EntryRow, EventList, PaintPill } from "./history";
 import { markLabel, siteLabel } from "./labels";
@@ -456,7 +456,7 @@ export function ToothPanel({
           title={T.statusHint[s]}
           onClick={() => a.onStatus(s)}
           className="inline-flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-[0.8125rem] font-semibold transition-colors duration-140"
-          style={status === s ? { background: SOFT[s], color: INK[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
+          style={status === s ? { background: SOFT[s], color: TEXT[s], boxShadow: "var(--shadow-card)" } : { color: "var(--color-ink-500)" }}
         >
           <PaintSwatch paint={s} size={14} />
           {T.status[s]}

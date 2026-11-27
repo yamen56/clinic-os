@@ -198,7 +198,7 @@ export function PhoneInput({
         placeholder={hint}
         onChange={(e) => typed(e.target.value)}
         {...inputAttrs}
-        className={`num w-full min-w-0 text-ink-900 tabular-nums outline-none placeholder:text-ink-500 transition-[border-color,box-shadow] duration-140 ease-out disabled:bg-subtle ${box} ${
+        className={`num w-full min-w-0 text-ink-900 tabular-nums outline-none placeholder:text-ink-400 transition-[border-color,box-shadow] duration-140 ease-out disabled:bg-subtle ${box} ${
           lg ? "scroll-mb-28 px-4" : "px-3 focus:shadow-[0_0_0_3px_rgb(105_137_166/0.30)]"
         }`}
       />

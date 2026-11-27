@@ -377,7 +377,7 @@ export function InvoiceDetailClient({
       */}
       {inv.status !== "void" ? (
         <input
-          className="-mt-3 mb-5 w-full max-w-lg rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[0.9375rem] font-medium text-ink-700 outline-none transition-colors placeholder:font-normal placeholder:text-ink-300 hover:border-line focus:border-brand-500 focus:bg-surface"
+          className="-mt-3 mb-5 w-full max-w-lg rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[0.9375rem] font-medium text-ink-700 outline-none transition-colors placeholder:font-normal placeholder:text-ink-400 hover:border-line max-md:text-base focus:border-brand-500 focus:bg-surface"
           value={title}
           maxLength={120}
           disabled={savingTitle}

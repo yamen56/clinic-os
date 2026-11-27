@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Banknote, ChartColumn, HandCoins, ReceiptText, ShieldCheck, type LucideIcon } from "lucide-react";
 import { LinkTabs } from "@/components/ui/misc";
 import { useI18n } from "@/lib/i18n/client";
@@ -53,18 +53,8 @@ export function FinanceFrame({
   const [pressed, setPressed] = useState<FinanceTab | null>(null);
   useEffect(() => setPressed(null), [pathname]);
 
-  /*
-    On a phone the strip scrolls sideways, and with an icon on every tab the
-    one that is open can sit past the edge — Expenses showed as "E…". So the
-    open tab is brought into view whenever the tab changes. `nearest` both
-    ways: it moves the strip, never the page.
-  */
-  const strip = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    strip.current
-      ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [here]);
+  /* On a phone the strip scrolls sideways; LinkTabs keeps the open tab in view
+     (Expenses used to show as "E…") and fades the edge that has more. */
   // Pressing the tab already open goes nowhere, so it must not wait for anything.
   const going = pressed !== null && pressed !== here ? pressed : null;
   const current = going ?? here;
@@ -91,7 +81,6 @@ export function FinanceFrame({
 
   return (
     <>
-      <div ref={strip}>
       <LinkTabs
         onSelect={(k) => setPressed(k as FinanceTab)}
         tabs={tabs.map((tab) => {
@@ -109,7 +98,6 @@ export function FinanceFrame({
           };
         })}
       />
-      </div>
       {/*
         The shell already runs its line across the top for any page on its way,
         so this only fades the page that is leaving — after 150ms, so a tab

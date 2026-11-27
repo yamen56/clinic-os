@@ -759,7 +759,7 @@ function FaceChart({ tz, today }: { tz: string; today: string }) {
                     onClick={() => (setView(v), setSpot(null))}
                     aria-label={VIEW_NAME[v]}
                     className={`relative flex min-h-9 min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-full px-1.5 text-[0.78125rem] font-semibold transition-colors sm:flex-none sm:px-3.5 ${
-                      view === v ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
+                      view === v ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-900"
                     }`}
                     data-face-view-tab={v}
                   >

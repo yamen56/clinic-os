@@ -476,7 +476,7 @@ export function ExpensesClient({
               <button
                 aria-label={t.earnings.previousMonth}
                 onClick={() => stepMonth(offset - 1)}
-                className="grid h-7 w-7 place-items-center rounded-full text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
+                className="grid h-7 w-7 place-items-center max-md:h-10 max-md:w-10 rounded-full text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900"
               >
                 <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
               </button>
@@ -487,7 +487,7 @@ export function ExpensesClient({
                 aria-label={t.earnings.nextMonth}
                 disabled={offset >= 0}
                 onClick={() => stepMonth(offset + 1)}
-                className="grid h-7 w-7 place-items-center rounded-full text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900 disabled:opacity-30 disabled:hover:bg-transparent"
+                className="grid h-7 w-7 place-items-center max-md:h-10 max-md:w-10 rounded-full text-ink-500 transition-colors hover:bg-ink-900/5 hover:text-ink-900 disabled:opacity-30 disabled:hover:bg-transparent"
               >
                 <ChevronRight className="h-4 w-4 rtl:rotate-180" />
               </button>
@@ -542,7 +542,7 @@ export function ExpensesClient({
               onClick={() => show(key)}
               data-expenses-view={key}
               className={`flex touch-manipulation items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-1.5 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
-                view === key ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+                view === key ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
               }`}
             >
               {/* From a tablet up: on a phone the icons push Categories onto a line of its own. */}
@@ -912,7 +912,7 @@ export function ExpensesClient({
                     onClick={() => setDraft({ ...draft, unpaid: k === "owed", repeat: k === "monthly" })}
                     data-kind={k}
                     className={`flex touch-manipulation items-center justify-center gap-1.5 rounded-md px-2 py-2 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
-                      kindOf(draft) === k ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+                      kindOf(draft) === k ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
                     }`}
                   >
                     {/* Words only on a phone: three labels and three icons do not fit a third of 358px. */}

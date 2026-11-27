@@ -725,7 +725,8 @@ function Figure({ card }: { card: FigureCard }) {
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700 ring-1 ring-brand-100">
           <Icon className="h-3.5 w-3.5" strokeWidth={2} />
         </span>
-        <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-ink-500">{card.label}</span>
+        {/* Two lines on a phone: in a half-width card "Unread messages" was cut to "Unread m…". */}
+        <span className="min-w-0 flex-1 text-[0.8125rem] font-medium leading-snug text-ink-500 max-sm:line-clamp-2 sm:truncate">{card.label}</span>
         {card.href && (
           <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 opacity-0 transition-opacity duration-140 group-hover:opacity-100 rtl:rotate-180" aria-hidden />
         )}

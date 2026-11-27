@@ -368,7 +368,7 @@ export function InboxClient({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={t.common.search}
-              className="h-9 w-full rounded-full border border-line bg-sunken ps-9 pe-3 text-sm outline-none focus:border-brand-400"
+              className="h-9 w-full rounded-full border border-line bg-sunken ps-9 pe-3 text-base outline-none focus:border-brand-400 max-md:h-10 md:text-sm"
             />
           </div>
           {/*
@@ -382,7 +382,7 @@ export function InboxClient({
               <button
                 key={f.key}
                 onClick={() => setFilter(f.key)}
-                className={`whitespace-nowrap rounded-full px-3 py-1 text-[0.75rem] font-medium transition-colors ${
+                className={`touch-manipulation whitespace-nowrap rounded-full px-3 py-1 text-[0.75rem] max-md:py-2 font-medium transition-colors ${
                   filter === f.key ? "bg-brand-600 text-on-brand" : "bg-ink-900/4 text-ink-500 hover:bg-ink-900/8"
                 }`}
               >
@@ -410,7 +410,8 @@ export function InboxClient({
                 <Avatar
                   name={displayName(row)}
                   size={40}
-                  color={row.patient_status === "lead" ? "var(--color-st-pending)" : undefined}
+                  color={row.patient_status === "lead" ? "var(--color-st-pending-soft)" : undefined}
+                  ink={row.patient_status === "lead" ? "var(--color-st-pending)" : undefined}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">

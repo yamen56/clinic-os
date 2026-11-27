@@ -1227,7 +1227,7 @@ export function PaintSwatch({ paint, size = 16 }: { paint: Paint; size?: number 
   );
 }
 
-export { ART_VERSION, CW, GUM_PAD, INK, OCC, SIDE_H, SOFT, festoon, gumArt, gumMargin, sideArt, sideArtKey, topArt, topArtKey, topOutline } from "./art-base";
+export { ART_VERSION, CW, GUM_PAD, INK, OCC, SIDE_H, SOFT, TEXT, festoon, gumArt, gumMargin, sideArt, sideArtKey, topArt, topArtKey, topOutline } from "./art-base";
 export { crownPath, rootGeom };
 /** The drawing's landmarks, for the script that bakes the art (scripts/render-tooth-art.tsx). */
 export const GEOM = { C, Y0, YB, YE, GUM_TOP, PAP, ZEN };

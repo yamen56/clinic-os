@@ -164,7 +164,12 @@ export function AutomationsClient({
       a.waiting ? fill(f.waitingNow, { n: a.waiting }) : null,
     ].filter(Boolean);
     return (
-      <li key={a.id} className={`transition-opacity duration-140 ${a.active ? "" : "opacity-75"}`}>
+      /*
+        A paused one is said by its switch and by sitting under "Off", not by
+        fading the row: at 75% its two grey lines fell to 2.3–3.3:1 and could
+        not be read on a phone (2026-11-27). Only the name steps back.
+      */
+      <li key={a.id}>
         <div className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
           <Toggle
             checked={a.active}
@@ -193,7 +198,7 @@ export function AutomationsClient({
               than the phone, and the whole page starts scrolling sideways.
             */}
             <div className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 truncate text-sm font-semibold">{a.name}</span>
+              <span className={`min-w-0 truncate text-sm font-semibold ${a.active ? "" : "text-ink-700"}`}>{a.name}</span>
               {a.failed_count > 0 && (
                 <Badge status="danger">
                   <AlertTriangle className="h-3 w-3" />
@@ -328,7 +333,7 @@ export function AutomationsClient({
                         type="button"
                         aria-pressed={cat === c}
                         onClick={() => setCat(c)}
-                        className={`rounded-full border px-3 py-1 text-[0.75rem] font-medium ${
+                        className={`touch-manipulation rounded-full border px-3 py-1 text-[0.75rem] max-md:py-2 font-medium ${
                           cat === c ? "border-brand-600 bg-brand-600 text-on-brand" : "border-line bg-surface text-ink-700 hover:border-line-strong"
                         }`}
                       >

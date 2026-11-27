@@ -513,7 +513,7 @@ export function TemplateEditor({
                     onClick={() => setQuestionsAt(k)}
                     data-at={k}
                     className={`min-h-10 touch-manipulation rounded-md px-2 text-[0.8125rem] font-semibold transition-colors duration-140 ease-out ${
-                      questionsAt === k ? "bg-surface text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
+                      questionsAt === k ? "bg-segment text-ink-900 shadow-card" : "text-ink-500 hover:text-ink-700"
                     }`}
                   >
                     {t.docTemplates.questionsAtKinds[k]}

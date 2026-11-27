@@ -51,7 +51,7 @@ import { useChartWriter } from "./writer";
 import { PaintPill } from "./history";
 import { siteLabel } from "./labels";
 import { TreatmentGlyph } from "./treatment-picker";
-import { INK, SOFT } from "./tooth-art";
+import { INK, SOFT, TEXT } from "./tooth-art";
 import { PriceLine } from "./price-line";
 import { LabLine, LabStop } from "./lab-line";
 import { attemptOf, redoable, redoneBy } from "@/lib/charts/dental/redo";
@@ -655,7 +655,7 @@ export function ProcedureCard({
                       isDone
                         ? { background: INK.done, color: "white" }
                         : isNext
-                          ? { background: SOFT.progress, color: INK.progress, boxShadow: `inset 0 0 0 2px ${INK.progress}` }
+                          ? { background: SOFT.progress, color: TEXT.progress, boxShadow: `inset 0 0 0 2px ${INK.progress}` }
                           : { background: "var(--color-sunken)", color: "var(--color-ink-400)" }
                     }
                   >
@@ -666,7 +666,7 @@ export function ProcedureCard({
                       {def.en}
                       {def.optional && <span className="text-[length:max(11px,0.71875rem)] font-medium text-ink-400">{P.optional}</span>}
                       {def.repeatable && recs.length > 1 && <span className="text-[0.75rem] font-semibold text-ink-500">{P.times.replace("{n}", String(recs.length))}</span>}
-                      {isNext && <span className="rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold" style={{ background: SOFT.progress, color: INK.progress }}>{P.nextBadge}</span>}
+                      {isNext && <span className="rounded-full px-2 py-0.5 text-[length:max(11px,0.6875rem)] font-semibold" style={{ background: SOFT.progress, color: TEXT.progress }}>{P.nextBadge}</span>}
                     </span>
                     {implied && (
                       <span className="mt-0.5 block text-[0.75rem] text-ink-500" data-step-implied={def.key}>

@@ -54,7 +54,7 @@ export function Menu({
       {open && (
         <div
           role="menu"
-          className={`absolute top-full z-30 mt-1 min-w-52 max-w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-line bg-surface/80 py-1 shadow-pop backdrop-blur-xl backdrop-saturate-150 animate-fade-in ${
+          className={`absolute top-full z-30 mt-1 min-w-52 max-w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-line bg-surface/95 py-1 shadow-pop backdrop-blur-xl backdrop-saturate-150 animate-fade-in ${
             align === "end" ? "end-0" : "start-0"
           }`}
         >
