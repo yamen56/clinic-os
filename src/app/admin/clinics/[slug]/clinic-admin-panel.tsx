@@ -1,29 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  impersonateAction,
-  updateSubscriptionAction,
-  updateClinicFeaturesAction,
-  setClinicSpecialtyAction,
-  setClinicPlanAction,
-} from "../../actions";
-import { PlanPicker } from "../../plan-picker";
-import { PLAN_PROFILES, applyPlan, asPlan, type Plan } from "@/lib/plans";
+import { impersonateAction, setClinicSpecialtyAction } from "../../actions";
 import { SPECIALTIES, type Specialty } from "@/lib/specialties";
 import { useI18n } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Field, Input, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { FeaturePicker } from "../../feature-picker";
 import { DepartmentPicker } from "../../department-picker";
 import { SpecialtyAdds } from "../../specialty-adds";
-import { toFeatureSetting, type FeatureMap } from "@/lib/features";
 import type { AdminCapabilityMap } from "@/lib/admin-permissions";
 import { SUPPORT_REASON_MAX, SUPPORT_REASON_MIN } from "@/lib/support-visits";
-import { ExternalLink, Settings2, SlidersHorizontal, Stethoscope } from "lucide-react";
+import { ExternalLink, Stethoscope } from "lucide-react";
 
+/**
+ * The two things the agency does to a clinic from its header: change what it
+ * practises, and go inside on a support visit. The plan, its price and its
+ * modules moved to the Plan & billing tab (2026-11-27).
+ */
 export function ClinicAdminPanel({
   clinic,
   caps,
@@ -33,12 +28,6 @@ export function ClinicAdminPanel({
     id: string;
     slug: string;
     name: string;
-    subscriptionStatus: string;
-    plan: string;
-    planPrice: number;
-    /** The stored limit; null is none. */
-    memberLimit: number | null;
-    features: FeatureMap;
     specialty: Specialty;
     /** A medical centre's other departments. */
     departments: Specialty[];
@@ -50,28 +39,9 @@ export function ClinicAdminPanel({
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const [featuresOpen, setFeaturesOpen] = useState(false);
-  const [status, setStatus] = useState(clinic.subscriptionStatus);
-  // What the server holds now — the hint below compares against this, not the
-  // page's first render, so it does not reappear after the change is saved.
-  const [savedStatus, setSavedStatus] = useState(clinic.subscriptionStatus);
-  const [plan, setPlan] = useState<Plan>(asPlan(clinic.plan));
-  const [savedPlan, setSavedPlan] = useState<Plan>(asPlan(clinic.plan));
-  /*
-    Empty means "the plan's own limit". Shown filled only when the stored limit
-    is an exception to the plan, so changing the plan moves an untouched limit
-    with it rather than carrying the old plan's number across.
-  */
-  const limitIsOwn = clinic.memberLimit !== PLAN_PROFILES[asPlan(clinic.plan)].memberLimit;
-  const [limit, setLimit] = useState(limitIsOwn && clinic.memberLimit !== null ? String(clinic.memberLimit) : "");
-  const [price, setPrice] = useState(String(clinic.planPrice));
-  const [features, setFeatures] = useState(clinic.features);
   const [specialtyOpen, setSpecialtyOpen] = useState(false);
   const [specialty, setSpecialty] = useState<Specialty>(clinic.specialty);
   const [departments, setDepartments] = useState<Specialty[]>(clinic.departments);
-  const [pending, start] = useTransition();
-  const [featPending, startFeat] = useTransition();
   const [specPending, startSpec] = useTransition();
   const [impPending, startImp] = useTransition();
   const [enterOpen, setEnterOpen] = useState(false);
@@ -80,30 +50,17 @@ export function ClinicAdminPanel({
 
   /*
     A deleted clinic has one meaningful action left — restore — and it lives in
-    the danger zone below. Everything here would either fail on the server
-    (impersonation refuses a deleted clinic outright) or quietly edit a licence
-    for a workspace nobody can open.
+    the danger zone. Everything here would fail on the server (impersonation
+    refuses a deleted clinic outright) or edit a workspace nobody can open.
   */
   if (clinic.deleted) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {caps["clinics.features"] && (
-        <Button variant="outline" onClick={() => setFeaturesOpen(true)}>
-          <SlidersHorizontal className="h-4 w-4" />
-          {t.admin.features}
-        </Button>
-      )}
       {caps["clinics.edit"] && (
         <Button variant="outline" onClick={() => setSpecialtyOpen(true)}>
           <Stethoscope className="h-4 w-4" />
           {t.admin.specialty}
-        </Button>
-      )}
-      {caps["clinics.edit"] && (
-        <Button variant="outline" onClick={() => setOpen(true)}>
-          <Settings2 className="h-4 w-4" />
-          {t.admin.subscription}
         </Button>
       )}
       {caps["clinics.impersonate"] && (
@@ -118,11 +75,7 @@ export function ClinicAdminPanel({
         the clinic's owner, which is what makes the record answer "why was the
         agency in my clinic" rather than only "when".
       */}
-      <Modal
-        open={enterOpen}
-        onClose={() => setEnterOpen(false)}
-        title={t.admin.enterTitle.replace("{clinic}", clinic.name)}
-      >
+      <Modal open={enterOpen} onClose={() => setEnterOpen(false)} title={t.admin.enterTitle.replace("{clinic}", clinic.name)}>
         <form
           className="grid gap-4"
           onSubmit={(e) => {
@@ -138,13 +91,8 @@ export function ClinicAdminPanel({
             });
           }}
         >
-          <p className="text-[0.8125rem] text-ink-500">
-            {t.admin.enterNotice.replace("{h}", String(visitHours))}
-          </p>
-          <Field
-            label={t.admin.enterReason}
-            error={reasonError ? t.admin.enterReasonError : undefined}
-          >
+          <p className="text-[0.8125rem] text-ink-500">{t.admin.enterNotice.replace("{h}", String(visitHours))}</p>
+          <Field label={t.admin.enterReason} error={reasonError ? t.admin.enterReasonError : undefined}>
             <Input
               name="reason"
               autoFocus
@@ -169,103 +117,12 @@ export function ClinicAdminPanel({
         </form>
       </Modal>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={t.admin.subscription}>
-        <div className="grid gap-4">
-          <Field
-            label={t.common.status}
-            hint={
-              status !== savedStatus && (status === "past_due" || status === "suspended")
-                ? t.admin.statusEmailsOwner
-                : undefined
-            }
-          >
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="trial">{t.admin.trial}</option>
-              <option value="active">{t.admin.activeSub}</option>
-              <option value="past_due">{t.admin.pastDue}</option>
-              <option value="suspended">{t.admin.suspended}</option>
-            </Select>
-          </Field>
-          <Field label={t.admin.plan}>
-            <PlanPicker value={plan} onChange={setPlan} disabled={pending} />
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label={t.plans.memberLimit} hint={t.plans.memberLimitHint}>
-              <Input
-                dir="ltr"
-                type="number"
-                min={1}
-                step={1}
-                value={limit}
-                placeholder={String(PLAN_PROFILES[plan].memberLimit ?? "∞")}
-                onChange={(e) => setLimit(e.target.value)}
-                data-member-limit
-              />
-            </Field>
-            <Field label={t.admin.planPrice}>
-              <Input
-                dir="ltr"
-                type="number"
-                min={0}
-                step="0.01"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-              />
-            </Field>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              {t.common.cancel}
-            </Button>
-            <Button
-              loading={pending}
-              onClick={() =>
-                start(async () => {
-                  await updateSubscriptionAction(clinic.id, {
-                    status,
-                    planPrice: Number(price) || 0,
-                  });
-                  setSavedStatus(status);
-                  /*
-                    The plan last, and only when something about it changed:
-                    re-applying an unchanged plan would wipe the agency's
-                    hand-made module exceptions for nothing.
-                  */
-                  const ownLimit = limit.trim() === "" ? undefined : Math.max(1, Math.round(Number(limit) || 1));
-                  const limitChanged = (ownLimit ?? PLAN_PROFILES[plan].memberLimit) !== clinic.memberLimit;
-                  if (caps["clinics.features"] && (plan !== savedPlan || limitChanged)) {
-                    const r = await setClinicPlanAction(clinic.id, plan, { memberLimit: ownLimit });
-                    if (r.error) {
-                      toast(t.common.genericError, "error");
-                      return;
-                    }
-                    setSavedPlan(plan);
-                    // The modules modal reads local state; the page re-renders from the action.
-                    setFeatures((f) => applyPlan(f, plan));
-                    if (r.paused?.length) toast(t.plans.paused.replace("{names}", r.paused.join("، ")), "error");
-                    else toast(t.admin.planSaved);
-                    if (r.memberLimit !== null && r.memberLimit !== undefined && (r.members ?? 0) > r.memberLimit) {
-                      toast(
-                        t.plans.overLimit.replace("{n}", String(r.members)).replace("{limit}", String(r.memberLimit)),
-                        "error"
-                      );
-                    }
-                  } else toast(t.common.saved);
-                  setOpen(false);
-                })
-              }
-            >
-              {t.common.save}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={specialtyOpen}
-        onClose={() => setSpecialtyOpen(false)}
-        title={t.admin.specialty}
-      >
+      {/*
+        What it practises decides its charts, the machines it usually connects
+        and the result kinds it files (lib/specialty-profile). It no longer
+        brings automation packs (2026-11-27).
+      */}
+      <Modal open={specialtyOpen} onClose={() => setSpecialtyOpen(false)} title={t.admin.specialty}>
         <div className="grid gap-4">
           <p className="text-[0.8125rem] text-ink-500">{t.admin.specialtySub}</p>
           <Field label={t.admin.specialty} hint={t.admin.specialtyHint}>
@@ -296,51 +153,12 @@ export function ClinicAdminPanel({
             </Button>
             <Button
               loading={specPending}
+              data-save-specialty
               onClick={() =>
                 startSpec(async () => {
                   const r = await setClinicSpecialtyAction(clinic.slug, specialty, departments.filter((d) => d !== specialty));
-                  if (r.error) toast(t.common.genericError, "error");
-                  else
-                    toast(
-                      r.installed
-                        ? t.admin.packInstalled.replace("{n}", String(r.installed))
-                        : t.admin.packUpToDate
-                    );
+                  toast(r.error ? t.common.genericError : t.common.saved, r.error ? "error" : "success");
                   setSpecialtyOpen(false);
-                })
-              }
-            >
-              {t.admin.installPack}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal open={featuresOpen} onClose={() => setFeaturesOpen(false)} title={t.admin.features}>
-        <div className="grid gap-4">
-          <p className="text-[0.8125rem] text-ink-500">{t.admin.featuresSub}</p>
-          <FeaturePicker value={features} onChange={setFeatures} disabled={featPending} plan={savedPlan} />
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                // Discard, don't keep. Reopening the dialog after a cancel and
-                // finding yesterday's half-made edit still ticked is how the
-                // wrong licence gets saved by accident.
-                setFeatures(clinic.features);
-                setFeaturesOpen(false);
-              }}
-            >
-              {t.common.cancel}
-            </Button>
-            <Button
-              loading={featPending}
-              onClick={() =>
-                startFeat(async () => {
-                  const r = await updateClinicFeaturesAction(clinic.id, toFeatureSetting(features));
-                  if (r.paused?.length) toast(t.plans.paused.replace("{names}", r.paused.join("، ")), "error");
-                  else toast(t.admin.featuresSaved);
-                  setFeaturesOpen(false);
                 })
               }
             >

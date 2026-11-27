@@ -32,9 +32,12 @@ async function main() {
   await page.fill('input[name="name"]', "QA Clinic");
   await page.fill('input[name="nameAr"]', "عيادة الاختبار");
   await page.fill('input[name="slug"]', slug);
+  // The form is steps since 2026-11-27: clinic, specialty, plan, owner, review.
+  for (let i = 0; i < 3; i++) await page.click("[data-next-step]");
   await page.fill('input[name="ownerName"]', "Test Owner");
   await page.fill('input[name="ownerEmail"]', `owner-${slug}@test.local`);
-  await page.click('button[type="submit"]');
+  await page.click("[data-next-step]");
+  await page.click("[data-create-clinic]");
   await page.waitForURL(`**/admin/clinics/${slug}`, { timeout: 20000 });
   console.log("✓ clinic created → detail page");
 

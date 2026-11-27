@@ -20,11 +20,12 @@ import { audit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { sanitizeHtml } from "@/lib/esign/render";
 import { deleteClinicFiles } from "@/lib/storage";
+import { rescueAccountFiles } from "@/lib/account-files";
 import { internalSecret } from "@/lib/internal-secret";
 import { FEATURES, toFeatureSetting, type Feature, type FeatureMap } from "@/lib/features";
 import { RESTORE_WINDOW_DAYS } from "@/lib/clinic-lifecycle";
 import { SPECIALTIES, asSpecialty, clinicSpecialties, isSpecialty, type Specialty } from "@/lib/specialties";
-import { provisionClinic, installRecipes, isReservedSlug } from "@/lib/clinic-provision";
+import { provisionClinic, isReservedSlug } from "@/lib/clinic-provision";
 import { setCoordinator } from "@/lib/coordinator";
 import { SPECIALTY_MODULES, modulesFor } from "@/lib/specialty-profile";
 import { PLANS, isPlan, planFeatures, type Plan } from "@/lib/plans";
@@ -95,17 +96,16 @@ export type CreateClinicResult = { error?: string; fieldErrors?: Record<string, 
 
 
 /**
- * Changes a clinic's field and hands it the recipes that come with it.
- *
- * Nothing is removed. A clinic that was set up as general practice and is
- * really a dental clinic has spent months editing the flows it does have, and
- * deleting them to "clean up" would throw that away to fix a dropdown.
+ * Changes what a clinic practises, and the charts that follow from it
+ * (lib/specialty-profile). It used to hand the clinic that specialty's pack of
+ * flows too; the packs were retired on 2026-11-27 ("useless"), and a
+ * clinic's flows are never touched by a dropdown.
  */
 export async function setClinicSpecialtyAction(
   slug: string,
   specialty: string,
   departments: string[] = []
-): Promise<{ installed?: number; error?: string }> {
+): Promise<{ error?: string }> {
   const s = await requireAdminCap("clinics.edit");
   const chosen = asSpecialty(specialty);
   // Everything it practises — what decides the charts on its patient files.
@@ -129,50 +129,16 @@ export async function setClinicSpecialtyAction(
       else if (before.includes(m) && !after.includes(m)) switched[m] = features[m] = false;
     }
     await c.query(`update clinics set specialty = $2, specialties = $3, features = $4::jsonb where id = $1`, [clinicId, chosen, practises, JSON.stringify(features)]);
-    let installed = 0;
-    for (const sp of practises.length ? practises : [chosen]) installed += await installRecipes(c, clinicId, sp);
     await audit(c, {
       clinicId,
       userId: s.user.id,
       action: "admin.clinic.specialty",
       entity: "clinic",
       entityId: clinicId,
-      detail: { specialty: chosen, specialties: practises, installed, modules: switched },
+      detail: { specialty: chosen, specialties: practises, modules: switched },
     });
     revalidatePath(`/admin/clinics/${slug}`);
-    return { installed };
-  });
-}
-
-/**
- * Switches on, for a clinic already running, the flows a new clinic now starts
- * with — the reminders above all (Yamen, 2026-10-31: on for the pilot clinics
- * too). Pressed from the clinic's page after reading the messages it will send
- * (pendingDefaultRecipes), because from this moment its patients receive them.
- *
- * Additive: a flow the clinic already has, even one it switched off, is left
- * alone, and so is one it built itself on the same trigger at the same hour.
- */
-export async function applyDefaultFlowsAction(slug: string): Promise<{ installed?: number; error?: string }> {
-  const s = await requireAdminCap("clinics.edit");
-  return withSystem(async (c) => {
-    const clinic = await c.query(`select id, specialty, specialties from clinics where slug = $1 and deleted_at is null`, [slug]);
-    if (!clinic.rowCount) return { error: "not_found" };
-    const clinicId = clinic.rows[0].id as string;
-    const chosen = asSpecialty(clinic.rows[0].specialty);
-    const practises = clinicSpecialties(chosen, clinic.rows[0].specialties ?? []);
-    let installed = 0;
-    for (const sp of practises.length ? practises : [chosen]) installed += await installRecipes(c, clinicId, sp);
-    await audit(c, {
-      clinicId,
-      userId: s.user.id,
-      action: "admin.clinic.default_flows",
-      entity: "clinic",
-      entityId: clinicId,
-      detail: { installed },
-    });
-    revalidatePath(`/admin/clinics/${slug}`);
-    return { installed };
+    return {};
   });
 }
 
@@ -805,6 +771,8 @@ async function purgeClinic(
   name: string,
   byUserId: string | null
 ): Promise<void> {
+  // People's own signatures and photos leave the folder first: they are used at their other clinics.
+  await rescueAccountFiles(clinicId).catch((e) => console.error("[purge] account files", (e as Error).message));
   const files = await deleteClinicFiles(clinicId).catch((e) => {
     console.error("[purge] storage", (e as Error).message);
     return -1;
@@ -858,7 +826,8 @@ export async function exitImpersonationAction() {
     return { token: await insertSession(c, s.user.id), slug };
   });
   await setSessionCookie(token);
-  redirect(slug ? `/admin/clinics/${slug}` : "/admin");
+  // The Activity tab, where the visit that just ended is the top line (admin rebuilt 2026-11-27).
+  redirect(slug ? `/admin/clinics/${slug}?tab=activity` : "/admin");
 }
 
 /**

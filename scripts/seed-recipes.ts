@@ -662,11 +662,25 @@ export const KNOWLEDGE = [
 ];
 
 /**
- * Everything the agency hands out: the library every clinic gets, then the
- * per-field packs on top. One list, because a recipe is a recipe — the
- * `specialty` column is the only thing that decides who is offered it.
+ * The specialty packs that are still handed out (Yamen, 2026-11-27: the packs
+ * felt useless and left the gallery, migration 0119). The psychiatry reminder
+ * stays because it is a patient's privacy, not a pack: it replaces the
+ * day-before reminder with one that does not name the clinic. The rest stay
+ * defined in specialty-recipes.ts — clinics that run a copy keep theirs — but
+ * are not seeded, so the line below switches them off on every re-seed.
  */
-export const ALL_RECIPES: Recipe[] = [...RECIPES, ...SPECIALTY_RECIPES, ...COORDINATOR_RECIPE_LIST];
+const KEPT_SPECIALTY = new Set(["psych_discreet_reminder"]);
+
+/**
+ * Everything the agency hands out: the library every clinic gets, the one
+ * specialty recipe kept, and the coordinator's. One list, because a recipe is
+ * a recipe — the `specialty` column decides who is offered it.
+ */
+export const ALL_RECIPES: Recipe[] = [
+  ...RECIPES,
+  ...SPECIALTY_RECIPES.filter((r) => KEPT_SPECIALTY.has(r.key)),
+  ...COORDINATOR_RECIPE_LIST,
+];
 
 export async function seedAgencyDefaults(c: Client) {
   for (const r of ALL_RECIPES) {

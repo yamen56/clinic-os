@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { can } from "@/lib/auth";
-import { saveFile, openFile, deleteFile } from "@/lib/storage";
+import { saveUserFile, openFile, deleteFile } from "@/lib/storage";
 import { audit } from "@/lib/audit";
 
 /**
@@ -109,8 +109,9 @@ export async function POST(
 
   const { access, row } = r;
   await inClinic(access, async (c) => {
-    const saved = await saveFile(
-      access.clinicId,
+    // Under the person: the same photo is theirs at every clinic they work at (2026-11-27).
+    const saved = await saveUserFile(
+      row.user_id,
       "avatars",
       // The user id keeps one person's photos together; the timestamp defeats
       // any cache still holding the previous one.

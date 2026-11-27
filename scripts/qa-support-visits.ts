@@ -252,7 +252,7 @@ async function main() {
     await admin.goto(`${BASE}/c/${A}`);
     await admin.waitForSelector("text=Exit support mode", { timeout: 60000 });
     await admin.click("text=Exit support mode");
-    await admin.waitForURL(`**/admin/clinics/${A}`, { timeout: 60000 });
+    await admin.waitForURL(`**/admin/clinics/${A}?tab=activity`, { timeout: 60000 });
     [visit] = await visits(clinicA);
     check(visit.ended_at && visit.end_reason === "exit", `exiting closes the visit as "exit" (${visit.end_reason})`);
     await admin.waitForSelector(`text=${REASON}`, { timeout: 30000 });

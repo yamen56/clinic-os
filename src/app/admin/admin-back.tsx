@@ -12,9 +12,13 @@ import { BackLink, useBackHref } from "@/components/back-link";
 export function AdminBack() {
   const { t } = useI18n();
   const pathname = usePathname();
-  const href = useBackHref("/admin", "/admin");
+  // A clinic's pages go back to the clinics list, which left the admin home on 2026-11-27.
+  const fallback = pathname.startsWith("/admin/clinics/") ? "/admin/clinics" : "/admin";
+  const href = useBackHref(fallback, "/admin");
 
   const sections: Record<string, string> = {
+    clinics: t.admin.clinics,
+    plans: t.admin.plansNav,
     analytics: t.admin.analytics,
     monitoring: t.admin.monitoring,
     announcements: t.admin.announcements,
@@ -27,7 +31,7 @@ export function AdminBack() {
 
   const to = href.split(/[?#]/)[0].split("/").filter(Boolean).slice(1);
   const label =
-    to.length === 0 ? t.admin.clinics : to.length === 1 && sections[to[0]] ? sections[to[0]] : t.common.back;
+    to.length === 0 ? t.admin.overview : to.length === 1 && sections[to[0]] ? sections[to[0]] : t.common.back;
 
   return (
     <div className="-ms-2 -mt-4 mb-2">

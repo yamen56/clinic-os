@@ -211,7 +211,7 @@ async function main() {
     ok("the monitoring page shows the backup age and the archives themselves");
 
     // Deletion is not in their set, so the danger zone must not be rendered.
-    await lp.goto(`${BASE}/admin/clinics/${demo.slug}`);
+    await lp.goto(`${BASE}/admin/clinics/${demo.slug}?tab=details`);
     await lp.waitForLoadState("networkidle");
     if ((await seen(lp)).includes("Danger zone"))
       fail("limited admin without clinics.delete was shown the danger zone");
@@ -220,13 +220,16 @@ async function main() {
 
     /* ----------------------------------------------- delete → restore → purge */
 
+    // The new-clinic form is steps since 2026-11-27: clinic, specialty, plan, owner, review.
     await page.goto(`${BASE}/admin/clinics/new`);
     await page.waitForSelector('input[name="slug"]', { timeout: 30000 });
     await page.fill('input[name="name"]', "QA Doomed Clinic");
     await page.fill('input[name="slug"]', TEST_SLUG);
+    for (let i = 0; i < 3; i++) await page.click("[data-next-step]");
     await page.fill('input[name="ownerName"]', "QA Owner");
     await page.fill('input[name="ownerEmail"]', "owner-qa-doomed@test.local");
-    await page.click('button[type="submit"]');
+    await page.click("[data-next-step]");
+    await page.click("[data-create-clinic]");
     await page.waitForURL(`**/admin/clinics/${TEST_SLUG}`, { timeout: 30000 });
     ok("clinic created through the form");
 
@@ -240,6 +243,8 @@ async function main() {
       fail("new clinic stored no explicit feature map");
     ok("the new clinic recorded an explicit module licence");
 
+    // The danger zone is at the foot of the Details tab.
+    await page.goto(`${BASE}/admin/clinics/${TEST_SLUG}?tab=details`);
     await page.waitForSelector("text=Danger zone", { timeout: 20000 });
     await page.click("button:has-text('Delete clinic')");
     await page.waitForSelector('input[placeholder="' + TEST_SLUG + '"]', { timeout: 10000 });
@@ -284,14 +289,15 @@ async function main() {
       fail("a deleted workspace showed the suspended-subscription wording");
     ok("the workspace is closed, with wording that is not the billing message");
 
-    await page.goto(`${BASE}/admin`);
+    await page.goto(`${BASE}/admin/clinics`);
     await page.waitForSelector("text=Deleted", { timeout: 20000 });
     ok("the clinic moved to the deleted list");
 
     await page.goto(`${BASE}/admin/clinics/${TEST_SLUG}`);
     await page.waitForSelector("button:has-text('Restore')", { timeout: 20000 });
     await page.click("button:has-text('Restore')");
-    await page.waitForSelector("text=Danger zone", { timeout: 20000 });
+    // Back to a working clinic: its tabs return.
+    await page.waitForSelector("[data-clinic-tabs]", { timeout: 20000 });
     if ((await db.query(`select deleted_at from clinics where slug = $1`, [TEST_SLUG])).rows[0]
         .deleted_at)
       fail("restore did not clear the deletion");
@@ -306,7 +312,7 @@ async function main() {
 
     // Delete once more, then destroy for real — which must refuse to run on a
     // clinic that has not been deleted first.
-    await page.goto(`${BASE}/admin/clinics/${TEST_SLUG}`);
+    await page.goto(`${BASE}/admin/clinics/${TEST_SLUG}?tab=details`);
     await page.waitForSelector("button:has-text('Delete clinic')", { timeout: 20000 });
     await page.click("button:has-text('Delete clinic')");
     await page.fill(`input[placeholder="${TEST_SLUG}"]`, TEST_SLUG);

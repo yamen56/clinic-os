@@ -113,6 +113,7 @@ function Inbox({ slug, tz, onUnread }: { slug: string; tz: string; onUnread: (n:
   const { t, locale } = useI18n();
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [items, setItems] = useState<Notif[] | null>(null);
+  const manyClinics = new Set((items ?? []).map((n) => n.clinic_name).filter(Boolean)).size > 1;
   const [more, setMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [unread, setUnread] = useState(0);
@@ -239,6 +240,12 @@ function Inbox({ slug, tz, onUnread }: { slug: string; tz: string; onUnread: (n:
         <>
           <ul className="divide-y divide-line">
             {items.map((n) => {
+              /*
+                One login can work at several clinics, and the bell is the
+                person's, not the clinic's. Once the list holds more than one
+                clinic, each line says which it is about (2026-11-27).
+              */
+              const showClinic = manyClinics && !!n.clinic_name;
               const inner = (
                 <div
                   className={`flex items-start gap-3 px-5 py-3.5 transition-colors ${
@@ -267,6 +274,11 @@ function Inbox({ slug, tz, onUnread }: { slug: string; tz: string; onUnread: (n:
                     */}
                     {n.body && <p className="mt-0.5 whitespace-pre-line text-[0.8125rem] text-ink-500">{n.body}</p>}
                     <div className="mt-0.5 text-[0.75rem] text-ink-400" suppressHydrationWarning>
+                      {showClinic && (
+                        <span className="font-medium text-ink-700" data-notif-clinic>
+                          {n.clinic_name} ·{" "}
+                        </span>
+                      )}
                       {fmtDateTime(n.created_at, tz, locale)}
                     </div>
                   </div>

@@ -5,6 +5,8 @@ import { getDict, getLocale } from "@/lib/i18n";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LibraryEditor } from "./library-editor";
+import { ContentTabs } from "../admin-nav";
+import { RECIPES_ON_BY_DEFAULT } from "@/lib/esign/constants";
 import { Workflow, BookOpen } from "lucide-react";
 import type { Specialty } from "@/lib/specialties";
 
@@ -35,7 +37,7 @@ export default async function DefaultsPage() {
           await c.query(
             `select key, name, name_ar, description, trigger_type, trigger_config, steps, active, sort,
                     specialty
-             from recipe_templates order by sort`
+             from recipe_templates where active order by sort`
           )
         ).rows
       : [];
@@ -66,9 +68,10 @@ export default async function DefaultsPage() {
 
   return (
     <>
+      <ContentTabs caps={s.adminCaps} />
       <PageHeader
         title={t.admin.defaults}
-        sub="Copied into every new clinic, disabled and fully editable by them."
+        sub="Copied into every new clinic and fully editable by them. The reminders and alerts marked on start switched on; the rest wait in the clinic's gallery."
       />
 
       {showLibrary && (
@@ -104,7 +107,7 @@ export default async function DefaultsPage() {
                         {r.specialty !== "general" && (
                           <Badge status="pending">{t.specialties[r.specialty as Specialty]}</Badge>
                         )}
-                        {!r.active && <Badge status="cancelled">hidden</Badge>}
+                        {RECIPES_ON_BY_DEFAULT.has(r.key) && <Badge status="ok">on</Badge>}
                       </div>
                       <p className="mt-0.5 text-[0.8125rem] text-ink-500">{r.description}</p>
                       <div className="mt-1 text-[0.75rem] text-ink-400 tnum">

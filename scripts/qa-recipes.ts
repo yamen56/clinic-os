@@ -454,58 +454,20 @@ async function run(db: Client, recipes: { key: string }[]) {
   check("a paid one is left alone", (await texts(pIp)).length === 0);
 
   /* ================================================================ specialty */
-  console.log("\ndental_ortho_recall");
-  await only("dental_ortho_recall");
-  const orthoVisit = today.minus({ days: 28 }).plus({ hours: 12 });
-  const pO = await patient("ياسمين تقويم", { last_visit_at: orthoVisit.toUTC().toISO(), tags: ["تقويم"] });
-  await appointment(pO, { at: orthoVisit, status: "completed", doctor: drB });
-  const pOn = await patient("مازن عادي", { last_visit_at: orthoVisit.toUTC().toISO() });
-  await sched.recallReminders({ force: true });
-  await drain();
-  check("braces patients are reminded", (await texts(pO)).some((t) => t.includes("شد التقويم")));
-  check("other dental patients are not (it used to write to all of them)", (await texts(pOn)).length === 0);
-  await reply(pO, "احجز");
-  check("a yes books the adjustment", (await booked(pO)).length === 1);
-
-  console.log("\nobgyn: antenatal and postpartum");
-  await only("obgyn_antenatal_recall");
-  const pG = await patient("رنا حامل", { last_visit_at: orthoVisit.toUTC().toISO(), tags: ["حامل"] });
-  const pGn = await patient("علا غير حامل", { last_visit_at: orthoVisit.toUTC().toISO() });
-  await sched.recallReminders({ force: true });
-  await drain();
-  check("pregnant patients are asked to their follow-up", (await texts(pG)).some((t) => t.includes("متابعة الحمل")));
-  check("others are not", (await texts(pGn)).length === 0);
-  await only("obgyn_postpartum_checkin");
-  await fire("tag_added", { patientId: pG, tag: "ولادة" });
-  check("after delivery the pregnancy tag comes off", !((await one(`select tags from patients where id = $1`, [pG])).tags as string[]).includes("حامل"));
-  await skip("obgyn_postpartum_checkin", pG);
-  check("forty days on, her own check", (await texts(pG)).some((t) => t.includes("فحص ما بعد الولادة")));
-
-  console.log("\npeds_vaccine_recall");
-  await only("peds_vaccine_recall");
-  const vacVisit = today.minus({ days: 60 }).plus({ hours: 12 });
-  const pBaby = await patient("رضيع", { last_visit_at: vacVisit.toUTC().toISO(), birth_date: today.minus({ months: 8 }).toISODate() });
-  const pKid = await patient("طفل كبير", { last_visit_at: vacVisit.toUTC().toISO(), birth_date: today.minus({ years: 6 }).toISODate() });
-  await sched.recallReminders({ force: true });
-  await drain();
-  check("an infant's parents are reminded", (await texts(pBaby)).some((t) => t.includes("مطعوم")));
-  if (process.env.QA_DEBUG) { const rb = await runOf("peds_vaccine_recall", pBaby); console.log(rb?.status, rb && await all(`select s.step_type, l.status, l.detail from automation_run_logs l left join automation_steps s on s.id = l.step_id where l.run_id = $1 order by l.created_at`, [rb.id]), await one(`select birth_date, last_visit_at, status from patients where id = $1`, [pBaby])); }
-  check("a six-year-old's are not", (await texts(pKid)).length === 0);
-  await reply(pBaby, "1");
-  check("a yes becomes a call to arrange it", (await tasks(pBaby)).some((t) => t.includes("موعد مطعوم")));
-
-  console.log("\nphysio_lapsed_series");
-  await only("physio_lapsed_series");
-  const phVisit = today.minus({ days: 14 }).plus({ hours: 12 });
-  const pPh = await patient("كريم علاج", { last_visit_at: phVisit.toUTC().toISO() });
-  await appointment(pPh, { at: phVisit, status: "completed", doctor: drB });
-  const pPd = await patient("هالة أنهت", { last_visit_at: phVisit.toUTC().toISO(), tags: ["أنهى البرنامج"] });
-  await sched.recallReminders({ force: true });
-  await drain();
-  check("two weeks off a course: asked back", (await texts(pPh)).some((t) => t.includes("أسبوعين")));
-  check("not one who finished", (await texts(pPd)).length === 0);
-  await skip("physio_lapsed_series", pPh);
-  check("no answer: a call on the to-do list", (await tasks(pPh)).some((t) => t.includes("متابعة انقطاع")));
+  /*
+    The specialty packs left the gallery on 2026-11-27 (migration 0119, Yamen:
+    "useless"): braces, pregnancy, vaccines, physio, preparation and post-op
+    packs are no longer seeded or offered. One stays, because it is a
+    patient's privacy rather than a pack: psychiatry's discreet reminder.
+  */
+  console.log("\nspecialty packs retired");
+  {
+    const retired = ["dental_ortho_recall", "obgyn_antenatal_recall", "obgyn_postpartum_checkin", "peds_vaccine_recall", "physio_lapsed_series", "derm_pre_session_prep", "plastic_pre_op_instructions"];
+    const live = (await all(`select key from recipe_templates where active and key = any($1::text[])`, [retired])).map((r) => r.key as string);
+    check("the retired packs are not offered", live.length === 0, live.join(","));
+    const kept = await one(`select active from recipe_templates where key = 'psych_discreet_reminder'`);
+    check("psychiatry's discreet reminder stays", kept?.active === true);
+  }
 
   console.log("\npsych_discreet_reminder");
   await only("psych_discreet_reminder");
@@ -517,22 +479,6 @@ async function run(db: Client, recipes: { key: string }[]) {
   check("the time, and nothing that names the clinic", tY.includes("تذكير بموعدك") && !tY.includes("عيادة") && !tY.includes("تنظيف"), tY);
   await reply(pY, "1");
   check("1 confirms", (await all(`select status from appointments where patient_id = $1`, [pY]))[0].status === "confirmed");
-
-  console.log("\nprep at booking (dermatology)");
-  await only("derm_pre_session_prep");
-  const pD = await patient("سلوى ليزر");
-  const aD = await appointment(pD, { at: today.plus({ days: 6, hours: 10 }) });
-  await fire("appointment_created", { appointmentId: aD, patientId: pD, source: "staff" });
-  await skip("derm_pre_session_prep", pD);
-  check("the preparation goes out at booking, days ahead", (await texts(pD)).some((t) => t.includes("الريتينول")));
-
-  console.log("\nplastic surgery: instructions when surgery is scheduled");
-  await only("plastic_pre_op_instructions");
-  const pPl = await patient("عمر عملية");
-  await fire("tag_added", { patientId: pPl, tag: "موعد عملية" });
-  const tPl = (await texts(pPl))[0] ?? "";
-  check("sent the moment it is scheduled", tPl.includes("تعليمات ما قبل العملية"));
-  check("never tells the patient to stop a medicine on its own", tPl.includes("لا توقف أي دواء من نفسك"));
 
   /* ================================================================ the treatment coordinator */
   console.log("\ntreatment coordinator (a test, behind a switch)");

@@ -282,8 +282,8 @@ export async function provisionClinic(
     input.slug,
   ]);
 
-  // Copy agency defaults: automation recipes (disabled) and knowledge structure.
-  // A medical centre gets the pack for each of its departments too.
+  // The flows every new clinic starts with, switched on (RECIPES_ON_BY_DEFAULT:
+  // the reminders, the welcome, the document alerts), and the knowledge structure.
   for (const s of practises.length ? practises : [input.specialty]) await installRecipes(c, clinicId, s);
   // The doctor and staff alerts this clinic will be able to edit from its own
   // automations page. Seeded with exactly what the worker used to do.

@@ -34,6 +34,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <span className="hidden text-sm text-ink-500 sm:block">{s.user.fullName}</span>
           </div>
         </div>
+        {/* The same sections on a phone, as a strip that scrolls sideways — it was hidden below md. */}
+        <div className="mx-auto max-w-7xl">
+          <AdminNav caps={s.adminCaps} phone />
+        </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-8">
         <AdminBack />

@@ -40,17 +40,23 @@ export async function requestResetAction(
     );
     if (!u.rowCount) return null;
     const user = u.rows[0];
-    // The template names the workspace being recovered; agency staff have no
-    // clinic membership, so fall back to the agency name.
+    /*
+      The template names what is being recovered. One email is one account on
+      Clinicti, and its password opens every clinic the person works at — so
+      a doctor at two clinics is told it is for both, not only the one they
+      happened to join first (2026-11-27). Agency staff have no clinic
+      membership, so fall back to the agency name.
+    */
     const cn = await c.query(
-      `select coalesce(cl.name_ar, cl.name) as n
+      `select coalesce(nullif(cl.name_ar, ''), cl.name) as n
        from clinic_members m
        join clinics cl on cl.id = m.clinic_id
-       where m.user_id = $1 and m.active
-       order by m.created_at limit 1`,
+       where m.user_id = $1 and m.active and cl.deleted_at is null
+       order by m.created_at`,
       [user.id]
     );
-    const clinicName = (cn.rows[0]?.n as string) ?? "Clinicti";
+    const names = cn.rows.map((r) => r.n as string);
+    const clinicName = names.length ? names.join(user.locale === "en" ? " · " : "، ") : "Clinicti";
 
     const raw = await createAuthToken(c, { userId: user.id, purpose: "reset" });
     const link = `${appUrl()}/reset/${raw}`;

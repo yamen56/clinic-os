@@ -3,9 +3,10 @@ import { withSystem } from "@/lib/db";
 import { getDict } from "@/lib/i18n";
 import { PageHeader } from "@/components/ui/card";
 import { AnnouncementsClient } from "./announcements-client";
+import { ContentTabs } from "../admin-nav";
 
 export default async function AnnouncementsPage() {
-  await guardAdminCap("announcements");
+  const s = await guardAdminCap("announcements");
   const t = await getDict();
   const rows = await withSystem(async (c) => {
     const r = await c.query(
@@ -18,6 +19,7 @@ export default async function AnnouncementsPage() {
 
   return (
     <>
+      <ContentTabs caps={s.adminCaps} />
       <PageHeader title={t.admin.announcements} sub="Shown at the top of every clinic dashboard." />
       <AnnouncementsClient announcements={JSON.parse(JSON.stringify(rows))} />
     </>

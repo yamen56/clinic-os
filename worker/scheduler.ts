@@ -10,6 +10,7 @@ import { expirePastWaitlist, requeueStaleOffers } from "./waitlist";
 import { sessions } from "./wa/session";
 import { resolvePendingLids } from "./wa/lid-mapping";
 import { deleteClinicFiles } from "../src/lib/storage";
+import { rescueAccountFiles } from "../src/lib/account-files";
 import { RESTORE_WINDOW_DAYS } from "../src/lib/clinic-lifecycle";
 import { licensed } from "./features";
 import { enqueueEinvoiceSubmit } from "../src/lib/einvoice/jobs";
@@ -619,6 +620,8 @@ async function purgeDeletedClinics() {
     // One at a time, and never inside a shared transaction: a cascade across
     // forty-nine tables is a long-running statement, and batching several would
     // hold locks over rows other clinics' requests are reading.
+    // People's own signatures and photos leave the folder first: they are used at their other clinics.
+    await rescueAccountFiles(clinic.id).catch((e) => console.error(`[purge ${clinic.slug}] account files`, (e as Error).message));
     const files = await deleteClinicFiles(clinic.id).catch((e) => {
       console.error(`[purge ${clinic.slug}] storage`, (e as Error).message);
       return -1;

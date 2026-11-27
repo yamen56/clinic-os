@@ -23,6 +23,7 @@ export default async function SettingsLayout({
         dental: !!access.clinic.features.dental,
         face: !!access.clinic.features.aesthetic,
         devices: access.clinic.features.devices,
+        branches: access.session.memberships.filter((m) => access.clinic.groupId && m.groupId === access.clinic.groupId && !m.deletedAt).length > 1,
       }}
     >
       {children}

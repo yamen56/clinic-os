@@ -130,22 +130,26 @@ async function main() {
     check("a doctor is not shown it", (await docPage.locator("[data-setup-card]").count()) === 0);
 
     /* ============================================================ the agency */
-    console.log("\n[the agency switches reminders on for a live clinic]");
+    /*
+      The agency's "Default flows" card was retired on 2026-11-27 (Yamen: it
+      served no purpose). A new clinic starts with these flows on; one that
+      does not have them adds them from its own gallery. What is checked here
+      is the card's absence, and that the flows themselves still install as
+      before — the same installRecipes a new clinic runs.
+    */
+    console.log("\n[a live clinic without reminders]");
     const agency = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     watch(agency);
     await signIn(agency, `admin-${slug}@test.local`);
     await agency.goto(`${BASE}/admin/clinics/${slug}`);
-    await agency.waitForSelector("[data-default-flows]", { timeout: 90_000 });
-    check("the reminder waits to be switched on", (await agency.locator('[data-pending-flow="reminder_24h"]').count()) === 1);
-    check("with the message patients will read", (await agency.locator('[data-pending-flow="reminder_24h"]').innerText()).includes("للتأكيد أرسل 1"));
+    await agency.waitForSelector("[data-clinic-tabs]", { timeout: 90_000 });
+    check("the admin page has no Default flows card", (await agency.locator("[data-default-flows]").count()) === 0);
     check("the admin checklist says reminders are off", (await agency.locator('[data-admin-setup="reminders"]').getAttribute("data-done")) === "0");
-    await agency.click("[data-apply-default-flows]");
-    await agency.getByRole("button", { name: "Switch on", exact: true }).last().click();
+    const installed = await installRecipes(db as never, clinic, "general");
     const flows = await until(async () => (await db.query(`select count(*)::int as n from automations where clinic_id = $1 and recipe_key = 'reminder_24h' and active`, [clinic])).rows[0].n === 1);
-    check("switching them on installs the reminder", flows);
+    check("installing the defaults switches the reminder on", flows && installed > 0, String(installed));
     const confirm = (await db.query(`select trigger_config from automations where clinic_id = $1 and recipe_key = 'confirm_on_booking'`, [clinic])).rows[0];
     check("and the confirmation, for reception's bookings only", JSON.stringify(confirm?.trigger_config?.sources) === '["staff"]', JSON.stringify(confirm));
-    check("the card then says they are all on", await until(async () => (await agency.locator('[data-pending-flow]').count()) === 0, 30_000));
     await desk.goto(base);
     await desk.waitForSelector("[data-setup-card], [data-today-list]", { timeout: 60_000 });
     check("and the owner's checklist ticks reminders", (await desk.locator('[data-setup-item="reminders"]').getAttribute("data-done")) === "1");

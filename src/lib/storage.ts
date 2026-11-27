@@ -256,6 +256,23 @@ export async function saveFile(
   return { storagePath: key, sizeBytes: data.length };
 }
 
+/**
+ * A file that belongs to a person, not to a clinic: their saved signature,
+ * their photo. One login works at several clinics (2026-11-27), so these
+ * live under `_users/<id>/` rather than the clinic they were uploaded from —
+ * purging that clinic deletes its folder, and the doctor's signature used at
+ * their other clinic must not go with it.
+ */
+export async function saveUserFile(
+  userId: string,
+  folder: string,
+  fileName: string,
+  data: Buffer
+): Promise<{ storagePath: string; sizeBytes: number }> {
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) throw new Error("saveUserFile: bad user id");
+  return saveFile(path.posix.join("_users", userId), folder, fileName, data);
+}
+
 export async function openFile(storagePath: string): Promise<StoredFile | null> {
   if (usingObjectStore()) {
     const { mod, client, bucket } = await s3(storagePath);

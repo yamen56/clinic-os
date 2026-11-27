@@ -83,6 +83,8 @@ export type ClinicProfile = {
   features: FeatureMap;
   /** Set once the agency has deleted it; the workspace is closed from then on. */
   deletedAt: string | null;
+  /** The branch group it is in (migration 0120), or null for a clinic on its own. */
+  groupId: string | null;
 };
 
 export type Membership = ClinicProfile & {
@@ -283,7 +285,7 @@ const CLINIC_JSON = `json_build_object(
   'timezone', cl.timezone, 'currency', cl.currency, 'brandColor', cl.brand_color,
   'logoPath', cl.logo_path, 'defaultLocale', cl.default_locale,
   'subscriptionStatus', cl.subscription_status, 'vocabulary', cl.vocabulary,
-  'features', cl.features, 'deletedAt', cl.deleted_at
+  'features', cl.features, 'deletedAt', cl.deleted_at, 'groupId', cl.group_id
 )`;
 
 type SessionRow = {

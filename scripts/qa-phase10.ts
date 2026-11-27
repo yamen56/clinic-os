@@ -53,7 +53,8 @@ async function main() {
   await page.fill('input[name="password"]', "admin1234");
   await page.click('button[type="submit"]');
   await page.waitForURL((u) => !u.pathname.includes("login"), { timeout: 30000 });
-  await page.goto(`${BASE}/admin`);
+  // The clinics list moved off the admin home to /admin/clinics (2026-11-27).
+  await page.goto(`${BASE}/admin/clinics`);
   console.log("✓ agency admin signed in");
 
   // 1. Clinics list with health indicators
@@ -91,7 +92,7 @@ async function main() {
   await page.goto(`${BASE}/admin/clinics/rima-dental`);
   await page.waitForSelector("text=Onboarding", { timeout: 15000 });
   const detail = await page.textContent("body");
-  if (!detail?.includes("Services added")) throw new Error("checklist missing");
+  if (!detail?.includes("Services and their prices")) throw new Error("checklist missing");
   console.log("✓ onboarding checklist rendered");
 
   // 6. Impersonation: enter support mode, see the banner + announcement, then exit
@@ -113,7 +114,7 @@ async function main() {
   );
   await page.click("text=Exit support mode");
   // Back on the clinic's page, where the visit that just ended heads the record.
-  await page.waitForURL("**/admin/clinics/rima-dental", { timeout: 20000 });
+  await page.waitForURL("**/admin/clinics/rima-dental?tab=activity", { timeout: 20000 });
   const ended = await db.query(
     `select count(*)::int as n from audit_log where action = 'admin.impersonate.end'`
   );

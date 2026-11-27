@@ -24,7 +24,8 @@ export async function acceptOwnerInvite(
   slug: string,
   password: string
 ): Promise<void> {
-  await adminPage.goto(`${base}/admin/clinics/${slug}`);
+  // Invitations are resent from the clinic's Members tab (admin rebuilt 2026-11-27).
+  await adminPage.goto(`${base}/admin/clinics/${slug}?tab=members`);
   await adminPage.waitForLoadState("networkidle");
   await adminPage.addStyleTag({ content: "nextjs-portal{display:none!important}" });
 

@@ -280,7 +280,7 @@ async function main() {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
     const page = await ctx.newPage();
     await login(page, ADMIN);
-    await go(page, "/admin");
+    await go(page, "/admin/clinics");
     check((await back(page, "main")) === null, "admin: no Back on the clinic list");
     const clinicHref = await firstHref(page, 'main a[href^="/admin/clinics/"]:not([href$="/new"])');
     if (clinicHref) {
@@ -288,7 +288,7 @@ async function main() {
       await page.waitForURL(`**${clinicHref}`, { timeout: 180000 });
       await settle(page);
       const b = await back(page, "main");
-      check(b?.path === "/admin", "admin: a clinic's page has Back to the list", b?.href);
+      check(b?.path === "/admin/clinics", "admin: a clinic's page has Back to the list", b?.href);
       check(b?.text === "Clinics", "…labelled Clinics", b?.text);
     }
     await go(page, "/admin/analytics");

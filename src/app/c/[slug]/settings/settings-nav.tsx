@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/ui/card";
 import { FoldHints } from "@/components/ui/hints";
 import { SETTINGS_GROUPS, settingsItems } from "./settings-items";
 
-type Has = { einvoicing: boolean; dental: boolean; face: boolean; devices: boolean };
+type Has = { einvoicing: boolean; dental: boolean; face: boolean; devices: boolean; branches?: boolean };
 
 /**
  * Around every settings page but the menu itself.

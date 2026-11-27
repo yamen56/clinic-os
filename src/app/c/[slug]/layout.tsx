@@ -9,6 +9,7 @@ import { getLocale } from "@/lib/i18n";
 import { dictSources } from "@/lib/i18n/asset";
 import { I18nProvider } from "@/lib/i18n/client";
 import { chartColorsFor } from "@/lib/brand-chart";
+import { clinicLogoUrl } from "@/lib/clinic-logo";
 import { cookies } from "next/headers";
 import { SIDEBAR_COOKIE, parseSidebarPref } from "@/lib/theme";
 import { needsRestockSql } from "@/lib/charts/face/stock";
@@ -189,6 +190,15 @@ export default async function ClinicLayout({
       pendingDocuments={chrome.pending_documents}
       hasEarnings={!!chrome.has_earnings}
       hasInsurers={!!chrome.has_insurers}
+      // One login, several clinics: the others it opens, for the switcher (2026-11-27).
+      otherClinics={access.session.memberships
+        .filter((m) => m.clinicId !== clinic.id && !m.deletedAt)
+        .map((m) => ({
+          slug: m.clinicSlug,
+          name: (clinic.defaultLocale === "en" ? null : m.clinicNameAr) || m.clinicName,
+          brandColor: m.brandColor,
+          logoSrc: clinicLogoUrl(m.clinicSlug, m.logoPath),
+        }))}
       // Devices are a plan module (lib/plans): without it the entry never shows, whatever is plugged in.
       devices={
         clinic.features.devices

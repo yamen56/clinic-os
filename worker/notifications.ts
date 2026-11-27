@@ -52,6 +52,9 @@ export type Pending = {
   locale: string;
   tz: string;
   slug: string | null;
+  /** The clinic's name, and how many clinics this person works at — one login, several clinics. */
+  clinic_name?: string | null;
+  clinic_count?: number | null;
   /** Who it is from, when it is a colleague: their member row and whether they have a photo. */
   actor_id?: string | null;
   actor_member_id?: string | null;
@@ -140,6 +143,9 @@ export async function deliverPending() {
         `select n.id, n.user_id, n.clinic_id, n.kind, n.title, n.body, n.url, n.read_at, n.push_after, n.dedupe_key,
                 u.phone_e164, u.notification_prefs, u.locale,
                 coalesce(cl.timezone, 'Asia/Amman') as tz, cl.slug,
+                coalesce(nullif(cl.name_ar, ''), cl.name) as clinic_name,
+                (select count(*)::int from clinic_members m join clinics mc on mc.id = m.clinic_id
+                  where m.user_id = n.user_id and m.active and mc.deleted_at is null) as clinic_count,
                 n.actor_id, acm.id as actor_member_id, au.avatar_path is not null as actor_has_photo
            from notifications n
            join users u on u.id = n.user_id
@@ -162,7 +168,9 @@ export async function deliverPending() {
 
     for (const [userId, list] of plan.summaries) {
       const L = NT[asLocale(list[0].locale)];
-      const slug = list.find((x) => x.slug)?.slug;
+      // Held from more than one clinic: the picker, not one clinic's bell (2026-11-27).
+      const slugs = new Set(list.map((x) => x.slug).filter(Boolean));
+      const slug = slugs.size === 1 ? [...slugs][0] : null;
       try {
         await pushToUser(
           c,
@@ -237,7 +245,12 @@ async function pushOne(c: PoolClient, n: Pending) {
       c,
       n.user_id,
       {
-        title: n.title,
+        /*
+          Named for its clinic when the person works at more than one: the
+          same doctor at two clinics must see which one a booking is in
+          before they open it (2026-11-27).
+        */
+        title: (n.clinic_count ?? 0) > 1 && n.clinic_name ? `${n.clinic_name} · ${n.title}` : n.title,
         body: n.body,
         url: n.url ?? "/",
         /*

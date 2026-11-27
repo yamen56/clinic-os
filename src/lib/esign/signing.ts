@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import { saveFile } from "../storage";
+import { saveFile, saveUserFile } from "../storage";
 import { notifyClinicStaff, notifyUser } from "../notify";
 import { logDocEvent } from "./events";
 import {
@@ -363,12 +363,17 @@ export async function saveStaffSignature(
 ): Promise<{ ok: boolean; error?: string }> {
   const png = decodeSignaturePng(args.pngDataUrl);
   if (!png) return { ok: false, error: "bad_signature" };
-  const saved = await saveFile(args.clinicId, "signatures/staff", `${args.userId}.png`, png);
+  /*
+    Filed under the person, not the clinic it was drawn in: the same
+    signature is used at every clinic they work at, and purging this one must
+    not take it from the others (lib/storage saveUserFile, 2026-11-27).
+  */
+  const saved = await saveUserFile(args.userId, "signatures", `${args.userId}.png`, png);
   let svgPath: string | null = null;
   if (args.svg && args.svg.length < 400_000) {
-    const s = await saveFile(
-      args.clinicId,
-      "signatures/staff",
+    const s = await saveUserFile(
+      args.userId,
+      "signatures",
       `${args.userId}.svg`,
       Buffer.from(args.svg, "utf8")
     );

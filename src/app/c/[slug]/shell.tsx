@@ -18,6 +18,7 @@ import { SIDEBAR_COOKIE, type SidebarPref } from "@/lib/theme";
 import { NotificationPopups, useLiveNotifications, type InAppPrefs } from "@/components/live-notifications";
 import { ArrivalAlerts } from "@/components/appointments/arrival-alerts";
 import { BackLink, useBackHref } from "@/components/back-link";
+import { ClinicSwitcher, type OtherClinic } from "@/components/clinic-switcher";
 import type { CapabilityMap, MemberRole } from "@/lib/permissions";
 import { CommandPalette, keyIsFree, type PaletteAction, type PalettePage } from "@/components/command-palette";
 import { hrefFor, useQuickShortcuts, type QuickAction } from "./quick-actions";
@@ -102,6 +103,7 @@ export function Shell({
   hasEarnings,
   hasInsurers,
   devices,
+  otherClinics = [],
   labs,
   stock,
   fullControl,
@@ -141,6 +143,8 @@ export function Shell({
   hasInsurers: boolean;
   /** A machine is connected, and how many of its results wait to be filed. */
   devices: { connected: boolean; waiting: number };
+  /** The other clinics this login works at — branches, or a second clinic — for the switcher. */
+  otherClinics?: OtherClinic[];
   /** A dental clinic's labs: whether it keeps any, and how much work is back late. */
   labs: { kept: boolean; late: number };
   /** An aesthetic clinic's products and stock: whether it has the face chart, and how many products run low. */
@@ -528,12 +532,15 @@ export function Shell({
               rather than being swapped out, so a logo that fails to load leaves
               a marked circle rather than a hole. */}
           <Avatar name={clinic.name} size={30} color={clinic.brandColor} src={logoSrc} fit="contain" />
-          <div className="min-w-0 sb-mini:sr-only">
+          <div className="min-w-0 flex-1 sb-mini:sr-only">
             <div className="truncate text-[0.8125rem] font-semibold leading-tight text-white">
               {clinicDisplay}
             </div>
             <div className="text-[length:max(11px,0.6875rem)] text-white/45">Clinicti</div>
           </div>
+          <span className="sb-mini:hidden">
+            <ClinicSwitcher slug={clinic.slug} others={otherClinics} tone="night" />
+          </span>
         </div>
         <div className="px-3 pb-1 sb-mini:px-0">
           <button
@@ -735,6 +742,7 @@ export function Shell({
                 {clinicDisplay}
               </span>
             </Link>
+            <ClinicSwitcher slug={clinic.slug} others={otherClinics} tone="light" />
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
