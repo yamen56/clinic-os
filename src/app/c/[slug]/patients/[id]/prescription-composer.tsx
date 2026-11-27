@@ -811,7 +811,7 @@ export function PrescriptionComposer({
  * scrolls (`data-rx-scroll`, which the suggestions measure against), and the
  * notch and the home bar are kept clear.
  */
-function RxSheet({
+export function RxSheet({
   title,
   sub,
   closeLabel,

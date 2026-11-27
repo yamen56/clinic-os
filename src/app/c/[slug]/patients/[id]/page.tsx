@@ -10,6 +10,7 @@ import { invoiceDaySql, invoiceScopeSql } from "@/lib/invoice-scope";
 import { appointmentAttachedSql } from "@/lib/appointment-history";
 import { countryFromClinic } from "@/lib/phone";
 import { PATIENT_PRESCRIPTIONS_JSON } from "@/lib/prescriptions";
+import { PATIENT_LETTERS_JSON } from "@/lib/medical-letters";
 import { auditView } from "@/lib/audit";
 import { DateTime } from "luxon";
 import { loadDentalChart } from "@/lib/charts/dental/db";
@@ -87,6 +88,7 @@ export default async function PatientProfilePage({
         // The cover's end date as text: a `date` read through node-pg is a JS Date in
         // the server's zone, which moves it by a day west of the clinic.
         `select p.*, p.insurance_valid_until::text as cover_until, ${PATIENT_PRESCRIPTIONS_JSON} as __prescriptions,
+                ${PATIENT_LETTERS_JSON} as __letters,
                 -- Who typed this patient in, as the clinic knows them: the
                 -- header says "Lina · Reception", not "staff".
                 (select json_build_object('name', u.full_name, 'title', cm.title, 'role', cm.role, 'owner', coalesce(cm.is_owner, false))
@@ -97,7 +99,7 @@ export default async function PatientProfilePage({
       )
     ).rows[0];
     if (!row) return null;
-    const { __prescriptions: prescriptions, ...p } = row;
+    const { __prescriptions: prescriptions, __letters: letters, ...p } = row;
     // The dental chart is a module the agency switches on for a clinic that charts teeth;
     // the face chart, for an aesthetic clinic.
     const dental = access.clinic.features.dental;
@@ -291,6 +293,7 @@ export default async function PatientProfilePage({
     return {
       patient,
       prescriptions,
+      letters,
       notes: notes.rows,
       files: visibleFiles,
       appointments: appointments.rows,
@@ -348,6 +351,7 @@ export default async function PatientProfilePage({
       insurers={JSON.parse(JSON.stringify(d.insurers))}
       noteCategories={JSON.parse(JSON.stringify(d.noteCategories))}
       prescriptions={JSON.parse(JSON.stringify(d.prescriptions ?? []))}
+      letters={JSON.parse(JSON.stringify(d.letters ?? []))}
       initialTab={tab}
       renderedAt={Date.now()}
       canSendDocuments={can(access, "documents.manage")}

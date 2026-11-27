@@ -560,6 +560,8 @@ export async function mergePatientsAction(
       // A prescription is part of the record; left behind it would sit on the
       // tombstone, where nobody can open it.
       ["prescriptions", "patient_id"],
+      // Sick leaves, reports and referrals (0123), for the same reason.
+      ["medical_letters", "patient_id"],
       // The dental chart is the record too; its history follows its entries.
       ["chart_marks", "patient_id"],
       // Its cases, the steps of its treatments, and the plan items booked into visits.

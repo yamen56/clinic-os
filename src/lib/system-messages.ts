@@ -32,6 +32,7 @@ export type SystemMessageKey =
   | "invoice_receipt"
   | "receipt_sent"
   | "prescription_sent"
+  | "letter_sent"
   | "visit_link"
   | "visit_moved"
   | "visit_cancelled";
@@ -357,6 +358,21 @@ export const SYSTEM_MESSAGES: SystemMessageDef[] = [
     ],
     ar: "مرحباً {{patient.first_name}}،\nهذه وصفتك الطبية من {{clinic.name}}\n{{doctor.name}} — {{prescription.date}}\n\n{{prescription.medicines}}\n\nالملف المرفق هو الوصفة، يمكنك عرضه في الصيدلية.",
     en: "Hello {{patient.first_name}},\nHere is your prescription from {{clinic.name}}\n{{doctor.name}} — {{prescription.date}}\n\n{{prescription.medicines}}\n\nThe attached file is your prescription; you can show it at the pharmacy.",
+  },
+  /*
+    The caption under a sick leave, a medical report or a referral (0123).
+
+    It names the kind of letter and nothing of what is in it: the diagnosis is
+    on the PDF, which the patient chooses to show, and not in a chat a family
+    may share. Always on, like the prescription's — the send is the feature.
+  */
+  {
+    key: "letter_sent",
+    group: "patients",
+    canDisable: false,
+    vars: ["patient.first_name", "patient.name", "clinic.name", "doctor.name", "letter.title", "letter.date"],
+    ar: "مرحباً {{patient.first_name}}،\nمرفق {{letter.title}} من {{clinic.name}}\n{{doctor.name}} — {{letter.date}}",
+    en: "Hello {{patient.first_name}},\nAttached is your {{letter.title}} from {{clinic.name}}\n{{doctor.name}} — {{letter.date}}",
   },
 ];
 

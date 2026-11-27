@@ -26,6 +26,7 @@ export function memberHistorySql(alias: string): string {
     or exists (select 1 from doctor_payouts x where x.doctor_member_id = ${id})
     or exists (select 1 from on_call_visits x where x.doctor_member_id = ${id})
     or exists (select 1 from prescriptions x where x.doctor_member_id = ${id})
+    or exists (select 1 from medical_letters x where x.doctor_member_id = ${id})
     or exists (select 1 from treatment_cases x where x.doctor_member_id = ${id})
     or exists (select 1 from visit_records x where x.doctor_member_id = ${id})
     or exists (select 1 from waitlist_entries x where x.doctor_member_id = ${id})

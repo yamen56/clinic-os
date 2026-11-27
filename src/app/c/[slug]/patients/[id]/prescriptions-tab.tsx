@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/toast";
 import { resendPrescriptionAction } from "./prescription-actions";
 import { FileText, Pill, Plus, Repeat, Send } from "lucide-react";
 
-const STATUS_BADGE: Record<string, StatusKey> = {
+export const STATUS_BADGE: Record<string, StatusKey> = {
   queued: "pending",
   sending: "pending",
   sent: "brand",
@@ -191,7 +191,7 @@ export function PrescriptionsTab({
   );
 }
 
-type RowActionProps = {
+export type RowActionProps = {
   key: string;
   icon: React.ReactNode;
   label: string;
@@ -208,7 +208,7 @@ type RowActionProps = {
  * here the same control is a stacked cell on a phone and an inline button on
  * a desk. Styled to match it at the wide size.
  */
-function RowAction({ icon, label, onClick, href, busy, disabled }: Omit<RowActionProps, "key">) {
+export function RowAction({ icon, label, onClick, href, busy, disabled }: Omit<RowActionProps, "key">) {
   const cls = `relative flex min-w-0 touch-manipulation select-none flex-col items-center justify-center gap-1 rounded-ctl border border-line px-2 py-2 text-[0.75rem] font-semibold text-ink-900 transition-colors duration-140 hover:bg-brand-100 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 @2xl:h-9 @2xl:flex-row @2xl:gap-2 @2xl:px-3 @2xl:py-0 @2xl:text-[0.8125rem] [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0 ${
     busy ? "animate-pulse" : ""
   }`;
@@ -240,7 +240,7 @@ function RowAction({ icon, label, onClick, href, busy, disabled }: Omit<RowActio
  * Mounted only while something is still on its way, so the file holds no
  * event stream open for prescriptions that were delivered last week.
  */
-function DeliveryWatch({ slug, messageIds }: { slug: string; messageIds: string[] }) {
+export function DeliveryWatch({ slug, messageIds }: { slug: string; messageIds: string[] }) {
   const router = useRouter();
   useRealtimeRefresh(
     slug,

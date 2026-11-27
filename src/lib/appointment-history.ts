@@ -23,6 +23,7 @@ export function appointmentAttachedSql(alias: string): string {
     or exists (select 1 from chart_mark_steps x where x.appointment_id = ${id})
     or exists (select 1 from visit_records x where x.appointment_id = ${id})
     or exists (select 1 from prescriptions x where x.appointment_id = ${id})
+    or exists (select 1 from medical_letters x where x.appointment_id = ${id})
     or exists (select 1 from patient_files x where x.appointment_id = ${id})
     or exists (select 1 from documents x where x.appointment_id = ${id})
     or exists (select 1 from waitlist_entries x where x.booked_appointment_id = ${id})

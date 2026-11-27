@@ -62,6 +62,9 @@ import { OnFile, OtherNoteCard, SOURCE_ICON, useOtherNotes, type OtherSource } f
 import type { FeedItem } from "@/lib/note-feed";
 import { PrescriptionsTab } from "./prescriptions-tab";
 import { PrescriptionComposer, useComposerData, type RxDraft } from "./prescription-composer";
+import { LettersTab } from "./letters-tab";
+import { LetterComposer, type LetterDraft } from "./letter-composer";
+import type { LetterRow } from "@/lib/medical-letters";
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
 import { coverState } from "@/lib/insurance";
 import { addedByLabel, type AddedBy } from "@/lib/added-by";
@@ -417,6 +420,8 @@ export function PatientProfile(props: {
     insurance: boolean;
   };
   prescriptions: PrescriptionRow[];
+  /** Sick leaves, reports and referrals (0123), newest first. */
+  letters: LetterRow[];
   /** The tab to open on, from `?tab=` — a notification's link, usually. */
   initialTab?: string;
   /** The clinic's country, so a new number defaults to the right dialling code. */
@@ -462,6 +467,24 @@ export function PatientProfile(props: {
       prev.some((r) => r.id === row.id) ? prev.map((r) => (r.id === row.id ? row : r)) : [row, ...prev]
     );
   const rxData = useComposerData(slug, props.patient.id, caps.prescriptions);
+  // Letters are held the way prescriptions are, and their composer uses the same doctors.
+  const [letterRows, setLetterRows] = useState(props.letters);
+  useEffect(() => setLetterRows(props.letters), [props.letters]);
+  const upsertLetter = (row: LetterRow) =>
+    setLetterRows((prev) =>
+      prev.some((r) => r.id === row.id) ? prev.map((r) => (r.id === row.id ? row : r)) : [row, ...prev]
+    );
+  const [letterComposer, setLetterComposer] = useState<{ draft: LetterDraft | null } | null>(null);
+  const onLetterSaved = (row: LetterRow, warning: string | undefined, sent: boolean) => {
+    upsertLetter(row);
+    setLetterComposer(null);
+    setTab("letters");
+    const T = t.letters;
+    if (warning === "no_phone") toast(T.savedNoPhone, "error");
+    else if (warning === "wa_disconnected") toast(T.savedNotSent, "error");
+    else if (warning) toast(T.pdfFailed, "error");
+    else toast(sent ? T.sent : T.saved);
+  };
   /*
     `from`: the visit's record the prescription was started from. It is then
     filed under that visit, and closing or sending it comes back to the record
@@ -633,6 +656,12 @@ export function PatientProfile(props: {
       label: t.patients.tabs.prescriptions,
       count: rxRows.length,
     },
+    // Beside them: the sick leave, report or referral written at the same moment.
+    (caps.prescriptions || letterRows.length > 0) && {
+      key: "letters",
+      label: t.patients.tabs.letters,
+      count: letterRows.length,
+    },
     // The doctor's side of the file, beside the prescriptions: the tooth chart, for a dental clinic.
     props.dental && { key: "dental", label: t.dental.tab },
     // And the face, for an aesthetic clinic.
@@ -786,6 +815,19 @@ export function PatientProfile(props: {
             >
               <Pill className="h-4 w-4" />
               {t.prescriptions.quickAction}
+            </Button>
+          )}
+          {caps.prescriptions && (
+            <Button
+              variant="soft"
+              size="sm"
+              className={HEADER_ACTION}
+              onClick={() => setLetterComposer({ draft: null })}
+              onPointerEnter={() => void rxData.load()}
+              data-letter-new
+            >
+              <FileSignature className="h-4 w-4" />
+              {t.letters.quickAction}
             </Button>
           )}
           {/* Sending through the platform is the Conversations section; the
@@ -1241,6 +1283,31 @@ export function PatientProfile(props: {
             onUpdated={upsertRx}
           />
         )}
+        {tab === "letters" && (
+          <LettersTab
+            slug={slug}
+            rows={letterRows}
+            tz={tz}
+            canWrite={caps.prescriptions}
+            hasPhone={!!p.phone_e164}
+            onNew={() => setLetterComposer({ draft: null })}
+            onAgain={(r) =>
+              setLetterComposer({
+                draft: {
+                  kind: r.kind,
+                  locale: r.locale,
+                  diagnosis: r.diagnosis,
+                  body: r.body,
+                  addressee: r.addressee,
+                  leaveDays: r.leave_days,
+                  urgent: r.urgent,
+                  doctorMemberId: r.doctor_member_id,
+                },
+              })
+            }
+            onUpdated={upsertLetter}
+          />
+        )}
         {tab === "dental" && props.dental && (
           <DentalChartTab slug={slug} patientId={p.id} tz={tz} birthDate={p.birth_date} data={props.dental} />
         )}
@@ -1529,6 +1596,19 @@ export function PatientProfile(props: {
             />
           )}
         </WithAllergies>
+      )}
+      {letterComposer && (
+        <LetterComposer
+          slug={slug}
+          patient={{ id: p.id, full_name: p.full_name, phone_e164: p.phone_e164 }}
+          today={props.today}
+          draft={letterComposer.draft}
+          data={rxData.data}
+          reload={rxData.load}
+          onClose={() => setLetterComposer(null)}
+          onSaved={onLetterSaved}
+          appointmentId={visitNow?.id ?? null}
+        />
       )}
       <MergeModal
         open={mergeOpen}

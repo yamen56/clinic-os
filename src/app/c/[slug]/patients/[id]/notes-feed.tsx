@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   CalendarDays,
+  FileSignature,
   FileText,
   Hourglass,
   ListChecks,
@@ -33,6 +34,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Tooth } from "@/components/ui/tooth-icon";
+import { letterNumber, type LetterKind } from "@/lib/medical-letters";
 import { useI18n } from "@/lib/i18n/client";
 import { Card } from "@/components/ui/card";
 import { fmtDate, fmtTime } from "@/lib/dates";
@@ -65,6 +67,7 @@ export const SOURCE_ICON: Record<OtherSource, LucideIcon> = {
   invoice: ReceiptText,
   claim: ShieldCheck,
   prescription: Pill,
+  letter: FileSignature,
   waitlist: Hourglass,
   xray: FileText,
   chart: Tooth,
@@ -139,6 +142,23 @@ export function useOtherNotes({
           .filter((x) => x.name)
           .map((x) => [[x.name, x.dose, x.frequency, x.duration].filter(Boolean).join(" "), x.instructions].filter(Boolean).join(" — ")),
         open: has("prescriptions") ? () => onTab("prescriptions") : undefined,
+      });
+    } else if (f.source === "letter") {
+      // A report's or a referral's text is a clinical note; a sick leave's diagnosis is too.
+      const x = (f.extra ?? {}) as { diagnosis?: string; addressee?: string };
+      const kind = (f.status === "sick_leave" || f.status === "referral" ? f.status : "report") as LetterKind;
+      out.push({
+        key: `letter:${f.id}`,
+        source: "letter",
+        at: f.at,
+        by: f.by,
+        title: [t.letters.kinds[kind], f.ref ? letterNumber(Number(f.ref)) : ""].filter(Boolean).join(" · "),
+        body: f.body,
+        lines: [
+          x.addressee ? `${t.letters.sheet.to}: ${x.addressee}` : "",
+          x.diagnosis ? `${N.caseFields.diagnosis}: ${x.diagnosis}` : "",
+        ].filter(Boolean),
+        open: has("letters") ? () => onTab("letters") : undefined,
       });
     } else if (f.source === "waitlist") {
       out.push({

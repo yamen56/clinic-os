@@ -17,7 +17,7 @@
 
 import type { PoolClient } from "pg";
 
-export type FeedSource = "visit" | "invoice" | "claim" | "prescription" | "waitlist" | "xray";
+export type FeedSource = "visit" | "invoice" | "claim" | "prescription" | "letter" | "waitlist" | "xray";
 
 export type FeedItem = {
   source: FeedSource;
@@ -69,6 +69,12 @@ export async function loadNoteFeed(
         where p.clinic_id = $1 and p.patient_id = $2
           and (btrim(p.diagnosis) <> ''
                or exists (select 1 from jsonb_array_elements(p.items) x where btrim(coalesce(x->>'instructions', '')) <> ''))
+       union all
+       select 'letter', l.id, l.created_at, l.doctor_name, l.body, l.number::text, null, null, l.kind,
+              jsonb_build_object('diagnosis', l.diagnosis, 'addressee', l.addressee)
+         from medical_letters l
+        where l.clinic_id = $1 and l.patient_id = $2
+          and (btrim(l.body) <> '' or btrim(l.diagnosis) <> '')
        union all
        select 'waitlist', w.id, w.created_at, null, w.note, null, s.name, s.name_ar, w.status, null
          from waitlist_entries w left join services s on s.id = w.service_id

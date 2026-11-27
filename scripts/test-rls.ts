@@ -352,6 +352,13 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
      values ($1, $2, $3, 'Dr RLS', $4, $5, '[{"name":"Amoxicillin"}]') returning id`,
     [clinic, patient, member, user, seq]
   );
+  // Medical letters (0123): a sick leave.
+  await q(
+    `insert into medical_letters (clinic_id, patient_id, kind, number, doctor_member_id, doctor_name, author_id,
+                                  leave_from, leave_days)
+     values ($1, $2, 'sick_leave', $5, $3, 'Dr RLS', $4, current_date, 2) returning id`,
+    [clinic, patient, member, user, seq]
+  );
   await q(
     `insert into medications (clinic_id, name, use_count) values ($1, $2, 1) returning id`,
     [clinic, `Amoxicillin ${tag}`]
