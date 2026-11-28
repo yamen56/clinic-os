@@ -19,7 +19,7 @@ import { queueWhatsAppMessage } from "./outbound";
 export async function tellPatientBookingApproved(c: PoolClient, clinicId: string, appointmentId: string): Promise<void> {
   const a = (
     await c.query(
-      `select a.starts_at, a.patient_id, p.full_name, p.phone_e164, cl.timezone, cl.default_locale,
+      `select a.starts_at, a.patient_id, p.full_name, patient_reach_phone(p.id) as phone_e164, cl.timezone, cl.default_locale,
               cl.name as clinic_name, cl.name_ar as clinic_name_ar, cl.address, cl.address_ar,
               -- Every service of the visit, joined (0106).
               appointment_service_names(a.id, false) as service_name, appointment_service_names(a.id, true) as service_name_ar,

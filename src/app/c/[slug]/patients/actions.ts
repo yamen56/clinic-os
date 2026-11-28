@@ -201,7 +201,8 @@ export async function openConversationAction(
 
   return inClinic(access, async (c) => {
     const p = await c.query(
-      `select phone_e164 from patients where id = $1 and clinic_id = $2 and merged_into is null`,
+      // Their own number, or their family contact's for a child with none (0127) — whose thread it then is.
+      `select patient_reach_phone(id) as phone_e164 from patients where id = $1 and clinic_id = $2 and merged_into is null`,
       [patientId, access.clinicId]
     );
     if (!p.rowCount) return { error: "not_found" };
@@ -210,7 +211,7 @@ export async function openConversationAction(
 
     const conv = await c.query(
       `insert into conversations (clinic_id, phone_e164, patient_id)
-       values ($1, $2, $3)
+       values ($1, $2, coalesce((select id from patients where clinic_id = $1 and phone_e164 = $2 and merged_into is null limit 1), $3))
        on conflict (clinic_id, phone_e164)
        do update set patient_id = coalesce(conversations.patient_id, excluded.patient_id)
        returning id`,
@@ -575,6 +576,8 @@ export async function mergePatientsAction(
       ["patient_packages", "patient_id"],
       ["imaging_requests", "patient_id"],
       ["appointments", "patient_id"],
+      // The repeating series those visits belong to (0126).
+      ["appointment_series", "patient_id"],
       ["invoices", "patient_id"],
       ["payments", "patient_id"],
       ["tasks", "patient_id"],
@@ -591,6 +594,36 @@ export async function mergePatientsAction(
       `update conversations set patient_id = $1 where patient_id = $2 and clinic_id = $3`,
       [keepId, duplicateId, access.clinicId]
     );
+    /*
+      The family (0127): the surviving file takes the duplicate's place in its
+      family when it has none of its own, contact and all. The duplicate leaves
+      its family either way; one left with a single member is dissolved.
+    */
+    const dupFamily = (
+      await c.query(`select family_id from patients where id = $1 and clinic_id = $2`, [duplicateId, access.clinicId])
+    ).rows[0]?.family_id as string | null;
+    if (dupFamily) {
+      await c.query(
+        `update patients k set family_id = d.family_id, family_role = coalesce(k.family_role, d.family_role)
+           from patients d where k.id = $1 and d.id = $2 and k.family_id is null`,
+        [keepId, duplicateId]
+      );
+      await c.query(`update patients set family_id = null, family_role = null where id = $1`, [duplicateId]);
+      await c.query(
+        `update patient_families f
+            set contact_patient_id = case
+              when exists (select 1 from patients k where k.id = $1 and k.family_id = f.id) then $1
+              else (select m.id from patients m where m.family_id = f.id and m.merged_into is null and m.phone_e164 is not null
+                     order by m.created_at limit 1) end
+          where f.id = $3 and f.clinic_id = $4 and (f.contact_patient_id = $2 or f.contact_patient_id is null)`,
+        [keepId, duplicateId, dupFamily, access.clinicId]
+      );
+      const left = (await c.query(`select count(*)::int as n from patients where family_id = $1 and merged_into is null and id <> $2`, [dupFamily, duplicateId])).rows[0].n as number;
+      if (left < 2) {
+        await c.query(`update patients set family_id = null, family_role = null where family_id = $1`, [dupFamily]);
+        await c.query(`delete from patient_families where id = $1 and clinic_id = $2`, [dupFamily, access.clinicId]);
+      }
+    }
 
     // Merge identity: all numbers stay reachable on the surviving file
     const phones = new Set<string>(

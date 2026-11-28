@@ -32,6 +32,7 @@ export function TakePayment({
   size = "sm",
   showBalance = false,
   onPaid,
+  family = false,
 }: {
   slug: string;
   patientId: string;
@@ -45,6 +46,8 @@ export function TakePayment({
   showBalance?: boolean;
   /** Told what was paid, for a balance drawn elsewhere on the screen. */
   onPaid?: (amount: number) => void;
+  /** Toward the patient's whole family (0127): `balance` is then what they all owe. */
+  family?: boolean;
 }) {
   const { t, locale } = useI18n();
   const { toast } = useToast();
@@ -57,7 +60,7 @@ export function TakePayment({
   const [paidOn, setPaidOn] = useState(() => todayIn(tz));
   const [pending, start] = useTransition();
   /* The invoices this payment settled, while their receipts are on offer. */
-  const [receipts, setReceipts] = useState<{ id: string; number: string; sent: boolean }[] | null>(null);
+  const [receipts, setReceipts] = useState<{ id: string; number: string; sent: boolean; patientName?: string }[] | null>(null);
   const [sendingReceipt, setSendingReceipt] = useState<string | null>(null);
   // A fresh read of the page is the truth again.
   useEffect(() => setOwed(balance), [balance]);
@@ -69,7 +72,7 @@ export function TakePayment({
 
   const save = () =>
     start(async () => {
-      const r = await recordPatientPaymentAction(slug, { patientId, amount: value, method, reference, paidOn });
+      const r = await recordPatientPaymentAction(slug, { patientId, amount: value, method, reference, paidOn, family });
       if (r.error || !r.paid) {
         toast(
           r.error === "overpay"
@@ -91,7 +94,7 @@ export function TakePayment({
         not after somebody finds the invoice. The receipt is offered here.
       */
       const settled = r.paid.filter((p) => p.settled);
-      if (settled.length) setReceipts(settled.map((p) => ({ id: p.invoiceId, number: p.number, sent: false })));
+      if (settled.length) setReceipts(settled.map((p) => ({ id: p.invoiceId, number: p.number, sent: false, patientName: p.patientName })));
       else setOpen(false);
     });
 
@@ -108,7 +111,7 @@ export function TakePayment({
 
   return (
     <>
-      <span className="inline-flex flex-wrap items-center gap-2" data-take-payment={patientId} data-owed={owed}>
+      <span className="inline-flex flex-wrap items-center gap-2" data-take-payment={family ? "family" : patientId} data-owed={owed}>
         {showBalance && (
           <span className="text-[0.78125rem] font-semibold tnum text-st-pending">{t.invoices.owes.replace("{amount}", fmtMoney(owed, currency, locale))}</span>
         )}
@@ -124,16 +127,19 @@ export function TakePayment({
           }}
         >
           <Wallet className="h-4 w-4" />
-          {t.invoices.takePayment}
+          {family ? t.family.payForFamily : t.invoices.takePayment}
         </Button>
       </span>
-      <Modal open={open} onClose={() => setOpen(false)} title={t.invoices.takePaymentTitle}>
+      <Modal open={open} onClose={() => setOpen(false)} title={family ? t.family.payForFamily : t.invoices.takePaymentTitle}>
         {receipts ? (
           <div className="grid gap-3" data-take-payment-receipts>
             <p className="text-[0.8125rem] text-ink-700">{t.invoices.settledSendReceipt}</p>
             {receipts.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
-                <span className="text-sm font-semibold tnum">{r.number}</span>
+                <span className="min-w-0 text-sm font-semibold tnum">
+                  {r.number}
+                  {r.patientName && <span className="block truncate text-[0.75rem] font-normal text-ink-500">{r.patientName}</span>}
+                </span>
                 {r.sent ? (
                   <span className="inline-flex items-center gap-1 text-[0.8125rem] font-semibold text-st-confirmed">
                     <Check className="h-4 w-4" />
@@ -163,7 +169,7 @@ export function TakePayment({
           data-take-payment-form
         >
           <p className="text-[0.8125rem] text-ink-500">
-            {t.invoices.owes.replace("{amount}", fmtMoney(owed, currency, locale))} · {t.invoices.takePaymentHint}
+            {t.invoices.owes.replace("{amount}", fmtMoney(owed, currency, locale))} · {family ? t.family.payHint : t.invoices.takePaymentHint}
           </p>
           <div className="grid grid-cols-2 gap-4">
             <Field label={`${t.common.amount} (${currency})`} required>

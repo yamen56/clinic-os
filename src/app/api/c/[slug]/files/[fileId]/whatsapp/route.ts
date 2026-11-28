@@ -36,7 +36,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
   const row = await inClinic(access, async (c) =>
     (
       await c.query(
-        `select f.storage_path, f.mime_type, f.file_name, f.kind, f.patient_id, p.phone_e164,
+        `select f.storage_path, f.mime_type, f.file_name, f.kind, f.patient_id, patient_reach_phone(p.id) as phone_e164,
                 (select status from whatsapp_sessions where clinic_id = f.clinic_id) as wa_status
            from patient_files f join patients p on p.id = f.patient_id
           where f.id = $1 and f.clinic_id = $2`,

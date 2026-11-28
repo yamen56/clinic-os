@@ -358,6 +358,17 @@ async function buildFixture(su: Client, tag: string, seq: number): Promise<Fixtu
      values ($1, $2, current_date, current_date + 1, $3) returning id`,
     [clinic, member, user]
   );
+  // A repeating series (0126) and a family (0127).
+  await q(
+    `insert into appointment_series (clinic_id, patient_id, every, unit, planned, created_by)
+     values ($1, $2, 4, 'week', 6, $3) returning id`,
+    [clinic, patient, user]
+  );
+  await q(
+    `insert into patient_families (clinic_id, contact_patient_id, created_by)
+     values ($1, $2, $3) returning id`,
+    [clinic, patient, user]
+  );
   // Medical letters (0123): a sick leave.
   await q(
     `insert into medical_letters (clinic_id, patient_id, kind, number, doctor_member_id, doctor_name, author_id,

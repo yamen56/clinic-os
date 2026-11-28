@@ -32,6 +32,12 @@ export type ApptInput = {
   markIds?: string[];
   /** A room, null to pick one, absent to keep the current one when it still works. See scheduleCheck. */
   roomId?: string | null;
+  /**
+   * Members of the patient's family to book too (0127), one straight after
+   * another — the mother's three children at the dentist. Each takes the same
+   * doctor, services and length, starting when the one before ends.
+   */
+  alsoPatientIds?: string[];
 };
 
 export type ApptResult = {
@@ -43,6 +49,9 @@ export type ApptResult = {
   roomName?: string;
   /** Kept the time but moved rooms — the toast says where. */
   roomChanged?: boolean;
+  /** Family members booked after the first, and whose time was taken when one could not be. */
+  alsoBooked?: number;
+  alsoStopped?: string;
 };
 
 export async function createAppointmentAction(slug: string, input: ApptInput): Promise<ApptResult> {
@@ -128,7 +137,64 @@ export async function createAppointmentAction(slug: string, input: ApptInput): P
       source: "staff",
       actorUserId: access.session.user.id,
     });
-    return { id, roomName: check.roomName };
+
+    /*
+      The rest of the family, back to back. Only members of this patient's own
+      family; each is an ordinary visit of its own (its own confirmation, to
+      the family's number). The first time that is taken stops the run and is
+      named — the desk books that one by hand rather than have it land later.
+    */
+    const also = [...new Set((input.alsoPatientIds ?? []).filter((x) => isUuid(x) && x !== patientId))].slice(0, 8);
+    let alsoBooked = 0;
+    let alsoStopped: string | undefined;
+    if (also.length) {
+      const members = (
+        await c.query(
+          `select m.id, m.full_name from patients m join patients p on p.family_id = m.family_id
+            where p.id = $1 and m.id = any($2::uuid[]) and m.clinic_id = $3 and m.merged_into is null`,
+          [patientId, also, access.clinicId]
+        )
+      ).rows as { id: string; full_name: string }[];
+      const length = Date.parse(input.endsAt) - Date.parse(input.startsAt);
+      let at = Date.parse(input.endsAt);
+      for (const pid of also) {
+        const m = members.find((x) => x.id === pid);
+        if (!m) continue;
+        const startsAt = new Date(at).toISOString();
+        const endsAt = new Date(at + length).toISOString();
+        const ok = await scheduleCheck(c, access.clinicId, { doctorMemberId: input.doctorMemberId, serviceId, startsAt, endsAt, roomId: input.roomId ?? null });
+        if (ok.error) {
+          alsoStopped = m.full_name;
+          break;
+        }
+        const next = (
+          await c.query(
+            `insert into appointments (clinic_id, patient_id, doctor_member_id, service_id, starts_at, ends_at, notes, source, created_by, room_id)
+             values ($1, $2, $3, $4, $5, $6, $7, 'staff', $8, $9) returning id`,
+            [access.clinicId, m.id, input.doctorMemberId, serviceId, startsAt, endsAt, input.notes.slice(0, 2000), access.session.user.id, ok.roomId]
+          )
+        ).rows[0].id as string;
+        if (services.length > 1) await setExtraServices(c, access.clinicId, next, serviceId, services.slice(1));
+        await audit(c, {
+          clinicId: access.clinicId,
+          userId: access.session.user.id,
+          impersonatedBy: access.session.impersonatedBy,
+          action: "appointment.create",
+          entity: "appointment",
+          entityId: next,
+          detail: { patientId: m.id, startsAt, roomId: ok.roomId, withFamilyOf: patientId },
+        });
+        await emitTrigger(c, access.clinicId, "appointment_created", {
+          appointmentId: next,
+          patientId: m.id,
+          source: "staff",
+          actorUserId: access.session.user.id,
+        });
+        alsoBooked++;
+        at += length;
+      }
+    }
+    return { id, roomName: check.roomName, ...(also.length ? { alsoBooked, ...(alsoStopped ? { alsoStopped } : {}) } : {}) };
   });
 }
 

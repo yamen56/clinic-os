@@ -16,6 +16,7 @@ import { Toggle, Input, Field, Textarea } from "@/components/ui/input";
 import { Avatar, EmptyState, Spinner } from "@/components/ui/misc";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
+import { FamilyList } from "@/components/family-list";
 import {
   addQuickReplyAction,
   deleteQuickReplyAction,
@@ -767,6 +768,8 @@ export function InboxClient({
                   {t.patients.createInvoice}
                 </Link>
               </div>
+              {/* Whoever else this number brings (0127): the mother writes about her son. */}
+              <FamilyList slug={slug} patientId={thread.patient.id} canBook />
               {/* A link staff made by hand can be wrong; it has to be undoable here. */}
               <button
                 className="text-[0.75rem] text-ink-400 hover:text-ink-700 disabled:opacity-50"

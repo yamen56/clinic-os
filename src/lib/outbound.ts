@@ -24,9 +24,13 @@ export async function queueWhatsAppMessage(
     patientId?: string | null;
   }
 ): Promise<{ messageId: string; conversationId: string }> {
+  /*
+    A new thread belongs to whoever owns the number: a child's reminder sent to
+    their mother's phone (0127) opens her thread, not one filed under the child.
+  */
   const conv = await c.query(
     `insert into conversations (clinic_id, phone_e164, patient_id)
-     values ($1, $2, $3)
+     values ($1, $2, coalesce((select id from patients where clinic_id = $1 and phone_e164 = $2 and merged_into is null limit 1), $3))
      on conflict (clinic_id, phone_e164)
      do update set patient_id = coalesce(conversations.patient_id, excluded.patient_id)
      returning id`,

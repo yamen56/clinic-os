@@ -224,7 +224,7 @@ async function queueSend(c: PoolClient, access: ClinicAccess, id: string): Promi
   const l = (
     await c.query(
       `select l.kind, l.number, l.created_at, l.locale, l.doctor_name, l.pdf_path,
-              p.id as patient_id, p.full_name, p.phone_e164,
+              p.id as patient_id, p.full_name, patient_reach_phone(p.id) as phone_e164,
               cl.name, cl.name_ar, cl.timezone,
               coalesce(ws.status = 'connected', false) as wa_connected
          from medical_letters l

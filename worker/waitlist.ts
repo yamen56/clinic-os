@@ -94,12 +94,13 @@ export async function offerFreedSlot(slot: FreedSlot): Promise<number> {
       first. The cooldown and the status filter are what stop this being a blast.
     */
     const candidates = await c.query(
-      `select w.id, w.patient_id, p.full_name, p.phone_e164
+      // The patient's number, or their family contact's for a child with none (0127).
+      `select w.id, w.patient_id, p.full_name, patient_reach_phone(p.id) as phone_e164
          from waitlist_entries w
          join patients p on p.id = w.patient_id
         where w.clinic_id = $1
           and w.status = 'waiting'
-          and p.phone_e164 is not null and p.phone_e164 <> ''
+          and coalesce(patient_reach_phone(p.id), '') <> ''
           and p.merged_into is null
           and (w.doctor_member_id is null or w.doctor_member_id = $2)
           and (w.service_id is null or $3::uuid is null or w.service_id = $3)
@@ -153,9 +154,10 @@ export async function offerFreedSlot(slot: FreedSlot): Promise<number> {
         the blast guard and the delivery receipt. A waitlist offer is precisely
         the kind of message that must not bypass those.
       */
+      // A new thread is the number owner's — the mother's, for a child reached on her phone (0127).
       const conv = await c.query(
         `insert into conversations (clinic_id, phone_e164, patient_id)
-         values ($1, $2, $3)
+         values ($1, $2, coalesce((select id from patients where clinic_id = $1 and phone_e164 = $2 and merged_into is null limit 1), $3))
          on conflict (clinic_id, phone_e164)
          do update set patient_id = coalesce(conversations.patient_id, excluded.patient_id)
          returning id`,

@@ -1199,9 +1199,33 @@ async function sendWhatsapp(env: Env, cfg: Record<string, unknown>): Promise<Ste
     conversationId = r.rows[0]?.id ?? null;
   }
   if (!conversationId) {
-    const phone = run.patient_id
-      ? (await c.query(`select phone_e164 from patients where id = $1`, [run.patient_id])).rows[0]?.phone_e164
+    /*
+      A patient with no number of their own — a child — is reached on their
+      family contact's (0127), in the contact's own thread. Not for a welcome:
+      greeting a new file is for the person who owns the phone, and the
+      contact was greeted when theirs was made. Not when the contact asked
+      not to be messaged either: it is their phone.
+    */
+    const who = run.patient_id
+      ? (
+          await c.query(
+            `select p.phone_e164 as own, g.id as contact_id, g.phone_e164 as contact_phone, coalesce(g.automation_opt_out, false) as contact_muted,
+                    (select trigger_type from automations where id = $2) as trigger_type
+               from patients p
+               left join patient_families f on f.id = p.family_id
+               left join patients g on g.id = f.contact_patient_id and g.merged_into is null
+              where p.id = $1`,
+            [run.patient_id, run.automation_id]
+          )
+        ).rows[0]
       : null;
+    let phone: string | null = who?.own ?? null;
+    let threadPatient: string | null = run.patient_id;
+    if (!phone && who?.contact_phone && who.trigger_type !== "patient_created") {
+      if (who.contact_muted) return next("skipped", { reason: "contact_opted_out" });
+      phone = who.contact_phone as string;
+      threadPatient = who.contact_id as string;
+    }
     if (!phone) return next("skipped", { reason: "no_phone" });
     const conv = await c.query(
       `insert into conversations (clinic_id, phone_e164, patient_id)
@@ -1209,7 +1233,7 @@ async function sendWhatsapp(env: Env, cfg: Record<string, unknown>): Promise<Ste
        on conflict (clinic_id, phone_e164)
        do update set patient_id = coalesce(conversations.patient_id, excluded.patient_id)
        returning id`,
-      [run.clinic_id, phone, run.patient_id]
+      [run.clinic_id, phone, threadPatient]
     );
     conversationId = conv.rows[0].id as string;
   }

@@ -35,7 +35,8 @@ export type SystemMessageKey =
   | "letter_sent"
   | "visit_link"
   | "visit_moved"
-  | "visit_cancelled";
+  | "visit_cancelled"
+  | "series_booked";
 
 export type SystemMessageGroup = "booking" | "waitlist" | "documents" | "billing" | "patients";
 
@@ -184,6 +185,37 @@ export const SYSTEM_MESSAGES: SystemMessageDef[] = [
       "Your appointment at {{clinic.name}} ({{appointment.when}}) has been cancelled.",
       "To book another time: {{link}}",
       "Didn't ask for this? Reply to this message.",
+    ].join("\n"),
+  },
+  /*
+    Repeating appointments (0126): every date of the series at once, when the
+    desk books "every 4 weeks, 6 times". The clinic's own confirmation still
+    answers the first visit; this is the list the patient keeps.
+  */
+  {
+    key: "series_booked",
+    group: "booking",
+    canDisable: true,
+    vars: ["patient.first_name", "patient.name", "clinic.name", "appointment.service", "appointment.doctor", "series.dates"],
+    ar: [
+      "مرحباً {{patient.first_name}} 👋",
+      "مواعيدك في {{clinic.name}}:",
+      "{{appointment.service}}",
+      "{{appointment.doctor}}",
+      "",
+      "{{series.dates}}",
+      "",
+      "لتغيير أي موعد منها ردّ على هذه الرسالة.",
+    ].join("\n"),
+    en: [
+      "Hi {{patient.first_name}} 👋",
+      "Your appointments at {{clinic.name}}:",
+      "{{appointment.service}}",
+      "{{appointment.doctor}}",
+      "",
+      "{{series.dates}}",
+      "",
+      "To change any of them, reply to this message.",
     ].join("\n"),
   },
   /*

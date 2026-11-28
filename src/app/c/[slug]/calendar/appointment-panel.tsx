@@ -12,6 +12,9 @@ import { ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { flowStage, type FlowStage } from "@/lib/patient-flow";
 import { createAppointmentAction, updateAppointmentAction, setAppointmentStatusAction } from "./actions";
+import { cancelSeriesFromAction, createSeriesAction, planSeriesAction, type SeriesDate } from "./series-actions";
+import { MAX_SERIES, MIN_SERIES, REPEAT_MORE, REPEAT_PRESETS, repeatKey, repeatLabel, type Repeat } from "@/lib/series";
+import { familyRoleLabel, type FamilyRole } from "@/lib/families";
 import { setFlowAction, type FlowStep } from "./flow-actions";
 import { addToWaitlistAction } from "../waitlist/actions";
 import type { Handoff } from "./flow-actions";
@@ -23,7 +26,7 @@ import { AppointmentNotes } from "@/components/appointment-notes";
 import { PatientPicker } from "@/components/appointments/patient-picker";
 import type { Appt, Doctor, PlannedItem, Room, Section, Service } from "./types";
 import { VisitLineView, whereOf } from "@/components/charts/dental/visit-work";
-import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock, UserPen, Send, Copy, CalendarClock } from "lucide-react";
+import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock, UserPen, Send, Copy, CalendarClock, Repeat2 } from "lucide-react";
 import { sendVisitLinkAction, visitLinkAction } from "./visit-link-actions";
 import { flagAlerts } from "@/lib/medical-history";
 import { MAX_VISIT_SERVICES } from "@/lib/appointment-services";
@@ -122,10 +125,34 @@ export function AppointmentPanel({
   const [suggested, setSuggested] = useState<{ startISO: string; doctorMemberId: string | null }[] | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [waitlisting, setWaitlisting] = useState(false);
+  /*
+    Repeating (0126): "every 4 weeks, 6 times". The dates are checked on the
+    server as the rule changes; the desk unticks any it does not want, and a
+    busy one is booked at the nearest free time that day instead.
+  */
+  const [repeatOn, setRepeatOn] = useState(false);
+  const [repeat, setRepeat] = useState<Repeat>({ every: 4, unit: "week" });
+  const [times, setTimes] = useState(6);
+  const [plan, setPlan] = useState<SeriesDate[] | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [kept, setKept] = useState<Record<string, boolean>>({});
+  const [sendDates, setSendDates] = useState(true);
+  /** Cancelling a repeating visit: this one, or this and the rest of the series. */
+  const [cancelRest, setCancelRest] = useState(false);
+  /* The rest of the patient's family (0127), any of whom can be booked straight after. */
+  const [kin, setKin] = useState<{ id: string; name: string; role: FamilyRole | null; gender: string | null }[]>([]);
+  const [also, setAlso] = useState<string[]>([]);
 
   useEffect(() => {
     if (!state) return;
     setSuggested(null);
+    setRepeatOn(false);
+    setRepeat({ every: 4, unit: "week" });
+    setTimes(6);
+    setPlan(null);
+    setSendDates(true);
+    setCancelRest(false);
+    setAlso([]);
     if (state.mode === "create") {
       const s = state.start ? DateTime.fromISO(state.start).setZone(tz) : DateTime.now().setZone(tz).plus({ hours: 1 }).startOf("hour");
       const svc = services.find((x) => x.id === state.serviceId);
@@ -161,6 +188,57 @@ export function AppointmentPanel({
     () => (date && time ? DateTime.fromISO(`${date}T${time}`, { zone: tz }) : null),
     [date, time, tz]
   );
+
+  /* Who else in the family could come along, read when a patient on file is chosen for a new visit. */
+  const kinFor = state?.mode === "create" ? patient?.id ?? "" : "";
+  useEffect(() => {
+    setAlso([]);
+    if (!kinFor) {
+      setKin([]);
+      return;
+    }
+    let live = true;
+    void fetch(`/api/c/${slug}/patients/${kinFor}/family`)
+      .then((r) => (r.ok ? r.json() : { members: [] }))
+      .then((j) => live && setKin(j.members ?? []))
+      .catch(() => live && setKin([]));
+    return () => {
+      live = false;
+    };
+  }, [kinFor, slug]);
+
+  /* The series' dates, read again a moment after the rule, the time, the doctor or the services change. */
+  const planKey = repeatOn && state?.mode === "create" && startsAt?.isValid
+    ? JSON.stringify([startsAt.toUTC().toISO(), duration, doctorId, serviceIds, repeat, times])
+    : "";
+  useEffect(() => {
+    if (!planKey) {
+      setPlan(null);
+      setPlanning(false);
+      return;
+    }
+    const [at, dur, doc, svc, rep, n] = JSON.parse(planKey) as [string, number, string, string[], Repeat, number];
+    let live = true;
+    setPlanning(true);
+    const timer = setTimeout(async () => {
+      const r = await planSeriesAction(slug, { doctorMemberId: doc || null, serviceIds: svc, startsAt: at, durationMin: dur, repeat: rep, count: n }).catch(() => ({ dates: undefined }));
+      if (!live) return;
+      setPlanning(false);
+      const dates = r.dates ?? [];
+      setPlan(dates);
+      // Free dates go in; a busy one goes in at its free time, if it has one; a day off or a closed day waits to be ticked.
+      setKept(Object.fromEntries(dates.map((d) => [d.startsAt, d.status === "ok" || (d.status === "busy" && !!d.alt)])));
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [planKey, slug]);
+  /** What a series would book: each kept date, a busy one at its free time. */
+  const seriesDates = (plan ?? [])
+    .filter((d) => kept[d.startsAt] && !(d.status === "busy" && !d.alt))
+    .map((d) => (d.status === "busy" ? d.alt! : d.startsAt));
+  const asSeries = repeatOn && state?.mode === "create";
 
   /* Which rooms already have somebody at the chosen time, from what the page has loaded. */
   const busyRooms = useMemo(() => {
@@ -224,7 +302,38 @@ export function AppointmentPanel({
     start(async () => {
       if (!startsAt) return;
       const endsAt = startsAt.plus({ minutes: duration });
-      if (state?.mode === "create") {
+      if (state?.mode === "create" && repeatOn) {
+        if (seriesDates.length < MIN_SERIES) {
+          toast(t.series.pickTwo, "error");
+          return;
+        }
+        const r = await createSeriesAction(slug, {
+          patientId: patient?.id,
+          newPatient: newPatient ?? undefined,
+          doctorMemberId: doctorId || null,
+          serviceIds,
+          durationMin: duration,
+          notes,
+          markIds: items.map((i) => i.markId),
+          roomId: roomId || null,
+          repeat,
+          dates: seriesDates,
+          sendDates,
+        });
+        if (r.error || !r.booked) {
+          toast(scheduleErrorText(t, { error: r.error, conflictWith: r.skipped?.[0]?.conflictWith }), "error");
+          return;
+        }
+        const n = String(r.booked.length);
+        toast(
+          r.skipped?.length
+            ? t.series.bookedSkipped.replace("{n}", n).replace("{k}", String(r.skipped.length))
+            : r.told
+              ? `${t.series.bookedN.replace("{n}", n)} · ${t.series.told}`
+              : t.series.bookedN.replace("{n}", n)
+        );
+        onChanged();
+      } else if (state?.mode === "create") {
         const r = await createAppointmentAction(slug, {
           patientId: patient?.id,
           newPatient: newPatient ?? undefined,
@@ -236,12 +345,16 @@ export function AppointmentPanel({
           notes,
           markIds: items.map((i) => i.markId),
           roomId: roomId || null,
+          alsoPatientIds: also,
         });
         if (r.error) {
           toast(scheduleErrorText(t, r), "error");
           return;
         }
-        toast(r.roomName ? `${t.calendar.created} · ${t.calendar.bookedIn.replace("{room}", r.roomName)}` : t.calendar.created);
+        if (also.length) {
+          const n = String(1 + (r.alsoBooked ?? 0));
+          toast(r.alsoStopped ? t.family.familyStopped.replace("{n}", n).replace("{name}", r.alsoStopped) : t.family.familyBooked.replace("{n}", n), r.alsoStopped ? "error" : undefined);
+        } else toast(r.roomName ? `${t.calendar.created} · ${t.calendar.bookedIn.replace("{room}", r.roomName)}` : t.calendar.created);
         onChanged();
       } else if (state?.mode === "edit") {
         /*
@@ -612,6 +725,39 @@ export function AppointmentPanel({
                 <PatientPicker slug={slug} onPick={setPatient} onCreateNew={setNewPatient} />
               )}
               {/*
+                The rest of the family (0127): tap to book them too, one after
+                another with the same doctor — the mother's three children. Not
+                with a repeat: each child's course is booked on its own.
+              */}
+              {state.mode === "create" && patient && kin.length > 0 && !repeatOn && (
+                <div className="mt-2.5" data-panel-also>
+                  <span className="text-[0.75rem] font-semibold text-ink-500">{t.family.alsoBook}</span>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {kin.map((k) => {
+                      const on = also.includes(k.id);
+                      const role = familyRoleLabel(k.role, k.gender, t.family);
+                      return (
+                        <button
+                          key={k.id}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => setAlso((xs) => (on ? xs.filter((x) => x !== k.id) : [...xs, k.id]))}
+                          className={`inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-[0.78125rem] font-medium sm:min-h-8 ${
+                            on ? "bg-brand-600 text-on-brand" : "border border-line-strong bg-surface text-ink-700 hover:bg-sunken"
+                          }`}
+                          data-panel-also-member={k.id}
+                        >
+                          {on && <CheckCheck className="h-3.5 w-3.5" />}
+                          {k.name}
+                          {role && <span className={on ? "opacity-80" : "text-ink-500"}>· {role}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {also.length > 0 && <p className="mt-1 text-[0.75rem] text-ink-500">{t.family.alsoBookHint}</p>}
+                </div>
+              )}
+              {/*
                 Who booked it, and when (Yamen, 2026-11-12: "mention who created
                 this appointment, or that it came from the scheduling link").
                 The staff member, the booking link by its name, the AI
@@ -629,6 +775,16 @@ export function AppointmentPanel({
                   <span className="min-w-0">{patientLine}</span>
                 </p>
               )}
+              {/* One of a series (0126): which, of how many, and how often. */}
+              {editAppt?.series_id && editAppt.series_no && (editAppt.series_total ?? 0) >= 2 && editAppt.status !== "cancelled" ? (
+                <p className="mt-1 flex items-center gap-1.5 text-[0.75rem] font-medium text-ink-700" data-panel-series={`${editAppt.series_no}/${editAppt.series_total}`}>
+                  <Repeat2 className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                  <span className="min-w-0">
+                    {t.series.visitOf.replace("{n}", String(editAppt.series_no)).replace("{total}", String(editAppt.series_total))}
+                    {editAppt.series_repeat ? ` · ${repeatLabel(editAppt.series_repeat, t.series)}` : ""}
+                  </span>
+                </p>
+              ) : null}
               {canSendLink && (
                 <div className="mt-2.5 rounded-lg border border-line bg-canvas px-3 py-2.5" data-panel-visit-link>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -834,6 +990,137 @@ export function AppointmentPanel({
               </Field>
             </div>
 
+            {/*
+              Repeat (0126): the same visit every so often, so many times —
+              three presets a press away, the rest behind one menu. Each date
+              is shown before anything is booked, with what is in its way.
+            */}
+            {state.mode === "create" && (
+              <div className="-mt-1 grid gap-2" data-repeat={repeatOn ? "on" : "off"}>
+                <button
+                  type="button"
+                  onClick={() => setRepeatOn((v) => !v)}
+                  aria-pressed={repeatOn}
+                  className={`flex min-h-10 items-center gap-1.5 justify-self-start rounded-full px-3 text-[0.78125rem] font-semibold sm:min-h-8 ${
+                    repeatOn ? "bg-brand-600 text-on-brand" : "border border-line-strong text-ink-700 hover:bg-sunken"
+                  }`}
+                  data-repeat-toggle
+                >
+                  <Repeat2 className="h-3.5 w-3.5" />
+                  {repeatOn ? `${t.series.repeatOn} · ${repeatLabel(repeat, t.series)}` : t.series.repeat}
+                </button>
+                {repeatOn && (
+                  <div className="grid gap-3 rounded-lg border border-line bg-canvas p-3" data-repeat-box>
+                    <p className="text-[0.75rem] text-ink-500">{t.series.repeatHint}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {REPEAT_PRESETS.map((r) => {
+                        const on = repeatKey(r) === repeatKey(repeat);
+                        return (
+                          <button
+                            key={repeatKey(r)}
+                            type="button"
+                            onClick={() => setRepeat(r)}
+                            aria-pressed={on}
+                            className={`min-h-10 rounded-full px-3 text-[0.78125rem] font-medium sm:min-h-8 ${
+                              on ? "bg-brand-600 text-on-brand" : "border border-line-strong bg-surface text-ink-700 hover:bg-sunken"
+                            }`}
+                            data-repeat-every={repeatKey(r)}
+                          >
+                            {repeatLabel(r, t.series)}
+                          </button>
+                        );
+                      })}
+                      <Select
+                        value={REPEAT_MORE.some((r) => repeatKey(r) === repeatKey(repeat)) ? repeatKey(repeat) : ""}
+                        onChange={(e) => {
+                          const r = REPEAT_MORE.find((x) => repeatKey(x) === e.target.value);
+                          if (r) setRepeat(r);
+                        }}
+                        className="!w-auto"
+                        data-repeat-more
+                      >
+                        <option value="">{t.series.more}</option>
+                        {REPEAT_MORE.map((r) => (
+                          <option key={repeatKey(r)} value={repeatKey(r)}>
+                            {repeatLabel(r, t.series)}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <label className="flex items-center gap-2 text-[0.8125rem] font-medium text-ink-700">
+                      {t.series.times}
+                      <NumberInput
+                        dir="ltr"
+                        min={MIN_SERIES}
+                        max={MAX_SERIES}
+                        value={times}
+                        onChange={(v) => setTimes(Math.max(MIN_SERIES, Math.min(MAX_SERIES, Math.round(v))))}
+                        fallback={6}
+                        className="!w-20"
+                        data-repeat-times
+                      />
+                    </label>
+
+                    {planning && !plan ? (
+                      <p className="text-[0.75rem] text-ink-500">{t.series.checking}</p>
+                    ) : plan && plan.length > 0 ? (
+                      <ol className={`grid gap-1 ${planning ? "opacity-60" : ""}`} data-repeat-plan={plan.length}>
+                        {plan.map((d, i) => {
+                          const stuck = d.status === "busy" && !d.alt;
+                          const when = DateTime.fromISO(d.status === "busy" && d.alt ? d.alt : d.startsAt)
+                            .setZone(tz)
+                            .setLocale(locale === "ar" ? "ar-JO-u-nu-latn" : "en-GB");
+                          const asked = DateTime.fromISO(d.startsAt).setZone(tz);
+                          const why =
+                            d.status === "busy"
+                              ? `${t.series.busyWith.replace("{name}", d.conflictWith ?? "")} · ${
+                                  d.alt ? t.series.movedFrom.replace("{time}", asked.toFormat("H:mm")) : t.series.noAlt
+                                }`
+                              : d.status === "off"
+                                ? t.series.offDay
+                                : d.status === "closed"
+                                  ? t.series.closed
+                                  : "";
+                          return (
+                            <li key={d.startsAt} data-repeat-date={d.status} data-repeat-kept={kept[d.startsAt] && !stuck ? "1" : "0"}>
+                              <label className={`flex min-h-10 items-center gap-2.5 rounded-md px-1.5 ${stuck ? "opacity-60" : "cursor-pointer hover:bg-sunken"}`}>
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 shrink-0 accent-[var(--color-brand-600)]"
+                                  checked={!!kept[d.startsAt] && !stuck}
+                                  disabled={stuck}
+                                  onChange={(e) => setKept((k) => ({ ...k, [d.startsAt]: e.target.checked }))}
+                                />
+                                <span className="w-5 shrink-0 text-[0.75rem] text-ink-400 tnum">{i + 1}</span>
+                                <span className="min-w-0 flex-1 text-[0.8125rem]">
+                                  <span className="font-medium text-ink-900">
+                                    {when.toFormat("ccc d LLL yyyy")} ·{" "}
+                                    <span className="tnum">{when.toFormat("H:mm")}</span>
+                                  </span>
+                                  {why && <span className={`block text-[0.75rem] ${d.status === "busy" && d.alt ? "text-ink-500" : "text-st-pending"}`}>{why}</span>}
+                                </span>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    ) : null}
+
+                    <label className="flex min-h-10 items-center gap-2.5 text-[0.8125rem] text-ink-700 sm:min-h-0">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 accent-[var(--color-brand-600)]"
+                        checked={sendDates}
+                        onChange={(e) => setSendDates(e.target.checked)}
+                        data-repeat-send
+                      />
+                      {t.series.sendDates}
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* The next free times for this service and doctor, rooms and all. */}
             {(state.mode === "create" || (editAppt && editAppt.status !== "completed")) && (
               <div className="-mt-1 grid gap-2">
@@ -991,9 +1278,14 @@ export function AppointmentPanel({
             <Button
               onClick={submit}
               loading={pending}
-              disabled={!startsAt || (state.mode === "create" && !patient && !newPatient?.fullName.trim())}
+              disabled={
+                !startsAt ||
+                (state.mode === "create" && !patient && !newPatient?.fullName.trim()) ||
+                (asSeries && (planning || seriesDates.length < MIN_SERIES))
+              }
+              data-panel-save
             >
-              {t.common.save}
+              {asSeries ? t.series.bookN.replace("{n}", String(seriesDates.length)) : t.common.save}
             </Button>
           </div>
         </footer>
@@ -1025,9 +1317,40 @@ export function AppointmentPanel({
         cancelLabel={t.common.back}
         onConfirm={() => {
           setCancelOpen(false);
-          setStatus("cancelled");
+          if (cancelRest && editAppt?.series_id) {
+            const id = editAppt.id;
+            start(async () => {
+              const r = await cancelSeriesFromAction(slug, id);
+              if (r.error) {
+                toast(t.common.genericError, "error");
+                return;
+              }
+              toast(t.series.cancelledN.replace("{n}", String(r.cancelled ?? 0)));
+              onChanged();
+            });
+          } else setStatus("cancelled");
         }}
-      />
+      >
+        {/* A repeating visit with more to come: this one, or the rest of the series with it. */}
+        {editAppt?.series_id && (editAppt.series_after ?? 0) > 0 ? (
+          <fieldset className="grid gap-1" data-cancel-series>
+            <legend className="mb-1 text-[0.8125rem] font-semibold text-ink-900">{t.series.cancelWhich}</legend>
+            {[false, true].map((rest) => (
+              <label key={String(rest)} className="flex min-h-10 cursor-pointer items-center gap-2.5 rounded-md px-1.5 text-[0.8125rem] hover:bg-sunken">
+                <input
+                  type="radio"
+                  name="cancel-series"
+                  className="h-4 w-4 accent-[var(--color-brand-600)]"
+                  checked={cancelRest === rest}
+                  onChange={() => setCancelRest(rest)}
+                  data-cancel-series-rest={rest ? "1" : "0"}
+                />
+                {rest ? t.series.thisAndRest.replace("{n}", String(editAppt.series_after)) : t.series.onlyThis}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
+      </ConfirmDialog>
     </>
   );
 }

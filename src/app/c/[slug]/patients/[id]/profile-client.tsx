@@ -66,6 +66,8 @@ import { LettersTab } from "./letters-tab";
 import { LetterComposer, type LetterDraft } from "./letter-composer";
 import type { LetterRow } from "@/lib/medical-letters";
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
+import { FamilyCard } from "./family-card";
+import type { Family } from "@/lib/families";
 import { coverState } from "@/lib/insurance";
 import { addedByLabel, type AddedBy } from "@/lib/added-by";
 import { foldActivity } from "@/lib/patient-activity";
@@ -364,6 +366,8 @@ export function PatientProfile(props: {
   tz: string;
   currency: string;
   balanceDue: number;
+  /** The family the patient comes with (0127), or null. */
+  family: Family | null;
   patient: Patient;
   notes: NoteRow[];
   /** Notes written elsewhere in the file, for the Notes tab. */
@@ -614,8 +618,11 @@ export function PatientProfile(props: {
     of the button.
   */
   const [opening, startOpening] = useTransition();
+  /** The family member a patient with no number of their own is reached through (0127). */
+  const familyContact = props.family?.members.find((m) => m.isContact && m.phone && m.id !== p.id) ?? null;
   const openThread = () => {
-    if (!p.phone_e164) return toast(t.patients.messageNoPhone, "error");
+    // No number of their own: their family contact's thread, if they have one.
+    if (!p.phone_e164 && !familyContact) return toast(t.patients.messageNoPhone, "error");
     startOpening(async () => {
       const r = await openConversationAction(slug, p.id);
       if (r.id) router.push(`/c/${slug}/conversations?open=${r.id}`);
@@ -770,6 +777,10 @@ export function PatientProfile(props: {
               </span>
             )}
             {p.phone_e164 && <span className="num tnum">{formatPhone(p.phone_e164)}</span>}
+            {/* No number of their own: whose number they are reached on (0127). */}
+            {!p.phone_e164 && familyContact && (
+              <span data-header-reach>{t.family.viaContact.replace("{name}", familyContact.name)}</span>
+            )}
             {p.secondary_phone_e164 && (
               <span className="num tnum text-ink-400">{formatPhone(p.secondary_phone_e164)}</span>
             )}
@@ -832,8 +843,8 @@ export function PatientProfile(props: {
           )}
           {/* Sending through the platform is the Conversations section; the
               wa.me link and the tel: link beside it are not, and stay. */}
-          {p.phone_e164 && caps.conversations && (
-            <Button variant="soft" size="sm" className={HEADER_ACTION} onClick={openThread} disabled={opening}>
+          {(p.phone_e164 || familyContact) && caps.conversations && (
+            <Button variant="soft" size="sm" className={HEADER_ACTION} onClick={openThread} disabled={opening} data-header-message>
               <MessageCircle className="h-4 w-4" />
               {t.patients.message}
             </Button>
@@ -1212,6 +1223,19 @@ export function PatientProfile(props: {
                   )}
                 </Card>
               )}
+              {/* Who they come with (0127): booked, reached and paid for together. */}
+              <FamilyCard
+                className="max-lg:order-4"
+                slug={slug}
+                patientId={p.id}
+                patientName={p.full_name}
+                family={props.family}
+                tz={tz}
+                today={props.today}
+                currency={currency}
+                canBook={caps.calendar}
+                canPay={caps.invoices}
+              />
               <Card className="p-5 max-lg:order-8">
                 <h3 className="mb-2 text-[0.8125rem] font-semibold text-ink-500">
                   {t.patients.overview.recentActivity}

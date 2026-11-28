@@ -76,6 +76,9 @@ export type RowAppointment = {
   handed_off_at?: string | null;
   /** Cancelled, and nothing in the file hangs on it: may be deleted (2026-11-20). */
   deletable?: boolean;
+  /** One of a repeating series (0126): which of those still standing, of how many. */
+  series_no?: number | null;
+  series_total?: number | null;
 };
 
 /** An invoice raised for this visit. */
@@ -226,6 +229,12 @@ export function AppointmentRow({
           <div className="text-[0.8125rem] text-ink-500">
             {fmtDateTime(a.starts_at, tz, locale)}
             {a.doctor_name ? ` · ${a.doctor_name}` : ""}
+            {a.series_no && (a.series_total ?? 0) >= 2 ? (
+              <span className="text-ink-700" data-row-series={`${a.series_no}/${a.series_total}`}>
+                {" · "}
+                {t.series.visitOf.replace("{n}", String(a.series_no)).replace("{total}", String(a.series_total))}
+              </span>
+            ) : null}
           </div>
           {/* What the visit holds, in a row that wraps under the words: on a phone, beside them it crushed them. */}
           {(work > 0 || recorded || rxHere > 0 || filesHere > 0 || notes.length > 0 || invoices.length > 0) && (

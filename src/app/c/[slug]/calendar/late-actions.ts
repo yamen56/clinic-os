@@ -68,7 +68,7 @@ export async function markLateAction(slug: string, id: string, minutes: number, 
       // Only the doctor's later patients today who are not here yet — whatever the browser sent.
       const next = (
         await c.query(
-          `select a.id, a.starts_at, a.patient_id, p.full_name, p.phone_e164, du.full_name as doctor_name
+          `select a.id, a.starts_at, a.patient_id, p.full_name, patient_reach_phone(p.id) as phone_e164, du.full_name as doctor_name
              from appointments a
              join patients p on p.id = a.patient_id
              left join clinic_members dm on dm.id = a.doctor_member_id
@@ -78,7 +78,7 @@ export async function markLateAction(slug: string, id: string, minutes: number, 
               and a.starts_at > $4
               and (a.starts_at at time zone $5)::date = ($4::timestamptz at time zone $5)::date
               and a.status = any($6::text[]) and a.arrived_at is null
-              and p.phone_e164 is not null
+              and patient_reach_phone(p.id) is not null
             order by a.starts_at`,
           [tell, access.clinicId, cur.doctor_member_id, cur.starts_at, cur.timezone, ACTIVE]
         )

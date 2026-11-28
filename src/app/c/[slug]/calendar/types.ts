@@ -76,6 +76,15 @@ export type Appt = {
   cancel_reason?: string | null;
   /** How many times the patient moved it from their own link. */
   patient_moves?: number;
+  /**
+   * A repeating visit (0126): its series, which one it is of those still
+   * standing, how many stand, how many are still to come after it, and the rule.
+   */
+  series_id?: string | null;
+  series_no?: number | null;
+  series_total?: number | null;
+  series_after?: number | null;
+  series_repeat?: { every: number; unit: "day" | "week" | "month" } | null;
 };
 
 /** A treatment on the patient's plan, as a visit carries it. */

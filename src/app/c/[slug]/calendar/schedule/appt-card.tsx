@@ -61,6 +61,8 @@ export function ApptCard({
   const service = visitServiceLabel(appt, locale);
   const room = (locale === "ar" && appt.room_name_ar) || appt.room_name;
   const dim = appt.status === "completed" || appt.status === "no_show";
+  // One of a repeating series (0126): "3/6", beside what the visit is for.
+  const seriesTag = appt.series_id && appt.series_no && (appt.series_total ?? 0) >= 2 && appt.status !== "cancelled" ? `↻ ${appt.series_no}/${appt.series_total}` : null;
 
   const Icon =
     stage === "in_room"
@@ -124,9 +126,9 @@ export function ApptCard({
         <div className="truncate text-[length:max(11px,0.6875rem)] font-semibold leading-tight tnum">
           {s.toFormat("h:mm")} {appt.patient_name}
         </div>
-        {height > 34 && (service || (showRoom && room)) && (
-          <div className="truncate text-[10px] leading-tight text-ink-700">
-            {[service, showRoom ? room : null].filter(Boolean).join(" · ")}
+        {height > 34 && (service || (showRoom && room) || seriesTag) && (
+          <div className="truncate text-[10px] leading-tight text-ink-700" data-appt-series={seriesTag ? `${appt.series_no}/${appt.series_total}` : undefined}>
+            {[service, showRoom ? room : null, seriesTag].filter(Boolean).join(" · ")}
           </div>
         )}
         {height > 50 && showDoctor && appt.doctor_name && (

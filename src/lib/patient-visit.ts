@@ -98,7 +98,8 @@ async function loadRow(c: PoolClient, appointmentId: string, lock = false): Prom
               appointment_service_names(a.id, false) as service_name,
               appointment_service_names(a.id, true) as service_name_ar,
               du.full_name as doctor_name,
-              p.full_name as patient_name, p.phone_e164 as patient_phone,
+              -- Their own number, or their family contact's for a child with none (0127).
+              p.full_name as patient_name, patient_reach_phone(p.id) as patient_phone,
               json_build_object(
                 'name', cl.name, 'name_ar', cl.name_ar, 'slug', cl.slug, 'logo_path', cl.logo_path,
                 'brand_color', cl.brand_color, 'address', cl.address, 'address_ar', cl.address_ar,

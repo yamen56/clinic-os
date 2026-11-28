@@ -280,7 +280,7 @@ async function queueSend(c: PoolClient, access: ClinicAccess, id: string): Promi
   const rx = (
     await c.query(
       `select rx.number, rx.created_at, rx.locale, rx.diagnosis, rx.items, rx.doctor_name, rx.pdf_path,
-              p.id as patient_id, p.full_name, p.phone_e164,
+              p.id as patient_id, p.full_name, patient_reach_phone(p.id) as phone_e164,
               cl.name, cl.name_ar, cl.timezone,
               coalesce(ws.status = 'connected', false) as wa_connected
          from prescriptions rx

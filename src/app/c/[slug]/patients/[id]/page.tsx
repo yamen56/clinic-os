@@ -17,6 +17,7 @@ import { loadDentalChart } from "@/lib/charts/dental/db";
 import { loadFaceChart } from "@/lib/charts/face/db";
 import { loadNoteFeed } from "@/lib/note-feed";
 import { loadTreatment } from "@/lib/treatment/db";
+import { loadFamily } from "@/lib/families";
 import type { PoolClient } from "pg";
 import { hintWords, nameWords } from "@/lib/imaging/ingest";
 import { clinicSpecialties } from "@/lib/specialties";
@@ -164,6 +165,11 @@ export default async function PatientProfilePage({
                       a.ends_at, a.finished_at, a.walk_in, a.notes, a.intake_answers, a.created_at,
                       a.next_visit_days, a.next_visit_none, a.desk_note, a.handed_off_at, a.late_min,
                       cb.full_name as created_by_name, bl.name as booking_link_name,
+                      -- One of a repeating series (0126): which of those still standing, and of how many.
+                      case when a.series_id is not null and a.status <> 'cancelled' then
+                        (select count(*)::int from appointments s2 where s2.series_id = a.series_id and s2.status <> 'cancelled' and s2.starts_at <= a.starts_at) end as series_no,
+                      case when a.series_id is not null and a.status <> 'cancelled' then
+                        (select count(*)::int from appointments s2 where s2.series_id = a.series_id and s2.status <> 'cancelled') end as series_total,
                       -- A cancelled visit nothing was written under may be deleted from the file (2026-11-20).
                       (a.status = 'cancelled' and not ${appointmentAttachedSql("a")}) as deletable
                from appointments a
@@ -314,6 +320,8 @@ export default async function PatientProfilePage({
       // The treatment record, for every clinic: what each visit was, and what was done at it that no chart draws.
       treatment: await loadTreatment(c, access.clinicId, id, { billing: caps.invoices, userId: access.session.user.id }),
       filesHub: await loadFilesHub(c, access.clinicId, id, p.full_name as string, (p.birth_date as Date | null) ?? null),
+      // Who the patient comes with (0127): each member, how they are reached, and — for a member who may see it — what they owe.
+      family: await loadFamily(c, access.clinicId, id, caps.invoices ? invoiceScopeSql(access, "i", 4) : null),
       // Notes written elsewhere in the file — visits, invoices, prescriptions… — for the Notes tab, each where its reader may look.
       noteFeed: await loadNoteFeed(
         c,
@@ -336,6 +344,7 @@ export default async function PatientProfilePage({
       today={DateTime.now().setZone(access.clinic.timezone).toISODate()!}
       currency={access.clinic.currency}
       balanceDue={d.balanceDue}
+      family={d.family}
       patient={JSON.parse(JSON.stringify(d.patient))}
       notes={JSON.parse(JSON.stringify(d.notes))}
       noteFeed={d.noteFeed}

@@ -64,6 +64,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
                 a.late_min, a.delay_notice_at,
                 -- What the patient did from their own link (0115).
                 a.cancelled_by, a.cancel_reason, a.patient_moves,
+                -- A repeating visit (0126): which of its series it is, how many still stand, how many come after.
+                a.series_id,
+                case when a.series_id is not null then
+                  (select count(*)::int from appointments s2 where s2.series_id = a.series_id and s2.status <> 'cancelled' and s2.starts_at <= a.starts_at) end as series_no,
+                case when a.series_id is not null then
+                  (select count(*)::int from appointments s2 where s2.series_id = a.series_id and s2.status <> 'cancelled') end as series_total,
+                case when a.series_id is not null then
+                  (select count(*)::int from appointments s2 where s2.series_id = a.series_id and s2.starts_at > a.starts_at
+                      and s2.status in ('pending_approval', 'scheduled', 'confirmed')) end as series_after,
+                (select json_build_object('every', sr.every, 'unit', sr.unit) from appointment_series sr where sr.id = a.series_id) as series_repeat,
                 s.duration_min as service_duration_min,
                 -- The services after the first, and who booked the visit (migration 0106).
                 ${extraServicesSql("a")} as extra_services,

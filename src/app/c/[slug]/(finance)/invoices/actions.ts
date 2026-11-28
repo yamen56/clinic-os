@@ -271,7 +271,7 @@ export async function sendInvoiceAction(slug: string, invoiceId: string): Promis
       await c.query(
         `select i.id, i.patient_id, i.number, i.total, i.currency, i.public_token, i.pdf_path,
                 i.status, i.amount_paid, i.einvoice_status,
-                p.phone_e164, p.full_name, cl.name, cl.name_ar, cl.default_locale,
+                patient_reach_phone(p.id) as phone_e164, p.full_name, cl.name, cl.name_ar, cl.default_locale,
                 coalesce(ws.status = 'connected', false) as wa_connected
          from invoices i
          join patients p on p.id = i.patient_id
@@ -472,11 +472,16 @@ export async function recordPaymentAction(
  *
  * Only the invoices this member may act on: a doctor who sees their own
  * invoices takes payments toward those alone.
+ *
+ * `family` (0127): toward what the patient's whole family owes — a mother
+ * paying for her children at once. The same oldest-first rule across every
+ * member's invoices, each payment still on its own invoice and its own
+ * patient, so each child's file says what was paid for them.
  */
 export async function recordPatientPaymentAction(
   slug: string,
-  data: { patientId: string; amount: number; method: string; reference: string; paidOn?: string | null }
-): Promise<{ error?: string; paid?: { invoiceId: string; number: string; amount: number; settled: boolean }[] }> {
+  data: { patientId: string; amount: number; method: string; reference: string; paidOn?: string | null; family?: boolean }
+): Promise<{ error?: string; paid?: { invoiceId: string; number: string; amount: number; settled: boolean; patientName?: string }[] }> {
   const access = await requireClinic(slug);
   if (!can(access, "invoices")) return { error: "forbidden" };
   if (!isUuid(data.patientId)) return { error: "not_found" };
@@ -488,22 +493,29 @@ export async function recordPatientPaymentAction(
 
   return inClinic(access, async (c) => {
     const scope = invoiceScopeSql(access, "i", 3);
+    // The patient alone, or every member of their family (0127).
+    const whose = data.family
+      ? `i.patient_id in (select m.id from patients m join patients p on p.family_id = m.family_id
+                            where p.id = $2 and m.clinic_id = $1 and m.merged_into is null)`
+      : `i.patient_id = $2`;
     const open = (
       await c.query(
-        `select i.id, i.number, i.patient_id, i.total, i.amount_paid from invoices i
-          where i.clinic_id = $1 and i.patient_id = $2
+        `select i.id, i.number, i.patient_id, i.total, i.amount_paid,
+                (select full_name from patients where id = i.patient_id) as patient_name
+           from invoices i
+          where i.clinic_id = $1 and ${whose}
             and i.status in ('draft', 'sent', 'partially_paid') and i.credit_note_of is null
             and i.total > i.amount_paid${scope.sql}
           order by i.issue_date, i.created_at, i.id
           for update of i`,
         [access.clinicId, data.patientId, ...scope.params]
       )
-    ).rows as { id: string; number: string; patient_id: string; total: string; amount_paid: string }[];
+    ).rows as { id: string; number: string; patient_id: string; total: string; amount_paid: string; patient_name: string }[];
     const owed = round2(open.reduce((s, i) => s + Number(i.total) - Number(i.amount_paid), 0));
     if (!open.length) return { error: "nothing_due" };
     if (amount > owed + 0.001) return { error: "overpay" };
 
-    const paid: { invoiceId: string; number: string; amount: number; settled: boolean }[] = [];
+    const paid: { invoiceId: string; number: string; amount: number; settled: boolean; patientName?: string }[] = [];
     let left = amount;
     for (const inv of open) {
       if (left <= 0) break;
@@ -512,11 +524,17 @@ export async function recordPatientPaymentAction(
       if (slice <= 0) continue;
       await applyPayment(c, access, inv, { amount: slice, method: data.method, reference: data.reference, paidAt: when.at });
       // Settled by this payment: the desk is offered its receipt then and there.
-      paid.push({ invoiceId: inv.id, number: inv.number, amount: slice, settled: slice >= remaining - 0.001 });
+      paid.push({
+        invoiceId: inv.id,
+        number: inv.number,
+        amount: slice,
+        settled: slice >= remaining - 0.001,
+        ...(data.family ? { patientName: inv.patient_name } : {}),
+      });
       left = round2(left - slice);
     }
     revalidatePath(`/c/${slug}/invoices`);
-    revalidatePath(`/c/${slug}/patients/${data.patientId}`);
+    for (const id of new Set([data.patientId, ...open.map((i) => i.patient_id)])) revalidatePath(`/c/${slug}/patients/${id}`);
     return { paid };
   });
 }
@@ -692,7 +710,7 @@ export async function sendReceiptAction(
         // Aliased: spreading this over the receipt's own fields would otherwise
         // have the invoice's number quietly overwrite the receipt's.
         `select i.amount_paid, i.currency, i.number as invoice_number,
-                p.phone_e164, cl.name, cl.name_ar, cl.default_locale,
+                patient_reach_phone(p.id) as phone_e164, cl.name, cl.name_ar, cl.default_locale,
                 coalesce(ws.status = 'connected', false) as wa_connected
            from invoices i
            join patients p on p.id = i.patient_id

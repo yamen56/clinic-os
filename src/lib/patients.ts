@@ -305,8 +305,16 @@ export function patientSearchClause(
   const parts: string[] = [`ar_normalize(p.full_name) like ar_normalize($${paramOffset})`];
   const params: string[] = [`%${trimmed}%`];
   if (phone) {
+    const n = `$${paramOffset + params.length}`;
+    parts.push(`(p.phone_e164 = ${n} or p.secondary_phone_e164 = ${n} or ${n} = any(p.extra_phones))`);
+    /*
+      And everybody in the family of whoever has that number (0127): the
+      mother's number finds the children she brings, who have none of their own.
+    */
     parts.push(
-      `(p.phone_e164 = $${paramOffset + params.length} or p.secondary_phone_e164 = $${paramOffset + params.length} or $${paramOffset + params.length} = any(p.extra_phones))`
+      `p.family_id in (select f.family_id from patients f
+                        where f.clinic_id = p.clinic_id and f.family_id is not null and f.merged_into is null
+                          and (f.phone_e164 = ${n} or f.secondary_phone_e164 = ${n} or ${n} = any(f.extra_phones)))`
     );
     params.push(phone);
   }

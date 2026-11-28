@@ -205,8 +205,12 @@ async function main() {
       await page.waitForTimeout(400);
 
       await page.click(`[data-due-back-row="${pSoon}"] [data-due-back-remove]`);
-      await page.waitForTimeout(800);
-      const dismissed = await one(`select next_visit_dismissed_at, next_visit_dismissed_by from appointments where patient_id = $1 and next_visit_days is not null`, [pSoon]);
+      // The row goes at once; the write lands when the server answers — on a cold dev server, after a route compiles.
+      let dismissed = { next_visit_dismissed_at: null as Date | null, next_visit_dismissed_by: null as string | null };
+      for (let i = 0; i < 25 && !dismissed.next_visit_dismissed_at; i++) {
+        await page.waitForTimeout(200);
+        dismissed = await one(`select next_visit_dismissed_at, next_visit_dismissed_by from appointments where patient_id = $1 and next_visit_days is not null`, [pSoon]);
+      }
       check("✕ takes them off the list, and says who did", !!dismissed.next_visit_dismissed_at && dismissed.next_visit_dismissed_by === desk);
       check("and they are gone from the page", (await page.locator(`[data-due-back-row="${pSoon}"]`).count()) === 0);
       await page.click('button:has-text("Undo")');
