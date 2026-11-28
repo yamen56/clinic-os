@@ -49,6 +49,7 @@ import { dayOf, lastPlanBefore, planned as plannedOf, standing } from "@/lib/tre
 import { call, newId, useOptionalTreatmentStore, type TreatmentStore, type VisitFile } from "./store";
 import { useChartWork } from "./visit-record-view";
 import { routePhrase, useDictation, type TalkField } from "./use-dictation";
+import { VITAL_KEYS, VITAL_SPECS, bmi, readVital, unusual, type VitalKey, type Vitals } from "@/lib/treatment/vitals";
 
 type Field = TalkField;
 type Answer = { label?: string; labelAr?: string; value?: unknown };
@@ -184,7 +185,33 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
   const { patch, state } = useAutosave({
     url: `${base}/records/${recordId}${appointmentId ? `?visit=${appointmentId}` : ""}`,
     entityKey: `visit-record:${recordId}`,
+    // Two readings typed inside one debounce must both arrive.
+    mergeKeys: ["vitals"],
   });
+
+  /* ── Vital signs (0125) ───────────────────────────────────────────────── */
+  // As typed, so "37." stays on screen while the doctor is still typing it.
+  const [vitalText, setVitalText] = useState<Record<VitalKey, string>>(() =>
+    Object.fromEntries(VITAL_KEYS.map((k) => [k, existing?.vitals?.[k] !== undefined ? String(existing.vitals[k]) : ""])) as Record<VitalKey, string>
+  );
+  const [vitals, setVitals] = useState<Vitals>(() => ({ ...(existing?.vitals ?? {}) }));
+  const setVital = (k: VitalKey, raw: string) => {
+    setVitalText((prev) => ({ ...prev, [k]: raw }));
+    const n = readVital(k, raw);
+    // Not a reading yet ("3" on the way to "37") or a typo: shown, not saved.
+    if (n === "bad") return;
+    const next = { ...vitals };
+    if (n === null) delete next[k];
+    else next[k] = n;
+    setVitals(next);
+    patch({ vitals: { [k]: n } });
+    store.mine(recordId);
+    store.setRecords((prev) => {
+      const now = new Date().toISOString();
+      if (prev.some((r) => r.id === recordId)) return prev.map((r) => (r.id === recordId ? { ...r, vitals: next, updatedBy: store.me, updatedAt: now } : r));
+      return [...prev, { id: recordId, appointmentId, complaint: "", exam: "", diagnosis: "", plan: "", vitals: next, recordedBy: store.me, updatedBy: store.me, createdAt: now, updatedAt: now }];
+    });
+  };
 
   const set = (f: Field, v: string) => {
     live.current = { ...live.current, [f]: v };
@@ -195,7 +222,7 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
     store.setRecords((prev) => {
       const now = new Date().toISOString();
       if (prev.some((r) => r.id === recordId)) return prev.map((r) => (r.id === recordId ? { ...r, [f]: v, updatedBy: store.me, updatedAt: now } : r));
-      return [...prev, { id: recordId, appointmentId, complaint: "", exam: "", diagnosis: "", plan: "", [f]: v, recordedBy: store.me, updatedBy: store.me, createdAt: now, updatedAt: now }];
+      return [...prev, { id: recordId, appointmentId, complaint: "", exam: "", diagnosis: "", plan: "", vitals: {}, [f]: v, recordedBy: store.me, updatedBy: store.me, createdAt: now, updatedAt: now }];
     });
   };
 
@@ -530,6 +557,8 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
             )}
           </div>
 
+          <VitalsSection text={vitalText} vitals={vitals} onChange={setVital} heading={heading} />
+
           {field("exam", 3)}
 
           <div className="grid gap-2">
@@ -758,3 +787,93 @@ function Sheet({ store, appointmentId }: { store: TreatmentStore; appointmentId:
   );
 }
 
+
+/**
+ * The visit's vital signs: a row of number fields, each saved as it is typed.
+ *
+ * Phone first: a numeric keypad, 44px fields, blood pressure as one row of
+ * two. A reading outside the usual adult resting range turns amber for a
+ * second look — a reminder, not a diagnosis, and the line under the fields
+ * says so. Something that is not a reading at all (a typo) turns red and is
+ * not saved.
+ */
+function VitalsSection({
+  text,
+  vitals,
+  onChange,
+  heading,
+}: {
+  text: Record<VitalKey, string>;
+  vitals: Vitals;
+  onChange: (k: VitalKey, raw: string) => void;
+  heading: string;
+}) {
+  const { t } = useI18n();
+  const V = t.vitals;
+  const input = (k: VitalKey, label: string) => {
+    const bad = text[k].trim() !== "" && readVital(k, text[k]) === "bad";
+    const odd = !bad && unusual(k, vitals[k]);
+    return (
+      <input
+        dir="ltr"
+        inputMode="decimal"
+        autoComplete="off"
+        value={text[k]}
+        onChange={(e) => onChange(k, e.target.value)}
+        aria-label={label}
+        aria-invalid={bad || undefined}
+        className={`h-11 w-full min-w-0 rounded-ctl border bg-surface px-2.5 text-center text-base tnum focus:border-brand-600 focus:outline-none md:h-10 md:text-sm ${
+          bad ? "border-danger" : odd ? "border-st-pending font-semibold text-st-pending" : "border-line text-ink-900"
+        }`}
+        data-vital={k}
+        data-vital-unusual={odd || undefined}
+      />
+    );
+  };
+  const cell = (k: Exclude<VitalKey, "bp_sys" | "bp_dia">, label: string) => (
+    <label className="block min-w-0">
+      <span className="mb-1 block truncate text-[0.75rem] font-medium text-ink-700">
+        {label} <span className="text-ink-400">{VITAL_SPECS[k].unit}</span>
+      </span>
+      {input(k, label)}
+    </label>
+  );
+  const b = bmi(vitals);
+  const anyOdd = VITAL_KEYS.some((k) => unusual(k, vitals[k]));
+  return (
+    <section data-record-vitals>
+      <h3 className={heading}>{V.title}</h3>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="col-span-2 min-w-0">
+          <span className="mb-1 block text-[0.75rem] font-medium text-ink-700">
+            {V.bp} <span className="text-ink-400">mmHg</span>
+          </span>
+          <div className="flex items-center gap-1.5" dir="ltr">
+            {input("bp_sys", `${V.bp} — ${V.bpSys}`)}
+            <span className="text-ink-400" aria-hidden>
+              /
+            </span>
+            {input("bp_dia", `${V.bp} — ${V.bpDia}`)}
+          </div>
+        </div>
+        {cell("pulse", V.pulse)}
+        {cell("temp", V.temp)}
+        {cell("spo2", V.spo2)}
+        {cell("sugar", V.sugar)}
+        {cell("weight", V.weight)}
+        {cell("height", V.height)}
+      </div>
+      {(b !== null || anyOdd) && (
+        <p className="mt-1.5 text-[0.75rem] text-ink-500" data-vitals-bmi={b ?? undefined}>
+          {b !== null && (
+            <span className="font-semibold text-ink-700">
+              {V.bmi}: <bdi className="tnum">{b}</bdi>
+            </span>
+          )}
+          {b !== null && anyOdd && " · "}
+          {anyOdd && <span className="text-st-pending">{V.unusual}</span>}
+        </p>
+      )}
+    </section>
+  );
+}

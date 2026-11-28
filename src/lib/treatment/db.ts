@@ -14,6 +14,7 @@
 
 import type { PoolClient } from "pg";
 import type { Billed } from "@/lib/charts/dental/billing-server";
+import { asVitals, type Vitals } from "./vitals";
 
 type Person = { id: string; name: string };
 
@@ -26,6 +27,8 @@ export type VisitRecord = {
   exam: string;
   diagnosis: string;
   plan: string;
+  /** Blood pressure, pulse, weight… by name (0125); a key is absent until measured. */
+  vitals: Vitals;
   recordedBy: Person | null;
   updatedBy: Person | null;
   createdAt: string;
@@ -87,6 +90,7 @@ export function toRecord(r: Record<string, unknown>): VisitRecord {
     exam: (r.exam as string) ?? "",
     diagnosis: (r.diagnosis as string) ?? "",
     plan: (r.plan as string) ?? "",
+    vitals: asVitals(r.vitals),
     recordedBy: r.recorded_by ? { id: r.recorded_by as string, name: (r.recorder_name as string) ?? "" } : null,
     updatedBy: r.updated_by ? { id: r.updated_by as string, name: (r.updater_name as string) ?? "" } : null,
     createdAt: iso(r.created_at)!,

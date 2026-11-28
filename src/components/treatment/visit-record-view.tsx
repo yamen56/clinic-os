@@ -24,6 +24,7 @@ import { whereText } from "@/lib/charts/face/catalog";
 import type { FaceMark } from "@/lib/charts/face/db";
 import type { GeneralMark, VisitRecord } from "@/lib/treatment/db";
 import { hasText } from "@/lib/treatment/visits";
+import { hasVitals, vitalParts } from "@/lib/treatment/vitals";
 import { useOptionalTreatmentStore } from "./store";
 
 /** A visit's share of the charts: how much tooth work, and which face work. */
@@ -65,6 +66,56 @@ export function useChartWork(): Map<string, ChartWork> {
 
 const FIELDS = ["diagnosis", "complaint", "exam", "plan"] as const;
 
+/** A visit's vital signs as a row of chips; amber outside the usual adult range. */
+export function VitalChips({
+  record,
+  previous,
+  bare,
+}: {
+  record: VisitRecord;
+  previous?: VisitRecord[];
+  /** Without its own heading, inside a box that has one. */
+  bare?: boolean;
+}) {
+  const { t } = useI18n();
+  const V = t.vitals;
+  const parts = vitalParts(record.vitals, V);
+  // The same reading the visit before, for the card's latest: the first earlier record that has it.
+  const before = (key: string) => {
+    for (const r of previous ?? []) {
+      const p = vitalParts(r.vitals, V).find((x) => x.key === key);
+      if (p) return p.value;
+    }
+    return null;
+  };
+  return (
+    <div data-record-vitals-view>
+      {!bare && <div className="mb-1 text-[length:max(11px,0.6875rem)] font-semibold uppercase tracking-wide text-ink-400">{V.title}</div>}
+      <ul className="flex flex-wrap gap-1.5">
+        {parts.map((p) => {
+          const was = previous ? before(p.key) : null;
+          return (
+            <li
+              key={p.key}
+              className={`rounded-lg px-2.5 py-1 text-[0.78125rem] ${p.unusual ? "bg-st-pending-soft text-st-pending" : "bg-canvas text-ink-900"}`}
+              data-vital-chip={p.key}
+            >
+              <span className={p.unusual ? "" : "text-ink-500"}>{p.label}</span>{" "}
+              <bdi className="font-semibold tnum">{p.value}</bdi>
+              {was && was !== p.value && (
+                <span className="block text-[length:max(11px,0.6875rem)] text-ink-500">
+                  {V.previous.replace("{value}", "")}
+                  <bdi className="tnum">{was}</bdi>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export function VisitRecordView({
   appointmentId,
   record,
@@ -91,6 +142,7 @@ export function VisitRecordView({
 
   return (
     <div className="grid gap-3" data-visit-record={appointmentId ?? "day"}>
+      {written && hasVitals(record!.vitals) && <VitalChips record={record!} />}
       {written && (
         <dl className="grid gap-2">
           {FIELDS.filter((f) => record![f].trim()).map((f) => (

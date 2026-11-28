@@ -28,7 +28,8 @@ import { useToast } from "@/components/ui/toast";
 import { fmtDate } from "@/lib/dates";
 import { buildEntries, hasText, planned, todaysVisitId, type Entry } from "@/lib/treatment/visits";
 import { useOptionalTreatmentStore } from "./store";
-import { useChartWork, VisitRecordView, type ChartWork } from "./visit-record-view";
+import { useChartWork, VitalChips, VisitRecordView, type ChartWork } from "./visit-record-view";
+import { hasVitals } from "@/lib/treatment/vitals";
 
 const SHOWN = 3;
 
@@ -81,6 +82,14 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
   const entries = buildEntries(store.records, store.marks, store.visits, tz, withSomething);
   // What earlier visits planned and no visit has done yet: the first thing to know before today's.
   const waiting = planned(store.marks);
+  /*
+    The vital signs, newest visit first: the latest reading on top of the
+    card with the one before beside each number, so a blood pressure or a
+    weight is read as a trend, not a number on its own.
+  */
+  const visitAt = new Map(store.visits.map((v) => [v.id, v.starts_at]));
+  const whenOf = (r: (typeof store.records)[number]) => (r.appointmentId ? visitAt.get(r.appointmentId) : undefined) ?? r.createdAt;
+  const latestVitals = store.records.filter((r) => hasVitals(r.vitals)).sort((a, b) => Date.parse(whenOf(b)) - Date.parse(whenOf(a)));
   // What a doctor is here to write: the visit in progress, else today's, else today with no visit.
   const target = currentVisitId ?? todaysVisitId(store.visits, tz);
   const shown = all ? entries : entries.slice(0, SHOWN);
@@ -124,6 +133,16 @@ export function TreatmentCard({ className = "", currentVisitId }: { className?: 
             </div>
           )}
         </div>
+
+        {latestVitals.length > 0 && (
+          <div className="mb-3 rounded-lg border border-line px-3 py-2.5" data-treatment-vitals>
+            <div className="mb-1.5 flex items-baseline justify-between gap-2 text-[0.75rem]">
+              <span className="font-semibold text-ink-700">{t.vitals.latest}</span>
+              <span className="text-ink-500">{fmtDate(whenOf(latestVitals[0]), tz, locale)}</span>
+            </div>
+            <VitalChips record={latestVitals[0]} previous={latestVitals.slice(1)} bare />
+          </div>
+        )}
 
         {waiting.length > 0 && (
           <div className="mb-3 rounded-lg border border-line bg-canvas px-3 py-2.5" data-treatment-planned={waiting.length}>

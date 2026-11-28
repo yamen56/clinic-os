@@ -11,6 +11,7 @@
 
 import { DateTime } from "luxon";
 import type { GeneralMark, VisitRecord } from "./db";
+import { hasVitals } from "./vitals";
 
 export type EntryVisit = {
   id: string;
@@ -32,9 +33,9 @@ export type Entry = {
   marks: GeneralMark[];
 };
 
-/** Whether a record says anything. One with every part cleared reads as not written. */
+/** Whether a record says anything. One with every part cleared reads as not written; vital signs alone count. */
 export function hasText(r: VisitRecord | null | undefined): boolean {
-  return !!r && [r.complaint, r.exam, r.diagnosis, r.plan].some((x) => x.trim() !== "");
+  return !!r && ([r.complaint, r.exam, r.diagnosis, r.plan].some((x) => x.trim() !== "") || hasVitals(r.vitals));
 }
 
 export const dayOf = (iso: string, tz: string) => DateTime.fromISO(iso).setZone(tz).toISODate()!;

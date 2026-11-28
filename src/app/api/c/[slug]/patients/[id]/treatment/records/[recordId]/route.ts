@@ -4,6 +4,7 @@ import { isUuid } from "@/lib/uuid";
 import { apiClinic, inClinic } from "@/lib/clinic-api";
 import { auditView } from "@/lib/audit";
 import { RECORD_SELECT, toRecord } from "@/lib/treatment/db";
+import { cleanVitalsPatch } from "@/lib/treatment/vitals";
 
 /*
   A visit's record — complaint, examination, diagnosis, plan — saved as it is
@@ -26,6 +27,8 @@ const bodySchema = z.object({
       exam: z.string().max(8000).optional(),
       diagnosis: z.string().max(2000).optional(),
       plan: z.string().max(4000).optional(),
+      /** Vital signs by name (0125): a number to set, null to clear. Checked by cleanVitalsPatch. */
+      vitals: z.record(z.string(), z.unknown()).optional(),
     })
     .strict(),
 });
@@ -39,6 +42,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const p = parsed.data.patch;
+  const vitals = p.vitals === undefined ? null : cleanVitalsPatch(p.vitals);
+  if (p.vitals !== undefined && !vitals) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const visit = new URL(req.url).searchParams.get("visit");
   if (visit && !isUuid(visit)) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const me = access.session.user.id;
@@ -83,9 +88,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
     await c.query(
       `update visit_records
           set complaint = coalesce($2, complaint), exam = coalesce($3, exam),
-              diagnosis = coalesce($4, diagnosis), plan = coalesce($5, plan), updated_by = $6
+              diagnosis = coalesce($4, diagnosis), plan = coalesce($5, plan), updated_by = $6,
+              -- A reading merged in; a cleared one (null) taken out.
+              vitals = case when $7::jsonb is null then vitals else jsonb_strip_nulls(vitals || $7::jsonb) end
         where id = $1`,
-      [target, p.complaint ?? null, p.exam ?? null, p.diagnosis ?? null, p.plan ?? null, me]
+      [target, p.complaint ?? null, p.exam ?? null, p.diagnosis ?? null, p.plan ?? null, me, vitals ? JSON.stringify(vitals) : null]
     );
     const row = (await c.query(`${RECORD_SELECT} where r.id = $1`, [target])).rows[0];
 
@@ -98,17 +105,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
       )
     ).rows[0]?.id as string | undefined;
     if (sitting) {
-      await c.query(`update visit_record_versions set complaint = $2, exam = $3, diagnosis = $4, plan = $5 where id = $1`, [
+      await c.query(`update visit_record_versions set complaint = $2, exam = $3, diagnosis = $4, plan = $5, vitals = $6 where id = $1`, [
         sitting,
         row.complaint,
         row.exam,
         row.diagnosis,
         row.plan,
+        JSON.stringify(row.vitals ?? {}),
       ]);
     } else {
       await c.query(
-        `insert into visit_record_versions (clinic_id, record_id, complaint, exam, diagnosis, plan, author_id) values ($1, $2, $3, $4, $5, $6, $7)`,
-        [access.clinicId, target, row.complaint, row.exam, row.diagnosis, row.plan, me]
+        `insert into visit_record_versions (clinic_id, record_id, complaint, exam, diagnosis, plan, vitals, author_id) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [access.clinicId, target, row.complaint, row.exam, row.diagnosis, row.plan, JSON.stringify(row.vitals ?? {}), me]
       );
     }
     // Once an hour per person: a record typed over a visit is one line of the file's activity, not forty.
