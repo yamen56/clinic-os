@@ -850,8 +850,10 @@ export function PatientProfile(props: {
             </Button>
           )}
           {/* The patient's own WhatsApp, for a call or a look — not the way to
-              send, which is the button beside it. */}
-          {waLink && (
+              send, which is the button beside it. Beside Message it read as a
+              second WhatsApp button (the 11-08 audit), so it lives in the ⋯
+              menu then; here only for someone who has no inbox to send from. */}
+          {waLink && !caps.conversations && (
             <a
               href={waLink}
               target="_blank"
@@ -889,6 +891,19 @@ export function PatientProfile(props: {
             </Button>
             {menuOpen && (
               <div className="absolute end-0 top-10 z-30 w-52 rounded-card border border-line bg-surface p-1.5 shadow-pop animate-fade-up">
+                {waLink && caps.conversations && (
+                  <a
+                    href={waLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink-900/4"
+                    data-menu-wa
+                  >
+                    <ExternalLink className="h-4 w-4 text-ink-400" />
+                    {t.patients.whatsappOpen}
+                  </a>
+                )}
                 {caps.merge && (
                   <button
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink-900/4"

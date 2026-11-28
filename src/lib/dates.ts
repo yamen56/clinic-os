@@ -116,6 +116,43 @@ export function fmtLongToday(tz: string, locale: string): string {
   return clinicNow(tz).setLocale(numLocale(locale)).toFormat("cccc d LLLL");
 }
 
+/**
+ * A chat message's day, the way WhatsApp says it (Yamen, 2026-11-28: "we need
+ * to see the date of sending the message like whatsapp"): Today, Yesterday,
+ * the weekday within the past week, else the date — with the year only when
+ * it is not this one. In the clinic's timezone, so a message at 00:30 Amman
+ * time is not filed under the day before.
+ */
+export function chatDayLabel(iso: string | Date, tz: string, locale: string, w: { today: string; yesterday: string }): string {
+  const d = DateTime.fromJSDate(new Date(iso)).setZone(tz).startOf("day");
+  const today = clinicNow(tz).startOf("day");
+  const days = Math.round(today.diff(d, "days").days);
+  if (days === 0) return w.today;
+  if (days === 1) return w.yesterday;
+  const dt = d.setLocale(numLocale(locale));
+  if (days > 1 && days < 7) return dt.toFormat("cccc");
+  return dt.toFormat(d.year === today.year ? "cccc d LLLL" : "d LLLL yyyy");
+}
+
+/** The clinic-local day a message belongs to, for grouping a thread by day. */
+export function chatDayKey(iso: string | Date, tz: string): string {
+  return DateTime.fromJSDate(new Date(iso)).setZone(tz).toISODate() ?? "";
+}
+
+/**
+ * The stamp beside a chat in the list, as WhatsApp's: the time today,
+ * Yesterday, the weekday this past week, else the short date.
+ */
+export function chatListStamp(iso: string | Date, tz: string, locale: string, w: { yesterday: string }): string {
+  const at = DateTime.fromJSDate(new Date(iso)).setZone(tz);
+  const days = Math.round(clinicNow(tz).startOf("day").diff(at.startOf("day"), "days").days);
+  const dt = at.setLocale(numLocale(locale));
+  if (days <= 0) return dt.toFormat("h:mm a");
+  if (days === 1) return w.yesterday;
+  if (days < 7) return dt.toFormat("cccc");
+  return dt.toFormat("d/M/yyyy");
+}
+
 export function fmtDateTime(iso: string | Date, tz: string, locale: string): string {
   return DateTime.fromJSDate(new Date(iso)).setZone(tz).setLocale(numLocale(locale)).toFormat("d LLL · h:mm a");
 }

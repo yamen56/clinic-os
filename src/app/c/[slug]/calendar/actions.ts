@@ -52,6 +52,9 @@ export type ApptResult = {
   /** Family members booked after the first, and whose time was taken when one could not be. */
   alsoBooked?: number;
   alsoStopped?: string;
+  /** The later visits of a series moved with this one, and those whose new time was taken. */
+  shifted?: number;
+  shiftSkipped?: number;
 };
 
 export async function createAppointmentAction(slug: string, input: ApptInput): Promise<ApptResult> {
@@ -201,7 +204,9 @@ export async function createAppointmentAction(slug: string, input: ApptInput): P
 export async function updateAppointmentAction(
   slug: string,
   id: string,
-  input: Partial<Pick<ApptInput, "doctorMemberId" | "serviceId" | "serviceIds" | "startsAt" | "endsAt" | "notes" | "roomId">>
+  input: Partial<Pick<ApptInput, "doctorMemberId" | "serviceId" | "serviceIds" | "startsAt" | "endsAt" | "notes" | "roomId">>,
+  /** A visit of a repeating series: move the later ones by the same amount (0126). */
+  shiftFollowing = false
 ): Promise<ApptResult> {
   const access = await requireClinic(slug);
   if (!can(access, "calendar")) return { error: "forbidden" };
@@ -302,7 +307,75 @@ export async function updateAppointmentAction(
         60
       );
     }
-    return { ok: true, roomName: check.roomName, roomChanged: check.roomChanged };
+
+    /*
+      One of a repeating series moved, and the desk chose to move the ones after
+      it too (0126): each later visit still to come goes by the same amount —
+      a day later, an hour earlier — checked as any move is. One whose new time
+      is taken stays where it was and is counted, never double-booked.
+    */
+    let shifted = 0;
+    let shiftSkipped = 0;
+    const delta = new Date(startsAt).getTime() - new Date(cur.starts_at).getTime();
+    if (shiftFollowing && cur.series_id && delta !== 0) {
+      const later = (
+        await c.query(
+          `select id, patient_id, doctor_member_id, service_id, starts_at, ends_at, room_id from appointments
+            where clinic_id = $1 and series_id = $2 and id <> $3 and starts_at > $4
+              and status in ('pending_approval', 'scheduled', 'confirmed')
+            order by starts_at`,
+          [access.clinicId, cur.series_id, id, cur.starts_at]
+        )
+      ).rows;
+      for (const a of later) {
+        const s = new Date(new Date(a.starts_at).getTime() + delta).toISOString();
+        const e = new Date(new Date(a.ends_at).getTime() + delta).toISOString();
+        const ok = await scheduleCheck(c, access.clinicId, {
+          doctorMemberId: a.doctor_member_id,
+          serviceId: a.service_id,
+          startsAt: s,
+          endsAt: e,
+          excludeId: a.id,
+          roomId: undefined,
+          currentRoomId: a.room_id,
+        });
+        if (ok.error) {
+          shiftSkipped++;
+          continue;
+        }
+        await c.query(`update appointments set starts_at = $3, ends_at = $4, room_id = $5 where id = $1 and clinic_id = $2`, [a.id, access.clinicId, s, e, ok.roomId]);
+        await emitTrigger(
+          c,
+          access.clinicId,
+          "appointment_rescheduled",
+          {
+            appointmentId: a.id,
+            patientId: a.patient_id,
+            actorUserId: access.session.user.id,
+            previousStartsAt: new Date(a.starts_at).toISOString(),
+            previousDoctorMemberId: a.doctor_member_id ?? null,
+          },
+          `appointment_rescheduled:${a.id}`,
+          60
+        );
+        shifted++;
+      }
+      await audit(c, {
+        clinicId: access.clinicId,
+        userId: access.session.user.id,
+        impersonatedBy: access.session.impersonatedBy,
+        action: "appointment.series_shift",
+        entity: "appointment",
+        entityId: id,
+        detail: { seriesId: cur.series_id, deltaMinutes: Math.round(delta / 60000), shifted, skipped: shiftSkipped },
+      });
+    }
+    return {
+      ok: true,
+      roomName: check.roomName,
+      roomChanged: check.roomChanged,
+      ...(shiftFollowing ? { shifted, shiftSkipped } : {}),
+    };
   });
 }
 

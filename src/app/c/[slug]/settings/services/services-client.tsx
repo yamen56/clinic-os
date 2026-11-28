@@ -199,9 +199,13 @@ export function ServicesClient({
       </div>
       {canEdit && (
         <div className="flex items-center gap-1.5">
+          {/* Says what the switch is: a bare switch on every row read as decoration (the 11-08 audit). */}
+          <span className="text-[0.75rem] font-medium text-ink-500" aria-hidden>
+            {t.services.offered}
+          </span>
           <Toggle
             checked={s.active}
-            label={t.common.active}
+            label={t.services.offered}
             onChange={async (v) => {
               await toggleServiceAction(slug, s.id, v);
             }}

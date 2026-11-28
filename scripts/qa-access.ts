@@ -88,6 +88,9 @@ const IDENTITY_AUTHORISED = [
   "deleteMyAccountAction",
   "updateMyNameAction",
   "saveMyHoursAction",
+  // A doctor's days off (0124): their own, or anyone's with Settings — `mayManage` in time-off-actions checks both.
+  "addTimeOffAction",
+  "deleteTimeOffAction",
 ];
 
 /** Reads every `"use server"` file under src and reports the unguarded actions. */

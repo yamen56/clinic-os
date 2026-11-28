@@ -38,6 +38,8 @@ type Row = {
   fileNo: number | null;
   /** Null when this reader may not see it. */
   owed: number | null;
+  /** No phone of their own: the family member they are reached through (0127). */
+  reachName?: string | null;
 };
 
 /** One of the clinic's patient fields (Settings → Fields), as the new-patient form needs it. */
@@ -440,6 +442,11 @@ export function PatientsList({
                       </div>
                       <div className="mt-0.5 flex min-w-0 items-center gap-x-2 text-[0.75rem] text-ink-500">
                         {p.phone && <span className="num tnum lg:hidden">{formatPhone(p.phone)}</span>}
+                        {!p.phone && p.reachName && (
+                          <span className="truncate lg:hidden" data-row-reach>
+                            {t.family.via.replace("{name}", p.reachName)}
+                          </span>
+                        )}
                         {p.fileNo !== null && <span className="tnum text-ink-400">#{p.fileNo}</span>}
                         {p.tags.slice(0, 2).map((tag) => (
                           <span key={tag} className="hidden truncate rounded-full bg-brand-100 px-1.5 text-[length:max(11px,0.6875rem)] text-brand-700 sm:inline">
@@ -451,7 +458,13 @@ export function PatientsList({
                   </div>
 
                   <span className="hidden text-[0.8125rem] text-ink-700 lg:block">
-                    {p.phone ? <span className="num tnum">{formatPhone(p.phone)}</span> : <Dash />}
+                    {p.phone ? (
+                      <span className="num tnum">{formatPhone(p.phone)}</span>
+                    ) : p.reachName ? (
+                      <span className="text-ink-500">{t.family.via.replace("{name}", p.reachName)}</span>
+                    ) : (
+                      <Dash />
+                    )}
                   </span>
                   <span className="hidden text-[0.8125rem] text-ink-700 lg:block">
                     {p.lastVisitAt ? (

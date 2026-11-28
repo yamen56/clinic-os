@@ -209,7 +209,11 @@ export function patientListRowsSql(
       ? ""
       : ` and (p.created_at, p.id) < ($${cursorParam}::timestamptz, $${cursorParam + 1}::uuid)`;
   return `select p.id, p.full_name, p.phone_e164, p.tags, p.source, p.status,
-                 p.last_visit_at, p.automation_opt_out, p.file_no,${
+                 p.last_visit_at, p.automation_opt_out, p.file_no,
+                 -- No number of their own: whose they are reached on (0127).
+                 case when p.phone_e164 is null and p.family_id is not null then
+                   (select g.full_name from patient_families f join patients g on g.id = f.contact_patient_id
+                     where f.id = p.family_id and g.merged_into is null and g.phone_e164 is not null) end as reach_name,${
                    opts.owes
                      ? `
                  (select coalesce(sum(i.total - i.amount_paid), 0) from invoices i
@@ -266,6 +270,8 @@ export type PatientListRow = {
   fileNo: number | null;
   /** What they still owe; null when the reader may not see it. */
   owed: number | null;
+  /** With no phone of their own, the family member they are reached through (0127). */
+  reachName: string | null;
 };
 
 /** The one place a row from `patientListRowsSql` becomes a `PatientListRow`. */
@@ -284,6 +290,7 @@ export function toPatientListRow(r: Record<string, unknown>): PatientListRow {
     addedBy: (r.added_by as AddedBy | null) ?? null,
     fileNo: r.file_no === null || r.file_no === undefined ? null : Number(r.file_no),
     owed: r.owed === undefined || r.owed === null ? null : Number(r.owed),
+    reachName: (r.reach_name as string | null | undefined) ?? null,
   };
 }
 

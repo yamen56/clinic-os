@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { ConversationsSwitch } from "./conversations-switch";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
 import { useFillHeight } from "@/lib/use-fill-height";
-import { fmtRelative, fmtTime, fmtMoney, fmtDateTime } from "@/lib/dates";
+import { chatDayKey, chatDayLabel, chatListStamp, fmtTime, fmtMoney, fmtDateTime } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
 import { canResend, deliveryNote, deliveryText, type DeliveryNote, type SessionState } from "@/lib/wa-delivery";
 import { Badge } from "@/components/ui/badge";
@@ -418,8 +418,13 @@ export function InboxClient({
                   <div className="flex items-baseline justify-between gap-2">
                     <Title cv={row} className="truncate text-sm font-semibold" />
                     {row.last_message_at && (
-                      <span className="shrink-0 text-[length:max(11px,0.6875rem)] text-ink-400" suppressHydrationWarning>
-                        {fmtRelative(row.last_message_at, locale)}
+                      <span
+                        className="shrink-0 text-[length:max(11px,0.6875rem)] text-ink-400 tnum"
+                        title={fmtDateTime(row.last_message_at, tz, locale)}
+                        suppressHydrationWarning
+                        data-chat-stamp
+                      >
+                        {chatListStamp(row.last_message_at, tz, locale, t.common)}
                       </span>
                     )}
                   </div>
@@ -553,8 +558,15 @@ export function InboxClient({
                   </button>
                 </div>
               )}
-              {thread.messages.map((m) => {
+              {thread.messages.map((m, i) => {
                 const out = m.direction === "out";
+                /*
+                  A new day starts with its date, as WhatsApp does (Yamen,
+                  2026-11-28): the time on a bubble alone could not say whether
+                  "10:30" was this morning or last month.
+                */
+                const day = chatDayKey(m.created_at, tz);
+                const newDay = i === 0 || chatDayKey(thread.messages[i - 1].created_at, tz) !== day;
                 const note = out ? deliveryNote(m, thread.session ?? { connected: true }) : null;
                 const senderLabel =
                   out && m.sender_kind !== "patient"
@@ -563,7 +575,15 @@ export function InboxClient({
                       : (t.conversations.sentBy as Record<string, string>)[m.sender_kind] ?? m.sender_kind
                     : null;
                 return (
-                  <div key={m.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
+                  <Fragment key={m.id}>
+                  {newDay && (
+                    <div className="sticky top-0 z-[1] my-1.5 flex justify-center" data-day-divider={day}>
+                      <span className="rounded-full bg-surface px-3 py-1 text-[0.75rem] font-semibold text-ink-500 shadow-card" suppressHydrationWarning>
+                        {chatDayLabel(m.created_at, tz, locale, t.common)}
+                      </span>
+                    </div>
+                  )}
+                  <div className={`flex ${out ? "justify-end" : "justify-start"}`}>
                     <div className={`flex min-w-0 max-w-[78%] flex-col ${out ? "items-end" : "items-start"}`}>
                     <div
                       className={`max-w-full rounded-2xl px-3 py-2 shadow-sm ${
@@ -608,7 +628,9 @@ export function InboxClient({
                       {/* Each message in its own direction: an English one in the Arabic app ends with its "?", not starts. */}
                       {m.body && <div className="whitespace-pre-wrap break-words text-sm" dir="auto">{m.body}</div>}
                       <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${out && m.sender_kind !== "ai" ? "text-on-brand/65" : "text-ink-500"}`} data-bubble-time>
-                        <span className="tnum" suppressHydrationWarning>{fmtTime(m.created_at, tz, locale)}</span>
+                        <span className="tnum" title={fmtDateTime(m.created_at, tz, locale)} suppressHydrationWarning>
+                          {fmtTime(m.created_at, tz, locale)}
+                        </span>
                         {statusIcon(m)}
                       </div>
                     </div>
@@ -644,6 +666,7 @@ export function InboxClient({
                     )}
                     </div>
                   </div>
+                  </Fragment>
                 );
               })}
               <div ref={bottomRef} />

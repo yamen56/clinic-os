@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { flowStage, type FlowStage } from "@/lib/patient-flow";
 import { createAppointmentAction, updateAppointmentAction, setAppointmentStatusAction } from "./actions";
 import { cancelSeriesFromAction, createSeriesAction, planSeriesAction, type SeriesDate } from "./series-actions";
+import { slotNoticeAction, type SlotNotice } from "./slot-notice-actions";
 import { MAX_SERIES, MIN_SERIES, REPEAT_MORE, REPEAT_PRESETS, repeatKey, repeatLabel, type Repeat } from "@/lib/series";
 import { familyRoleLabel, type FamilyRole } from "@/lib/families";
 import { setFlowAction, type FlowStep } from "./flow-actions";
@@ -26,7 +27,7 @@ import { AppointmentNotes } from "@/components/appointment-notes";
 import { PatientPicker } from "@/components/appointments/patient-picker";
 import type { Appt, Doctor, PlannedItem, Room, Section, Service } from "./types";
 import { VisitLineView, whereOf } from "@/components/charts/dental/visit-work";
-import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock, UserPen, Send, Copy, CalendarClock, Repeat2 } from "lucide-react";
+import { X, ClipboardList, Sparkles, Armchair, DoorOpen, CheckCheck, Undo2, ShieldAlert, Clock, UserPen, Send, Copy, CalendarClock, Repeat2, TriangleAlert } from "lucide-react";
 import { sendVisitLinkAction, visitLinkAction } from "./visit-link-actions";
 import { flagAlerts } from "@/lib/medical-history";
 import { MAX_VISIT_SERVICES } from "@/lib/appointment-services";
@@ -139,6 +140,11 @@ export function AppointmentPanel({
   const [sendDates, setSendDates] = useState(true);
   /** Cancelling a repeating visit: this one, or this and the rest of the series. */
   const [cancelRest, setCancelRest] = useState(false);
+  /** Moving one in time: asked whether the later ones go too, and the answer. */
+  const [moveAsk, setMoveAsk] = useState(false);
+  const [moveRest, setMoveRest] = useState(false);
+  /** What is wrong with the chosen time — a day off, outside the hours, taken — said before saving. */
+  const [notice, setNotice] = useState<SlotNotice | null>(null);
   /* The rest of the patient's family (0127), any of whom can be booked straight after. */
   const [kin, setKin] = useState<{ id: string; name: string; role: FamilyRole | null; gender: string | null }[]>([]);
   const [also, setAlso] = useState<string[]>([]);
@@ -240,6 +246,52 @@ export function AppointmentPanel({
     .map((d) => (d.status === "busy" ? d.alt! : d.startsAt));
   const asSeries = repeatOn && state?.mode === "create";
 
+  /*
+    The chosen time, checked a moment after it changes: the doctor away, not
+    working, outside their hours, or with somebody else. Not for a series (its
+    dates are checked one by one) nor for a visit already over.
+  */
+  const noticeKey =
+    state && startsAt?.isValid && !asSeries && (state.mode === "create" || !["completed", "cancelled", "no_show"].includes(state.appt.status))
+      ? JSON.stringify([startsAt.toUTC().toISO(), duration, doctorId, state.mode === "edit" ? state.appt.id : null])
+      : "";
+  useEffect(() => {
+    if (!noticeKey) {
+      setNotice(null);
+      return;
+    }
+    const [at, dur, doc, self] = JSON.parse(noticeKey) as [string, number, string, string | null];
+    let live = true;
+    const timer = setTimeout(async () => {
+      const r = await slotNoticeAction(slug, {
+        doctorMemberId: doc || null,
+        startsAt: at,
+        endsAt: DateTime.fromISO(at).plus({ minutes: dur }).toUTC().toISO()!,
+        excludeId: self,
+      }).catch(() => ({ notice: null }));
+      if (live) setNotice(r.notice);
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [noticeKey, slug]);
+  const doctorName = doctors.find((d) => d.id === doctorId)?.name ?? "";
+  const noticeText = !notice
+    ? ""
+    : notice.kind === "busy"
+      ? t.slotNotice.busy.replace("{name}", notice.with)
+      : notice.kind === "off"
+        ? [t.slotNotice.off.replace("{doctor}", doctorName), notice.note].filter(Boolean).join(" · ")
+        : notice.kind === "closed"
+          ? t.slotNotice.closed
+          : notice.kind === "not_working"
+            ? t.slotNotice.notWorking.replace("{doctor}", doctorName)
+            : (doctorId ? t.slotNotice.outside.replace("{doctor}", doctorName) : t.slotNotice.outsideClinic).replace(
+                "{hours}",
+                notice.hours.map(([o, c]) => `${o.replace(/^0(\d)/, "$1")}–${c.replace(/^0(\d)/, "$1")}`).join(locale === "ar" ? "، " : ", ")
+              );
+
   /* Which rooms already have somebody at the chosen time, from what the page has loaded. */
   const busyRooms = useMemo(() => {
     const busy = new Set<string>();
@@ -298,10 +350,25 @@ export function AppointmentPanel({
   };
   const addable = services.filter((s) => !serviceIds.includes(s.id));
 
-  const submit = () =>
+  /*
+    `shiftFollowing`: a visit of a repeating series moved in time asks first
+    whether the later ones go with it (0126); the answer comes back here.
+  */
+  const submit = (shiftFollowing?: boolean) =>
     start(async () => {
       if (!startsAt) return;
       const endsAt = startsAt.plus({ minutes: duration });
+      if (
+        shiftFollowing === undefined &&
+        state?.mode === "edit" &&
+        state.appt.series_id &&
+        (state.appt.series_after ?? 0) > 0 &&
+        startsAt.toMillis() !== Date.parse(state.appt.starts_at)
+      ) {
+        setMoveRest(false);
+        setMoveAsk(true);
+        return;
+      }
       if (state?.mode === "create" && repeatOn) {
         if (seriesDates.length < MIN_SERIES) {
           toast(t.series.pickTwo, "error");
@@ -362,19 +429,32 @@ export function AppointmentPanel({
           find one" — so changing only the time does not fail on a room that
           is taken when another is free. A different room is exactly that room.
         */
-        const r = await updateAppointmentAction(slug, state.appt.id, {
-          doctorMemberId: doctorId || null,
-          serviceIds,
-          startsAt: startsAt.toUTC().toISO()!,
-          endsAt: endsAt.toUTC().toISO()!,
-          notes,
-          roomId: roomId === (state.appt.room_id ?? "") ? undefined : roomId || null,
-        });
+        const r = await updateAppointmentAction(
+          slug,
+          state.appt.id,
+          {
+            doctorMemberId: doctorId || null,
+            serviceIds,
+            startsAt: startsAt.toUTC().toISO()!,
+            endsAt: endsAt.toUTC().toISO()!,
+            notes,
+            roomId: roomId === (state.appt.room_id ?? "") ? undefined : roomId || null,
+          },
+          !!shiftFollowing
+        );
         if (r.error) {
           toast(scheduleErrorText(t, r), "error");
           return;
         }
-        toast(savedText(t, t.calendar.updated, r));
+        const saved = savedText(t, t.calendar.updated, r);
+        toast(
+          r.shifted || r.shiftSkipped
+            ? [saved, r.shifted ? t.series.shiftedN.replace("{n}", String(r.shifted)) : "", r.shiftSkipped ? t.series.shiftSkipped.replace("{k}", String(r.shiftSkipped)) : ""]
+                .filter(Boolean)
+                .join(" · ")
+            : saved,
+          r.shiftSkipped ? "error" : undefined
+        );
         onChanged();
       }
     });
@@ -989,6 +1069,16 @@ export function AppointmentPanel({
                 <NumberInput dir="ltr" min={5} step={5} value={duration} onChange={(v) => setDuration(v)} fallback={30} />
               </Field>
             </div>
+            {/* What is wrong with this time, before it is saved — the desk may still book it, except over another patient. */}
+            {notice && noticeText && (
+              <p className="-mt-1 flex items-start gap-2 rounded-lg bg-st-pending-soft px-3 py-2 text-[0.78125rem] font-medium text-st-pending" role="status" data-slot-notice={notice.kind}>
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0">
+                  {noticeText}
+                  {notice.kind !== "busy" && <span className="block font-normal text-ink-700">{t.slotNotice.canStill}</span>}
+                </span>
+              </p>
+            )}
 
             {/*
               Repeat (0126): the same visit every so often, so many times —
@@ -1276,7 +1366,7 @@ export function AppointmentPanel({
               {t.common.cancel}
             </Button>
             <Button
-              onClick={submit}
+              onClick={() => submit()}
               loading={pending}
               disabled={
                 !startsAt ||
@@ -1350,6 +1440,35 @@ export function AppointmentPanel({
             ))}
           </fieldset>
         ) : null}
+      </ConfirmDialog>
+      {/* One of a series moved in time: this one alone, or the later ones by the same amount (0126). */}
+      <ConfirmDialog
+        open={moveAsk}
+        onClose={() => setMoveAsk(false)}
+        title={t.series.moveWhich}
+        confirmLabel={t.common.save}
+        cancelLabel={t.common.back}
+        danger={false}
+        onConfirm={() => {
+          setMoveAsk(false);
+          submit(moveRest);
+        }}
+      >
+        <fieldset className="grid gap-1" data-move-series>
+          {[false, true].map((rest) => (
+            <label key={String(rest)} className="flex min-h-10 cursor-pointer items-center gap-2.5 rounded-md px-1.5 text-[0.8125rem] hover:bg-sunken">
+              <input
+                type="radio"
+                name="move-series"
+                className="h-4 w-4 accent-[var(--color-brand-600)]"
+                checked={moveRest === rest}
+                onChange={() => setMoveRest(rest)}
+                data-move-series-rest={rest ? "1" : "0"}
+              />
+              {rest ? t.series.moveRest.replace("{n}", String(editAppt?.series_after ?? 0)) : t.series.onlyThis}
+            </label>
+          ))}
+        </fieldset>
       </ConfirmDialog>
     </>
   );
