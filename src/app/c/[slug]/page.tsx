@@ -45,6 +45,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
+import { COVER_ICON, coverAction } from "@/components/ui/cover-action";
 
 /**
  * The front page: a welcome, the day in four figures, today's patients, and
@@ -472,6 +473,19 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
     Math.ceil(Math.max(nowMin + 1, quiet ? 20 * 60 : 0, ...open.map((o) => o[1]), ...dots.map((d) => d.min + 30)) / 60) * 60
   );
 
+  /*
+    The day's shortcuts on the welcome, on every screen (Yamen, 2026-11-28:
+    "show the shortcuts like adding the new appointment and its button, same
+    for the other shortcuts"): whatever of the four this member may start,
+    the first of them solid. The same four the keyboard reaches (A, P, I, M).
+  */
+  const shortcuts = [
+    ...(showCalendar ? [{ key: "appointment", href: `${base}/calendar?new=1`, icon: CalendarPlus, label: t.calendar.newAppointment }] : []),
+    ...(showPatients ? [{ key: "patient", href: `${base}/patients?new=1`, icon: UserPlus, label: t.patients.newPatient }] : []),
+    ...(showMoney ? [{ key: "invoice", href: `${base}/invoices/new`, icon: ReceiptText, label: t.invoices.newInvoice }] : []),
+    ...(showInbox ? [{ key: "inbox", href: `${base}/conversations`, icon: MessageCircle, label: t.dashboard.openInbox }] : []),
+  ];
+
   return (
     <>
       <Welcome
@@ -481,25 +495,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         clock={<LiveClock intl={intl} tz={tz} serverNow={nowMs} />}
         clockSmall={<LiveClock intl={intl} tz={tz} serverNow={nowMs} compact />}
         strip={<DayStrip tz={tz} intl={intl} serverNow={nowMs} from={spanFrom} to={spanTo} open={open} dots={dots} />}
-        actions={
-          <>
-            {showCalendar && (
-              <Link href={`${base}/calendar?new=1`} className={buttonClass({ className: "!bg-white !text-night hover:!bg-white/90" })}>
-                <CalendarPlus className="h-4 w-4" />
-                {t.calendar.newAppointment}
-              </Link>
-            )}
-            {showPatients && (
-              <Link
-                href={`${base}/patients?new=1`}
-                className={buttonClass({ variant: "outline", className: "!border-white/25 !bg-white/5 !text-white hover:!bg-white/15" })}
-              >
-                <UserPlus className="h-4 w-4" />
-                {t.patients.newPatient}
-              </Link>
-            )}
-          </>
-        }
+        actions={shortcuts.map((x, i) => (
+          <Link key={x.key} href={x.href} className={coverAction(i === 0)} data-shortcut={x.key}>
+            <x.icon className={COVER_ICON} />
+            {x.label}
+          </Link>
+        ))}
       />
 
       {/*
@@ -653,7 +654,7 @@ function Welcome({
   greeting: string;
   date: string;
   line: string;
-  actions: React.ReactNode;
+  actions: React.ReactNode[];
   /** The clinic's time, large, at the far side of the greeting. */
   clock: React.ReactNode;
   /** The same time as a few words after the date, for a phone. */
@@ -678,13 +679,22 @@ function Welcome({
         <div className="shrink-0 max-sm:hidden">{clock}</div>
       </div>
       {/*
-        Not on a phone: there the welcome is one slim line, so a doctor's list
-        is on the first screen (qa-connections), and the tab bar already
-        reaches Appointments and Patients.
+        The day's line beside the shortcuts on a desk. On a phone the line is
+        left out — the welcome stays slim so a doctor's list is on the first
+        screen (qa-connections) — but the shortcuts stay, as one row of tiles.
       */}
-      <div className="mt-6 flex items-end gap-6 max-sm:hidden">
-        <div className="min-w-0 flex-1">{strip}</div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">{actions}</div>
+      <div className="mt-3.5 sm:mt-6 sm:flex sm:items-end sm:gap-6">
+        <div className="min-w-0 flex-1 max-sm:hidden">{strip}</div>
+        {actions.length > 0 && (
+          <div
+            className={`grid gap-2 sm:flex sm:shrink-0 sm:flex-wrap sm:justify-end ${
+              actions.length >= 4 ? "grid-cols-4" : actions.length === 3 ? "grid-cols-3" : actions.length === 2 ? "grid-cols-2" : "grid-cols-1"
+            }`}
+            data-shortcuts={actions.length}
+          >
+            {actions}
+          </div>
+        )}
       </div>
     </section>
   );

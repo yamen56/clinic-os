@@ -67,6 +67,7 @@ import { LetterComposer, type LetterDraft } from "./letter-composer";
 import type { LetterRow } from "@/lib/medical-letters";
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
 import { FamilyCard } from "./family-card";
+import { COVER_ICON, COVER_LEAD, COVER_QUIET } from "@/components/ui/cover-action";
 import { ReferralPicker } from "@/components/referral-picker";
 import { ageOn, type Family } from "@/lib/families";
 import { coverState } from "@/lib/insurance";
@@ -368,15 +369,6 @@ const storageKeyOf = (d: FieldDef) => d.storage_key ?? d.key.replace(/^patient\.
   make any of them longer. From a tablet up they are ordinary one-line buttons
   in a wrapping row.
 */
-/*
-  The cover's actions (2026-11-28): on a phone a tile, icon over name, a thumb
-  tall, the name allowed two lines; from a tablet up a pill in a row. The lead
-  is solid white on the navy, the rest translucent — one style, one choice.
-*/
-const COVER_ACTION =
-  "flex min-h-[3.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2 text-center text-[0.75rem] font-semibold leading-tight transition-colors disabled:opacity-60 sm:min-h-10 sm:flex-row sm:gap-2 sm:rounded-full sm:px-4 sm:py-2 sm:text-[0.8125rem]";
-const COVER_LEAD = `${COVER_ACTION} bg-white text-night hover:bg-white/90`;
-const COVER_QUIET = `${COVER_ACTION} bg-white/[0.09] text-white ring-1 ring-inset ring-white/10 hover:bg-white/[0.16]`;
 
 
 export function PatientProfile(props: {
@@ -722,7 +714,7 @@ export function PatientProfile(props: {
     one solid tile; the rest are quiet, so the cover has one thing to press.
   */
   const coverActions: { key: string; render: (cls: string) => React.ReactNode }[] = [];
-  const icon = "h-[18px] w-[18px] shrink-0 sm:h-4 sm:w-4";
+  const icon = COVER_ICON;
   if (caps.prescriptions) {
     // Hovering starts loading the medicine list, in case the press beats the idle prefetch.
     coverActions.push({
@@ -835,7 +827,7 @@ export function PatientProfile(props: {
         are one style, the first of them solid for what this member came to do.
       */}
       <section
-        className="cover-art relative isolate mb-5 overflow-hidden rounded-card px-4 pb-4 pt-4 text-white ring-1 ring-white/5 sm:px-6 sm:pb-5 sm:pt-5"
+        className="cover-art relative isolate mb-5 rounded-card px-4 pb-4 pt-4 text-white ring-1 ring-white/5 sm:px-6 sm:pb-5 sm:pt-5"
         data-patient-cover
       >
         <div className="flex items-start gap-3.5 pe-10 sm:gap-4">
@@ -932,7 +924,7 @@ export function PatientProfile(props: {
               <MoreVertical className="h-4.5 w-4.5" />
             </button>
             {menuOpen && (
-              <div className="absolute end-0 top-10 z-30 w-52 rounded-card border border-line bg-surface p-1.5 shadow-pop animate-fade-up">
+              <div className="absolute end-0 top-10 z-30 w-52 rounded-card border border-line bg-surface p-1.5 text-ink-900 shadow-pop animate-fade-up" data-cover-menu>
                 {waLink && caps.conversations && (
                   <a
                     href={waLink}
