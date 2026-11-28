@@ -1,4 +1,5 @@
 import type { WeeklyHours } from "@/lib/hours";
+import type { TimeOffRow } from "@/lib/time-off";
 import type { IntakeAnswer } from "@/lib/booking-intake";
 import type { VisitLine } from "@/lib/charts/dental/treatment";
 import type { MedicalFlags } from "@/lib/medical-history";
@@ -114,6 +115,8 @@ export type CalendarData = {
   rooms: Room[];
   clinicHours: WeeklyHours;
   blockedDates: string[];
+  /** Doctors' days off in the window (0124). */
+  timeOff?: TimeOffRow[];
   /** Upcoming in-person visits with no room, in a clinic that has rooms. */
   unroomed: number;
   /** The clinic's currency, for what a patient owes on the board. */

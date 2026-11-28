@@ -7,6 +7,8 @@ import { visitLines } from "@/lib/charts/dental/treatment";
 import { medicalFlags } from "@/lib/medical-history";
 import { extraServicesSql } from "@/lib/appointment-services";
 import { patientChangesSql } from "@/lib/features";
+import { loadTimeOffBetween } from "@/lib/time-off";
+import { DateTime } from "luxon";
 
 type WorkRow = { markId: string; site: string; label: string; labelAr: string | null; treatmentKey: string; groupId: string | null; step: string | null; at: string };
 type Member = { id: string; site: string; label: string; labelAr: string | null; treatmentKey: string; groupId: string };
@@ -225,6 +227,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
       sections: sections.rows,
       clinicHours: clinic.rows[0].working_hours,
       blockedDates: clinic.rows[0].blocked_dates,
+      // The doctors' days off touching the window (0124), so the day view can grey them.
+      timeOff: await loadTimeOffBetween(
+        c,
+        access.clinicId,
+        DateTime.fromISO(from).setZone(clinic.rows[0].timezone).toISODate()!,
+        DateTime.fromISO(to).setZone(clinic.rows[0].timezone).toISODate()!
+      ),
       tz: clinic.rows[0].timezone,
       rooms: clinic.rows[0].rooms,
       unroomed: clinic.rows[0].unroomed,

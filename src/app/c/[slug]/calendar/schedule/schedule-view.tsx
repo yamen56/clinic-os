@@ -5,7 +5,8 @@ import Link from "next/link";
 import { DateTime } from "luxon";
 import { useI18n } from "@/lib/i18n/client";
 import { useRealtimeRefresh } from "@/lib/use-realtime";
-import { effectiveHours } from "@/lib/hours";
+import { effectiveHours, type WeeklyHours } from "@/lib/hours";
+import { offOn } from "@/lib/time-off";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/misc";
@@ -123,7 +124,21 @@ export function ScheduleView({
 
   const columns: GridColumn[] = useMemo(() => {
     if (!data) return [];
-    if (view !== "day") return days.map((d) => ({ key: d.toISODate()!, day: d, kind: "day" as const, hours: data.clinicHours, label: "" }));
+    const timeOff = data.timeOff ?? [];
+    /*
+      A doctor on a day off (0124): their column is closed all day and says
+      so. With one doctor picked, the week and month days they are away close
+      the same way.
+    */
+    const CLOSED: WeeklyHours = {};
+    if (view !== "day")
+      return days.map((d) => ({
+        key: d.toISODate()!,
+        day: d,
+        kind: "day" as const,
+        hours: doctorFilter && offOn(timeOff, doctorFilter, d.toISODate()!) ? CLOSED : data.clinicHours,
+        label: "",
+      }));
     const day = anchorDt.startOf("day");
     const dayKey = day.toISODate();
     const onDay = visible.filter((a) => DateTime.fromISO(a.starts_at).setZone(tz).toISODate() === dayKey);
@@ -149,8 +164,8 @@ export function ScheduleView({
       day,
       kind: "doctor" as const,
       ownerId: d.id,
-      hours: effectiveHours(data.clinicHours, d.working_hours),
-      label: d.name,
+      hours: offOn(timeOff, d.id, dayKey!) ? CLOSED : effectiveHours(data.clinicHours, d.working_hours),
+      label: offOn(timeOff, d.id, dayKey!) ? `${d.name} · ${t.timeOff.offShort}` : d.name,
       color: d.color,
     }));
     // Appointments without a doctor still need a home in the day view.

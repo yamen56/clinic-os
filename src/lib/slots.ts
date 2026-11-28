@@ -17,6 +17,8 @@ type Inputs = {
   busy: Busy[];
   /** Rooms that can host the service. Empty = rooms do not limit it. */
   rooms: Room[];
+  /** Each candidate doctor's days off in the window (0124), as inclusive yyyy-MM-dd ranges. */
+  off: Map<string, [string, string][]>;
 };
 
 export type AvailabilityOpts = {
@@ -125,6 +127,24 @@ async function loadInputs(
   // services at all (see suitableRooms).
   const rooms = suitableRoomsForAll(await loadActiveRooms(c, clinicId), services);
 
+  /*
+    The doctors' days off (0124), for the window in the clinic's own dates. A
+    doctor away on a day offers nothing that day; the others still do.
+  */
+  const off = new Map<string, [string, string][]>();
+  if (doctors.length) {
+    const fromDay = DateTime.fromISO(fromUTC).setZone(opts.tz).toISODate();
+    const toDay = DateTime.fromISO(toUTC).setZone(opts.tz).toISODate();
+    const rows = (
+      await c.query(
+        `select member_id, starts_on::text as starts_on, ends_on::text as ends_on from doctor_time_off
+          where clinic_id = $1 and member_id = any($2::uuid[]) and ends_on >= $3::date and starts_on <= $4::date`,
+        [clinicId, doctors.map((d) => d.id), fromDay, toDay]
+      )
+    ).rows as { member_id: string; starts_on: string; ends_on: string }[];
+    for (const r of rows) off.set(r.member_id, [...(off.get(r.member_id) ?? []), [r.starts_on, r.ends_on]]);
+  }
+
   return {
     durMin: services.reduce((n, s) => n + Number(s.duration_min), 0),
     bufMin: Math.max(...services.map((s) => Number(s.buffer_after_min) || 0)),
@@ -132,7 +152,13 @@ async function loadInputs(
     useUnassigned,
     busy,
     rooms,
+    off,
   };
+}
+
+/** Whether a yyyy-MM-dd day falls inside any of these inclusive ranges. */
+export function isOffOn(ranges: [string, string][] | undefined, dayISO: string): boolean {
+  return !!ranges?.some(([from, to]) => from <= dayISO && dayISO <= to);
 }
 
 /** One clinic-local day, computed in memory from already-loaded inputs. */
@@ -144,7 +170,8 @@ function slotsForDay(
 ): SlotResult[] {
   if (opts.blockedDates.includes(day.toISODate()!)) return [];
 
-  const { durMin, bufMin, candidates, useUnassigned, busy, rooms } = input;
+  const { durMin, bufMin, candidates, useUnassigned, busy, rooms, off } = input;
+  const dayKey = day.toISODate()!;
   const dayStart = day.startOf("day");
   const results: SlotResult[] = [];
   const seen = new Set<string>();
@@ -157,6 +184,7 @@ function slotsForDay(
   const roomsAreCapacity = useUnassigned && rooms.length > 0;
 
   for (const doc of candidates) {
+    if (doc.id && isOffOn(off.get(doc.id), dayKey)) continue;
     const hours = effectiveHours(opts.clinicHours, doc.working_hours);
     for (const [open, close] of rangesForDay(hours, day)) {
       let cursor = dayStart.plus({ minutes: hmToMin(open) });

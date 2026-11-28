@@ -90,6 +90,9 @@ const ar = {
   hoursTitle: (doctor: string) => `تغيّرت ساعات دوام ${doctor}`,
   hoursClash: (n: number) => `مواعيد محجوزة خارج الساعات الجديدة: ${n}`,
   hoursNoClash: "لا مواعيد محجوزة خارج الساعات الجديدة",
+  timeOffTitle: (doctor: string) => `${doctor} في إجازة`,
+  timeOffBody: (range: string, n: number) =>
+    n ? `${range} — مواعيد محجوزة في هذه الأيام: ${n}` : `${range} — لا مواعيد محجوزة في هذه الأيام`,
   stockTitle: (n: number) => `المخزون: ${n} أمور تحتاج انتباهك`,
   stockLow: (name: string, left: string) => `${name} على وشك النفاد: بقي ${left}`,
   stockOut: (name: string) => `نفد ${name}`,
@@ -147,6 +150,8 @@ const en: typeof ar = {
   hoursTitle: (doctor) => `${doctor}'s working hours changed`,
   hoursClash: (n) => `Booked visits outside the new hours: ${n}`,
   hoursNoClash: "No booked visits fall outside the new hours",
+  timeOffTitle: (doctor) => `${doctor} is off`,
+  timeOffBody: (range, n) => (n ? `${range} — booked visits on those days: ${n}` : `${range} — no visits booked on those days`),
   stockTitle: (n) => `Stock: ${n} things need attention`,
   stockLow: (name, left) => `${name} is running low: ${left} left`,
   stockOut: (name) => `${name} has run out`,
