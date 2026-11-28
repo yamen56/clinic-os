@@ -3,32 +3,12 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export type QuickAction = "appointment" | "patient" | "invoice" | "inbox";
+import { QUICK_KEYS, quickHref, type QuickAction } from "@/lib/quick-keys";
 
-/**
- * The four things a front desk does all day, one key away.
- *
- * Keyboard accelerators, because the people using this are on a desktop with a
- * patient in front of them, and reaching for the mouse to start a booking is
- * the slowest part of taking one.
- */
-const SHORTCUTS: Record<QuickAction, { code: string; hint: string }> = {
-  appointment: { code: "KeyA", hint: "A" },
-  patient: { code: "KeyP", hint: "P" },
-  invoice: { code: "KeyI", hint: "I" },
-  inbox: { code: "KeyM", hint: "M" },
-};
+export type { QuickAction };
 
-/** Where each action goes. Outside the component so the effect below can depend
- *  on `slug` alone rather than on an object rebuilt every render. */
-export function hrefFor(slug: string, a: QuickAction): string {
-  return {
-    appointment: `/c/${slug}/calendar?new=1`,
-    patient: `/c/${slug}/patients?new=1`,
-    invoice: `/c/${slug}/invoices/new`,
-    inbox: `/c/${slug}/conversations`,
-  }[a];
-}
+/** Where each action goes (lib/quick-keys). */
+export const hrefFor = quickHref;
 
 /**
  * The accelerators, on every screen rather than only the dashboard: the shell
@@ -43,7 +23,7 @@ export function useQuickShortcuts(slug: string, actions: QuickAction[]) {
         `e.code`, not `e.key`. `code` is the physical key; `key` is the
         character the current layout produces — so on an Arabic keyboard the A
         key reports "ش" and every shortcut in an Arabic-first product would be
-        dead. This is the whole reason the map above stores KeyA rather than "a".
+        dead. This is the whole reason lib/quick-keys stores KeyA rather than "a".
       */
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const el = document.activeElement as HTMLElement | null;
@@ -62,7 +42,7 @@ export function useQuickShortcuts(slug: string, actions: QuickAction[]) {
       // stray "p" underneath it must not navigate the page out from under.
       if (document.querySelector('[role="dialog"]')) return;
 
-      const hit = actions.find((a) => SHORTCUTS[a].code === e.code);
+      const hit = actions.find((a) => QUICK_KEYS[a].code === e.code);
       if (!hit) return;
       e.preventDefault();
       router.push(hrefFor(slug, hit));

@@ -46,6 +46,7 @@ import {
   Users,
 } from "lucide-react";
 import { COVER_ICON, coverAction } from "@/components/ui/cover-action";
+import { QUICK_KEYS, quickHref, type QuickAction } from "@/lib/quick-keys";
 
 /**
  * The front page: a welcome, the day in four figures, today's patients, and
@@ -474,16 +475,17 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
   );
 
   /*
-    The day's shortcuts on the welcome, on every screen (Yamen, 2026-11-28:
-    "show the shortcuts like adding the new appointment and its button, same
-    for the other shortcuts"): whatever of the four this member may start,
-    the first of them solid. The same four the keyboard reaches (A, P, I, M).
+    The day's shortcuts on the welcome (Yamen, 2026-11-28): whatever of the
+    four this member may start, the first of them solid, each with the key
+    that starts it from anywhere on a desk (lib/quick-keys). Not on a phone —
+    Yamen: there they "do not look good", and the tab bar already reaches
+    Appointments and Patients.
   */
-  const shortcuts = [
-    ...(showCalendar ? [{ key: "appointment", href: `${base}/calendar?new=1`, icon: CalendarPlus, label: t.calendar.newAppointment }] : []),
-    ...(showPatients ? [{ key: "patient", href: `${base}/patients?new=1`, icon: UserPlus, label: t.patients.newPatient }] : []),
-    ...(showMoney ? [{ key: "invoice", href: `${base}/invoices/new`, icon: ReceiptText, label: t.invoices.newInvoice }] : []),
-    ...(showInbox ? [{ key: "inbox", href: `${base}/conversations`, icon: MessageCircle, label: t.dashboard.openInbox }] : []),
+  const shortcuts: { key: QuickAction; icon: typeof CalendarPlus; label: string }[] = [
+    ...(showCalendar ? [{ key: "appointment" as const, icon: CalendarPlus, label: t.calendar.newAppointment }] : []),
+    ...(showPatients ? [{ key: "patient" as const, icon: UserPlus, label: t.patients.newPatient }] : []),
+    ...(showMoney ? [{ key: "invoice" as const, icon: ReceiptText, label: t.invoices.newInvoice }] : []),
+    ...(showInbox ? [{ key: "inbox" as const, icon: MessageCircle, label: t.dashboard.openInbox }] : []),
   ];
 
   return (
@@ -496,9 +498,13 @@ export default async function DashboardPage({ params }: { params: Promise<{ slug
         clockSmall={<LiveClock intl={intl} tz={tz} serverNow={nowMs} compact />}
         strip={<DayStrip tz={tz} intl={intl} serverNow={nowMs} from={spanFrom} to={spanTo} open={open} dots={dots} />}
         actions={shortcuts.map((x, i) => (
-          <Link key={x.key} href={x.href} className={coverAction(i === 0)} data-shortcut={x.key}>
+          <Link key={x.key} href={quickHref(slug, x.key)} className={coverAction(i === 0)} data-shortcut={x.key}>
             <x.icon className={COVER_ICON} />
             {x.label}
+            {/* The key that does the same from anywhere — a desk has a keyboard; a tablet usually does not. */}
+            <kbd className="rounded border border-current/30 px-1.5 py-px font-sans text-[10px] font-bold leading-none opacity-70 max-lg:hidden" data-shortcut-key>
+              {QUICK_KEYS[x.key].hint}
+            </kbd>
           </Link>
         ))}
       />
@@ -679,19 +685,15 @@ function Welcome({
         <div className="shrink-0 max-sm:hidden">{clock}</div>
       </div>
       {/*
-        The day's line beside the shortcuts on a desk. On a phone the line is
-        left out — the welcome stays slim so a doctor's list is on the first
-        screen (qa-connections) — but the shortcuts stay, as one row of tiles.
+        Not on a phone: there the welcome is one slim line, so a doctor's list
+        is on the first screen (qa-connections), and the tab bar already
+        reaches Appointments and Patients. On a desk, the day's line beside
+        the shortcuts.
       */}
-      <div className="mt-3.5 sm:mt-6 sm:flex sm:items-end sm:gap-6">
-        <div className="min-w-0 flex-1 max-sm:hidden">{strip}</div>
+      <div className="mt-6 flex items-end gap-6 max-sm:hidden">
+        <div className="min-w-0 flex-1">{strip}</div>
         {actions.length > 0 && (
-          <div
-            className={`grid gap-2 sm:flex sm:shrink-0 sm:flex-wrap sm:justify-end ${
-              actions.length >= 4 ? "grid-cols-4" : actions.length === 3 ? "grid-cols-3" : actions.length === 2 ? "grid-cols-2" : "grid-cols-1"
-            }`}
-            data-shortcuts={actions.length}
-          >
+          <div className="flex shrink-0 flex-wrap justify-end gap-2" data-shortcuts={actions.length}>
             {actions}
           </div>
         )}
