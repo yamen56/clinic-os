@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
 import { useAutosave } from "@/lib/use-autosave";
-import { fmtDate, fmtDateTime, fmtMoney, fmtRelative, fmtTime } from "@/lib/dates";
+import { fmtDate, fmtDateOnly, fmtDateTime, fmtMoney, fmtRelative, fmtTime } from "@/lib/dates";
 import { inkOn } from "@/lib/contrast";
 import { formatPhone } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
@@ -68,7 +68,7 @@ import type { LetterRow } from "@/lib/medical-letters";
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
 import { FamilyCard } from "./family-card";
 import { ReferralPicker } from "@/components/referral-picker";
-import type { Family } from "@/lib/families";
+import { ageOn, type Family } from "@/lib/families";
 import { coverState } from "@/lib/insurance";
 import { addedByLabel, type AddedBy } from "@/lib/added-by";
 import { foldActivity } from "@/lib/patient-activity";
@@ -120,17 +120,24 @@ const FaceChartTab = dynamic(() => import("./face-chart-tab").then((m) => m.Face
   language, for every clinic. A dental clinic's chart holds the history live,
   so its copy wins; any other clinic reads the file's own.
 */
-function MedicalAlerts({ history }: { history: MedicalHistory }) {
+function MedicalAlerts({ history, onDark = false }: { history: MedicalHistory; onDark?: boolean }) {
   const { locale } = useI18n();
   const store = useOptionalDentalStore();
   return (
     <>
-      {medicalAlerts(store ? store.medical : history, locale).map((a) => (
-        <Badge key={a} status="danger">
-          <ShieldAlert className="h-3 w-3" />
-          {a}
-        </Badge>
-      ))}
+      {medicalAlerts(store ? store.medical : history, locale).map((a) =>
+        onDark ? (
+          <span key={a} className="inline-flex items-center gap-1 rounded-full bg-danger px-2.5 py-1 text-xs font-semibold text-white shadow-sm" data-cover-alert>
+            <ShieldAlert className="h-3.5 w-3.5" />
+            {a}
+          </span>
+        ) : (
+          <Badge key={a} status="danger">
+            <ShieldAlert className="h-3 w-3" />
+            {a}
+          </Badge>
+        )
+      )}
     </>
   );
 }
@@ -361,8 +368,15 @@ const storageKeyOf = (d: FieldDef) => d.storage_key ?? d.key.replace(/^patient\.
   make any of them longer. From a tablet up they are ordinary one-line buttons
   in a wrapping row.
 */
-const HEADER_ACTION =
-  "w-full max-sm:h-full max-sm:min-h-9 max-sm:gap-1.5 max-sm:px-2 max-sm:py-1.5 max-sm:whitespace-normal max-sm:text-center max-sm:leading-tight sm:w-auto";
+/*
+  The cover's actions (2026-11-28): on a phone a tile, icon over name, a thumb
+  tall, the name allowed two lines; from a tablet up a pill in a row. The lead
+  is solid white on the navy, the rest translucent — one style, one choice.
+*/
+const COVER_ACTION =
+  "flex min-h-[3.75rem] touch-manipulation flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2 text-center text-[0.75rem] font-semibold leading-tight transition-colors disabled:opacity-60 sm:min-h-10 sm:flex-row sm:gap-2 sm:rounded-full sm:px-4 sm:py-2 sm:text-[0.8125rem]";
+const COVER_LEAD = `${COVER_ACTION} bg-white text-night hover:bg-white/90`;
+const COVER_QUIET = `${COVER_ACTION} bg-white/[0.09] text-white ring-1 ring-inset ring-white/10 hover:bg-white/[0.16]`;
 
 
 export function PatientProfile(props: {
@@ -530,6 +544,8 @@ export function PatientProfile(props: {
     else toast(sent ? T.sent : T.saved);
   };
   const [menuOpen, setMenuOpen] = useState(false);
+  /** The details form, on a phone: folded to what it holds until asked for (2026-11-28). */
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
@@ -700,6 +716,95 @@ export function PatientProfile(props: {
   // `?tab=` is only a request: a tab this member cannot see opens the overview.
   const tab = tabs.some((x) => x.key === chosenTab) ? chosenTab : "overview";
 
+  /*
+    The cover's actions, in the order this member reaches for them: for a
+    doctor the prescription first, for the desk the booking. The first is the
+    one solid tile; the rest are quiet, so the cover has one thing to press.
+  */
+  const coverActions: { key: string; render: (cls: string) => React.ReactNode }[] = [];
+  const icon = "h-[18px] w-[18px] shrink-0 sm:h-4 sm:w-4";
+  if (caps.prescriptions) {
+    // Hovering starts loading the medicine list, in case the press beats the idle prefetch.
+    coverActions.push({
+      key: "rx",
+      render: (cls) => (
+        <button type="button" className={cls} onClick={() => openComposer()} onPointerEnter={() => void rxData.load()}>
+          <Pill className={icon} />
+          {t.prescriptions.quickAction}
+        </button>
+      ),
+    });
+  }
+  if (caps.calendar) {
+    coverActions.push({
+      key: "book",
+      render: (cls) => (
+        <Link href={`/c/${slug}/calendar?patient=${p.id}`} className={cls}>
+          <CalendarPlus className={icon} />
+          {t.patients.bookAppointment}
+        </Link>
+      ),
+    });
+  }
+  if (caps.prescriptions) {
+    coverActions.push({
+      key: "letter",
+      render: (cls) => (
+        <button type="button" className={cls} onClick={() => setLetterComposer({ draft: null })} onPointerEnter={() => void rxData.load()} data-letter-new>
+          <FileSignature className={icon} />
+          {t.letters.quickAction}
+        </button>
+      ),
+    });
+  }
+  // Sending through the platform is the Conversations section; the tel: link is not, and stays.
+  if ((p.phone_e164 || familyContact) && caps.conversations) {
+    coverActions.push({
+      key: "message",
+      render: (cls) => (
+        <button type="button" className={cls} onClick={openThread} disabled={opening} data-header-message>
+          <MessageCircle className={icon} />
+          {t.patients.message}
+        </button>
+      ),
+    });
+  }
+  /* The patient's own WhatsApp, for someone with no inbox to send from; beside Message it read as a second WhatsApp button (11-08), so it is in ⋯ then. */
+  if (waLink && !caps.conversations) {
+    coverActions.push({
+      key: "wa",
+      render: (cls) => (
+        <a href={waLink} target="_blank" rel="noreferrer" className={cls}>
+          <ExternalLink className={icon} />
+          {t.patients.whatsappOpen}
+        </a>
+      ),
+    });
+  }
+  if (p.phone_e164) {
+    coverActions.push({
+      key: "call",
+      render: (cls) => (
+        <a href={`tel:${p.phone_e164}`} className={cls}>
+          <PhoneIcon className={icon} />
+          {t.patients.call}
+        </a>
+      ),
+    });
+  }
+  if (caps.invoices) {
+    coverActions.push({
+      key: "invoice",
+      render: (cls) => (
+        <Link href={`/c/${slug}/invoices/new?patient=${p.id}`} className={cls}>
+          <ReceiptText className={icon} />
+          {t.patients.createInvoice}
+        </Link>
+      ),
+    });
+  }
+  const age = ageOn(p.birth_date ? String(p.birth_date).slice(0, 10) : null, props.today);
+
   return (
     <MaybeDental slug={slug} patientId={p.id} dental={props.dental} files={props.files} renderedAt={props.renderedAt}>
     <MaybeFace slug={slug} patientId={p.id} face={props.face} renderedAt={props.renderedAt}>
@@ -720,179 +825,112 @@ export function PatientProfile(props: {
       renderedAt={props.renderedAt}
       onTab={setTab}
     >
-      {/* Header */}
-      <div className="relative mb-5 flex flex-wrap items-start gap-4">
-        <Avatar name={p.full_name} size={52} color={p.status === "lead" ? "var(--color-st-pending-soft)" : undefined} ink={p.status === "lead" ? "var(--color-st-pending)" : undefined} />
-        {/*
-          At least 12rem before anything shares its line. With a basis of
-          zero, the row of actions took all the width it wanted and an iPad in
-          landscape squeezed the patient's name and number into a column one
-          word wide; now the actions wrap underneath instead. 12rem still fits
-          beside the avatar on the narrowest phone.
-
-          Room at the end on a phone for the ⋯ menu, which sits in the corner
-          there.
-        */}
-        <div className="min-w-0 flex-[1_1_12rem] max-sm:pe-10">
-          <div className="flex flex-wrap items-center gap-2.5">
+      {/*
+        The patient's cover (2026-11-28). Yamen: the file on a phone "is not
+        looking the best, and the colours are not coordinated, especially in
+        the light view" — six buttons in two styles under a plain header, the
+        same grey as the page behind them. Now who this is and what can be done
+        for them sit on the navy the front page's welcome wears, and the record
+        below stays on white cards: one dark thing, then the paper. The actions
+        are one style, the first of them solid for what this member came to do.
+      */}
+      <section
+        className="cover-art relative isolate mb-5 overflow-hidden rounded-card px-4 pb-4 pt-4 text-white ring-1 ring-white/5 sm:px-6 sm:pb-5 sm:pt-5"
+        data-patient-cover
+      >
+        <div className="flex items-start gap-3.5 pe-10 sm:gap-4">
+          {/* White on the navy, not the list's grey disc; a lead keeps its amber. */}
+          <Avatar
+            name={p.full_name}
+            size={56}
+            color={p.status === "lead" ? "var(--color-st-pending-soft)" : "rgb(255 255 255 / 0.12)"}
+            ink={p.status === "lead" ? "var(--color-st-pending)" : "#ffffff"}
+          />
+          <div className="min-w-0 flex-1">
             <input
-              className="min-w-40 max-w-full rounded-md border border-transparent bg-transparent text-xl font-semibold tracking-tight outline-none transition-colors hover:border-line focus:border-brand-500 focus:bg-surface"
+              className="w-full min-w-0 rounded-md border border-transparent bg-transparent font-display text-[1.375rem] font-bold leading-tight tracking-tight text-white outline-none transition-colors hover:border-white/20 focus:border-white/40 focus:bg-white/10 sm:text-[1.625rem]"
               value={p.full_name}
               onChange={(e) => set({ full_name: e.target.value })}
               aria-label={t.patients.fullName}
             />
-            {p.status === "lead" && <Badge status="pending">{t.patients.statusLead}</Badge>}
-            {p.status === "archived" && <Badge status="cancelled">{t.patients.statusArchived}</Badge>}
+            {/* Who, in two short lines: the file and the age, then how they are reached. */}
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[0.8125rem] text-white/70 empty:hidden [&>*+*]:before:me-2 [&>*+*]:before:text-white/35 [&>*+*]:before:content-['·']">
+              {p.file_no != null && (
+                <span className="font-semibold text-white tnum" data-file-no={p.file_no}>
+                  {t.devices.fileNo.replace("{n}", String(p.file_no))}
+                </span>
+              )}
+              {age !== null && <span className="tnum">{t.family.age.replace("{n}", String(age))}</span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 text-[0.8125rem] text-white/70 empty:hidden">
+              {p.phone_e164 && <span className="num tnum">{formatPhone(p.phone_e164)}</span>}
+              {/* No number of their own: whose number they are reached on (0127). */}
+              {!p.phone_e164 && familyContact && (
+                <span data-header-reach>{t.family.viaContact.replace("{name}", familyContact.name)}</span>
+              )}
+              {p.secondary_phone_e164 && <span className="num tnum text-white/55">{formatPhone(p.secondary_phone_e164)}</span>}
+              {p.extra_phones?.map((ph) => (
+                <span key={ph} className="num tnum text-white/55">{formatPhone(ph)}</span>
+              ))}
+            </div>
             {/*
-              Said in the header rather than only on the tab that sets it.
-              Whoever is about to build a recall list, or wondering why this
-              person never got their reminder, has to be able to see it without
-              going looking for it.
+              What must be known before anything is done — the allergy, in solid
+              red — then who covers them and how the clinic treats them. Light
+              chips on the navy, like labels on a folder.
             */}
-            {p.automation_opt_out && (
-              <Badge status="neutral">
-                <BellOff className="h-3 w-3" />
-                {t.patients.automations.muted}
-              </Badge>
-            )}
-            {/*
-              Who covers them, in the header, because "is this patient insured"
-              is asked before anything else at the desk — and lapsed cover in
-              red, because finding out after the claim is the expensive way.
-            */}
-            {insurerName && (
-              <Badge status={cover === "expired" ? "danger" : cover === "expiring" ? "pending" : "brand"}>
-                {cover === "expired" || cover === "expiring" ? (
-                  <ShieldAlert className="h-3 w-3" />
-                ) : (
-                  <ShieldCheck className="h-3 w-3" />
-                )}
-                {insurerName}
-                {cover === "expired" ? ` · ${t.insurers.card.expiredShort}` : ""}
-              </Badge>
-            )}
-            <MedicalAlerts history={medical} />
-            <SaveIndicator state={state} />
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5 empty:hidden" data-cover-flags>
+              <MedicalAlerts history={medical} onDark />
+              <SaveIndicator state={state} tone="dark" />
+              {insurerName && (
+                <Badge status={cover === "expired" ? "danger" : cover === "expiring" ? "pending" : "brand"}>
+                  {cover === "expired" || cover === "expiring" ? <ShieldAlert className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+                  {insurerName}
+                  {cover === "expired" ? ` · ${t.insurers.card.expiredShort}` : ""}
+                </Badge>
+              )}
+              {p.status === "lead" && <Badge status="pending">{t.patients.statusLead}</Badge>}
+              {p.status === "archived" && <Badge status="cancelled">{t.patients.statusArchived}</Badge>}
+              {/* Said here, so whoever wonders why this patient got no reminder sees it at once. */}
+              {p.automation_opt_out && (
+                <Badge status="neutral">
+                  <BellOff className="h-3 w-3" />
+                  {t.patients.automations.muted}
+                </Badge>
+              )}
+            </div>
+            <TagsRow
+              slug={slug}
+              patientId={p.id}
+              tags={p.tags}
+              known={props.clinicTags}
+              onChange={(tags) => setP((prev) => ({ ...prev, tags }))}
+              onDark
+            />
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8125rem] text-ink-500">
-            {p.file_no != null && (
-              <span className="font-semibold text-ink-700 tnum" data-file-no={p.file_no}>
-                {t.devices.fileNo.replace("{n}", String(p.file_no))}
-              </span>
-            )}
-            {p.phone_e164 && <span className="num tnum">{formatPhone(p.phone_e164)}</span>}
-            {/* No number of their own: whose number they are reached on (0127). */}
-            {!p.phone_e164 && familyContact && (
-              <span data-header-reach>{t.family.viaContact.replace("{name}", familyContact.name)}</span>
-            )}
-            {p.secondary_phone_e164 && (
-              <span className="num tnum text-ink-400">{formatPhone(p.secondary_phone_e164)}</span>
-            )}
-            {p.extra_phones?.map((ph) => (
-              <span key={ph} className="num tnum text-ink-400">{formatPhone(ph)}</span>
-            ))}
-          </div>
-          <TagsRow
-            slug={slug}
-            patientId={p.id}
-            tags={p.tags}
-            known={props.clinicTags}
-            onChange={(tags) => setP((prev) => ({ ...prev, tags }))}
-          />
         </div>
-        {/*
-          Five actions in a row that would not wrap: on a phone they ran to 722
-          pixels and took the whole page sideways with them. The header above
-          already wraps; this did not, and adding the Message button made a
-          long-standing overflow impossible to miss.
-        */}
-        {/*
-          On a phone the actions are an even two-column grid, every button the
-          same width, rather than a row that wraps wherever the labels happen
-          to end — with six of them that left rows of three, two and one. An
-          odd one out at the end spans both columns. The ⋯ menu leaves the grid
-          for the header's corner, where a phone expects it. From a tablet up
-          they are one wrapping row, as before.
 
-          See HEADER_ACTION for why a label may take two lines on a phone.
+        {/*
+          Tiles on a phone, three to a row (two when there are four), each an
+          icon over its name and a thumb tall; a row of pills from a tablet up.
         */}
-        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center [&>*:nth-last-child(2):nth-child(odd)]:col-span-2">
-          {/* First in the row: for a doctor it is the thing they came to the
-              file to do. Hovering starts loading the medicine list, in case
-              the press beats the idle prefetch. */}
-          {caps.prescriptions && (
-            <Button
-              variant="soft"
-              size="sm"
-              className={HEADER_ACTION}
-              onClick={() => openComposer()}
-              onPointerEnter={() => void rxData.load()}
+        <div
+          className={`mt-4 grid gap-2 sm:flex sm:flex-wrap sm:items-center ${coverActions.length === 4 || coverActions.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}
+          data-cover-actions={coverActions.length}
+        >
+          {coverActions.map((x, i) => (
+            <Fragment key={x.key}>{x.render(i === 0 ? COVER_LEAD : COVER_QUIET)}</Fragment>
+          ))}
+        </div>
+        {/* The ⋯ menu, in the cover's corner: a child of the cover, not of the row of actions. */}
+        <div className="absolute end-2 top-2 sm:end-3 sm:top-3">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label={t.common.actions}
+              className="grid h-10 w-10 touch-manipulation place-items-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white"
             >
-              <Pill className="h-4 w-4" />
-              {t.prescriptions.quickAction}
-            </Button>
-          )}
-          {caps.prescriptions && (
-            <Button
-              variant="soft"
-              size="sm"
-              className={HEADER_ACTION}
-              onClick={() => setLetterComposer({ draft: null })}
-              onPointerEnter={() => void rxData.load()}
-              data-letter-new
-            >
-              <FileSignature className="h-4 w-4" />
-              {t.letters.quickAction}
-            </Button>
-          )}
-          {/* Sending through the platform is the Conversations section; the
-              wa.me link and the tel: link beside it are not, and stay. */}
-          {(p.phone_e164 || familyContact) && caps.conversations && (
-            <Button variant="soft" size="sm" className={HEADER_ACTION} onClick={openThread} disabled={opening} data-header-message>
-              <MessageCircle className="h-4 w-4" />
-              {t.patients.message}
-            </Button>
-          )}
-          {/* The patient's own WhatsApp, for a call or a look — not the way to
-              send, which is the button beside it. Beside Message it read as a
-              second WhatsApp button (the 11-08 audit), so it lives in the ⋯
-              menu then; here only for someone who has no inbox to send from. */}
-          {waLink && !caps.conversations && (
-            <a
-              href={waLink}
-              target="_blank"
-              rel="noreferrer"
-              className={buttonClass({ variant: "outline", size: "sm", className: HEADER_ACTION })}
-            >
-              <ExternalLink className="h-4 w-4" />
-              {t.patients.whatsappOpen}
-            </a>
-          )}
-          {p.phone_e164 && (
-            <a
-              href={`tel:${p.phone_e164}`}
-              className={buttonClass({ variant: "outline", size: "sm", className: HEADER_ACTION })}
-            >
-              <PhoneIcon className="h-4 w-4" />
-              {t.patients.call}
-            </a>
-          )}
-          {caps.calendar && (
-            <Link href={`/c/${slug}/calendar?patient=${p.id}`} className={buttonClass({ variant: "outline", size: "sm", className: HEADER_ACTION })}>
-              <CalendarPlus className="h-4 w-4" />
-              {t.patients.bookAppointment}
-            </Link>
-          )}
-          {caps.invoices && (
-            <Link href={`/c/${slug}/invoices/new?patient=${p.id}`} className={buttonClass({ variant: "outline", size: "sm", className: HEADER_ACTION })}>
-              <ReceiptText className="h-4 w-4" />
-              {t.patients.createInvoice}
-            </Link>
-          )}
-          <div className="relative max-sm:absolute max-sm:end-0 max-sm:top-0">
-            <Button variant="ghost" size="icon" onClick={() => setMenuOpen((v) => !v)} aria-label={t.common.actions}>
               <MoreVertical className="h-4.5 w-4.5" />
-            </Button>
+            </button>
             {menuOpen && (
               <div className="absolute end-0 top-10 z-30 w-52 rounded-card border border-line bg-surface p-1.5 shadow-pop animate-fade-up">
                 {waLink && caps.conversations && (
@@ -950,8 +988,7 @@ export function PatientProfile(props: {
               </div>
             )}
           </div>
-        </div>
-      </div>
+      </section>
 
       {visitNow && (
         <VisitBanner key={visitNow.id} slug={slug} tz={tz} patientId={p.id} visit={visitNow} patientName={p.full_name} canFlow={caps.calendar} />
@@ -979,8 +1016,37 @@ export function PatientProfile(props: {
               <div className="max-lg:order-1">
                 <PatientMedical tz={tz} history={medical} onSave={saveMedical} />
               </div>
-              <Card className="p-5 max-lg:order-5">
-                <h3 className="mb-4 text-[0.9375rem] font-semibold">{t.patients.overview.details}</h3>
+              <Card className="p-4 max-lg:order-5 sm:p-5" data-details={detailsOpen ? "open" : "folded"}>
+                <div className="mb-3 flex items-center justify-between gap-2 sm:mb-4">
+                  <h3 className="text-[0.9375rem] font-semibold">{t.patients.overview.details}</h3>
+                  {/* On a phone the form folds behind this: the doctor reads the file far more than they edit it. */}
+                  <Button variant="ghost" size="sm" className="sm:hidden" onClick={() => setDetailsOpen((v) => !v)} aria-expanded={detailsOpen} data-details-toggle>
+                    {detailsOpen ? t.common.done : t.patients.overview.editDetails}
+                  </Button>
+                </div>
+                {/*
+                  Folded, on a phone: what the form holds, read — not seven empty
+                  boxes to scroll past (2026-11-28). The form is a tap away.
+                */}
+                {!detailsOpen && (
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:hidden" data-details-summary>
+                    {[
+                      [defLabel("patient.phone", t.patients.phone), p.phone_e164 ? <span className="num tnum">{formatPhone(p.phone_e164)}</span> : null],
+                      [defLabel("patient.birth_date", t.patients.birthDate), p.birth_date ? `${fmtDateOnly(String(p.birth_date).slice(0, 10), locale)}${age !== null ? ` · ${t.family.age.replace("{n}", String(age))}` : ""}` : null],
+                      [defLabel("patient.gender", t.patients.gender), p.gender === "male" ? t.patients.male : p.gender === "female" ? t.patients.female : null],
+                      ...(nationalIdDef
+                        ? [[locale === "ar" ? nationalIdDef.label_ar || nationalIdDef.label : nationalIdDef.label, String(p.custom_fields?.[storageKeyOf(nationalIdDef)] ?? "") || null] as const]
+                        : []),
+                      [t.referral.label, p.referral_source ? [(t.referral.sources as Record<string, string>)[p.referral_source], p.referral_note].filter(Boolean).join(" · ") : null],
+                    ].map(([label, value], i) => (
+                      <div key={i} className="min-w-0">
+                        <dt className="text-[0.75rem] font-medium text-ink-500">{label}</dt>
+                        <dd className={`mt-0.5 truncate ${value ? "font-medium text-ink-900" : "text-ink-400"}`}>{value ?? "—"}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                <div className={detailsOpen ? "" : "max-sm:hidden"}>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={defLabel("patient.phone", t.patients.phone)}>
                     <PhoneInput
@@ -1115,6 +1181,7 @@ export function PatientProfile(props: {
                     </div>
                   </>
                 )}
+                </div>
                 {/*
                   Who opened this file, by name and job — the doctor or the
                   receptionist — rather than "staff". The source is still what
@@ -1126,7 +1193,7 @@ export function PatientProfile(props: {
                   opens, and who typed the patient in is not part of that
                   (Yamen, 2026-10-13).
                 */}
-                <p className="mt-5 border-t border-line pt-3 text-[0.75rem] text-ink-400" data-added-by={p.added_by ? "person" : p.source}>
+                <p className="mt-4 border-t border-line pt-3 text-[0.75rem] text-ink-500 sm:mt-5" data-added-by={p.added_by ? "person" : p.source}>
                   {p.added_by
                     ? (p.source === "import" ? t.patients.importedBy : t.patients.addedBy).replace("{name}", addedByLabel(p.added_by, t))
                     : (t.patients.sources as Record<string, string>)[p.source] ?? p.source}{" "}
@@ -1160,12 +1227,12 @@ export function PatientProfile(props: {
                 />
                 </div>
               )}
-              <Card className="p-5 max-lg:order-2">
-                <h3 className="mb-3 text-[0.9375rem] font-semibold">{t.patients.overview.summary}</h3>
+              <Card className="p-4 max-lg:order-2 sm:p-5">
+                <h3 className="mb-3 text-[0.9375rem] font-semibold text-ink-900">{t.patients.overview.summary}</h3>
                 <Textarea
                   defaultValue={p.notes_summary}
                   placeholder={t.patients.overview.summaryPlaceholder}
-                  className="min-h-28"
+                  className="min-h-20 sm:min-h-28"
                   onChange={(e) => patch({ notes_summary: e.target.value })}
                 />
               </Card>
@@ -1188,7 +1255,7 @@ export function PatientProfile(props: {
                 on the one control, rather than in the schema and every query
                 that reads it.
               */}
-              <Card className="p-5 max-lg:order-7">
+              <Card className="p-4 max-lg:order-7 sm:p-5">
                 <div className="flex items-start gap-3">
                   <Toggle
                     checked={!p.automation_opt_out}
@@ -1196,7 +1263,7 @@ export function PatientProfile(props: {
                     onChange={(v) => set({ automation_opt_out: !v })}
                   />
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-[0.8125rem] font-semibold text-ink-500">
+                    <h3 className="text-[0.9375rem] font-semibold text-ink-900">
                       {t.patients.automations.title}
                     </h3>
                     <p className="mt-1 text-[0.8125rem] text-ink-500">
@@ -1207,46 +1274,59 @@ export function PatientProfile(props: {
                   </div>
                 </div>
               </Card>
-              {/* What the patient owes is an Invoices figure, and the whole
-                  reason a clinic withholds that section is so that it is not on
-                  screen. A zero here would be worse than nothing: it is wrong,
-                  and it reads as fact. */}
-              {caps.invoices && (
-                <Card className="p-5 max-lg:order-3">
-                  <h3 className="text-[0.8125rem] font-semibold text-ink-500">{t.patients.overview.balanceDue}</h3>
-                  <div className={`mt-1 text-2xl font-semibold tnum ${props.balanceDue > 0 ? "text-st-pending" : ""}`}>
-                    {fmtMoney(props.balanceDue, currency, locale)}
-                  </div>
-                  {/* Paid off over the visits: what the patient hands over goes on the oldest invoices first. */}
-                  {/* Always mounted: it hides itself at nothing owed, and stays to offer the receipt of what it settled. */}
-                  <div className="mt-3 empty:hidden">
-                    <TakePayment slug={slug} patientId={p.id} balance={props.balanceDue} currency={currency} tz={tz} />
-                  </div>
-                </Card>
-              )}
-              {caps.calendar && (
-                <Card className="p-5 max-lg:order-4">
-                  <h3 className="text-[0.8125rem] font-semibold text-ink-500">{t.patients.overview.upcoming}</h3>
-                  {upcoming ? (
-                    <div className="spine mt-2 ps-3" style={{ "--spine-color": "var(--color-st-confirmed)" } as React.CSSProperties}>
-                      <div className="text-sm font-medium">
-                        {(locale === "ar" ? upcoming.service_name_ar : null) || upcoming.service_name || "—"}
+              {/*
+                What they owe and when they are next in, one card with a line
+                each (2026-11-28) — they were two boxes saying one short thing
+                apiece. What is owed is an Invoices figure, and the whole
+                reason a clinic withholds that section is so that it is not on
+                screen: without it the line is left out, never drawn as zero.
+              */}
+              {(caps.invoices || caps.calendar) && (
+                <Card className="max-lg:order-3">
+                  <div className="divide-y divide-line" data-glance>
+                    {caps.invoices && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:px-5" data-glance-balance>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-[0.75rem] font-semibold text-ink-500">{t.patients.overview.balanceDue}</h3>
+                          <div className={`mt-0.5 text-xl font-bold tnum ${props.balanceDue > 0 ? "text-st-pending" : "text-ink-900"}`}>
+                            {fmtMoney(props.balanceDue, currency, locale)}
+                          </div>
+                        </div>
+                        {/* Paid off over the visits: what the patient hands over goes on the oldest invoices first. */}
+                        {/* Always mounted: it hides itself at nothing owed, and stays to offer the receipt of what it settled. */}
+                        <div className="empty:hidden">
+                          <TakePayment slug={slug} patientId={p.id} balance={props.balanceDue} currency={currency} tz={tz} />
+                        </div>
                       </div>
-                      <div className="text-[0.8125rem] text-ink-500">
-                        {fmtDateTime(upcoming.starts_at, tz, locale)}
-                        {upcoming.doctor_name ? ` · ${upcoming.doctor_name}` : ""}
+                    )}
+                    {caps.calendar && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:px-5" data-glance-next>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-[0.75rem] font-semibold text-ink-500">{t.patients.overview.upcoming}</h3>
+                          {upcoming ? (
+                            <div className="mt-0.5">
+                              <div className="text-sm font-semibold text-ink-900">
+                                {(locale === "ar" ? upcoming.service_name_ar : null) || upcoming.service_name || "—"}
+                              </div>
+                              <div className="text-[0.8125rem] text-ink-500">
+                                {fmtDateTime(upcoming.starts_at, tz, locale)}
+                                {upcoming.doctor_name ? ` · ${upcoming.doctor_name}` : ""}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="mt-0.5 text-sm text-ink-500">{t.patients.overview.noUpcoming}</p>
+                          )}
+                        </div>
+                        {/* Nothing booked is the moment to book — here, where it is noticed. */}
+                        {!upcoming && (
+                          <Link href={`/c/${slug}/calendar?patient=${p.id}`} className={buttonClass({ variant: "soft", size: "sm" })} data-upcoming-book>
+                            <CalendarPlus className="h-4 w-4" />
+                            {t.patients.bookAppointment}
+                          </Link>
+                        )}
                       </div>
-                    </div>
-                  ) : (
-                    /* Nothing booked is the moment to book — here, where it is noticed. */
-                    <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm text-ink-400">{t.patients.overview.noUpcoming}</p>
-                      <Link href={`/c/${slug}/calendar?patient=${p.id}`} className={buttonClass({ variant: "soft", size: "sm" })} data-upcoming-book>
-                        <CalendarPlus className="h-4 w-4" />
-                        {t.patients.bookAppointment}
-                      </Link>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </Card>
               )}
               {/* Who they come with (0127): booked, reached and paid for together. */}
@@ -1262,8 +1342,8 @@ export function PatientProfile(props: {
                 canBook={caps.calendar}
                 canPay={caps.invoices}
               />
-              <Card className="p-5 max-lg:order-8">
-                <h3 className="mb-2 text-[0.8125rem] font-semibold text-ink-500">
+              <Card className="p-4 max-lg:order-8 sm:p-5">
+                <h3 className="mb-2.5 text-[0.9375rem] font-semibold text-ink-900">
                   {t.patients.overview.recentActivity}
                 </h3>
                 {props.activity.length === 0 ? (
@@ -1697,6 +1777,7 @@ function TagsRow({
   tags,
   known,
   onChange,
+  onDark = false,
 }: {
   slug: string;
   patientId: string;
@@ -1704,6 +1785,8 @@ function TagsRow({
   /** The clinic's catalogue: what to suggest, and what colour each tag wears. */
   known: { name: string; color: string }[];
   onChange: (tags: string[]) => void;
+  /** On the cover's navy: the add button in white ink. */
+  onDark?: boolean;
 }) {
   const { t } = useI18n();
   const [adding, setAdding] = useState(false);
@@ -1782,7 +1865,9 @@ function TagsRow({
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="inline-flex touch-manipulation items-center gap-1 rounded-full border border-dashed border-line-strong px-2.5 py-0.5 text-xs text-ink-400 transition-colors hover:border-brand-400 hover:text-brand-700 max-md:py-1.5"
+          className={`inline-flex touch-manipulation items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors max-md:py-1.5 ${
+            onDark ? "border-white/30 text-white/75 hover:border-white/60 hover:text-white" : "border-line-strong text-ink-400 hover:border-brand-400 hover:text-brand-700"
+          }`}
         >
           <Plus className="h-3 w-3" />
           {t.patients.addTag}

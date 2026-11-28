@@ -303,6 +303,24 @@
     A line that has just been added: a green wash that fades to nothing, so the
     eye finds it in a list without the list moving under the finger.
   */
+  /*
+    Recording a voice note (2026-11-28): the pill grows out of the mic button
+    the way WhatsApp's does, and the red dot breathes while it listens.
+  */
+  --animate-rec-in: rec-in 0.24s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  --animate-rec-dot: rec-dot 1.2s ease-in-out infinite;
+  @keyframes rec-in {
+    from {
+      opacity: 0;
+      transform: scaleX(0.7);
+    }
+  }
+  @keyframes rec-dot {
+    50% {
+      opacity: 0.45;
+      transform: scale(0.8);
+    }
+  }
   --animate-line-in: line-in 1.6s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   @keyframes line-in {
     0% { background-color: var(--color-st-confirmed-soft); box-shadow: 0 0 0 2px rgb(47 158 106 / 0.45); }
@@ -1016,6 +1034,25 @@ html[dir="rtl"] .doc-body-wrap .doc-title { font-family: var(--font-ar-display);
       radial-gradient(20rem 9rem at 34% -10%, rgb(226 232 240 / 0.6), rgb(148 163 184 / 0.2) 45%, transparent 72%),
       radial-gradient(26rem 10rem at 60% 120%, rgb(203 213 225 / 0.42), rgb(148 163 184 / 0.14) 45%, transparent 72%),
       radial-gradient(14rem 7rem at 20% 105%, rgb(251 191 36 / 0.1), transparent 70%);
+  }
+}
+
+/*
+  The patient's cover (2026-11-28): the welcome's navy, quieter — one glow
+  past the name's corner, a fainter one rising under the actions. A working
+  page, not a greeting, so no warm rim. Navy in both themes, like the welcome.
+*/
+@layer components {
+  .cover-art {
+    background-color: var(--color-night);
+    background-image:
+      radial-gradient(18rem 8rem at 86% -25%, rgb(226 232 240 / 0.26), rgb(148 163 184 / 0.08) 50%, transparent 72%),
+      radial-gradient(24rem 9rem at 18% 135%, rgb(203 213 225 / 0.16), transparent 72%);
+  }
+  [dir="rtl"] .cover-art {
+    background-image:
+      radial-gradient(18rem 8rem at 14% -25%, rgb(226 232 240 / 0.26), rgb(148 163 184 / 0.08) 50%, transparent 72%),
+      radial-gradient(24rem 9rem at 82% 135%, rgb(203 213 225 / 0.16), transparent 72%);
   }
 }
 

@@ -1202,6 +1202,7 @@ export const en = {
     },
     overview: {
       details: "Details",
+      editDetails: "Edit details",
       customFields: "Additional fields",
       summary: "Summary notes",
       summaryPlaceholder: "Important things to remember about this patient…",
@@ -2363,7 +2364,7 @@ export const en = {
   /* Families (0127). */
   family: {
     title: "Family",
-    none: "Not linked to a family. Link the parents and children who come together: one number then finds them all, and a child's messages reach their parent.",
+    none: "Link who comes together: one number finds them all, and a child's messages reach their parent.",
     add: "Add a family member",
     addTitle: "Add to {name}'s family",
     onFile: "Already a patient",

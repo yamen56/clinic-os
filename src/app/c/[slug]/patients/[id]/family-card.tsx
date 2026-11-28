@@ -74,10 +74,10 @@ export function FamilyCard({
 
   return (
     <div className={className} data-family={members.length}>
-      <Card className="p-5">
+      <Card className="p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-500">
-            <Users className="h-4 w-4" />
+          <h3 className="flex items-center gap-1.5 text-[0.9375rem] font-semibold text-ink-900">
+            <Users className="h-4 w-4 text-ink-500" />
             {F.title}
           </h3>
           <Button size="sm" variant="soft" onClick={() => setAdding(true)} data-family-add>

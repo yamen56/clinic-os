@@ -93,6 +93,8 @@ export function TeamClient({
   const [text, setText] = useState("");
   const [sheet, setSheet] = useState<null | "new" | "settings">(null);
   const [replyTo, setReplyTo] = useState<TeamQuote | null>(null);
+  /** A voice note being recorded: the text box steps aside for it, as WhatsApp's does. */
+  const [recording, setRecording] = useState(false);
   const [editing, setEditing] = useState<Local | null>(null);
   const [menuFor, setMenuFor] = useState<Local | null>(null);
   const [forwarding, setForwarding] = useState<Local | null>(null);
@@ -1039,7 +1041,7 @@ export function TeamClient({
                   placeholder={T.write}
                   title={canMention ? T.mentionHint : undefined}
                   dir="auto"
-                  className="max-h-32 min-h-10 flex-1 resize-none rounded-2xl border border-line bg-sunken px-3 py-2 text-[1rem] outline-none focus:border-brand-400 sm:text-[0.875rem]"
+                  className={`max-h-32 min-h-10 flex-1 resize-none rounded-2xl border border-line bg-sunken px-3 py-2 text-[1rem] outline-none focus:border-brand-400 sm:text-[0.875rem] ${recording ? "hidden" : ""}`}
                   data-team-input
                 />
                 {text.trim() || editing ? (
@@ -1049,6 +1051,7 @@ export function TeamClient({
                 ) : (
                   <VoiceRecorder
                     immediate
+                    onRecording={setRecording}
                     onReady={(rec) => {
                       if (!rec || !openId) return;
                       const ext = rec.blob.type.includes("mp4") ? "m4a" : rec.blob.type.includes("ogg") ? "ogg" : "webm";

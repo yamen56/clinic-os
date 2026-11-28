@@ -31,7 +31,9 @@ const variants: Record<Variant, string> = {
   outline: "border border-line bg-surface text-ink-900 hover:bg-brand-50 hover:border-line-strong",
   ghost: "text-ink-700 hover:bg-sunken hover:text-ink-900",
   danger: "bg-danger text-white hover:bg-danger-hover",
-  soft: "bg-brand-100 text-brand-700 hover:bg-brand-200",
+  /* A tint with an edge (2026-11-28): the flat #e2e7ee fill was the page's own grey
+     on a white card, and read as a disabled patch rather than a button. */
+  soft: "bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-100",
 };
 
 const sizes: Record<Size, string> = {

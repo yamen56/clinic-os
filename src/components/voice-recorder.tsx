@@ -15,11 +15,22 @@ import { Mic, Square, Trash2, Play, Pause } from "lucide-react";
  * The microphone track is stopped explicitly when recording ends. Without it
  * the browser's recording indicator stays lit after the note is saved, which
  * reads — correctly — as "this page is still listening".
+ *
+ * While it records it looks the way people know from WhatsApp and Instagram
+ * (Yamen, 2026-11-28: "a nice animation like whatsapp and instagram"): a red
+ * dot that breathes, the time running, and a waveform that moves with the
+ * voice — read off the microphone itself, so a silent mic shows a flat line
+ * and the person knows before saving that nothing is being heard. A bin throws
+ * the recording away; stop keeps it.
  */
+const BARS = 26;
+const BAR_EVERY_MS = 75;
+
 export function VoiceRecorder({
   onReady,
   disabled,
   immediate,
+  onRecording,
   labels,
 }: {
   /** Called with the finished recording, or null when it is discarded. */
@@ -35,6 +46,8 @@ export function VoiceRecorder({
    * idle rather than into a preview it would never be read.
    */
   immediate?: boolean;
+  /** Told when recording starts and ends — a composer hides its text box meanwhile, as WhatsApp does. */
+  onRecording?: (on: boolean) => void;
   labels: {
     record: string;
     stop: string;
@@ -52,28 +65,87 @@ export function VoiceRecorder({
   const [seconds, setSeconds] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
+  /** The newest levels, one per bar, 0–1; and every level of the clip, for its waveform afterwards. */
+  const [levels, setLevels] = useState<number[]>(() => Array(BARS).fill(0));
+  const [peaks, setPeaks] = useState<number[]>([]);
+  const [played, setPlayed] = useState(0);
 
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const stream = useRef<MediaStream | null>(null);
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
+  const listen = useRef<{ ctx: AudioContext; raf: number } | null>(null);
+  const all = useRef<number[]>([]);
+  const cancelled = useRef(false);
+  const told = useRef(onRecording);
+  told.current = onRecording;
 
   useEffect(() => {
     if (typeof window !== "undefined" && !("MediaRecorder" in window)) setState("unsupported");
   }, []);
+
+  useEffect(() => told.current?.(state === "recording"), [state]);
+
+  const stopListening = () => {
+    if (!listen.current) return;
+    cancelAnimationFrame(listen.current.raf);
+    void listen.current.ctx.close().catch(() => {});
+    listen.current = null;
+  };
 
   // Release the microphone and the object URL whichever way this unmounts —
   // navigating away mid-recording must not leave the mic open.
   useEffect(() => {
     return () => {
       if (tick.current) clearInterval(tick.current);
+      cancelled.current = true;
       recorder.current?.state === "recording" && recorder.current.stop();
       stream.current?.getTracks().forEach((t) => t.stop());
+      stopListening();
       if (url) URL.revokeObjectURL(url);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
+
+  /*
+    The waveform: how loud the microphone is, sampled a dozen times a second,
+    each new reading pushing the oldest bar off the end. No analyser (an old
+    browser, a blocked AudioContext) only means a quiet line; the recording
+    itself does not depend on it.
+  */
+  const startListening = (s: MediaStream) => {
+    try {
+      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.4;
+      ctx.createMediaStreamSource(s).connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+      let last = 0;
+      const loop = (now: number) => {
+        if (!listen.current) return;
+        listen.current.raf = requestAnimationFrame(loop);
+        if (now - last < BAR_EVERY_MS) return;
+        last = now;
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) {
+          const x = (buf[i] - 128) / 128;
+          sum += x * x;
+        }
+        // Speech sits around 0.02–0.2 RMS; lifted and capped so a normal voice fills the bar.
+        const level = Math.min(1, Math.sqrt(sum / buf.length) * 5);
+        all.current.push(level);
+        setLevels((prev) => [...prev.slice(1), level]);
+      };
+      listen.current = { ctx, raf: requestAnimationFrame(loop) };
+    } catch {
+      listen.current = null;
+    }
+  };
 
   const start = async () => {
     try {
@@ -92,11 +164,23 @@ export function VoiceRecorder({
       stream.current = s;
       const mr = new MediaRecorder(s);
       chunks.current = [];
+      cancelled.current = false;
+      all.current = [];
+      setLevels(Array(BARS).fill(0));
       mr.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
       mr.onstop = () => {
-        const blob = new Blob(chunks.current, { type: mr.mimeType || "audio/webm" });
         stream.current?.getTracks().forEach((t) => t.stop());
         stream.current = null;
+        stopListening();
+        // Thrown away with the bin: nothing is handed on, and nothing is kept.
+        if (cancelled.current) {
+          chunks.current = [];
+          setSeconds(0);
+          elapsed.current = 0;
+          setState("idle");
+          return;
+        }
+        const blob = new Blob(chunks.current, { type: mr.mimeType || "audio/webm" });
         // Read the count off the ref rather than the closure: `seconds` here
         // would be whatever it was when recording started, which is zero.
         const rec = { blob, seconds: elapsed.current };
@@ -111,6 +195,8 @@ export function VoiceRecorder({
           return;
         }
 
+        setPeaks(squeeze(all.current, 32));
+        setPlayed(0);
         setUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return URL.createObjectURL(blob);
@@ -123,6 +209,7 @@ export function VoiceRecorder({
       elapsed.current = 0;
       setSeconds(0);
       setState("recording");
+      startListening(s);
       tick.current = setInterval(() => {
         elapsed.current += 1;
         setSeconds(elapsed.current);
@@ -147,6 +234,12 @@ export function VoiceRecorder({
     if (tick.current) clearInterval(tick.current);
     tick.current = null;
     recorder.current?.state === "recording" && recorder.current.stop();
+  };
+
+  /** The bin while recording: stop, and keep nothing. */
+  const cancel = () => {
+    cancelled.current = true;
+    stop();
   };
 
   const discard = () => {
@@ -194,30 +287,40 @@ export function VoiceRecorder({
     );
   }
 
+  /* Recorded and kept for a listen first: the clip's own waveform, filling in as it plays. */
   if (state === "ready" && url) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="inline-flex h-11 items-center gap-2 rounded-full bg-surface pe-1 ps-1 shadow-card ring-1 ring-line animate-fade-in" data-voice-ready>
         <audio
           ref={audio}
           src={url}
-          onEnded={() => setPlaying(false)}
+          onEnded={() => {
+            setPlaying(false);
+            setPlayed(0);
+          }}
           onPause={() => setPlaying(false)}
           onPlay={() => setPlaying(true)}
+          onTimeUpdate={(e) => {
+            const a = e.currentTarget;
+            setPlayed(a.duration && Number.isFinite(a.duration) ? a.currentTime / a.duration : 0);
+          }}
           className="hidden"
         />
         <button
           type="button"
           onClick={() => (playing ? audio.current?.pause() : audio.current?.play())}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-brand-50 px-3 text-[0.8125rem] font-medium text-brand-700"
+          aria-label={playing ? "Pause" : "Play"}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-on-brand transition-transform active:scale-95"
         >
-          {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          <span className="tnum">{mmss(seconds)}</span>
+          {playing ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current rtl:rotate-180" />}
         </button>
+        <Wave levels={peaks.length ? peaks : Array(32).fill(0.15)} filled={played} tone="brand" />
+        <span className="w-10 shrink-0 text-[0.75rem] font-medium text-ink-500 tnum">{mmss(seconds)}</span>
         <button
           type="button"
           onClick={discard}
           aria-label={labels.discard}
-          className="text-ink-400 transition-colors hover:text-danger"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-400 transition-colors hover:bg-danger-soft hover:text-danger"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -227,18 +330,38 @@ export function VoiceRecorder({
 
   if (state === "recording") {
     return (
-      <button
-        type="button"
-        onClick={stop}
-        className="inline-flex h-8 items-center gap-2 rounded-full bg-danger-soft px-3 text-[0.8125rem] font-medium text-danger"
+      <div
+        className="inline-flex h-11 w-full min-w-0 max-w-full origin-right items-center gap-2 rounded-full bg-surface pe-1 ps-1 shadow-card ring-1 ring-danger/25 animate-rec-in rtl:origin-left sm:w-auto"
+        role="status"
+        aria-live="polite"
+        data-voice-recording
       >
-        <Square className="h-3.5 w-3.5 fill-current" />
-        {/* The dot is what makes "recording" read at a glance; the clock is what
-            makes it read precisely. */}
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-danger" />
-        <span className="tnum">{mmss(seconds)}</span>
-        <span className="sr-only">{labels.stop}</span>
-      </button>
+        <button
+          type="button"
+          onClick={cancel}
+          aria-label={labels.discard}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-500 transition-colors hover:bg-danger-soft hover:text-danger"
+          data-voice-cancel
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+        {/* The dot that breathes, with a ring going out from it — what says "recording" at a glance. */}
+        <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden>
+          <span className="absolute inline-flex h-full w-full rounded-full bg-danger opacity-60 motion-safe:animate-ping" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-danger motion-safe:animate-rec-dot" />
+        </span>
+        <span className="w-10 shrink-0 text-[0.8125rem] font-semibold text-ink-900 tnum">{mmss(seconds)}</span>
+        <Wave levels={levels} tone="live" />
+        <button
+          type="button"
+          onClick={stop}
+          aria-label={labels.stop}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-danger text-white shadow-sm transition-transform active:scale-95"
+          data-voice-stop
+        >
+          <Square className="h-3.5 w-3.5 fill-current" />
+        </button>
+      </div>
     );
   }
 
@@ -247,10 +370,44 @@ export function VoiceRecorder({
       type="button"
       onClick={start}
       disabled={disabled}
-      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.8125rem] font-medium text-ink-700 transition-colors hover:border-brand-500 hover:text-brand-700 disabled:opacity-40"
+      className="inline-flex h-10 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3.5 text-[0.8125rem] font-medium text-ink-700 transition-colors hover:border-brand-500 hover:text-brand-700 active:scale-[0.98] disabled:opacity-40 sm:h-9"
+      data-voice-record
     >
-      <Mic className="h-3.5 w-3.5" />
+      <Mic className="h-4 w-4" />
       {labels.record}
     </button>
   );
+}
+
+/**
+ * Bars for a level each, centred on a line, like WhatsApp's. `live` is the
+ * microphone as it is now — red, each bar easing to its height; otherwise the
+ * clip's own shape, navy up to how much has played.
+ */
+function Wave({ levels, tone, filled = 0 }: { levels: number[]; tone: "live" | "brand"; filled?: number }) {
+  return (
+    <span className="flex h-7 min-w-0 flex-1 items-center gap-[3px] overflow-hidden" aria-hidden data-voice-wave>
+      {levels.map((l, i) => (
+        <span
+          key={i}
+          className={`w-[3px] shrink-0 rounded-full transition-[height,background-color] duration-100 ease-out ${
+            tone === "live" ? "bg-danger/75" : i / levels.length < filled ? "bg-brand-600" : "bg-ink-300"
+          }`}
+          style={{ height: `${Math.max(3, Math.round(l * 26))}px` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** A long run of levels as `n` bars: each bar the loudest of its stretch, so short peaks still show. */
+function squeeze(xs: number[], n: number): number[] {
+  if (!xs.length) return [];
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const from = Math.floor((i * xs.length) / n);
+    const to = Math.max(from + 1, Math.floor(((i + 1) * xs.length) / n));
+    out.push(Math.max(...xs.slice(from, to)));
+  }
+  return out;
 }

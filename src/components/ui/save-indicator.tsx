@@ -4,9 +4,11 @@ import { useI18n } from "@/lib/i18n/client";
 import type { SaveState } from "@/lib/use-autosave";
 import { Check, CloudOff, AlertTriangle } from "lucide-react";
 
-export function SaveIndicator({ state }: { state: SaveState }) {
+/** `tone="dark"`: on a navy surface (the patient's cover), where the status colours would not read. */
+export function SaveIndicator({ state, tone = "light" }: { state: SaveState; tone?: "light" | "dark" }) {
   const { t } = useI18n();
-  if (state === "idle") return <span className="h-5" />;
+  // On the cover nothing holds its place: an empty row there would still take a line.
+  if (state === "idle") return tone === "dark" ? null : <span className="h-5" />;
   const map = {
     saving: {
       icon: <span className="slim-progress w-6 rounded-full" />,
@@ -36,7 +38,7 @@ export function SaveIndicator({ state }: { state: SaveState }) {
     },
   }[state];
   return (
-    <span className={`inline-flex h-5 items-center gap-1.5 text-xs font-medium ${map.cls}`}>
+    <span className={`inline-flex h-5 items-center gap-1.5 text-xs font-medium ${tone === "dark" ? (state === "rejected" ? "text-white" : "text-white/75") : map.cls}`}>
       {map.icon}
       {map.text}
     </span>

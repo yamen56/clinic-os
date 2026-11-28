@@ -319,10 +319,10 @@ async function main() {
     const playersBefore = await players();
 
     await p.getByRole("button", { name: /^Record$|^تسجيل$/ }).click();
-    await p.locator("main button.bg-danger-soft").first().waitFor({ timeout: 20000 });
+    await p.locator("main [data-voice-stop]").first().waitFor({ timeout: 20000 });
     // Long enough to clear the under-a-second mis-tap guard.
     await p.waitForTimeout(1800);
-    await p.locator("main button.bg-danger-soft").first().click();
+    await p.locator("main [data-voice-stop]").first().click();
 
     await p
       .waitForFunction(
