@@ -324,52 +324,6 @@ async function sendOwnerInvite(
 }
 
 /**
- * Re-issues the owner's invitation, invalidating any previous link.
- *
- * The counterpart to a send that silently failed — a bounced address, a mail
- * provider that was not configured yet, an owner who let the seven days lapse.
- * Without this the only remedy was recreating the clinic.
- */
-export async function resendOwnerInviteAction(
-  clinicId: string
-): Promise<{ error?: string; url?: string; emailed?: boolean }> {
-  const s = await requireAdminCap("clinics.edit");
-  const owner = await withSystem(async (c) => {
-    const r = await c.query(
-      `select u.id, u.email, u.full_name, u.password_hash
-         from clinic_members cm join users u on u.id = cm.user_id
-        where cm.clinic_id = $1 and cm.is_owner
-        order by cm.created_at limit 1`,
-      [clinicId]
-    );
-    return r.rows[0] as
-      | { id: string; email: string; full_name: string; password_hash: string | null }
-      | undefined;
-  });
-  if (!owner) return { error: "no_owner" };
-  // An owner who has already chosen a password does not need an invitation, and
-  // issuing one would be a password-reset link nobody asked for.
-  if (owner.password_hash) return { error: "already_active" };
-
-  const { url, emailed } = await sendOwnerInvite(
-    clinicId,
-    owner.id,
-    owner.email,
-    owner.full_name,
-    s.user.id
-  );
-  revalidatePath("/admin");
-  /*
-    The link comes back whether or not the mail was accepted, which differs from
-    the staff invitation on purpose. Only a super admin can reach this, and they
-    can impersonate the owner regardless, so it discloses nothing they did not
-    already have — while an owner who never received the email is a support call
-    that otherwise has no answer. In practice the agency sends it on WhatsApp.
-  */
-  return { emailed, url };
-}
-
-/**
  * The billing side of a clinic: its status, price and dates, and the agency's
  * own note. The plan itself is `setClinicPlanAction`, because changing it
  * changes what the clinic can do and has consequences to report back.

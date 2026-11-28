@@ -183,11 +183,6 @@ const FEATURE_CAPS: Record<Feature, Capability[]> = {
   branding: [],
 };
 
-/** What the new-clinic form starts from: everything except the opt-ins. */
-export function allFeatures(): FeatureMap {
-  return Object.fromEntries(FEATURES.map((f) => [f, !OPT_IN_FEATURES.has(f)])) as FeatureMap;
-}
-
 /**
  * Reads `clinics.features` into a complete map.
  *

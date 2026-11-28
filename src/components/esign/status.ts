@@ -14,10 +14,3 @@ export const DOC_STATUS_BADGE: Record<string, StatusKey> = {
   expired: "no_show",
   voided: "cancelled",
 };
-
-export const SIGNER_STATUS_BADGE: Record<string, StatusKey> = {
-  pending: "neutral",
-  viewed: "scheduled",
-  signed: "confirmed",
-  declined: "cancelled",
-};

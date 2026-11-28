@@ -49,11 +49,6 @@ export function dayRangeUtc(tz: string, day?: string): { start: string; end: str
   };
 }
 
-export function weekRangeUtc(tz: string, offsetWeeks = 0): { start: string; end: string } {
-  const start = DateTime.now().setZone(tz).startOf("week").plus({ weeks: offsetWeeks });
-  return { start: start.toUTC().toISO()!, end: start.plus({ weeks: 1 }).toUTC().toISO()! };
-}
-
 export function monthRangeUtc(tz: string, offsetMonths = 0): { start: string; end: string } {
   const start = DateTime.now().setZone(tz).startOf("month").plus({ months: offsetMonths });
   return { start: start.toUTC().toISO()!, end: start.plus({ months: 1 }).toUTC().toISO()! };
@@ -109,11 +104,6 @@ export function fmtDate(iso: string | Date, tz: string, locale: string): string 
 export function fmtDateOnly(d: string | Date, locale: string): string {
   const dt = typeof d === "string" ? DateTime.fromISO(d.slice(0, 10)) : DateTime.fromJSDate(d);
   return dt.setLocale(numLocale(locale)).toFormat("d LLL yyyy");
-}
-
-/** Today in the clinic, spelled out — "Monday 5 October" — for a page that is about today. */
-export function fmtLongToday(tz: string, locale: string): string {
-  return clinicNow(tz).setLocale(numLocale(locale)).toFormat("cccc d LLLL");
 }
 
 /**

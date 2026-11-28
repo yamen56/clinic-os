@@ -67,6 +67,7 @@ import { LetterComposer, type LetterDraft } from "./letter-composer";
 import type { LetterRow } from "@/lib/medical-letters";
 import { InsuranceCard, type InsurerOption, type PatientClaim } from "./insurance-card";
 import { FamilyCard } from "./family-card";
+import { ReferralPicker } from "@/components/referral-picker";
 import type { Family } from "@/lib/families";
 import { coverState } from "@/lib/insurance";
 import { addedByLabel, type AddedBy } from "@/lib/added-by";
@@ -297,6 +298,9 @@ type Patient = {
   custom_fields: Record<string, unknown>;
   insurer_id: string | null;
   insurance_no: string;
+  /** Where they came from (0128), and who referred them. */
+  referral_source: string | null;
+  referral_note: string | null;
   insurance_valid_until: string | null;
   /** The same date as text, yyyy-MM-dd — what every comparison and input uses. */
   cover_until: string | null;
@@ -1027,6 +1031,13 @@ export function PatientProfile(props: {
                       />
                     </Field>
                   )}
+                  {/* Where they came from (0128) — counted on the analytics page. */}
+                  <ReferralPicker
+                    source={p.referral_source}
+                    note={p.referral_note}
+                    onSource={(v) => set({ referral_source: v })}
+                    onNote={(v) => patch({ referral_note: v })}
+                  />
                 </div>
                 {extraDefs.length > 0 && (
                   <>

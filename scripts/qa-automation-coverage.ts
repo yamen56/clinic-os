@@ -314,9 +314,10 @@ async function main() {
   check(
     "a new clinic starts with exactly what the worker used to hardcode",
     seeded.rowCount === DEFAULT_STAFF_ALERTS.length &&
-      seeded.rows[0].kind === "appointment_reminder" &&
-      seeded.rows[0].minutes_before === null &&
-      seeded.rows[2].at_hour === 20,
+      seeded.rows[0].kind === "patient_message" &&
+      seeded.rows[1].kind === "appointment_reminder" &&
+      seeded.rows[1].minutes_before === null &&
+      seeded.rows[3].at_hour === 20,
     `${seeded.rowCount} rows`
   );
 
@@ -459,8 +460,9 @@ async function main() {
     `select specialty, count(*)::int n from recipe_templates where active group by specialty`
   );
   check(
-    "the library has a general set and per-field packs",
-    packs.rows.length > 1 && packs.rows.some((r) => r.specialty === "dental"),
+    "the library offers the general set, and of the field packs only psychiatry's discreet reminder (retired 2026-11-27)",
+    packs.rows.some((r) => r.specialty === "general") &&
+      packs.rows.every((r) => r.specialty === "general" || (r.specialty === "psychiatry" && r.n === 1)),
     packs.rows.map((r) => `${r.specialty}:${r.n}`).join(" ")
   );
   check(
@@ -479,8 +481,8 @@ async function main() {
     `select count(*)::int n from recipe_templates where active and specialty = 'general'`
   );
   check(
-    "a dental clinic is offered more than a general one",
-    forDental.rows[0].n > generalOnly.rows[0].n,
+    "a dental clinic is offered the general set, no retired dental pack",
+    forDental.rows[0].n === generalOnly.rows[0].n,
     `${forDental.rows[0].n} vs ${generalOnly.rows[0].n}`
   );
   const leaked = await db.query(
@@ -517,7 +519,7 @@ async function main() {
     `select count(*)::int n from automations where clinic_id = $1 and recipe_specialty = 'dental'`,
     [clinicId]
   );
-  check("the copies remember which pack they came from", dentalCopies.rows[0].n > 0, `${dentalCopies.rows[0].n}`);
+  check("and none of them is a retired dental copy", dentalCopies.rows[0].n === 0, `${dentalCopies.rows[0].n}`);
   const anyOn = await db.query(
     `select count(*)::int n from automations where clinic_id = $1 and recipe_specialty = 'dental' and active`,
     [clinicId]
@@ -566,19 +568,16 @@ async function main() {
     // Automations send at any hour (2026-11-10): the sending-hours card is gone.
     check("and no longer offers sending hours", !flows.includes("أوقات الإرسال"), "");
     /*
-      The specialty pack is offered rather than installed now: the gallery
-      behind "New automation" leads with the clinic's own field. Read from the
+      The specialty packs were retired from the gallery with the plans work
+      (2026-11-27: only psychiatry's discreet reminder stays), so the gallery
+      behind "New automation" no longer offers the dental one. Read from the
       body, because the gallery is a dialog portalled outside <main>.
     */
     await page.getByRole("button", { name: ar.automations.newAutomation }).first().click();
     await page.waitForSelector("[data-template]", { timeout: 30_000 });
     const gallery = (await page.locator("body").innerText()).replace(/\s+/g, " ");
     const dentalName = SPECIALTY_RECIPES.find((r) => r.specialty === "dental")!.name_ar;
-    check(
-      "and offers the specialty pack in the gallery, under the clinic's own suggestions",
-      gallery.includes(ar.automations.flow.forYou) && gallery.includes(dentalName),
-      dentalName
-    );
+    check("and no longer offers the retired specialty pack", !gallery.includes(dentalName), dentalName);
     await page.keyboard.press("Escape");
 
     await page.getByRole("tab", { name: ar.automations.tabMessages }).click();
@@ -639,8 +638,8 @@ async function main() {
       [clinicId]
     );
     check(
-      "adding an alert on the page creates a row",
-      nowRows.rows[0].n === DEFAULT_STAFF_ALERTS.length + 1,
+      "adding an alert the clinic already has joins it, not a second row (0111)",
+      nowRows.rows[0].n === DEFAULT_STAFF_ALERTS.length,
       `${nowRows.rows[0].n}`
     );
 

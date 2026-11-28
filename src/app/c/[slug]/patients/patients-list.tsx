@@ -20,6 +20,7 @@ import { ExportMenu } from "@/components/export-menu";
 import { useToast } from "@/components/ui/toast";
 import { createPatientAction } from "./actions";
 import { splitTyped } from "@/components/appointments/patient-picker";
+import { ReferralPicker } from "@/components/referral-picker";
 import { Users, Plus, Upload, BellOff, SlidersHorizontal, X } from "lucide-react";
 
 type Row = {
@@ -55,7 +56,7 @@ type FieldDef = {
   source_column: string | null;
 };
 const storageKeyOf = (d: FieldDef) => d.storage_key ?? d.key.replace(/^patient\./, "");
-const blankNew = { name: "", phone: "", gender: "" as "" | "male" | "female", birthDate: "", nationalId: "" };
+const blankNew = { name: "", phone: "", gender: "" as "" | "male" | "female", birthDate: "", nationalId: "", referral: null as string | null, referralNote: "" };
 
 export function PatientsList({
   slug,
@@ -231,6 +232,8 @@ export function PatientsList({
         birthDate: nw.birthDate,
         nationalId: nationalIdDef ? nw.nationalId : "",
         custom,
+        referralSource: nw.referral,
+        referralNote: nw.referralNote,
       });
       if (r.error) {
         setErr(
@@ -577,6 +580,13 @@ export function PatientsList({
                 <Input dir="ltr" inputMode="numeric" value={nw.nationalId} onChange={(e) => setNw({ ...nw, nationalId: e.target.value })} data-new-nid />
               </Field>
             )}
+            {/* Where they came from (0128): asked once, here, while the patient is at the desk. */}
+            <ReferralPicker
+              source={nw.referral}
+              note={nw.referralNote}
+              onSource={(v) => setNw((x) => ({ ...x, referral: v }))}
+              onNote={(v) => setNw((x) => ({ ...x, referralNote: v }))}
+            />
             {/* Whatever else the clinic made required in Settings → Fields. */}
             {extraRequired.map((d) => {
               const label = locale === "ar" ? d.label_ar || d.label : d.label;

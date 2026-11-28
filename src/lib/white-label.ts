@@ -19,12 +19,3 @@ export function whiteLabelSql(alias = "cl"): string {
   return featureSql("branding", alias);
 }
 
-/** A page title in the clinic's name, with Clinicti's suffix only when it is not white-label. */
-export function pageTitle(name: string, whiteLabel: boolean): { absolute: string } {
-  return { absolute: whiteLabel ? name : `${name} · Clinicti` };
-}
-
-/** Who made a PDF, as its metadata says. */
-export function producerName(clinicName: string, whiteLabel: boolean): string {
-  return whiteLabel ? clinicName : "Clinicti";
-}

@@ -67,7 +67,7 @@ export default async function FinanceAnalyticsPage({
     and how far back the month menu reaches. Asked first, on the same
     connection, because the period depends on it.
   */
-  const { a, period, since } = await inClinic(access, async (c) => {
+  const { a, period, since, sources, anyAsked } = await inClinic(access, async (c) => {
     const since = await firstMoneyDate(c, access.clinicId);
     const period = periodOf(tz, asPeriodParam(sp.p), since);
     const a = await financeAnalytics(
@@ -75,7 +75,35 @@ export default async function FinanceAnalyticsPage({
       { clinicId: access.clinicId, tz, period, dental: !!access.clinic.features.dental },
       { spend: showSpend, shares: showShares }
     );
-    return { a, period, since };
+    /*
+      Where patients come from (0128): the new patients of the period by the
+      answer to "how did you hear about us", and what patients from each source
+      paid in it — collected as the tile above counts it, a cancelled invoice's
+      payments left out.
+    */
+    const sources = (
+      await c.query(
+        `with joined as (
+           select coalesce(p.referral_source, '') as k, count(*)::int as n from patients p
+            where p.clinic_id = $1 and p.merged_into is null and p.created_at >= $2 and p.created_at < $3
+            group by 1),
+         paid as (
+           select coalesce(pt.referral_source, '') as k, sum(pay.amount)::float8 as amount
+             from payments pay
+             join invoices v on v.id = pay.invoice_id and v.status <> 'void'
+             join patients pt on pt.id = pay.patient_id
+            where pay.clinic_id = $1 and pay.paid_at >= $2 and pay.paid_at < $3
+            group by 1)
+         select coalesce(j.k, m.k) as k, coalesce(j.n, 0) as n, coalesce(m.amount, 0)::float8 as amount
+           from joined j full join paid m on m.k = j.k
+          order by 3 desc, 2 desc`,
+        [access.clinicId, period.from.toUTC().toISO(), period.to.toUTC().toISO()]
+      )
+    ).rows.map((r) => ({ key: r.k as string, n: Number(r.n), amount: Number(r.amount) }));
+    const anyAsked = sources.some((s) => s.key !== "")
+      ? true
+      : !!(await c.query(`select 1 from patients where clinic_id = $1 and referral_source is not null limit 1`, [access.clinicId])).rowCount;
+    return { a, period, since, sources, anyAsked };
   });
 
   const day = (d: DateTime, withYear: boolean) => d.setLocale(intl).toFormat(withYear ? "d LLL yyyy" : "d LLL");
@@ -317,6 +345,34 @@ export default async function FinanceAnalyticsPage({
           </Card>
         )}
       </div>
+
+      {/*
+        Where patients come from (0128): which ads, referrers and walk-ins bring
+        patients, and patients who pay. Until the desk starts asking, the card
+        says how to start rather than showing one "not recorded" line.
+      */}
+      <Card className="mb-4">
+        <CardHeader title={t.referral.analyticsTitle} sub={t.referral.analyticsSub} />
+        {!anyAsked || sources.length === 0 ? (
+          <div className="px-5 py-4" data-referral-analytics="empty">
+            <Quiet>{anyAsked ? F.nothingCollected : t.referral.analyticsEmpty}</Quiet>
+          </div>
+        ) : (
+          <ul className="divide-y divide-line" data-referral-analytics={sources.length}>
+            {sources.map((s) => (
+              <Row
+                key={s.key || "none"}
+                name={s.key ? ((t.referral.sources as Record<string, string>)[s.key] ?? s.key) : t.referral.notRecorded}
+                note={t.referral.newPatients.replace("{n}", String(s.n))}
+                amount={money(s.amount)}
+                share={a.collected > 0 ? Math.round((s.amount / a.collected) * 100) : null}
+                value={s.amount}
+                max={Math.max(0, ...sources.map((x) => x.amount))}
+              />
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {/* What is owed is today's fact, not the period's — said in the card, so the chips above are not read into it. */}
       <div className="grid items-start gap-4 lg:grid-cols-2">

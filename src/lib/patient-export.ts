@@ -65,6 +65,9 @@ export type ExportedRecord = {
     */
     extraPhones: string[];
     source: string;
+    /** Where they came from (0128), and who referred them. */
+    referral: string | null;
+    referralNote: string | null;
     lastVisitAt: string | null;
     insuranceValidUntil: string | null;
     /** Muted from every automation and campaign — see migration 0040. */
@@ -390,6 +393,8 @@ export async function loadPatientExportBatch(
         customFields,
         extraPhones: p.extra_phones ?? [],
         source: p.source,
+        referral: p.referral_source ?? null,
+        referralNote: p.referral_note ?? null,
         lastVisitAt: p.last_visit_at ? String(p.last_visit_at) : null,
         insuranceValidUntil: p.insurance_valid_until ? String(p.insurance_valid_until) : null,
         automationOptOut: Boolean(p.automation_opt_out),

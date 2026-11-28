@@ -74,8 +74,6 @@ export function verifyVisitToken(token: string, appointmentId: string, patientId
    ------------------------------------------------------------------------- */
 
 export type PatientChangesMode = "off" | "cancel" | "cancel_move";
-export const PATIENT_CHANGE_MODES: PatientChangesMode[] = ["off", "cancel", "cancel_move"];
-export const CUTOFF_CHOICES = [2, 6, 12, 24, 48] as const;
 /** After this many moves from the link, the patient is asked to call. */
 export const MAX_PATIENT_MOVES = 2;
 export const ACTIVE_STATUSES = ["pending_approval", "scheduled", "confirmed"];

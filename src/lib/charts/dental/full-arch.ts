@@ -38,11 +38,6 @@ export function onImplants(key: string): boolean {
 /** The counts offered first; any other is reached by tapping teeth. */
 export const IMPLANT_COUNTS = [2, 4, 6] as const;
 
-/** Where the implants usually go, as teeth (implant-place.ts defaultPlaces has them as places). */
-export function defaultImplantSites(arch: Arch, count: number): string[] {
-  return sitesFor(arch, defaultPlaces(arch, count));
-}
-
 /** The last tooth a full arch's bridge may reach to: the second premolars, the first molars, the second molars. */
 export const LAST_TEETH = [5, 6, 7] as const;
 

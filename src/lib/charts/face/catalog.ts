@@ -412,8 +412,6 @@ export function zonesOn(view: FaceView): Zone[] {
   return SIDE[view].map((p) => ({ ...ZONE_BY_KEY.get(p.key)!, x: p.x, y: p.y, w: p.w, h: p.h }));
 }
 
-export const isView = (v: unknown): v is FaceView => typeof v === "string" && (FACE_VIEWS as string[]).includes(v);
-
 /** An exact spot the doctor worked on, as a share of its picture, 0–1 (2026-11-08). */
 export type FacePoint = { x: number; y: number; v?: FaceView };
 

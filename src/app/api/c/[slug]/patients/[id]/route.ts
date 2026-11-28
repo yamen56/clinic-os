@@ -6,6 +6,7 @@ import { normalizePhone } from "@/lib/phone";
 import { checkNationalId, nationalIdOf } from "@/lib/patients";
 import { can } from "@/lib/auth";
 import { cleanHistory } from "@/lib/medical-history";
+import { asReferral, cleanReferralNote } from "@/lib/referral";
 
 const TEXT_FIELDS = new Set(["full_name", "notes_summary", "whatsapp_name"]);
 /** Who covers this patient: the Insurance switch's, not the file's. */
@@ -97,6 +98,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string; 
         push(key, /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
       } else if (key === "gender") {
         push(key, raw === "male" || raw === "female" ? raw : null);
+      } else if (key === "referral_source") {
+        // Where they came from (0128): one of the list, or cleared.
+        push(key, asReferral(raw));
+      } else if (key === "referral_note") {
+        push(key, cleanReferralNote(raw));
       } else if (key === "status") {
         if (raw === "lead" || raw === "active" || raw === "archived") push(key, raw);
       } else if (key === "insurer_id") {

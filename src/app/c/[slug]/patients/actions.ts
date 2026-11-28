@@ -10,6 +10,7 @@ import { normalizePhone } from "@/lib/phone";
 import { deleteFiles } from "@/lib/storage";
 import { storedPaths } from "@/lib/imaging/ingest";
 import { emitTrigger } from "@/lib/triggers";
+import { asReferral, cleanReferralNote } from "@/lib/referral";
 import {
   createNote,
   defaultCategoryId,
@@ -34,6 +35,9 @@ type PatientExtras = {
   nationalId?: string;
   /** The clinic's own fields, by storage key. */
   custom?: Record<string, string | boolean | null>;
+  /** Where they came from (0128), and who referred them. */
+  referralSource?: string | null;
+  referralNote?: string | null;
 };
 
 /** The clinic's patient fields the form must ask for, by the key the form uses. */
@@ -58,6 +62,7 @@ export async function createPatientAction(
   const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(data.birthDate ?? "") ? data.birthDate! : null;
   if (birthDate && birthDate > new Date().toISOString().slice(0, 10)) return { error: "invalid_birth_date" };
   const gender = data.gender === "male" || data.gender === "female" ? data.gender : null;
+  const referral = asReferral(data.referralSource);
   // The national number is checked here as on the file: a typo is a claim an insurer rejects later.
   const nid = checkNationalId(data.nationalId ?? "");
   if ("error" in nid) return { error: nid.error };
@@ -109,13 +114,14 @@ export async function createPatientAction(
         if (/^[a-z0-9_]{1,60}$/i.test(k) && v !== null && v !== "") custom[k] = typeof v === "string" ? v.slice(0, 500) : v;
       }
       if (nid.value) custom.national_id = nid.value;
-      if (!gender && !birthDate && !Object.keys(custom).length) return;
+      if (!gender && !birthDate && !referral && !Object.keys(custom).length) return;
       await c.query(
         `update patients
             set gender = coalesce($3, gender), birth_date = coalesce($4::date, birth_date),
-                custom_fields = custom_fields || $5::jsonb
+                custom_fields = custom_fields || $5::jsonb,
+                referral_source = coalesce($6, referral_source), referral_note = coalesce($7, referral_note)
           where id = $1 and clinic_id = $2`,
-        [id, access.clinicId, gender, birthDate, JSON.stringify(custom)]
+        [id, access.clinicId, gender, birthDate, JSON.stringify(custom), referral, referral ? cleanReferralNote(data.referralNote) : null]
       );
     };
 

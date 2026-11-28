@@ -1,33 +1,22 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useI18n } from "@/lib/i18n/client";
-import { buttonClass } from "@/components/ui/button-class";
-import { CalendarPlus, UserPlus, ReceiptText, MessagesSquare } from "lucide-react";
 
 export type QuickAction = "appointment" | "patient" | "invoice" | "inbox";
 
 /**
- * The four things a front desk does all day, one press away.
+ * The four things a front desk does all day, one key away.
  *
- * Each button carries a keyboard accelerator because the people using this are
- * on a desktop with a patient in front of them, and reaching for the mouse to
- * start a booking is the slowest part of taking one.
+ * Keyboard accelerators, because the people using this are on a desktop with a
+ * patient in front of them, and reaching for the mouse to start a booking is
+ * the slowest part of taking one.
  */
 const SHORTCUTS: Record<QuickAction, { code: string; hint: string }> = {
   appointment: { code: "KeyA", hint: "A" },
   patient: { code: "KeyP", hint: "P" },
   invoice: { code: "KeyI", hint: "I" },
   inbox: { code: "KeyM", hint: "M" },
-};
-
-const ICONS: Record<QuickAction, React.ComponentType<{ className?: string }>> = {
-  appointment: CalendarPlus,
-  patient: UserPlus,
-  invoice: ReceiptText,
-  inbox: MessagesSquare,
 };
 
 /** Where each action goes. Outside the component so the effect below can depend
@@ -81,46 +70,4 @@ export function useQuickShortcuts(slug: string, actions: QuickAction[]) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [actions, router, slug]);
-}
-
-export function QuickActions({ slug, actions }: { slug: string; actions: QuickAction[] }) {
-  const { t } = useI18n();
-
-  const label: Record<QuickAction, string> = {
-    appointment: t.dashboard.newAppointment,
-    patient: t.dashboard.newPatient,
-    invoice: t.dashboard.newInvoice,
-    inbox: t.dashboard.openInbox,
-  };
-
-  return (
-    <>
-      {actions.map((a) => {
-        const Icon = ICONS[a];
-        return (
-          <Link
-            key={a}
-            href={hrefFor(slug, a)}
-            /* Two to a row on a phone. Left to wrap, four labels broke three and
-               one in Arabic, with the inbox alone on a line of its own. */
-            className={buttonClass({
-              variant: a === "appointment" ? "primary" : "outline",
-              size: "sm",
-              className: "max-sm:flex-1 max-sm:basis-[calc(50%-0.25rem)]",
-            })}
-          >
-            <Icon className="h-4 w-4" />
-            {label[a]}
-            {/*
-              The hint is desktop-only: a phone has no key to press, and the
-              extra glyph is noise on the screen with the least room for it.
-            */}
-            <kbd className="ms-1 hidden rounded border border-current/25 px-1 text-[10px] font-semibold opacity-60 lg:inline">
-              {SHORTCUTS[a].hint}
-            </kbd>
-          </Link>
-        );
-      })}
-    </>
-  );
 }
